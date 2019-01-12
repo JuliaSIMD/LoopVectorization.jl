@@ -1,0 +1,10 @@
+name = "LoopVectorization"
+uuid = "bdcacae8-1622-11e9-2a5c-532679323890"
+authors = ["Chris Elrod <elrodc@gmail.com>"]
+version = "0.1.0"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
