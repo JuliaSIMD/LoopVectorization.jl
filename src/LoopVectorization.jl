@@ -538,7 +538,7 @@ function _vectorloads!(main_body, indexed_expressions, reduction_expressions, re
                 $br = LoopVectorization.extract_data.($B)
 
                 for $coliter ∈ 0:$numiter-1
-                    SIMDPirates.vstore(getindex($br,1+$coliter), $pA, $isym + $stridesym * $coliter)
+                    @inbounds SIMDPirates.vstore(getindex($br,1+$coliter), $pA, $isym + $stridesym * $coliter)
                 end
             end
 
