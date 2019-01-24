@@ -107,7 +107,7 @@ end
 
 
 
-mask_expr(W, r) = :($(Expr(:tuple, [i > r ? Core.VecElement{Bool}(false) : Core.VecElement{Bool}(true) for i ∈ 1:W]...)))
+# mask_expr(W, r) = :($(Expr(:tuple, [i > r ? Core.VecElement{Bool}(false) : Core.VecElement{Bool}(true) for i ∈ 1:W]...)))
 
 """
 Returns the strides necessary to iterate across rows.
@@ -129,148 +129,179 @@ end
     ntuple(i -> (i-1) * stride, Val(N))
 end
 
-"""
-N is length of the vectors.
-T is the type of the index.
-n is the index.
-body is the body of the function.
-"""
-function vectorize_body(N::Integer, T::DataType, unroll_factor, n, body, VectorizationDict = SLEEFDict)
-    T_size = sizeof(T)
-    W = REGISTER_SIZE ÷ T_size
-    while W > 2N
-        W >>= 1
-    end
-    WT = W * T_size
-    Q, r = divrem(N, W) #Assuming Mₖ is a multiple of W
-    QQ, Qr = divrem(Q, unroll_factor)
-    if r > 0
-        if unroll_factor == 1
-            QQ += 1
-        else
-            Qr += 1
-        end
-        Q += 1
-    end
-    # unroll the remainder iteration
-    # so that whenever Q >= unroll_factor, we will always have at least
-    # unroll_factor operations scheduled at a time.
-    if QQ > 0 && Qr > 0 && Qr < unroll_factor # if r > 0, Qr may equal 4
-        QQ -= 1
-        Qr += unroll_factor
-    end
-    V = Vec{W,T}
-
-
-    # body = _pirate(body)
-
-    # indexed_expressions = Dict{Symbol,Expr}()
-    indexed_expressions = Dict{Symbol,Symbol}() # Symbol, gensymbol
-    reduction_expressions = Dict{Symbol,Symbol}() # ParamSymbol,
-    # itersym = esc(gensym(:iter))
-    # itersym = esc(:iter)
-    itersym = :iter
-    isym = gensym(:i)
-    # walk the expression, searching for all get index patterns.
-    # these will be replaced with
-    # Plan: definition of q will create vectorizables
-    main_body = quote end
-    reduction_symbols = Symbol[]
-    loaded_exprs = Dict{Expr,Symbol}()
-    loop_constants_dict = Dict{Expr,Symbol}()
-    loop_constants_quote = quote end
-
-    for b ∈ body
-        ## body preamble must define indexed symbols
-        ## we only need that for loads.
-        push!(main_body.args,
-            _vectorloads!(main_body, indexed_expressions, reduction_expressions, reduction_symbols, loaded_exprs, V, loop_constants_quote, loop_constants_dict, b;
-                            itersym = itersym, declared_iter_sym = n)
-        )# |> x -> (@show(x), _pirate(x)))
-    end
-
-    ### now we walk the body to look for reductions
-    if length(reduction_symbols) > 0
-        reductions = true
+function mask_expr(W, remsym::Symbol)
+    if W <= 8
+        m = :((one(UInt8) << $remsym) - one(UInt8))
+    elseif W <= 16
+        m = :((one(UInt16) << $remsym) - one(UInt16))
+    elseif W <= 32
+        m = :((one(UInt32) << $remsym) - one(UInt32))
+    elseif W <= 64
+        m = :((one(UInt64) << $remsym) - one(UInt64))
+    elseif W <= 128
+        m = :((one(UInt128) << $remsym) - one(UInt128))
     else
-        reductions = false
+        throw("A mask of length $W > 128? Are you sure you want to do that?")
     end
-
-    # q = quote end
-    q = loop_constants_quote
-    for (sym, psym) ∈ indexed_expressions
-        push!(q.args, :( $psym = vectorizable($sym) ))
-    end
-
-
-    # @show QQ, Qr, Q, r
-    loop_body = [:($itersym = $isym), main_body]
-    for unroll ∈ 1:unroll_factor-1
-        push!(loop_body, :($itersym = $isym + $(unroll*W)))
-        push!(loop_body, main_body)
-    end
-
-    if QQ > 0
-        push!(q.args,
-        quote
-            for $isym ∈ 1:$(unroll_factor*W):$(QQ*unroll_factor*W)
-                $(loop_body...)
-            end
-        end)
-    end
-    for qri ∈ 1:Qr
-        push!(q.args,
-        quote
-            $itersym = $(QQ*unroll_factor*W + qri*W)
-            $main_body
-        end)
-    end
-    if r > 0
-        throw("Need to work on mask!")
-        mask = mask_expr(W, r)
-        iter = Q * W
-        r_body = quote end
-        for b ∈ body
-            push!(r_body.args, _spirate(prewalk(b) do x
-                if @capture(x, A_[i_] = B_)
-                    if A ∉ keys(indexed_expressions)
-                        # pA = esc(gensym(A))
-                        # pA = esc(Symbol(:p,A))
-                        pA = Symbol(:p,A)
-                        indexed_expressions[A] = pA
-                    else
-                        pA = indexed_expressions[A]
-                    end
-                    if i == n
-                        return :(SIMDPirates.vstore($B, $pA, $iter, $mask))
-                    else
-                        return :(SIMDPirates.vstore($B, $pA, $i, $mask))
-                    end
-                elseif @capture(x, A_[i_])
-                    if A ∉ keys(indexed_expressions)
-                        # pA = esc(gensym(A))
-                        # pA = esc(Symbol(:p,A))
-                        pA = Symbol(:p,A)
-                        indexed_expressions[A] = pA
-                    else
-                        pA = indexed_expressions[A]
-                    end
-                    if i == n
-                        return :(SIMDPirates.vload($V, $pA, $iter, $mask))
-                    else
-                        # when loading something not indexed by the loop variable,
-                        # we assume that the intension is to broadcast
-                        return :(SIMDPirates.vbroadcast($V, unsafe_load($pA, $i-1)))
-                    end
-                else
-                    return x
-                end
-            end, VectorizationDict, false)) # macro_escape = false
-        end
-        push!(q.args, r_body)
-    end
-    q
+    m
 end
+mask(rem::Integer) = (one(UInt) << rem) - one(UInt)
+
+
+# """
+# N is length of the vectors.
+# T is the type of the index.
+# n is the index.
+# body is the body of the function.
+# """
+# function vectorize_body(N::Integer, T::DataType, unroll_factor, n, body, VectorizationDict = SLEEFDict)
+#     T_size = sizeof(T)
+#     W = REGISTER_SIZE ÷ T_size
+#     while W > 2N
+#         W >>= 1
+#     end
+#     WT = W * T_size
+#     Q, r = divrem(N, W) #Assuming Mₖ is a multiple of W
+#     QQ, Qr = divrem(Q, unroll_factor)
+#     if r > 0
+#         if unroll_factor == 1
+#             QQ += 1
+#         else
+#             Qr += 1
+#         end
+#         Q += 1
+#     end
+#     # unroll the remainder iteration
+#     # so that whenever Q >= unroll_factor, we will always have at least
+#     # unroll_factor operations scheduled at a time.
+#     if QQ > 0 && Qr > 0 && Qr < unroll_factor # if r > 0, Qr may equal 4
+#         QQ -= 1
+#         Qr += unroll_factor
+#     end
+#     V = Vec{W,T}
+#
+#
+#     # body = _pirate(body)
+#
+#     # indexed_expressions = Dict{Symbol,Expr}()
+#     indexed_expressions = Dict{Symbol,Symbol}() # Symbol, gensymbol
+#     reduction_expressions = Dict{Symbol,Symbol}() # ParamSymbol,
+#     # itersym = esc(gensym(:iter))
+#     # itersym = esc(:iter)
+#     # itersym = gensym(:iter)
+#     isym = gensym(:i)
+#     itersym = isym
+#     # walk the expression, searching for all get index patterns.
+#     # these will be replaced with
+#     # Plan: definition of q will create vectorizables
+#     main_body = quote end
+#     reduction_symbols = Symbol[]
+#     loaded_exprs = Dict{Expr,Symbol}()
+#     loop_constants_dict = Dict{Expr,Symbol}()
+#     loop_constants_quote = quote end
+#
+#     for b ∈ body
+#         ## body preamble must define indexed symbols
+#         ## we only need that for loads.
+#         push!(main_body.args,
+#             _vectorloads!(main_body, indexed_expressions, reduction_expressions, reduction_symbols, loaded_exprs, V, loop_constants_quote, loop_constants_dict, b;
+#                             itersym = itersym, declared_iter_sym = n)
+#         )# |> x -> (@show(x), _pirate(x)))
+#     end
+#
+#     ### now we walk the body to look for reductions
+#     if length(reduction_symbols) > 0
+#         reductions = true
+#     else
+#         reductions = false
+#     end
+#
+#     # q = quote end
+#     q = loop_constants_quote
+#     for (sym, psym) ∈ indexed_expressions
+#         push!(q.args, :( $psym = vectorizable($sym) ))
+#     end
+#
+#
+#     # @show QQ, Qr, Q, r
+#     # loop_body = [:($itersym = $isym), main_body]
+#     loop_body = [main_body]
+#     for unroll ∈ 1:unroll_factor-1
+#         push!(loop_body, :($itersym = $isym + $(unroll*W)))
+#         push!(loop_body, main_body)
+#     end
+#
+#     if QQ > 0
+#         push!(q.args,
+#         quote
+#             for $isym ∈ 1:$(unroll_factor*W):$(QQ*unroll_factor*W)
+#                 $(loop_body...)
+#             end
+#         end)
+#     end
+#     for qri ∈ 1:Qr
+#         push!(q.args,
+#         quote
+#             $itersym = $(QQ*unroll_factor*W + qri*W)
+#             $main_body
+#         end)
+#     end
+#     if r > 0
+#         throw("Need to work on mask!")
+#         maskuint = mask(r)
+#         if W <= 8
+#             mask = convert(UInt8, mask)
+#         elseif W <= 16
+#             mask = convert(UInt16, mask)
+#         elseif W <= 32
+#             mask = convert(UInt32, mask)
+#         else
+#             mask = maskuint
+#         end
+#         # mask = mask_expr(W, r)
+#         iter = Q * W
+#         r_body = quote end
+#         for b ∈ body
+#             push!(r_body.args, _spirate(prewalk(b) do x
+#                 if @capture(x, A_[i_] = B_)
+#                     if A ∉ keys(indexed_expressions)
+#                         # pA = esc(gensym(A))
+#                         # pA = esc(Symbol(:p,A))
+#                         pA = Symbol(:p,A)
+#                         indexed_expressions[A] = pA
+#                     else
+#                         pA = indexed_expressions[A]
+#                     end
+#                     if i == n
+#                         return :(SIMDPirates.vstore($B, $pA, $iter, $mask))
+#                     else
+#                         return :(SIMDPirates.vstore($B, $pA, $i, $mask))
+#                     end
+#                 elseif @capture(x, A_[i_])
+#                     if A ∉ keys(indexed_expressions)
+#                         # pA = esc(gensym(A))
+#                         # pA = esc(Symbol(:p,A))
+#                         pA = Symbol(:p,A)
+#                         indexed_expressions[A] = pA
+#                     else
+#                         pA = indexed_expressions[A]
+#                     end
+#                     if i == n
+#                         return :(SIMDPirates.vload($V, $pA, $iter, $mask))
+#                     else
+#                         # when loading something not indexed by the loop variable,
+#                         # we assume that the intension is to broadcast
+#                         return :(SIMDPirates.vbroadcast($V, unsafe_load($pA, $i-1)))
+#                     end
+#                 else
+#                     return x
+#                 end
+#             end, VectorizationDict, false)) # macro_escape = false
+#         end
+#         push!(q.args, r_body)
+#     end
+#     q
+# end
 function vectorize_body(N, Tsym::Symbol, uf, n, body)
     if Tsym == :Float32
         vectorize_body(N, Float32, uf, n, body)
@@ -303,8 +334,9 @@ function vectorize_body(N::Union{Symbol, Expr}, T::DataType, unroll_factor, n, b
     # itersym = esc(gensym(:iter))
     # itersym = esc(:iter)
     # itersym = :iter
-    itersym = gensym(:iter)
+    # itersym = gensym(:iter)
     isym = gensym(:i)
+    itersym = isym
     # walk the expression, searching for all get index patterns.
     # these will be replaced with
     # Plan: definition of q will create vectorizables
@@ -341,23 +373,27 @@ function vectorize_body(N::Union{Symbol, Expr}, T::DataType, unroll_factor, n, b
     #     # end
     # end
     # pushfirst!(q.args, :((Q, r) = $(num_vector_load_expr(:LoopVectorization, N, W))))
+    Qsym = gensym(:Q)
+    remsym = gensym(:rem)
     q = quote
         $Nsym = $N
-        (Q, r) = $(num_vector_load_expr(:LoopVectorization, N, W))
-        $loop_constants_quote
+        ($Qsym, $remsym) = $(num_vector_load_expr(:LoopVectorization, N, W))
+        # $loop_constants_quote
     end
     for (sym, psym) ∈ indexed_expressions
         push!(q.args, :( $psym = vectorizable($sym) ))
     end
+    push!(q.args, loop_constants_quote)
     # @show QQ, Qr, Q, r
-    loop_body = [:($itersym = $isym), :($main_body)]
+    # loop_body = [:($itersym = $isym), :($main_body)]
+    loop_body = [main_body]
     for unroll ∈ 1:unroll_factor-1
         push!(loop_body, :($itersym = $isym + $(unroll*W)))
         push!(loop_body, :($main_body))
     end
     push!(q.args,
     quote
-        for $isym ∈ 1:$(unroll_factor*W):(Q*$(unroll_factor*W))
+        for $isym ∈ 0:$(unroll_factor*WT):($Qsym*$(unroll_factor*WT)-$T_size)
             $(loop_body...)
         end
     end)
@@ -371,16 +407,12 @@ function vectorize_body(N::Union{Symbol, Expr}, T::DataType, unroll_factor, n, b
     #     end)
     # end
     Itype = Base.Threads.inttype(T)
-    masked_loop_body = add_masks.(loop_body)
+    masksym = gensym(:mask)
+    masked_loop_body = add_masks.(loop_body, masksym)
     push!(q.args, quote
-        if r > 0
-            mask = SIMDPirates.vless_or_equal(
-                SIMDPirates.vsub(
-                    $(Expr(:tuple, [:(Core.VecElement{$Itype}(($(Itype(w))))) for w ∈ 1:W]...) ),
-                    unsafe_trunc($Itype, r) # unsafe trunc is safe unless CPU's vector width > 2^31. W just 2^4 for avx512 and Float32
-                ), zero($Itype)
-            )
-            $isym = $Nsym - r + 1
+        if $remsym > 0
+            $masksym = $(mask_expr(W, remsym))
+            $isym = ($Nsym - $remsym)*$T_size
             $(masked_loop_body...)
         end
     end)
@@ -392,12 +424,12 @@ function vectorize_body(N::Union{Symbol, Expr}, T::DataType, unroll_factor, n, b
     # end)
     q
 end
-function add_masks(expr)
+function add_masks(expr, masksym)
     postwalk(expr) do x
-        if @capture(x, SIMDPirates.vstore(V_, ptr_, i_))
-            return :(SIMDPirates.vstore($V, $ptr, $i, mask))
-        elseif @capture(x, SIMDPirates.vload(V_, ptr_, i_))
-            return :(SIMDPirates.vload($V, $ptr, $i, mask))
+        if @capture(x, SIMDPirates.vstore(V_, ptr_))
+            return :(SIMDPirates.vstore($V, $ptr, $masksym))
+        elseif @capture(x, SIMDPirates.vload(V_, ptr_))
+            return :(SIMDPirates.vload($V, $ptr, $masksym))
         else
             return x
         end
@@ -461,10 +493,10 @@ function _vectorloads!(main_body, indexed_expressions, reduction_expressions, re
                     stridesym = loop_constants_dict[stridexpr]
                 else
                     stridesym = gensym(:stride)
-                    push!(loop_constants_quote.args, :( $stridesym = $stridexpr ))
+                    push!(loop_constants_quote.args, :( $stridesym = $stridexpr * sizeof(eltype($pA)) ))
                     loop_constants_dict[stridexpr] = stridesym
                 end
-                return :(SIMDPirates.vstore($B, $pA, $itersym + $ej*$stridesym ))
+                return :(SIMDPirates.vstore($B, $pA + $itersym + $ej*$stridesym ))
             else
                 throw("Indexing columns with vectorized loop variable is not supported.")
             end
@@ -482,9 +514,10 @@ function _vectorloads!(main_body, indexed_expressions, reduction_expressions, re
 
             ## check to see if we are to do a vector load or a broadcast
             if i == declared_iter_sym
-                load_expr = :(SIMDPirates.vload($V, $pA, $itersym))
+                load_expr = :(SIMDPirates.vload($V, $pA + $itersym ))
+                # load_expr = :(SIMDPirates.vload($V, $pA, $itersym))
             else
-                load_expr = :(SIMDPirates.vbroadcast($V, unsafe_load($pA, $i-1)))
+                load_expr = :(SIMDPirates.vbroadcast($V, unsafe_load($pA, $i)))
             end
             # performs a CSE on load expressions
             if load_expr ∈ keys(loaded_exprs)
@@ -514,10 +547,10 @@ function _vectorloads!(main_body, indexed_expressions, reduction_expressions, re
                     stridesym = loop_constants_dict[stridexpr]
                 else
                     stridesym = gensym(:stride)
-                    push!(loop_constants_quote.args, :( $stridesym = $stridexpr ))
+                    push!(loop_constants_quote.args, :( $stridesym = $stridexpr * sizeof(eltype($pA)) ))
                     loop_constants_dict[stridexpr] = stridesym
                 end
-                load_expr = :(SIMDPirates.vload($V, $pA, $itersym + $ej*$stridesym))
+                load_expr = :(SIMDPirates.vload($V, $pA + $itersym + $ej*$stridesym))
             elseif j == declared_iter_sym
                 throw("Indexing columns with vectorized loop variable is not supported.")
             else
@@ -528,10 +561,10 @@ function _vectorloads!(main_body, indexed_expressions, reduction_expressions, re
                     stridesym = loop_constants_dict[stridexpr]
                 else
                     stridesym = gensym(:stride)
-                    push!(loop_constants_quote.args, :( $stridesym = $stridexpr ))
+                    push!(loop_constants_quote.args, :( $stridesym = $stridexpr * sizeof(eltype($pA)) ))
                     loop_constants_dict[stridexpr] = stridesym
                 end
-                load_expr = :(SIMDPirates.vbroadcast($V, unsafe_load($pA, $i + $ej*$stridesym)))
+                load_expr = :(SIMDPirates.vbroadcast($V, unsafe_load($pA + $i*sizeof(eltype($pA)) + $ej*$stridesym)))
             end
             # performs a CSE on load expressions
             if load_expr ∈ keys(loaded_exprs)
@@ -568,7 +601,7 @@ function _vectorloads!(main_body, indexed_expressions, reduction_expressions, re
                 stridesym = loop_constants_dict[stridexpr]
             else
                 stridesym = gensym(:stride)
-                push!(loop_constants_quote.args, :( $stridesym = $stridexpr ))
+                push!(loop_constants_quote.args, :( $stridesym = $stridexpr * sizeof(eltype($pA)) ))
                 loop_constants_dict[stridexpr] = stridesym
             end
             # numiterexpr = :(LoopVectorization.num_row_strides($A))
@@ -585,7 +618,7 @@ function _vectorloads!(main_body, indexed_expressions, reduction_expressions, re
 
                 # for $coliter ∈ 0:$numitersym-1
                 for $coliter ∈ 0:length($br)-1
-                    @inbounds SIMDPirates.vstore(getindex($br,1+$coliter), $pA, $isym + $stridesym * $coliter)
+                    @inbounds SIMDPirates.vstore(getindex($br,1+$coliter), $pA + $isym + $stridesym * $coliter)
                 end
             end
 
