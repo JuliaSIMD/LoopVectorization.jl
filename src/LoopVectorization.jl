@@ -322,7 +322,7 @@ function vectorize_body(N::Union{Symbol, Expr}, T::DataType, unroll_factor, n, b
     # @show W, REGISTER_SIZE, T_size
     # @show T
     WT = W * T_size
-    V = Vec{W,T}
+    V = SVec{W,T}
 
     # @show body
 
@@ -348,6 +348,7 @@ function vectorize_body(N::Union{Symbol, Expr}, T::DataType, unroll_factor, n, b
     loop_constants_quote = quote end
 
     for b ∈ body
+        b = nexprs_expansion(b)
         ## body preamble must define indexed symbols
         ## we only need that for loads.
         push!(main_body.args,
@@ -456,6 +457,22 @@ function _vectorloads(V, expr; itersym = :iter, declared_iter_sym = nothing)
             itersym = itersym, declared_iter_sym = declared_iter_sym)
     )
     main_body
+end
+
+function nexprs_expansion(expr)
+    prewalk(expr) do x
+        if @capture(x, @nexprs N_ ex_) || @capture(x, Base.Cartesian.@nexprs N_ ex_)
+            # println("Macroexpanding x:", x)
+            # @show ex
+            # mx = Expr(:escape, Expr(:block, Any[ Base.Cartesian.inlineanonymous(ex,i) for i = 1:N ]...))
+            mx = Expr(:block, Any[ Base.Cartesian.inlineanonymous(ex,i) for i = 1:N ]...)
+            # println("Macroexpanded x:", mx)
+            return mx
+        else
+            # @show x
+            return x
+        end
+    end
 end
 
 function _vectorloads!(main_body, indexed_expressions, reduction_expressions, reduction_symbols, loaded_exprs, V, loop_constants_quote, loop_constants_dict, expr;
@@ -623,13 +640,13 @@ function _vectorloads!(main_body, indexed_expressions, reduction_expressions, re
             end
 
             return expr
-        elseif @capture(x, @nexprs N_ ex_)
-            # println("Macroexpanding x:", x)
-            # @show ex
-            # mx = Expr(:escape, Expr(:block, Any[ Base.Cartesian.inlineanonymous(ex,i) for i = 1:N ]...))
-            mx = Expr(:block, Any[ Base.Cartesian.inlineanonymous(ex,i) for i = 1:N ]...)
-            # println("Macroexpanded x:", mx)
-            return mx
+        # elseif @capture(x, @nexprs N_ ex_)
+        #     # println("Macroexpanding x:", x)
+        #     # @show ex
+        #     # mx = Expr(:escape, Expr(:block, Any[ Base.Cartesian.inlineanonymous(ex,i) for i = 1:N ]...))
+        #     mx = Expr(:block, Any[ Base.Cartesian.inlineanonymous(ex,i) for i = 1:N ]...)
+        #     # println("Macroexpanded x:", mx)
+        #     return mx
         elseif @capture(x, zero(T_))
             return :(zero($V))
         elseif @capture(x, one(T_))
