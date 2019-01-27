@@ -43,7 +43,7 @@ const SLEEFDict = Dict{Symbol,Expr}(
     :abs => :(SLEEF.abs),
     :sincos => :(SLEEF.sincos_fast),
     # :sincospi => :(SLEEF.sincospi_fast),
-    :pow => :(SLEEF.pow),
+    # :pow => :(SLEEF.pow),
     # :hypot => :(SLEEF.hypot_fast),
     :mod => :(SLEEF.mod)
     # :copysign => :copysign
@@ -302,27 +302,27 @@ mask(rem::Integer) = (one(UInt) << rem) - one(UInt)
 #     end
 #     q
 # end
-function vectorize_body(N, Tsym::Symbol, uf, n, body)
+function vectorize_body(N, Tsym::Symbol, uf, n, body, vecdict = SLEEFDict, VType = SVec)
     if Tsym == :Float32
-        vectorize_body(N, Float32, uf, n, body)
+        vectorize_body(N, Float32, uf, n, body, vecdict, VType)
     elseif Tsym == :Float64
-        vectorize_body(N, Float64, uf, n, body)
+        vectorize_body(N, Float64, uf, n, body, vecdict, VType)
     elseif Tsym == :ComplexF32
-        vectorize_body(N, ComplexF32, uf, n, body)
+        vectorize_body(N, ComplexF32, uf, n, body, vecdict, VType)
     elseif Tsym == :ComplexF64
-        vectorize_body(N, ComplexF64, uf, n, body)
+        vectorize_body(N, ComplexF64, uf, n, body, vecdict, VType)
     else
         throw("Type $Tsym is not supported.")
     end
 end
-function vectorize_body(N::Union{Symbol, Expr}, T::DataType, unroll_factor, n, body)
+function vectorize_body(N::Union{Symbol, Expr}, T::DataType, unroll_factor, n, body, vecdict = SLEEFDict, VType = SVec)
     unroll_factor == 1 || throw("Only unroll factor of 1 is currently supported. Was set to $unroll_factor.")
     T_size = sizeof(T)
     W = REGISTER_SIZE ÷ T_size
     # @show W, REGISTER_SIZE, T_size
     # @show T
     WT = W * T_size
-    V = SVec{W,T}
+    V = VType{W,T}
 
     # @show body
 
@@ -353,7 +353,7 @@ function vectorize_body(N::Union{Symbol, Expr}, T::DataType, unroll_factor, n, b
         ## we only need that for loads.
         push!(main_body.args,
             _vectorloads!(main_body, indexed_expressions, reduction_expressions, reduction_symbols, loaded_exprs, V, loop_constants_quote, loop_constants_dict, b;
-                            itersym = itersym, declared_iter_sym = n)
+                            itersym = itersym, declared_iter_sym = n, VectorizationDict = vecdict)
         )# |> x -> (@show(x), _pirate(x)))
     end
     # @show main_body
@@ -437,7 +437,7 @@ function add_masks(expr, masksym)
     end
 end
 
-function _vectorloads(V, expr; itersym = :iter, declared_iter_sym = nothing)
+function _vectorloads(V, expr; itersym = :iter, declared_iter_sym = nothing, VectorizationDict = SLEEFDict)
 
 
     # body = _pirate(body)
@@ -454,7 +454,7 @@ function _vectorloads(V, expr; itersym = :iter, declared_iter_sym = nothing)
 
     push!(main_body.args,
         _vectorloads!(main_body, indexed_expressions, reduction_expressions, reduction_symbols, loaded_exprs, V, loop_constants_quote, loop_constants_dict, expr;
-            itersym = itersym, declared_iter_sym = declared_iter_sym)
+            itersym = itersym, declared_iter_sym = declared_iter_sym, VectorizationDict = VectorizationDict)
     )
     main_body
 end
@@ -489,9 +489,9 @@ function _vectorloads!(main_body, indexed_expressions, reduction_expressions, re
                 pA = indexed_expressions[A]
             end
             if i == declared_iter_sym
-                return :(SIMDPirates.vstore($B, $pA, $itersym))
+                return :(SIMDPirates.vstore($B, $pA + $itersym))
             else
-                return :(SIMDPirates.vstore($B, $pA, $i))
+                return :(SIMDPirates.vstore($B, $pA + $i))
             end
         elseif @capture(x, A_[i_,j_] = B_)
             if A ∉ keys(indexed_expressions)
