@@ -7,6 +7,8 @@ using MacroTools: @capture, prewalk, postwalk
 
 export vectorizable, @vectorize
 
+
+
 const SLEEFDict = Dict{Symbol,Expr}(
     :sin => :(SLEEF.sin_fast),
     :sinpi => :(SLEEF.sinpi),
@@ -22,7 +24,7 @@ const SLEEFDict = Dict{Symbol,Expr}(
     :exp10 => :(SLEEF.exp10),
     :expm1 => :(SLEEF.expm1),
     :sqrt => :(SLEEF.sqrt), # faster than sqrt_fast
-    :rsqrt => :(SIMDPirates.rsqrt),
+    :rsqrt => :(LoopVectorization.SIMDPirates.rsqrt),
     :cbrt => :(SLEEF.cbrt_fast),
     :asin => :(SLEEF.asin_fast),
     :acos => :(SLEEF.acos_fast),
@@ -56,28 +58,28 @@ const SLEEFDict = Dict{Symbol,Expr}(
 function _spirate(ex, dict, macro_escape = true)
     ex = postwalk(ex) do x
         # @show x
-        # if @capture(x, SIMDPirates.vadd(SIMDPirates.vmul(a_, b_), c_)) || @capture(x, SIMDPirates.vadd(c_, SIMDPirates.vmul(a_, b_)))
-        #     return :(SIMDPirates.vmuladd($a, $b, $c))
-        # elseif @capture(x, SIMDPirates.vadd(SIMDPirates.vmul(a_, b_), SIMDPirates.vmul(c_, d_), e_)) || @capture(x, SIMDPirates.vadd(SIMDPirates.vmul(a_, b_), e_, SIMDPirates.vmul(c_, d_))) || @capture(x, SIMDPirates.vadd(e_, SIMDPirates.vmul(a_, b_), SIMDPirates.vmul(c_, d_)))
-        #     return :(SIMDPirates.vmuladd($a, $b, SIMDPirates.vmuladd($c, $d, $e)))
-        # elseif @capture(x, SIMDPirates.vadd(SIMDPirates.vmul(b_, c_), SIMDPirates.vmul(d_, e_), SIMDPirates.vmul(f_, g_), a_)) ||
-        #         @capture(x, SIMDPirates.vadd(SIMDPirates.vmul(b_, c_), SIMDPirates.vmul(d_, e_), a_, SIMDPirates.vmul(f_, g_))) ||
-        #         @capture(x, SIMDPirates.vadd(SIMDPirates.vmul(b_, c_), a_, SIMDPirates.vmul(d_, e_), SIMDPirates.vmul(f_, g_))) ||
-        #         @capture(x, SIMDPirates.vadd(a_, SIMDPirates.vmul(b_, c_), SIMDPirates.vmul(d_, e_), SIMDPirates.vmul(f_, g_)))
-        #     return :(SIMDPirates.vmuladd($g, $f, SIMDPirates.vmuladd($e, $d, SIMDPirates.vmuladd($c, $b, $a))))
+        # if @capture(x, LoopVectorization.SIMDPirates.vadd(LoopVectorization.SIMDPirates.vmul(a_, b_), c_)) || @capture(x, LoopVectorization.SIMDPirates.vadd(c_, LoopVectorization.SIMDPirates.vmul(a_, b_)))
+        #     return :(LoopVectorization.SIMDPirates.vmuladd($a, $b, $c))
+        # elseif @capture(x, LoopVectorization.SIMDPirates.vadd(LoopVectorization.SIMDPirates.vmul(a_, b_), LoopVectorization.SIMDPirates.vmul(c_, d_), e_)) || @capture(x, LoopVectorization.SIMDPirates.vadd(LoopVectorization.SIMDPirates.vmul(a_, b_), e_, LoopVectorization.SIMDPirates.vmul(c_, d_))) || @capture(x, LoopVectorization.SIMDPirates.vadd(e_, LoopVectorization.SIMDPirates.vmul(a_, b_), LoopVectorization.SIMDPirates.vmul(c_, d_)))
+        #     return :(LoopVectorization.SIMDPirates.vmuladd($a, $b, LoopVectorization.SIMDPirates.vmuladd($c, $d, $e)))
+        # elseif @capture(x, LoopVectorization.SIMDPirates.vadd(LoopVectorization.SIMDPirates.vmul(b_, c_), LoopVectorization.SIMDPirates.vmul(d_, e_), LoopVectorization.SIMDPirates.vmul(f_, g_), a_)) ||
+        #         @capture(x, LoopVectorization.SIMDPirates.vadd(LoopVectorization.SIMDPirates.vmul(b_, c_), LoopVectorization.SIMDPirates.vmul(d_, e_), a_, LoopVectorization.SIMDPirates.vmul(f_, g_))) ||
+        #         @capture(x, LoopVectorization.SIMDPirates.vadd(LoopVectorization.SIMDPirates.vmul(b_, c_), a_, LoopVectorization.SIMDPirates.vmul(d_, e_), LoopVectorization.SIMDPirates.vmul(f_, g_))) ||
+        #         @capture(x, LoopVectorization.SIMDPirates.vadd(a_, LoopVectorization.SIMDPirates.vmul(b_, c_), LoopVectorization.SIMDPirates.vmul(d_, e_), LoopVectorization.SIMDPirates.vmul(f_, g_)))
+        #     return :(LoopVectorization.SIMDPirates.vmuladd($g, $f, LoopVectorization.SIMDPirates.vmuladd($e, $d, LoopVectorization.SIMDPirates.vmuladd($c, $b, $a))))
         # elseif @capture(x, a_ * b_ + c_ - c_) || @capture(x, c_ + a_ * b_ - c_) || @capture(x, a_ * b_ - c_ + c_) || @capture(x, - c_ + a_ * b_ + c_)
-        #     return :(SIMDPirates.vmul($a, $b))
-        # elseif @capture(x, a_ * b_ + c_ - d_) || @capture(x, c_ + a_ * b_ - d_) || @capture(x, a_ * b_ - d_ + c_) || @capture(x, - d_ + a_ * b_ + c_) || @capture(x, SIMDPirates.vsub(SIMDPirates.vmuladd(a_, b_, c_), d_))
-        #     return :(SIMDPirates.vmuladd($a, $b, SIMDPirates.vsub($c, $d)))
+        #     return :(LoopVectorization.SIMDPirates.vmul($a, $b))
+        # elseif @capture(x, a_ * b_ + c_ - d_) || @capture(x, c_ + a_ * b_ - d_) || @capture(x, a_ * b_ - d_ + c_) || @capture(x, - d_ + a_ * b_ + c_) || @capture(x, LoopVectorization.SIMDPirates.vsub(LoopVectorization.SIMDPirates.vmuladd(a_, b_, c_), d_))
+        #     return :(LoopVectorization.SIMDPirates.vmuladd($a, $b, LoopVectorization.SIMDPirates.vsub($c, $d)))
         # elseif @capture(x, a_ += b_)
         if @capture(x, a_ += b_)
-            return :($a = SIMDPirates.vadd($a, $b))
+            return :($a = LoopVectorization.SIMDPirates.vadd($a, $b))
         elseif @capture(x, a_ -= b_)
-            return :($a = SIMDPirates.vsub($a, $b))
+            return :($a = LoopVectorization.SIMDPirates.vsub($a, $b))
         elseif @capture(x, a_ *= b_)
-            return :($a = SIMDPirates.vmul($a, $b))
+            return :($a = LoopVectorization.SIMDPirates.vmul($a, $b))
         elseif @capture(x, a_ /= b_)
-            return :($a = SIMDPirates.vdiv($a, $b))
+            return :($a = LoopVectorization.SIMDPirates.vdiv($a, $b))
         elseif @capture(x, a_ / sqrt(b_))
             return :($a * rsqrt($b))
         elseif @capture(x, inv(sqrt(a_)))
@@ -85,14 +87,14 @@ function _spirate(ex, dict, macro_escape = true)
         elseif @capture(x, @horner a__)
             return horner(a...)
         elseif @capture(x, Base.Math.muladd(a_, b_, c_))
-            return :( SIMDPirates.vmuladd($a, $b, $c) )
+            return :( LoopVectorization.SIMDPirates.vmuladd($a, $b, $c) )
         elseif isa(x, Symbol) && !occursin("@", string(x))
             vec_sym = get(dict, x, :not_found)
             if vec_sym != :not_found
                 return vec_sym
             else
                 vec_sym = get(VECTOR_SYMBOLS, x, :not_found)
-                return vec_sym == :not_found ? x : :(SIMDPirates.$(vec_sym))
+                return vec_sym == :not_found ? x : :(LoopVectorization.SIMDPirates.$(vec_sym))
             end
         else
             return x
@@ -273,9 +275,9 @@ mask(rem::Integer) = (one(UInt) << rem) - one(UInt)
 #                         pA = indexed_expressions[A]
 #                     end
 #                     if i == n
-#                         return :(SIMDPirates.vstore($B, $pA, $iter, $mask))
+#                         return :(LoopVectorization.SIMDPirates.vstore($B, $pA, $iter, $mask))
 #                     else
-#                         return :(SIMDPirates.vstore($B, $pA, $i, $mask))
+#                         return :(LoopVectorization.SIMDPirates.vstore($B, $pA, $i, $mask))
 #                     end
 #                 elseif @capture(x, A_[i_])
 #                     if A ∉ keys(indexed_expressions)
@@ -287,11 +289,11 @@ mask(rem::Integer) = (one(UInt) << rem) - one(UInt)
 #                         pA = indexed_expressions[A]
 #                     end
 #                     if i == n
-#                         return :(SIMDPirates.vload($V, $pA, $iter, $mask))
+#                         return :(LoopVectorization.SIMDPirates.vload($V, $pA, $iter, $mask))
 #                     else
 #                         # when loading something not indexed by the loop variable,
 #                         # we assume that the intension is to broadcast
-#                         return :(SIMDPirates.vbroadcast($V, unsafe_load($pA, $i-1)))
+#                         return :(LoopVectorization.SIMDPirates.vbroadcast($V, unsafe_load($pA, $i-1)))
 #                     end
 #                 else
 #                     return x
@@ -342,7 +344,7 @@ function vectorize_body(N::Union{Symbol, Expr}, T::DataType, unroll_factor, n, b
     # Plan: definition of q will create vectorizables
     Nsym = gensym(:N)
     main_body = quote end
-    reduction_symbols = Symbol[]
+    reduction_symbols = Dict{Tuple{Symbol,Symbol},Symbol}()
     loaded_exprs = Dict{Expr,Symbol}()
     loop_constants_dict = Dict{Expr,Symbol}()
     loop_constants_quote = quote end
@@ -358,12 +360,6 @@ function vectorize_body(N::Union{Symbol, Expr}, T::DataType, unroll_factor, n, b
     end
     # @show main_body
 
-    ### now we walk the body to look for reductions
-    if length(reduction_symbols) > 0
-        reductions = true
-    else
-        reductions = false
-    end
 
     # q = quote
     #     # QQ, Qr = divrem(Q, $unroll_factor)
@@ -394,7 +390,7 @@ function vectorize_body(N::Union{Symbol, Expr}, T::DataType, unroll_factor, n, b
     end
     push!(q.args,
     quote
-        for $isym ∈ 0:$(unroll_factor*WT):($Qsym*$(unroll_factor*WT)-$T_size)
+        for $isym ∈ 0:$(unroll_factor*W):($Qsym*$(unroll_factor*W)-1)
             $(loop_body...)
         end
     end)
@@ -413,24 +409,38 @@ function vectorize_body(N::Union{Symbol, Expr}, T::DataType, unroll_factor, n, b
     push!(q.args, quote
         if $remsym > 0
             $masksym = $(mask_expr(W, remsym))
-            $isym = ($Nsym - $remsym)*$T_size
+            $isym = ($Nsym - $remsym)
             $(masked_loop_body...)
         end
     end)
-    # push!(q.args,
-    # quote
-    #     for $n ∈ $N-r+1:$N
-    #         $(body...)
-    #     end
-    # end)
+
+
+    ### now we walk the body to look for reductions
+    for ((sym,op),gsym) ∈ reduction_symbols
+        if op == :+ || op == :-
+            pushfirst!(q.args, :($gsym = LoopVectorization.SIMDPirates.vbroadcast($V,zero($T))))
+        elseif op == :* || op == :/
+            pushfirst!(q.args, :($gsym = LoopVectorization.SIMDPirates.vbroadcast($V,one($T))))
+        end
+        if op == :+
+            push!(q.args, :(@fastmath $sym = $sym + LoopVectorization.SIMDPirates.vsum($gsym)))
+        elseif op == :-
+            push!(q.args, :(@fastmath $sym = $sym - LoopVectorization.SIMDPirates.vsum($gsym)))
+        elseif op == :*
+            push!(q.args, :(@fastmath $sym = $sym * LoopVectorization.SIMDPirates.vprod($gsym)))
+        elseif op == :/
+            push!(q.args, :(@fastmath $sym = $sym / LoopVectorization.SIMDPirates.vprod($gsym)))
+        end
+    end
+
     q
 end
 function add_masks(expr, masksym)
     postwalk(expr) do x
-        if @capture(x, SIMDPirates.vstore(V_, ptr_))
-            return :(SIMDPirates.vstore($V, $ptr, $masksym))
-        elseif @capture(x, SIMDPirates.vload(V_, ptr_))
-            return :(SIMDPirates.vload($V, $ptr, $masksym))
+        if @capture(x, LoopVectorization.SIMDPirates.vstore(V_, ptr_))
+            return :(LoopVectorization.SIMDPirates.vstore($V, $ptr, $masksym))
+        elseif @capture(x, LoopVectorization.SIMDPirates.vload(V_, ptr_))
+            return :(LoopVectorization.SIMDPirates.vload($V, $ptr, $masksym))
         else
             return x
         end
@@ -447,7 +457,7 @@ function _vectorloads(V, expr; itersym = :iter, declared_iter_sym = nothing, Vec
     reduction_expressions = Dict{Symbol,Symbol}() # ParamSymbol,
 
     main_body = quote end
-    reduction_symbols = Symbol[]
+    reduction_symbols = Dict{Tuple{Symbol,Symbol},Symbol}()
     loaded_exprs = Dict{Expr,Symbol}()
     loop_constants_dict = Dict{Expr,Symbol}()
     loop_constants_quote = quote end
@@ -489,9 +499,9 @@ function _vectorloads!(main_body, indexed_expressions, reduction_expressions, re
                 pA = indexed_expressions[A]
             end
             if i == declared_iter_sym
-                return :(SIMDPirates.vstore($B, $pA + $itersym))
+                return :(LoopVectorization.SIMDPirates.vstore($B, $pA + $itersym))
             else
-                return :(SIMDPirates.vstore($B, $pA + $i))
+                return :(LoopVectorization.SIMDPirates.vstore($B, $pA + $i))
             end
         elseif @capture(x, A_[i_,j_] = B_)
             if A ∉ keys(indexed_expressions)
@@ -510,15 +520,25 @@ function _vectorloads!(main_body, indexed_expressions, reduction_expressions, re
                     stridesym = loop_constants_dict[stridexpr]
                 else
                     stridesym = gensym(:stride)
-                    push!(loop_constants_quote.args, :( $stridesym = $stridexpr * sizeof(eltype($pA)) ))
+                    push!(loop_constants_quote.args, :( $stridesym = $stridexpr ))
                     loop_constants_dict[stridexpr] = stridesym
                 end
-                return :(SIMDPirates.vstore($B, $pA + $itersym + $ej*$stridesym ))
+                return :(LoopVectorization.SIMDPirates.vstore($B, $pA + $itersym + $ej*$stridesym ))
             else
                 throw("Indexing columns with vectorized loop variable is not supported.")
             end
-        elseif (@capture(x, A += B_) || @capture(x, A -= B_) || @capture(x, A *= B_) || @capture(x, A /= B_)) && A ∉ reduction_symbols
-            push!(reduction_symbols, A)
+        elseif @capture(x, A_ += B_) || @capture(x, A_ = A_ + B_) || @capture(x, A_ = B_ + A_)
+            gA = get!(() -> gensym(A), reduction_symbols, (A, :+))
+            return :( $gA = $gA + $B )
+        elseif @capture(x, A_ -= B_) || @capture(x, A_ = A_ - B_)
+            gA = get!(() -> gensym(A), reduction_symbols, (A, :-))
+            return :( $gA = $gA + $B )
+        elseif @capture(x, A_ *= B_) || @capture(x, A_ = A_ * B_) || @capture(x, A_ = B_ * A_)
+            gA = get!(() -> gensym(A), reduction_symbols, (A, :*))
+            return :( $gA = LoopVectorization.SIMDPirates.evmul($gA, $B ))
+        elseif @capture(x, A_ /= B_) || @capture(x, A_ = A_ / B_)
+            gA = get!(() -> gensym(A), reduction_symbols, (A, :/))
+            return :( $gA = LoopVectorization.SIMDPirates.evmul($gA, $B ))
         elseif @capture(x, A_[i_])
             if A ∉ keys(indexed_expressions)
                 # pA = esc(gensym(A))
@@ -531,10 +551,10 @@ function _vectorloads!(main_body, indexed_expressions, reduction_expressions, re
 
             ## check to see if we are to do a vector load or a broadcast
             if i == declared_iter_sym
-                load_expr = :(SIMDPirates.vload($V, $pA + $itersym ))
-                # load_expr = :(SIMDPirates.vload($V, $pA, $itersym))
+                load_expr = :(LoopVectorization.SIMDPirates.vload($V, $pA + $itersym ))
+                # load_expr = :(LoopVectorization.SIMDPirates.vload($V, $pA, $itersym))
             else
-                load_expr = :(SIMDPirates.vbroadcast($V, unsafe_load($pA, $i)))
+                load_expr = :(LoopVectorization.SIMDPirates.vbroadcast($V, unsafe_load($pA, $i)))
             end
             # performs a CSE on load expressions
             if load_expr ∈ keys(loaded_exprs)
@@ -564,10 +584,10 @@ function _vectorloads!(main_body, indexed_expressions, reduction_expressions, re
                     stridesym = loop_constants_dict[stridexpr]
                 else
                     stridesym = gensym(:stride)
-                    push!(loop_constants_quote.args, :( $stridesym = $stridexpr * sizeof(eltype($pA)) ))
+                    push!(loop_constants_quote.args, :( $stridesym = $stridexpr ))
                     loop_constants_dict[stridexpr] = stridesym
                 end
-                load_expr = :(SIMDPirates.vload($V, $pA + $itersym + $ej*$stridesym))
+                load_expr = :(LoopVectorization.SIMDPirates.vload($V, $pA + $itersym + $ej*$stridesym))
             elseif j == declared_iter_sym
                 throw("Indexing columns with vectorized loop variable is not supported.")
             else
@@ -578,10 +598,10 @@ function _vectorloads!(main_body, indexed_expressions, reduction_expressions, re
                     stridesym = loop_constants_dict[stridexpr]
                 else
                     stridesym = gensym(:stride)
-                    push!(loop_constants_quote.args, :( $stridesym = $stridexpr * sizeof(eltype($pA)) ))
+                    push!(loop_constants_quote.args, :( $stridesym = $stridexpr ))
                     loop_constants_dict[stridexpr] = stridesym
                 end
-                load_expr = :(SIMDPirates.vbroadcast($V, unsafe_load($pA + $i*sizeof(eltype($pA)) + $ej*$stridesym)))
+                load_expr = :(LoopVectorization.SIMDPirates.vbroadcast($V, unsafe_load($pA + $i + $ej*$stridesym)))
             end
             # performs a CSE on load expressions
             if load_expr ∈ keys(loaded_exprs)
@@ -618,7 +638,7 @@ function _vectorloads!(main_body, indexed_expressions, reduction_expressions, re
                 stridesym = loop_constants_dict[stridexpr]
             else
                 stridesym = gensym(:stride)
-                push!(loop_constants_quote.args, :( $stridesym = $stridexpr * sizeof(eltype($pA)) ))
+                push!(loop_constants_quote.args, :( $stridesym = $stridexpr ))
                 loop_constants_dict[stridexpr] = stridesym
             end
             # numiterexpr = :(LoopVectorization.num_row_strides($A))
@@ -635,7 +655,7 @@ function _vectorloads!(main_body, indexed_expressions, reduction_expressions, re
 
                 # for $coliter ∈ 0:$numitersym-1
                 for $coliter ∈ 0:length($br)-1
-                    @inbounds SIMDPirates.vstore(getindex($br,1+$coliter), $pA + $isym + $stridesym * $coliter)
+                    @inbounds LoopVectorization.SIMDPirates.vstore(getindex($br,1+$coliter), $pA + $isym + $stridesym * $coliter)
                 end
             end
 
@@ -651,6 +671,8 @@ function _vectorloads!(main_body, indexed_expressions, reduction_expressions, re
             return :(zero($V))
         elseif @capture(x, one(T_))
             return :(one($V))
+        elseif @capture(x, B_ ? A_ : C_)
+            return :(LoopVectorization.SIMDPirates.vifelse($B, $A, $C))
         else
             # println("Returning x:", x)
             return x
