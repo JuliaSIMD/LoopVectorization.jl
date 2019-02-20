@@ -318,9 +318,9 @@ function vectorize_body(N, Tsym::Symbol, uf, n, body, vecdict = SLEEFDict, VType
     end
 end
 function vectorize_body(N::Union{Symbol, Expr}, T::DataType, unroll_factor, n, body, vecdict = SLEEFDict, VType = SVec)
-    unroll_factor == 1 || throw("Only unroll factor of 1 is currently supported. Was set to $unroll_factor.")
+    # unroll_factor == 1 || throw("Only unroll factor of 1 is currently supported. Was set to $unroll_factor.")
     T_size = sizeof(T)
-    W = REGISTER_SIZE ÷ T_size
+    W = (REGISTER_SIZE ÷ T_size) * unroll_factor
     # @show W, REGISTER_SIZE, T_size
     # @show T
     WT = W * T_size
@@ -333,12 +333,8 @@ function vectorize_body(N::Union{Symbol, Expr}, T::DataType, unroll_factor, n, b
     # indexed_expressions = Dict{Symbol,Expr}()
     indexed_expressions = Dict{Symbol,Symbol}() # Symbol, gensymbol
     reduction_expressions = Dict{Symbol,Symbol}() # ParamSymbol,
-    # itersym = esc(gensym(:iter))
-    # itersym = esc(:iter)
-    # itersym = :iter
-    # itersym = gensym(:iter)
-    isym = gensym(:i)
-    itersym = isym
+
+    itersym = gensym(:i)
     # walk the expression, searching for all get index patterns.
     # these will be replaced with
     # Plan: definition of q will create vectorizables
@@ -360,16 +356,6 @@ function vectorize_body(N::Union{Symbol, Expr}, T::DataType, unroll_factor, n, b
     end
     # @show main_body
 
-
-    # q = quote
-    #     # QQ, Qr = divrem(Q, $unroll_factor)
-    #     # if r > 0
-    #     #     # $(unroll_factor == 1 ? :QQ : :Qr) += 1
-    #     #     Qr += 1
-    #     #     # Q += 1
-    #     # end
-    # end
-    # pushfirst!(q.args, :((Q, r) = $(num_vector_load_expr(:LoopVectorization, N, W))))
     Qsym = gensym(:Q)
     remsym = gensym(:rem)
     q = quote
@@ -381,36 +367,22 @@ function vectorize_body(N::Union{Symbol, Expr}, T::DataType, unroll_factor, n, b
         push!(q.args, :( $psym = vectorizable($sym) ))
     end
     push!(q.args, loop_constants_quote)
-    # @show QQ, Qr, Q, r
-    # loop_body = [:($itersym = $isym), :($main_body)]
-    loop_body = [main_body]
-    for unroll ∈ 1:unroll_factor-1
-        push!(loop_body, :($itersym = $isym + $(unroll*W)))
-        push!(loop_body, :($main_body))
-    end
+
     push!(q.args,
     quote
-        for $isym ∈ 0:$(unroll_factor*W):($Qsym*$(unroll_factor*W)-1)
-            $(loop_body...)
+        for $itersym ∈ 0:$W:($W*$Qsym-1)
+            $main_body
         end
     end)
-    # if unroll_factor > 1
-    #     push!(q.args,
-    #     quote
-    #         for $isym ∈ 1:Qr
-    #             $itersym = QQ*$(unroll_factor*WT) + $isym*$WT
-    #             $main_body
-    #         end
-    #     end)
-    # end
+
     Itype = Base.Threads.inttype(T)
     masksym = gensym(:mask)
-    masked_loop_body = add_masks.(loop_body, masksym)
+    masked_loop_body = add_masks(main_body, masksym)
     push!(q.args, quote
         if $remsym > 0
             $masksym = $(mask_expr(W, remsym))
-            $isym = ($Nsym - $remsym)
-            $(masked_loop_body...)
+            $itersym = ($Nsym - $remsym)
+            $masked_loop_body
         end
     end)
 
