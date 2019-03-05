@@ -179,10 +179,10 @@ function vectorize_body(N, T::DataType, unroll_factor, n, body, vecdict = SLEEFD
     # unroll_factor == 1 || throw("Only unroll factor of 1 is currently supported. Was set to $unroll_factor.")
     T_size = sizeof(T)
     if isa(N, Integer)
-        W = pick_vector_width(N, T)
+        W, Wshift = pick_vector_width_shift(N, T)
         Nsym = N
     else
-        W = (REGISTER_SIZE ÷ T_size) * unroll_factor
+        W, Wshift = pick_vector_width_shift(T)
         Nsym = gensym(:N)
     end
     # @show W, REGISTER_SIZE, T_size
@@ -223,7 +223,7 @@ function vectorize_body(N, T::DataType, unroll_factor, n, body, vecdict = SLEEFD
     if isa(N, Integer)
         Q, r = divrem(N, W)
         q = quote end
-        loop_max_expr = W * Q - 1
+        loop_max_expr = Q - 1
     else
         Qsym = gensym(:Q)
         remsym = gensym(:rem)
@@ -232,16 +232,18 @@ function vectorize_body(N, T::DataType, unroll_factor, n, body, vecdict = SLEEFD
             ($Qsym, $remsym) = $(num_vector_load_expr(:LoopVectorization, N, W))
             # $loop_constants_quote
         end
-        loop_max_expr = :($W*$Qsym-1)
+        loop_max_expr = :($Qsym-1)
     end
     for (sym, psym) ∈ indexed_expressions
         push!(q.args, :( $psym = vectorizable($sym) ))
     end
     push!(q.args, loop_constants_quote)
 
+    unadjitersym = gensym(:unadjitersym)
     push!(q.args,
     quote
-        for $itersym ∈ 0:$W:$loop_max_expr
+        for $unadjitersym ∈ 0:$loop_max_expr
+            $itersym = $W * $unadjitersym
             $main_body
         end
     end)
