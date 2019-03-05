@@ -179,12 +179,15 @@ function vectorize_body(N, T::DataType, unroll_factor, n, body, vecdict = SLEEFD
     # unroll_factor == 1 || throw("Only unroll factor of 1 is currently supported. Was set to $unroll_factor.")
     T_size = sizeof(T)
     if isa(N, Integer)
-        W, Wshift = pick_vector_width_shift(N, T)
+        W, Wshift = VectorizationBase.pick_vector_width_shift(N, T)
         Nsym = N
     else
-        W, Wshift = pick_vector_width_shift(T)
+        W, Wshift = VectorizationBase.pick_vector_width_shift(T)
         Nsym = gensym(:N)
     end
+    log2unroll = max(1,VectorizationBase.intlog2(unroll_factor))
+    W *= unroll_factor
+    Wshift += log2unroll
     # @show W, REGISTER_SIZE, T_size
     # @show T
     WT = W * T_size
@@ -549,6 +552,8 @@ macro vectorize(expr)
     #     q = vectorize_body(N, element_type(body)
     elseif @capture(expr, for n_ ∈ eachindex(A_) body__ end)
         q = vectorize_body(:(length($A)), Float64, 1, n, body)
+    elseif @capture(expr, for n_ ∈ eachindex(args__) body__ end)
+        q = vectorize_body(:(min($([:(length($a)) for a ∈ args]...))), Float64, 1, n, body)
     else
         throw("Could not match loop expression.")
     end
@@ -560,6 +565,8 @@ macro vectorize(type::Union{Symbol,DataType}, expr)
         q = vectorize_body(N, type, 1, n, body)
     elseif @capture(expr, for n_ ∈ eachindex(A_) body__ end)
         q = vectorize_body(:(length($A)), type, 1, n, body)
+    elseif @capture(expr, for n_ ∈ eachindex(args__) body__ end)
+        q = vectorize_body(:(min($([:(length($a)) for a ∈ args]...))), Float64, 1, n, body)
     else
         throw("Could not match loop expression.")
     end
@@ -571,17 +578,21 @@ macro vectorize(unroll_factor::Integer, expr)
         q = vectorize_body(N, Float64, unroll_factor, n, body)
     elseif @capture(expr, for n_ ∈ eachindex(A_) body__ end)
         q = vectorize_body(:(length($A)), Float64, unroll_factor, n, body)
+    elseif @capture(expr, for n_ ∈ eachindex(args__) body__ end)
+        q = vectorize_body(:(min($([:(length($a)) for a ∈ args]...))), Float64, unroll_factor, n, body)
     else
         throw("Could not match loop expression.")
     end
     esc(q)
 end
-macro vectorize(type, unroll_factor, expr)
+macro vectorize(type, unroll_factor::Integer, expr)
     if @capture(expr, for n_ ∈ 1:N_ body__ end)
         # q = vectorize_body(N, type, n, body, true)
         q = vectorize_body(N, type, unroll_factor, n, body)
     elseif @capture(expr, for n_ ∈ eachindex(A_) body__ end)
         q = vectorize_body(:(length($A)), type, unroll_factor, n, body)
+    elseif @capture(expr, for n_ ∈ eachindex(args__) body__ end)
+        q = vectorize_body(:(min($([:(length($a)) for a ∈ args]...))), type, unroll_factor, n, body)
     else
         throw("Could not match loop expression.")
     end
