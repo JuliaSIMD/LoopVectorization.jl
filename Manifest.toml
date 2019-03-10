@@ -5,15 +5,15 @@ uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 
 [[Compat]]
 deps = ["Base64", "Dates", "DelimitedFiles", "Distributed", "InteractiveUtils", "LibGit2", "Libdl", "LinearAlgebra", "Markdown", "Mmap", "Pkg", "Printf", "REPL", "Random", "Serialization", "SharedArrays", "Sockets", "SparseArrays", "Statistics", "Test", "UUIDs", "Unicode"]
-git-tree-sha1 = "ec61a16eed883ad0cfa002d7489b3ce6d039bb9a"
+git-tree-sha1 = "195a3ffcb8b0762684b6821de18f83a16455c6ea"
 uuid = "34da2185-b29b-5c13-b0c7-acf172513d20"
-version = "1.4.0"
+version = "2.0.0"
 
 [[CpuId]]
 deps = ["Markdown", "Test"]
-git-tree-sha1 = "44529456cba0185724fc4bb995943416c5d94be3"
+git-tree-sha1 = "f0464e499ab9973b43c20f8216d088b61fda80c6"
 uuid = "adafc99b-e345-5852-983c-f28acb93d879"
-version = "0.2.0"
+version = "0.2.2"
 
 [[Dates]]
 deps = ["Printf"]
@@ -46,9 +46,9 @@ uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
 
 [[MacroTools]]
 deps = ["Compat"]
-git-tree-sha1 = "c443e1c8d58a4e9f61b708ad0a88286c7042145b"
+git-tree-sha1 = "3fd1a3022952128935b449c33552eb65895380c1"
 uuid = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
-version = "0.4.4"
+version = "0.4.5"
 
 [[Markdown]]
 deps = ["Base64"]
@@ -76,23 +76,17 @@ uuid = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 [[SHA]]
 uuid = "ea8e919c-243c-51af-8825-aaa63cd721ce"
 
-[[SIMD]]
-deps = ["InteractiveUtils", "Test"]
-git-tree-sha1 = "dd2cf145cdc7a8cb41b7ba8ea1e7aff6ae1a69b1"
-uuid = "fdea26ae-647d-5447-a871-4b548cad5224"
-version = "2.3.0"
-
 [[SIMDPirates]]
 deps = ["MacroTools", "VectorizationBase"]
 path = "/home/chriselrod/.julia/dev/SIMDPirates"
 uuid = "21efa798-c60a-11e8-04d3-e1a92915a26a"
 version = "0.1.0"
 
-[[SLEEF]]
-deps = ["SIMD", "SIMDPirates", "VectorizationBase"]
-path = "/home/chriselrod/.julia/dev/SLEEF"
-uuid = "3e6341c9-01f6-5312-b33f-f8894a2e817a"
-version = "0.5.1"
+[[SLEEFPirates]]
+deps = ["SIMDPirates", "VectorizationBase"]
+path = "/home/chriselrod/.julia/dev/SLEEFPirates"
+uuid = "476501e8-09a2-5ece-8869-fb82de89a1fa"
+version = "0.1.0"
 
 [[Serialization]]
 uuid = "9e88b42a-f829-5b0c-bbe9-9e923198166b"

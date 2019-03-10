@@ -1,6 +1,6 @@
 module LoopVectorization
 
-using VectorizationBase, SIMDPirates, SLEEF, MacroTools
+using VectorizationBase, SIMDPirates, SLEEFPirates, MacroTools
 using VectorizationBase: REGISTER_SIZE, extract_data
 using SIMDPirates: VECTOR_SYMBOLS
 using MacroTools: @capture, prewalk, postwalk
@@ -9,45 +9,45 @@ export vectorizable, @vectorize
 
 
 
-const SLEEFDict = Dict{Symbol,Expr}(
-    :sin => :(SLEEF.sin_fast),
-    :sinpi => :(SLEEF.sinpi),
-    :cos => :(SLEEF.cos_fast),
-    :cospi => :(SLEEF.cospi),
-    :tan => :(SLEEF.tan_fast),
-    :log => :(SLEEF.log_fast),
-    :log10 => :(SLEEF.log10),
-    :log2 => :(SLEEF.log2),
-    :log1p => :(SLEEF.log1p),
-    :exp => :(SLEEF.exp),
-    :exp2 => :(SLEEF.exp2),
-    :exp10 => :(SLEEF.exp10),
-    :expm1 => :(SLEEF.expm1),
-    :sqrt => :(SLEEF.sqrt), # faster than sqrt_fast
+const SLEEFPiratesDict = Dict{Symbol,Expr}(
+    :sin => :(SLEEFPirates.sin_fast),
+    :sinpi => :(SLEEFPirates.sinpi),
+    :cos => :(SLEEFPirates.cos_fast),
+    :cospi => :(SLEEFPirates.cospi),
+    :tan => :(SLEEFPirates.tan_fast),
+    :log => :(SLEEFPirates.log_fast),
+    :log10 => :(SLEEFPirates.log10),
+    :log2 => :(SLEEFPirates.log2),
+    :log1p => :(SLEEFPirates.log1p),
+    :exp => :(SLEEFPirates.exp),
+    :exp2 => :(SLEEFPirates.exp2),
+    :exp10 => :(SLEEFPirates.exp10),
+    :expm1 => :(SLEEFPirates.expm1),
+    :sqrt => :(SLEEFPirates.sqrt), # faster than sqrt_fast
     :rsqrt => :(LoopVectorization.SIMDPirates.rsqrt),
-    :cbrt => :(SLEEF.cbrt_fast),
-    :asin => :(SLEEF.asin_fast),
-    :acos => :(SLEEF.acos_fast),
-    :atan => :(SLEEF.atan_fast),
-    :sinh => :(SLEEF.sinh),
-    :cosh => :(SLEEF.cosh),
-    :tanh => :(SLEEF.tanh),
-    :asinh => :(SLEEF.asinh),
-    :acosh => :(SLEEF.acosh),
-    :atanh => :(SLEEF.atanh),
-    # :erf => :(SLEEF.erf),
-    # :erfc => :(SLEEF.erfc),
-    # :gamma => :(SLEEF.gamma),
-    # :lgamma => :(SLEEF.lgamma),
-    :trunc => :(SLEEF.trunc),
-    :floor => :(SLEEF.floor),
-    :ceil => :(SLEEF.ceil),
-    :abs => :(SLEEF.abs),
-    :sincos => :(SLEEF.sincos_fast),
-    # :sincospi => :(SLEEF.sincospi_fast),
-    # :pow => :(SLEEF.pow),
-    # :hypot => :(SLEEF.hypot_fast),
-    :mod => :(SLEEF.mod)
+    :cbrt => :(SLEEFPirates.cbrt_fast),
+    :asin => :(SLEEFPirates.asin_fast),
+    :acos => :(SLEEFPirates.acos_fast),
+    :atan => :(SLEEFPirates.atan_fast),
+    :sinh => :(SLEEFPirates.sinh),
+    :cosh => :(SLEEFPirates.cosh),
+    :tanh => :(SLEEFPirates.tanh),
+    :asinh => :(SLEEFPirates.asinh),
+    :acosh => :(SLEEFPirates.acosh),
+    :atanh => :(SLEEFPirates.atanh),
+    # :erf => :(SLEEFPirates.erf),
+    # :erfc => :(SLEEFPirates.erfc),
+    # :gamma => :(SLEEFPirates.gamma),
+    # :lgamma => :(SLEEFPirates.lgamma),
+    :trunc => :(SLEEFPirates.trunc),
+    :floor => :(SLEEFPirates.floor),
+    :ceil => :(SLEEFPirates.ceil),
+    :abs => :(SLEEFPirates.abs),
+    :sincos => :(SLEEFPirates.sincos_fast),
+    # :sincospi => :(SLEEFPirates.sincospi_fast),
+    # :pow => :(SLEEFPirates.pow),
+    # :hypot => :(SLEEFPirates.hypot_fast),
+    :mod => :(SLEEFPirates.mod)
     # :copysign => :copysign
 )
 
@@ -162,7 +162,7 @@ function create_mask(W, r)
     end
 end
 
-function vectorize_body(N, Tsym::Symbol, uf, n, body, vecdict = SLEEFDict, VType = SVec)
+function vectorize_body(N, Tsym::Symbol, uf, n, body, vecdict = SLEEFPiratesDict, VType = SVec)
     if Tsym == :Float32
         vectorize_body(N, Float32, uf, n, body, vecdict, VType)
     elseif Tsym == :Float64
@@ -175,7 +175,7 @@ function vectorize_body(N, Tsym::Symbol, uf, n, body, vecdict = SLEEFDict, VType
         throw("Type $Tsym is not supported.")
     end
 end
-function vectorize_body(N, T::DataType, unroll_factor, n, body, vecdict = SLEEFDict, VType = SVec)
+function vectorize_body(N, T::DataType, unroll_factor, n, body, vecdict = SLEEFPiratesDict, VType = SVec)
     # unroll_factor == 1 || throw("Only unroll factor of 1 is currently supported. Was set to $unroll_factor.")
     T_size = sizeof(T)
     if isa(N, Integer)
@@ -304,7 +304,7 @@ function add_masks(expr, masksym)
     end
 end
 
-function _vectorloads(V, expr; itersym = :iter, declared_iter_sym = nothing, VectorizationDict = SLEEFDict)
+function _vectorloads(V, expr; itersym = :iter, declared_iter_sym = nothing, VectorizationDict = SLEEFPiratesDict)
 
 
     # body = _pirate(body)
@@ -343,7 +343,7 @@ function nexprs_expansion(expr)
 end
 
 function _vectorloads!(main_body, indexed_expressions, reduction_expressions, reduction_symbols, loaded_exprs, V, loop_constants_quote, loop_constants_dict, expr;
-                            itersym = :iter, declared_iter_sym = nothing, VectorizationDict = SLEEFDict)
+                            itersym = :iter, declared_iter_sym = nothing, VectorizationDict = SLEEFPiratesDict)
     _spirate(prewalk(expr) do x
         # @show x
         if @capture(x, A_[i_] = B_)

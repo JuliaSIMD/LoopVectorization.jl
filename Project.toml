@@ -6,7 +6,7 @@ version = "0.1.0"
 [deps]
 MacroTools = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
 SIMDPirates = "21efa798-c60a-11e8-04d3-e1a92915a26a"
-SLEEF = "3e6341c9-01f6-5312-b33f-f8894a2e817a"
+SLEEFPirates = "476501e8-09a2-5ece-8869-fb82de89a1fa"
 VectorizationBase = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
 
 [extras]
