@@ -357,6 +357,9 @@ function _vectorloads!(main_body, indexed_expressions, reduction_expressions, re
             end
             if i == declared_iter_sym
                 return :(LoopVectorization.SIMDPirates.vstore!($pA + $itersym, $B))
+            elseif isa(i, Expr)
+                contains_itersym, i2 = subsymbol(i, declared_iter_sym, itersym)
+                return :(LoopVectorization.SIMDPirates.vstore!($pA + $i2, $B))
             else
                 return :(LoopVectorization.SIMDPirates.vstore!($pA + $i, $B))
             end
@@ -410,6 +413,13 @@ function _vectorloads!(main_body, indexed_expressions, reduction_expressions, re
             if i == declared_iter_sym
                 load_expr = :(LoopVectorization.SIMDPirates.vload($V, $pA + $itersym ))
                 # load_expr = :(LoopVectorization.SIMDPirates.vload($V, $pA, $itersym))
+            elseif isa(i, Expr)
+                contains_itersym, i2 = subsymbol(i, declared_iter_sym, itersym)
+                if contains_itersym
+                    load_expr = :(LoopVectorization.SIMDPirates.vload($V, $pA + $i2 ))
+                else
+                    load_expr = :(LoopVectorization.SIMDPirates.vbroadcast($V, unsafe_load($pA, $i)))
+                end
             else
                 load_expr = :(LoopVectorization.SIMDPirates.vbroadcast($V, unsafe_load($pA, $i)))
             end
@@ -537,10 +547,28 @@ function _vectorloads!(main_body, indexed_expressions, reduction_expressions, re
     end, VectorizationDict, false) # macro_escape = false
 end
 
+"""
+subsymbol(expr, i, j)
+substitute symbol i with symbol j in expr
+Returns true if a substitution was made, false otherwise.
+"""
+function subsymbol(expr, i, j)
+    subbed = false
+    expr = postwalk(expr) do ex
+        if ex == i
+            subbed = true
+            return j
+        else
+            return ex
+        end
+    end
+    subbed, expr
+end
+
 
 """
 Arguments are
-@vectorze Type UnrollFactor forloop
+@vectorize Type UnrollFactor forloop
 
 The default type is Float64, and default UnrollFactor is 1 (no unrolling).
 """
