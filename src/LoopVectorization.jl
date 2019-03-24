@@ -290,8 +290,14 @@ function vectorize_body(N, T::DataType, unroll_factor, n, body, vecdict = SLEEFP
         end
     end
 
-    q
+    # q
+    # We are using pointers, so better add a GC.@preserve.
+    Expr(:macrocall,
+        Expr(:., :GC, QuoteNode(Symbol("@preserve"))),
+            LineNumberNode(294), sym..., q
+    )
 end
+
 function add_masks(expr, masksym)
     postwalk(expr) do x
         if @capture(x, LoopVectorization.SIMDPirates.vstore!(ptr_, V_))
