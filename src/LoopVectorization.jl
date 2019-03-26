@@ -253,7 +253,7 @@ function vectorize_body(N, T::DataType, unroll_factor, n, body, vecdict = SLEEFP
 
     if !isa(N, Integer) || r > 0
         masksym = gensym(:mask)
-        masked_loop_body = add_masks(main_body, masksym)
+        masked_loop_body = add_masks(main_body, masksym, reduction_symbols)
         if isa(N, Integer)
             push!(q.args, quote
                 $masksym = $(create_mask(W, r))
@@ -290,20 +290,26 @@ function vectorize_body(N, T::DataType, unroll_factor, n, body, vecdict = SLEEFP
         end
     end
 
-    # q
     # We are using pointers, so better add a GC.@preserve.
     Expr(:macrocall,
         Expr(:., :GC, QuoteNode(Symbol("@preserve"))),
-            LineNumberNode(294), sym..., q
+            LineNumberNode(294), (keys(indexed_expressions))..., q
     )
 end
 
-function add_masks(expr, masksym)
+function add_masks(expr, masksym, reduction_symbols)
     postwalk(expr) do x
         if @capture(x, LoopVectorization.SIMDPirates.vstore!(ptr_, V_))
             return :(LoopVectorization.SIMDPirates.vstore!($ptr, $V, $masksym))
         elseif @capture(x, LoopVectorization.SIMDPirates.vload(V_, ptr_))
             return :(LoopVectorization.SIMDPirates.vload($V, $ptr, $masksym))
+        # We mask the reductions, because the odds of them getting contaminated and therefore poisoning the results seems too great
+        # for reductions to be practical. If what we're vectorizing is simple enough not to worry about contamination...then
+        # it ought to be simple enough so we don't need @vectorize.
+        elseif @capture(x, reductionA_ = LoopVectorization.SIMDPirates.vadd(reductionA_, B_ ) )
+            return :( $reductionA = SIMDPirates.vifelse($masksym, LoopVectorization.SIMDPirates.vadd($reductionA, $B), $reductionA) )
+        elseif @capture(x, reductionA_ = LoopVectorization.SIMDPirates.vmul(reductionA_, B_ ) )
+            return :( $reductionA = SIMDPirates.vifelse($masksym, LoopVectorization.SIMDPirates.vmul($reductionA, $B), $reductionA) )
         else
             return x
         end
@@ -395,16 +401,16 @@ function _vectorloads!(main_body, indexed_expressions, reduction_expressions, re
             end
         elseif @capture(x, A_ += B_) || @capture(x, A_ = A_ + B_) || @capture(x, A_ = B_ + A_)
             gA = get!(() -> gensym(A), reduction_symbols, (A, :+))
-            return :( $gA = $gA + $B )
+            return :( $gA = LoopVectorization.SIMDPirates.vadd($gA, $B ))
         elseif @capture(x, A_ -= B_) || @capture(x, A_ = A_ - B_)
             gA = get!(() -> gensym(A), reduction_symbols, (A, :-))
-            return :( $gA = $gA + $B )
+            return :( $gA = LoopVectorization.SIMDPirates.vadd($gA, $B ))
         elseif @capture(x, A_ *= B_) || @capture(x, A_ = A_ * B_) || @capture(x, A_ = B_ * A_)
             gA = get!(() -> gensym(A), reduction_symbols, (A, :*))
-            return :( $gA = LoopVectorization.SIMDPirates.evmul($gA, $B ))
+            return :( $gA = LoopVectorization.SIMDPirates.vmul($gA, $B ))
         elseif @capture(x, A_ /= B_) || @capture(x, A_ = A_ / B_)
             gA = get!(() -> gensym(A), reduction_symbols, (A, :/))
-            return :( $gA = LoopVectorization.SIMDPirates.evmul($gA, $B ))
+            return :( $gA = LoopVectorization.SIMDPirates.vmul($gA, $B ))
         elseif @capture(x, A_[i_])
             if A ∉ keys(indexed_expressions)
                 # pA = esc(gensym(A))
