@@ -199,7 +199,6 @@ function vectorize_body(N, T::DataType, unroll_factor, n, body, vecdict = SLEEFP
 
     # indexed_expressions = Dict{Symbol,Expr}()
     indexed_expressions = Dict{Symbol,Symbol}() # Symbol, gensymbol
-    reduction_expressions = Dict{Symbol,Symbol}() # ParamSymbol,
 
     itersym = gensym(:i)
     # walk the expression, searching for all get index patterns.
@@ -217,7 +216,7 @@ function vectorize_body(N, T::DataType, unroll_factor, n, body, vecdict = SLEEFP
         ## body preamble must define indexed symbols
         ## we only need that for loads.
         push!(main_body.args,
-            _vectorloads!(main_body, indexed_expressions, reduction_expressions, reduction_symbols, loaded_exprs, V, loop_constants_quote, loop_constants_dict, b;
+            _vectorloads!(main_body, indexed_expressions, reduction_symbols, loaded_exprs, V, loop_constants_quote, loop_constants_dict, b;
                             itersym = itersym, declared_iter_sym = n, VectorizationDict = vecdict)
         )# |> x -> (@show(x), _pirate(x)))
     end
@@ -280,7 +279,9 @@ function vectorize_body(N, T::DataType, unroll_factor, n, body, vecdict = SLEEFP
             pushfirst!(q.args, :($gsym = LoopVectorization.SIMDPirates.vbroadcast($V,one($T))))
         end
         if op == :+
+            # push!(q.args, :(@show $sym, $gsym))
             push!(q.args, :(@fastmath $sym = $sym + LoopVectorization.SIMDPirates.vsum($gsym)))
+            # push!(q.args, :(@show $sym, $gsym))
         elseif op == :-
             push!(q.args, :(@fastmath $sym = $sym - LoopVectorization.SIMDPirates.vsum($gsym)))
         elseif op == :*
@@ -290,11 +291,13 @@ function vectorize_body(N, T::DataType, unroll_factor, n, body, vecdict = SLEEFP
         end
     end
 
+    # display(q)
     # We are using pointers, so better add a GC.@preserve.
     Expr(:macrocall,
         Expr(:., :GC, QuoteNode(Symbol("@preserve"))),
-            LineNumberNode(294), (keys(indexed_expressions))..., q
+            LineNumberNode(@__LINE__), (keys(indexed_expressions))..., q
     )
+    # q
 end
 
 function add_masks(expr, masksym, reduction_symbols)
@@ -323,7 +326,6 @@ function _vectorloads(V, expr; itersym = :iter, declared_iter_sym = nothing, Vec
 
     # indexed_expressions = Dict{Symbol,Expr}()
     indexed_expressions = Dict{Symbol,Symbol}() # Symbol, gensymbol
-    reduction_expressions = Dict{Symbol,Symbol}() # ParamSymbol,
 
     main_body = quote end
     reduction_symbols = Dict{Tuple{Symbol,Symbol},Symbol}()
@@ -332,7 +334,7 @@ function _vectorloads(V, expr; itersym = :iter, declared_iter_sym = nothing, Vec
     loop_constants_quote = quote end
 
     push!(main_body.args,
-        _vectorloads!(main_body, indexed_expressions, reduction_expressions, reduction_symbols, loaded_exprs, V, loop_constants_quote, loop_constants_dict, expr;
+        _vectorloads!(main_body, indexed_expressions, reduction_symbols, loaded_exprs, V, loop_constants_quote, loop_constants_dict, expr;
             itersym = itersym, declared_iter_sym = declared_iter_sym, VectorizationDict = VectorizationDict)
     )
     main_body
@@ -354,7 +356,7 @@ function nexprs_expansion(expr)
     end
 end
 
-function _vectorloads!(main_body, indexed_expressions, reduction_expressions, reduction_symbols, loaded_exprs, V, loop_constants_quote, loop_constants_dict, expr;
+function _vectorloads!(main_body, indexed_expressions, reduction_symbols, loaded_exprs, V, loop_constants_quote, loop_constants_dict, expr;
                             itersym = :iter, declared_iter_sym = nothing, VectorizationDict = SLEEFPiratesDict)
     _spirate(prewalk(expr) do x
         # @show x
@@ -606,7 +608,7 @@ macro vectorize(type::Union{Symbol,DataType}, expr)
     elseif @capture(expr, for n_ ∈ eachindex(A_) body__ end)
         q = vectorize_body(:(length($A)), type, 1, n, body)
     elseif @capture(expr, for n_ ∈ eachindex(args__) body__ end)
-        q = vectorize_body(:(min($([:(length($a)) for a ∈ args]...))), Float64, 1, n, body)
+        q = vectorize_body(:(min($([:(length($a)) for a ∈ args]...))), type, 1, n, body)
     else
         throw("Could not match loop expression.")
     end
