@@ -211,16 +211,6 @@ function vectorize_body(N, T::DataType, unroll_factor, n, body, vecdict = SLEEFP
     loop_constants_dict = Dict{Expr,Symbol}()
     loop_constants_quote = quote end
 
-    for b ∈ body
-        b = nexprs_expansion(b)
-        ## body preamble must define indexed symbols
-        ## we only need that for loads.
-        push!(main_body.args,
-            _vectorloads!(main_body, indexed_expressions, reduction_symbols, loaded_exprs, V, loop_constants_quote, loop_constants_dict, b;
-                            itersym = itersym, declared_iter_sym = n, VectorizationDict = vecdict)
-        )# |> x -> (@show(x), _pirate(x)))
-    end
-    # @show main_body
 
     if isa(N, Integer)
         Q, r = divrem(N, W)
@@ -236,6 +226,18 @@ function vectorize_body(N, T::DataType, unroll_factor, n, body, vecdict = SLEEFP
         end
         loop_max_expr = :($Qsym-1)
     end
+    # @show T
+    for b ∈ body
+        b = nexprs_expansion(b)
+        ## body preamble must define indexed symbols
+        ## we only need that for loads.
+        push!(main_body.args,
+            _vectorloads!(main_body, q, indexed_expressions, reduction_symbols, loaded_exprs, V, W, T, loop_constants_quote, loop_constants_dict, b;
+                            itersym = itersym, declared_iter_sym = n, VectorizationDict = vecdict)
+        )# |> x -> (@show(x), _pirate(x)))
+    end
+    # @show main_body
+
     for (sym, psym) ∈ indexed_expressions
         push!(q.args, :( $psym = vectorizable($sym) ))
     end
@@ -319,26 +321,26 @@ function add_masks(expr, masksym, reduction_symbols)
     end
 end
 
-function _vectorloads(V, expr; itersym = :iter, declared_iter_sym = nothing, VectorizationDict = SLEEFPiratesDict)
-
-
-    # body = _pirate(body)
-
-    # indexed_expressions = Dict{Symbol,Expr}()
-    indexed_expressions = Dict{Symbol,Symbol}() # Symbol, gensymbol
-
-    main_body = quote end
-    reduction_symbols = Dict{Tuple{Symbol,Symbol},Symbol}()
-    loaded_exprs = Dict{Expr,Symbol}()
-    loop_constants_dict = Dict{Expr,Symbol}()
-    loop_constants_quote = quote end
-
-    push!(main_body.args,
-        _vectorloads!(main_body, indexed_expressions, reduction_symbols, loaded_exprs, V, loop_constants_quote, loop_constants_dict, expr;
-            itersym = itersym, declared_iter_sym = declared_iter_sym, VectorizationDict = VectorizationDict)
-    )
-    main_body
-end
+# function _vectorloads(V, expr; itersym = :iter, declared_iter_sym = nothing, VectorizationDict = SLEEFPiratesDict)
+#
+#
+#     # body = _pirate(body)
+#
+#     # indexed_expressions = Dict{Symbol,Expr}()
+#     indexed_expressions = Dict{Symbol,Symbol}() # Symbol, gensymbol
+#
+#     main_body = quote end
+#     reduction_symbols = Dict{Tuple{Symbol,Symbol},Symbol}()
+#     loaded_exprs = Dict{Expr,Symbol}()
+#     loop_constants_dict = Dict{Expr,Symbol}()
+#     loop_constants_quote = quote end
+#
+#     push!(main_body.args,
+#         _vectorloads!(main_body, indexed_expressions, reduction_symbols, loaded_exprs, V, loop_constants_quote, loop_constants_dict, expr;
+#             itersym = itersym, declared_iter_sym = declared_iter_sym, VectorizationDict = VectorizationDict)
+#     )
+#     main_body
+# end
 
 function nexprs_expansion(expr)
     prewalk(expr) do x
@@ -356,10 +358,11 @@ function nexprs_expansion(expr)
     end
 end
 
-function _vectorloads!(main_body, indexed_expressions, reduction_symbols, loaded_exprs, V, loop_constants_quote, loop_constants_dict, expr;
+function _vectorloads!(main_body, pre_quote, indexed_expressions, reduction_symbols, loaded_exprs, V, W, VET, loop_constants_quote, loop_constants_dict, expr;
                             itersym = :iter, declared_iter_sym = nothing, VectorizationDict = SLEEFPiratesDict)
     _spirate(prewalk(expr) do x
         # @show x
+        # @show main_body
         if @capture(x, A_[i_] = B_)
             if A ∉ keys(indexed_expressions)
                 # pA = esc(gensym(A))
@@ -441,7 +444,7 @@ function _vectorloads!(main_body, indexed_expressions, reduction_symbols, loaded
             if load_expr ∈ keys(loaded_exprs)
                 sym = loaded_exprs[load_expr]
             else
-                sym = gensym(Symbol(pA, :_, i))
+                sym = gensym(Symbol(pA, :_i))
                 loaded_exprs[load_expr] = sym
                 push!(main_body.args, :($sym = $load_expr))
             end
@@ -554,6 +557,11 @@ function _vectorloads!(main_body, indexed_expressions, reduction_symbols, loaded
             return :(one($V))
         elseif @capture(x, B_ ? A_ : C_)
             return :(LoopVectorization.SIMDPirates.vifelse($B, $A, $C))
+        elseif x == declared_iter_sym
+            isymvec = gensym(itersym)
+            push!(pre_quote.args, :($isymvec = SVec($(Expr(:tuple, [:(Core.VecElement{$VET}($(w-W))) for w ∈ 1:W]...)))))
+            push!(main_body.args, :($isymvec = SIMDPirates.vadd($isymvec, vbroadcast($V, $W)) ))
+            return isymvec
         else
             # println("Returning x:", x)
             return x
