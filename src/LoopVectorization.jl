@@ -244,13 +244,15 @@ function vectorize_body(N, T::DataType, unroll_factor, n, body, vecdict = SLEEFP
     push!(q.args, loop_constants_quote)
 
     unadjitersym = gensym(:unadjitersym)
-    push!(q.args,
-    quote
-        for $unadjitersym ∈ 0:$loop_max_expr
-            $itersym = $W * $unadjitersym
-            $main_body
-        end
-    end)
+    if !isa(loop_max_expr, Integer) || loop_max_expr >= 0
+        push!(q.args,
+        quote
+            for $unadjitersym ∈ 0:$loop_max_expr
+                $itersym = $W * $unadjitersym
+                $main_body
+            end
+        end)
+    end
 
     if !isa(N, Integer) || r > 0
         masksym = gensym(:mask)
