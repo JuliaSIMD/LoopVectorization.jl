@@ -406,16 +406,20 @@ function _vectorloads!(main_body, pre_quote, indexed_expressions, reduction_symb
             else
                 throw("Indexing columns with vectorized loop variable is not supported.")
             end
-        elseif @capture(x, A_ += B_) || @capture(x, A_ = A_ + B_) || @capture(x, A_ = B_ + A_)
+        elseif (@capture(x, A_ += B_) || @capture(x, A_ = A_ + B_) || @capture(x, A_ = B_ + A_)) && A isa Symbol
+            # @show A, typeof(A)
             gA = get!(() -> gensym(A), reduction_symbols, (A, :+))
             return :( $gA = LoopVectorization.SIMDPirates.vadd($gA, $B ))
-        elseif @capture(x, A_ -= B_) || @capture(x, A_ = A_ - B_)
+        elseif (@capture(x, A_ -= B_) || @capture(x, A_ = A_ - B_)) && A isa Symbol
+            # @show A, typeof(A)
             gA = get!(() -> gensym(A), reduction_symbols, (A, :-))
             return :( $gA = LoopVectorization.SIMDPirates.vadd($gA, $B ))
-        elseif @capture(x, A_ *= B_) || @capture(x, A_ = A_ * B_) || @capture(x, A_ = B_ * A_)
+        elseif (@capture(x, A_ *= B_) || @capture(x, A_ = A_ * B_) || @capture(x, A_ = B_ * A_)) && A isa Symbol
+            # @show A, typeof(A)
             gA = get!(() -> gensym(A), reduction_symbols, (A, :*))
             return :( $gA = LoopVectorization.SIMDPirates.vmul($gA, $B ))
-        elseif @capture(x, A_ /= B_) || @capture(x, A_ = A_ / B_)
+        elseif (@capture(x, A_ /= B_) || @capture(x, A_ = A_ / B_)) && A isa Symbol
+            # @show A, typeof(A)
             gA = get!(() -> gensym(A), reduction_symbols, (A, :/))
             return :( $gA = LoopVectorization.SIMDPirates.vmul($gA, $B ))
         elseif @capture(x, A_[i_])
