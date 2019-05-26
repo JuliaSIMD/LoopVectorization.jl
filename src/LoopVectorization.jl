@@ -365,7 +365,7 @@ function _vectorloads!(main_body, pre_quote, indexed_expressions, reduction_symb
     _spirate(prewalk(expr) do x
         # @show x
         # @show main_body
-        if @capture(x, A_[i_] = B_)
+        if @capture(x, A_[i_] = B_) || @capture(x, setindex!(A_, B_, i_))
             if A ∉ keys(indexed_expressions)
                 # pA = esc(gensym(A))
                 # pA = esc(Symbol(:p,A))
@@ -382,7 +382,7 @@ function _vectorloads!(main_body, pre_quote, indexed_expressions, reduction_symb
             else
                 return :(LoopVectorization.SIMDPirates.vstore!($pA + $i, $B))
             end
-        elseif @capture(x, A_[i_,j_] = B_)
+        elseif @capture(x, A_[i_,j_] = B_) || @capture(x, setindex!(A_, B_, i_, j_))
             if A ∉ keys(indexed_expressions)
                 pA = gensym(Symbol(:p, A))
                 indexed_expressions[A] = pA
@@ -422,7 +422,7 @@ function _vectorloads!(main_body, pre_quote, indexed_expressions, reduction_symb
             # @show A, typeof(A)
             gA = get!(() -> gensym(A), reduction_symbols, (A, :/))
             return :( $gA = LoopVectorization.SIMDPirates.vmul($gA, $B ))
-        elseif @capture(x, A_[i_])
+        elseif @capture(x, A_[i_]) || @capture(x, getindex(A_, i_))
             if A ∉ keys(indexed_expressions)
                 # pA = esc(gensym(A))
                 # pA = esc(Symbol(:p,A))
@@ -456,7 +456,7 @@ function _vectorloads!(main_body, pre_quote, indexed_expressions, reduction_symb
             end
             # return the symbol we assigned the load to.
             return sym
-        elseif @capture(x, A_[i_, j_])
+        elseif @capture(x, A_[i_, j_]) || @capture(x, getindex(A_, i_, j_))
             if A ∉ keys(indexed_expressions)
                 # pA = esc(gensym(A))
                 # pA = esc(Symbol(:p,A))
