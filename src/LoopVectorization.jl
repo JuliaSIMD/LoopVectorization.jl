@@ -44,6 +44,8 @@ const SLEEFPiratesDict = Dict{Symbol,Expr}(
     :ceil => :(SLEEFPirates.ceil),
     :abs => :(SLEEFPirates.abs),
     :sincos => :(SLEEFPirates.sincos_fast),
+    :pow => :(SLEEFPirates.pow),
+    :^ => :(SLEEFPirates.pow),
     # :sincospi => :(SLEEFPirates.sincospi_fast),
     # :pow => :(SLEEFPirates.pow),
     # :hypot => :(SLEEFPirates.hypot_fast),
@@ -441,10 +443,10 @@ function _vectorloads!(main_body, pre_quote, indexed_expressions, reduction_symb
                 if contains_itersym
                     load_expr = :(LoopVectorization.SIMDPirates.vload($V, $pA + $i2 ))
                 else
-                    load_expr = :(LoopVectorization.SIMDPirates.vbroadcast($V, unsafe_load($pA, $i)))
+                    load_expr = :(LoopVectorization.SIMDPirates.vbroadcast($V, LoopVectorization.VectorizationBase.load($pA - 1 + $i)))
                 end
             else
-                load_expr = :(LoopVectorization.SIMDPirates.vbroadcast($V, unsafe_load($pA, $i)))
+                load_expr = :(LoopVectorization.SIMDPirates.vbroadcast($V, LoopVectorization.VectorizationBase.load($pA - 1 + $i)))
             end
             # performs a CSE on load expressions
             if load_expr ∈ keys(loaded_exprs)
@@ -491,7 +493,8 @@ function _vectorloads!(main_body, pre_quote, indexed_expressions, reduction_symb
                     push!(loop_constants_quote.args, :( $stridesym = $stridexpr ))
                     loop_constants_dict[stridexpr] = stridesym
                 end
-                load_expr = :(LoopVectorization.SIMDPirates.vbroadcast($V, unsafe_load($pA + $i + $ej*$stridesym)))
+                # added -1 because i is not the declared itersym, therefore the row number is presumably 1-indexed.
+                load_expr = :(LoopVectorization.SIMDPirates.vbroadcast($V, LoopVectorization.VectorizationBase.load($pA + $i - 1 + $ej*$stridesym)))
             end
             # performs a CSE on load expressions
             if load_expr ∈ keys(loaded_exprs)
