@@ -49,8 +49,10 @@ const SLEEFPiratesDict = Dict{Symbol,Expr}(
     # :sincospi => :(SLEEFPirates.sincospi_fast),
     # :pow => :(SLEEFPirates.pow),
     # :hypot => :(SLEEFPirates.hypot_fast),
-    :mod => :(SLEEFPirates.mod)
+    :mod => :(SLEEFPirates.mod),
     # :copysign => :copysign
+    :one => :(SIMDPirates.vone),
+    :zero => :(SIMDPirates.vzero)
 )
 
 
@@ -303,7 +305,7 @@ function vectorize_body(N, T::DataType, unroll_factor, n, body, vecdict = SLEEFP
         Expr(:., :GC, QuoteNode(Symbol("@preserve"))),
             LineNumberNode(@__LINE__), (keys(indexed_expressions))..., q
     )
-    # q
+    #q
 end
 
 function add_masks(expr, masksym, reduction_symbols)
@@ -315,10 +317,18 @@ function add_masks(expr, masksym, reduction_symbols)
         # We mask the reductions, because the odds of them getting contaminated and therefore poisoning the results seems too great
         # for reductions to be practical. If what we're vectorizing is simple enough not to worry about contamination...then
         # it ought to be simple enough so we don't need @vectorize.
-        elseif @capture(x, reductionA_ = LoopVectorization.SIMDPirates.vadd(reductionA_, B_ ) )
+        elseif @capture(x, reductionA_ = LoopVectorization.SIMDPirates.vadd(reductionA_, B_ ) ) || @capture(x, reductionA_ = LoopVectorization.SIMDPirates.vadd(B_, reductionA_ ) ) || @capture(x, reductionA_ = vadd(reductionA_, B_ ) ) || @capture(x, reductionA_ = vadd(B_, reductionA_ ) )
             return :( $reductionA = SIMDPirates.vifelse($masksym, LoopVectorization.SIMDPirates.vadd($reductionA, $B), $reductionA) )
-        elseif @capture(x, reductionA_ = LoopVectorization.SIMDPirates.vmul(reductionA_, B_ ) )
+        elseif @capture(x, reductionA_ = LoopVectorization.SIMDPirates.vmul(reductionA_, B_ ) ) || @capture(x, reductionA_ = LoopVectorization.SIMDPirates.vmul(B_, reductionA_ ) ) ||  @capture(x, reductionA_ = vmul(reductionA_, B_ ) ) || @capture(x, reductionA_ = vmul(B_, reductionA_ ) )
             return :( $reductionA = SIMDPirates.vifelse($masksym, LoopVectorization.SIMDPirates.vmul($reductionA, $B), $reductionA) )
+        elseif @capture(x, reductionA_ = LoopVectorization.SIMDPirates.vmuladd(B_, C_, reductionA_) ) ||  @capture(x, reductionA_ = vmuladd(B_, C_, reductionA_) )
+            return :( $reductionA = SIMDPirates.vifelse($masksym, LoopVectorization.SIMDPirates.vmuladd($B, $C, $reductionA), $reductionA) )
+        elseif @capture(x, reductionA_ = LoopVectorization.SIMDPirates.vfnmadd(B_, C_, reductionA_ ) ) || @capture(x, reductionA_ = vfnmadd(B_, C_, reductionA_ ) )
+            return :( $reductionA = SIMDPirates.vifelse($masksym, LoopVectorization.SIMDPirates.vfnmadd($B, $C, $reductionA), $reductionA) )
+        elseif @capture(x, reductionA_ = LoopVectorization.SIMDPirates.vsub(reductionA_, B_ ) ) || @capture(x, reductionA_ = vsub(reductionA_, B_ ) )
+            return :( $reductionA = SIMDPirates.vifelse($masksym, LoopVectorization.SIMDPirates.vsub($reductionA, $B), $reductionA) )
+#        elseif @capture(x, reductionA_ = LoopVectorization.SIMDPirates.vmul(reductionA_, B_ ) )
+#            return :( $reductionA = SIMDPirates.vifelse($masksym, LoopVectorization.SIMDPirates.vmul($reductionA, $B), $reductionA) )
         else
             return x
         end
@@ -652,6 +662,61 @@ macro vectorize(type, unroll_factor::Integer, expr)
         q = vectorize_body(:(length($A)), type, unroll_factor, n, body)
     elseif @capture(expr, for n_ ∈ eachindex(args__) body__ end)
         q = vectorize_body(:(min($([:(length($a)) for a ∈ args]...))), type, unroll_factor, n, body)
+    else
+        throw("Could not match loop expression.")
+    end
+    esc(q)
+end
+
+macro vvectorize(expr)
+    if @capture(expr, for n_ ∈ 1:N_ body__ end)
+        # q = vectorize_body(N, Float64, n, body, false)
+        q = vectorize_body(N, Float64, 1, n, body, SLEEFPiratesDict, Vec)
+    # elseif @capture(expr, for n_ ∈ 1:N_ body__ end)
+    #     q = vectorize_body(N, element_type(body)
+    elseif @capture(expr, for n_ ∈ eachindex(A_) body__ end)
+        q = vectorize_body(:(length($A)), Float64, 1, n, body, SLEEFPiratesDict, Vec)
+    elseif @capture(expr, for n_ ∈ eachindex(args__) body__ end)
+        q = vectorize_body(:(min($([:(length($a)) for a ∈ args]...))), Float64, 1, n, body, SLEEFPiratesDict, Vec)
+    else
+        throw("Could not match loop expression.")
+    end
+    esc(q)
+end
+macro vvectorize(type::Union{Symbol,DataType}, expr)
+    if @capture(expr, for n_ ∈ 1:N_ body__ end)
+        # q = vectorize_body(N, type, n, body, true)
+        q = vectorize_body(N, type, 1, n, body, SLEEFPiratesDict, Vec)
+    elseif @capture(expr, for n_ ∈ eachindex(A_) body__ end)
+        q = vectorize_body(:(length($A)), type, 1, n, body, SLEEFPiratesDict, Vec)
+    elseif @capture(expr, for n_ ∈ eachindex(args__) body__ end)
+        q = vectorize_body(:(min($([:(length($a)) for a ∈ args]...))), type, 1, n, body, SLEEFPiratesDict, Vec)
+    else
+        throw("Could not match loop expression.")
+    end
+    esc(q)
+end
+macro vvectorize(unroll_factor::Integer, expr)
+    if @capture(expr, for n_ ∈ 1:N_ body__ end)
+        # q = vectorize_body(N, type, n, body, true)
+        q = vectorize_body(N, Float64, unroll_factor, n, body, SLEEFPiratesDict, Vec)
+    elseif @capture(expr, for n_ ∈ eachindex(A_) body__ end)
+        q = vectorize_body(:(length($A)), Float64, unroll_factor, n, body, SLEEFPiratesDict, Vec)
+    elseif @capture(expr, for n_ ∈ eachindex(args__) body__ end)
+        q = vectorize_body(:(min($([:(length($a)) for a ∈ args]...))), Float64, unroll_factor, n, body, SLEEFPiratesDict, Vec)
+    else
+        throw("Could not match loop expression.")
+    end
+    esc(q)
+end
+macro vvectorize(type, unroll_factor::Integer, expr)
+    if @capture(expr, for n_ ∈ 1:N_ body__ end)
+        # q = vectorize_body(N, type, n, body, true)
+        q = vectorize_body(N, type, unroll_factor, n, body, SLEEFPiratesDict, Vec)
+    elseif @capture(expr, for n_ ∈ eachindex(A_) body__ end)
+        q = vectorize_body(:(length($A)), type, unroll_factor, n, body, SLEEFPiratesDict, Vec)
+    elseif @capture(expr, for n_ ∈ eachindex(args__) body__ end)
+        q = vectorize_body(:(min($([:(length($a)) for a ∈ args]...))), type, unroll_factor, n, body, SLEEFPiratesDict, Vec)
     else
         throw("Could not match loop expression.")
     end
