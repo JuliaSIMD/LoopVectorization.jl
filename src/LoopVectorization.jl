@@ -135,6 +135,7 @@ end
     ntuple(i -> (i-1) * stride, Val(N))
 end
 
+#=
 function mask_expr(W, remsym::Symbol)
     if W <= 8
         m = :((one(UInt8) << $remsym) - one(UInt8))
@@ -165,7 +166,7 @@ function create_mask(W, r)
         return UInt128(2)^r-UInt128(1)
     end
 end
-
+=#
 function vectorize_body(N, Tsym::Symbol, uf, n, body, vecdict = SLEEFPiratesDict, VType = SVec)
     if Tsym == :Float32
         vectorize_body(N, Float32, uf, n, body, vecdict, VType)
@@ -263,14 +264,14 @@ function vectorize_body(N, T::DataType, unroll_factor, n, body, vecdict = SLEEFP
         masked_loop_body = add_masks(main_body, masksym, reduction_symbols)
         if isa(N, Integer)
             push!(q.args, quote
-                $masksym = $(create_mask(W, r))
+                $masksym = $(VectorizationBase.mask(Val{W}(), r))
                 $itersym = $(N - r)
                 $masked_loop_body
             end)
         else
             push!(q.args, quote
                 if $remsym > 0
-                    $masksym = $(mask_expr(W, remsym))
+                    $masksym = VectorizationBase.mask(Val{$W}(), $remsym)
                     $itersym = ($Nsym - $remsym)
                     $masked_loop_body
                 end
