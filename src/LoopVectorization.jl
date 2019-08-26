@@ -41,11 +41,11 @@ const SLEEFPiratesDict = Dict{Symbol,Expr}(
     # :lgamma => :(SLEEFPirates.lgamma),
     :trunc => :(SLEEFPirates.trunc),
     :floor => :(SLEEFPirates.floor),
-    :ceil => :(SLEEFPirates.ceil),
-    :abs => :(SLEEFPirates.abs),
+    :ceil => :(SIMDPirates.ceil),
+    :abs => :(SIMDPirates.vabs),
     :sincos => :(SLEEFPirates.sincos_fast),
-    :pow => :(SLEEFPirates.pow),
-    :^ => :(SLEEFPirates.pow),
+    :pow => :(SLEEFPirates.pow_fast),
+    :^ => :(SLEEFPirates.pow_fast),
     # :sincospi => :(SLEEFPirates.sincospi_fast),
     # :pow => :(SLEEFPirates.pow),
     # :hypot => :(SLEEFPirates.hypot_fast),
@@ -302,11 +302,15 @@ function vectorize_body(N, T::DataType, unroll_factor, n, body, vecdict = SLEEFP
 
     # display(q)
     # We are using pointers, so better add a GC.@preserve.
-    Expr(:macrocall,
+    gcpreserve = true#false
+    if gcpreserve
+        return Expr(:macrocall,
         Expr(:., :GC, QuoteNode(Symbol("@preserve"))),
             LineNumberNode(@__LINE__), (keys(indexed_expressions))..., q
-    )
-    #q
+                    )
+    else
+        return q
+    end
 end
 
 function add_masks(expr, masksym, reduction_symbols)
