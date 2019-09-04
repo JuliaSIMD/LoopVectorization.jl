@@ -208,7 +208,7 @@ function vectorize_body(N, T::DataType, unroll_factor, n, body, vecdict = SLEEFP
     itersym = gensym(:i)
     # walk the expression, searching for all get index patterns.
     # these will be replaced with
-    # Plan: definition of q will create vectorizables
+    # Plan: definition of q will create vectors
 
     main_body = quote end
     reduction_symbols = Dict{Tuple{Symbol,Symbol},Symbol}()
@@ -244,7 +244,7 @@ function vectorize_body(N, T::DataType, unroll_factor, n, body, vecdict = SLEEFP
     # @show main_body
 
     for (sym, psym) ∈ indexed_expressions
-        push!(q.args, :( $psym = vectorizable($sym) ))
+        push!(q.args, :( $psym = LoopVectorization.vectorizable($sym) ))
     end
     push!(q.args, loop_constants_quote)
 
