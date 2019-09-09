@@ -249,14 +249,20 @@ function vectorize_body(N, T::DataType, unroll_factor, n, body, vecdict = SLEEFP
     push!(q.args, loop_constants_quote)
 
     unadjitersym = gensym(:unadjitersym)
-    if !isa(loop_max_expr, Integer) || loop_max_expr >= 0
-        push!(q.args,
-        quote
+    if !isa(loop_max_expr, Integer) || loop_max_expr > 0
+        loop_quote = quote
             for $unadjitersym ∈ 0:$loop_max_expr
                 $itersym = $W * $unadjitersym
                 $main_body
             end
-        end)
+        end
+        push!(q.args, loop_quote)
+    elseif loop_max_expr isa Integer && loop_max_expr == 0
+        single_iter_quote = quote
+            $itersym = 0
+            $main_body
+        end
+        push!(q.args, single_iter_quote)
     end
 
     if !isa(N, Integer) || r > 0
@@ -302,7 +308,8 @@ function vectorize_body(N, T::DataType, unroll_factor, n, body, vecdict = SLEEFP
 
     # display(q)
     # We are using pointers, so better add a GC.@preserve.
-    gcpreserve = true#false
+    # gcpreserve = true
+    gcpreserve = false
     if gcpreserve
         return Expr(:macrocall,
         Expr(:., :GC, QuoteNode(Symbol("@preserve"))),
