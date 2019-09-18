@@ -1,11 +1,11 @@
 module LoopVectorization
 
 using VectorizationBase, SIMDPirates, SLEEFPirates, MacroTools
-using VectorizationBase: REGISTER_SIZE, extract_data
+using VectorizationBase: REGISTER_SIZE, extract_data, num_vector_load_expr
 using SIMDPirates: VECTOR_SYMBOLS
 using MacroTools: @capture, prewalk, postwalk
 
-export vectorizable, @vectorize
+export vectorizable, @vectorize, @vvectorize
 
 
 
@@ -84,13 +84,13 @@ function _spirate(ex, dict, macro_escape = true)
             return :($a = LoopVectorization.SIMDPirates.vmul($a, $b))
         elseif @capture(x, a_ /= b_)
             return :($a = LoopVectorization.SIMDPirates.vdiv($a, $b))
-        elseif @capture(x, Base.FastMath.add_fast($a__))
+        elseif @capture(x, Base.FastMath.add_fast(a__))
             return :(LoopVectorization.SIMDPirates.vadd($(a...)))
-        elseif @capture(x, Base.FastMath.sub_fast($a__))
+        elseif @capture(x, Base.FastMath.sub_fast(a__))
             return :(LoopVectorization.SIMDPirates.vsub($(a...)))
-        elseif @capture(x, Base.FastMath.mul_fast($a__))
+        elseif @capture(x, Base.FastMath.mul_fast(a__))
             return :(LoopVectorization.SIMDPirates.vmul($(a...)))
-        elseif @capture(x, Base.FastMath.div_fast($a__))
+        elseif @capture(x, Base.FastMath.div_fast(a__))
             return :(LoopVectorization.SIMDPirates.vfdiv($(a...)))
         elseif @capture(x, a_ / sqrt(b_))
             return :($a * rsqrt($b))
