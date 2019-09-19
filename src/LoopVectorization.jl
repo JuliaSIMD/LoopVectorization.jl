@@ -143,38 +143,6 @@ end
     ntuple(i -> (i-1) * stride, Val(N))
 end
 
-#=
-function mask_expr(W, remsym::Symbol)
-    if W <= 8
-        m = :((one(UInt8) << $remsym) - one(UInt8))
-    elseif W <= 16
-        m = :((one(UInt16) << $remsym) - one(UInt16))
-    elseif W <= 32
-        m = :((one(UInt32) << $remsym) - one(UInt32))
-    elseif W <= 64
-        m = :((one(UInt64) << $remsym) - one(UInt64))
-    elseif W <= 128
-        m = :((one(UInt128) << $remsym) - one(UInt128))
-    else
-        throw("A mask of length $W > 128? Are you sure you want to do that?")
-    end
-    m
-end
-mask(rem::Integer) = (one(UInt) << rem) - one(UInt)
-function create_mask(W, r)
-    if W <= 8
-        return UInt8(2)^r-UInt8(1)
-    elseif W <= 16
-        return UInt16(2)^r-UInt16(1)
-    elseif W <= 32
-        return UInt32(2)^r-UInt32(1)
-    elseif W <= 64
-        return UInt64(2)^r-UInt64(1)
-    else #W <= 128
-        return UInt128(2)^r-UInt128(1)
-    end
-end
-=#
 function vectorize_body(N, Tsym::Symbol, uf, n, body, vecdict = SLEEFPiratesDict, VType = SVec)
     if Tsym == :Float32
         vectorize_body(N, Float32, uf, n, body, vecdict, VType)
@@ -188,7 +156,7 @@ function vectorize_body(N, Tsym::Symbol, uf, n, body, vecdict = SLEEFPiratesDict
         throw("Type $Tsym is not supported.")
     end
 end
-function vectorize_body(N, T::DataType, unroll_factor, n, body, vecdict = SLEEFPiratesDict, VType = SVec)
+function vectorize_body(N, T::DataType, unroll_factor::Int, n, body, vecdict = SLEEFPiratesDict, VType = SVec)
     # unroll_factor == 1 || throw("Only unroll factor of 1 is currently supported. Was set to $unroll_factor.")
     T_size = sizeof(T)
     if isa(N, Integer)
@@ -198,9 +166,14 @@ function vectorize_body(N, T::DataType, unroll_factor, n, body, vecdict = SLEEFP
         W, Wshift = VectorizationBase.pick_vector_width_shift(T)
         Nsym = gensym(:N)
     end
-    log2unroll = max(1,VectorizationBase.intlog2(unroll_factor))
-    W *= unroll_factor
-    Wshift += log2unroll
+    if !(N isa Integer) && unroll_factor > 1 # We will force the unroll to be a power of two
+        log2unroll = max(0,VectorizationBase.intlog2(unroll_factor))
+        unroll_factor = 1 << log2unroll  
+    else
+        log2unroll = 0
+    end
+    # 
+    # W *= unroll_factor
     # @show W, REGISTER_SIZE, T_size
     # @show T
     WT = W * T_size
@@ -224,24 +197,38 @@ function vectorize_body(N, T::DataType, unroll_factor, n, body, vecdict = SLEEFP
     loop_constants_dict = Dict{Expr,Symbol}()
     loop_constants_quote = quote end
 
-
-    if isa(N, Integer)
-        Q, r = divrem(N, W)
+    ### Here we define unrolled_loop count, full loop count, and rem loop
+    if N isa Integer
+        # Q = N >> Wshift
+        # r = N & (unroll_factor*W - 1)
+        Q, r = divrem(N, unroll_factor*W)
+        Qp1W = (Q+1) << Wshift
+        if N % Qp1W == 0
+            Q, r = Q + 1, 0
+            unroll_factor = N ÷ Qp1W
+        end
         q = quote end
-        loop_max_expr = Q - 1
+        # loop_max_expr = Q - 1
+        loop_max_expr = Q
+        remr = r >> Wshift
+        r &= (W - 1)
     else
         Qsym = gensym(:Q)
         remsym = gensym(:rem)
+        remr = gensym(:remreps)
         q = quote
             $Nsym = $N
-            ($Qsym, $remsym) = $(num_vector_load_expr(:LoopVectorization, N, W))
-            # $loop_constants_quote
+            ($Qsym, $remsym) = $(num_vector_load_expr(:LoopVectorization, N, W<<intlog2))
         end
-        loop_max_expr = :($Qsym-1)
+        if unroll_factor > 1
+            push!(q.args, :($remr = $remsym >> $Wshift))
+            push!(q.args, :($remsym &= $(W-1)))
+        end
+        loop_max_expr = Qsym
     end
     # @show T
     for b ∈ body
-        b = nexprs_expansion(b)
+        b = macroexpand(LoopVectorization, b)
         ## body preamble must define indexed symbols
         ## we only need that for loads.
         push!(main_body.args,
@@ -255,38 +242,55 @@ function vectorize_body(N, T::DataType, unroll_factor, n, body, vecdict = SLEEFP
         push!(q.args, :( $psym = LoopVectorization.vectorizable($sym) ))
     end
     push!(q.args, loop_constants_quote)
-
+    push!(q.args, :($itersym = 0))
+    unrolled_loop_body_expr = quote end
+    unrolled_loop_body_iter = quote
+        $main_body
+        $itersym += $W
+    end
+    # Eventually we should unroll reductions as well. Should also check if the compiler ever does that for us (doubt it)
+    for u in 1:unroll_factor
+        push!(unrolled_loop_body_expr.args, unrolled_loop_body_iter)
+    end
     unadjitersym = gensym(:unadjitersym)
-    if !isa(loop_max_expr, Integer) || loop_max_expr > 0
+    if loop_max_expr isa Integer && loop_max_expr <= 1
+        loop_max_expr == 1 && push!(q.args, unrolled_loop_body_expr)
+    else
         loop_quote = quote
-            for $unadjitersym ∈ 0:$loop_max_expr
-                $itersym = $W * $unadjitersym
-                $main_body
+            for $unadjitersym ∈ 1:$loop_max_expr
+                $unrolled_loop_body_expr
             end
         end
         push!(q.args, loop_quote)
-    elseif loop_max_expr isa Integer && loop_max_expr == 0
-        single_iter_quote = quote
-            $itersym = 0
-            $main_body
-        end
-        push!(q.args, single_iter_quote)
     end
-
-    if !isa(N, Integer) || r > 0
+    if N isa Integer
+        for _ in 1:remr
+            push!(q.args, unrolled_loop_body_iter)
+        end
+    else
+        if unroll_factor > 1
+            unrolled_remquote = quote
+                for $unadjitersym in 1:$remr
+                    $unrolled_loop_body_iter
+                end
+            end
+            push!(q.args, unrolled_remquote)
+        end
+    end
+    if !(N isa Integer) || r > 0
         masksym = gensym(:mask)
         masked_loop_body = add_masks(main_body, masksym, reduction_symbols)
-        if isa(N, Integer)
+        if N isa Integer
             push!(q.args, quote
-                $masksym = $(VectorizationBase.mask(Val{W}(), r))
-                $itersym = $(N - r)
+                $masksym = $(VectorizationBase.mask(W, r))
+                # $itersym = $(N - r)
                 $masked_loop_body
             end)
         else
             push!(q.args, quote
                 if $remsym > 0
                     $masksym = VectorizationBase.mask(Val{$W}(), $remsym)
-                    $itersym = ($Nsym - $remsym)
+                    # $itersym = ($Nsym - $remsym)
                     $masked_loop_body
                 end
             end)
@@ -303,14 +307,14 @@ function vectorize_body(N, T::DataType, unroll_factor, n, body, vecdict = SLEEFP
         end
         if op == :+
             # push!(q.args, :(@show $sym, $gsym))
-            push!(q.args, :(@fastmath $sym = $sym + LoopVectorization.SIMDPirates.vsum($gsym)))
+            push!(q.args, :($sym = Base.FastMath.add_fast($sym, LoopVectorization.SIMDPirates.vsum($gsym))))
             # push!(q.args, :(@show $sym, $gsym))
         elseif op == :-
-            push!(q.args, :(@fastmath $sym = $sym - LoopVectorization.SIMDPirates.vsum($gsym)))
+            push!(q.args, :($sym = Base.FastMath.sub_fast($sym, LoopVectorization.SIMDPirates.vsum($gsym))))
         elseif op == :*
-            push!(q.args, :(@fastmath $sym = $sym * LoopVectorization.SIMDPirates.vprod($gsym)))
+            push!(q.args, :($sym = Base.FastMath.mul_fast($sym, LoopVectorization.SIMDPirates.vprod($gsym))))
         elseif op == :/
-            push!(q.args, :(@fastmath $sym = $sym / LoopVectorization.SIMDPirates.vprod($gsym)))
+            push!(q.args, :($sym = Base.FastMath.div_fast($sym, LoopVectorization.SIMDPirates.vprod($gsym))))
         end
     end
 
@@ -355,42 +359,6 @@ function add_masks(expr, masksym, reduction_symbols)
     end
 end
 
-# function _vectorloads(V, expr; itersym = :iter, declared_iter_sym = nothing, VectorizationDict = SLEEFPiratesDict)
-#
-#
-#     # body = _pirate(body)
-#
-#     # indexed_expressions = Dict{Symbol,Expr}()
-#     indexed_expressions = Dict{Symbol,Symbol}() # Symbol, gensymbol
-#
-#     main_body = quote end
-#     reduction_symbols = Dict{Tuple{Symbol,Symbol},Symbol}()
-#     loaded_exprs = Dict{Expr,Symbol}()
-#     loop_constants_dict = Dict{Expr,Symbol}()
-#     loop_constants_quote = quote end
-#
-#     push!(main_body.args,
-#         _vectorloads!(main_body, indexed_expressions, reduction_symbols, loaded_exprs, V, loop_constants_quote, loop_constants_dict, expr;
-#             itersym = itersym, declared_iter_sym = declared_iter_sym, VectorizationDict = VectorizationDict)
-#     )
-#     main_body
-# end
-
-function nexprs_expansion(expr)
-    prewalk(expr) do x
-        if @capture(x, @nexprs N_ ex_) || @capture(x, Base.Cartesian.@nexprs N_ ex_)
-            # println("Macroexpanding x:", x)
-            # @show ex
-            # mx = Expr(:escape, Expr(:block, Any[ Base.Cartesian.inlineanonymous(ex,i) for i = 1:N ]...))
-            mx = Expr(:block, Any[ Base.Cartesian.inlineanonymous(ex,i) for i = 1:N ]...)
-            # println("Macroexpanded x:", mx)
-            return mx
-        else
-            # @show x
-            return x
-        end
-    end
-end
 
 function _vectorloads!(main_body, pre_quote, indexed_expressions, reduction_symbols, loaded_exprs, V, W, VET, loop_constants_quote, loop_constants_dict, expr;
                             itersym = :iter, declared_iter_sym = nothing, VectorizationDict = SLEEFPiratesDict)
