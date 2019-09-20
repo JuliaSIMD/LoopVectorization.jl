@@ -9,57 +9,57 @@ export vectorizable, @vectorize, @vvectorize
 
 
 
-const SLEEFPiratesDict = Dict{Symbol,Expr}(
-    :sin => :(SLEEFPirates.sin_fast),
-    :sinpi => :(SLEEFPirates.sinpi),
-    :cos => :(SLEEFPirates.cos_fast),
-    :cospi => :(SLEEFPirates.cospi),
-    :tan => :(SLEEFPirates.tan_fast),
-    :log => :(SLEEFPirates.log_fast),
-    :log10 => :(SLEEFPirates.log10),
-    :log2 => :(SLEEFPirates.log2),
-    :log1p => :(SLEEFPirates.log1p),
-    :exp => :(SLEEFPirates.exp),
-    :exp2 => :(SLEEFPirates.exp2),
-    :exp10 => :(SLEEFPirates.exp10),
-    :expm1 => :(SLEEFPirates.expm1),
-    :sqrt => :(SLEEFPirates.sqrt), # faster than sqrt_fast
-    :rsqrt => :(LoopVectorization.SIMDPirates.rsqrt),
-    :cbrt => :(SLEEFPirates.cbrt_fast),
-    :asin => :(SLEEFPirates.asin_fast),
-    :acos => :(SLEEFPirates.acos_fast),
-    :atan => :(SLEEFPirates.atan_fast),
-    :sinh => :(SLEEFPirates.sinh),
-    :cosh => :(SLEEFPirates.cosh),
-    :tanh => :(SLEEFPirates.tanh),
-    :asinh => :(SLEEFPirates.asinh),
-    :acosh => :(SLEEFPirates.acosh),
-    :atanh => :(SLEEFPirates.atanh),
+const SLEEFPiratesDict = Dict{Symbol,Tuple{Symbol,Symbol}}(
+    :sin => (:SLEEFPirates, :sin_fast),
+    :sinpi => (:SLEEFPirates, :sinpi),
+    :cos => (:SLEEFPirates, :cos_fast),
+    :cospi => (:SLEEFPirates, :cospi),
+    :tan => (:SLEEFPirates, :tan_fast),
+    :log => (:SLEEFPirates, :log_fast),
+    :log10 => (:SLEEFPirates, :log10),
+    :log2 => (:SLEEFPirates, :log2),
+    :log1p => (:SLEEFPirates, :log1p),
+    :exp => (:SLEEFPirates, :exp),
+    :exp2 => (:SLEEFPirates, :exp2),
+    :exp10 => (:SLEEFPirates, :exp10),
+    :expm1 => (:SLEEFPirates, :expm1),
+    :sqrt => (:SLEEFPirates, :sqrt), # faster than sqrt_fast
+    :rsqrt => (:SIMDPirates, :rsqrt),
+    :cbrt => (:SLEEFPirates, :cbrt_fast),
+    :asin => (:SLEEFPirates, :asin_fast),
+    :acos => (:SLEEFPirates, :acos_fast),
+    :atan => (:SLEEFPirates, :atan_fast),
+    :sinh => (:SLEEFPirates, :sinh),
+    :cosh => (:SLEEFPirates, :cosh),
+    :tanh => (:SLEEFPirates, :tanh),
+    :asinh => (:SLEEFPirates, :asinh),
+    :acosh => (:SLEEFPirates, :acosh),
+    :atanh => (:SLEEFPirates, :atanh),
     # :erf => :(SLEEFPirates.erf),
     # :erfc => :(SLEEFPirates.erfc),
     # :gamma => :(SLEEFPirates.gamma),
     # :lgamma => :(SLEEFPirates.lgamma),
-    :trunc => :(SLEEFPirates.trunc),
-    :floor => :(SLEEFPirates.floor),
-    :ceil => :(SIMDPirates.ceil),
-    :abs => :(SIMDPirates.vabs),
-    :sincos => :(SLEEFPirates.sincos_fast),
-    :pow => :(SLEEFPirates.pow_fast),
-    :^ => :(SLEEFPirates.pow_fast),
-    # :sincospi => :(SLEEFPirates.sincospi_fast),
-    # :pow => :(SLEEFPirates.pow),
-    # :hypot => :(SLEEFPirates.hypot_fast),
-    :mod => :(SLEEFPirates.mod),
+    :trunc => (:SLEEFPirates, :trunc),
+    :floor => (:SLEEFPirates, :floor),
+    :ceil => (:SIMDPirates, :ceil),
+    :abs => (:SIMDPirates, :vabs),
+    :sincos => (:SLEEFPirates, :sincos_fast),
+    :pow => (:SLEEFPirates, :pow_fast),
+    :^ => (:SLEEFPirates, :pow_fast),
+    # :sincospi => (:SLEEFPirates, :sincospi_fast),
+    # :pow => (:SLEEFPirates, :pow),
+    # :hypot => (:SLEEFPirates, :hypot_fast),
+    :mod => (:SLEEFPirates, :mod),
     # :copysign => :copysign
-    :one => :(SIMDPirates.vone),
-    :zero => :(SIMDPirates.vzero)
+    :one => (:SIMDPirates, :vone),
+    :zero => (:SIMDPirates, :vzero)
 )
 
 
 
 
 
-function _spirate(ex, dict, macro_escape = true)
+@noinline function _spirate(ex, dict, macro_escape = true)
     ex = postwalk(ex) do x
         # @show x
         # if @capture(x, LoopVectorization.SIMDPirates.vadd(LoopVectorization.SIMDPirates.vmul(a_, b_), c_)) || @capture(x, LoopVectorization.SIMDPirates.vadd(c_, LoopVectorization.SIMDPirates.vmul(a_, b_)))
@@ -97,13 +97,13 @@ function _spirate(ex, dict, macro_escape = true)
         elseif @capture(x, inv(sqrt(a_)))
             return :(rsqrt($a))
         elseif @capture(x, @horner a__)
-            return horner(a...)
+            return SIMDPirates.horner(a...)
         elseif @capture(x, Base.Math.muladd(a_, b_, c_))
             return :( LoopVectorization.SIMDPirates.vmuladd($a, $b, $c) )
         elseif isa(x, Symbol) && !occursin("@", string(x))
-            vec_sym = get(dict, x, :not_found)
+            vec_mod, vec_sym = get(dict, x, (:not_found,:not_found))
             if vec_sym != :not_found
-                return vec_sym
+                return :(LoopVectorization.$vec_mod.$vec_sym)
             else
                 vec_sym = get(VECTOR_SYMBOLS, x, :not_found)
                 return vec_sym == :not_found ? x : :(LoopVectorization.SIMDPirates.$(vec_sym))
@@ -129,21 +129,21 @@ Needs `@inferred` testing / that the compiler optimizes it away
 whenever size(A) is known at compile time. Seems to be the case for Julia 1.1.
 """
 @inline stride_row(A::AbstractArray) = size(A,1)
-@inline function num_row_strides(A::AbstractArray)
-    s = size(A)
-    N = s[2]
-    for i ∈ 3:length(s)
-        N *= s[i]
-    end
-    N
-end
-@inline function stride_row_iter(A::AbstractArray)
-    N = num_row_strides(A)
-    stride = stride_row(A)
-    ntuple(i -> (i-1) * stride, Val(N))
-end
+# @inline function num_row_strides(A::AbstractArray)
+#     s = size(A)
+#     N = s[2]
+#     for i ∈ 3:length(s)
+#         N *= s[i]
+#     end
+#     N
+# end
+# @inline function stride_row_iter(A::AbstractArray)
+#     N = num_row_strides(A)
+#     stride = stride_row(A)
+#     ntuple(i -> (i-1) * stride, Val(N))
+# end
 
-function vectorize_body(N, Tsym::Symbol, uf, n, body, vecdict = SLEEFPiratesDict, VType = SVec)
+@noinline function vectorize_body(N, Tsym::Symbol, uf, n, body, vecdict = SLEEFPiratesDict, VType = SVec)
     if Tsym == :Float32
         vectorize_body(N, Float32, uf, n, body, vecdict, VType)
     elseif Tsym == :Float64
@@ -156,7 +156,7 @@ function vectorize_body(N, Tsym::Symbol, uf, n, body, vecdict = SLEEFPiratesDict
         throw("Type $Tsym is not supported.")
     end
 end
-function vectorize_body(N, T::DataType, unroll_factor::Int, n, body, vecdict = SLEEFPiratesDict, VType = SVec)
+@noinline function vectorize_body(N, T::DataType, unroll_factor::Int, n, body, vecdict = SLEEFPiratesDict, VType = SVec)
     # unroll_factor == 1 || throw("Only unroll factor of 1 is currently supported. Was set to $unroll_factor.")
     T_size = sizeof(T)
     if isa(N, Integer)
@@ -332,7 +332,7 @@ function vectorize_body(N, T::DataType, unroll_factor::Int, n, body, vecdict = S
     end
 end
 
-function add_masks(expr, masksym, reduction_symbols)
+@noinline function add_masks(expr, masksym, reduction_symbols)
     postwalk(expr) do x
         if @capture(x, LoopVectorization.SIMDPirates.vstore!(ptr_, V_))
             return :(LoopVectorization.SIMDPirates.vstore!($ptr, $V, $masksym))
@@ -360,7 +360,7 @@ function add_masks(expr, masksym, reduction_symbols)
 end
 
 
-function _vectorloads!(main_body, pre_quote, indexed_expressions, reduction_symbols, loaded_exprs, V, W, VET, loop_constants_quote, loop_constants_dict, expr;
+@noinline function _vectorloads!(main_body, pre_quote, indexed_expressions, reduction_symbols, loaded_exprs, V, W, VET, loop_constants_quote, loop_constants_dict, expr;
                             itersym = :iter, declared_iter_sym = nothing, VectorizationDict = SLEEFPiratesDict)
     _spirate(prewalk(expr) do x
         # @show x
@@ -581,7 +581,7 @@ subsymbol(expr, i, j)
 substitute symbol i with symbol j in expr
 Returns true if a substitution was made, false otherwise.
 """
-function subsymbol(expr, i, j)
+@noinline function subsymbol(expr::Expr, i, j)
     subbed = false
     expr = postwalk(expr) do ex
         if ex == i

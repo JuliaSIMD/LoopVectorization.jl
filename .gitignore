@@ -4,3 +4,6 @@
 *.jl.cov
 *.jl.*.cov
 *.jl.mem
+*~
+src/#*#
+tests/#*#
