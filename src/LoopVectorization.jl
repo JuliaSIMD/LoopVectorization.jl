@@ -218,7 +218,7 @@ end
         remr = gensym(:remreps)
         q = quote
             $Nsym = $N
-            ($Qsym, $remsym) = $(num_vector_load_expr(:LoopVectorization, N, W<<intlog2))
+            ($Qsym, $remsym) = $(num_vector_load_expr(:LoopVectorization, N, W<<log2unroll))
         end
         if unroll_factor > 1
             push!(q.args, :($remr = $remsym >> $Wshift))
@@ -289,7 +289,7 @@ end
         else
             push!(q.args, quote
                 if $remsym > 0
-                    $masksym = VectorizationBase.mask(Val{$W}(), $remsym)
+                    $masksym = LoopVectorization.VectorizationBase.mask(Val{$W}(), $remsym)
                     # $itersym = ($Nsym - $remsym)
                     $masked_loop_body
                 end
