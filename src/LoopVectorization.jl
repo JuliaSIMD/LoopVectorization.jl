@@ -296,8 +296,6 @@ end
             end)
         end
     end
-
-
     ### now we walk the body to look for reductions
     for ((sym,op),gsym) ∈ reduction_symbols
         if op == :+ || op == :-
@@ -342,17 +340,17 @@ end
         # for reductions to be practical. If what we're vectorizing is simple enough not to worry about contamination...then
         # it ought to be simple enough so we don't need @vectorize.
         elseif @capture(x, reductionA_ = LoopVectorization.SIMDPirates.vadd(reductionA_, B_ ) ) || @capture(x, reductionA_ = LoopVectorization.SIMDPirates.vadd(B_, reductionA_ ) ) || @capture(x, reductionA_ = vadd(reductionA_, B_ ) ) || @capture(x, reductionA_ = vadd(B_, reductionA_ ) )
-            return :( $reductionA = SIMDPirates.vifelse($masksym, LoopVectorization.SIMDPirates.vadd($reductionA, $B), $reductionA) )
+            return :( $reductionA = LoopVectorization.SIMDPirates.vifelse($masksym, LoopVectorization.SIMDPirates.vadd($reductionA, $B), $reductionA) )
         elseif @capture(x, reductionA_ = LoopVectorization.SIMDPirates.vmul(reductionA_, B_ ) ) || @capture(x, reductionA_ = LoopVectorization.SIMDPirates.vmul(B_, reductionA_ ) ) ||  @capture(x, reductionA_ = vmul(reductionA_, B_ ) ) || @capture(x, reductionA_ = vmul(B_, reductionA_ ) )
-            return :( $reductionA = SIMDPirates.vifelse($masksym, LoopVectorization.SIMDPirates.vmul($reductionA, $B), $reductionA) )
+            return :( $reductionA = LoopVectorization.SIMDPirates.vifelse($masksym, LoopVectorization.SIMDPirates.vmul($reductionA, $B), $reductionA) )
         elseif @capture(x, reductionA_ = LoopVectorization.SIMDPirates.vmuladd(B_, C_, reductionA_) ) ||  @capture(x, reductionA_ = vmuladd(B_, C_, reductionA_) )
-            return :( $reductionA = SIMDPirates.vifelse($masksym, LoopVectorization.SIMDPirates.vmuladd($B, $C, $reductionA), $reductionA) )
+            return :( $reductionA = LoopVectorization.SIMDPirates.vifelse($masksym, LoopVectorization.SIMDPirates.vmuladd($B, $C, $reductionA), $reductionA) )
         elseif @capture(x, reductionA_ = LoopVectorization.SIMDPirates.vfnmadd(B_, C_, reductionA_ ) ) || @capture(x, reductionA_ = vfnmadd(B_, C_, reductionA_ ) )
-            return :( $reductionA = SIMDPirates.vifelse($masksym, LoopVectorization.SIMDPirates.vfnmadd($B, $C, $reductionA), $reductionA) )
+            return :( $reductionA = LoopVectorization.SIMDPirates.vifelse($masksym, LoopVectorization.SIMDPirates.vfnmadd($B, $C, $reductionA), $reductionA) )
         elseif @capture(x, reductionA_ = LoopVectorization.SIMDPirates.vsub(reductionA_, B_ ) ) || @capture(x, reductionA_ = vsub(reductionA_, B_ ) )
-            return :( $reductionA = SIMDPirates.vifelse($masksym, LoopVectorization.SIMDPirates.vsub($reductionA, $B), $reductionA) )
+            return :( $reductionA = LoopVectorization.SIMDPirates.vifelse($masksym, LoopVectorization.SIMDPirates.vsub($reductionA, $B), $reductionA) )
 #        elseif @capture(x, reductionA_ = LoopVectorization.SIMDPirates.vmul(reductionA_, B_ ) )
-#            return :( $reductionA = SIMDPirates.vifelse($masksym, LoopVectorization.SIMDPirates.vmul($reductionA, $B), $reductionA) )
+#            return :( $reductionA = LoopVectorization.SIMDPirates.vifelse($masksym, LoopVectorization.SIMDPirates.vmul($reductionA, $B), $reductionA) )
         else
             return x
         end
@@ -567,7 +565,7 @@ end
         elseif x == declared_iter_sym
             isymvec = gensym(itersym)
             push!(pre_quote.args, :($isymvec = SVec($(Expr(:tuple, [:(Core.VecElement{$VET}($(w-W))) for w ∈ 1:W]...)))))
-            push!(main_body.args, :($isymvec = SIMDPirates.vadd($isymvec, vbroadcast($V, $W)) ))
+            push!(main_body.args, :($isymvec = LoopVectorization.SIMDPirates.vadd($isymvec, vbroadcast($V, $W)) ))
             return isymvec
         else
             # println("Returning x:", x)
