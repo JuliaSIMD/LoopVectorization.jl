@@ -282,7 +282,7 @@ end
         masked_loop_body = add_masks(main_body, masksym, reduction_symbols)
         if N isa Integer
             push!(q.args, quote
-                $masksym = $(VectorizationBase.mask(W, r))
+                $masksym = $(VectorizationBase.mask(T, r))
                 # $itersym = $(N - r)
                 $masked_loop_body
             end)
