@@ -199,8 +199,6 @@ end
 
     ### Here we define unrolled_loop count, full loop count, and rem loop
     if N isa Integer
-        # Q = N >> Wshift
-        # r = N & (unroll_factor*W - 1)
         Q, r = divrem(N, unroll_factor*W)
         Qp1W = (Q+1) << Wshift
         if N % Qp1W == 0
@@ -210,7 +208,7 @@ end
         q = quote end
         # loop_max_expr = Q - 1
         loop_max_expr = Q
-        remr = r >> Wshift
+        remr = r >>> Wshift
         r &= (W - 1)
     else
         Qsym = gensym(:Q)
@@ -221,7 +219,7 @@ end
             ($Qsym, $remsym) = $(num_vector_load_expr(:LoopVectorization, N, W<<log2unroll))
         end
         if unroll_factor > 1
-            push!(q.args, :($remr = $remsym >> $Wshift))
+            push!(q.args, :($remr = $remsym >>> $Wshift))
             push!(q.args, :($remsym &= $(W-1)))
         end
         loop_max_expr = Qsym
