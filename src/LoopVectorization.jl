@@ -339,22 +339,22 @@ end
         # for reductions to be practical. If what we're vectorizing is simple enough not to worry about contamination...then
         # it ought to be simple enough so we don't need @vectorize.
         elseif @capture(x, reductionA_ = M_.vadd(reductionA_, B_ ) ) || @capture(x, reductionA_ = M_.vadd(B_, reductionA_ ) ) || @capture(x, reductionA_ = vadd(reductionA_, B_ ) ) || @capture(x, reductionA_ = vadd(B_, reductionA_ ) )
-            M === nothing && (M = :SIMDPirates)
+            M === nothing && (M = :(LoopVectorization.SIMDPirates))
             return :( $reductionA = $M.vifelse($masksym, $M.vadd($reductionA, $B), $reductionA) )
         elseif @capture(x, reductionA_ = M_.vmul(reductionA_, B_ ) ) || @capture(x, reductionA_ = M_.vmul(B_, reductionA_ ) ) ||  @capture(x, reductionA_ = vmul(reductionA_, B_ ) ) || @capture(x, reductionA_ = vmul(B_, reductionA_ ) )
-            M === nothing && (M = :SIMDPirates)
+            M === nothing && (M = :(LoopVectorization.SIMDPirates))
             return :( $reductionA = $M.vifelse($masksym, $M.vmul($reductionA, $B), $reductionA) )
         elseif @capture(x, reductionA_ = M_.vmuladd(B_, C_, reductionA_) ) ||  @capture(x, reductionA_ = vmuladd(B_, C_, reductionA_) )
-            M === nothing && (M = :SIMDPirates)
+            M === nothing && (M = :(LoopVectorization.SIMDPirates))
             return :( $reductionA = $M.vifelse($masksym, $M.vmuladd($B, $C, $reductionA), $reductionA) )
         elseif @capture(x, reductionA_ = M_.vfnmadd(B_, C_, reductionA_ ) ) || @capture(x, reductionA_ = vfnmadd(B_, C_, reductionA_ ) )
-            M === nothing && (M = :SIMDPirates)
+            M === nothing && (M = :(LoopVectorization.SIMDPirates))
             return :( $reductionA = $M.vifelse($masksym, $M.vfnmadd($B, $C, $reductionA), $reductionA) )
         elseif @capture(x, reductionA_ = M_.vsub(reductionA_, B_ ) ) || @capture(x, reductionA_ = vsub(reductionA_, B_ ) )
-            M === nothing && (M = :SIMDPirates)
+            M === nothing && (M = :(LoopVectorization.SIMDPirates))
             return :( $reductionA = $M.vifelse($masksym, $M.vsub($reductionA, $B), $reductionA) )
 #        elseif @capture(x, reductionA_ = M_.vmul(reductionA_, B_ ) )
-            # M === nothing && (M = :SIMDPirates)
+            # M === nothing && (M = :(LoopVectorization.SIMDPirates))
 #            return :( $reductionA = $M.vifelse($masksym, $M.vmul($reductionA, $B), $reductionA) )
         else
             return x
