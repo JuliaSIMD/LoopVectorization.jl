@@ -316,13 +316,16 @@ end
 
     # display(q)
     # We are using pointers, so better add a GC.@preserve.
-    # gcpreserve = true
-    gcpreserve = false
+    gcpreserve = true
+    # gcpreserve = false
     if gcpreserve
-        return Expr(:macrocall,
+        return quote
+            $(Expr(:macrocall,
         Expr(:., :GC, QuoteNode(Symbol("@preserve"))),
             LineNumberNode(@__LINE__), (keys(indexed_expressions))..., q
-                    )
+                   ))
+            nothing
+        end
     else
         return q
     end
