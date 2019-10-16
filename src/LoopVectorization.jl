@@ -313,7 +313,7 @@ end
             push!(q.args, :($sym = Base.FastMath.div_fast($sym, $mod.SIMDPirates.vprod($gsym))))
         end
     end
-
+    push!(q.args, nothing)
     # display(q)
     # We are using pointers, so better add a GC.@preserve.
     gcpreserve = true
@@ -349,15 +349,15 @@ end
         elseif @capture(x, reductionA_ = M_.vmul(reductionA_, B_ ) ) || @capture(x, reductionA_ = M_.vmul(B_, reductionA_ ) ) ||  @capture(x, reductionA_ = vmul(reductionA_, B_ ) ) || @capture(x, reductionA_ = vmul(B_, reductionA_ ) )
             M === nothing && (M = default_module)
             return :( $reductionA = $M.vifelse($masksym, $M.vmul($reductionA, $B), $reductionA) )
-        elseif @capture(x, reductionA_ = M_.vmuladd(B_, C_, reductionA_) ) ||  @capture(x, reductionA_ = vmuladd(B_, C_, reductionA_) )
+        elseif @capture(x, reductionA_ = M_.f_(B_, C_, reductionA_) ) ||  @capture(x, reductionA_ = f_(B_, C_, reductionA_) )
             M === nothing && (M = default_module)
-            return :( $reductionA = $M.vifelse($masksym, $M.vmuladd($B, $C, $reductionA), $reductionA) )
-        elseif @capture(x, reductionA_ = M_.vfnmadd(B_, C_, reductionA_ ) ) || @capture(x, reductionA_ = vfnmadd(B_, C_, reductionA_ ) )
+            return :( $reductionA = $M.vifelse($masksym, $M.$f($B, $C, $reductionA), $reductionA) )
+        # elseif @capture(x, reductionA_ = M_.vfnmadd(B_, C_, reductionA_ ) ) || @capture(x, reductionA_ = vfnmadd(B_, C_, reductionA_ ) )
+            # M === nothing && (M = default_module)
+            # return :( $reductionA = $M.vifelse($masksym, $M.vfnmadd($B, $C, $reductionA), $reductionA) )
+        elseif @capture(x, reductionA_ = M_.f_(reductionA_, B_ ) ) || @capture(x, reductionA_ = f_(reductionA_, B_ ) )
             M === nothing && (M = default_module)
-            return :( $reductionA = $M.vifelse($masksym, $M.vfnmadd($B, $C, $reductionA), $reductionA) )
-        elseif @capture(x, reductionA_ = M_.vsub(reductionA_, B_ ) ) || @capture(x, reductionA_ = vsub(reductionA_, B_ ) )
-            M === nothing && (M = default_module)
-            return :( $reductionA = $M.vifelse($masksym, $M.vsub($reductionA, $B), $reductionA) )
+            return :( $reductionA = $M.vifelse($masksym, $M.$f($reductionA, $B), $reductionA) )
 #        elseif @capture(x, reductionA_ = M_.vmul(reductionA_, B_ ) )
             # M === nothing && (M = :(LoopVectorization.SIMDPirates))
 #            return :( $reductionA = $M.vifelse($masksym, $M.vmul($reductionA, $B), $reductionA) )
@@ -443,7 +443,6 @@ end
             ## check to see if we are to do a vector load or a broadcast
             if i == declared_iter_sym
                 load_expr = :($mod.vload($V, $pA + $itersym ))
-                # load_expr = :($mod.vload($V, $pA, $itersym))
             elseif isa(i, Expr)
                 contains_itersym, i2 = subsymbol(i, declared_iter_sym, itersym)
                 if contains_itersym
