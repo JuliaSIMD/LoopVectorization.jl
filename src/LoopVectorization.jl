@@ -23,7 +23,8 @@ const SLEEFPiratesDict = Dict{Symbol,Tuple{Symbol,Symbol}}(
     :exp2 => (:SLEEFPirates, :exp2),
     :exp10 => (:SLEEFPirates, :exp10),
     :expm1 => (:SLEEFPirates, :expm1),
-    :sqrt => (:SLEEFPirates, :sqrt), # faster than sqrt_fast
+    # :sqrt => (:SLEEFPirates, :sqrt), # faster than sqrt_fast
+    :sqrt => (:SIMDPirates, :sqrt), # faster than sqrt_fast
     :rsqrt => (:SIMDPirates, :rsqrt),
     :cbrt => (:SLEEFPirates, :cbrt_fast),
     :asin => (:SLEEFPirates, :asin_fast),
@@ -216,7 +217,7 @@ end
         remr = gensym(:remreps)
         q = quote
             $Nsym = $N
-            ($Qsym, $remsym) = $(num_vector_load_expr(:($mod.LoopVectorization), N, W<<log2unroll))
+            ($Qsym, $remsym) = $(num_vector_load_expr(:($mod.LoopVectorization), Nsym, W<<log2unroll))
         end
         if unroll_factor > 1
             push!(q.args, :($remr = $remsym >>> $Wshift))
@@ -373,7 +374,17 @@ end
     _spirate(prewalk(expr) do x
         # @show x
         # @show main_body
+        if @capture(x, A_[i__] += B_)
+             x = :($A[$(i...)] = $B + $A[$(i...)])
+        elseif @capture(x, A_[i__] -= B_)
+             x = :($A[$(i...)] = $A[$(i...)] - $B)
+        elseif @capture(x, A_[i__] *= B_)
+             x = :($A[$(i...)] = $B * $A[$(i...)])
+        elseif @capture(x, A_[i__] /= B_)
+             x = :($A[$(i...)] = $A[$(i...)] / $B)
+        end
         if @capture(x, A_[i_] = B_) || @capture(x, setindex!(A_, B_, i_))
+            # println("Made it.") 
             if A ∉ keys(indexed_expressions)
                 # pA = esc(gensym(A))
                 # pA = esc(Symbol(:p,A))
@@ -439,7 +450,6 @@ end
             else
                 pA = indexed_expressions[A]
             end
-
             ## check to see if we are to do a vector load or a broadcast
             if i == declared_iter_sym
                 load_expr = :($mod.vload($V, $pA + $itersym ))
