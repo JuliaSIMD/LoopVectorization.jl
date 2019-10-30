@@ -144,6 +144,16 @@ whenever size(A) is known at compile time. Seems to be the case for Julia 1.1.
 #     ntuple(i -> (i-1) * stride, Val(N))
 # end
 
+function replace_syms_i(expr, set, i)
+    postwalk(expr) do ex
+        if ex isa Symbol && ex ∈ set
+            return Symbol(ex, :_, i)
+        else
+            return ex
+        end
+    end
+end
+
 @noinline function vectorize_body(N, Tsym::Symbol, uf, n, body, vecdict = SLEEFPiratesDict, VType = SVec, mod = :LoopVectorization)
     if Tsym == :Float32
         vectorize_body(N, Float32, uf, n, body, vecdict, VType, mod)
@@ -247,9 +257,16 @@ end
         $main_body
         $itersym += $W
     end
-    # Eventually we should unroll reductions as well. Should also check if the compiler ever does that for us (doubt it)
-    for u in 1:unroll_factor
+    if unroll_factor == 1
         push!(unrolled_loop_body_expr.args, unrolled_loop_body_iter)
+    else
+        ulb = unrolled_loop_body_iter
+        rep_syms = Set(values(reduction_symbols))
+        unrolled_loop_body_iter = replace_syms_i(ulb, rep_syms, 0)
+        push!(unrolled_loop_body_expr.args, unrolled_loop_body_iter)
+        for u in 1:unroll_factor-1
+            push!(unrolled_loop_body_expr.args, replace_syms_i(ulb, rep_syms, u))
+        end
     end
     unadjitersym = gensym(:unadjitersym)
     if loop_max_expr isa Integer && loop_max_expr <= 1
@@ -296,22 +313,55 @@ end
         end
     end
     ### now we walk the body to look for reductions
-    for ((sym,op),gsym) ∈ reduction_symbols
-        if op == :+ || op == :-
-            pushfirst!(q.args, :($gsym = $mod.vbroadcast($V,zero($T))))
-        elseif op == :* || op == :/
-            pushfirst!(q.args, :($gsym = $mod.vbroadcast($V,one($T))))
+    if unroll_factor == 1
+        for ((sym,op),gsym) ∈ reduction_symbols
+            if op == :+ || op == :-
+                pushfirst!(q.args, :($gsym = $mod.vbroadcast($V,zero($T))))
+            elseif op == :* || op == :/
+                pushfirst!(q.args, :($gsym = $mod.vbroadcast($V,one($T))))
+            end
+            if op == :+
+                push!(q.args, :($sym = Base.FastMath.add_fast($sym, $mod.vsum($gsym))))
+            elseif op == :-
+                push!(q.args, :($sym = Base.FastMath.sub_fast($sym, $mod.vsum($gsym))))
+            elseif op == :*
+                push!(q.args, :($sym = Base.FastMath.mul_fast($sym, $mod.SIMDPirates.vprod($gsym))))
+            elseif op == :/
+                push!(q.args, :($sym = Base.FastMath.div_fast($sym, $mod.SIMDPirates.vprod($gsym))))
+            end
         end
-        if op == :+
-            # push!(q.args, :(@show $sym, $gsym))
-            push!(q.args, :($sym = Base.FastMath.add_fast($sym, $mod.vsum($gsym))))
-            # push!(q.args, :(@show $sym, $gsym))
-        elseif op == :-
-            push!(q.args, :($sym = Base.FastMath.sub_fast($sym, $mod.vsum($gsym))))
-        elseif op == :*
-            push!(q.args, :($sym = Base.FastMath.mul_fast($sym, $mod.SIMDPirates.vprod($gsym))))
-        elseif op == :/
-            push!(q.args, :($sym = Base.FastMath.div_fast($sym, $mod.SIMDPirates.vprod($gsym))))
+    else
+        for ((sym,op),gsym_base) ∈ reduction_symbols
+            for uf ∈ 0:unroll_factor-1
+                gsym = Symbol(gsym_base, :_, uf)
+                if op == :+ || op == :-
+                    pushfirst!(q.args, :($gsym = $mod.vbroadcast($V,zero($T))))
+                elseif op == :* || op == :/
+                    pushfirst!(q.args, :($gsym = $mod.vbroadcast($V,one($T))))
+                end
+            end
+            func = ((op == :*) | (op == :/)) ? :($mod.vmul) : :($mod.vadd)
+            uf_new = unroll_factor
+            while uf_new > 1
+                uf_new, uf_prev = uf_new >> 1, uf_new
+                for uf ∈ 0:uf_new - 1 # reduce half divisible by two
+                    push!(q.args, Expr(:(=), Symbol(gsym_base, :_, uf), Expr(:call, func, Symbol(gsym_base, :_, 2uf), Symbol(gsym_base, :_, 2uf + 1))))
+                end
+                uf_firstrem = 2uf_new
+                for uf ∈ uf_firstrem:uf_prev - 1
+                    push!(q.args, Expr(:(=), Symbol(gsym_base, :_, uf - uf_firstrem), Expr(:call, func, Symbol(gsym_base, :_, uf - uf_firstrem), Symbol(gsym_base, :_, uf))))
+                end
+            end
+            gsym = Symbol(gsym_base, :_, 0)
+            if op == :+
+                push!(q.args, :($sym = Base.FastMath.add_fast($sym, $mod.vsum($gsym))))
+            elseif op == :-
+                push!(q.args, :($sym = Base.FastMath.sub_fast($sym, $mod.vsum($gsym))))
+            elseif op == :*
+                push!(q.args, :($sym = Base.FastMath.mul_fast($sym, $mod.SIMDPirates.vprod($gsym))))
+            elseif op == :/
+                push!(q.args, :($sym = Base.FastMath.div_fast($sym, $mod.SIMDPirates.vprod($gsym))))
+            end
         end
     end
     push!(q.args, nothing)
