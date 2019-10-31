@@ -62,21 +62,6 @@ const SLEEFPiratesDict = Dict{Symbol,Tuple{Symbol,Symbol}}(
 
 @noinline function _spirate(ex, dict, macro_escape = true, mod = :LoopVectorization)
     ex = postwalk(ex) do x
-        # @show x
-        # if @capture(x, LoopVectorization.SIMDPirates.vadd(LoopVectorization.SIMDPirates.vmul(a_, b_), c_)) || @capture(x, LoopVectorization.SIMDPirates.vadd(c_, LoopVectorization.SIMDPirates.vmul(a_, b_)))
-        #     return :(LoopVectorization.SIMDPirates.vmuladd($a, $b, $c))
-        # elseif @capture(x, LoopVectorization.SIMDPirates.vadd(LoopVectorization.SIMDPirates.vmul(a_, b_), LoopVectorization.SIMDPirates.vmul(c_, d_), e_)) || @capture(x, LoopVectorization.SIMDPirates.vadd(LoopVectorization.SIMDPirates.vmul(a_, b_), e_, LoopVectorization.SIMDPirates.vmul(c_, d_))) || @capture(x, LoopVectorization.SIMDPirates.vadd(e_, LoopVectorization.SIMDPirates.vmul(a_, b_), LoopVectorization.SIMDPirates.vmul(c_, d_)))
-        #     return :(LoopVectorization.SIMDPirates.vmuladd($a, $b, LoopVectorization.SIMDPirates.vmuladd($c, $d, $e)))
-        # elseif @capture(x, LoopVectorization.SIMDPirates.vadd(LoopVectorization.SIMDPirates.vmul(b_, c_), LoopVectorization.SIMDPirates.vmul(d_, e_), LoopVectorization.SIMDPirates.vmul(f_, g_), a_)) ||
-        #         @capture(x, LoopVectorization.SIMDPirates.vadd(LoopVectorization.SIMDPirates.vmul(b_, c_), LoopVectorization.SIMDPirates.vmul(d_, e_), a_, LoopVectorization.SIMDPirates.vmul(f_, g_))) ||
-        #         @capture(x, LoopVectorization.SIMDPirates.vadd(LoopVectorization.SIMDPirates.vmul(b_, c_), a_, LoopVectorization.SIMDPirates.vmul(d_, e_), LoopVectorization.SIMDPirates.vmul(f_, g_))) ||
-        #         @capture(x, LoopVectorization.SIMDPirates.vadd(a_, LoopVectorization.SIMDPirates.vmul(b_, c_), LoopVectorization.SIMDPirates.vmul(d_, e_), LoopVectorization.SIMDPirates.vmul(f_, g_)))
-        #     return :(LoopVectorization.SIMDPirates.vmuladd($g, $f, LoopVectorization.SIMDPirates.vmuladd($e, $d, LoopVectorization.SIMDPirates.vmuladd($c, $b, $a))))
-        # elseif @capture(x, a_ * b_ + c_ - c_) || @capture(x, c_ + a_ * b_ - c_) || @capture(x, a_ * b_ - c_ + c_) || @capture(x, - c_ + a_ * b_ + c_)
-        #     return :(LoopVectorization.SIMDPirates.vmul($a, $b))
-        # elseif @capture(x, a_ * b_ + c_ - d_) || @capture(x, c_ + a_ * b_ - d_) || @capture(x, a_ * b_ - d_ + c_) || @capture(x, - d_ + a_ * b_ + c_) || @capture(x, LoopVectorization.SIMDPirates.vsub(LoopVectorization.SIMDPirates.vmuladd(a_, b_, c_), d_))
-        #     return :(LoopVectorization.SIMDPirates.vmuladd($a, $b, LoopVectorization.SIMDPirates.vsub($c, $d)))
-        # elseif @capture(x, a_ += b_)
         if @capture(x, a_ += b_)
             return :($a = $mod.vadd($a, $b))
         elseif @capture(x, a_ -= b_)
@@ -122,27 +107,12 @@ end
 
 
 
-# mask_expr(W, r) = :($(Expr(:tuple, [i > r ? Core.VecElement{Bool}(false) : Core.VecElement{Bool}(true) for i ∈ 1:W]...)))
-
 """
 Returns the strides necessary to iterate across rows.
 Needs `@inferred` testing / that the compiler optimizes it away
 whenever size(A) is known at compile time. Seems to be the case for Julia 1.1.
 """
 @inline stride_row(A::AbstractArray) = size(A,1)
-# @inline function num_row_strides(A::AbstractArray)
-#     s = size(A)
-#     N = s[2]
-#     for i ∈ 3:length(s)
-#         N *= s[i]
-#     end
-#     N
-# end
-# @inline function stride_row_iter(A::AbstractArray)
-#     N = num_row_strides(A)
-#     stride = stride_row(A)
-#     ntuple(i -> (i-1) * stride, Val(N))
-# end
 
 function replace_syms_i(expr, set, i)
     postwalk(expr) do ex
@@ -159,10 +129,6 @@ end
         vectorize_body(N, Float32, uf, n, body, vecdict, VType, mod)
     elseif Tsym == :Float64
         vectorize_body(N, Float64, uf, n, body, vecdict, VType, mod)
-    # elseif Tsym == :ComplexF32
-    #     vectorize_body(N, ComplexF32, uf, n, body, vecdict, VType)
-    # elseif Tsym == :ComplexF64
-    #     vectorize_body(N, ComplexF64, uf, n, body, vecdict, VType)
     else
         throw("Type $Tsym is not supported.")
     end
@@ -183,25 +149,14 @@ end
     else
         log2unroll = 0
     end
-    # 
-    # W *= unroll_factor
-    # @show W, REGISTER_SIZE, T_size
-    # @show T
     WT = W * T_size
     V = VType{W,T}
 
-    # @show body
-
-    # body = _pirate(body)
-
-    # indexed_expressions = Dict{Symbol,Expr}()
     indexed_expressions = Dict{Symbol,Symbol}() # Symbol, gensymbol
 
     itersym = gensym(:i)
     # walk the expression, searching for all get index patterns.
     # these will be replaced with
-    # Plan: definition of q will create vectors
-
     main_body = quote end
     reduction_symbols = Dict{Tuple{Symbol,Symbol},Symbol}()
     loaded_exprs = Dict{Expr,Symbol}()
