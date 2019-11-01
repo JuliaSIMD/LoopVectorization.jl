@@ -340,12 +340,12 @@ end
 @noinline function add_masks(expr, masksym, reduction_symbols, default_module = :LoopVectorization)
     # println("Called add masks!")
     postwalk(expr) do x
-        if @capture(x, M_.vstore!(ptr_, V_))
+        if @capture(x, M_.vstore!(args__))
             M === nothing && (M = default_module)
-            return :($M.vstore!($ptr, $V, $masksym))
-        elseif @capture(x, M_.vload(V_, ptr_))
+            return :($M.vstore!($(args...), $masksym))
+        elseif @capture(x, M_.vload(args__))
             M === nothing && (M = default_module)
-            return :($M.vload($V, $ptr, $masksym))
+            return :($M.vload($(args...), $masksym))
         # We mask the reductions, because the odds of them getting contaminated and therefore poisoning the results seems too great
         # for reductions to be practical. If what we're vectorizing is simple enough not to worry about contamination...then
         # it ought to be simple enough so we don't need @vectorize.
@@ -399,12 +399,12 @@ end
                 pA = indexed_expressions[A]
             end
             if i == declared_iter_sym
-                return :($mod.vstore!($pA + $itersym, $B))
+                return :($mod.vstore!($pA, $B, $itersym))
             elseif isa(i, Expr)
                 contains_itersym, i2 = subsymbol(i, declared_iter_sym, itersym)
-                return :($mod.vstore!($pA + $i2, $B))
+                return :($mod.vstore!($pA, $B, $i2))
             else
-                return :($mod.vstore!($pA + $i, $B))
+                return :($mod.vstore!($pA, $B, $i))
             end
         elseif @capture(x, A_[i_,j_] = B_) || @capture(x, setindex!(A_, B_, i_, j_))
             if A ∉ keys(indexed_expressions)
@@ -426,7 +426,7 @@ end
                     push!(loop_constants_quote.args, :( $stridesym = $stridexpr ))
                     loop_constants_dict[stridexpr] = stridesym
                 end
-                return :($mod.vstore!($pA + $itersym + $ej*$stridesym, $B))
+                return :($mod.vstore!($pA, $B, $itersym + $ej*$stridesym))
             else
                 throw("Indexing columns with vectorized loop variable is not supported.")
             end
@@ -457,11 +457,11 @@ end
             end
             ## check to see if we are to do a vector load or a broadcast
             if i == declared_iter_sym
-                load_expr = :($mod.vload($V, $pA + $itersym ))
+                load_expr = :($mod.vload($V, $pA, $itersym ))
             elseif isa(i, Expr)
                 contains_itersym, i2 = subsymbol(i, declared_iter_sym, itersym)
                 if contains_itersym
-                    load_expr = :($mod.vload($V, $pA + $i2 ))
+                    load_expr = :($mod.vload($V, $pA, $i2 ))
                 else
                     load_expr = :($mod.vbroadcast($V, $pA - 1 + $i))
                 end
@@ -497,7 +497,7 @@ end
                     push!(loop_constants_quote.args, :( $stridesym = $stridexpr ))
                     loop_constants_dict[stridexpr] = stridesym
                 end
-                load_expr = :($mod.vload($V, $pA + $itersym + $ej*$stridesym))
+                load_expr = :($mod.vload($V, $pA, $itersym + $ej*$stridesym))
             elseif j == declared_iter_sym
                 throw("Indexing columns with vectorized loop variable is not supported.")
             else
@@ -527,8 +527,6 @@ end
         elseif @capture(x, A_[i_,:] .= B_)
             ## Capture if there are multiple assignments...
             if A ∉ keys(indexed_expressions)
-                # pA = esc(gensym(A))
-                # pA = esc(Symbol(:p,A))
                 pA = gensym(Symbol(:p,A))
                 indexed_expressions[A] = pA
             else
@@ -539,11 +537,9 @@ end
             else
                 isym = i
             end
-
             br = gensym(:B)
             br2 = gensym(:B)
             coliter = gensym(:j)
-
             stridexpr = :($mod.LoopVectorization.stride_row($A))
             if stridexpr ∈ keys(loop_constants_dict)
                 stridesym = loop_constants_dict[stridexpr]
@@ -552,32 +548,13 @@ end
                 push!(loop_constants_quote.args, :( $stridesym = $stridexpr ))
                 loop_constants_dict[stridexpr] = stridesym
             end
-            # numiterexpr = :(LoopVectorization.num_row_strides($A))
-            # if numiterexpr ∈ keys(loop_constants_dict)
-            #     numitersym = loop_constants_dict[numiterexpr]
-            # else
-            #     numitersym = gensym(:numiter)
-            #     push!(loop_constants_quote.args, :( $numitersym = $numiterexpr ))
-            #     loop_constants_dict[numiterexpr] = numitersym
-            # end
-
             expr = quote
                 $br = $mod.LoopVectorization.extract_data.($B)
-
-                # for $coliter ∈ 0:$numitersym-1
                 for $coliter ∈ 0:length($br)-1
-                    @inbounds $mod.vstore!($pA + $isym + $stridesym * $coliter, getindex($br,1+$coliter))
+                    @inbounds $mod.vstore!($pA, getindex($br,1+$coliter), $isym + $stridesym * $coliter)
                 end
             end
-
             return expr
-        # elseif @capture(x, @nexprs N_ ex_)
-        #     # println("Macroexpanding x:", x)
-        #     # @show ex
-        #     # mx = Expr(:escape, Expr(:block, Any[ Base.Cartesian.inlineanonymous(ex,i) for i = 1:N ]...))
-        #     mx = Expr(:block, Any[ Base.Cartesian.inlineanonymous(ex,i) for i = 1:N ]...)
-        #     # println("Macroexpanded x:", mx)
-        #     return mx
         elseif @capture(x, zero(T_))
             return :(zero($V))
         elseif @capture(x, one(T_))
@@ -590,7 +567,6 @@ end
             push!(main_body.args, :($isymvec = $mod.vadd($isymvec, vbroadcast($V, $W)) ))
             return isymvec
         else
-            # println("Returning x:", x)
             return x
         end
     end, VectorizationDict, false, mod) # macro_escape = false
