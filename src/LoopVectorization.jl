@@ -250,7 +250,7 @@ end
     end
     if !(N isa Integer) || r > 0
         masksym = gensym(:mask)
-        masked_loop_body = add_masks(main_body, masksym, reduction_symbols, mod)
+        masked_loop_body = add_masks(unrolled_loop_body_iter, masksym, reduction_symbols, mod)
         if N isa Integer
             push!(q.args, quote
                 $masksym = $(VectorizationBase.mask(T, r))
