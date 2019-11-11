@@ -23,7 +23,7 @@ const SLEEFPiratesDict = Dict{Symbol,Tuple{Symbol,Symbol}}(
     :exp2 => (:SLEEFPirates, :exp2),
     :exp10 => (:SLEEFPirates, :exp10),
     :expm1 => (:SLEEFPirates, :expm1),
-    # :sqrt => (:SLEEFPirates, :sqrt), # faster than sqrt_fast
+    :inv => (:SIMDPirates, :vinv), # faster than sqrt_fast
     :sqrt => (:SIMDPirates, :sqrt), # faster than sqrt_fast
     :rsqrt => (:SIMDPirates, :rsqrt),
     :cbrt => (:SLEEFPirates, :cbrt_fast),
@@ -124,7 +124,7 @@ function replace_syms_i(expr, set, i)
     end
 end
 
-@noinline function vectorize_body(N, Tsym::Symbol, uf, n, body, vecdict = SLEEFPiratesDict, VType = SVec, mod = :LoopVectorization)
+@noinline function vectorize_body(N, Tsym::Symbol, uf, n, body, vecdict = SLEEFPiratesDict, VType = SVec, gcpreserve::Bool = true , mod = :LoopVectorization)
     if Tsym == :Float32
         vectorize_body(N, Float32, uf, n, body, vecdict, VType, mod)
     elseif Tsym == :Float64
@@ -133,7 +133,7 @@ end
         throw("Type $Tsym is not supported.")
     end
 end
-@noinline function vectorize_body(N, T::DataType, unroll_factor::Int, n, body, vecdict = SLEEFPiratesDict, VType = SVec, mod = :LoopVectorization)
+@noinline function vectorize_body(N, T::DataType, unroll_factor::Int, n, body, vecdict = SLEEFPiratesDict, VType = SVec, gcpreserve::Bool = true, mod = :LoopVectorization)
     # unroll_factor == 1 || throw("Only unroll factor of 1 is currently supported. Was set to $unroll_factor.")
     T_size = sizeof(T)
     if isa(N, Integer)
@@ -322,7 +322,7 @@ end
     push!(q.args, nothing)
     # display(q)
     # We are using pointers, so better add a GC.@preserve.
-    gcpreserve = true
+    # gcpreserve = true
     # gcpreserve = false
     if gcpreserve
         return quote
@@ -339,7 +339,8 @@ end
 
 @noinline function add_masks(expr, masksym, reduction_symbols, default_module = :LoopVectorization)
     # println("Called add masks!")
-    postwalk(expr) do x
+    # postwalk(expr) do x
+    prewalk(expr) do x
         if @capture(x, M_.vstore!(args__))
             M === nothing && (M = default_module)
             return :($M.vstore!($(args...), $masksym))
@@ -597,168 +598,92 @@ Arguments are
 
 The default type is Float64, and default UnrollFactor is 1 (no unrolling).
 """
-macro vectorize(expr)
-    if @capture(expr, for n_ ∈ 1:N_ body__ end)
-        # q = vectorize_body(N, Float64, n, body, false)
-        q = vectorize_body(N, Float64, 1, n, body)
-    # elseif @capture(expr, for n_ ∈ 1:N_ body__ end)
-    #     q = vectorize_body(N, element_type(body)
-    elseif @capture(expr, for n_ ∈ eachindex(A_) body__ end)
-        q = vectorize_body(:(length($A)), Float64, 1, n, body)
-    elseif @capture(expr, for n_ ∈ eachindex(args__) body__ end)
-        q = vectorize_body(:(min($([:(length($a)) for a ∈ args]...))), Float64, 1, n, body)
-    else
-        throw("Could not match loop expression.")
-    end
-    esc(q)
-end
-macro vectorize(type, expr)
-    if @capture(expr, for n_ ∈ 1:N_ body__ end)
-        # q = vectorize_body(N, type, n, body, true)
-        q = vectorize_body(N, type, 1, n, body)
-    elseif @capture(expr, for n_ ∈ eachindex(A_) body__ end)
-        q = vectorize_body(:(length($A)), type, 1, n, body)
-    elseif @capture(expr, for n_ ∈ eachindex(args__) body__ end)
-        q = vectorize_body(:(min($([:(length($a)) for a ∈ args]...))), type, 1, n, body)
-    else
-        throw("Could not match loop expression.")
-    end
-    esc(q)
-end
-macro vectorize(unroll_factor::Integer, expr)
-    if @capture(expr, for n_ ∈ 1:N_ body__ end)
-        # q = vectorize_body(N, type, n, body, true)
-        q = vectorize_body(N, Float64, unroll_factor, n, body)
-    elseif @capture(expr, for n_ ∈ eachindex(A_) body__ end)
-        q = vectorize_body(:(length($A)), Float64, unroll_factor, n, body)
-    elseif @capture(expr, for n_ ∈ eachindex(args__) body__ end)
-        q = vectorize_body(:(min($([:(length($a)) for a ∈ args]...))), Float64, unroll_factor, n, body)
-    else
-        throw("Could not match loop expression.")
-    end
-    esc(q)
-end
-macro vectorize(type, unroll_factor::Integer, expr)
-    if @capture(expr, for n_ ∈ 1:N_ body__ end)
-        # q = vectorize_body(N, type, n, body, true)
-        q = vectorize_body(N, type, unroll_factor, n, body)
-    elseif @capture(expr, for n_ ∈ eachindex(A_) body__ end)
-        q = vectorize_body(:(length($A)), type, unroll_factor, n, body)
-    elseif @capture(expr, for n_ ∈ eachindex(args__) body__ end)
-        q = vectorize_body(:(min($([:(length($a)) for a ∈ args]...))), type, unroll_factor, n, body)
-    else
-        throw("Could not match loop expression.")
-    end
-    esc(q)
-end
 
-macro vvectorize(expr)
-    if @capture(expr, for n_ ∈ 1:N_ body__ end)
-        # q = vectorize_body(N, Float64, n, body, false)
-        q = vectorize_body(N, Float64, 1, n, body, SLEEFPiratesDict, Vec)
-    # elseif @capture(expr, for n_ ∈ 1:N_ body__ end)
-    #     q = vectorize_body(N, element_type(body)
-    elseif @capture(expr, for n_ ∈ eachindex(A_) body__ end)
-        q = vectorize_body(:(length($A)), Float64, 1, n, body, SLEEFPiratesDict, Vec)
-    elseif @capture(expr, for n_ ∈ eachindex(args__) body__ end)
-        q = vectorize_body(:(min($([:(length($a)) for a ∈ args]...))), Float64, 1, n, body, SLEEFPiratesDict, Vec)
+for vec ∈ (false,true)
+    if vec
+        V = Vec
+        macroname = :vvectorize
     else
-        throw("Could not match loop expression.")
+        V = SVec
+        macroname = :vectorize
     end
-    esc(q)
-end
-macro vvectorize(type, expr)
-    if @capture(expr, for n_ ∈ 1:N_ body__ end)
-        # q = vectorize_body(N, type, n, body, true)
-        q = vectorize_body(N, type, 1, n, body, SLEEFPiratesDict, Vec)
-    elseif @capture(expr, for n_ ∈ eachindex(A_) body__ end)
-        q = vectorize_body(:(length($A)), type, 1, n, body, SLEEFPiratesDict, Vec)
-    elseif @capture(expr, for n_ ∈ eachindex(args__) body__ end)
-        q = vectorize_body(:(min($([:(length($a)) for a ∈ args]...))), type, 1, n, body, SLEEFPiratesDict, Vec)
-    else
-        throw("Could not match loop expression.")
+    for gcpreserve ∈ (true,false)
+        if !gcpreserve
+            macroname = Symbol(macroname, :_unsafe)
+        end
+        @eval macro $macroname(expr)
+            if @capture(expr, for n_ ∈ 1:N_ body__ end)
+                q = vectorize_body(N, Float64, 1, n, body, SLEEFPiratesDict, $V, $gcpreserve)
+            elseif @capture(expr, for n_ ∈ eachindex(A_) body__ end)
+                q = vectorize_body(:(length($A)), Float64, 1, n, body, SLEEFPiratesDict, $V, $gcpreserve)
+            elseif @capture(expr, for n_ ∈ eachindex(args__) body__ end)
+                q = vectorize_body(:(min($([:(length($a)) for a ∈ args]...))), Float64, 1, n, body, SLEEFPiratesDict, $V, $gcpreserve)
+            else
+                throw("Could not match loop expression.")
+            end
+            esc(q)
+        end
+        @eval macro $macroname(type, expr)
+            if @capture(expr, for n_ ∈ 1:N_ body__ end)
+                q = vectorize_body(N, type, 1, n, body, SLEEFPiratesDict, $V, $gcpreserve)
+            elseif @capture(expr, for n_ ∈ eachindex(A_) body__ end)
+                q = vectorize_body(:(length($A)), type, 1, n, body, SLEEFPiratesDict, $V, $gcpreserve)
+            elseif @capture(expr, for n_ ∈ eachindex(args__) body__ end)
+                q = vectorize_body(:(min($([:(length($a)) for a ∈ args]...))), type, 1, n, body, SLEEFPiratesDict, $V, $gcpreserve)
+            else
+                throw("Could not match loop expression.")
+            end
+            esc(q)
+        end
+        @eval macro $macroname(unroll_factor::Integer, expr)
+            if @capture(expr, for n_ ∈ 1:N_ body__ end)
+                q = vectorize_body(N, Float64, unroll_factor, n, body, SLEEFPiratesDict, $V, $gcpreserve)
+            elseif @capture(expr, for n_ ∈ eachindex(A_) body__ end)
+                q = vectorize_body(:(length($A)), Float64, unroll_factor, n, body, SLEEFPiratesDict, $V, $gcpreserve)
+            elseif @capture(expr, for n_ ∈ eachindex(args__) body__ end)
+                q = vectorize_body(:(min($([:(length($a)) for a ∈ args]...))), Float64, unroll_factor, n, body, SLEEFPiratesDict, $V, $gcpreserve)
+            else
+                throw("Could not match loop expression.")
+            end
+            esc(q)
+        end
+        @eval macro $macroname(type, unroll_factor::Integer, expr)
+            if @capture(expr, for n_ ∈ 1:N_ body__ end)
+                q = vectorize_body(N, type, unroll_factor, n, body, SLEEFPiratesDict, $V, $gcpreserve)
+            elseif @capture(expr, for n_ ∈ eachindex(A_) body__ end)
+                q = vectorize_body(:(length($A)), type, unroll_factor, n, body, SLEEFPiratesDict, $V, $gcpreserve)
+            elseif @capture(expr, for n_ ∈ eachindex(args__) body__ end)
+                q = vectorize_body(:(min($([:(length($a)) for a ∈ args]...))), type, unroll_factor, n, body, SLEEFPiratesDict, $V, $gcpreserve)
+            else
+                throw("Could not match loop expression.")
+            end
+            esc(q)
+        end
+        @eval macro $macroname(type, mod::Union{Symbol,Module}, expr)
+            if @capture(expr, for n_ ∈ 1:N_ body__ end)
+                q = vectorize_body(N, type, 1, n, body, SLEEFPiratesDict, $V, $gcpreserve, mod)
+            elseif @capture(expr, for n_ ∈ eachindex(A_) body__ end)
+                q = vectorize_body(:(length($A)), type, 1, n, body, SLEEFPiratesDict, $V, $gcpreserve, mod)
+            elseif @capture(expr, for n_ ∈ eachindex(args__) body__ end)
+                q = vectorize_body(:(min($([:(length($a)) for a ∈ args]...))), type, 1, n, body, SLEEFPiratesDict, $V, $gcpreserve, mod)
+            else
+                throw("Could not match loop expression.")
+            end
+            esc(q)
+        end
+        @eval macro $macroname(type, mod::Union{Symbol,Module}, unroll_factor::Integer, expr)
+            if @capture(expr, for n_ ∈ 1:N_ body__ end)
+                q = vectorize_body(N, type, unroll_factor, n, body, SLEEFPiratesDict, $V, mod)
+            elseif @capture(expr, for n_ ∈ eachindex(A_) body__ end)
+                q = vectorize_body(:(length($A)), type, unroll_factor, n, body, SLEEFPiratesDict, $V, mod)
+            elseif @capture(expr, for n_ ∈ eachindex(args__) body__ end)
+                q = vectorize_body(:(min($([:(length($a)) for a ∈ args]...))), type, unroll_factor, n, body, SLEEFPiratesDict, $V, $gcpreserve, mod)
+            else
+                throw("Could not match loop expression.")
+            end
+            esc(q)
+        end
     end
-    esc(q)
-end
-macro vvectorize(unroll_factor::Integer, expr)
-    if @capture(expr, for n_ ∈ 1:N_ body__ end)
-        # q = vectorize_body(N, type, n, body, true)
-        q = vectorize_body(N, Float64, unroll_factor, n, body, SLEEFPiratesDict, Vec)
-    elseif @capture(expr, for n_ ∈ eachindex(A_) body__ end)
-        q = vectorize_body(:(length($A)), Float64, unroll_factor, n, body, SLEEFPiratesDict, Vec)
-    elseif @capture(expr, for n_ ∈ eachindex(args__) body__ end)
-        q = vectorize_body(:(min($([:(length($a)) for a ∈ args]...))), Float64, unroll_factor, n, body, SLEEFPiratesDict, Vec)
-    else
-        throw("Could not match loop expression.")
-    end
-    esc(q)
-end
-macro vvectorize(type, unroll_factor::Integer, expr)
-    if @capture(expr, for n_ ∈ 1:N_ body__ end)
-        # q = vectorize_body(N, type, n, body, true)
-        q = vectorize_body(N, type, unroll_factor, n, body, SLEEFPiratesDict, Vec)
-    elseif @capture(expr, for n_ ∈ eachindex(A_) body__ end)
-        q = vectorize_body(:(length($A)), type, unroll_factor, n, body, SLEEFPiratesDict, Vec)
-    elseif @capture(expr, for n_ ∈ eachindex(args__) body__ end)
-        q = vectorize_body(:(min($([:(length($a)) for a ∈ args]...))), type, unroll_factor, n, body, SLEEFPiratesDict, Vec)
-    else
-        throw("Could not match loop expression.")
-    end
-    esc(q)
-end
-
-
-macro vectorize(type, mod::Union{Symbol,Module}, expr)
-    if @capture(expr, for n_ ∈ 1:N_ body__ end)
-        # q = vectorize_body(N, type, n, body, true)
-        q = vectorize_body(N, type, 1, n, body, SLEEFPiratesDict, SVec, mod)
-    elseif @capture(expr, for n_ ∈ eachindex(A_) body__ end)
-        q = vectorize_body(:(length($A)), type, 1, n, body, SLEEFPiratesDict, SVec, mod)
-    elseif @capture(expr, for n_ ∈ eachindex(args__) body__ end)
-        q = vectorize_body(:(min($([:(length($a)) for a ∈ args]...))), type, 1, n, body, SLEEFPiratesDict, SVec, mod)
-    else
-        throw("Could not match loop expression.")
-    end
-    esc(q)
-end
-macro vectorize(type, mod::Union{Symbol,Module}, unroll_factor::Integer, expr)
-    if @capture(expr, for n_ ∈ 1:N_ body__ end)
-        # q = vectorize_body(N, type, n, body, true)
-        q = vectorize_body(N, type, unroll_factor, n, body, SLEEFPiratesDict, SVec, mod)
-    elseif @capture(expr, for n_ ∈ eachindex(A_) body__ end)
-        q = vectorize_body(:(length($A)), type, unroll_factor, n, body, SLEEFPiratesDict, SVec, mod)
-    elseif @capture(expr, for n_ ∈ eachindex(args__) body__ end)
-        q = vectorize_body(:(min($([:(length($a)) for a ∈ args]...))), type, unroll_factor, n, body, SLEEFPiratesDict, SVec, mod)
-    else
-        throw("Could not match loop expression.")
-    end
-    esc(q)
-end
-macro vvectorize(type, mod::Union{Symbol,Module}, expr)
-    if @capture(expr, for n_ ∈ 1:N_ body__ end)
-        # q = vectorize_body(N, type, n, body, true)
-        q = vectorize_body(N, type, 1, n, body, SLEEFPiratesDict, Vec, mod)
-    elseif @capture(expr, for n_ ∈ eachindex(A_) body__ end)
-        q = vectorize_body(:(length($A)), type, 1, n, body, SLEEFPiratesDict, Vec, mod)
-    elseif @capture(expr, for n_ ∈ eachindex(args__) body__ end)
-        q = vectorize_body(:(min($([:(length($a)) for a ∈ args]...))), type, 1, n, body, SLEEFPiratesDict, Vec, mod)
-    else
-        throw("Could not match loop expression.")
-    end
-    esc(q)
-end
-macro vvectorize(type, unroll_factor::Integer, mod::Union{Symbol,Module}, expr)
-    if @capture(expr, for n_ ∈ 1:N_ body__ end)
-        # q = vectorize_body(N, type, n, body, true)
-        q = vectorize_body(N, type, unroll_factor, n, body, SLEEFPiratesDict, Vec, mod)
-    elseif @capture(expr, for n_ ∈ eachindex(A_) body__ end)
-        q = vectorize_body(:(length($A)), type, unroll_factor, n, body, SLEEFPiratesDict, Vec, mod)
-    elseif @capture(expr, for n_ ∈ eachindex(args__) body__ end)
-        q = vectorize_body(:(min($([:(length($a)) for a ∈ args]...))), type, unroll_factor, n, body, SLEEFPiratesDict, Vec, mod)
-    else
-        throw("Could not match loop expression.")
-    end
-    esc(q)
 end
 
 end # module
