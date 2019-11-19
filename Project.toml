@@ -4,6 +4,7 @@ authors = ["Chris Elrod <elrodc@gmail.com>"]
 version = "0.1.0"
 
 [deps]
+LightGraphs = "093fc24a-ae57-5d10-9952-331d41423f4d"
 MacroTools = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
 SIMDPirates = "21efa798-c60a-11e8-04d3-e1a92915a26a"
 SLEEFPirates = "476501e8-09a2-5ece-8869-fb82de89a1fa"
