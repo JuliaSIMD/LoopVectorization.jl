@@ -133,7 +133,11 @@ end
         throw("Type $Tsym is not supported.")
     end
 end
-@noinline function vectorize_body(N, T::DataType, unroll_factor::Int, n, body, vecdict = SLEEFPiratesDict, VType = SVec, gcpreserve::Bool = true, mod = :LoopVectorization)
+@noinline function vectorize_body(
+    N, ::Type{T}, unroll_factor::Int, n::Symbol, body::Array{Any},
+    vecdict::Dict{Symbol,Tuple{Symbol,Symbol}} = SLEEFPiratesDict,
+    @nospecialize(VType = SVec), gcpreserve::Bool = true, mod = :LoopVectorization
+) where {T}
     # unroll_factor == 1 || throw("Only unroll factor of 1 is currently supported. Was set to $unroll_factor.")
     T_size = sizeof(T)
     if isa(N, Integer)
