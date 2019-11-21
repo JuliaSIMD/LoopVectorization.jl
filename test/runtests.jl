@@ -224,6 +224,100 @@ end
         (ts_end - ts_start) / (2N*K), vsum(s_1)
     end
 end
+
+
+
+@generated function estimate_cost_onearg_llvmunroll(f::F, N::Int = 512, K = 1_000, ::Type{T} = Float64, ::Val{U} = Val(4)) where {F,T,U}
+    W, Wshift = VectorizationBase.pick_vector_width_shift(T)
+    Ushift = VectorizationBase.intlog2(U)
+    W <<= Ushift
+    quote    
+        s = vbroadcast(Vec{$W,$T}, zero(T))
+        x = rand(T, N << $Wshift)
+        ptrx = pointer(x)
+        ts_start, id_start = cpucycle_id()
+        for k ∈ 1:K
+            _ptrx = ptrx
+            for n ∈ 1:N>>$Ushift
+                v = vload(Vec{$W,$T}, _ptrx)
+                s = vadd(s, f(v))
+                _ptrx += VectorizationBase.REGISTER_SIZE*$U
+            end
+        end
+        ts_end, id_end = cpucycle_id()
+        @assert id_start == id_end
+        (ts_end - ts_start) / (N*K), vsum(s)
+    end
+end
+@generated function estimate_cost_onearg_tworet_llvmunroll(f::F, N::Int = 512, K = 1_000, ::Type{T} = Float64, ::Val{U} = Val(4)) where {F,T,U}
+    W, Wshift = VectorizationBase.pick_vector_width_shift(T)
+    Ushift = VectorizationBase.intlog2(U)
+    W <<= Ushift
+    quote    
+        s = vbroadcast(Vec{$W,$T}, zero(T))
+        x = rand(T, N << $Wshift)
+        ptrx = pointer(x)
+        ts_start, id_start = cpucycle_id()
+        for k ∈ 1:K
+            _ptrx = ptrx
+            for n ∈ 1:N>>$Ushift
+                v = vload(Vec{$W,$T}, _ptrx)
+                a, b = f(v)
+                s = vmuladd(a, b, s)
+                _ptrx += VectorizationBase.REGISTER_SIZE*$U
+            end
+        end
+        ts_end, id_end = cpucycle_id()
+        @assert id_start == id_end
+        (ts_end - ts_start) / (N*K), vsum(s)
+    end
+end
+@generated function estimate_cost_twoarg_llvmunroll(f::F, N::Int = 512, K = 1_000, ::Type{T} = Float64, ::Val{U} = Val(4)) where {F,T,U}
+    W, Wshift = VectorizationBase.pick_vector_width_shift(T)
+    Ushift = VectorizationBase.intlog2(U)
+    W <<= Ushift
+    quote    
+        s = vbroadcast(Vec{$W,$T}, one(T))
+        x = rand(T, N << $Wshift)
+        ptrx = pointer(x)
+        ts_start, id_start = cpucycle_id()
+        for k ∈ 1:K
+            _ptrx = ptrx
+            for n ∈ 1:N>>$Ushift
+                v = vload(Vec{$W,$T}, _ptrx)
+                s = f(v, s)
+                _ptrx += VectorizationBase.REGISTER_SIZE*$U
+            end
+        end
+        ts_end, id_end = cpucycle_id()
+        @assert id_start == id_end
+        (ts_end - ts_start) / (N*K), vsum(s)
+    end
+end
+@generated function estimate_cost_threearg_llvmunroll(f::F, N::Int = 512, K = 1_000, ::Type{T} = Float64, ::Val{U} = Val(4)) where {F,T,U}
+    W, Wshift = VectorizationBase.pick_vector_width_shift(T)
+    Ushift = VectorizationBase.intlog2(U)
+    W <<= Ushift
+    quote    
+        s = vbroadcast(Vec{$W,$T}, zero(T))
+        x = rand(T, N << $Wshift)
+        ptrx = pointer(x)
+        ts_start, id_start = cpucycle_id()
+        for k ∈ 1:K
+            _ptrx = ptrx
+            for n ∈ 1:N>>$Ushift
+                v = vload(Vec{$W,$T}, _ptrx)
+                s = f(v, v, s)
+                _ptrx += VectorizationBase.REGISTER_SIZE*$U
+            end
+        end
+        ts_end, id_end = cpucycle_id()
+        @assert id_start == id_end
+        (ts_end - ts_start) / (N*K), vsum(s)
+    end
+end
+
+
 estimate_cost_onearg_serial(exp, 512, 1_000, Float64, Val(1)) # 21
 estimate_cost_onearg_serial(exp, 512, 1_000, Float64, Val(2)) # 18.4
 estimate_cost_onearg_serial(exp, 512, 1_000, Float64, Val(4)) # 17.5
@@ -254,9 +348,14 @@ estimate_cost_onearg_tworet_serial(sincos, 512, 1_000, Float64, Val(2)) # 23
 estimate_cost_onearg_tworet_serial(sincos, 512, 1_000, Float64, Val(4)) # 22
 
 
-estimate_cost_onearg(SLEEFPirates.exp, 512, 1_000, Float64, Val(1)) # 28 # 21
-estimate_cost_onearg(SLEEFPirates.exp, 512, 1_000, Float64, Val(2)) # 28 # 20
+estimate_cost_onearg(SLEEFPirates.exp, 512, 1_000, Float64, Val(1)) # 48 # 21
+estimate_cost_onearg(SLEEFPirates.exp, 512, 1_000, Float64, Val(2)) # 52 # 20
 estimate_cost_onearg(SLEEFPirates.exp, 512, 1_000, Float64, Val(4)) # 28 # 19.5
+
+estimate_cost_onearg_llvmunroll(SLEEFPirates.exp, 512, 1_000, Float64, Val(1)) # 50 # 21
+estimate_cost_onearg_llvmunroll(SLEEFPirates.exp, 512, 1_000, Float64, Val(2)) # 40 # 20
+# estimate_cost_onearg_llvmunroll(SLEEFPirates.exp, 512, 1_000, Float64, Val(3)) # 40 # 
+estimate_cost_onearg_llvmunroll(SLEEFPirates.exp, 512, 1_000, Float64, Val(4)) # 32 # 19.5
 
 estimate_cost_onearg(SLEEFPirates.log, 512, 1_000, Float64, Val(1)) # 51 cycles # 44
 estimate_cost_onearg(SLEEFPirates.log, 512, 1_000, Float64, Val(2)) # 51 cycles # 40
