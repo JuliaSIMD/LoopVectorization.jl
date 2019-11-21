@@ -295,7 +295,7 @@ end
                     pushfirst!(q.args, :($gsym = $mod.vbroadcast($V,one($T))))
                 end
             end
-            func = ((op == :*) | (op == :/)) ? :($mod.vmul) : :($mod.vadd)
+            func = ((op == :*) | (op == :/)) ? :($mod.evmul) : :($mod.evadd)
             uf_new = unroll_factor
             while uf_new > 1
                 uf_new, uf_prev = uf_new >> 1, uf_new
