@@ -14,3 +14,36 @@ Pkg.add(PackageSpec(url="https://github.com/chriselrod/SIMDPirates.jl"))
 Pkg.add(PackageSpec(url="https://github.com/chriselrod/SLEEFPirates.jl"))
 Pkg.add(PackageSpec(url="https://github.com/chriselrod/LoopVectorization.jl"))
 ```
+
+
+## Usage
+
+The current version of LoopVectorization provides a simple, dumb, transform on a single loop.
+What I mean by this is that it will not check for the transformations for validity. To be safe, I would straight loops that transform arrays or calculate reductions.
+
+For example,
+```julia
+function sum_simd(x)
+    s = zero(eltype(x))
+    @simd for xᵢ ∈ x
+        s += xᵢ
+    end
+    s
+end
+using LoopVectorization, BenchmarkTools
+function sum_loopvec(x::AbstractVector{Float64})
+    s = 0.0
+    @vvectorize for i ∈ eachindex(x)
+        s += x[i]
+    end
+    s
+end
+x = rand(99);
+@btime sum($x)
+
+@btime sum_simd($x)
+@btime sum_loopvec($x)
+```
+
+
+

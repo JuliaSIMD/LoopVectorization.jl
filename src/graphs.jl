@@ -31,7 +31,7 @@ end
 function evaluate_cost(
     ls::LoopSet, order::ShortIntVector
 )
-    
+    included_vars = Set{Symbol}
 end
 
 # Here, we have to figure out how to convert the loopset into a vectorized expression.
