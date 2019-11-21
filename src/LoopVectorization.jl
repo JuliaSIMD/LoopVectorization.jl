@@ -2,7 +2,7 @@ module LoopVectorization
 
 using VectorizationBase, SIMDPirates, SLEEFPirates, MacroTools
 using VectorizationBase: REGISTER_SIZE, extract_data, num_vector_load_expr
-using SIMDPirates: VECTOR_SYMBOLS
+using SIMDPirates: VECTOR_SYMBOLS, evadd, evmul
 using MacroTools: @capture, prewalk, postwalk
 
 export vectorizable, @vectorize, @vvectorize
