@@ -42,7 +42,7 @@ function cost(instruction::InstructionCost, Wshift, ::Type{T}) where {T}
 end
 
 # Just a semi-reasonable assumption; should not be that sensitive to anything other than loads
-const OPAQUE_COST = InstructionSet(50.0, 50.0, -1.0, 32)
+const OPAQUE_INSTRUCTION = InstructionSet(50.0, 50.0, -1.0, 32)
 
 const COST = Dict{Symbol,InstructionCost}(
     :getindex => InstructionCost(3,0.5),
@@ -51,6 +51,14 @@ const COST = Dict{Symbol,InstructionCost}(
     :- => InstructionCost(4,0.5),
     :* => InstructionCost(4,0.5),
     :/ => InstructionCost(13,4.0,-2.0),
+    :== => InstructionCost(1, 0.5),
+    :isequal => InstructionCost(1, 0.5),
+    :& => InstructionCost(1, 0.5),
+    :| => InstructionCost(1, 0.5),
+    :> => InstructionCost(1, 0.5),
+    :< => InstructionCost(1, 0.5),
+    :>= => InstructionCost(1, 0.5),
+    :<= => InstructionCost(1, 0.5),
     :inv => InstructionCost(13,4.0,-2.0,1),
     :muladd => InstructionCost(0.5,4), # + and * will fuse into this, so much of the time they're not twice as expensive
     :sqrt => InstructionCost(15,4.0,-2.0),
@@ -76,7 +84,7 @@ function sum_loopvec(x::AbstractVector{Float64})
     end
     s
 end
-x = rand(99);
+x = rand(111);
 @btime sum($x)
 @btime sum_simd($x)
 @btime sum_loopvec($x)

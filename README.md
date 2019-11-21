@@ -33,16 +33,23 @@ end
 using LoopVectorization, BenchmarkTools
 function sum_loopvec(x::AbstractVector{Float64})
     s = 0.0
-    @vvectorize for i ∈ eachindex(x)
+    @vvectorize 4 for i ∈ eachindex(x)
         s += x[i]
     end
     s
 end
-x = rand(99);
+x = rand(110);
 @btime sum($x)
+#   20.527 ns (0 allocations: 0 bytes)
+# 53.38001667116997
 
 @btime sum_simd($x)
+#   16.749 ns (0 allocations: 0 bytes)
+# 53.38001667116997
+
 @btime sum_loopvec($x)
+#   12.022 ns (0 allocations: 0 bytes)
+# 53.38001667116997
 ```
 
 
