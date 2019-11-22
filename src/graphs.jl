@@ -60,8 +60,16 @@ function stride(var::Variable, sym::Symbol)
 end
 function cost(var::Variable, unrolled::Symbol, dim::Int)
     c = cost(instruction(var), Wshift, T)::Int
-    if accesses_memory(var) && stride(var, unrolled) != 1
-        c *= W
+    if accesses_memory(var)
+        # either vbroadcast/reductionstore, vmov(a/u)pd, or gather/scatter
+        if (unrolled ∈ loopdependencies(var))
+            if (stride(var, unrolled) != 1) # gather/scatter
+                c *= W
+            # else # vmov(a/u)pd
+            end
+        elseif sym(var) == :setindex! # broadcast or reductionstore; if store we want to penalize reduction
+            c *= 2
+        end
     end
     c
 end
