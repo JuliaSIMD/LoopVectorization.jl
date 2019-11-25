@@ -1,6 +1,27 @@
 # using LightGraphs
 
 
+isdense(::Type{<:DenseArray}) = true
+
+@enum NodeType begin
+    memload
+    memstore
+    reduction
+end
+
+
+struct Operation
+    outtype::DataType
+    instruction::Symbol
+    node_type::NodeType
+end
+
+isreduction(op::Operation) = op.node_type == reduction
+isload(op::Operation) = op.node_type == memload
+isstore(op::Operation) = op.node_type == memstore
+accesses_memory(op::Operation) = isload(op) | isstore(op)
+Base.eltype(var::Operation) = op.outtype
+
 """
 ShortVector{T} simply wraps a Vector{T}, but uses a different hash function that is faster for short vectors to support using it as the keys of a Dict.
 This hash function scales O(N) with length of the vectors, so it is slow for long vectors.
@@ -22,11 +43,6 @@ function Base.hash(x::ShortVector, h::UInt)
     h
 end
 
-@enum NodeType begin
-    input
-    store
-    reduction
-end
 
 struct Node
     type::DataType
@@ -43,27 +59,27 @@ end
 function variables(ls::LoopSet)
 
 end
-function loopdependencies(var::Variable)
+function loopdependencies(var::Operation)
 
 end
-function sym(var::Variable)
+function sym(var::Operation)
 
 end
-function instruction(var::Variable)
+function instruction(var::Operation)
 
 end
-function accesses_memory(var::Variable)
+function accesses_memory(var::Operation)
 
 end
-function stride(var::Variable, sym::Symbol)
+function stride(var::Operation, sym::Symbol)
 
 end
-function cost(var::Variable, unrolled::Symbol, dim::Int)
+function cost(var::Operation, unrolled::Symbol, dim::Int)
     c = cost(instruction(var), Wshift, T)::Int
     if accesses_memory(var)
         # either vbroadcast/reductionstore, vmov(a/u)pd, or gather/scatter
         if (unrolled ∈ loopdependencies(var))
-            if (stride(var, unrolled) != 1) # gather/scatter
+            if (stride(var, unrolled) != 1) || !isdense(var) # need gather/scatter
                 c *= W
             # else # vmov(a/u)pd
             end
@@ -73,22 +89,24 @@ function cost(var::Variable, unrolled::Symbol, dim::Int)
     end
     c
 end
-function Base.eltype(var::Variable)
-    Base._return_type()
-end
+
+    # Base._return_type()
+
 function biggest_type(ls::LoopSet)
 
 end
 
+
+
 # evaluates cost of evaluating loop in given order
-function evaluate_cost(
-    ls::LoopSet, order::ShortVector{Symbol}, max_cost = typemax(Int)
+function evaluate_cost_unroll(
+    ls::LoopSet, order::ShortVector{Symbol}, unrolled::Symbol, max_cost = typemax(Int)
 )
     included_vars = Set{Symbol}()
     nested_loop_syms = Set{Symbol}()
     total_cost = 0.0
     iter = 1.0
-    unrolled = last(order)
+    # Need to check if fusion is possible
     W, Wshift = VectorizationBase.pick_vector_width_shift(length(ls, unrolled), biggest_type(ls))::Tuple{Int,Int}
 
     fused_with_previous = fill(false, length(order))
@@ -117,6 +135,11 @@ function evaluate_cost(
             # Then it is worth checking if we can fuse with previous
         end
     end
+end
+function evaluate_cost_tile(
+    ls::LoopSet, order::ShortVector{Symbol}, tiler, tilec, max_cost = typemax(Int)
+)
+
 end
 
 struct LoopOrders

@@ -12,7 +12,7 @@ struct InstructionCost
     scaling::Float64 # sentinel values: -3 == no scaling; -2 == offset_scaling, -1 == linear scaling, >0 ->  == latency == reciprical throughput
     register_pressure::Int
 end
-InstructionCost(sl, srt, scaling = -3.0) = InstructionCost(sl, srt, scaling, 0)
+InstructionCost(sl, srt, scaling = -3.0) = InstructionCost(sl, srt, scaling, 1)
 
 function scalar_cost(instruction::InstructionCost)#, ::Type{T} = Float64) where {T}
     instruction.scalar_latency, instruction.scalar_reciprical_throughput
@@ -42,7 +42,7 @@ function cost(instruction::InstructionCost, Wshift, ::Type{T}) where {T}
 end
 
 # Just a semi-reasonable assumption; should not be that sensitive to anything other than loads
-const OPAQUE_INSTRUCTION = InstructionSet(50.0, 50.0, -1.0, 32)
+const OPAQUE_INSTRUCTION = InstructionSet(50.0, 50.0, -1.0, VectorizationBase.REGISTER_COUNT)
 
 const COST = Dict{Symbol,InstructionCost}(
     :getindex => InstructionCost(3,0.5),
@@ -59,14 +59,21 @@ const COST = Dict{Symbol,InstructionCost}(
     :< => InstructionCost(1, 0.5),
     :>= => InstructionCost(1, 0.5),
     :<= => InstructionCost(1, 0.5),
-    :inv => InstructionCost(13,4.0,-2.0,1),
-    :muladd => InstructionCost(0.5,4), # + and * will fuse into this, so much of the time they're not twice as expensive
+    :inv => InstructionCost(13,4.0,-2.0,2),
+    :muladd => InstructionCost(4,0.5), # + and * will fuse into this, so much of the time they're not twice as expensive
+    :fma => InstructionCost(4,0.5), # + and * will fuse into this, so much of the time they're not twice as expensive
+    :vmuladd => InstructionCost(4,0.5), # + and * will fuse into this, so much of the time they're not twice as expensive
+    :vfma => InstructionCost(4,0.5), # + and * will fuse into this, so much of the time they're not twice as expensive
+    :vfmadd => InstructionCost(4,0.5), # + and * will fuse into this, so much of the time they're not twice as expensive
+    :vfmsub => InstructionCost(4,0.5), # + and * will fuse into this, so much of the time they're not twice as expensive
+    :vfnmadd => InstructionCost(4,0.5), # + and * will fuse into this, so much of the time they're not twice as expensive
+    :vfnmsub => InstructionCost(4,0.5), # + and * will fuse into this, so much of the time they're not twice as expensive
     :sqrt => InstructionCost(15,4.0,-2.0),
-    :log => InstructionCost(20,20.0,40.0,20),
-    :exp => InstructionCost(20,20.0,20.0,18),
-    :sin => InstructionCost(18,15.0,68.0,23),
-    :cos => InstructionCost(18,15.0,68.0,26),
-    :sincos => InstructionCost(25,22.0,70.0,26)
+    :log => InstructionCost(20,20.0,40.0,21),
+    :exp => InstructionCost(20,20.0,20.0,19),
+    :sin => InstructionCost(18,15.0,68.0,24),
+    :cos => InstructionCost(18,15.0,68.0,27),
+    :sincos => InstructionCost(25,22.0,70.0,27)
 )
 
 function sum_simd(x)
