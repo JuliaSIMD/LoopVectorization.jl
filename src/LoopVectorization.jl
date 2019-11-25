@@ -2,7 +2,7 @@ module LoopVectorization
 
 using VectorizationBase, SIMDPirates, SLEEFPirates, MacroTools
 using VectorizationBase: REGISTER_SIZE, extract_data, num_vector_load_expr
-using SIMDPirates: VECTOR_SYMBOLS
+using SIMDPirates: VECTOR_SYMBOLS, evadd, evmul
 using MacroTools: @capture, prewalk, postwalk
 
 export vectorizable, @vectorize, @vvectorize
@@ -133,7 +133,11 @@ end
         throw("Type $Tsym is not supported.")
     end
 end
-@noinline function vectorize_body(N, T::DataType, unroll_factor::Int, n, body, vecdict = SLEEFPiratesDict, VType = SVec, gcpreserve::Bool = true, mod = :LoopVectorization)
+@noinline function vectorize_body(
+    N, ::Type{T}, unroll_factor::Int, n::Symbol, body::Array{Any},
+    vecdict::Dict{Symbol,Tuple{Symbol,Symbol}} = SLEEFPiratesDict,
+    @nospecialize(VType = SVec), gcpreserve::Bool = true, mod = :LoopVectorization
+) where {T}
     # unroll_factor == 1 || throw("Only unroll factor of 1 is currently supported. Was set to $unroll_factor.")
     T_size = sizeof(T)
     if isa(N, Integer)
@@ -295,7 +299,7 @@ end
                     pushfirst!(q.args, :($gsym = $mod.vbroadcast($V,one($T))))
                 end
             end
-            func = ((op == :*) | (op == :/)) ? :($mod.vmul) : :($mod.vadd)
+            func = ((op == :*) | (op == :/)) ? :($mod.evmul) : :($mod.evadd)
             uf_new = unroll_factor
             while uf_new > 1
                 uf_new, uf_prev = uf_new >> 1, uf_new
