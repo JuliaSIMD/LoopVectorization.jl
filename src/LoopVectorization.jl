@@ -15,11 +15,13 @@ const SLEEFPiratesDict = Dict{Symbol,Tuple{Symbol,Symbol}}(
     :cos => (:SLEEFPirates, :cos_fast),
     :cospi => (:SLEEFPirates, :cospi),
     :tan => (:SLEEFPirates, :tan_fast),
-    :log => (:SLEEFPirates, :log_fast),
+    # :log => (:SLEEFPirates, :log_fast),
+    :log => (:SIMDPirates, :vlog),
     :log10 => (:SLEEFPirates, :log10),
     :log2 => (:SLEEFPirates, :log2),
     :log1p => (:SLEEFPirates, :log1p),
-    :exp => (:SLEEFPirates, :exp),
+    # :exp => (:SLEEFPirates, :exp),
+    :exp => (:SIMDPirates, :vexp),
     :exp2 => (:SLEEFPirates, :exp2),
     :exp10 => (:SLEEFPirates, :exp10),
     :expm1 => (:SLEEFPirates, :expm1),
@@ -53,7 +55,8 @@ const SLEEFPiratesDict = Dict{Symbol,Tuple{Symbol,Symbol}}(
     :mod => (:SLEEFPirates, :mod),
     # :copysign => :copysign
     :one => (:SIMDPirates, :vone),
-    :zero => (:SIMDPirates, :vzero)
+    :zero => (:SIMDPirates, :vzero),
+    :erf => (:SIMDPirates, :verf)
 )
 
 
