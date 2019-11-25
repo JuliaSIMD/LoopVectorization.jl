@@ -7,7 +7,7 @@ using MacroTools: @capture, prewalk, postwalk
 
 export vectorizable, @vectorize, @vvectorize
 
-
+function isdense end #
 
 const SLEEFPiratesDict = Dict{Symbol,Tuple{Symbol,Symbol}}(
     :sin => (:SLEEFPirates, :sin_fast),
