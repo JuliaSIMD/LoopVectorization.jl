@@ -7,13 +7,23 @@ isdense(::Type{<:DenseArray}) = true
     memload
     memstore
     reduction
+    compute
 end
 
 
 struct Operation
-    outtype::DataType
+    elementbytes::Int
     instruction::Symbol
     node_type::NodeType
+    parents::Vector{Operation}
+    children::Vector{Operation}
+    metadata::Vector{Float64}
+    function Operation(elementbytes, instruction, node_type)
+        new(
+            elementbytes, instruction, node_type,
+            Operation[], Operation[], Float64[]
+        )
+    end
 end
 
 isreduction(op::Operation) = op.node_type == reduction
@@ -43,6 +53,11 @@ function Base.hash(x::ShortVector, h::UInt)
     h
 end
 
+function stride(op::Operation, sym::Symbol)
+    @assert accesses_memory(op) "This operation does not access memory!"
+    # access stride info?
+end
+function
 
 struct Node
     type::DataType
@@ -107,9 +122,7 @@ function evaluate_cost_unroll(
     total_cost = 0.0
     iter = 1.0
     # Need to check if fusion is possible
-    W, Wshift = VectorizationBase.pick_vector_width_shift(length(ls, unrolled), biggest_type(ls))::Tuple{Int,Int}
-
-    fused_with_previous = fill(false, length(order))
+    # W, Wshift = VectorizationBase.pick_vector_width_shift(length(ls, unrolled), biggest_type(ls))::Tuple{Int,Int}
     for itersym ∈ order
         # Add to set of defined symbles
         push!(nested_loop_syms, itersym)
@@ -119,8 +132,7 @@ function evaluate_cost_unroll(
         end
         iter *= liter
         # check which vars we can define at this level of loop nest
-        added_vars = 0
-        for (var,instruction) ∈ variables(ls)
+        for var ∈ variables(ls)
             # won't define if already defined...
             sym(var) ∈ included_vars && continue
             # it must also be a subset of defined symbols
@@ -130,9 +142,6 @@ function evaluate_cost_unroll(
             
             total_cost += iter * cost(var, W, Wshift, unrolled, liter)
             total_cost > max_cost && return total_cost # abort
-        end
-        if added_vars == 0
-            # Then it is worth checking if we can fuse with previous
         end
     end
 end
