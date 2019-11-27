@@ -1,6 +1,25 @@
 using LoopVectorization
 using Test
 
+pkgdir(pkg::String) = abspath(joinpath(dirname(Base.find_package(pkg)), ".."))
+using VectorizationBase, SIMDPirates, SLEEFPirates
+# includet(joinpath(pkgdir("LoopVectorization"), "src/costs.jl"))
+# includet(joinpath(pkgdir("LoopVectorization"), "src/graphs.jl"))
+include(joinpath(pkgdir("LoopVectorization"), "src/costs.jl"))
+include(joinpath(pkgdir("LoopVectorization"), "src/graphs.jl"))
+
+# loop is gemv!
+for c ∈ 1:C
+    for r ∈ 1:R
+        y[r] += A[r,c] * x[c]
+        # translates to
+        # y[r] = vmuladd(A[r,c], x[c], y[r])
+    end
+end
+
+         
+
+
 using CpuId, VectorizationBase, SIMDPirates, SLEEFPirates, VectorizedRNG
 
 @generated function estimate_cost_onearg_serial(f::F, N::Int = 512, K = 1_000, ::Type{T} = Float64, ::Val{U} = Val(4)) where {F,T,U}

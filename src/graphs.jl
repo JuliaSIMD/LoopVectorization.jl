@@ -3,35 +3,6 @@
 
 isdense(::Type{<:DenseArray}) = true
 
-@enum NodeType begin
-    memload
-    memstore
-    reduction
-    compute
-end
-
-
-struct Operation
-    elementbytes::Int
-    instruction::Symbol
-    node_type::NodeType
-    parents::Vector{Operation}
-    children::Vector{Operation}
-    metadata::Vector{Float64}
-    function Operation(elementbytes, instruction, node_type)
-        new(
-            elementbytes, instruction, node_type,
-            Operation[], Operation[], Float64[]
-        )
-    end
-end
-
-isreduction(op::Operation) = op.node_type == reduction
-isload(op::Operation) = op.node_type == memload
-isstore(op::Operation) = op.node_type == memstore
-accesses_memory(op::Operation) = isload(op) | isstore(op)
-Base.eltype(var::Operation) = op.outtype
-
 """
 ShortVector{T} simply wraps a Vector{T}, but uses a different hash function that is faster for short vectors to support using it as the keys of a Dict.
 This hash function scales O(N) with length of the vectors, so it is slow for long vectors.
@@ -53,23 +24,75 @@ function Base.hash(x::ShortVector, h::UInt)
     h
 end
 
+
+
+@enum NodeType begin
+    memload
+    memstore
+    compute
+end
+
+
+struct Operation
+    elementbytes::Int
+    instruction::Symbol
+    node_type::NodeType
+    # dependencies::ShortVector{Symbol}
+    dependencies::Set{Symbol}
+    # dependencies::Set{Symbol}
+    parents::Vector{Operation}
+    children::Vector{Operation}
+    numerical_metadata::Vector{Float64}
+    symbolic_metadata::Vector{Symbol}
+    function Operation(elementbytes, instruction, node_type)
+        new(
+            elementbytes, instruction, node_type,
+            Set{Symbol}(), Operation[], Operation[], Float64[], Symbol[]
+        )
+    end
+end
+
+function isreduction(op::Operation)
+    (op.node_type == memstore) && (length(op.symbolic_metadata) < length(op.dependencies)) && issubset(op.symbolic_metadata, op.dependencies)
+end
+isload(op::Operation) = op.node_type == memload
+isstore(op::Operation) = op.node_type == memstore
+accesses_memory(op::Operation) = isload(op) | isstore(op)
+elsize(op::Operation) = op.elementbytes
+dependson(op::Operation, sym::Symbol) = sym ∈ op.dependencies
+
 function stride(op::Operation, sym::Symbol)
     @assert accesses_memory(op) "This operation does not access memory!"
     # access stride info?
 end
-function
+# function
 
 struct Node
     type::DataType
 end
 
+struct Loop
+    itersymbol::Symbol
+    rangehint::Int
+    rangesym::Symbol
+    hintexact::Bool # if true, rangesym ignored and rangehint used for final lowering
+end
+function Loop(itersymbol::Symbol, rangehint::Int)
+    Loop( itersymbol, rangehint, :undef, true )
+end
+function Loop(itersymbol::Symbol, rangesym::Symbol, rangehint::Int = 1_000_000)
+    Loop( itersymbol, rangehint, rangesym, false )
+end
+
 # Must make it easy to iterate
 struct LoopSet
+    loops::Dict{Symbol,Loop} # sym === loops[sym].itersymbol
+    operations::Vector{Operation}
     
 end
 
 function Base.length(ls::LoopSet, is::Symbol)
-
+    ls.loops[is].rangehint
 end
 function variables(ls::LoopSet)
 
@@ -78,7 +101,7 @@ function loopdependencies(var::Operation)
 
 end
 function sym(var::Operation)
-
+    
 end
 function instruction(var::Operation)
 
@@ -89,6 +112,7 @@ end
 function stride(var::Operation, sym::Symbol)
 
 end
+operations(ls::LoopSet) = ls.operations
 function cost(var::Operation, unrolled::Symbol, dim::Int)
     c = cost(instruction(var), Wshift, T)::Int
     if accesses_memory(var)
@@ -108,31 +132,31 @@ end
     # Base._return_type()
 
 function biggest_type(ls::LoopSet)
-
+    maximum(elsize, ls.operations)
 end
 
 
 
 # evaluates cost of evaluating loop in given order
 function evaluate_cost_unroll(
-    ls::LoopSet, order::ShortVector{Symbol}, unrolled::Symbol, max_cost = typemax(Int)
+    ls::LoopSet, order::ShortVector{Symbol}, unrolled::Symbol, max_cost = typemax(Float64)
 )
     included_vars = Set{Symbol}()
     nested_loop_syms = Set{Symbol}()
     total_cost = 0.0
     iter = 1.0
     # Need to check if fusion is possible
-    # W, Wshift = VectorizationBase.pick_vector_width_shift(length(ls, unrolled), biggest_type(ls))::Tuple{Int,Int}
+    W, Wshift = VectorizationBase.pick_vector_width_shift(length(ls, unrolled), biggest_type(ls))::Tuple{Int,Int}
     for itersym ∈ order
         # Add to set of defined symbles
         push!(nested_loop_syms, itersym)
-        liter = length(ls, itersym)
+        liter = Float64(length(ls, itersym))
         if itersym == unrolled
             liter /= W
         end
         iter *= liter
         # check which vars we can define at this level of loop nest
-        for var ∈ variables(ls)
+        for var ∈ operations(ls)
             # won't define if already defined...
             sym(var) ∈ included_vars && continue
             # it must also be a subset of defined symbols
@@ -141,14 +165,48 @@ function evaluate_cost_unroll(
             push!(included_vars, sym(var))
             
             total_cost += iter * cost(var, W, Wshift, unrolled, liter)
-            total_cost > max_cost && return total_cost # abort
+            total_cost > max_cost && return total_cost # abort if more expensive; we only want to know the cheapest
         end
     end
+    total_cost
+end
+
+# only covers unrolled ops; everything else considered lifted?
+function depchain_cost!(
+    skip::Set{Symbol}, ls::LoopSet, op::Operation, unrolled::Symbol, Wshift::Int, size_T::Int
+)
+    
+end
+   
+function determine_unroll_factor(
+    ls::LoopSet, order::ShortVector{Symbol}, unrolled::Symbol, Wshift::Int, size_T::Int
+)
+    # The strategy is to use an unroll factor of 1, unless there appears to be loop carried dependencies (ie, num_reductions > 0)
+    # The assumption here is that unrolling provides no real benefit, unless it is needed to enable OOO execution by breaking up these dependency chains
+    num_reductions = sum(isreduction, operations(ls))
+    iszero(num_reductions) && return 1
+    # So if num_reductions > 0, we set the unroll factor to be high enough so that the CPU can be kept busy
+    # if there are, U = max(1, round(Int, max(latency) * throughput / num_reductions)) = max(1, round(Int, latency / (recip_througput * num_reductions)))
+    latency = 0
+    recip_throughput = 0.0
+    visited_nodes = Set{Symbol}()
+    for op ∈ operations(ls)
+        if isreduction(op) && dependson(op, unrolled)
+            l, rt = cost_of_chain()
+            num_reductions += 1
+            sl, rt = cost(instruction(op), Wshift, size_T)
+            latency = max(sl, latency)
+            recip_throughput += rt
+        end
+    end
+    
+
+    
 end
 function evaluate_cost_tile(
-    ls::LoopSet, order::ShortVector{Symbol}, tiler, tilec, max_cost = typemax(Int)
+    ls::LoopSet, order::ShortVector{Symbol}, tiler, tilec, max_cost = typemax(Float64)
 )
-
+    
 end
 
 struct LoopOrders

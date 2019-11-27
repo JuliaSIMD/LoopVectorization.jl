@@ -17,14 +17,14 @@ InstructionCost(sl, srt, scaling = -3.0) = InstructionCost(sl, srt, scaling, 1)
 function scalar_cost(instruction::InstructionCost)#, ::Type{T} = Float64) where {T}
     instruction.scalar_latency, instruction.scalar_reciprical_throughput
 end
-function vector_cost(instruction::InstructionCost, Wshift, ::Type{T} = Float64) where {T}
+function vector_cost(instruction::InstructionCost, Wshift, sizeof_T)
     sl, srt = scalar_cost(instruction)
     scaling = instruction.scaling
     if scaling == -3.0 || Wshift == 0
         return sl, srt
     elseif scaling == -2.0
-        srt *= 1 << (Wshift + VectorizationBase.intlog2(sizeof(T)) - 4)
-        if (sizeof(T) << Wshift) == VectorizationBase.REGISTER_SIZE # These instructions experience double latency with zmm
+        srt *= 1 << (Wshift + VectorizationBase.intlog2(sizeof_T) - 4)
+        if (sizeof_T << Wshift) == 64 # VectorizationBase.REGISTER_SIZE # These instructions experience double latency with zmm
             sl += sl
         end
     elseif scaling == -1.0
@@ -37,28 +37,35 @@ function vector_cost(instruction::InstructionCost, Wshift, ::Type{T} = Float64) 
     end    
     sl, srt
 end
-function cost(instruction::InstructionCost, Wshift, ::Type{T}) where {T}
-    Wshift == 0 ? scalar_cost(instruction) : vector_cost(instruction, Wshift, T)
+function cost(instruction::InstructionCost, Wshift, sizeof_T)
+    Wshift == 0 ? scalar_cost(instruction) : vector_cost(instruction, Wshift, sizeof_T)
+end
+
+function cost(instruction::Symbol, Wshift, sizeof_T)
+    cost(
+        get(COST, instruction, OPAQUE_INSTRUCTION),
+        Wshift, sizeof_T
+    )
 end
 
 # Just a semi-reasonable assumption; should not be that sensitive to anything other than loads
-const OPAQUE_INSTRUCTION = InstructionSet(50.0, 50.0, -1.0, VectorizationBase.REGISTER_COUNT)
+const OPAQUE_INSTRUCTION = InstructionCost(50, 50.0, -1.0, VectorizationBase.REGISTER_COUNT)
 
 const COST = Dict{Symbol,InstructionCost}(
     :getindex => InstructionCost(3,0.5),
     :setindex! => InstructionCost(3,1.0), # but not a part of dependency chains, so not really twice as expensive?
-    :+ => InstructionCost(4,0.5),
-    :- => InstructionCost(4,0.5),
-    :* => InstructionCost(4,0.5),
-    :/ => InstructionCost(13,4.0,-2.0),
-    :== => InstructionCost(1, 0.5),
+    :(+) => InstructionCost(4,0.5),
+    :(-) => InstructionCost(4,0.5),
+    :(*) => InstructionCost(4,0.5),
+    :(/) => InstructionCost(13,4.0,-2.0),
+    :(==) => InstructionCost(1, 0.5),
     :isequal => InstructionCost(1, 0.5),
-    :& => InstructionCost(1, 0.5),
-    :| => InstructionCost(1, 0.5),
-    :> => InstructionCost(1, 0.5),
-    :< => InstructionCost(1, 0.5),
-    :>= => InstructionCost(1, 0.5),
-    :<= => InstructionCost(1, 0.5),
+    :(&) => InstructionCost(1, 0.5),
+    :(|) => InstructionCost(1, 0.5),
+    :(>) => InstructionCost(1, 0.5),
+    :(<) => InstructionCost(1, 0.5),
+    :(>=) => InstructionCost(1, 0.5),
+    :(<=) => InstructionCost(1, 0.5),
     :inv => InstructionCost(13,4.0,-2.0,2),
     :muladd => InstructionCost(4,0.5), # + and * will fuse into this, so much of the time they're not twice as expensive
     :fma => InstructionCost(4,0.5), # + and * will fuse into this, so much of the time they're not twice as expensive
@@ -75,26 +82,6 @@ const COST = Dict{Symbol,InstructionCost}(
     :cos => InstructionCost(18,15.0,68.0,27),
     :sincos => InstructionCost(25,22.0,70.0,27)
 )
-
-function sum_simd(x)
-    s = zero(eltype(x))
-    @simd for xᵢ ∈ x
-        s += xᵢ
-    end
-    s
-end
-using LoopVectorization, BenchmarkTools
-function sum_loopvec(x::AbstractVector{Float64})
-    s = 0.0
-    @vvectorize 4 for i ∈ eachindex(x)
-        s += x[i]
-    end
-    s
-end
-x = rand(111);
-@btime sum($x)
-@btime sum_simd($x)
-@btime sum_loopvec($x)
 
 
 # const SIMDPIRATES_COST = Dict{Symbol,InstructionCost}()
