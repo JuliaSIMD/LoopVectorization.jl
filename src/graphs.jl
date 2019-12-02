@@ -29,12 +29,22 @@ isdense(::Type{<:DenseArray}) = true
 @enum NodeType begin
     memload
     memstore
-    compute
+    compute_new
+    compute_update
+    # accumulator
 end
 
+# const ID = Threads.Atomic{UInt}(0)
 
+"""
+if node_type == memstore || node_type == compute_new || node_type == compute_store
+symbolic metadata contains info on direct dependencies / placement within loop.
+
+
+"""
 struct Operation
-    identifier::Symbol
+    identifier::UInt
+    variable::Symbol
     elementbytes::Int
     instruction::Symbol
     node_type::NodeType
@@ -45,9 +55,16 @@ struct Operation
     children::Vector{Operation}
     numerical_metadata::Vector{Int}
     symbolic_metadata::Vector{Symbol}
-    function Operation(elementbytes, instruction, node_type, identifier = gensym())
+    function Operation(
+        elementbytes,
+        instruction,
+        node_type,
+        identifier,
+        variable = gensym()
+    )
+        # identifier = Threads.atomic_add!(ID, one(UInt))
         new(
-            identifier, elementbytes, instruction, node_type,
+            identifier, variable, elementbytes, instruction, node_type,
             Set{Symbol}(), Operation[], Operation[], Int[], Symbol[]
         )
     end
@@ -65,6 +82,7 @@ parents(op::Operation) = op.parents
 children(op::Operation) = op.children
 loopdependencies(op::Operation) = op.dependencies
 identifier(op::Operation) = op.identifier
+name(op::Operation) = op.variable
 instruction(op::Operation) = op.instruction
 
 function stride(op::Operation, sym::Symbol)
@@ -98,10 +116,11 @@ struct LoopSet
     loadops::Vector{Operation} # Split them to make it easier to iterate over just a subset
     computeops::Vector{Operation}
     storeops::Vector{Operation}
-    
+    reductions::Set{Operation}
 end
 num_loops(ls::LoopSet) = length(ls.loops)
 isstaticloop(ls::LoopSet, s::Symbol) = ls.loops[s].hintexact
+itersyms(ls::LoopSet) = keys(ls.loops)
 function looprange(ls::LoopSet, s::Symbol)
     loop = ls.loops[s]
     Expr(:(:), 0, loop.hintexact ? loop.rangehint - 1 : Expr(:call, :(-), loop.rangesym, 1))
@@ -155,7 +174,8 @@ end
 function evaluate_cost_unroll(
     ls::LoopSet, order::Vector{Symbol}, max_cost = typemax(Float64), unrolled::Symbol = first(order)
 )
-    included_vars = Set{Symbol}()
+    # included_vars = Set{UInt}()
+    included_vars = fill(false, length(operations(ls)))
     nested_loop_syms = Set{Symbol}()
     total_cost = 0.0
     iter = 1.0
@@ -174,10 +194,10 @@ function evaluate_cost_unroll(
         for op ∈ operations(ls)
             # won't define if already defined...
             id = identifier(op)
-            id ∈ included_vars && continue
+            included_vars[id] && continue
             # it must also be a subset of defined symbols
             loopdependencies(op) ⊆ nested_loop_syms || continue
-            push!(included_vars, id)
+            included_vars[id] = true
             
             total_cost += iter * first(cost(op, unrolled, Wshift, size_T))
             total_cost > max_cost && return total_cost # abort if more expensive; we only want to know the cheapest
@@ -188,12 +208,12 @@ end
 
 # only covers unrolled ops; everything else considered lifted?
 function depchain_cost!(
-    skip::Set{Symbol}, op::Operation, unrolled::Symbol, Wshift::Int, size_T::Int, sl::Int = 0, rt::Float64 = 0.0
+    skip::Vector{Bool}, op::Operation, unrolled::Symbol, Wshift::Int, size_T::Int, sl::Int = 0, rt::Float64 = 0.0
 )
-    push!(skip, sym(op))
+    skip[identifier(op)] = true
     # depth first search
     for opp ∈ parents(op)
-        opp ∈ skip && continue
+        skip[identifier(opp)] && continue
         sl, rt = depchain_cost!(skip, opp, unrolled, Wshift, size_T, sl, rt)
     end
     # Basically assuming memory and compute don't conflict, but everything else does
@@ -220,7 +240,7 @@ function determine_unroll_factor(
     # We also make sure register pressure is not too high.
     latency = 0
     recip_throughput = 0.0
-    visited_nodes = Set{Symbol}()
+    visited_nodes = fill(false, length(operations(ls)))
     for op ∈ operations(ls)
         if isreduction(op) && dependson(op, unrolled)
             sl, rt = depchain_cost!(visited_nodes, instruction(op), unrolled, Wshift, size_T)
@@ -283,7 +303,7 @@ function evaluate_cost_tile(
     @assert N ≥ 2 "Cannot tile merely $N loops!"
     tiled = order[1]
     unrolled = order[2]
-    included_vars = Set{Symbol}()
+    included_vars = fill(false, length(operations(ls)))
     nested_loop_syms = Set{Symbol}()
     iter = 1.0
     # Need to check if fusion is possible
@@ -308,12 +328,13 @@ function evaluate_cost_tile(
         end
         iter *= liter
         # check which vars we can define at this level of loop nest
-        for op ∈ operations(ls)
+        for (id, op) ∈ enumerate(operations(ls))
+            @assert id == identifier(op) # testing, for now
             # won't define if already defined...
-            sym(op) ∈ included_vars && continue
+            included_vars[id] && continue
             # it must also be a subset of defined symbols
             loopdependencies(op) ⊆ nested_loop_syms || continue
-            push!(included_vars, sym(op))
+            included_vars[id] = true
             rt, lat, rp = cost(op, unrolled, Wshift, size_T)
             rt *= iter
             isunrolled = unrolled ∈ loopdependencies(op)
@@ -428,15 +449,78 @@ function choose_order(ls::LoopSet)
     end
 end
 
+function depends_on_assigned(op::Operation, assigned::Vector{Bool})
+    for p ∈ parents(op)
+        assigned[identifier(op)] && return true
+        depends_on_assigned(p, assigned) && return true
+    end
+    false
+end
+
 # construction requires ops inserted into operations vectors in dependency order.
 function lower_unroll(ls::LoopSet, order::Vector{Symbol}, U::Int)
+    if isstaticloop(ls, first(order))
+        lower_unroll_static(ls, order, U)
+    else
+        lower_unroll_dynamic(ls, order, U)
+    end
+end
+function lower_unroll_inner_block(ls::LoopSet, order::Vector{Symbol}, U::Int)
+    # this function create the inner block
+    args = Any[]
+    nloops = length(order)
+    unrolled = first(order)
+    # included_syms = Set( (unrolled,) )
+    included_vars = fill(false, length(operations(ls)))
+    # to go inside out, we just have to include all those not-yet included depending on the current sym
+
+    n = 0
+    loopsym = last(order)
+    for (id,op) ∈ enumerate(operations(ls))
+        # We add an op the first time all loop dependencies are met
+        # when working through loops backwords, that equates to the first time we encounter a loop dependency
+        loopsym ∈ dependencies(op) || continue
+        included_vars[id] = true
+        
+        
+    end
+    for n ∈ 1:nloops - 2
+        loopsym = order[nloops - n]
+        blockq = Expr(:block, )
+        loopq = Expr(:for, Expr(:(=), itersym, looprange), blockq)
+        for (id,op) ∈ enumerate(operations(ls))
+            included_vars[id] && continue
+            # We add an op the first time all loop dependencies are met
+            # when working through loops backwords, that equates to the first time we encounter a loop dependency
+            loopsym ∈ dependencies(op) || continue
+            included_vars[id] = true
+
+            after_loop = depends_on_assigned(op, included_vars)
+
+            
+        end
+    end
+end
+function lower_unroll_static(ls::LoopSet, order::Vector{Symbol}, U::Int)
+
+end
+function lower_unroll_dynamic(ls::LoopSet, order::Vector{Symbol}, U::Int)
     nested_loop_syms = Set{Symbol}()
-    included_vars = Set{Symbol}()
-    q = quote end
+    # included_vars = Set{UInt}()
+    included_vars = fill(false, length(operations(ls)))
+    q = quote end #Expr(:block,)
+    # rely on compiler to simplify integer indices
+    for s ∈ itersyms(ls)
+        push!(q.args, Expr(:(=), s, 0))
+    end
     lastqargs = q.args
     postloop_reduction = false
-    for itersym ∈ order
-        # Add to set of defined symbles
+    num_loops = length(order)
+    unrolled = first(order)
+
+    for n ∈ 2:num_loops
+        itersym = order[n]
+        # Add to set of defined symbols
         push!(nested_loop_syms, itersym)
         # check which vars we can define at this level of loop nest
         if itersym === first(order)
@@ -445,7 +529,7 @@ function lower_unroll(ls::LoopSet, order::Vector{Symbol}, U::Int)
             loopq = looprange(ls::LoopSet, s::Symbol)
         end
         blockq = Expr(:block, )
-        loopq = Expr(:for, Expr(:(=), itersym, looprange), )
+        loopq = Expr(:for, Expr(:(=), itersym, looprange), blockq)
         for op ∈ operations(ls)
             # won't define if already defined...
             id = identifier(op)
