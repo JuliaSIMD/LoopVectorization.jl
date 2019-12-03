@@ -202,8 +202,9 @@ end
         b = macroexpand(LoopVectorization, b)
         ## body preamble must define indexed symbols
         ## we only need that for loads.
+        dicts = (indexed_expressions, reduction_symbols, loaded_exprs, loop_constants_dict)
         push!(main_body.args,
-            _vectorloads!(main_body, q, indexed_expressions, reduction_symbols, loaded_exprs, V, W, T, loop_constants_quote, loop_constants_dict, b;
+            _vectorloads!(main_body, q, dicts, V, W, T, loop_constants_quote, b;
                             itersym = itersym, declared_iter_sym = n, VectorizationDict = vecdict, mod = mod)
         )# |> x -> (@show(x), _pirate(x)))
     end
@@ -382,8 +383,9 @@ end
 end
 
 
-@noinline function _vectorloads!(main_body, pre_quote, indexed_expressions, reduction_symbols, loaded_exprs, V, W, VET, loop_constants_quote, loop_constants_dict, expr;
-                            itersym = :iter, declared_iter_sym = nothing, VectorizationDict = SLEEFPiratesDict, mod = :LoopVectorization)
+@noinline function _vectorloads!(main_body, pre_quote, dicts, V, W, VET, loop_constants_quote, expr;
+                                 itersym = :iter, declared_iter_sym = nothing, VectorizationDict = SLEEFPiratesDict, mod = :LoopVectorization)
+    (indexed_expressions, reduction_symbols, loaded_exprs, loop_constants_dict) = dicts
     _spirate(prewalk(expr) do x
         # @show x
         # @show main_body

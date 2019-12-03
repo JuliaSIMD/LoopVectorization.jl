@@ -71,7 +71,7 @@ struct Operation
 end
 
 function isreduction(op::Operation)
-    (op.node_type == memstore) && (length(op.symbolic_metadata) < length(op.dependencies)) && issubset(op.symbolic_metadata, op.dependencies)
+    (op.node_type == memstore) && (length(op.symbolic_metadata) < length(op.dependencies))# && issubset(op.symbolic_metadata, op.dependencies)
 end
 isload(op::Operation) = op.node_type == memload
 isstore(op::Operation) = op.node_type == memstore
@@ -91,10 +91,10 @@ function stride(op::Operation, sym::Symbol)
     op.numerical_metadata[findfirst(s -> s === sym, op.symbolic_metadata)]
 end
 # function
-
-struct Node
-    type::DataType
+function unitstride(op::Operation, sym::Symbol)
+    (first(op.symbolic_metadata) === sym) && (first(op.numerical_metadata) == 1)
 end
+
 
 struct Loop
     itersymbol::Symbol
@@ -116,7 +116,8 @@ struct LoopSet
     loadops::Vector{Operation} # Split them to make it easier to iterate over just a subset
     computeops::Vector{Operation}
     storeops::Vector{Operation}
-    reductions::Set{Operation}
+    reductions::Set{UInt} # IDs of reduction operations that need to be reduced at end.
+    strideset::Vector{} 
 end
 num_loops(ls::LoopSet) = length(ls.loops)
 isstaticloop(ls::LoopSet, s::Symbol) = ls.loops[s].hintexact
@@ -147,7 +148,7 @@ function cost(op::Operation, unrolled::Symbol, Wshift::Int, size_T::Int)
     if accesses_memory(op)
         # either vbroadcast/reductionstore, vmov(a/u)pd, or gather/scatter
         if opisunrolled
-            if (stride(op, unrolled) != 1) || !isdense(op) # need gather/scatter
+            if !unitstride(op, unrolled)# || !isdense(op) # need gather/scatter
                 r = (1 << Wshift)
                 c *= r
                 sl *= r
@@ -456,6 +457,35 @@ function depends_on_assigned(op::Operation, assigned::Vector{Bool})
     end
     false
 end
+function lower_load!(q::Expr, op::Operation, unrolled::Symbol, U, Umax, T = nothing, Tmax = nothing)
+    loopdeps = loopdependencies(op)
+    if unrolled ∈ loopdeps # we need a vector
+        if unitstride(op, unrolled) # vload
+            
+        else # gather
+            
+        end
+    else # load scalar; promotion should broadcast as/when neccesary
+        Expr(:call, :(VectorizationBase.load),  )
+    end
+end
+function lower_store!(q::Expr, op::Operation, unrolled::Symbol, U, T = 1)
+
+end
+function lower_compute!(q::Expr, op::Operation, unrolled::Symbol, U, T = 1)
+    for t ∈ T, u ∈ U
+        
+    end
+end
+function lower!(q::Expr, op::Operation, unrolled::Symbol, U, T = 1)
+    if isload(op)
+        lower_load!(q, op, unrolled, U, T)
+    elseif isstore(op)
+        lower_store!(q, op, unrolled, U, T)
+    else
+        lower_compute!(q, op, unrolled, U, T)
+    end
+end
 
 # construction requires ops inserted into operations vectors in dependency order.
 function lower_unroll(ls::LoopSet, order::Vector{Symbol}, U::Int)
@@ -476,13 +506,14 @@ function lower_unroll_inner_block(ls::LoopSet, order::Vector{Symbol}, U::Int)
 
     n = 0
     loopsym = last(order)
+    blockq = Expr(:block, )
+    loopq = Expr(:for, Expr(:(=), itersym, looprange(ls, loopsym)), blockq)
     for (id,op) ∈ enumerate(operations(ls))
         # We add an op the first time all loop dependencies are met
         # when working through loops backwords, that equates to the first time we encounter a loop dependency
         loopsym ∈ dependencies(op) || continue
         included_vars[id] = true
-        
-        
+        lower!(blockq, op, unrolled, U)
     end
     for n ∈ 1:nloops - 2
         loopsym = order[nloops - n]
