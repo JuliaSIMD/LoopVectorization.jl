@@ -26,7 +26,7 @@ isdense(::Type{<:DenseArray}) = true
 
 
 
-@enum NodeType begin
+@enum OperationType begin
     memload
     memstore
     compute_new
@@ -37,35 +37,42 @@ end
 # const ID = Threads.Atomic{UInt}(0)
 
 """
-if node_type == memstore || node_type == compute_new || node_type == compute_store
+if ooperation_type == memstore || operation_type == memstore# || operation_type == compute_new || operation_type == compute_update
 symbolic metadata contains info on direct dependencies / placement within loop.
 
-
+if accesses_memory(op)
+Symbol(:vptr_, op.variable)
+is how we access the memory.
+If numerical_metadata[i] == -1
+Symbol(:stride_, op.variable, :_, op.symbolic_metadata[i])
+is the stride for loop index
+symbolic_metadata[i]
 """
 struct Operation
     identifier::UInt
     variable::Symbol
     elementbytes::Int
     instruction::Symbol
-    node_type::NodeType
+    node_type::OperationType
     # dependencies::Vector{Symbol}
     dependencies::Set{Symbol}
     # dependencies::Set{Symbol}
     parents::Vector{Operation}
     children::Vector{Operation}
-    numerical_metadata::Vector{Int}
+    numerical_metadata::Vector{Int} # stride of -1 indicates dynamic
     symbolic_metadata::Vector{Symbol}
+    # strides::Dict{Symbol,Union{Symbol,Int}}
     function Operation(
+        identifier,
         elementbytes,
         instruction,
         node_type,
-        identifier,
         variable = gensym()
     )
         # identifier = Threads.atomic_add!(ID, one(UInt))
         new(
             identifier, variable, elementbytes, instruction, node_type,
-            Set{Symbol}(), Operation[], Operation[], Int[], Symbol[]
+            Set{Symbol}(), Operation[], Operation[], Int[], Symbol[]#, Dict{Symbol,Union{Symbol,Int}}()
         )
     end
 end
@@ -85,16 +92,45 @@ identifier(op::Operation) = op.identifier
 name(op::Operation) = op.variable
 instruction(op::Operation) = op.instruction
 
+function symposition(op::Operation, sym::Symbol)
+    findfirst(s -> s === sym, op.symbolic_metadata)
+end
 function stride(op::Operation, sym::Symbol)
     @assert accesses_memory(op) "This operation does not access memory!"
     # access stride info?
-    op.numerical_metadata[findfirst(s -> s === sym, op.symbolic_metadata)]
+    op.numerical_metadata[symposition(op,sym)]
 end
 # function
 function unitstride(op::Operation, sym::Symbol)
     (first(op.symbolic_metadata) === sym) && (first(op.numerical_metadata) == 1)
 end
-
+function mem_offset(op::Operation, incr::Int = 0)::Union{Symbol,Expr}
+    @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
+    @unpack numerical_metadata, symbolic_metadata = op
+    if incr == 0 && length(numerical_metadata) == 1
+        firstsym = first(symbolic_metadata)
+        if first(numerical_metadata) == 1
+            return firstsym
+        elseif first(numerical_metadata) == -1
+            return Expr(:call, :*,  Symbol(:stride_, op.variable, :_, firstsym), firstsym)
+        else
+            return Expr(:call, :*,  first(numerical_metadata), firstsym)
+        end
+    end
+    ret = Expr(:call, :+, )
+    for i ∈ eachindex(numerical_metadata)
+        sym = symbolic_metadata[i]; num = numerical_metadata[i]
+        if num == 1
+            push!(ret.args, sym)
+        elseif num == -1
+            push!(ret.args, Expr(:call, :*, Symbol(:stride_, op.variable, :_, firstsym), sym))
+        else
+            push!(ret.args, Expr(:call, :*, num, sym))
+        end        
+    end
+    incr == 0 || push!(ret.args, incr)
+    ret
+end
 
 struct Loop
     itersymbol::Symbol
@@ -457,25 +493,147 @@ function depends_on_assigned(op::Operation, assigned::Vector{Bool})
     end
     false
 end
-function lower_load!(q::Expr, op::Operation, unrolled::Symbol, U, Umax, T = nothing, Tmax = nothing)
+function replace_ind_in_offset!(offset::Vector, op::Operation, ind::Int, dynamic::Bool, t)
+    t == 0 && return nothing
+    var = op.variable
+    siter = op.symbolic_metadata[ind]
+    striden = op.numerical_metadata[ind]
+    strides = Symbol(:stride_, var)
+    offset[ind] = if tstriden == -1
+        Expr(:call, :*, Expr(:call, :+, strides, t), siter)
+    else
+        Expr(:call, :*, striden + t, siter)
+    end
+    nothing
+end
+
+# TODO: this code should be rewritten to be more "orthogonal", so that we're just combining separate pieces.
+# Using sentinel values (eg, T = -1 for non tiling) in part to avoid recompilation.
+function lower_load!(
+    q::Expr, op::Operation, W::Int, unrolled::Symbol,
+    U::Int, T::Int = -1, tiled::Symbol = :undef
+)
     loopdeps = loopdependencies(op)
+    var = op.variable
+    ptr = Symbol(:vptr_, var)
+    memoff = mem_offset(op)
+    tind = T == -1 ? -1 : findfirst(s -> s === tiled, op.symbolic_metadata)
+    upos = symposition(op, unrolled)
+    ustride = op.numerical_metadata[upos]
     if unrolled ∈ loopdeps # we need a vector
-        if unitstride(op, unrolled) # vload
-            
-        else # gather
-            
+        if ustride == 1 # vload
+            if T == -1 && U == 1
+                push!(q.args, Expr(:(=), var, Expr(:call,:vload,ptr,memoff)))
+            elseif T == -1
+                for u ∈ 0:U-1
+                    push!(q.args, Expr(:(=), Symbol(var,:_,u), Expr(:call,:vload, Val(W), ptr, u == 0 ? memoff : push!(copy(memoff), W*u))))
+                end
+            else # tiling
+                for t ∈ 0:T-1
+                    replace_ind_inoffset!(memoff, op, tind, t)
+                    for u ∈ 0:U-1
+                        memoff2 = copy(memoff)
+                        u > 0 && push!(memoff2, W*u)
+                        push!(q.args, Expr(:(=), Symbol(var, :_, u, :_, t), Expr(:call, :vload, Val(W), ptr, memoff2)))
+                    end
+                end
+            end
+        else
+            # ustep = ustride > 1 ? ustride : op.symbolic_metadata[upos]
+            ustrides = Expr(:tuple, (ustride > 1 ? [Core.VecElement{Int}(ustride*w) for w ∈ 0:W-1] : [:(Core.VecElement{Int}($(op.symbolic_metadata[upos])*$w)) for w ∈ 0:W-1])...)
+            if T != -1 # gather tile
+                for t ∈ 0:T-1
+                    replace_ind_inoffset!(memoff, op, tind, t)
+                    for u ∈ 0:U-1
+                        memoff2 = copy(memoff)
+                        u > 0 && push!(memoff2, ustride > 1 ? u*W*ustride : Expr(:call,:*,op.symbolic_metadata[upos],u*W) )
+                        push!(q.args, Expr(:(=), Symbol(var,:_,u,:_,t), Expr(:call, :gather, ptr, Expr(:call, :vadd, memoff2, ustrides))))
+                    end
+                end
+                # elseif unitstride(op, tiled) # TODO: we load tiled, and then shuffle
+            elseif U == 1 # we gather, no tile, no extra unroll
+                push!(q.args, Expr(:(=), var, Expr(:call,:gather,ptr,Expr(:call,:vadd,memoff,ustrides))))
+            else # we gather, no tile, but extra unroll
+                for u ∈ 0:U-1
+                    memoff2 = u == 0 ? memoff : push!(copy(memoff), ustride > 1 ? u*W*ustride : Expr(:call,:*,op.symbolic_metadata[upos],u*W) )
+                    push!(q.args, Expr(:(=), Symbol(var,:_,u), Expr(:call, :gather, ptr, Expr(:call,:vadd,memoff2,ustrides))))
+                end
+            end
+        end
+    elseif T != -1 && tiled ∈ loopdeps # load for each tile.
+        # load per T.
+        # memoff2 = copy(memoff)
+        for t ∈ 0:T-1
+            replace_ind_inoffset!(memoff, op, tind, t)
+            push!(q.args, Expr(:(=), Symbol(var,:_,t), Expr(:call, :load, ptr, copy(memoff))))
         end
     else # load scalar; promotion should broadcast as/when neccesary
-        Expr(:call, :(VectorizationBase.load),  )
+        push!(q.args, Expr(:(=), var, Expr(:call, :load,  ptr, memoff)))
     end
 end
 function lower_store!(q::Expr, op::Operation, unrolled::Symbol, U, T = 1)
-
+    q::Expr, op::Operation, W::Int, unrolled::Symbol,
+    U::Int, T::Int = -1, tiled::Symbol = :undef
+)
+    loopdeps = loopdependencies(op)
+    var = first(parents(op)).variable
+    ptr = Symbol(:vptr_, op.variable)
+    memoff = mem_offset(op)
+    tind = T == -1 ? -1 : findfirst(s -> s === tiled, op.symbolic_metadata)
+    upos = symposition(op, unrolled)
+    ustride = op.numerical_metadata[upos]
+    if unrolled ∈ loopdeps # we need a vector
+        if ustride == 1 # vload
+            if T == -1 && U == 1
+                push!(q.args, Expr(:(=), var, Expr(:call,:vload,ptr,memoff)))
+            elseif T == -1
+                for u ∈ 0:U-1
+                    push!(q.args, Expr(:(=), Symbol(var,:_,u), Expr(:call,:vstore, Val(W), ptr, u == 0 ? memoff : push!(copy(memoff), W*u))))
+                end
+            else # tiling
+                for t ∈ 0:T-1
+                    replace_ind_inoffset!(memoff, op, tind, t)
+                    for u ∈ 0:U-1
+                        memoff2 = copy(memoff)
+                        u > 0 && push!(memoff2, W*u)
+                        push!(q.args, Expr(:(=), Symbol(var, :_, u, :_, t), Expr(:call, :vload, Val(W), ptr, memoff2)))
+                    end
+                end
+            end
+        else
+            # ustep = ustride > 1 ? ustride : op.symbolic_metadata[upos]
+            ustrides = Expr(:tuple, (ustride > 1 ? [Core.VecElement{Int}(ustride*w) for w ∈ 0:W-1] : [:(Core.VecElement{Int}($(op.symbolic_metadata[upos])*$w)) for w ∈ 0:W-1])...)
+            if T != -1 # gather tile
+                for t ∈ 0:T-1
+                    replace_ind_inoffset!(memoff, op, tind, t)
+                    for u ∈ 0:U-1
+                        memoff2 = copy(memoff)
+                        u > 0 && push!(memoff2, ustride > 1 ? u*W*ustride : Expr(:call,:*,op.symbolic_metadata[upos],u*W) )
+                        push!(q.args, Expr(:(=), Symbol(var,:_,u,:_,t), Expr(:call, :gather, ptr, Expr(:call, :vadd, memoff2, ustrides))))
+                    end
+                end
+                # elseif unitstride(op, tiled) # TODO: we load tiled, and then shuffle
+            elseif U == 1 # we gather, no tile, no extra unroll
+                push!(q.args, Expr(:(=), var, Expr(:call,:gather,ptr,Expr(:call,:vadd,memoff,ustrides))))
+            else # we gather, no tile, but extra unroll
+                for u ∈ 0:U-1
+                    memoff2 = u == 0 ? memoff : push!(copy(memoff), ustride > 1 ? u*W*ustride : Expr(:call,:*,op.symbolic_metadata[upos],u*W) )
+                    push!(q.args, Expr(:(=), Symbol(var,:_,u), Expr(:call, :gather, ptr, Expr(:call,:vadd,memoff2,ustrides))))
+                end
+            end
+        end
+    elseif T != -1 && tiled ∈ loopdeps # load for each tile.
+        # load per T.
+        # memoff2 = copy(memoff)
+        for t ∈ 0:T-1
+            replace_ind_inoffset!(memoff, op, tind, t)
+            push!(q.args, Expr(:(=), Symbol(var,:_,t), Expr(:call, :load, ptr, copy(memoff))))
+        end
+    else # load scalar; promotion should broadcast as/when neccesary
+        push!(q.args, Expr(:(=), var, Expr(:call, :load,  ptr, memoff)))
+    end
 end
 function lower_compute!(q::Expr, op::Operation, unrolled::Symbol, U, T = 1)
-    for t ∈ T, u ∈ U
-        
-    end
 end
 function lower!(q::Expr, op::Operation, unrolled::Symbol, U, T = 1)
     if isload(op)
