@@ -36,6 +36,7 @@ end
 
 # const ID = Threads.Atomic{UInt}(0)
 
+# TODO: can some computations be cached in the operations?
 """
 if ooperation_type == memstore || operation_type == memstore# || operation_type == compute_new || operation_type == compute_update
 symbolic metadata contains info on direct dependencies / placement within loop.
@@ -77,6 +78,8 @@ struct Operation
     end
 end
 
+
+
 function isreduction(op::Operation)
     (op.node_type == memstore) && (length(op.symbolic_metadata) < length(op.dependencies))# && issubset(op.symbolic_metadata, op.dependencies)
 end
@@ -91,6 +94,7 @@ loopdependencies(op::Operation) = op.dependencies
 identifier(op::Operation) = op.identifier
 name(op::Operation) = op.variable
 instruction(op::Operation) = op.instruction
+
 
 function symposition(op::Operation, sym::Symbol)
     findfirst(s -> s === sym, op.symbolic_metadata)
@@ -139,7 +143,7 @@ struct Loop
     hintexact::Bool # if true, rangesym ignored and rangehint used for final lowering
 end
 function Loop(itersymbol::Symbol, rangehint::Int)
-    Loop( itersymbol, rangehint, :undef, true )
+    Loop( itersymbol, rangehint, Symbol("##UNDEFINED##"), true )
 end
 function Loop(itersymbol::Symbol, rangesym::Symbol, rangehint::Int = 1_024)
     Loop( itersymbol, rangehint, rangesym, false )
@@ -152,8 +156,9 @@ struct LoopSet
     loadops::Vector{Operation} # Split them to make it easier to iterate over just a subset
     computeops::Vector{Operation}
     storeops::Vector{Operation}
-    reductions::Set{UInt} # IDs of reduction operations that need to be reduced at end.
-    strideset::Vector{} 
+    inner_reductions::Set{UInt} # IDs of reduction operations nested within loops and stored.
+    outer_reductions::Set{UInt} # IDs of reduction operations that need to be reduced at end.
+    # strideset::Vector{} 
 end
 num_loops(ls::LoopSet) = length(ls.loops)
 isstaticloop(ls::LoopSet, s::Symbol) = ls.loops[s].hintexact
@@ -511,7 +516,7 @@ end
 # Using sentinel values (eg, T = -1 for non tiling) in part to avoid recompilation.
 function lower_load!(
     q::Expr, op::Operation, W::Int, unrolled::Symbol,
-    U::Int, T::Int = -1, tiled::Symbol = :undef
+    U::Int, T::Int = -1, tiled::Symbol = Symbol("##UNDEFINED##")
 )
     loopdeps = loopdependencies(op)
     var = op.variable
@@ -526,7 +531,7 @@ function lower_load!(
                 push!(q.args, Expr(:(=), var, Expr(:call,:vload,ptr,memoff)))
             elseif T == -1
                 for u ∈ 0:U-1
-                    push!(q.args, Expr(:(=), Symbol(var,:_,u), Expr(:call,:vload, Val(W), ptr, u == 0 ? memoff : push!(copy(memoff), W*u))))
+                    push!(q.args, Expr(:(=), Symbol(var,:_,u), Expr(:call,:vload, Val{W}(), ptr, u == 0 ? memoff : push!(copy(memoff), W*u))))
                 end
             else # tiling
                 for t ∈ 0:T-1
@@ -534,7 +539,7 @@ function lower_load!(
                     for u ∈ 0:U-1
                         memoff2 = copy(memoff)
                         u > 0 && push!(memoff2, W*u)
-                        push!(q.args, Expr(:(=), Symbol(var, :_, u, :_, t), Expr(:call, :vload, Val(W), ptr, memoff2)))
+                        push!(q.args, Expr(:(=), Symbol(var, :_, u, :_, t), Expr(:call, :vload, Val{W}(), ptr, memoff2)))
                     end
                 end
             end
@@ -571,9 +576,9 @@ function lower_load!(
         push!(q.args, Expr(:(=), var, Expr(:call, :load,  ptr, memoff)))
     end
 end
-function lower_store!(q::Expr, op::Operation, unrolled::Symbol, U, T = 1)
+function lower_store!(
     q::Expr, op::Operation, W::Int, unrolled::Symbol,
-    U::Int, T::Int = -1, tiled::Symbol = :undef
+    U::Int, T::Int = -1, tiled::Symbol = Symbol("##UNDEFINED##")
 )
     loopdeps = loopdependencies(op)
     var = first(parents(op)).variable
@@ -588,7 +593,7 @@ function lower_store!(q::Expr, op::Operation, unrolled::Symbol, U, T = 1)
                 push!(q.args, Expr(:(=), var, Expr(:call,:vload,ptr,memoff)))
             elseif T == -1
                 for u ∈ 0:U-1
-                    push!(q.args, Expr(:(=), Symbol(var,:_,u), Expr(:call,:vstore, Val(W), ptr, u == 0 ? memoff : push!(copy(memoff), W*u))))
+                    push!(q.args, Expr(:call,:vstore!, ptr, Symbol(var,:_,u), u == 0 ? memoff : push!(copy(memoff), W*u)))
                 end
             else # tiling
                 for t ∈ 0:T-1
@@ -596,7 +601,7 @@ function lower_store!(q::Expr, op::Operation, unrolled::Symbol, U, T = 1)
                     for u ∈ 0:U-1
                         memoff2 = copy(memoff)
                         u > 0 && push!(memoff2, W*u)
-                        push!(q.args, Expr(:(=), Symbol(var, :_, u, :_, t), Expr(:call, :vload, Val(W), ptr, memoff2)))
+                        push!(q.args, Expr(:call, :vstore!, ptr, Symbol(var, :_, u, :_, t), memoff2))
                     end
                 end
             end
@@ -609,16 +614,16 @@ function lower_store!(q::Expr, op::Operation, unrolled::Symbol, U, T = 1)
                     for u ∈ 0:U-1
                         memoff2 = copy(memoff)
                         u > 0 && push!(memoff2, ustride > 1 ? u*W*ustride : Expr(:call,:*,op.symbolic_metadata[upos],u*W) )
-                        push!(q.args, Expr(:(=), Symbol(var,:_,u,:_,t), Expr(:call, :gather, ptr, Expr(:call, :vadd, memoff2, ustrides))))
+                        push!(q.args, Expr(:call, :scatter!, ptr, Symbol(var,:_,u,:_,t), Expr(:call, :vadd, memoff2, ustrides)))
                     end
                 end
                 # elseif unitstride(op, tiled) # TODO: we load tiled, and then shuffle
             elseif U == 1 # we gather, no tile, no extra unroll
-                push!(q.args, Expr(:(=), var, Expr(:call,:gather,ptr,Expr(:call,:vadd,memoff,ustrides))))
+                push!(q.args, Expr(:call,:scatter!,ptr, var, Expr(:call,:vadd,memoff,ustrides)))
             else # we gather, no tile, but extra unroll
                 for u ∈ 0:U-1
                     memoff2 = u == 0 ? memoff : push!(copy(memoff), ustride > 1 ? u*W*ustride : Expr(:call,:*,op.symbolic_metadata[upos],u*W) )
-                    push!(q.args, Expr(:(=), Symbol(var,:_,u), Expr(:call, :gather, ptr, Expr(:call,:vadd,memoff2,ustrides))))
+                    push!(q.args, Expr(:call, :scatter!, ptr, Symbol(var,:_,u), Expr(:call,:vadd,memoff2,ustrides)))
                 end
             end
         end
@@ -627,13 +632,43 @@ function lower_store!(q::Expr, op::Operation, unrolled::Symbol, U, T = 1)
         # memoff2 = copy(memoff)
         for t ∈ 0:T-1
             replace_ind_inoffset!(memoff, op, tind, t)
-            push!(q.args, Expr(:(=), Symbol(var,:_,t), Expr(:call, :load, ptr, copy(memoff))))
+            push!(q.args, Expr(:call, :store!, ptr, Symbol(var,:_,t), copy(memoff)))
         end
     else # load scalar; promotion should broadcast as/when neccesary
-        push!(q.args, Expr(:(=), var, Expr(:call, :load,  ptr, memoff)))
+        push!(q.args, Expr(:call, :store!, var,  ptr, memoff))
     end
 end
-function lower_compute!(q::Expr, op::Operation, unrolled::Symbol, U, T = 1)
+# A compute op needs to know the unrolling and tiling status of each of its parents.
+# 
+function lower_compute!(
+    q::Expr, op::Operation, W::Int, unrolled::Symbol,
+    U::Int, T::Int = -1, tiled::Symbol = Symbol("##UNDEFINED##")
+)
+    opunrolled = unrolled ∈ loopdependencies(op)
+    optiled = tiled ∈ loopdependencies(op)
+    var = op.variable
+    # cache unroll and tiling check of parents
+    # not broadcasted, because we use frequent checks of individual bools
+    # making BitArrays inefficient.
+    parentsunrolled = [unrolled ∈ loopdependencies(opp) for oppp ∈ parents(op)]
+    parentstiled = [tiled ∈ loopdependencies(opp) for oppp ∈ parents(op)]
+    if opunrolled
+        if optiled
+            for t ∈ 0:T-1
+                for u ∈ 0:U-1
+                    
+                end
+            end
+        else # not tiled
+
+        end
+    else # not unrolled
+        if optiled # but not unrolled
+
+        else # not tiled and not unrolled
+
+        end
+    end
 end
 function lower!(q::Expr, op::Operation, unrolled::Symbol, U, T = 1)
     if isload(op)
