@@ -96,7 +96,21 @@ for (k, v) ∈ COST # so we can look up Symbol(typeof(function))
     COST[Symbol("typeof(", k, ")")] = v
 end
 
-
+const CORRESPONDING_REDUCTION = Dict{Symbol,Symbol}(
+    :(+) => :vsum,
+    :(-) => :vsum,
+    :(*) => :vprod,
+    :(&) => :vall,
+    :(|) => :vany,
+    :muladd => :vsum,
+    :fma => :vsum,
+    :vmuladd => :vsum,
+    :vfma => :vsum,
+    :vfmadd => :vsum,
+    :vfmsub => :vsum,
+    :vfnmadd => :vsum,
+    :vfnmsub => :vsum
+)
 # const SIMDPIRATES_COST = Dict{Symbol,InstructionCost}()
 # const SLEEFPIRATES_COST = Dict{Symbol,InstructionCost}()
 
