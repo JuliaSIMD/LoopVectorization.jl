@@ -70,7 +70,6 @@ struct Operation
         node_type,
         variable = gensym()
     )
-        # identifier = Threads.atomic_add!(ID, one(UInt))
         new(
             identifier, variable, elementbytes, instruction, node_type,
             Set{Symbol}(), Operation[], Operation[], Int[], Symbol[]#, Dict{Symbol,Union{Symbol,Int}}()
@@ -165,7 +164,7 @@ isstaticloop(ls::LoopSet, s::Symbol) = ls.loops[s].hintexact
 itersyms(ls::LoopSet) = keys(ls.loops)
 function looprange(ls::LoopSet, s::Symbol)
     loop = ls.loops[s]
-    Expr(:(:), 0, loop.hintexact ? loop.rangehint - 1 : Expr(:call, :(-), loop.rangesym, 1))
+    Expr(:call, :<, s, loop.hintexact ? loop.rangehint : loop.rangesym)
 end
 function Base.length(ls::LoopSet, is::Symbol)
     ls.loops[is].rangehint
@@ -499,7 +498,8 @@ function depends_on_assigned(op::Operation, assigned::Vector{Bool})
     end
     false
 end
-function replace_ind_in_offset!(offset::Vector, op::Operation, ind::Int, dynamic::Bool, t)
+# ind gets increased across tiles / unroll, so we need steps.
+function replace_ind_in_offset!(offset::Vector, op::Operation, ind::Int, t)
     t == 0 && return nothing
     var = op.variable
     siter = op.symbolic_metadata[ind]
@@ -538,7 +538,7 @@ function lower_load!(
                 end
             else # tiling
                 for t ∈ 0:T-1
-                    replace_ind_inoffset!(memoff, op, tind, t)
+                    replace_ind_in_offset!(memoff, op, tind, t)
                     for u ∈ 0:U-1
                         memoff2 = copy(memoff)
                         u > 0 && push!(memoff2, W*u)
@@ -553,7 +553,7 @@ function lower_load!(
             ustrides = Expr(:tuple, (ustride > 1 ? [Core.VecElement{Int}(ustride*w) for w ∈ 0:W-1] : [:(Core.VecElement{Int}($(op.symbolic_metadata[upos])*$w)) for w ∈ 0:W-1])...)
             if T != -1 # gather tile
                 for t ∈ 0:T-1
-                    replace_ind_inoffset!(memoff, op, tind, t)
+                    replace_ind_in_offset!(memoff, op, tind, t)
                     for u ∈ 0:U-1
                         memoff2 = copy(memoff)
                         u > 0 && push!(memoff2, ustride > 1 ? u*W*ustride : Expr(:call,:*,op.symbolic_metadata[upos],u*W) )
@@ -580,7 +580,7 @@ function lower_load!(
         # load per T.
         # memoff2 = copy(memoff)
         for t ∈ 0:T-1
-            replace_ind_inoffset!(memoff, op, tind, t)
+            replace_ind_in_offset!(memoff, op, tind, t)
             instrcall = Expr(:call, :load, ptr, copy(memoff))
             # mask === nothing || push!(instrcall.args, mask)
             push!(q.args, Expr(:(=), Symbol(var,:_,t), instrcall))
@@ -613,7 +613,7 @@ function lower_store!(
                 end
             else # tiling
                 for t ∈ 0:T-1
-                    replace_ind_inoffset!(memoff, op, tind, t)
+                    replace_ind_in_offset!(memoff, op, tind, t)
                     for u ∈ 0:U-1
                         memoff2 = copy(memoff)
                         u > 0 && push!(memoff2, W*u)
@@ -628,7 +628,7 @@ function lower_store!(
             ustrides = Expr(:tuple, (ustride > 1 ? [Core.VecElement{Int}(ustride*w) for w ∈ 0:W-1] : [:(Core.VecElement{Int}($(op.symbolic_metadata[upos])*$w)) for w ∈ 0:W-1])...)
             if T != -1 # gather tile
                 for t ∈ 0:T-1
-                    replace_ind_inoffset!(memoff, op, tind, t)
+                    replace_ind_in_offset!(memoff, op, tind, t)
                     for u ∈ 0:U-1
                         memoff2 = copy(memoff)
                         u > 0 && push!(memoff2, ustride > 1 ? u*W*ustride : Expr(:call,:*,op.symbolic_metadata[upos],u*W) )
@@ -658,11 +658,13 @@ function lower_store!(
             # store per T.
             # memoff2 = copy(memoff)
             for t ∈ 0:T-1
-                replace_ind_inoffset!(memoff, op, tind, t)
-                push!(q.args, Expr(:call, :store!, ptr, Symbol(var,:_,t), copy(memoff)))
+                replace_ind_in_offset!(memoff, op, tind, t)
+                storevar = Expr(:call, reduct, Symbol(var,:_,t))
+                push!(q.args, Expr(:call, :store!, ptr, storevar, copy(memoff)))
             end
         else # no unroll
-            push!(q.args, Expr(:call, :store!, var,  ptr, memoff))
+            storevar = Expr(:call, reduct, var)
+            push!(q.args, Expr(:call, :store!, ptr, storevar, memoff))
         end
     end
 end
@@ -673,6 +675,7 @@ function lower_compute!(
     U::Int, T::Int = -1, tiled::Symbol = Symbol("##UNDEFINED##"), mask = nothing
 )
     opunrolled = unrolled ∈ loopdependencies(op)
+
     optiled = tiled ∈ loopdependencies(op)
     var = op.variable
     instr = op.instruction
@@ -745,7 +748,8 @@ function lower_unroll(ls::LoopSet, order::Vector{Symbol}, U::Int)
         lower_unroll_dynamic(ls, order, U)
     end
 end
-function lower_unroll_inner_block(ls::LoopSet, order::Vector{Symbol}, U::Int)
+function lower_unroll_inner_block(ls::LoopSet, order::Vector{Symbol}, U::Int, peel::Int = 1)
+    @assert peel ≥ 0
     # this function create the inner block
     # args = Any[]
     nloops = length(order)
@@ -755,8 +759,8 @@ function lower_unroll_inner_block(ls::LoopSet, order::Vector{Symbol}, U::Int)
     # to go inside out, we just have to include all those not-yet included depending on the current sym
     n = 0
     loopsym = last(order)
-    blockq = Expr(:block, )
-    loopq = Expr(:for, Expr(:(=), itersym, looprange(ls, loopsym)), blockq)
+    blockq = Expr(:block, )#Expr(:(=), loopsym, 0))
+    loopq = Expr(:while, looprange(ls, loopsym), blockq)
     for (id,op) ∈ enumerate(operations(ls))
         # We add an op the first time all loop dependencies are met
         # when working through loops backwords, that equates to the first time we encounter a loop dependency
@@ -764,9 +768,9 @@ function lower_unroll_inner_block(ls::LoopSet, order::Vector{Symbol}, U::Int)
         included_vars[id] = true
         lower!(blockq, op, unrolled, U)
     end
-    for n ∈ 1:nloops - 2
+    for n ∈ 1:nloops - 1 - peel
+        blockq = Expr(:block, Expr(:(=), loopsym, 0)) # sets old loopsym to 0
         loopsym = order[nloops - n]
-        blockq = Expr(:block, )
         postloop = Expr(:block, )
         for (id,op) ∈ enumerate(operations(ls))
             included_vars[id] && continue
@@ -774,20 +778,49 @@ function lower_unroll_inner_block(ls::LoopSet, order::Vector{Symbol}, U::Int)
             # when working through loops backwords, that equates to the first time we encounter a loop dependency
             loopsym ∈ dependencies(op) || continue
             included_vars[id] = true
-
+            
             after_loop = depends_on_assigned(op, included_vars)
             after_loop || lower!(blockq, op, unrolled, U)
             after_loop && lower!(postloop, op, unrolled, U)
         end
         push!(blockq.args, loopq_old); append!(blockq.args, postloop.args)
-        loopq = Expr(:for, Expr(:(=), itersym, looprange), blockq)
+        push!(blockq, Expr(:+=, loopsym, 1))
+        loopq = Expr(:while, looprange(ls, loopsym), blockq)
     end
-    loopq
+    Expr(:block, Expr(:=, order[1 + peel], 0), loopq), included_vars
 end
 function lower_unroll_static(ls::LoopSet, order::Vector{Symbol}, U::Int)
 
 end
 function lower_unroll_dynamic(ls::LoopSet, order::Vector{Symbol}, U::Int)
+
+    
+    unrolled = first(order)
+    q = Expr(:block, )
+
+    # we repeatedly break into smaller chunks.
+    while U > 0
+        inner_block, included_vars = lower_unroll_inner_block(ls, order, U, 1)
+
+    end
+    
+    Uispow2 = VectorizationBase.ispow2(U)
+    looprange(ls, loopsym)
+    
+    loop = ls.loops[s]
+    Expr(:(:), 0, loop.hintexact ? loop.rangehint - 1 : Expr(:call, :(-), loop.rangesym, 1))
+
+    if U == 1 # no unrolling needed
+        
+    elseif Uispow2 # we use shifts and bitwise &
+        log2U = VectorizationBase.intlog2(U)
+        
+    else
+
+    end
+    
+    # now must repeat inner block
+    
     nested_loop_syms = Set{Symbol}()
     # included_vars = Set{UInt}()
     included_vars = fill(false, length(operations(ls)))
@@ -812,6 +845,7 @@ function lower_unroll_dynamic(ls::LoopSet, order::Vector{Symbol}, U::Int)
             loopq = looprange(ls::LoopSet, s::Symbol)
         end
         blockq = Expr(:block, )
+
         loopq = Expr(:for, Expr(:(=), itersym, looprange), blockq)
         for op ∈ operations(ls)
             # won't define if already defined...
