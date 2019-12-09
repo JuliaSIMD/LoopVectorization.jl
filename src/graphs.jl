@@ -57,6 +57,7 @@ struct Operation
     node_type::OperationType
     # dependencies::Vector{Symbol}
     dependencies::Set{Symbol}
+    reduced_deps::Set{Symbol}
     # dependencies::Set{Symbol}
     parents::Vector{Operation}
     children::Vector{Operation}
@@ -90,10 +91,17 @@ dependson(op::Operation, sym::Symbol) = sym ∈ op.dependencies
 parents(op::Operation) = op.parents
 children(op::Operation) = op.children
 loopdependencies(op::Operation) = op.dependencies
+reduceddependencies(op::Operation) = op.reduced_deps
 identifier(op::Operation) = op.identifier
 name(op::Operation) = op.variable
 instruction(op::Operation) = op.instruction
 
+function hasintersection(s1::Set{T}, s2::Set{T}) where {T}
+    for x ∈ s1
+        x ∈ s2 && return true
+    end
+    false
+end
 
 function symposition(op::Operation, sym::Symbol)
     findfirst(s -> s === sym, op.symbolic_metadata)
@@ -135,6 +143,7 @@ function mem_offset(op::Operation, incr::Int = 0)::Union{Symbol,Expr}
     ret
 end
 
+
 struct Loop
     itersymbol::Symbol
     rangehint::Int
@@ -148,6 +157,18 @@ function Loop(itersymbol::Symbol, rangesym::Symbol, rangehint::Int = 1_024)
     Loop( itersymbol, rangehint, rangesym, false )
 end
 
+# load/compute/store × isunroled × istiled × pre/post loop × Loop number
+struct LoopOrder <: AbstractArray{Vector{Operation},5}
+    oporder::Array{Vector{Operation},5}
+    loopnames::Vector{Symbol}
+end
+function LoopOrder(N::Int)
+    LoopOrder( [ Operation[] for i ∈ 1:3, j ∈ 1:2, k ∈ 1:2, l ∈ 1:2, n ∈ 1:N ], Vector{Symbol}(undef, N) )
+end
+Base.empty!(lo::LoopOrder) = foreach(empty!, lo.oporder)
+Base.size(lo::LoopOrder) = (3,2,2,2,size(lo.oporder,5))
+Base.@propagate_inbounds Base.getindex(lo::LoopOrder, i...) = lo.oporder[i...]
+
 # Must make it easy to iterate
 struct LoopSet
     loops::Dict{Symbol,Loop} # sym === loops[sym].itersymbol
@@ -157,6 +178,7 @@ struct LoopSet
     storeops::Vector{Operation}
     inner_reductions::Set{UInt} # IDs of reduction operations nested within loops and stored.
     outer_reductions::Set{UInt} # IDs of reduction operations that need to be reduced at end.
+    loop_order::LoopOrder
     # strideset::Vector{} 
 end
 num_loops(ls::LoopSet) = length(ls.loops)
@@ -179,6 +201,39 @@ function operations(ls::LoopSet)
         store_operations(ls)
     ))
 end
+
+function fillorder!(ls::LoopSet, order::Vector{Symbol})
+    lo = ls.loop_order
+    copyto!(lo.names, order)
+    empty!(lo)
+    nloops = length(order)
+    unrolled = first(order)
+    tiled = nloops > 1 ? order[2] : Symbol("##UNDEFINED##")
+    included_vars = fill(false, length(operations(ls)))
+    # to go inside out, we just have to include all those not-yet included depending on the current sym
+    for _n ∈ 1:nloops
+        n = 1 + nloops - _n
+        loopsym = order[n]
+        for (id,op) ∈ enumerate(operations(ls))
+            included_vars[id] && continue
+            loopsym ∈ dependencies(op) || continue
+            included_vars[id] = true
+            isunrolled = (unrolled ∈ loopdependencies(op)) + 1
+            istiled = (nloops == 1 ? false : (tiled ∈ loopdependencies(op))) + 1
+            optype = if isload(op)
+                1
+            elseif isstore(op)
+                3
+            else#if compute
+                2
+            end
+            after_loop = (length(reduceddependencies(op)) > 0) + 1
+            push!(lo[optype,isunrolled,istiled,after_loop,_n], op)
+        end
+    end    
+end
+
+
 function cost(op::Operation, unrolled::Symbol, Wshift::Int, size_T::Int)
     # Wshift == dependson(op, unrolled) ? Wshift : 0
     # c = first(cost(instruction(op), Wshift, size_T))::Int
@@ -207,7 +262,12 @@ end
 function biggest_type_size(ls::LoopSet)
     maximum(elsize, operations(ls))
 end
-
+function VectorizationBase.pick_vector_width(ls::LoopSet, u::Symbol)
+    VectorizationBase.pick_vector_width(length(ls, u), biggest_type_size(ls))
+end
+function VectorizationBase.pick_vector_width_shift(ls::LoopSet, u::Symbol)
+    VectorizationBase.pick_vector_width_shift(length(ls, u), biggest_type_size(ls))
+end
 
 
 # evaluates cost of evaluating loop in given order
@@ -238,6 +298,7 @@ function evaluate_cost_unroll(
             included_vars[id] && continue
             # it must also be a subset of defined symbols
             loopdependencies(op) ⊆ nested_loop_syms || continue
+            hasintersection(reduceddependencies(op), nested_loop_syms) && return Inf
             included_vars[id] = true
             
             total_cost += iter * first(cost(op, unrolled, Wshift, size_T))
@@ -375,6 +436,7 @@ function evaluate_cost_tile(
             included_vars[id] && continue
             # it must also be a subset of defined symbols
             loopdependencies(op) ⊆ nested_loop_syms || continue
+            hasintersection(reduceddependencies(op), nested_loop_syms) && return 0,0,Inf
             included_vars[id] = true
             rt, lat, rp = cost(op, unrolled, Wshift, size_T)
             rt *= iter
@@ -445,7 +507,7 @@ function Base.iterate(lo::LoopOrders, state)
     syms, state
 end
 function choose_unroll_order(ls::LoopSet, lowest_cost::Float64 = Inf)
-    lo = LoopOrder(ls)
+    lo = LoopOrders(ls)
     best_order = lo.syms
     new_order, state = iterate(lo) # right now, new_order === best_order
     while true
@@ -460,7 +522,7 @@ function choose_unroll_order(ls::LoopSet, lowest_cost::Float64 = Inf)
     end    
 end
 function choose_tile(ls::LoopSet)
-    lo = LoopOrder(ls)
+    lo = LoopOrders(ls)
     best_order = lo.syms
     new_order, state = iterate(lo) # right now, new_order === best_order
     U, T, lowest_cost = 0, 0, Inf
@@ -513,171 +575,175 @@ function replace_ind_in_offset!(offset::Vector, op::Operation, ind::Int, t)
     nothing
 end
 
-# TODO: this code should be rewritten to be more "orthogonal", so that we're just combining separate pieces.
-# Using sentinel values (eg, T = -1 for non tiling) in part to avoid recompilation.
-function lower_load!(
-    q::Expr, op::Operation, W::Int, unrolled::Symbol,
-    U::Int, T::Int = -1, tiled::Symbol = Symbol("##UNDEFINED##"), mask = nothing
+function lower_load_scalar!(
+    q::Expr, op::Operation, W::Int, unrolled::Symbol, U::Int,
+    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
 )
+
     loopdeps = loopdependencies(op)
+    @assert unrolled ∉ loopdeps
     var = op.variable
+    if suffix !== nothing
+        var = Symbol(var, :_, suffix)
+    end
     ptr = Symbol(:vptr_, var)
     memoff = mem_offset(op)
-    tind = T == -1 ? -1 : findfirst(s -> s === tiled, op.symbolic_metadata)
-    upos = symposition(op, unrolled)
-    ustride = op.numerical_metadata[upos]
-    if unrolled ∈ loopdeps # we need a vector
-        if ustride == 1 # vload
-            if T == -1 && U == 1
-                push!(q.args, Expr(:(=), var, Expr(:call,:vload,ptr,memoff)))
-            elseif T == -1
-                for u ∈ 0:U-1
-                    instrcall = Expr(:call,:vload, Val{W}(), ptr, u == 0 ? memoff : push!(copy(memoff), W*u))
-                    mask === nothing || push!(instrcall.args, mask)
-                    push!(q.args, Expr(:(=), Symbol(var,:_,u), instrcall))
-                end
-            else # tiling
-                for t ∈ 0:T-1
-                    replace_ind_in_offset!(memoff, op, tind, t)
-                    for u ∈ 0:U-1
-                        memoff2 = copy(memoff)
-                        u > 0 && push!(memoff2, W*u)
-                        instrcall = Expr(:call, :vload, Val{W}(), ptr, memoff2)
-                        mask === nothing || push!(instrcall.args, mask)
-                        push!(q.args, Expr(:(=), Symbol(var, :_, u, :_, t), instrcall))
-                    end
-                end
-            end
-        else
-            # ustep = ustride > 1 ? ustride : op.symbolic_metadata[upos]
-            ustrides = Expr(:tuple, (ustride > 1 ? [Core.VecElement{Int}(ustride*w) for w ∈ 0:W-1] : [:(Core.VecElement{Int}($(op.symbolic_metadata[upos])*$w)) for w ∈ 0:W-1])...)
-            if T != -1 # gather tile
-                for t ∈ 0:T-1
-                    replace_ind_in_offset!(memoff, op, tind, t)
-                    for u ∈ 0:U-1
-                        memoff2 = copy(memoff)
-                        u > 0 && push!(memoff2, ustride > 1 ? u*W*ustride : Expr(:call,:*,op.symbolic_metadata[upos],u*W) )
-                        instrcall = Expr(:call, :gather, ptr, Expr(:call, :vadd, memoff2, ustrides))
-                        mask === nothing || push!(instrcall.args, mask)
-                        push!(q.args, Expr(:(=), Symbol(var,:_,u,:_,t), instrcall))
-                    end
-                end
-                # elseif unitstride(op, tiled) # TODO: we load tiled, and then shuffle
-            elseif U == 1 # we gather, no tile, no extra unroll
-                instrcall = Expr(:call,:gather,ptr,Expr(:call,:vadd,memoff,ustrides))
-                mask === nothing || push!(instrcall.args, mask)
-                push!(q.args, Expr(:(=), var, instrcall))
-            else # we gather, no tile, but extra unroll
-                for u ∈ 0:U-1
-                    memoff2 = u == 0 ? memoff : push!(copy(memoff), ustride > 1 ? u*W*ustride : Expr(:call,:*,op.symbolic_metadata[upos],u*W) )
-                    instrcall = Expr(:call, :gather, ptr, Expr(:call,:vadd,memoff2,ustrides))
-                    mask === nothing || push!(instrcall.args, mask)
-                    push!(q.args, Expr(:(=), Symbol(var,:_,u), instrcall))
-                end
-            end
-        end
-    elseif T != -1 && tiled ∈ loopdeps # load for each tile.
-        # load per T.
-        # memoff2 = copy(memoff)
-        for t ∈ 0:T-1
-            replace_ind_in_offset!(memoff, op, tind, t)
-            instrcall = Expr(:call, :load, ptr, copy(memoff))
-            # mask === nothing || push!(instrcall.args, mask)
-            push!(q.args, Expr(:(=), Symbol(var,:_,t), instrcall))
-        end
-    else # load scalar; promotion should broadcast as/when neccesary
-        push!(q.args, Expr(:(=), var, Expr(:call, :load,  ptr, memoff)))
-    end
+    push!(q.args, Expr(:(=), var, Expr(:call, :load,  ptr, memoff)))
+    nothing
 end
-# TODO: handle reductions correctly when we're storing non-unrolled parameters!
-function lower_store!(
-    q::Expr, op::Operation, W::Int, unrolled::Symbol,
-    U::Int, T::Int = -1, tiled::Symbol = Symbol("##UNDEFINED##"), mask = nothing
+function lower_load_unrolled!(
+    q::Expr, op::Operation, W::Int, unrolled::Symbol, U::Int,
+    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
 )
     loopdeps = loopdependencies(op)
-    var = first(parents(op)).variable
-    ptr = Symbol(:vptr_, op.variable)
+    @assert unrolled ∈ loopdeps
+    var = op.variable
+    if suffix !== nothing
+        var = Symbol(var, :_, suffix)
+    end
+    ptr = Symbol(:vptr_, var)
     memoff = mem_offset(op)
-    tind = T == -1 ? -1 : findfirst(s -> s === tiled, op.symbolic_metadata)
     upos = symposition(op, unrolled)
     ustride = op.numerical_metadata[upos]
-    if unrolled ∈ loopdeps # we need a vector
-        if ustride == 1 # vload
-            if T == -1 && U == 1
-                push!(q.args, Expr(:(=), var, Expr(:call,:vload,ptr,memoff)))
-            elseif T == -1
-                for u ∈ 0:U-1
-                    instrcall = Expr(:call,:vstore!, ptr, Symbol(var,:_,u), u == 0 ? memoff : push!(copy(memoff), W*u))
-                    mask === nothing || push!(instrcall.args, mask)
-                    push!(q.args, instrcall)
-                end
-            else # tiling
-                for t ∈ 0:T-1
-                    replace_ind_in_offset!(memoff, op, tind, t)
-                    for u ∈ 0:U-1
-                        memoff2 = copy(memoff)
-                        u > 0 && push!(memoff2, W*u)
-                        instrcall = Expr(:call, :vstore!, ptr, Symbol(var, :_, u, :_, t), memoff2)
-                        mask === nothing || push!(instrcall.args, mask)
-                        push!(q.args, instrcall)
-                    end
-                end
-            end
+    if ustride == 1 # vload
+        if U == 1
+            push!(q.args, Expr(:(=), var, Expr(:call,:vload,ptr,memoff)))
         else
-            # ustep = ustride > 1 ? ustride : op.symbolic_metadata[upos]
-            ustrides = Expr(:tuple, (ustride > 1 ? [Core.VecElement{Int}(ustride*w) for w ∈ 0:W-1] : [:(Core.VecElement{Int}($(op.symbolic_metadata[upos])*$w)) for w ∈ 0:W-1])...)
-            if T != -1 # gather tile
-                for t ∈ 0:T-1
-                    replace_ind_in_offset!(memoff, op, tind, t)
-                    for u ∈ 0:U-1
-                        memoff2 = copy(memoff)
-                        u > 0 && push!(memoff2, ustride > 1 ? u*W*ustride : Expr(:call,:*,op.symbolic_metadata[upos],u*W) )
-                        instrcall = Expr(:call, :scatter!, ptr, Symbol(var,:_,u,:_,t), Expr(:call, :vadd, memoff2, ustrides))
-                        mask === nothing || push!(instrcall.args, mask)
-                        push!(q.args, instrcall)
-                    end
-                end
-                # elseif unitstride(op, tiled) # TODO: we load tiled, and then shuffle
-            elseif U == 1 # we gather, no tile, no extra unroll
-                instrcall = Expr(:call,:scatter!,ptr, var, Expr(:call,:vadd,memoff,ustrides))
+            for u ∈ 0:U-1
+                instrcall = Expr(:call,:vload, Val{W}(), ptr, u == 0 ? memoff : push!(copy(memoff), W*u))
                 mask === nothing || push!(instrcall.args, mask)
-                push!(q.args, instrcall)
-            else # we gather, no tile, but extra unroll
-                for u ∈ 0:U-1
-                    memoff2 = u == 0 ? memoff : push!(copy(memoff), ustride > 1 ? u*W*ustride : Expr(:call,:*,op.symbolic_metadata[upos],u*W) )
-                    instrcall = Expr(:call, :scatter!, ptr, Symbol(var,:_,u), Expr(:call,:vadd,memoff2,ustrides))
-                    mask === nothing || push!(instrcall.args, mask)
-                    push!(q.args, instrcall)
-                end
+                push!(q.args, Expr(:(=), Symbol(var,:_,u), instrcall))
             end
         end
     else
-        # need to find out reduction type
-        reduct = CORRESPONDING_REDUCTION[first(parents(op)).instruction]
-        if T != -1 && tiled ∈ loopdeps # no unroll, but tiled
-            # store per T.
-            # memoff2 = copy(memoff)
-            for t ∈ 0:T-1
-                replace_ind_in_offset!(memoff, op, tind, t)
-                storevar = Expr(:call, reduct, Symbol(var,:_,t))
-                push!(q.args, Expr(:call, :store!, ptr, storevar, copy(memoff)))
+        # ustep = ustride > 1 ? ustride : op.symbolic_metadata[upos]
+        ustrides = Expr(:tuple, (ustride > 1 ? [Core.VecElement{Int}(ustride*w) for w ∈ 0:W-1] : [:(Core.VecElement{Int}($(op.symbolic_metadata[upos])*$w)) for w ∈ 0:W-1])...)
+        if U == 1 # we gather, no tile, no extra unroll
+            instrcall = Expr(:call,:gather,ptr,Expr(:call,:vadd,memoff,ustrides))
+            mask === nothing || push!(instrcall.args, mask)
+            push!(q.args, Expr(:(=), var, instrcall))
+        else # we gather, no tile, but extra unroll
+            for u ∈ 0:U-1
+                memoff2 = u == 0 ? memoff : push!(copy(memoff), ustride > 1 ? u*W*ustride : Expr(:call,:*,op.symbolic_metadata[upos],u*W) )
+                instrcall = Expr(:call, :gather, ptr, Expr(:call,:vadd,memoff2,ustrides))
+                mask === nothing || push!(instrcall.args, mask)
+                push!(q.args, Expr(:(=), Symbol(var,:_,u), instrcall))
             end
-        else # no unroll
-            storevar = Expr(:call, reduct, var)
-            push!(q.args, Expr(:call, :store!, ptr, storevar, memoff))
         end
+    end
+    nothing
+end
+
+# TODO: this code should be rewritten to be more "orthogonal", so that we're just combining separate pieces.
+# Using sentinel values (eg, T = -1 for non tiling) in part to avoid recompilation.
+function lower_load!(
+    q::Expr, op::Operation, W::Int, unrolled::Symbol, U::Int,
+    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
+)
+    if unrolled ∈ loopdependencies(op)
+        lower_load_unrolled!(q, op, W, unrolled, U, suffix, mask)
+    else
+        lower_load_scalar!(q, op, W, unrolled, U, suffix, mask)
+    end
+end
+
+function lower_store_scalar!(
+    q::Expr, op::Operation, W::Int, unrolled::Symbol, U::Int,
+    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
+)
+    loopdeps = loopdependencies(op)
+    @assert unrolled ∉ loopdeps
+    var = first(parents(op)).variable
+    if suffix !== nothing
+        var = Symbol(var, :_, suffix)
+    end
+    ptr = Symbol(:vptr_, op.variable)
+    memoff = mem_offset(op)
+    # need to find out reduction type
+    reduct = CORRESPONDING_REDUCTION[first(parents(op)).instruction]
+    storevar = Expr(:call, reduct, var)
+    push!(q.args, Expr(:call, :store!, ptr, storevar, memoff))
+    nothing
+end
+function lower_store_unrolled!(
+    q::Expr, op::Operation, W::Int, unrolled::Symbol, U::Int,
+    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
+)
+    loopdeps = loopdependencies(op)
+    @assert unrolled ∈ loopdeps
+    var = first(parents(op)).variable
+    if suffix !== nothing
+        var = Symbol(var, :_, suffix)
+    end
+    ptr = Symbol(:vptr_, op.variable)
+    memoff = mem_offset(op)
+    upos = symposition(op, unrolled)
+    ustride = op.numerical_metadata[upos]
+    if ustride == 1 # vload
+        if U == 1
+            push!(q.args, Expr(:(=), var, Expr(:call,:vload,ptr,memoff)))
+        else
+            for u ∈ 0:U-1
+                instrcall = Expr(:call,:vstore!, ptr, Symbol(var,:_,u), u == 0 ? memoff : push!(copy(memoff), W*u))
+                mask === nothing || push!(instrcall.args, mask)
+                push!(q.args, instrcall)
+            end
+        end
+    else
+        # ustep = ustride > 1 ? ustride : op.symbolic_metadata[upos]
+        ustrides = Expr(:tuple, (ustride > 1 ? [Core.VecElement{Int}(ustride*w) for w ∈ 0:W-1] : [:(Core.VecElement{Int}($(op.symbolic_metadata[upos])*$w)) for w ∈ 0:W-1])...)
+        if U == 1 # we gather, no tile, no extra unroll
+            instrcall = Expr(:call,:scatter!,ptr, var, Expr(:call,:vadd,memoff,ustrides))
+            mask === nothing || push!(instrcall.args, mask)
+            push!(q.args, instrcall)
+        else # we gather, no tile, but extra unroll
+            for u ∈ 0:U-1
+                memoff2 = u == 0 ? memoff : push!(copy(memoff), ustride > 1 ? u*W*ustride : Expr(:call,:*,op.symbolic_metadata[upos],u*W) )
+                instrcall = Expr(:call, :scatter!, ptr, Symbol(var,:_,u), Expr(:call,:vadd,memoff2,ustrides))
+                mask === nothing || push!(instrcall.args, mask)
+                push!(q.args, instrcall)
+            end
+        end
+    end
+    nothing
+end
+function lower_store!(
+    q::Expr, op::Operation, W::Int, unrolled::Symbol, U::Int,
+    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
+)
+    if unrolled ∈ loopdependencies(op)
+        lower_store_unrolled!(q, op, W, unrolled, U, suffix, mask)
+    else
+        lower_store_scalar!(q, op, W, unrolled, U, suffix, mask)
     end
 end
 # A compute op needs to know the unrolling and tiling status of each of its parents.
-# 
-function lower_compute!(
-    q::Expr, op::Operation, W::Int, unrolled::Symbol,
-    U::Int, T::Int = -1, tiled::Symbol = Symbol("##UNDEFINED##"), mask = nothing
+#
+function lower_compute_scalar!(
+    q::Expr, op::Operation, W::Int, unrolled::Symbol, U::Int,
+    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
 )
+    lower_compute!(q, op, W, unrolled, U, suffix, mask, false)
+end
+function lower_compute_unrolled!(
+    q::Expr, op::Operation, W::Int, unrolled::Symbol, U::Int,
+    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
+)
+    lower_compute!(q, op, W, unrolled, U, suffix, mask, true)
+end
+function lower_compute!(
+    q::Expr, op::Operation, W::Int, unrolled::Symbol, U::Int,
+    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing,
     opunrolled = unrolled ∈ loopdependencies(op)
+)
 
-    optiled = tiled ∈ loopdependencies(op)
     var = op.variable
+    if suffix === nothing
+        optiled = false
+    else
+        var = Symbol(var, :_, suffix)
+        optiled = true
+    end
     instr = op.instruction
     
     # cache unroll and tiling check of parents
@@ -688,8 +754,7 @@ function lower_compute!(
     parentsunrolled = opunrolled ? [unrolled ∈ loopdependencies(opp) for opp ∈ parents_op] : fill(false, nparents)
     parentstiled = optiled ? [tiled ∈ loopdependencies(opp) for opp ∈ parents_op] : fill(false, nparents)
     # parentsyms = [opp.variable for opp ∈ parents(op)]
-    Uiter = opunrolled ? U-1 : o
-    Titer = optiled ? T-1 : 0
+    Uiter = opunrolled ? U - 1 : 0
     maskreduct = mask !== nothing && any(opp -> opp.variable === var, parents_op)
     # if a parent is not unrolled, the compiler should handle broadcasting CSE.
     # because unrolled/tiled parents result in an unrolled/tiled dependendency,
@@ -698,38 +763,35 @@ function lower_compute!(
     # but smaller function is probably worthwhile. Compiler could theoreically split anyway
     # but I suspect that the branches are so cheap compared to the cost of everything else going on
     # that smaller size is more advantageous.
-    for t ∈ 0:Titer
-        for u ∈ 0:U-1
-            intrcall = Expr(:call, instr)
-            for n ∈ 1:nparents
-                parent = parents_op.variable
-                if parentsunrolled[n]
-                    parent = Symbol(parent,:_,u)
-                end
-                if parentstiled[n]
-                    parent = Symbol(parent,:_,t)
-                end
-                push!(intrcall.args, parent)
+    for u ∈ 0:Uiter
+        intrcall = Expr(:call, instr)
+        for n ∈ 1:nparents
+            parent = parents_op.variable
+            if parentsunrolled[n]
+                parent = Symbol(parent,:_,u)
             end
-            varsym = var
-            if opunrolled
-                varsym = Symbol(varsym,:_,u)
+            if parentstiled[n]
+                parent = Symbol(parent,:_,t)
             end
-            if optiled
-                varsym = Symbol(varsym,:_,t)
-            end
-            if maskreduct
-                push!(q.args, Expr(:(=), varsym, Expr(:call, :vifesle, mask, varsym, instrcall)))
-            else
-                push!(q.args, Expr(:(=), varsym, instrcall))
-            end
+            push!(intrcall.args, parent)
+        end
+        varsym = var
+        if optiled
+            varsym = Symbol(varsym,:_,suffix)
+        end
+        if opunrolled
+            varsym = Symbol(varsym,:_,u)
+        end
+        if maskreduct
+            push!(q.args, Expr(:(=), varsym, Expr(:call, :vifelse, mask, varsym, instrcall)))
+        else
+            push!(q.args, Expr(:(=), varsym, instrcall))
         end
     end
 end
 function lower!(
-    q::Expr, op::Operation, W::Int, unrolled::Symbol,
-    U::Int, T::Int = -1, tiled::Symbol = Symbol("##UNDEFINED##"),
-    mask = nothing
+    q::Expr, op::Operation, W::Int, unrolled::Symbol, U::Int,
+    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
 )
     if isload(op)
         lower_load!(q, op, W, unrolled, U, T, tiled, mask)
@@ -739,6 +801,20 @@ function lower!(
         lower_compute!(q, op, W, unrolled, U, T, tiled, mask)
     end
 end
+function lower!(
+    q::Expr, ops::AbstractVector{Operation}, W::Int, unrolled::Symbol, U::Int,
+    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
+)
+    foreach(op -> lower!(q, op, W, unrolled, U, suffix, mask), ops)
+end
+function lower!(
+    q::Expr, op::Operation, W::Int, unrolled::Symbol, U::Int,
+    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
+)
+    foreach(op -> lower!(q, op, W, unrolled, U, suffix, mask), ops)
+end
+
+
 
 # construction requires ops inserted into operations vectors in dependency order.
 function lower_unroll(ls::LoopSet, order::Vector{Symbol}, U::Int)
@@ -748,7 +824,49 @@ function lower_unroll(ls::LoopSet, order::Vector{Symbol}, U::Int)
         lower_unroll_dynamic(ls, order, U)
     end
 end
-function lower_unroll_inner_block(ls::LoopSet, order::Vector{Symbol}, U::Int, peel::Int = 1)
+function lower_inner_block(ls::LoopSet, U::Int, T::Int, peel::Int = 1)
+    @assert peel ≥ 0
+    lo = ls.loop_order
+    order = lo.loopnames
+    W = VectorizationBase.pick_vector_width(ls, first(order))
+    unrolled = first(order)
+    nloops = length(order)
+    istiled = nloops > 1 && T > 0
+    if istiled
+        Titer = T - 1
+        tiled = order[2]
+    else
+        Titer = 0
+        tiled = Symbol("##UNDEFINED##")
+    end
+    local loopq_old::Expr
+    for n ∈ 1:nloops - peel
+        loopsym = order[n]
+        blockq = if n == 1
+            Expr(:block, )
+        else
+            Expr(:block, Expr(:=, order[n-1], 0))
+        end
+        loopq = Expr(:while, looprange(ls, loopsym), blockq)
+        for prepost ∈ 1:2
+            # !U && !T
+            lower_scalar!(blockq, @view(ops[:,1,1,prepost,n]), W, unrolled, U, nothing, mask)
+            for u ∈ 0:U-1     #  U && !T
+                lower_unrolled!(blockq, @view(ops[:,2,1,prepost,n]), W, unrolled, U, nothing, mask)
+            end
+            for t ∈ 0:Titer   # !U &&  T
+                lower_scalar!(blockq, @view(ops[:,1,2,prepost,n]), W, unrolled, U, t, mask)
+                for u ∈ 0:U-1 #  U &&  T
+                    lower_unrolled!(blockq, @view(ops[:,2,2,prepost,n]), W, unrolled, U, t, mask)
+                end
+            end
+            if n > 1 && prepost == 1
+                push!(blockq.args, loopq_old)
+            end
+        end
+        loopq_old = loopq
+    end
+
     @assert peel ≥ 0
     # this function create the inner block
     # args = Any[]
