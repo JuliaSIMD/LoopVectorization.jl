@@ -807,11 +807,32 @@ function lower!(
 )
     foreach(op -> lower!(q, op, W, unrolled, U, suffix, mask), ops)
 end
-function lower!(
-    q::Expr, op::Operation, W::Int, unrolled::Symbol, U::Int,
+function lower_load!(
+    q::Expr, ops::AbstractVector{Operation}, W::Int, unrolled::Symbol, U::Int,
     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
 )
-    foreach(op -> lower!(q, op, W, unrolled, U, suffix, mask), ops)
+    foreach(op -> lower_load!(q, op, W, unrolled, U, suffix, mask), ops)
+end
+function lower_compute!(
+    q::Expr, ops::AbstractVector{Operation}, W::Int, unrolled::Symbol, U::Int,
+    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
+)
+    foreach(op -> lower_compute!(q, op, W, unrolled, U, suffix, mask), ops)
+end
+function lower_store!(
+    q::Expr, ops::AbstractVector{Operation}, W::Int, unrolled::Symbol, U::Int,
+    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
+)
+    foreach(op -> lower_store!(q, op, W, unrolled, U, suffix, mask), ops)
+end
+function lower!(
+    q::Expr, ops::AbstractVector{<:AbstractVector{Operation}}, W::Int, unrolled::Symbol, U::Int,
+    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
+)
+    
+    foreach(op -> lower_load!(q, op, W, unrolled, U, suffix, mask), ops[1])
+    foreach(op -> lower_compute!(q, op, W, unrolled, U, suffix, mask), ops[2])
+    foreach(op -> lower_store!(q, op, W, unrolled, U, suffix, mask), ops[3])
 end
 
 
@@ -840,6 +861,10 @@ function lower_inner_block(ls::LoopSet, U::Int, T::Int, peel::Int = 1)
         tiled = Symbol("##UNDEFINED##")
     end
     local loopq_old::Expr
+    # Probably delete peel
+    # Have this function generate entire body
+    # And pass custom range, or range strategy
+    # to be used for unrolled and optionally tiled dims.
     for n ∈ 1:nloops - peel
         loopsym = order[n]
         blockq = if n == 1
@@ -850,14 +875,14 @@ function lower_inner_block(ls::LoopSet, U::Int, T::Int, peel::Int = 1)
         loopq = Expr(:while, looprange(ls, loopsym), blockq)
         for prepost ∈ 1:2
             # !U && !T
-            lower_scalar!(blockq, @view(ops[:,1,1,prepost,n]), W, unrolled, U, nothing, mask)
+            lower!(blockq, @view(ops[:,1,1,prepost,n]), W, unrolled, U, nothing, mask)
             for u ∈ 0:U-1     #  U && !T
-                lower_unrolled!(blockq, @view(ops[:,2,1,prepost,n]), W, unrolled, U, nothing, mask)
+                lower!(blockq, @view(ops[:,2,1,prepost,n]), W, unrolled, U, nothing, mask)
             end
             for t ∈ 0:Titer   # !U &&  T
-                lower_scalar!(blockq, @view(ops[:,1,2,prepost,n]), W, unrolled, U, t, mask)
+                lower!(blockq, @view(ops[:,1,2,prepost,n]), W, unrolled, U, t, mask)
                 for u ∈ 0:U-1 #  U &&  T
-                    lower_unrolled!(blockq, @view(ops[:,2,2,prepost,n]), W, unrolled, U, t, mask)
+                    lower!(blockq, @view(ops[:,2,2,prepost,n]), W, unrolled, U, t, mask)
                 end
             end
             if n > 1 && prepost == 1
@@ -866,46 +891,7 @@ function lower_inner_block(ls::LoopSet, U::Int, T::Int, peel::Int = 1)
         end
         loopq_old = loopq
     end
-
-    @assert peel ≥ 0
-    # this function create the inner block
-    # args = Any[]
-    nloops = length(order)
-    unrolled = first(order)
-    # included_syms = Set( (unrolled,) )
-    included_vars = fill(false, length(operations(ls)))
-    # to go inside out, we just have to include all those not-yet included depending on the current sym
-    n = 0
-    loopsym = last(order)
-    blockq = Expr(:block, )#Expr(:(=), loopsym, 0))
-    loopq = Expr(:while, looprange(ls, loopsym), blockq)
-    for (id,op) ∈ enumerate(operations(ls))
-        # We add an op the first time all loop dependencies are met
-        # when working through loops backwords, that equates to the first time we encounter a loop dependency
-        loopsym ∈ dependencies(op) || continue
-        included_vars[id] = true
-        lower!(blockq, op, unrolled, U)
-    end
-    for n ∈ 1:nloops - 1 - peel
-        blockq = Expr(:block, Expr(:(=), loopsym, 0)) # sets old loopsym to 0
-        loopsym = order[nloops - n]
-        postloop = Expr(:block, )
-        for (id,op) ∈ enumerate(operations(ls))
-            included_vars[id] && continue
-            # We add an op the first time all loop dependencies are met
-            # when working through loops backwords, that equates to the first time we encounter a loop dependency
-            loopsym ∈ dependencies(op) || continue
-            included_vars[id] = true
-            
-            after_loop = depends_on_assigned(op, included_vars)
-            after_loop || lower!(blockq, op, unrolled, U)
-            after_loop && lower!(postloop, op, unrolled, U)
-        end
-        push!(blockq.args, loopq_old); append!(blockq.args, postloop.args)
-        push!(blockq, Expr(:+=, loopsym, 1))
-        loopq = Expr(:while, looprange(ls, loopsym), blockq)
-    end
-    Expr(:block, Expr(:=, order[1 + peel], 0), loopq), included_vars
+    loopq
 end
 function lower_unroll_static(ls::LoopSet, order::Vector{Symbol}, U::Int)
 
