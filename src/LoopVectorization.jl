@@ -698,5 +698,8 @@ end
 include("precompile.jl")
 _precompile_()
 
+function __init__()
+    _precompile_()
+end
 
 end # module
