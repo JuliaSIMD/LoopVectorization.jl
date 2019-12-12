@@ -158,7 +158,11 @@ end
     end
     WT = W * T_size
     V = VType{W,T}
-
+    vectorize_body(N, Nsym, VType{W,T}, unroll_factor, n, body, vecdict, gcpreserve, Wshift, log2unroll, mod)
+end
+@noinline function vectorize_body(
+    N, Nsym, ::Type{V}, unroll_factor, n, body, vecdict, gcpreserve, Wshift, log2unroll, mod
+) where {W,T,V <: Union{SVec{W,T},Vec{W,T}}}
     indexed_expressions = Dict{Symbol,Symbol}() # Symbol, gensymbol
 
     itersym = gensym(:i)
@@ -276,58 +280,7 @@ end
         end
     end
     ### now we walk the body to look for reductions
-    if unroll_factor == 1
-        for ((sym,op),gsym) ∈ reduction_symbols
-            if op == :+ || op == :-
-                pushfirst!(q.args, :($gsym = $mod.vbroadcast($V,zero($T))))
-            elseif op == :* || op == :/
-                pushfirst!(q.args, :($gsym = $mod.vbroadcast($V,one($T))))
-            end
-            if op == :+
-                push!(q.args, :($sym = Base.FastMath.add_fast($sym, $mod.vsum($gsym))))
-            elseif op == :-
-                push!(q.args, :($sym = Base.FastMath.sub_fast($sym, $mod.vsum($gsym))))
-            elseif op == :*
-                push!(q.args, :($sym = Base.FastMath.mul_fast($sym, $mod.SIMDPirates.vprod($gsym))))
-            elseif op == :/
-                push!(q.args, :($sym = Base.FastMath.div_fast($sym, $mod.SIMDPirates.vprod($gsym))))
-            end
-        end
-    else
-        for ((sym,op),gsym_base) ∈ reduction_symbols
-            for uf ∈ 0:unroll_factor-1
-                gsym = Symbol(gsym_base, :_, uf)
-                if op == :+ || op == :-
-                    pushfirst!(q.args, :($gsym = $mod.vbroadcast($V,zero($T))))
-                elseif op == :* || op == :/
-                    pushfirst!(q.args, :($gsym = $mod.vbroadcast($V,one($T))))
-                end
-            end
-            func = ((op == :*) | (op == :/)) ? :($mod.evmul) : :($mod.evadd)
-            uf_new = unroll_factor
-            while uf_new > 1
-                uf_new, uf_prev = uf_new >> 1, uf_new
-                for uf ∈ 0:uf_new - 1 # reduce half divisible by two
-                    push!(q.args, Expr(:(=), Symbol(gsym_base, :_, uf), Expr(:call, func, Symbol(gsym_base, :_, 2uf), Symbol(gsym_base, :_, 2uf + 1))))
-                end
-                uf_firstrem = 2uf_new
-                for uf ∈ uf_firstrem:uf_prev - 1
-                    push!(q.args, Expr(:(=), Symbol(gsym_base, :_, uf - uf_firstrem), Expr(:call, func, Symbol(gsym_base, :_, uf - uf_firstrem), Symbol(gsym_base, :_, uf))))
-                end
-            end
-            gsym = Symbol(gsym_base, :_, 0)
-            if op == :+
-                push!(q.args, :($sym = Base.FastMath.add_fast($sym, $mod.vsum($gsym))))
-            elseif op == :-
-                push!(q.args, :($sym = Base.FastMath.sub_fast($sym, $mod.vsum($gsym))))
-            elseif op == :*
-                push!(q.args, :($sym = Base.FastMath.mul_fast($sym, $mod.SIMDPirates.vprod($gsym))))
-            elseif op == :/
-                push!(q.args, :($sym = Base.FastMath.div_fast($sym, $mod.SIMDPirates.vprod($gsym))))
-            end
-        end
-    end
-    push!(q.args, nothing)
+    add_reductions!(q, V, reduction_symbols, unroll_factor, mod)
     # display(q)
     # We are using pointers, so better add a GC.@preserve.
     # gcpreserve = true
@@ -343,6 +296,62 @@ end
     else
         return q
     end
+end
+
+function add_reductions!(q, ::Type{V}, reduction_symbols, unroll_factor, mod) where {W,T,V <: Union{SVec{W,T},Vec{W,T}}}
+    if unroll_factor == 1
+        for ((sym,op),gsym) ∈ reduction_symbols
+            if op === :+ || op === :-
+                pushfirst!(q.args, :($gsym = $mod.vbroadcast($V,zero($T))))
+            elseif op === :* || op === :/
+                pushfirst!(q.args, :($gsym = $mod.vbroadcast($V,one($T))))
+            end
+            if op === :+
+                push!(q.args, :($sym = Base.FastMath.add_fast($sym, $mod.vsum($gsym))))
+            elseif op === :-
+                push!(q.args, :($sym = Base.FastMath.sub_fast($sym, $mod.vsum($gsym))))
+            elseif op === :*
+                push!(q.args, :($sym = Base.FastMath.mul_fast($sym, $mod.SIMDPirates.vprod($gsym))))
+            elseif op === :/
+                push!(q.args, :($sym = Base.FastMath.div_fast($sym, $mod.SIMDPirates.vprod($gsym))))
+            end
+        end
+    else
+        for ((sym,op),gsym_base) ∈ reduction_symbols
+            for uf ∈ 0:unroll_factor-1
+                gsym = Symbol(gsym_base, :_, uf)
+                if op === :+ || op === :-
+                    pushfirst!(q.args, :($gsym = $mod.vbroadcast($V,zero($T))))
+                elseif op === :* || op === :/
+                    pushfirst!(q.args, :($gsym = $mod.vbroadcast($V,one($T))))
+                end
+            end
+            func = ((op === :*) | (op === :/)) ? :($mod.evmul) : :($mod.evadd)
+            uf_new = unroll_factor
+            while uf_new > 1
+                uf_new, uf_prev = uf_new >> 1, uf_new
+                for uf ∈ 0:uf_new - 1 # reduce half divisible by two
+                    push!(q.args, Expr(:(=), Symbol(gsym_base, :_, uf), Expr(:call, func, Symbol(gsym_base, :_, 2uf), Symbol(gsym_base, :_, 2uf + 1))))
+                end
+                uf_firstrem = 2uf_new
+                for uf ∈ uf_firstrem:uf_prev - 1
+                    push!(q.args, Expr(:(=), Symbol(gsym_base, :_, uf - uf_firstrem), Expr(:call, func, Symbol(gsym_base, :_, uf - uf_firstrem), Symbol(gsym_base, :_, uf))))
+                end
+            end
+            gsym = Symbol(gsym_base, :_, 0)
+            if op === :+
+                push!(q.args, :($sym = Base.FastMath.add_fast($sym, $mod.vsum($gsym))))
+            elseif op === :-
+                push!(q.args, :($sym = Base.FastMath.sub_fast($sym, $mod.vsum($gsym))))
+            elseif op === :*
+                push!(q.args, :($sym = Base.FastMath.mul_fast($sym, $mod.SIMDPirates.vprod($gsym))))
+            elseif op === :/
+                push!(q.args, :($sym = Base.FastMath.div_fast($sym, $mod.SIMDPirates.vprod($gsym))))
+            end
+        end
+    end
+    push!(q.args, nothing)
+    nothing
 end
 
 function insert_mask(x, masksym, reduction_symbols, default_module = :LoopVectorization)
@@ -617,8 +626,10 @@ function vectorload!(
             else
                 throw("Currently only supports up to 2 indices for some reason.")
             end
-        elseif f === :zero || f === :one
-            return Expr(:call, :vbroadcast, V, x)
+        elseif f === :zero
+            return Expr(:call, Expr(:(.), mod, QuoteNode(:vbroadcast)), V, zero(T))
+        elseif f === :one
+            return Expr(:call, Expr(:(.), mod, QuoteNode(:vbroadcast)), V, one(T))
         else
             return x
         end
@@ -635,6 +646,7 @@ end
     itersym = :iter, declared_iter_sym = nothing, VectorizationDict = SLEEFPiratesDict, mod = :LoopVectorization
 ) where {W,T,V <: Union{Vec{W,T},SVec{W,T}}}
     q = prewalk(expr) do x
+        # @show x
         if x isa Symbol
             if x === declared_iter_sym
                 isymvec = gensym(itersym)
