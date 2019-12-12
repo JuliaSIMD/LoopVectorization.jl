@@ -3,7 +3,7 @@ module LoopVectorization
 using VectorizationBase, SIMDPirates, SLEEFPirates, MacroTools, Parameters
 using VectorizationBase: REGISTER_SIZE, extract_data, num_vector_load_expr
 using SIMDPirates: VECTOR_SYMBOLS, evadd, evmul
-using MacroTools: @capture, prewalk, postwalk
+using MacroTools: prewalk, postwalk
 
 export vectorizable, @vectorize, @vvectorize
 
@@ -61,46 +61,82 @@ const SLEEFPiratesDict = Dict{Symbol,Tuple{Symbol,Symbol}}(
 
 
 
-
+# @noinline function _spirate(ex, dict, macro_escape = true, mod = :LoopVectorization)
+#     ex = postwalk(ex) do x
+#         if @capture(x, a_ += b_)
+#             return :($a = $mod.vadd($a, $b))
+#         elseif @capture(x, a_ -= b_)
+#             return :($a = $mod.vsub($a, $b))
+#         elseif @capture(x, a_ *= b_)
+#             return :($a = $mod.vmul($a, $b))
+#         elseif @capture(x, a_ /= b_)
+#             return :($a = $mod.vdiv($a, $b))
+#         elseif @capture(x, Base.FastMath.add_fast(a__))
+#             return :($mod.vadd($(a...)))
+#         elseif @capture(x, Base.FastMath.sub_fast(a__))
+#             return :($mod.vsub($(a...)))
+#         elseif @capture(x, Base.FastMath.mul_fast(a__))
+#             return :($mod.vmul($(a...)))
+#         elseif @capture(x, Base.FastMath.div_fast(a__))
+#             return :($mod.vfdiv($(a...)))
+#         elseif @capture(x, a_ / sqrt(b_))
+#             return :($a * $mod.rsqrt($b))
+#         elseif @capture(x, inv(sqrt(a_)))
+#             return :($mod.rsqrt($a))
+#         elseif @capture(x, @horner a__)
+#             return SIMDPirates.horner(a...)
+#         elseif @capture(x, Base.Math.muladd(a_, b_, c_))
+#             return :( $mod.vmuladd($a, $b, $c) )
+#         elseif isa(x, Symbol) && !occursin("@", string(x))
+#             vec_mod, vec_sym = get(dict, x, (:not_found,:not_found))
+#             if vec_sym != :not_found
+#                 return :($mod.$vec_mod.$vec_sym)
+#             else
+#                 vec_sym = get(VECTOR_SYMBOLS, x, :not_found)
+#                 return vec_sym == :not_found ? x : :($mod.SIMDPirates.$(vec_sym))
+#             end
+#         else
+#             return x
+#         end
+#     end
+#     macro_escape ? esc(ex) : ex
+# end
 
 @noinline function _spirate(ex, dict, macro_escape = true, mod = :LoopVectorization)
     ex = postwalk(ex) do x
-        if @capture(x, a_ += b_)
-            return :($a = $mod.vadd($a, $b))
-        elseif @capture(x, a_ -= b_)
-            return :($a = $mod.vsub($a, $b))
-        elseif @capture(x, a_ *= b_)
-            return :($a = $mod.vmul($a, $b))
-        elseif @capture(x, a_ /= b_)
-            return :($a = $mod.vdiv($a, $b))
-        elseif @capture(x, Base.FastMath.add_fast(a__))
-            return :($mod.vadd($(a...)))
-        elseif @capture(x, Base.FastMath.sub_fast(a__))
-            return :($mod.vsub($(a...)))
-        elseif @capture(x, Base.FastMath.mul_fast(a__))
-            return :($mod.vmul($(a...)))
-        elseif @capture(x, Base.FastMath.div_fast(a__))
-            return :($mod.vfdiv($(a...)))
-        elseif @capture(x, a_ / sqrt(b_))
-            return :($a * $mod.rsqrt($b))
-        elseif @capture(x, inv(sqrt(a_)))
-            return :($mod.rsqrt($a))
-        elseif @capture(x, @horner a__)
-            return SIMDPirates.horner(a...)
-        elseif @capture(x, Base.Math.muladd(a_, b_, c_))
-            return :( $mod.vmuladd($a, $b, $c) )
-        elseif isa(x, Symbol) && !occursin("@", string(x))
-            vec_mod, vec_sym = get(dict, x, (:not_found,:not_found))
-            if vec_sym != :not_found
-                return :($mod.$vec_mod.$vec_sym)
-            else
-                vec_sym = get(VECTOR_SYMBOLS, x, :not_found)
-                return vec_sym == :not_found ? x : :($mod.SIMDPirates.$(vec_sym))
+        if x isa Symbol
+            vec_mod, vec_sym = get(dict, x) do
+                mod, get(VECTOR_SYMBOLS, x) do
+                    x
+                end
             end
-        else
-            return x
+            return x === vec_sym ? x : Expr(:(.), vec_mod === mod ? mod : Expr(:(.), mod, QuoteNode(vec_mod)), QuoteNode(vec_sym))
         end
+        x isa Expr || return x
+        xexpr::Expr = x
+        # if xexpr.head === :macrocall && first(xexpr.args) === Symbol("@horner")
+            # return SIMDPirates.horner(@view(xexpr.args[3:end])...)
+        # end
+        xexpr.head === :call || return x
+        f = first(xexpr.args)
+        if f == :(Base.FastMath.add_fast)
+            vf = :vadd
+        elseif f == :(Base.FastMath.sub_fast)
+            vf = :vsub
+        elseif f == :(Base.FastMath.mul_fast)
+            vf = :vmul
+        elseif f == :(Base.FastMath.div_fast)
+            vf = :vfdiv
+        elseif f == :(Base.FastMath.sqrt)
+            vf = :vsqrt
+        elseif f == :(Base.Math.muladd)
+            vf = :vmuladd
+        else
+            return xexpr
+        end
+        return Expr(:call, Expr(:(.), mod, QuoteNode(vf)), @view(x.args[2:end])...)
     end
+    # println(ex)
     macro_escape ? esc(ex) : ex
 end
 
@@ -129,15 +165,15 @@ end
 
 @noinline function vectorize_body(N, Tsym::Symbol, uf, n, body, vecdict = SLEEFPiratesDict, VType = SVec, gcpreserve::Bool = true , mod = :LoopVectorization)
     if Tsym == :Float32
-        vectorize_body(N, Float32, uf, n, body, vecdict, VType, mod)
+        vectorize_body(N, Float32, uf, n, body, vecdict, VType, gcpreserve, mod)
     elseif Tsym == :Float64
-        vectorize_body(N, Float64, uf, n, body, vecdict, VType, mod)
+        vectorize_body(N, Float64, uf, n, body, vecdict, VType, gcpreserve, mod)
     else
         throw("Type $Tsym is not supported.")
     end
 end
 @noinline function vectorize_body(
-    N, ::Type{T}, unroll_factor::Int, n::Symbol, body::Array{Any},
+    N, ::Type{T}, unroll_factor::Int, n::Symbol, body,
     vecdict::Dict{Symbol,Tuple{Symbol,Symbol}} = SLEEFPiratesDict,
     @nospecialize(VType = SVec), gcpreserve::Bool = true, mod = :LoopVectorization
 ) where {T}
@@ -207,9 +243,12 @@ end
         ## body preamble must define indexed symbols
         ## we only need that for loads.
         dicts = (indexed_expressions, reduction_symbols, loaded_exprs, loop_constants_dict)
-        push!(main_body.args,
-            _vectorloads!(main_body, q, dicts, V, loop_constants_quote, b;
-                            itersym = itersym, declared_iter_sym = n, VectorizationDict = vecdict, mod = mod)
+        push!(
+            main_body.args,
+            _vectorloads!(
+                main_body, q, dicts, V, loop_constants_quote, b;
+                itersym = itersym, declared_iter_sym = n, VectorizationDict = vecdict, mod = mod
+            )
         )# |> x -> (@show(x), _pirate(x)))
     end
     # @show main_body
@@ -359,6 +398,7 @@ function insert_mask(x, masksym, reduction_symbols, default_module = :LoopVector
     local fs::Symbol, mf::Expr, f::Union{Symbol,Expr}, call::Expr, a::Symbol
     if x.head === :(=) # check for reductions
         x.args[2] isa Expr || return x
+        # @show x
         a = x.args[1]
         call = x.args[2]
         f = first(call.args)
@@ -687,13 +727,84 @@ Returns true if a substitution was made, false otherwise.
     subbed, expr
 end
 
+# function loop_components(expr::Expr)
+#     expr.head === :for || throw("Macro must be applied to a for loop.")
+#     iterdef = expr.args[1]
+#     itersym = iterdef.args[1]
+#     iterrange = iterdef.args[2]
+#     @assert iterrange isa Expr
+#     @assert length(expr.args) == 2
+#     body = expr.args[2]
+#     iterlength = if iterrange.head === :call
+#         if iterrange.args[1] === :(:)
+#             if iterrange.args[2] == 1
+#                 iterrange.args[3]
+#             else
+#                 Expr(:(-), iterrange.args[3], iterrange.args[2])
+#             end
+#         elseif iterrange.args[1] === :eachindex
+#             if length(iterrange.args) == 2
+#                 Expr(:call, :length, iterrange.args[2])
+#             else
+#                 il = Expr(:call, :min)
+#                 for i ∈ 2:length(iterrange.args)
+#                     push!(il.args, Expr(:call, :length, iterrange.args[i]))
+#                 end
+#                 il
+#             end
+#         else
+#             throw("could not match loop expression.")
+#         end
+#     end
+#     @show iterdef, itersym
+#     iterlength, itersym, body
+# end
 
-"""
-Arguments are
-@vectorize Type UnrollFactor forloop
 
-The default type is Float64, and default UnrollFactor is 1 (no unrolling).
-"""
+# # Arguments are
+# # @vectorize Type UnrollFactor forloop
+
+# # The default type is Float64, and default UnrollFactor is 1 (no unrolling).
+
+
+# for vec ∈ (false,true)
+#     if vec
+#         V = Vec
+#         macroname = :vvectorize
+#     else
+#         V = SVec
+#         macroname = :vectorize
+#     end
+#     for gcpreserve ∈ (true,false)
+#         if !gcpreserve
+#             macroname = Symbol(macroname, :_unsafe)
+#         end
+#         @eval macro $macroname(expr)
+#             iterlength, itersym, body = loop_components(expr)
+#             esc(vectorize_body(iterlength, Float64, 1, itersym, body, SLEEFPiratesDict, $V, $gcpreserve))
+#         end
+#         @eval macro $macroname(type, expr)
+#             iterlength, itersym, body = loop_components(expr)
+#             esc(vectorize_body(iterlength, type, 1, itersym, body, SLEEFPiratesDict, $V, $gcpreserve))
+#         end
+#         @eval macro $macroname(unroll_factor::Integer, expr)
+#             iterlength, itersym, body = loop_components(expr)
+#             esc(vectorize_body(iterlength, Float64, unroll_factor, itersym, body, SLEEFPiratesDict, $V, $gcpreserve))
+#         end
+#         @eval macro $macroname(type, unroll_factor::Integer, expr)
+#             iterlength, itersym, body = loop_components(expr)
+#             esc(vectorize_body(iterlength, type, unroll_factor, itersym, body, SLEEFPiratesDict, $V, $gcpreserve))
+#         end
+#         @eval macro $macroname(type, mod::Union{Symbol,Module}, expr)
+#             iterlength, itersym, body = loop_components(expr)
+#             esc(vectorize_body(iterlength, type, 1, itersym, body, SLEEFPiratesDict, $V, $gcpreserve, mod))
+#         end
+#         @eval macro $macroname(type, mod::Union{Symbol,Module}, unroll_factor::Integer, expr)
+#             iterlength, itersym, body = loop_components(expr)
+#             esc(vectorize_body(iterlength, type, unroll_factor, itersym, body, SLEEFPiratesDict, $V, $gcpreserve, mod))
+#         end
+#     end
+# end
 
 for vec ∈ (false,true)
     if vec
