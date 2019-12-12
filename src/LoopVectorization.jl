@@ -204,7 +204,7 @@ end
         ## we only need that for loads.
         dicts = (indexed_expressions, reduction_symbols, loaded_exprs, loop_constants_dict)
         push!(main_body.args,
-            _vectorloads!(main_body, q, dicts, V, W, T, loop_constants_quote, b;
+            _vectorloads!(main_body, q, dicts, V, loop_constants_quote, b;
                             itersym = itersym, declared_iter_sym = n, VectorizationDict = vecdict, mod = mod)
         )# |> x -> (@show(x), _pirate(x)))
     end
@@ -345,241 +345,316 @@ end
     end
 end
 
+function insert_mask(x, masksym, reduction_symbols, default_module = :LoopVectorization)
+    x isa Expr || return x
+    local fs::Symbol, mf::Expr, f::Union{Symbol,Expr}, call::Expr, a::Symbol
+    if x.head === :(=) # check for reductions
+        x.args[2] isa Expr || return x
+        a = x.args[1]
+        call = x.args[2]
+        f = first(call.args)
+        for i ∈ 2:length(call.args)
+            if call.args[i] === a
+                if f isa Symbol
+                    call = Expr(:call, Expr(:., default_module, QuoteNode(f)), @view(call.args[2:end])...)
+                end
+                return Expr(:(=), a, Expr(:call, Expr(:., default_module, QuoteNode(:vifelse)), masksym, call, a))
+            end
+        end
+        return x
+    elseif x.head === :call # check for vload or vstore
+        f = first(x.args)::Union{Symbol,Expr}
+        if f isa Symbol
+            fs = f
+            (fs === :vload || fs === :vstore!) || return x
+            mf = Expr(:., default_module, QuoteNode(f))
+        elseif f isa Expr
+            # @show f
+            fs = f.args[2].value
+            (fs === :vload || fs === :vstore!) || return x
+            mf = f
+        end
+        return Expr(:call, mf, @view(x.args[2:end])..., masksym)
+    else
+        x
+    end
+end
+
 @noinline function add_masks(expr, masksym, reduction_symbols, default_module = :LoopVectorization)
     # println("Called add masks!")
     # postwalk(expr) do x
     prewalk(expr) do x
-        if @capture(x, M_.vstore!(args__))
-            M === nothing && (M = default_module)
-            return :($M.vstore!($(args...), $masksym))
-        elseif @capture(x, M_.vload(args__))
-            M === nothing && (M = default_module)
-            return :($M.vload($(args...), $masksym))
-        # We mask the reductions, because the odds of them getting contaminated and therefore poisoning the results seems too great
-        # for reductions to be practical. If what we're vectorizing is simple enough not to worry about contamination...then
-        # it ought to be simple enough so we don't need @vectorize.
-        elseif @capture(x, reductionA_ = M_.vadd(reductionA_, B_ ) ) || @capture(x, reductionA_ = M_.vadd(B_, reductionA_ ) ) || @capture(x, reductionA_ = vadd(reductionA_, B_ ) ) || @capture(x, reductionA_ = vadd(B_, reductionA_ ) )
-            M === nothing && (M = default_module)
-            return :( $reductionA = $M.vifelse($masksym, $M.vadd($reductionA, $B), $reductionA) )
-        elseif @capture(x, reductionA_ = M_.vmul(reductionA_, B_ ) ) || @capture(x, reductionA_ = M_.vmul(B_, reductionA_ ) ) ||  @capture(x, reductionA_ = vmul(reductionA_, B_ ) ) || @capture(x, reductionA_ = vmul(B_, reductionA_ ) )
-            M === nothing && (M = default_module)
-            return :( $reductionA = $M.vifelse($masksym, $M.vmul($reductionA, $B), $reductionA) )
-        elseif @capture(x, reductionA_ = M_.f_(B_, C_, reductionA_) ) ||  @capture(x, reductionA_ = f_(B_, C_, reductionA_) )
-            M === nothing && (M = default_module)
-            return :( $reductionA = $M.vifelse($masksym, $M.$f($B, $C, $reductionA), $reductionA) )
-        # elseif @capture(x, reductionA_ = M_.vfnmadd(B_, C_, reductionA_ ) ) || @capture(x, reductionA_ = vfnmadd(B_, C_, reductionA_ ) )
-            # M === nothing && (M = default_module)
-            # return :( $reductionA = $M.vifelse($masksym, $M.vfnmadd($B, $C, $reductionA), $reductionA) )
-        elseif @capture(x, reductionA_ = M_.f_(reductionA_, B_ ) ) || @capture(x, reductionA_ = f_(reductionA_, B_ ) )
-            M === nothing && (M = default_module)
-            return :( $reductionA = $M.vifelse($masksym, $M.$f($reductionA, $B), $reductionA) )
-#        elseif @capture(x, reductionA_ = M_.vmul(reductionA_, B_ ) )
-            # M === nothing && (M = :(LoopVectorization.SIMDPirates))
-#            return :( $reductionA = $M.vifelse($masksym, $M.vmul($reductionA, $B), $reductionA) )
-        else
-            return x
-        end
+        insert_mask(x, masksym, reduction_symbols, default_module)
     end
 end
 
-
-@noinline function _vectorloads!(main_body, pre_quote, dicts, V, W, VET, loop_constants_quote, expr;
-                                 itersym = :iter, declared_iter_sym = nothing, VectorizationDict = SLEEFPiratesDict, mod = :LoopVectorization)
-    (indexed_expressions, reduction_symbols, loaded_exprs, loop_constants_dict) = dicts
-    _spirate(prewalk(expr) do x
-        # @show x
-        # @show main_body
-        if @capture(x, A_[i__] += B_)
-             x = :($A[$(i...)] = $B + $A[$(i...)])
-        elseif @capture(x, A_[i__] -= B_)
-             x = :($A[$(i...)] = $A[$(i...)] - $B)
-        elseif @capture(x, A_[i__] *= B_)
-             x = :($A[$(i...)] = $B * $A[$(i...)])
-        elseif @capture(x, A_[i__] /= B_)
-             x = :($A[$(i...)] = $A[$(i...)] / $B)
+function vectorize_assign_linear_index(A, B, i, indexed_expressions, itersym, declared_iter_sym, mod)
+    pA = get!(indexed_expressions, A) do
+        gensym(Symbol(:p,A))
+    end
+    ind = if i == declared_iter_sym
+        itersym
+    elseif isa(i, Expr)
+        last(subsymbol(i, declared_iter_sym, itersym))
+    else
+        i
+    end
+    Expr(:call, Expr(:., mod, QuoteNode(:vstore!)), pA, B, ind)
+end
+function vectorize_assign_cartesian_index(A, B, i, j, indexed_expressions, itersym, declared_iter_sym, mod)
+    pA = get!(indexed_expressions, A) do
+        gensym(Symbol(:p,A))
+    end
+    sym = gensym(Symbol(pA, :_, i))
+    if i == declared_iter_sym
+        # then i gives the row number
+        # ej gives the number of columns the setindex! is shifted
+        ej = isa(j, Number) ? j - 1 : Expr(:call, :-, j, 1)
+        stridexpr = :($mod.LoopVectorization.stride_row($A))
+        if stridexpr ∈ keys(loop_constants_dict)
+            stridesym = loop_constants_dict[stridexpr]
+        else
+            stridesym = gensym(:stride)
+            push!(loop_constants_quote.args, :( $stridesym = $stridexpr ))
+            loop_constants_dict[stridexpr] = stridesym
         end
-        if @capture(x, A_[i_] = B_) || @capture(x, setindex!(A_, B_, i_))
-            # println("Made it.") 
-            if A ∉ keys(indexed_expressions)
-                # pA = esc(gensym(A))
-                # pA = esc(Symbol(:p,A))
-                pA = gensym(Symbol(:p,A))
-                indexed_expressions[A] = pA
+        return Expr(:call, Expr(:., mod, QuoteNode(:vstore!)), pA, B, Expr(:call, :+, itersym, Expr(:call, :*, ej, stridesym)))
+        # return :($mod.vstore!($pA, $B, $itersym + $ej*$stridesym))
+    else
+        throw("Indexing columns with vectorized loop variable is not supported.")
+    end
+end
+function vectorize_linear_index!(main_body, loaded_exprs, indexed_expressions, A, i, itersym, declared_iter_sym, mod, V)
+    pA = get!(indexed_expressions, A) do
+        gensym(Symbol(:p,A))
+    end
+    ## check to see if we are to do a vector load or a broadcast
+    if i === declared_iter_sym
+        load_expr = Expr(:call, Expr(:., mod, QuoteNode(:vload)), V, pA, itersym )
+    elseif isa(i, Expr)
+        contains_itersym, i2 = subsymbol(i, declared_iter_sym, itersym)
+        if contains_itersym
+            load_expr = :($mod.vload($V, $pA, $i2 ))
+        else
+            load_expr = :($mod.vbroadcast($V, $pA - 1 + $i))
+        end
+    else
+        load_expr = :($mod.vbroadcast($V, $pA - 1 + $i))
+    end
+    # performs a CSE on load expressions
+    get!(loaded_exprs, load_expr) do
+        sym = gensym(Symbol(pA, :_i))
+        push!(main_body.args, Expr(:(=), sym, load_expr))
+        sym
+    end
+end
+function vectorize_cartesian_index!(main_body, loaded_exprs, indexed_expressions, A, i, j, itersym, declared_iter_sym, mod, V)
+    pA = get!(indexed_expressions, A) do
+        gensym(Symbol(:p,A))
+    end
+    ej = isa(j, Number) ?  j - 1 : Expr(:(-), j, 1)
+    if i === declared_iter_sym
+        stridexpr = :($mod.LoopVectorization.stride_row($A))
+        if stridexpr ∈ keys(loop_constants_dict)
+            stridesym = loop_constants_dict[stridexpr]
+        else
+            stridesym = gensym(:stride)
+            push!(loop_constants_quote.args, :( $stridesym = $stridexpr ))
+            loop_constants_dict[stridexpr] = stridesym
+        end
+        load_expr = :($mod.vload($V, $pA, $itersym + $ej*$stridesym))
+    elseif j == declared_iter_sym
+        throw("Indexing columns with vectorized loop variable is not supported.")
+    else
+        # when loading something not indexed by the loop variable,
+        # we assume that the intension is to broadcast
+        stridexpr = :($mod.LoopVectorization.stride_row($A))
+        if stridexpr ∈ keys(loop_constants_dict)
+            stridesym = loop_constants_dict[stridexpr]
+        else
+            stridesym = gensym(:stride)
+            push!(loop_constants_quote.args, :( $stridesym = $stridexpr ))
+            loop_constants_dict[stridexpr] = stridesym
+        end
+        # added -1 because i is not the declared itersym, therefore the row number is presumably 1-indexed.
+        load_expr = :($mod.vbroadcast($V, LoopVectorization.VectorizationBase.load($pA + $i - 1 + $ej*$stridesym)))
+    end
+    # performs a CSE on load expressions
+    get!(loaded_exprs, load_expr) do
+        sym = gensym(Symbol(pA, :_, i))
+        push!(main_body.args, :($sym = $load_expr))
+        sym
+    end
+end
+function vectorize_broadcast_across_columns(indexed_expressions, loop_constants_quote, loop_constants_dict, B, A, i, itersym, declared_iter_sym, mod)
+    ## Capture if there are multiple assignments...
+    pA = get!(indexed_expressions, A) do
+        gensym(Symbol(:p,A))
+    end
+    if i === declared_iter_sym
+        isym = itersym
+    else
+        isym = i
+    end
+    br = gensym(:B)
+    coliter = gensym(:j)
+    stridexpr = :($mod.LoopVectorization.stride_row($A))
+    stridesym = get!(loop_constants_dict, stridexpr) do
+        stridesym = gensym(:stride)
+        push!(loop_constants_quote.args, Expr(:(=), stridesym, stridexpr ))
+        stridesym
+    end
+    quote
+        $br = $mod.LoopVectorization.extract_data.($B)
+        for $coliter ∈ 0:length($br)-1
+            @inbounds $mod.vstore!($pA, getindex($br,1+$coliter), $isym + $stridesym * $coliter)
+        end
+    end
+end
+function vectorload!(
+    dicts, main_body, loop_constants_quote,
+    x::Expr, ::Type{V}, itersym, declared_iter_sym, mod
+) where {W,T,V <: Union{Vec{W,T},SVec{W,T}}}
+    (indexed_expressions, reduction_symbols, loaded_exprs, loop_constants_dict) = dicts
+    if x.head === :+=
+        x = Expr(:(=), first(x.args), Expr(:call, :+, x.args...))
+    elseif x.head === :-=
+        x = Expr(:(=), first(x.args), Expr(:call, :-, x.args...))
+    elseif x.head === :*=
+        x = Expr(:(=), first(x.args), Expr(:call, :*, x.args...))
+    elseif x.head === :/=
+        x = Expr(:(=), first(x.args), Expr(:call, :/, x.args...))
+    end
+    local Assigned::Union{Expr,Symbol}, Assignedexpr::Expr, Assignedsym::Symbol, f::Union{Expr,Symbol}, fs::Symbol, B::Union{Symbol,Expr}, Bexpr::Expr
+    if x.head === :(=)
+        Assigned = first(x.args)
+        if Assigned isa Symbol
+            B = x.args[2]
+            if B isa Symbol
+                return x
             else
-                pA = indexed_expressions[A]
-            end
-            if i == declared_iter_sym
-                return :($mod.vstore!($pA, $B, $itersym))
-            elseif isa(i, Expr)
-                contains_itersym, i2 = subsymbol(i, declared_iter_sym, itersym)
-                return :($mod.vstore!($pA, $B, $i2))
-            else
-                return :($mod.vstore!($pA, $B, $i))
-            end
-        elseif @capture(x, A_[i_,j_] = B_) || @capture(x, setindex!(A_, B_, i_, j_))
-            if A ∉ keys(indexed_expressions)
-                pA = gensym(Symbol(:p, A))
-                indexed_expressions[A] = pA
-            else
-                pA = indexed_expressions[A]
-            end
-            sym = gensym(Symbol(pA, :_, i))
-            if i == declared_iter_sym
-                # then i gives the row number
-                # ej gives the number of columns the setindex! is shifted
-                ej = isa(j, Number) ? j - 1 : :($j - 1)
-                stridexpr = :($mod.LoopVectorization.stride_row($A))
-                if stridexpr ∈ keys(loop_constants_dict)
-                    stridesym = loop_constants_dict[stridexpr]
+                Assignedsym = Assigned
+                Bexpr = B
+                if Bexpr.head === :call
+                    f = first(Bexpr.args)
+                    if f isa Symbol
+                        fs = f
+                        if fs === :+ || fs === :*
+                            for i ∈ 2:length(Bexpr.args)
+                                if Bexpr.args[i] === Assignedsym # this is a reduction
+                                    gA = get!(() -> gensym(Assignedsym), reduction_symbols, (Assignedsym, fs))
+                                    vf = fs === :+ ? :vadd : :vmul
+                                    call = Expr(:call, Expr(:., mod, QuoteNode(vf)), gA )
+                                    for j ∈ 2:length(Bexpr.args)
+                                        j == i && continue
+                                        push!(call.args, Bexpr.args[j])
+                                    end
+                                    return Expr(:(=), gA, call)
+                                end
+                            end
+                        elseif (fs === :- || fs === :/) && Bexpr.args[2] === Assignedsym
+                            gA = get!(() -> gensym(Assignedsym), reduction_symbols, (Assignedsym, fs))
+                            return Expr(:(=), gA, Expr(:call, Expr(:., mod, QuoteNode(fs === :- ? :vadd : :vmul)), gA, Bexpr.args[3] ))
+                        end
+                        return x
+                    else
+                        return x
+                    end
                 else
-                    stridesym = gensym(:stride)
-                    push!(loop_constants_quote.args, :( $stridesym = $stridexpr ))
-                    loop_constants_dict[stridexpr] = stridesym
+                    return x
                 end
-                return :($mod.vstore!($pA, $B, $itersym + $ej*$stridesym))
-            else
-                throw("Indexing columns with vectorized loop variable is not supported.")
             end
-        elseif (@capture(x, A_ += B_) || @capture(x, A_ = A_ + B_) || @capture(x, A_ = B_ + A_)) && A isa Symbol
-            # @show A, typeof(A)
-            gA = get!(() -> gensym(A), reduction_symbols, (A, :+))
-            return :( $gA = $mod.vadd($gA, $B ))
-        elseif (@capture(x, A_ -= B_) || @capture(x, A_ = A_ - B_)) && A isa Symbol
-            # @show A, typeof(A)
-            gA = get!(() -> gensym(A), reduction_symbols, (A, :-))
-            return :( $gA = $mod.vadd($gA, $B ))
-        elseif (@capture(x, A_ *= B_) || @capture(x, A_ = A_ * B_) || @capture(x, A_ = B_ * A_)) && A isa Symbol
-            # @show A, typeof(A)
-            gA = get!(() -> gensym(A), reduction_symbols, (A, :*))
-            return :( $gA = $mod.vmul($gA, $B ))
-        elseif (@capture(x, A_ /= B_) || @capture(x, A_ = A_ / B_)) && A isa Symbol
-            # @show A, typeof(A)
-            gA = get!(() -> gensym(A), reduction_symbols, (A, :/))
-            return :( $gA = $mod.vmul($gA, $B ))
-        elseif @capture(x, A_[i_]) || @capture(x, getindex(A_, i_))
-            if A ∉ keys(indexed_expressions)
-                # pA = esc(gensym(A))
-                # pA = esc(Symbol(:p,A))
-                pA = gensym(Symbol(:p,A))
-                indexed_expressions[A] = pA
-            else
-                pA = indexed_expressions[A]
-            end
-            ## check to see if we are to do a vector load or a broadcast
-            if i == declared_iter_sym
-                load_expr = :($mod.vload($V, $pA, $itersym ))
-            elseif isa(i, Expr)
-                contains_itersym, i2 = subsymbol(i, declared_iter_sym, itersym)
-                if contains_itersym
-                    load_expr = :($mod.vload($V, $pA, $i2 ))
+        else
+            Assignedexpr = Assigned
+            if Assignedexpr.head === :ref
+                ninds = length(Assignedexpr.args) -1
+                if ninds == 1
+                    return vectorize_assign_linear_index(
+                        first(Assignedexpr.args), last(x.args), last(Assignedexpr.args),
+                        indexed_expressions, itersym, declared_iter_sym, mod
+                    )
+                elseif ninds == 2
+                    return vectorize_assign_cartesian_index(
+                        first(Assignedexpr.args), last(x.args), Assignedexpr.args[2], Assignedexpr.args[3],
+                        indexed_expressions, itersym, declared_iter_sym, mod
+                    )
                 else
-                    load_expr = :($mod.vbroadcast($V, $pA - 1 + $i))
-                end
-            else
-                load_expr = :($mod.vbroadcast($V, $pA - 1 + $i))
-            end
-            # performs a CSE on load expressions
-            if load_expr ∈ keys(loaded_exprs)
-                sym = loaded_exprs[load_expr]
-            else
-                sym = gensym(Symbol(pA, :_i))
-                loaded_exprs[load_expr] = sym
-                push!(main_body.args, :($sym = $load_expr))
-            end
-            # return the symbol we assigned the load to.
-            return sym
-        elseif @capture(x, A_[i_, j_]) || @capture(x, getindex(A_, i_, j_))
-            if A ∉ keys(indexed_expressions)
-                # pA = esc(gensym(A))
-                # pA = esc(Symbol(:p,A))
-                pA = gensym(Symbol(:p,A))
-                indexed_expressions[A] = pA
-            else
-                pA = indexed_expressions[A]
-            end
-            ej = isa(j, Number) ?  j - 1 : :($j - 1)
-            if i == declared_iter_sym
-                stridexpr = :($mod.LoopVectorization.stride_row($A))
-                if stridexpr ∈ keys(loop_constants_dict)
-                    stridesym = loop_constants_dict[stridexpr]
-                else
-                    stridesym = gensym(:stride)
-                    push!(loop_constants_quote.args, :( $stridesym = $stridexpr ))
-                    loop_constants_dict[stridexpr] = stridesym
-                end
-                load_expr = :($mod.vload($V, $pA, $itersym + $ej*$stridesym))
-            elseif j == declared_iter_sym
-                throw("Indexing columns with vectorized loop variable is not supported.")
-            else
-                # when loading something not indexed by the loop variable,
-                # we assume that the intension is to broadcast
-                stridexpr = :($mod.LoopVectorization.stride_row($A))
-                if stridexpr ∈ keys(loop_constants_dict)
-                    stridesym = loop_constants_dict[stridexpr]
-                else
-                    stridesym = gensym(:stride)
-                    push!(loop_constants_quote.args, :( $stridesym = $stridexpr ))
-                    loop_constants_dict[stridexpr] = stridesym
-                end
-                # added -1 because i is not the declared itersym, therefore the row number is presumably 1-indexed.
-                load_expr = :($mod.vbroadcast($V, LoopVectorization.VectorizationBase.load($pA + $i - 1 + $ej*$stridesym)))
-            end
-            # performs a CSE on load expressions
-            if load_expr ∈ keys(loaded_exprs)
-                sym = loaded_exprs[load_expr]
-            else
-                sym = gensym(Symbol(pA, :_, i))
-                loaded_exprs[load_expr] = sym
-                push!(main_body.args, :($sym = $load_expr))
-            end
-            # return the symbol we assigned the load to.
-            return sym
-        elseif @capture(x, A_[i_,:] .= B_)
-            ## Capture if there are multiple assignments...
-            if A ∉ keys(indexed_expressions)
-                pA = gensym(Symbol(:p,A))
-                indexed_expressions[A] = pA
-            else
-                pA = indexed_expressions[A]
-            end
-            if i == declared_iter_sym
-                isym = itersym
-            else
-                isym = i
-            end
-            br = gensym(:B)
-            br2 = gensym(:B)
-            coliter = gensym(:j)
-            stridexpr = :($mod.LoopVectorization.stride_row($A))
-            if stridexpr ∈ keys(loop_constants_dict)
-                stridesym = loop_constants_dict[stridexpr]
-            else
-                stridesym = gensym(:stride)
-                push!(loop_constants_quote.args, :( $stridesym = $stridexpr ))
-                loop_constants_dict[stridexpr] = stridesym
-            end
-            expr = quote
-                $br = $mod.LoopVectorization.extract_data.($B)
-                for $coliter ∈ 0:length($br)-1
-                    @inbounds $mod.vstore!($pA, getindex($br,1+$coliter), $isym + $stridesym * $coliter)
+                    throw("Currently only supports up to 2 indices for some reason.")
                 end
             end
-            return expr
-        elseif @capture(x, zero(T_))
-            return :(zero($V))
-        elseif @capture(x, one(T_))
-            return :(one($V))
-        elseif @capture(x, B_ ? A_ : C_)
-            return :($mod.vifelse($B, $A, $C))
-        elseif x == declared_iter_sym
-            isymvec = gensym(itersym)
-            push!(pre_quote.args, :($isymvec = SVec($(Expr(:tuple, [:(Core.VecElement{$VET}($(w-W))) for w ∈ 1:W]...)))))
-            push!(main_body.args, :($isymvec = $mod.vadd($isymvec, vbroadcast($V, $W)) ))
-            return isymvec
+        end
+    elseif x.head === :ref
+        if length(x.args) == 2
+            return vectorize_linear_index!(main_body, loaded_exprs, indexed_expressions, x.args[1], x.args[2], itersym, declared_iter_sym, mod, V)
+        elseif length(x.args) == 3
+            return vectorize_cartesian_index!(main_body, loaded_exprs, indexed_expressions, x.args[1], x.args[2], x.args[3], itersym, declared_iter_sym, mod, V)
+        else
+            throw("Currently only supports up to 2 indices for some reason.")
+        end
+    elseif x.head === :call
+        f = first(x.args)
+        if f === :setindex!
+            ninds = length(Assignedexpr.args) - 3
+            if ninds == 1
+                return vectorize_assign_linear_index(
+                    x.args[2], x.args[3], x.args[4],
+                    indexed_expressions, itersym, declared_iter_sym, mod
+                )
+            elseif ninds == 2
+                return vectorize_assign_cartesian_index(
+                    x.args[2], x.args[3], x.args[4], x.args[5],
+                    indexed_expressions, itersym, declared_iter_sym, mod
+                )
+            else
+                throw("Currently only supports up to 2 indices for some reason.")
+            end
+        elseif f === :getindex
+            ninds = length(Assignedexpr.args) - 2
+            if ninds == 1
+                return vectorize_linear_index!(main_body, loaded_exprs, indexed_expressions, x.args[2], x.args[3], itersym, declared_iter_sym, mod, V)
+            elseif ninds == 2
+                return vectorize_cartesian_index!(main_body, loaded_exprs, indexed_expressions, x.args[2], x.args[3], x.args[4], itersym, declared_iter_sym, mod, V)
+            else
+                throw("Currently only supports up to 2 indices for some reason.")
+            end
+        elseif f === :zero || f === :one
+            return Expr(:call, :vbroadcast, V, x)
         else
             return x
         end
-    end, VectorizationDict, false, mod) # macro_escape = false
+    elseif x.head === :if
+        return Expr(:call, Expr(:(.), mod, QuoteNode(:vifelse)), x.args...)
+    elseif x.head === :(.=) && x.args[1].args[3] === :(:)
+        return vectorize_broadcast_across_columns(indexed_expressions, loop_constants_dict, B, A, i, itersym, declared_iter_sym, mod)
+    end
+    x
+end
+
+@noinline function _vectorloads!(
+    main_body, pre_quote, dicts, ::Type{V}, loop_constants_quote, expr;
+    itersym = :iter, declared_iter_sym = nothing, VectorizationDict = SLEEFPiratesDict, mod = :LoopVectorization
+) where {W,T,V <: Union{Vec{W,T},SVec{W,T}}}
+    q = prewalk(expr) do x
+        if x isa Symbol
+            if x === declared_iter_sym
+                isymvec = gensym(itersym)
+                if V == SVec
+                    push!(pre_quote.args, :($isymvec = SVec($(Expr(:tuple, [:(Core.VecElement{$T}($(w-W))) for w ∈ 1:W]...)))))
+                else
+                    push!(pre_quote.args, :($isymvec = $(Expr(:tuple, [:(Core.VecElement{$T}($(w-W))) for w ∈ 1:W]...))))
+                end
+                push!(main_body.args, :($isymvec = $mod.vadd($isymvec, vbroadcast($V, $W)) ))
+                return isymvec
+            else
+                return x
+            end
+        end
+        x isa Expr || return x
+        vectorload!(
+            dicts, main_body, loop_constants_quote, x, V, itersym, declared_iter_sym, mod            
+        )       
+    end
+    _spirate(q, VectorizationDict, false, mod) # macro_escape = false
 end
 
 """
