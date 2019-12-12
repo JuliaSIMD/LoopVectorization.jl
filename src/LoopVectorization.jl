@@ -346,11 +346,11 @@ function add_reductions!(q, ::Type{V}, reduction_symbols, unroll_factor, mod) wh
                 pushfirst!(q.args, :($gsym = $mod.vbroadcast($V,one($T))))
             end
             if op === :+
-                push!(q.args, :($sym = Base.FastMath.add_fast($sym, $mod.vsum($gsym))))
+                push!(q.args, :($sym = $mod.SIMDPirates.reduced_add($sym, $gsym)))
             elseif op === :-
                 push!(q.args, :($sym = Base.FastMath.sub_fast($sym, $mod.vsum($gsym))))
             elseif op === :*
-                push!(q.args, :($sym = Base.FastMath.mul_fast($sym, $mod.SIMDPirates.vprod($gsym))))
+                push!(q.args, :($sym = $mod.SIMDPirates.reduced_prod($sym, $gsym)))
             elseif op === :/
                 push!(q.args, :($sym = Base.FastMath.div_fast($sym, $mod.SIMDPirates.vprod($gsym))))
             end

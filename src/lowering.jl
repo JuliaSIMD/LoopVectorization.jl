@@ -298,9 +298,8 @@ function lower_nest(
     loopstart::Union{Int,Symbol}, W::Int,
     mask::Union{Nothing,Symbol,Unsigned} = nothing, exprtype::Symbol = :while
 )
-    lo = ls.loop_order
-    ops = lo.oporder
-    order = lo.loopnames
+    ops = oporder(ls)
+    order = names(ls)
     istiled = T != -1
     loopsym = order[n]
     nloops = num_loops(ls)

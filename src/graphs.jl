@@ -28,9 +28,8 @@ isdense(::Type{<:DenseArray}) = true
 
 @enum OperationType begin
     memload
+    compute
     memstore
-    compute_new
-    compute_update
     # accumulator
 end
 
@@ -55,17 +54,15 @@ struct Operation
     elementbytes::Int
     instruction::Symbol
     node_type::OperationType
-    # dependencies::Vector{Symbol}
     dependencies::Set{Symbol}
     reduced_deps::Set{Symbol}
-    # dependencies::Set{Symbol}
     parents::Vector{Operation}
-    children::Vector{Operation}
+    # children::Vector{Operation}
     numerical_metadata::Vector{Int} # stride of -1 indicates dynamic
     symbolic_metadata::Vector{Symbol}
-    # strides::Dict{Symbol,Union{Symbol,Int}}
     function Operation(
         identifier,
+        variable,
         elementbytes,
         instruction,
         node_type,
@@ -73,7 +70,7 @@ struct Operation
     )
         new(
             identifier, variable, elementbytes, instruction, node_type,
-            Set{Symbol}(), Operation[], Operation[], Int[], Symbol[]#, Dict{Symbol,Union{Symbol,Int}}()
+            Set{Symbol}(), Set{Symbol}(), Operation[], Int[], Symbol[]
         )
     end
 end
@@ -84,12 +81,13 @@ function isreduction(op::Operation)
     (op.node_type == memstore) && (length(op.symbolic_metadata) < length(op.dependencies))# && issubset(op.symbolic_metadata, op.dependencies)
 end
 isload(op::Operation) = op.node_type == memload
+iscompute(op::Operation) = op.node_type == compute
 isstore(op::Operation) = op.node_type == memstore
 accesses_memory(op::Operation) = isload(op) | isstore(op)
 elsize(op::Operation) = op.elementbytes
 dependson(op::Operation, sym::Symbol) = sym ∈ op.dependencies
 parents(op::Operation) = op.parents
-children(op::Operation) = op.children
+# children(op::Operation) = op.children
 loopdependencies(op::Operation) = op.dependencies
 reduceddependencies(op::Operation) = op.reduced_deps
 identifier(op::Operation) = op.identifier
@@ -159,29 +157,57 @@ end
 
 # load/compute/store × isunroled × istiled × pre/post loop × Loop number
 struct LoopOrder <: AbstractArray{Vector{Operation},5}
-    oporder::Array{Vector{Operation},5}
+    oporder::Vector{Vector{Operation}}
     loopnames::Vector{Symbol}
 end
 function LoopOrder(N::Int)
-    LoopOrder( [ Operation[] for i ∈ 1:3, j ∈ 1:2, k ∈ 1:2, l ∈ 1:2, n ∈ 1:N ], Vector{Symbol}(undef, N) )
+    LoopOrder( [ Operation[] for i ∈ 1:24N ], Vector{Symbol}(undef, N) )
 end
+LoopOrder() = LoopOrder(Vector{Operation}[])
 Base.empty!(lo::LoopOrder) = foreach(empty!, lo.oporder)
-Base.size(lo::LoopOrder) = (3,2,2,2,size(lo.oporder,5))
-Base.@propagate_inbounds Base.getindex(lo::LoopOrder, i...) = lo.oporder[i...]
+function Base.resize!(lo::LoopOrder, N::Int)
+    Nold = length(lo.loopnames)
+    resize!(lo.oporder, 24N)
+    for n ∈ 24Nold+1:24N
+        lo.oporder[n] = Operation[]
+    end
+    resize!(lo.loopnames, N)
+    lo
+end
+Base.size(lo::LoopOrder) = (3,2,2,2,length(lo.loopnames))
+Base.@propagate_inbounds Base.getindex(lo::LoopOrder, i::Int) = lo.oporder[i]
+Base.@propagate_inbounds Base.getindex(lo::LoopOrder, i...) = lo.oporder[LinearIndices(size(lo))[i...]]
 
 # Must make it easy to iterate
 struct LoopSet
     loops::Dict{Symbol,Loop} # sym === loops[sym].itersymbol
-    # operations::Vector{Operation}
-    loadops::Vector{Operation} # Split them to make it easier to iterate over just a subset
-    computeops::Vector{Operation}
-    storeops::Vector{Operation}
-    inner_reductions::Set{UInt} # IDs of reduction operations nested within loops and stored.
+    opdict::Dict{Symbol,Operation}
+    operations::Vector{Operation} # Split them to make it easier to iterate over just a subset
+    # computeops::Vector{Operation}
+    # storeops::Vector{Operation}
     outer_reductions::Set{UInt} # IDs of reduction operations that need to be reduced at end.
     loop_order::LoopOrder
-    # strideset::Vector{} 
+    preamble::Expr # TODO: add preamble to lowering
+end
+function LoopSet()
+    LoopSet(
+        Dict{Symbol,Loop}(),
+        Dict{Symbol,Operation}(),
+        Operation[],
+        # Operation[],
+        # Operation[],
+        # Set{UInt}(),
+        Set{UInt}(),
+        LoopOrder(),
+        Expr(:block,)
+    )
 end
 num_loops(ls::LoopSet) = length(ls.loops)
+function oporder(ls::LoopSet)
+    N = length(ls.loop_order.loopnames)
+    reshape(ls.loop_order.oporder, (3,2,2,2,N))
+end
+names(ls::LoopSet) = ls.loop_order.loopnames
 isstaticloop(ls::LoopSet, s::Symbol) = ls.loops[s].hintexact
 looprangehint(ls::LoopSets, s::Symbol) = ls.loops[s].rangehint
 looprangesym(ls::LoopSets, s::Symbol) = ls.loops[s].rangesym
@@ -198,15 +224,71 @@ end
 function Base.length(ls::LoopSet, is::Symbol)
     ls.loops[is].rangehint
 end
-load_operations(ls::LoopSet) = ls.loadops
-compute_operations(ls::LoopSet) = ls.computeops
-store_operations(ls::LoopSet) = ls.storeops
-function operations(ls::LoopSet)
-    Base.Iterators.flatten((
-        load_operations(ls),
-        compute_operations(ls),
-        store_operations(ls)
-    ))
+# load_operations(ls::LoopSet) = ls.loadops
+# compute_operations(ls::LoopSet) = ls.computeops
+# store_operations(ls::LoopSet) = ls.storeops
+# function operations(ls::LoopSet)
+    # Base.Iterators.flatten((
+        # load_operations(ls),
+        # compute_operations(ls),
+        # store_operations(ls)
+    # ))
+# end
+operations(ls::LoopSet) = ls.operations
+function add_loop!(ls::LoopSet, looprange::Expr)
+    itersym = (looprange.args[1])::Symbol
+    r = (looprange.args[2])::Expr
+    @assert r.head === :call
+    f = first(r.args)
+    loop::Loop = if f === :(:)
+        lower = r.args[2]
+        upper = r.args[3]
+        lii::Bool = lower isa Integer
+        uii::Bool = upper isa Integer
+        if lii & uii
+            Loop(itersym, 1 + convert(Int,upper) - convert(Int,lower))
+        else
+            N = gensym(:loop, itersym)
+            ex = if lii
+                Expr(:call, :-, upper, lower - 1)
+            elseif uii
+                Expr(:call, :-, upper + 1, lower)
+            else
+                Expr(:call, :-, Expr(:call, :+, upper, 1), lower)
+            end
+            push!(ls.preamble.args, Expr(:(=), N, ex))
+            Loop(itersym, N)
+        end
+    elseif f === :eachindex
+        N = gensym(:loop, itersym)
+        push!(ls.preamble.args, Expr(:(=), N, Expr(:call, :length, r.args[2])))
+        Loop(itersym, N)
+    else
+        throw("Unrecognized loop range type: $r.")
+    end
+    ls.loops[itersym] = loop
+    nothing
+end
+function add_load!(ls::LoopSet, indexed::Symbol, indices::AbstractVector)
+    Ninds = length(indices)
+    
+    
+
+end
+function add_load_getindex!(ls::LoopSet, ex::Expr)
+    add_load!(ls, ex.args[2], @view(ex.args[3:end]))
+end
+function add_load_ref!(ls::LoopSet, ex::Expr)
+    add_load!(ls, ex.args[1], @view(ex.args[2:end]))
+end
+function add_compute!(ls::LoopSet, ex::Expr)
+
+end
+function add_store!(ls::LoopSet, ex::Expr)
+
+end
+function Base.push!(ls::LoopSet, ex::Expr)
+    
 end
 
 function fillorder!(ls::LoopSet, order::Vector{Symbol}, loopistiled::Bool)
@@ -233,13 +315,7 @@ function fillorder!(ls::LoopSet, order::Vector{Symbol}, loopistiled::Bool)
             included_vars[id] = true
             isunrolled = (unrolled ∈ loopdependencies(op)) + 1
             istiled = (loopistiled ? false : (tiled ∈ loopdependencies(op))) + 1
-            optype = if isload(op)
-                1
-            elseif isstore(op)
-                3
-            else#if compute
-                2
-            end
+            optype = Int(op.node_type)
             after_loop = (length(reduceddependencies(op)) > 0) + 1
             push!(lo[optype,isunrolled,istiled,after_loop,_n], op)
         end
