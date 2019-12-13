@@ -1,4 +1,3 @@
-# using LightGraphs
 
 
 isdense(::Type{<:DenseArray}) = true
@@ -83,10 +82,9 @@ struct Operation
     end
 end
 
-
-
 function isreduction(op::Operation)
-    (op.node_type == memstore) && (length(op.symbolic_metadata) < length(op.dependencies))# && issubset(op.symbolic_metadata, op.dependencies)
+    length(op.reduced_deps) > 0
+    # (op.node_type == memstore) && (length(op.symbolic_metadata) < length(op.dependencies))# && issubset(op.symbolic_metadata, op.dependencies)
 end
 isload(op::Operation) = op.node_type == memload
 iscompute(op::Operation) = op.node_type == compute
@@ -118,37 +116,6 @@ function stride(op::Operation, sym::Symbol)
     op.numerical_metadata[symposition(op,sym)]
 end
 # function
-function unitstride(op::Operation, sym::Symbol)
-    (first(op.symbolic_metadata) === sym) && (first(op.numerical_metadata) == 1)
-end
-function mem_offset(op::Operation, incr::Int = 0)::Union{Symbol,Expr}
-    @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
-    @unpack numerical_metadata, symbolic_metadata = op
-    if incr == 0 && length(numerical_metadata) == 1
-        firstsym = first(symbolic_metadata)
-        if first(numerical_metadata) == 1
-            return firstsym
-        elseif first(numerical_metadata) == -1
-            return Expr(:call, :*,  Symbol(:stride_, op.variable, :_, firstsym), firstsym)
-        else
-            return Expr(:call, :*,  first(numerical_metadata), firstsym)
-        end
-    end
-    ret = Expr(:call, :+, )
-    for i ∈ eachindex(numerical_metadata)
-        sym = symbolic_metadata[i]; num = numerical_metadata[i]
-        if num == 1
-            push!(ret.args, sym)
-        elseif num == -1
-            push!(ret.args, Expr(:call, :*, Symbol(:stride_, op.variable, :_, firstsym), sym))
-        else
-            push!(ret.args, Expr(:call, :*, num, sym))
-        end        
-    end
-    incr == 0 || push!(ret.args, incr)
-    ret
-end
-
 
 struct Loop
     itersymbol::Symbol
@@ -274,12 +241,14 @@ function add_loop!(ls::LoopSet, looprange::Expr)
     ls.loops[itersym] = loop
     nothing
 end
-function add_load!(ls::LoopSet, indexed::Symbol, indices::AbstractVector)
+function add_load!(
+    ls::LoopSet, indexed::Symbol, indices::AbstractVector, nstrides::Vector{Int} = fill(-1, length(indices))
+)
     Ninds = length(indices)
     inds = ShortVector{Symbol}(indices)
     nsets = length(ls.stridesets)
     get!(ls.stridesets, inds) do
-        strides = ShortVector{Symbol}(undef, Ninds - 1)
+        sstrides = ShortVector{Symbol}(undef, Ninds)
         @inbounds for i ∈ 2:Ninds
             sᵢ = Symbol(:stride_, nsets, :_, inds[i])
             strides[i-1] = sᵢ

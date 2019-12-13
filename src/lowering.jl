@@ -1,12 +1,42 @@
+function unitstride(op::Operation, sym::Symbol)
+    (first(op.symbolic_metadata) === sym) && (first(op.numerical_metadata) == 1)
+end
+function mem_offset(op::Operation, incr::Int = 0)::Union{Symbol,Expr}
+    @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
+    @unpack numerical_metadata, symbolic_metadata = op
+    if incr == 0 && length(numerical_metadata) == 1
+        firstsym = first(symbolic_metadata)
+        if first(numerical_metadata) == 1
+            return firstsym
+        elseif first(numerical_metadata) == -1
+            return Expr(:call, :*,  Symbol(:stride_, op.variable, :_, firstsym), firstsym)
+        else
+            return Expr(:call, :*,  first(numerical_metadata), firstsym)
+        end
+    end
+    ret = Expr(:call, :+, )
+    for i ∈ eachindex(numerical_metadata)
+        sym = symbolic_metadata[i]; num = numerical_metadata[i]
+        if num == 1
+            push!(ret.args, sym)
+        elseif num == -1
+            push!(ret.args, Expr(:call, :*, Symbol(:stride_, op.variable, :_, firstsym), sym))
+        else
+            push!(ret.args, Expr(:call, :*, num, sym))
+        end        
+    end
+    incr == 0 || push!(ret.args, incr)
+    ret
+end
 
 function add_expr(q, incr)
-    q2 = copy(q)
-    if q2.head === :call && q2.args[2] === :+
-        push!(q2.args, incr)
+    if q.head === :call && q.args[2] === :+
+        qc = copy(q)
+        push!(qc.args, incr)
+        qc
     else
-        q2 = Expr(:call, :+, q2, incr)
+        Expr(:call, :+, q, incr)
     end
-    q2
 end
 function lower_load_scalar!(
     q::Expr, op::Operation, W::Int, unrolled::Symbol, U::Int,
@@ -42,7 +72,7 @@ function lower_load_unrolled!(
             push!(q.args, Expr(:(=), var, Expr(:call,:vload,ptr,memoff)))
         else
             for u ∈ 0:U-1
-                instrcall = Expr(:call,:vload, Val{W}(), ptr, u == 0 ? memoff : add_expr(memoff, W*u))
+                instrcall = Expr(:call, :vload, Val{W}(), ptr, u == 0 ? memoff : add_expr(memoff, W*u))
                 if mask !== nothing && u == U - 1
                     push!(instrcall.args, mask)
                 end
