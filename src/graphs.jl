@@ -3,28 +3,36 @@
 
 isdense(::Type{<:DenseArray}) = true
 
-# """
-# ShortVector{T} simply wraps a Vector{T}, but uses a different hash function that is faster for short vectors to support using it as the keys of a Dict.
-# This hash function scales O(N) with length of the vectors, so it is slow for long vectors.
-# """
-# struct ShortVector{T} <: DenseVector{T}
-#     data::Vector{T}
-# end
-# Base.@propagate_inbounds Base.getindex(x::ShortVector, I...) = x.data[I...]
-# Base.@propagate_inbounds Base.setindex!(x::ShortVector, v, I...) = x.data[I...] = v
-# @inbounds Base.length(x::ShortVector) = length(x.data)
-# @inbounds Base.size(x::ShortVector) = size(x.data)
-# @inbounds Base.strides(x::ShortVector) = strides(x.data)
-# @inbounds Base.push!(x::ShortVector, v) = push!(x.data, v)
-# @inbounds Base.append!(x::ShortVector, v) = append!(x.data, v)
-# function Base.hash(x::ShortVector, h::UInt)
-#     @inbounds for n ∈ eachindex(x)
-#         h = hash(x[n], h)
-#     end
-#     h
-# end
-
-
+"""
+ShortVector{T} simply wraps a Vector{T}, but uses a different hash function that is faster for short vectors to support using it as the keys of a Dict.
+This hash function scales O(N) with length of the vectors, so it is slow for long vectors.
+"""
+struct ShortVector{T} <: DenseVector{T}
+    data::Vector{T}
+end
+Base.@propagate_inbounds Base.getindex(x::ShortVector, I...) = x.data[I...]
+Base.@propagate_inbounds Base.setindex!(x::ShortVector, v, I...) = x.data[I...] = v
+ShortVector{T}(::UndefInitializer, N::Integer) where {T} = ShortVector{T}(Vector{T}(undef, N))
+@inbounds Base.length(x::ShortVector) = length(x.data)
+@inbounds Base.size(x::ShortVector) = size(x.data)
+@inbounds Base.strides(x::ShortVector) = strides(x.data)
+@inbounds Base.push!(x::ShortVector, v) = push!(x.data, v)
+@inbounds Base.append!(x::ShortVector, v) = append!(x.data, v)
+function Base.hash(x::ShortVector, h::UInt)
+    @inbounds for n ∈ eachindex(x)
+        h = hash(x[n], h)
+    end
+    h
+end
+function Base.isequal(a::ShortVector{T}, b::ShortVector{T}) where {T}
+    length(a) == length(b) || return false
+    @inbounds for i ∈ 1:length(a)
+        a[i] === b[i] || return false
+    end
+    true
+end
+Base.convert(::Type{Vector}, sv::ShortVector) = sv.data
+Base.convert(::Type{Vector{T}}, sv::ShortVector{T}) where {T} = sv.data
 
 @enum OperationType begin
     memload
@@ -183,10 +191,9 @@ struct LoopSet
     loops::Dict{Symbol,Loop} # sym === loops[sym].itersymbol
     opdict::Dict{Symbol,Operation}
     operations::Vector{Operation} # Split them to make it easier to iterate over just a subset
-    # computeops::Vector{Operation}
-    # storeops::Vector{Operation}
-    outer_reductions::Set{UInt} # IDs of reduction operations that need to be reduced at end.
+    outer_reductions::Vector{UInt} # IDs of reduction operations that need to be reduced at end.
     loop_order::LoopOrder
+    stridesets::Dict{ShortVector{Symbol},ShortVector{Symbol}}
     preamble::Expr # TODO: add preamble to lowering
 end
 function LoopSet()
@@ -194,11 +201,9 @@ function LoopSet()
         Dict{Symbol,Loop}(),
         Dict{Symbol,Operation}(),
         Operation[],
-        # Operation[],
-        # Operation[],
-        # Set{UInt}(),
-        Set{UInt}(),
+        UInt[], #Set{UInt}(),
         LoopOrder(),
+        Dict{ShortVector{Symbol},ShortVector{Symbol}},
         Expr(:block,)
     )
 end
@@ -271,8 +276,17 @@ function add_loop!(ls::LoopSet, looprange::Expr)
 end
 function add_load!(ls::LoopSet, indexed::Symbol, indices::AbstractVector)
     Ninds = length(indices)
-    
-    
+    inds = ShortVector{Symbol}(indices)
+    nsets = length(ls.stridesets)
+    get!(ls.stridesets, inds) do
+        strides = ShortVector{Symbol}(undef, Ninds - 1)
+        @inbounds for i ∈ 2:Ninds
+            sᵢ = Symbol(:stride_, nsets, :_, inds[i])
+            strides[i-1] = sᵢ
+            push!(ls.preamble, Expr(:(=), sᵢ, Expr(:call, :stride, indexed, i)))
+        end
+        strides
+    end
 
 end
 function add_load_getindex!(ls::LoopSet, ex::Expr)
