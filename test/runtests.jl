@@ -1,9 +1,10 @@
 using Test
 using LoopVectorization
 
+stride1(x) = stride(x, 1)
 @testset "LoopVectorization.jl" begin
 
-    stride1(x) = stride(x, 1)
+    
     @generated function logsumexp!(r::AbstractArray{T}, x::AbstractArray{T}) where {T}
         quote
             n = length(x)
