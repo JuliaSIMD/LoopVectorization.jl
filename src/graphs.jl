@@ -2,119 +2,37 @@
 
 isdense(::Type{<:DenseArray}) = true
 
-"""
-ShortVector{T} simply wraps a Vector{T}, but uses a different hash function that is faster for short vectors to support using it as the keys of a Dict.
-This hash function scales O(N) with length of the vectors, so it is slow for long vectors.
-"""
-struct ShortVector{T} <: DenseVector{T}
-    data::Vector{T}
-end
-Base.@propagate_inbounds Base.getindex(x::ShortVector, I...) = x.data[I...]
-Base.@propagate_inbounds Base.setindex!(x::ShortVector, v, I...) = x.data[I...] = v
-ShortVector{T}(::UndefInitializer, N::Integer) where {T} = ShortVector{T}(Vector{T}(undef, N))
-@inbounds Base.length(x::ShortVector) = length(x.data)
-@inbounds Base.size(x::ShortVector) = size(x.data)
-@inbounds Base.strides(x::ShortVector) = strides(x.data)
-@inbounds Base.push!(x::ShortVector, v) = push!(x.data, v)
-@inbounds Base.append!(x::ShortVector, v) = append!(x.data, v)
-function Base.hash(x::ShortVector, h::UInt)
-    @inbounds for n ∈ eachindex(x)
-        h = hash(x[n], h)
-    end
-    h
-end
-function Base.isequal(a::ShortVector{T}, b::ShortVector{T}) where {T}
-    length(a) == length(b) || return false
-    @inbounds for i ∈ 1:length(a)
-        a[i] === b[i] || return false
-    end
-    true
-end
-Base.convert(::Type{Vector}, sv::ShortVector) = sv.data
-Base.convert(::Type{Vector{T}}, sv::ShortVector{T}) where {T} = sv.data
+# """
+# ShortVector{T} simply wraps a Vector{T}, but uses a different hash function that is faster for short vectors to support using it as the keys of a Dict.
+# This hash function scales O(N) with length of the vectors, so it is slow for long vectors.
+# """
+# struct ShortVector{T} <: DenseVector{T}
+#     data::Vector{T}
+# end
+# Base.@propagate_inbounds Base.getindex(x::ShortVector, I...) = x.data[I...]
+# Base.@propagate_inbounds Base.setindex!(x::ShortVector, v, I...) = x.data[I...] = v
+# ShortVector{T}(::UndefInitializer, N::Integer) where {T} = ShortVector{T}(Vector{T}(undef, N))
+# @inbounds Base.length(x::ShortVector) = length(x.data)
+# @inbounds Base.size(x::ShortVector) = size(x.data)
+# @inbounds Base.strides(x::ShortVector) = strides(x.data)
+# @inbounds Base.push!(x::ShortVector, v) = push!(x.data, v)
+# @inbounds Base.append!(x::ShortVector, v) = append!(x.data, v)
+# function Base.hash(x::ShortVector, h::UInt)
+#     @inbounds for n ∈ eachindex(x)
+#         h = hash(x[n], h)
+#     end
+#     h
+# end
+# function Base.isequal(a::ShortVector{T}, b::ShortVector{T}) where {T}
+#     length(a) == length(b) || return false
+#     @inbounds for i ∈ 1:length(a)
+#         a[i] === b[i] || return false
+#     end
+#     true
+# end
+# Base.convert(::Type{Vector}, sv::ShortVector) = sv.data
+# Base.convert(::Type{Vector{T}}, sv::ShortVector{T}) where {T} = sv.data
 
-@enum OperationType begin
-    memload
-    compute
-    memstore
-    # accumulator
-end
-
-# const ID = Threads.Atomic{UInt}(0)
-
-# TODO: can some computations be cached in the operations?
-"""
-if ooperation_type == memstore || operation_type == memstore# || operation_type == compute_new || operation_type == compute_update
-symbolic metadata contains info on direct dependencies / placement within loop.
-
-if accesses_memory(op)
-Symbol(:vptr_, op.variable)
-is how we access the memory.
-If numerical_metadata[i] == -1
-Symbol(:stride_, op.variable, :_, op.symbolic_metadata[i])
-is the stride for loop index
-symbolic_metadata[i]
-"""
-struct Operation
-    identifier::UInt
-    variable::Symbol
-    elementbytes::Int
-    instruction::Symbol
-    node_type::OperationType
-    dependencies::Set{Symbol}
-    reduced_deps::Set{Symbol}
-    parents::Vector{Operation}
-    # children::Vector{Operation}
-    numerical_metadata::Vector{Int} # stride of -1 indicates dynamic
-    symbolic_metadata::Vector{Symbol}
-    function Operation(
-        identifier,
-        variable,
-        elementbytes,
-        instruction,
-        node_type,
-        variable = gensym()
-    )
-        new(
-            identifier, variable, elementbytes, instruction, node_type,
-            Set{Symbol}(), Set{Symbol}(), Operation[], Int[], Symbol[]
-        )
-    end
-end
-
-function isreduction(op::Operation)
-    length(op.reduced_deps) > 0
-    # (op.node_type == memstore) && (length(op.symbolic_metadata) < length(op.dependencies))# && issubset(op.symbolic_metadata, op.dependencies)
-end
-isload(op::Operation) = op.node_type == memload
-iscompute(op::Operation) = op.node_type == compute
-isstore(op::Operation) = op.node_type == memstore
-accesses_memory(op::Operation) = isload(op) | isstore(op)
-elsize(op::Operation) = op.elementbytes
-dependson(op::Operation, sym::Symbol) = sym ∈ op.dependencies
-parents(op::Operation) = op.parents
-# children(op::Operation) = op.children
-loopdependencies(op::Operation) = op.dependencies
-reduceddependencies(op::Operation) = op.reduced_deps
-identifier(op::Operation) = op.identifier
-name(op::Operation) = op.variable
-instruction(op::Operation) = op.instruction
-
-function hasintersection(s1::Set{T}, s2::Set{T}) where {T}
-    for x ∈ s1
-        x ∈ s2 && return true
-    end
-    false
-end
-
-function symposition(op::Operation, sym::Symbol)
-    findfirst(s -> s === sym, op.symbolic_metadata)
-end
-function stride(op::Operation, sym::Symbol)
-    @assert accesses_memory(op) "This operation does not access memory!"
-    # access stride info?
-    op.numerical_metadata[symposition(op,sym)]
-end
 # function
 
 struct Loop
@@ -158,9 +76,9 @@ struct LoopSet
     loops::Dict{Symbol,Loop} # sym === loops[sym].itersymbol
     opdict::Dict{Symbol,Operation}
     operations::Vector{Operation} # Split them to make it easier to iterate over just a subset
-    outer_reductions::Vector{UInt} # IDs of reduction operations that need to be reduced at end.
+    outer_reductions::Vector{Int} # IDs of reduction operations that need to be reduced at end.
     loop_order::LoopOrder
-    stridesets::Dict{ShortVector{Symbol},ShortVector{Symbol}}
+    # stridesets::Dict{ShortVector{Symbol},ShortVector{Symbol}}
     preamble::Expr # TODO: add preamble to lowering
 end
 function LoopSet()
@@ -168,9 +86,8 @@ function LoopSet()
         Dict{Symbol,Loop}(),
         Dict{Symbol,Operation}(),
         Operation[],
-        UInt[], #Set{UInt}(),
+        Int[],
         LoopOrder(),
-        Dict{ShortVector{Symbol},ShortVector{Symbol}},
         Expr(:block,)
     )
 end
@@ -183,7 +100,10 @@ names(ls::LoopSet) = ls.loop_order.loopnames
 isstaticloop(ls::LoopSet, s::Symbol) = ls.loops[s].hintexact
 looprangehint(ls::LoopSets, s::Symbol) = ls.loops[s].rangehint
 looprangesym(ls::LoopSets, s::Symbol) = ls.loops[s].rangesym
-itersyms(ls::LoopSet) = keys(ls.loops)
+# itersyms(ls::LoopSet) = keys(ls.loops)
+getop(ls::LoopSet, s::Symbol) = ls.opdict[s]
+getop(ls::LoopSet, i::Int) = ls.operations[i + 1]
+
 function looprange(ls::LoopSet, s::Symbol, incr::Int = 1)
     loop = ls.loops[s]
     incr -= 1
@@ -207,6 +127,11 @@ end
     # ))
 # end
 operations(ls::LoopSet) = ls.operations
+function pushop!(ls::LoopSet, op::Operation, var::Symbol = name(op))
+    push!(ls.operations, op)
+    ls.opdict[var] = op
+    nothing
+end
 function add_loop!(ls::LoopSet, looprange::Expr)
     itersym = (looprange.args[1])::Symbol
     r = (looprange.args[2])::Expr
@@ -242,32 +167,125 @@ function add_loop!(ls::LoopSet, looprange::Expr)
     nothing
 end
 function add_load!(
-    ls::LoopSet, indexed::Symbol, indices::AbstractVector, nstrides::Vector{Int} = fill(-1, length(indices))
+    ls::LoopSet, var::Symbol, indexed::Symbol, indices::AbstractVector, elementbytes::Int = 8
 )
-    Ninds = length(indices)
-    inds = ShortVector{Symbol}(indices)
-    nsets = length(ls.stridesets)
-    get!(ls.stridesets, inds) do
-        sstrides = ShortVector{Symbol}(undef, Ninds)
-        @inbounds for i ∈ 2:Ninds
-            sᵢ = Symbol(:stride_, nsets, :_, inds[i])
-            strides[i-1] = sᵢ
-            push!(ls.preamble, Expr(:(=), sᵢ, Expr(:call, :stride, indexed, i)))
-        end
-        strides
+    op = Operation( length(operations(ls)), var, elementbytes, :getindex, memload, indices, [indexed], NOPARENTS )
+    pushop!(ls, op, var)
+end
+function add_load_ref!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8)
+    add_load!(ls, var, ex.args[1], @view(ex.args[2:end]), elementbytes)
+end
+function add_load_getindex!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8)
+    add_load!(ls, var, ex.args[2], @view(ex.args[3:end]), elementbytes)
+end
+function instruction(x)
+    x isa Symbol ? x : last(x.args).value
+end
+
+function addsetv!(s::AbstractVector{T}, v::T) where {T}
+    for sᵢ ∈ s
+        s === v && return nothing
     end
+    push!(s, v)
+    nothing
+end
+function mergesetv!(s1::AbstractVector{T}, s2::AbstractVector{T}) where {T}
+    for s ∈ s2
+        addsetv!(s1, s)
+    end
+    nothing
+end
+function setdiffv!(s3::AbstractVector{T}, s1::AbstractVector{T}, s2::AbstractVector{T}) where {T}
+    for s ∈ s1
+        (s ∈ s2) || (s ∉ s3 && push!(s3, s))
+    end
+end
+function add_constant!(ls::LoopSet, var::Symbol, elementbytes::Int = 8)
+    op = Operation(length(operations(ls)), var, elementbytes, :undef, constant, NODEPENDENCY, NODEPENDENCY, NOPARENTS)
+    pushop!(ls, op, var)
+    op
+end
+function add_constant!(ls, var, elementbytes::Int = 8)
+    sym = gensym(:constant)
+    push!(ls.preamble, Expr(:(=), sym, var))
+    add_constant!(ls, sym, elementbytes)
+end
+function pushparent!(parents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, parent::Operation)
+    push!(parents, parent)
+    mergesetv!(deps, loopdependencies(parent))
+    mergesetv!(reduceddeps, reduceddependencies(parent))
+    nothing
+end
+function add_parent!(
+    parents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet, var, elementbytes::Int = 8
+)
+    parent = if var isa Symbol
+        get!(ls.opdict, var) do
+            # might add constant
+            add_constant!(ls, var, elementbytes)
+        end
+    elseif var isa Expr
+        temp = gensym(:temporary)
+        add_operation!(ls, temp, var, elementbytes)
+        add_parent!(parents, deps, reduceddeps, ls, temp, elementbytes)
+        last(operations(ls))
+    else # assumed constant
+        add_constant!(ls, var, elementbytes)
+    end
+    pushparent!(parents, deps, reduceddeps, parent)
+end
+function add_reduction!(
+    parents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet, var::Symbol, elementbytes::Int = 8
+)
+    parent = get!(ls.opdict, var) do
+        p = add_constant!(ls, var, elementbytes)
+        push!(ls.outer_reductions, identifier(p))
+        p
+    end
+    # pushparent!(parents, deps, reduceddeps, parent)
+end
 
+function add_compute!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8)
+    @assert ex.head === :call
+    instr = instruction(first(ex.args))::Symbol
+    args = @view(ex.args[2:end])
+    parents = Operation[]
+    deps = Symbol[]
+    reduceddeps = Symbol[]
+    # op = Operation( length(operations(ls)), var, elementbytes, instr, compute )
+    reduction = false
+    for arg ∈ args
+        if arg === var
+            reduction = true
+            add_reduction!(parents, deps, reduceddeps, ls, arg, elementbytes)
+        else
+            add_parent!(parents, deps, reduceddeps, ls, arg, elementbytes)
+        end
+    end
+    if reduction # arg[reduction] is the reduction
+        parent = getop(ls, var)
+        setdiffv!(reduceddeps, deps, loopdependencies(parent))
+        pushparent!(parents, deps, reduceddeps, parent) # deps and reduced deps will not be disjoint
+    end
+    op = Operation(length(operations(ls)), var, elementbytes, instr, compute, deps, reduceddeps, parents)
+    pushop!(ls, op, var) # note this overwrites the entry in the operations dict, but not the vector
 end
-function add_load_getindex!(ls::LoopSet, ex::Expr)
-    add_load!(ls, ex.args[2], @view(ex.args[3:end]))
+function add_store!(
+    ls::LoopSet, indexed::Symbol, var::Symbol, indices::AbstractVector, elementbytes::Int = 8
+)
+    parent = getop(ls, var)
+    op = Operation( length(operations(ls)), indexed, elementbytes, :setindex!, memstore, indices, reduceddependencies(parent), [parent] )
+    pushop!(ls, op, var)
 end
-function add_load_ref!(ls::LoopSet, ex::Expr)
-    add_load!(ls, ex.args[1], @view(ex.args[2:end]))
+function add_store_ref!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8)
+    add_store!(ls, var, ex.args[1], ex.args[2], @view(ex.args[3:end]), elementbytes)
 end
-function add_compute!(ls::LoopSet, ex::Expr)
-
+function add_store_setindex!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8)
+    add_store!(ls, var, ex.args[2], ex.args[3], @view(ex.args[4:end]), elementbytes)
 end
-function add_store!(ls::LoopSet, ex::Expr)
+function add_operation!(
+    ls::LoopSet, var::Symbol, ex, elementbytes::Int = 8
+)
 
 end
 function Base.push!(ls::LoopSet, ex::Expr)

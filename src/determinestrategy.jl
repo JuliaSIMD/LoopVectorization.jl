@@ -57,9 +57,10 @@ function evaluate_cost_unroll(
         end
         iter *= liter
         # check which vars we can define at this level of loop nest
-        for op ∈ operations(ls)
+        for (id,op) ∈ enumerate(operations(ls))
             # won't define if already defined...
-            id = identifier(op)
+            # id = identifier(op)
+            isconstant(op) && continue
             included_vars[id] && continue
             # it must also be a subset of defined symbols
             loopdependencies(op) ⊆ nested_loop_syms || continue
@@ -218,7 +219,8 @@ function evaluate_cost_tile(
         end
         # check which vars we can define at this level of loop nest
         for (id, op) ∈ enumerate(operations(ls))
-            @assert id == identifier(op) # testing, for now
+            isconstant(op) && continue
+            # @assert id == identifier(op)+1 # testing, for now
             # won't define if already defined...
             included_vars[id] && continue
             # it must also be a subset of defined symbols
