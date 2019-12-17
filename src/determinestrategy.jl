@@ -2,7 +2,8 @@
 # TODO: FIXME for general case
 unitstride(op, s) = first(loopdependencies(op)) === s
 
-function cost(op::Operation, unrolled::Symbol, Wshift::Int, size_T::Int)
+function cost(op::Operation, unrolled::Symbol, Wshift::Int, size_T::Int = op.elementbytes)
+    isconstant(op) && return 0.0, 0, 0
     # Wshift == dependson(op, unrolled) ? Wshift : 0
     # c = first(cost(instruction(op), Wshift, size_T))::Int
     instr = instruction(op)
@@ -10,6 +11,7 @@ function cost(op::Operation, unrolled::Symbol, Wshift::Int, size_T::Int)
     srt, sl, srp = opisunrolled ? vector_cost(instr, Wshift, size_T) : scalar_cost(instr)
     if accesses_memory(op)
         # either vbroadcast/reductionstore, vmov(a/u)pd, or gather/scatter
+        # @show instr, unrolled, loopdependencies(op), unitstride(op, unrolled)
         if opisunrolled
             if !unitstride(op, unrolled)# || !isdense(op) # need gather/scatter
                 r = (1 << Wshift)
@@ -72,7 +74,9 @@ function evaluate_cost_unroll(
             included_vars[id] && continue
             # it must also be a subset of defined symbols
             loopdependencies(op) ⊆ nested_loop_syms || continue
-            hasintersection(reduceddependencies(op), nested_loop_syms) && return Inf
+            # hasintersection(reduceddependencies(op), nested_loop_syms) && return Inf
+            rd = reduceddependencies(op)
+            hasintersection(rd, nested_loop_syms[1:end-length(rd)]) && return Inf
             included_vars[id] = true
             
             total_cost += iter * first(cost(op, unrolled, Wshift, size_T))
@@ -97,7 +101,8 @@ function depchain_cost!(
     if accesses_memory(op)
         return sl, rt
     end
-    slᵢ, rtᵢ = cost(op, 1 << Wshift, Wshift, unrolled)
+    # @show instruction(op)
+    rtᵢ, slᵢ = cost(op, unrolled, Wshift, size_T)
     sl + slᵢ, rt + rtᵢ
 end
    
@@ -110,6 +115,7 @@ function determine_unroll_factor(
     # The strategy is to use an unroll factor of 1, unless there appears to be loop carried dependencies (ie, num_reductions > 0)
     # The assumption here is that unrolling provides no real benefit, unless it is needed to enable OOO execution by breaking up these dependency chains
     num_reductions = sum(isreduction, operations(ls))
+    # @show num_reductions
     iszero(num_reductions) && return 1
     # So if num_reductions > 0, we set the unroll factor to be high enough so that the CPU can be kept busy
     # if there are, U = max(1, round(Int, max(latency) * throughput / num_reductions)) = max(1, round(Int, latency / (recip_throughput * num_reductions)))
@@ -119,7 +125,7 @@ function determine_unroll_factor(
     visited_nodes = fill(false, length(operations(ls)))
     for op ∈ operations(ls)
         if isreduction(op) && dependson(op, unrolled)
-            sl, rt = depchain_cost!(visited_nodes, instruction(op), unrolled, Wshift, size_T)
+            sl, rt = depchain_cost!(visited_nodes, op, unrolled, Wshift, size_T)
             latency = max(sl, latency)
             recip_throughput += rt
         end
@@ -131,17 +137,19 @@ function tile_cost(X, U, T)
     X[1] + X[4] + X[2] / T + X[3] / U
 end
 function solve_tilesize(X, R)
+    first(R) == 0 && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
     # We use lagrange multiplier to finding floating point values for U and T
     # first solving for U via quadratic formula
     # X is vector of costs, and R is of register pressures
-    @show X
-    @show R 
+    # @show X
+    # @show R 
     RR = VectorizationBase.REGISTER_COUNT - R[3] - R[4]
     a = (R[1])^2*X[2] - (R[2])^2*R[1]*X[3]/RR
     b = 2*R[1]*R[2]*X[3]
     c = -RR*R[1]*X[3]
     Ufloat = (sqrt(b^2 - 4a*c) - b) / (2a)
     Tfloat = (RR - Ufloat*R[2])/(Ufloat*R[1])
+    # @show Ufloat, Tfloat
     Ulow = max(1, floor(Int, Ufloat)) # must be at least 1
     Tlow = max(1, floor(Int, Tfloat)) # must be at least 1
     Uhigh = Ulow + 1 #ceil(Int, Ufloat)
@@ -150,14 +158,17 @@ function solve_tilesize(X, R)
     RR = VectorizationBase.REGISTER_COUNT - R[3] - R[4]
     U, T = Ulow, Tlow
     tcost = tile_cost(X, Ulow, Tlow)
-    if RR > Ulow*Thigh*R[1] + Ulow*R[2]
+    # @show Ulow*Thigh*R[1] + Ulow*R[2]
+    if RR ≥ Ulow*Thigh*R[1] + Ulow*R[2]
         tcost_temp = tile_cost(X, Ulow, Thigh)
+        # @show tcost_temp, tcost
         if tcost_temp < tcost
             tcost = tcost_temp
             U, T = Ulow, Thigh
         end
     end
-    if RR > Uhigh*Tlow*R[1] + Uhigh*R[2]
+    # @show Uhigh*Tlow*R[1] + Uhigh*R[2]
+    if RR ≥ Uhigh*Tlow*R[1] + Uhigh*R[2]
         tcost_temp = tile_cost(X, Uhigh, Tlow)
         if tcost_temp < tcost
             tcost = tcost_temp
@@ -175,7 +186,9 @@ end
 function solve_tilesize_constT(X, R, T)
     floor(Int, (VectorizationBase.REGISTER_COUNT - R[3] - R[4]) / (T * R[1] + R[2]))
 end
+# Tiling here is about alleviating register pressure for the UxT
 function solve_tilesize(X, R, Umax, Tmax)
+    first(R) == 0 && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
     U, T, cost = solve_tilesize(X, R)
     U_too_large = U > Umax
     T_too_large = T > Tmax
@@ -215,9 +228,12 @@ function evaluate_cost_tile(
     # cost_mat[1] / ( unrolled * tiled)
     # cost_mat[2] / ( tiled)
     # cost_mat[3] / ( unrolled)
-    # cost_mat[4] 
+    # cost_mat[4]
+    # @show order
     cost_vec = zeros(Float64, 4)
     reg_pressure = zeros(Int, 4)
+    @inbounds reg_pressure[2] = 1
+    @inbounds reg_pressure[3] = 1
     for n ∈ 1:N
         itersym = order[n]
         # Add to set of defined symbles
@@ -235,16 +251,17 @@ function evaluate_cost_tile(
             included_vars[id] && continue
             # it must also be a subset of defined symbols
             loopdependencies(op) ⊆ nested_loop_syms || continue
-            # @show nested_loop_syms
-            # @show reduceddependencies(op)
+            # # @show nested_loop_syms
+            # # @show reduceddependencies(op)
             rd = reduceddependencies(op)
             hasintersection(rd, nested_loop_syms[1:end-length(rd)]) && return 0,0,Inf
             included_vars[id] = true
             rt, lat, rp = cost(op, unrolled, Wshift, size_T)
-            @show instruction(op), rt, lat, rp, iter
+            # @show instruction(op), rt, lat, rp, iter
             rt *= iter
             isunrolled = unrolled ∈ loopdependencies(op)
             istiled = tiled ∈ loopdependencies(op)
+            # @show isunrolled, istiled
             if isunrolled && istiled # no cost decrease; cost must be repeated
                 cost_vec[1] += rt
                 reg_pressure[1] += rp
@@ -315,8 +332,8 @@ end
 # that I could come up with.
 function Base.iterate(lo::LoopOrders, state)
     advance_state!(state) || return nothing
-    # @show state
-    syms = copy!(lo.buff, lo.syms)
+    # # @show state
+    syms = copyto!(lo.buff, lo.syms)
     for i ∈ eachindex(state)
         sᵢ = state[i]
         sᵢ == 0 || swap!(syms, i, i + sᵢ)
@@ -340,7 +357,7 @@ function choose_unroll_order(ls::LoopSet, lowest_cost::Float64 = Inf)
 end
 function choose_tile(ls::LoopSet)
     lo = LoopOrders(ls)
-    best_order = lo.syms
+    best_order = copy(lo.syms)
     new_order, state = iterate(lo) # right now, new_order === best_order
     U, T, lowest_cost = 0, 0, Inf
     while true
@@ -348,7 +365,7 @@ function choose_tile(ls::LoopSet)
         if cost_temp < lowest_cost
             lowest_cost = cost_temp
             U, T = U_temp, T_temp
-            best_order = new_order
+            copyto!(best_order, new_order)
         end
         iter = iterate(lo, state)
         iter === nothing && return best_order, U, T, lowest_cost
@@ -363,8 +380,10 @@ function choose_order(ls::LoopSet)
     end
     uorder, uc = choose_unroll_order(ls, tc)
     if num_loops(ls) <= 1 || tc > uc # if tc == uc, then that probably means we want tc, and no unrolled managed to beat the tiled cost
+        # copyto!(ls.loop_order.loopnames, uorder)
         return uorder, determine_unroll_factor(ls, uorder), -1
     else
+        # copyto!(ls.loop_order.loopnames, torder)
         return torder, tU, tT
     end
 end

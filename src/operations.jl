@@ -1,9 +1,9 @@
 
 @enum OperationType begin
+    constant
     memload
     compute
     memstore
-    constant
 end
 
 # const ID = Threads.Atomic{UInt}(0)
@@ -59,7 +59,7 @@ const NOPARENTS = Operation[]
 
 
 function isreduction(op::Operation)
-    length(op.reduced_deps) > 0
+    ((op.node_type == compute) || (op.node_type == memstore)) && length(op.reduced_deps) > 0
     # (op.node_type == memstore) && (length(op.symbolic_metadata) < length(op.dependencies))# && issubset(op.symbolic_metadata, op.dependencies)
 end
 isload(op::Operation) = op.node_type == memload
@@ -73,7 +73,7 @@ parents(op::Operation) = op.parents
 # children(op::Operation) = op.children
 loopdependencies(op::Operation) = op.dependencies
 reduceddependencies(op::Operation) = op.reduced_deps
-identifier(op::Operation) = op.identifier
+identifier(op::Operation) = op.identifier + 1
 name(op::Operation) = op.variable
 instruction(op::Operation) = op.instruction
 

@@ -60,14 +60,14 @@ LoopOrder() = LoopOrder(Vector{Operation}[],Symbol[])
 Base.empty!(lo::LoopOrder) = foreach(empty!, lo.oporder)
 function Base.resize!(lo::LoopOrder, N::Int)
     Nold = length(lo.loopnames)
-    resize!(lo.oporder, 24N)
-    for n ∈ 24Nold+1:24N
+    resize!(lo.oporder, 32N)
+    for n ∈ 32Nold+1:32N
         lo.oporder[n] = Operation[]
     end
     resize!(lo.loopnames, N)
     lo
 end
-Base.size(lo::LoopOrder) = (3,2,2,2,length(lo.loopnames))
+Base.size(lo::LoopOrder) = (4,2,2,2,length(lo.loopnames))
 Base.@propagate_inbounds Base.getindex(lo::LoopOrder, i::Int) = lo.oporder[i]
 Base.@propagate_inbounds Base.getindex(lo::LoopOrder, i...) = lo.oporder[LinearIndices(size(lo))[i...]]
 
@@ -80,6 +80,7 @@ struct LoopSet
     loop_order::LoopOrder
     # stridesets::Dict{ShortVector{Symbol},ShortVector{Symbol}}
     preamble::Expr # TODO: add preamble to lowering
+    includedarrays::Vector{Symbol}
 end
 function LoopSet()
     LoopSet(
@@ -88,13 +89,14 @@ function LoopSet()
         Operation[],
         Int[],
         LoopOrder(),
-        Expr(:block,)
+        Expr(:block,),
+        Symbol[]
     )
 end
 num_loops(ls::LoopSet) = length(ls.loops)
 function oporder(ls::LoopSet)
     N = length(ls.loop_order.loopnames)
-    reshape(ls.loop_order.oporder, (3,2,2,2,N))
+    reshape(ls.loop_order.oporder, (4,2,2,2,N))
 end
 names(ls::LoopSet) = ls.loop_order.loopnames
 isstaticloop(ls::LoopSet, s::Symbol) = ls.loops[s].hintexact
@@ -163,7 +165,7 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
             Loop(itersym, N)
         end
     elseif f === :eachindex
-        N = gensym(:loop, itersym)
+        N = gensym(Symbol(:loop, itersym))
         push!(ls.preamble.args, Expr(:(=), N, Expr(:call, :length, r.args[2])))
         Loop(itersym, N)
     else
@@ -191,11 +193,19 @@ function add_loop!(ls::LoopSet, q::Expr, elementbytes::Int = 8)
         Base.push!(ls, q, elementbytes)
     end
 end
+function add_vptr!(ls::LoopSet, indexed::Symbol)
+    if indexed ∉ ls.includedarrays
+        push!(ls.includedarrays, indexed)
+        push!(ls.preamble.args, Expr(:(=), Symbol(:vptr_, indexed), Expr(:call, Expr(:(.), :VectorizationBase, QuoteNode(:stridedpointer)), indexed)))
+    end
+    nothing
+end
 
 function add_load!(
     ls::LoopSet, var::Symbol, indexed::Symbol, indices::AbstractVector, elementbytes::Int = 8
 )
     op = Operation( length(operations(ls)), var, elementbytes, :getindex, memload, indices, [indexed], NOPARENTS )
+    add_vptr!(ls, indexed)
     pushop!(ls, op, var)
 end
 function add_load_ref!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8)
@@ -226,12 +236,26 @@ function setdiffv!(s3::AbstractVector{T}, s1::AbstractVector{T}, s2::AbstractVec
         (s ∈ s2) || (s ∉ s3 && push!(s3, s))
     end
 end
-function add_constant!(ls::LoopSet, var::Symbol, elementbytes::Int = 8, deps = NODEPENDENCY)
-    pushop!(ls, Operation(length(operations(ls)), var, elementbytes, :undef, constant, deps, NODEPENDENCY, NOPARENTS), var)
+# This version has no dependencies, and thus will not be lowered
+### if it is a literal, that literal is either var"##ZERO#Float##", var"##ONE#Float##", or has to have been assigned to var in the preamble.
+# if it is a literal, that literal has to have been assigned to var in the preamble.
+function add_constant!(ls::LoopSet, var::Symbol, elementbytes::Int = 8)
+    pushop!(ls, Operation(length(operations(ls)), var, elementbytes, Symbol("##CONSTANT##"), constant, NODEPENDENCY, NODEPENDENCY, NOPARENTS), var)
 end
-function add_constant!(ls, var, elementbytes::Int = 8, sym = gensym(:constant), deps = NODEPENDENCY)
+function add_constant!(ls::LoopSet, var, elementbytes::Int = 8)
+    sym = gensym(:temp)
     push!(ls.preamble.args, Expr(:(=), sym, var))
-    add_constant!(ls, sym, elementbytes, deps)
+    pushop!(ls, Operation(length(operations(ls)), sym, elementbytes, Symbol("##CONSTANT##"), constant, NODEPENDENCY, NODEPENDENCY, NOPARENTS), sym)
+end
+# This version has loop dependencies. var gets assigned to sym when lowering.
+function add_constant!(ls::LoopSet, var::Symbol, deps::Vector{Symbol}, sym::Symbol = gensym(:constant), elementbytes::Int = 8)
+    # length(deps) == 0 && push!(ls.preamble.args, Expr(:(=), sym, var))
+    pushop!(ls, Operation(length(operations(ls)), sym, elementbytes, var, constant, deps, NODEPENDENCY, NOPARENTS), sym)
+end
+function add_constant!(ls::LoopSet, var, deps::Vector{Symbol}, sym::Symbol = gensym(:constant), elementbytes::Int = 8)
+    sym2 = gensym(:temp)
+    push!(ls.preamble.args, Expr(:(=), sym2, var))
+    pushop!(ls, Operation(length(operations(ls)), sym, elementbytes, sym2, constant, deps, NODEPENDENCY, NOPARENTS), sym)
 end
 function pushparent!(parents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, parent::Operation)
     push!(parents, parent)
@@ -258,7 +282,7 @@ end
 function add_reduction!(
     parents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet, var::Symbol, elementbytes::Int = 8
 )
-    parent = get!(ls.opdict, var) do
+    get!(ls.opdict, var) do
         p = add_constant!(ls, var, elementbytes)
         push!(ls.outer_reductions, identifier(p))
         p
@@ -287,6 +311,7 @@ function add_compute!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8)
         parent = getop(ls, var)
         setdiffv!(reduceddeps, deps, loopdependencies(parent))
         pushparent!(parents, deps, reduceddeps, parent) # deps and reduced deps will not be disjoint
+        # append!(reduceddependencies(parent), reduceddeps)
     end
     op = Operation(length(operations(ls)), var, elementbytes, instr, compute, deps, reduceddeps, parents)
     pushop!(ls, op, var) # note this overwrites the entry in the operations dict, but not the vector
@@ -296,6 +321,7 @@ function add_store!(
 )
     parent = getop(ls, var)
     op = Operation( length(operations(ls)), indexed, elementbytes, :setindex!, memstore, indices, reduceddependencies(parent), [parent] )
+    add_vptr!(ls, indexed)
     pushop!(ls, op, var)
 end
 function add_store_ref!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8)
@@ -335,7 +361,7 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int = 8)
             if RHS isa Expr
                 add_operation!(ls, LHS, RHS, elementbytes)
             else
-                add_constant!(ls, RHS, elementbytes, LHS, [keys(ls.loops)...])
+                add_constant!(ls, RHS, [keys(ls.loops)...], LHS, elementbytes)
             end
         elseif LHS isa Expr
             @assert LHS.head === :ref
@@ -363,7 +389,9 @@ end
 function fillorder!(ls::LoopSet, order::Vector{Symbol}, loopistiled::Bool)
     lo = ls.loop_order
     ro = lo.loopnames # reverse order; will have same order as lo
-    copyto!(lo.names, order)
+    # @show 1, ro, order
+    # copyto!(ro, order)
+    # @show 2, ro, order
     empty!(lo)
     nloops = length(order)
     if loopistiled
@@ -378,17 +406,19 @@ function fillorder!(ls::LoopSet, order::Vector{Symbol}, loopistiled::Bool)
     for _n ∈ 1:nloops
         n = 1 + nloops - _n
         ro[_n] = loopsym = order[n]
+        #loopsym = order[n]
         for (id,op) ∈ enumerate(operations(ls))
             included_vars[id] && continue
-            loopsym ∈ dependencies(op) || continue
+            loopsym ∈ loopdependencies(op) || continue
             included_vars[id] = true
             isunrolled = (unrolled ∈ loopdependencies(op)) + 1
-            istiled = (loopistiled ? false : (tiled ∈ loopdependencies(op))) + 1
-            optype = Int(op.node_type)
+            istiled = (loopistiled ? (tiled ∈ loopdependencies(op)) : false) + 1
+            optype = Int(op.node_type) + 1
             after_loop = (length(reduceddependencies(op)) > 0) + 1
             push!(lo[optype,isunrolled,istiled,after_loop,_n], op)
         end
     end    
+    @show 3, ro, order
 end
 
 

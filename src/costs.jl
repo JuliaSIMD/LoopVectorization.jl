@@ -32,9 +32,9 @@ function vector_cost(instruction::InstructionCost, Wshift, sizeof_T)
         W = 1 << Wshift
         extra_latency = sl - srt
         srt *= W
-        sl = srt + extra_latency
+        sl = round(Int, srt + extra_latency)
     else # we assume custom cost, and that latency == recip_throughput
-        sl, srt = scaling, scaling
+        sl, srt = round(Int,scaling), scaling
     end    
     srt, sl, srp
 end
@@ -63,8 +63,8 @@ const OPAQUE_INSTRUCTION = InstructionCost(50, 50.0, -1.0, VectorizationBase.REG
 #    consolidated into a single register. The number of LICM-ed setindex!, on the other
 #    hand, should indicate how many registers we're keeping live for the sake of eventually storing.
 const COST = Dict{Symbol,InstructionCost}(
-    :getindex => InstructionCost(3,0.5,-3.0,0),
-    :setindex! => InstructionCost(3,1.0,-3.0,1),
+    :getindex => InstructionCost(-3.0,0.5,3,0),
+    :setindex! => InstructionCost(-3.0,1.0,3,1),
     :zero => InstructionCost(1,0.5),
     :one => InstructionCost(3,0.5),
     :(+) => InstructionCost(4,0.5),
@@ -93,7 +93,8 @@ const COST = Dict{Symbol,InstructionCost}(
     :exp => InstructionCost(20,20.0,20.0,18),
     :sin => InstructionCost(18,15.0,68.0,23),
     :cos => InstructionCost(18,15.0,68.0,26),
-    :sincos => InstructionCost(25,22.0,70.0,26)
+    :sincos => InstructionCost(25,22.0,70.0,26)#,
+    # Symbol("##CONSTANT##") => InstructionCost(0,0.0)
 )
 for (k, v) ∈ COST # so we can look up Symbol(typeof(function))
     COST[Symbol("typeof(", k, ")")] = v
