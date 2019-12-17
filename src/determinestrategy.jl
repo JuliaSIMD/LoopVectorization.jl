@@ -1,4 +1,7 @@
 
+# TODO: FIXME for general case
+unitstride(op, s) = first(loopdependencies(op)) === s
+
 function cost(op::Operation, unrolled::Symbol, Wshift::Int, size_T::Int)
     # Wshift == dependson(op, unrolled) ? Wshift : 0
     # c = first(cost(instruction(op), Wshift, size_T))::Int
@@ -10,12 +13,12 @@ function cost(op::Operation, unrolled::Symbol, Wshift::Int, size_T::Int)
         if opisunrolled
             if !unitstride(op, unrolled)# || !isdense(op) # need gather/scatter
                 r = (1 << Wshift)
-                c *= r
+                srt *= r
                 sl *= r
             # else # vmov(a/u)pd
             end
         elseif instr === :setindex! # broadcast or reductionstore; if store we want to penalize reduction
-            c *= 2
+            srt *= 2
             sl *= 2
         end
     end
@@ -33,7 +36,12 @@ end
 function VectorizationBase.pick_vector_width_shift(ls::LoopSet, u::Symbol)
     VectorizationBase.pick_vector_width_shift(length(ls, u), biggest_type_size(ls))
 end
-
+function hasintersection(a, b)
+    for aᵢ ∈ a, bᵢ ∈ b
+        aᵢ === bᵢ && return true
+    end
+    false
+end
 
 # evaluates cost of evaluating loop in given order
 # heuristically, could simplify analysis by just unrolling outer loop?
@@ -42,7 +50,7 @@ function evaluate_cost_unroll(
 )
     # included_vars = Set{UInt}()
     included_vars = fill(false, length(operations(ls)))
-    nested_loop_syms = Set{Symbol}()
+    nested_loop_syms = Symbol[]#Set{Symbol}()
     total_cost = 0.0
     iter = 1.0
     # Need to check if fusion is possible
@@ -122,10 +130,12 @@ end
 function tile_cost(X, U, T)
     X[1] + X[4] + X[2] / T + X[3] / U
 end
-function solve_tilsize(X, R)
+function solve_tilesize(X, R)
     # We use lagrange multiplier to finding floating point values for U and T
     # first solving for U via quadratic formula
     # X is vector of costs, and R is of register pressures
+    @show X
+    @show R 
     RR = VectorizationBase.REGISTER_COUNT - R[3] - R[4]
     a = (R[1])^2*X[2] - (R[2])^2*R[1]*X[3]/RR
     b = 2*R[1]*R[2]*X[3]
@@ -196,7 +206,7 @@ function evaluate_cost_tile(
     tiled = order[1]
     unrolled = order[2]
     included_vars = fill(false, length(operations(ls)))
-    nested_loop_syms = Set{Symbol}()
+    nested_loop_syms = Symbol[]# Set{Symbol}()
     iter = 1.0
     # Need to check if fusion is possible
     size_T = biggest_type_size(ls)
@@ -225,24 +235,28 @@ function evaluate_cost_tile(
             included_vars[id] && continue
             # it must also be a subset of defined symbols
             loopdependencies(op) ⊆ nested_loop_syms || continue
-            hasintersection(reduceddependencies(op), nested_loop_syms) && return 0,0,Inf
+            # @show nested_loop_syms
+            # @show reduceddependencies(op)
+            rd = reduceddependencies(op)
+            hasintersection(rd, nested_loop_syms[1:end-length(rd)]) && return 0,0,Inf
             included_vars[id] = true
             rt, lat, rp = cost(op, unrolled, Wshift, size_T)
+            @show instruction(op), rt, lat, rp, iter
             rt *= iter
             isunrolled = unrolled ∈ loopdependencies(op)
             istiled = tiled ∈ loopdependencies(op)
             if isunrolled && istiled # no cost decrease; cost must be repeated
-                cost_vec[1] = rt
-                reg_pressure[1] = rp
+                cost_vec[1] += rt
+                reg_pressure[1] += rp
             elseif isunrolled # cost decreased by tiling
-                cost_vec[2] = rt
-                reg_pressure[2] = rp
+                cost_vec[2] += rt
+                reg_pressure[2] += rp
             elseif istiled # cost decreased by unrolling
-                cost_vec[3] = rt
-                reg_pressure[3] = rp
+                cost_vec[3] += rt
+                reg_pressure[3] += rp
             else# neither unrolled or tiled
-                cost_vec[4] = rt
-                reg_pressure[4] = rp
+                cost_vec[4] += rt
+                reg_pressure[4] += rp
             end
         end
     end
@@ -252,13 +266,13 @@ function evaluate_cost_tile(
         if Ustatic
             solve_tilesize(cost_vec, reg_pressure, looprangehint(ls, tiled), looprangehint(ls, unrolled))
         else
-            solve_tilesize(cost_vec, reg_pressure, looprangehint(ls, tiled), nothing)
+            solve_tilesize(cost_vec, reg_pressure, looprangehint(ls, tiled), typemax(Int))
         end
     else
         if Ustatic
-            solve_tilesize(cost_vec, reg_pressure, nothing, looprangehint(ls, unrolled))
+            solve_tilesize(cost_vec, reg_pressure, typemax(Int), looprangehint(ls, unrolled))
         else
-            solve_tilesize(cost_vec, reg_pressure)
+            solve_tilesize(cost_vec, reg_pressure)#, typemax(Int), typemax(Int))
         end
     end
 end
@@ -270,7 +284,7 @@ struct LoopOrders
 end
 function LoopOrders(ls::LoopSet)
     syms = [s for s ∈ keys(ls.loops)]
-    LoopOrders(syms, similar(buff))
+    LoopOrders(syms, similar(syms))
 end
 function Base.iterate(lo::LoopOrders)
     lo.syms, zeros(Int, length(lo.syms))# - 1)

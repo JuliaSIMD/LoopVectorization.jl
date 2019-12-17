@@ -37,6 +37,42 @@ stride1(x) = stride(x, 1)
 end
 
 
+using LoopVectorization
+q = :(for i ∈ 1:size(A,1), j ∈ 1:size(B,2)
+      Cᵢⱼ = 0.0
+      for k ∈ 1:size(A,2)
+      Cᵢⱼ += A[i,k] * B[k,j]
+      end
+      C[i,j] = Cᵢⱼ
+      end)
+
+ls = LoopVectorization.LoopSet(q);
+ls.operations
+
+lssi = last(ls.operations)
+lssi.dependencies
+lssi.reduced_deps
+
+lssi.parents
+
+LoopVectorization.num_loops(ls)
+LoopVectorization.choose_tile(ls)
+LoopVectorization.choose_order(ls)
+
+lo = LoopVectorization.LoopOrders(ls);
+new_order, state = iterate(lo)
+LoopVectorization.evaluate_cost_tile(ls, new_order)
+
+iter = iterate(lo, state)
+new_order, state = iter
+LoopVectorization.evaluate_cost_tile(ls, new_order)
+
+X = [1.8000554666666666e8, 1.073741824e9, 1.7895697066666666e8, 0.0];
+R = [1, 0, 0, 0];
+LoopVectorization.solve_tilesize(X, R)
+
+using BenchmarkTools
+@benchmark LoopVectorization.choose_order($ls)
 
 
 

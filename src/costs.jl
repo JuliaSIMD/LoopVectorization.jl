@@ -12,7 +12,7 @@ struct InstructionCost
     scalar_latency::Int
     register_pressure::Int
 end
-InstructionCost(sl::Int, srt::Float64, scaling::Float64 = -3.0) = InstructionCost(scaling, srt, sl, srt, 0)
+InstructionCost(sl::Int, srt::Float64, scaling::Float64 = -3.0) = InstructionCost(scaling, srt, sl, 0)
 
 function scalar_cost(instruction::InstructionCost)#, ::Type{T} = Float64) where {T}
     @unpack scalar_reciprical_throughput, scalar_latency, register_pressure = instruction
@@ -38,13 +38,16 @@ function vector_cost(instruction::InstructionCost, Wshift, sizeof_T)
     end    
     srt, sl, srp
 end
+instruction_cost(instruction::Symbol) = get(COST, instruction, OPAQUE_INSTRUCTION)
+scalar_cost(instr::Symbol) = scalar_cost(instruction_cost(instr))
+vector_cost(instr::Symbol, Wshift, sizeof_T) = vector_cost(instruction_cost(instr), Wshift, sizeof_T)
 function cost(instruction::InstructionCost, Wshift, sizeof_T)
     Wshift == 0 ? scalar_cost(instruction) : vector_cost(instruction, Wshift, sizeof_T)
 end
 
 function cost(instruction::Symbol, Wshift, sizeof_T)
     cost(
-        get(COST, instruction, OPAQUE_INSTRUCTION),
+        instruction_cost(instruction),
         Wshift, sizeof_T
     )
 end
@@ -110,6 +113,42 @@ const CORRESPONDING_REDUCTION = Dict{Symbol,Symbol}(
     :vfmsub => :vsum,
     :vfnmadd => :vsum,
     :vfnmsub => :vsum
+)
+const REDUCTION_TRANSLATION = Dict{Symbol,Symbol}(
+    :(+) => :evadd,
+    :vadd => :evadd,
+    :(*) => :evmul,
+    :vmul => :evmul,
+    :(-) => :evadd,
+    :vsub => :evadd,
+    :(/) => :evmul,
+    :vdiv => :evmul,
+    :muladd => :evadd,
+    :fma => :evadd,
+    :vmuladd => :evadd,
+    :vfma => :evadd,
+    :vfmadd => :evadd,
+    :vfmsub => :evadd,
+    :vfnmadd => :evadd,
+    :vfnmsub => :evadd
+)
+const REDUCTION_ZERO = Dict{Symbol,Symbol}(
+    :(+) => :zero,
+    :vadd => :zero,
+    :(*) => :one,
+    :vmul => :one,
+    :(-) => :zero,
+    :vsub => :zero,
+    :(/) => :one,
+    :vdiv => :one,
+    :muladd => :zero,
+    :fma => :zero,
+    :vmuladd => :zero,
+    :vfma => :zero,
+    :vfmadd => :zero,
+    :vfmsub => :zero,
+    :vfnmadd => :zero,
+    :vfnmsub => :zero    
 )
 # const SIMDPIRATES_COST = Dict{Symbol,InstructionCost}()
 # const SLEEFPIRATES_COST = Dict{Symbol,InstructionCost}()

@@ -893,11 +893,13 @@ for vec ∈ (false,true)
     end
 end
 
+include("costs.jl")
+include("operations.jl")
+include("graphs.jl")
+include("determinestrategy.jl")
+include("lowering.jl")
+include("constructors.jl")
 include("precompile.jl")
 _precompile_()
-
-function __init__()
-    _precompile_()
-end
 
 end # module

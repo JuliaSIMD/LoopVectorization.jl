@@ -15,7 +15,7 @@ function mem_offset(op::Operation, incr::Int = 0)::Union{Symbol,Expr}
     end
     ret
 end
-function mem_offset(op::Operation, incr::Int = 0, unolled::Symbol)::Union{Symbol,Expr}
+function mem_offset(op::Operation, incr::Int, unolled::Symbol)::Union{Symbol,Expr}
     @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
     ret = Expr(:tuple, )
     deps = op.dependencies
@@ -115,22 +115,64 @@ function lower_load!(
         lower_load_scalar!(q, op, W, unrolled, U, suffix, mask)
     end
 end
+function reduce_range!(q::Expr, toreduct::Symbol, instr::Symbol, Uh::Int, Uh2::Int)
+    for u ∈ 0:Uh-1
+        tru = Symbol(toreduct,:_,u)
+        push!(q.args, Expr(:(=), tru, Expr(:call, instr, tru, Symbol(toreduct,:_,u + Uh))))
+    end
+    for u ∈ 2Uh:Uh2-1
+        tru = Symbol(toreduct,:_, u + 1 - 2Uh)
+        push!(q.args, Expr(:(=), tru, Expr(:call, instr, tru, Symbol(toreduct,:_,u))))
+    end
+end
 
-function lower_store_scalar!(
+function reduce_expr!(q::Expr, op::Operation, assignto::Symbol, toreduct::Symbol, U::Int)
+    instr = first(parents(op)).instruction
+    reductfunc = CORRESPONDING_REDUCTION[instr]
+    if U == 1
+        push!(q.args, Expr(:(=), assignto, Expr(:call, reductfunc, toreduct)))
+        return nothing
+    end
+    instr = get(REDUCTION_TRANSLATION, instr, instr)
+    Uh2 = U
+    while true # combine vectors
+        Uh = Uh2 >> 1
+        reduce_range!(q, toreduct, instr, Uh, Uh2)
+        Uh == 1 && break
+        Uh2 = Uh
+    end
+    # reduce last vector
+    push!(q.args, Expr(:(=), assignto, Expr(:call, reductfunc, Symbol(toreduct,:_0))))
+    nothing
+end
+
+function lower_store_reduction!(
     q::Expr, op::Operation, W::Int, unrolled::Symbol, U::Int,
     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
 )
     loopdeps = loopdependencies(op)
-    @assert unrolled ∉ loopdeps
+    # @assert unrolled ∉ loopdeps
     var = first(parents(op)).variable
     if suffix !== nothing
         var = Symbol(var, :_, suffix)
     end
     ptr = Symbol(:vptr_, op.variable)
     # need to find out reduction type
-    reduct = CORRESPONDING_REDUCTION[first(parents(op)).instruction]
-    storevar = Expr(:call, reduct, var)
-    push!(q.args, Expr(:call, :store!, ptr, storevar, mem_offset(op)))
+    storevar = gensym(var)
+    reduce_expr!(q, storevar, reduct, var, U) # assigns reduction to storevar
+    push!(q.args, Expr(:call, :store!, ptr, storevar, mem_offset(op))) # store storevar
+    nothing
+end
+function lower_store_scalar!(
+    q::Expr, op::Operation, W::Int, unrolled::Symbol, U::Int,
+    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
+)
+    var = first(parents(op)).variable
+    if suffix !== nothing
+        var = Symbol(var, :_, suffix)
+    end
+    ptr = Symbol(:vptr_, op.variable)
+    push!(q.args, Expr(:call, :store!, ptr, var, mem_offset(op)))
     nothing
 end
 function lower_store_unrolled!(
@@ -180,7 +222,9 @@ function lower_store!(
     q::Expr, op::Operation, W::Int, unrolled::Symbol, U::Int,
     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
 )
-    if unrolled ∈ loopdependencies(op)
+    if unrolled ∈ reduceddependencies(op)
+        lower_store_reduction!(q, op, W, unrolled, U, suffix, mask)
+    elseif unrolled ∈ loopdependencies(op)
         lower_store_unrolled!(q, op, W, unrolled, U, suffix, mask)
     else
         lower_store_scalar!(q, op, W, unrolled, U, suffix, mask)
@@ -382,6 +426,22 @@ function lower_set(ls::LoopSet, U::Int, T::Int, W::Int, mask, Uexprtype::Symbol)
     end
     loopq
 end
+function initialiaze_outer_reductions!(q::Expr, op::Operation, Umin::Int, Umax::Int, U::Int, suffix::Union{Symbol,Nothing} = nothing)
+    T = op.elementbytes == 8 ? :Float64 : :Float32
+    z = Expr(:call, REDUCTION_ZERO[op.instruction], T)
+    var = op.variable
+    if suffix !== nothing
+        var = Symbol(var, :_, suffix)
+    end
+    if U == 1
+        push!(q.args, Expr(:(=), var, z))
+        return nothing
+    end
+    for u ∈ Umin:Umax
+        push!(q.args, Expr(:(=), Symbol(var, :_, u), z))
+    end
+    nothing
+end
 function lower_unrolled!(
     q::Expr, ls::LoopSet, U::Int, T::Int, W::Int,
     static_unroll::Bool, unrolled_iter::Int, unrolled_itersym::Symbol
@@ -456,7 +516,7 @@ function lower_unrolled!(
             if Ut == 0
                 Uexprtype = :if
                 # W == Wt when !static_unroll
-                push!(q.args, Expr(:(=), Symbol("##mask##"), VectorizationBase.mask(Val{$W}(), $unrolled_itersym & $(W-1))))
+                push!(q.args, Expr(:(=), Symbol("##mask##"), :(VectorizationBase.mask(Val{$W}(), $unrolled_itersym & $(W-1)))))
             elseif 2Ut == oldUt
                 Uexprtype = :if
             else
