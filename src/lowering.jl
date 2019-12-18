@@ -1,7 +1,7 @@
 # function unitstride(op::Operation, sym::Symbol)
     # (first(op.symbolic_metadata) === sym) && (first(op.numerical_metadata) == 1)
 # end
-function mem_offset(op::Operation, incr::Int = 0)::Union{Symbol,Expr}
+function mem_offset(op::Operation, incr::Int = 0)
     @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
     ret = Expr(:tuple, )
     deps = op.dependencies
@@ -15,7 +15,7 @@ function mem_offset(op::Operation, incr::Int = 0)::Union{Symbol,Expr}
     end
     ret
 end
-function mem_offset(op::Operation, incr::Int, unrolled::Symbol)::Union{Symbol,Expr}
+function mem_offset(op::Operation, incr::Int, unrolled::Symbol)
     @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
     ret = Expr(:tuple, )
     deps = op.dependencies
@@ -268,10 +268,23 @@ function lower_compute!(
     var = op.variable
     parents_op = parents(op)
     nparents = length(parents_op)
+    if opunrolled
+        parentsunrolled = Vector{Bool}(undef, nparents)
+        for (p,opp) ∈ enumerate(parents_op)
+            # if op is an inner reduction, one of its parents will be the initialization of op
+            # They will share the same `variable` field. The initialization may not have
+            # unrolled in its loop dependencies, but (if opunrolled) op itself is, so we return true
+            parentsunrolled[p] = var === opp.variable ? true : (unrolled ∈ loopdependencies(opp))
+        end
+    else # maybe skip allocating this?
+        parentsunrolled = fill(false, nparents)
+    end
     parentstiled = if suffix === nothing
         optiled = false
+        tiledouterreduction = false
         fill(false, nparents)
     else
+        tiledouterreduction = identifier(op) ∈ 
         var = Symbol(var, :_, suffix)
         optiled = true
         [tiled ∈ loopdependencies(opp) for opp ∈ parents_op]
@@ -280,7 +293,7 @@ function lower_compute!(
     # cache unroll and tiling check of parents
     # not broadcasted, because we use frequent checks of individual bools
     # making BitArrays inefficient.
-    parentsunrolled = opunrolled ? [unrolled ∈ loopdependencies(opp) for opp ∈ parents_op] : fill(false, nparents)
+    @show instr parentsunrolled
     # parentsyms = [opp.variable for opp ∈ parents(op)]
     Uiter = opunrolled ? U - 1 : 0
     maskreduct = mask !== nothing && isreduction(op)#any(opp -> opp.variable === var, parents_op)
@@ -416,6 +429,7 @@ function lower_nest(
     istiled = T != -1
     loopsym = order[n]
     nloops = num_loops(ls)
+    outer_reduce = length(ls.outer_reductions) > 0
     if istiled
         if n == nloops
             loopsym = tiledsym(loopsym)
@@ -433,15 +447,12 @@ function lower_nest(
         loopincr = n == nloops ? U*W : 1
     end
     @show unrolled, order
-    blockq = if n == 1
-        Expr(:block, )
-    else
-        Expr(:block, Expr(:(=), order[n-1], loopstart))
-    end
+    blockq = Expr(:block, )
+    n == 1 || push!(blockq.args, Expr(:(=), order[n-1], loopstart))
     loopq = if exprtype === :block
         blockq
     else
-        @assert exprtype === :while || exprtype === :if
+        @assert exprtype === :while || exprtype === :if "Expression type $exprtype not recognized."
         Expr(exprtype, looprange(ls, loopsym, loopincr), blockq)
     end
     for prepost ∈ 1:2
@@ -603,7 +614,7 @@ function lower_tiled(ls::LoopSet, U::Int, T::Int)
     Texprtype = (static_tile && tiled_iter < 2T) ? :block : :while
     while Tt > 0
         tiledloopbody = Expr(:block, Expr(:(=), unrolled, 0))
-        push!(q.args, Texprtype === :block ? tiledloopbody : Expr(Texprtype, looprange(ls, tiled, Tt), tiledloopbody))
+        push!(q.args, Texprtype === :block ? tiledloopbody : Expr(Texprtype, looprange(ls, tiledsym(tiled), Tt), tiledloopbody))
         lower_unrolled!(tiledloopbody, ls, U, Tt, W, static_unroll, unrolled_iter, unrolled_itersym)
         if static_tile
             Tt = if Tt == T

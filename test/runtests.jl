@@ -66,6 +66,7 @@ dotq = :(for i ∈ eachindex(a)
 lsdot = LoopVectorization.LoopSet(dotq);
 @test LoopVectorization.choose_order(lsdot) == (Symbol[:i], 8, -1)
 LoopVectorization.lower(lsdot)
+lsdot.operations
 
 vexpq = :(for i ∈ eachindex(a)
           b[i] = exp(a[i])
@@ -80,6 +81,7 @@ vexpsq = :(for i ∈ eachindex(a)
 lsvexps = LoopVectorization.LoopSet(vexpsq);
 @test LoopVectorization.choose_order(lsvexps) == (Symbol[:i], 1, -1)
 LoopVectorization.lower(lsvexps)
+lsvexps.operations
 
 gemvq = :(for i ∈ eachindex(y)
           yᵢ = 0.0

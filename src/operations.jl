@@ -77,6 +77,20 @@ identifier(op::Operation) = op.identifier + 1
 name(op::Operation) = op.variable
 instruction(op::Operation) = op.instruction
 
+function isouterreduction(op::Operation)
+    if isconstant(op)
+        op.instruction === Symbol("##CONSTANT##")
+    elseif iscompute(op)
+        var = op.variable
+        for opp ∈ parents(op)
+            opp.variable === var && opp.instruction === Symbol("##CONSTANT##") && return true
+        end
+        false
+    else
+        false
+    end
+end
+
 # function hasintersection(s1::Set{T}, s2::Set{T}) where {T}
     # for x ∈ s1
         # x ∈ s2 && return true
