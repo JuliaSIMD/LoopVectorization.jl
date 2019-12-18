@@ -54,8 +54,12 @@ else
     (5,5)
 end
 @test LoopVectorization.choose_order(lsgemm) == (Symbol[:j,:i,:k], U, T)
+LoopVectorization.choose_order(lsgemm)
 LoopVectorization.lower(lsgemm)
 lsgemm.operations
+
+LoopVectorization.choose_tile(lsgemm)
+LoopVectorization.choose_unroll_order(lsgemm)
 
 ops = LoopVectorization.oporder(lsgemm);
 findall(length.(ops) .!= 0)

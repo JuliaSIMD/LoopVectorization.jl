@@ -239,7 +239,7 @@ function evaluate_cost_tile(
         # Add to set of defined symbles
         push!(nested_loop_syms, itersym)
         if n == 1
-            iter = length(ls, itersym) * length(ls, order[2]) / N
+            iter = length(ls, itersym) * length(ls, order[2]) / W
         elseif n > 2
             iter *= Float64(length(ls, itersym))
         end
@@ -279,6 +279,7 @@ function evaluate_cost_tile(
     end
     Tstatic = isstaticloop(ls, tiled)
     Ustatic = isstaticloop(ls, unrolled)
+    # @show order, cost_vec, reg_pressure
     if Tstatic
         if Ustatic
             solve_tilesize(cost_vec, reg_pressure, looprangehint(ls, tiled), looprangehint(ls, unrolled))
