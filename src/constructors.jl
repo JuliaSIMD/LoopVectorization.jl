@@ -1,10 +1,6 @@
 
 ### This file contains convenience functions for constructing LoopSets.
 
-function walk_body!(ls::LoopSet, body::Expr)
-    
-
-end
 function Base.copyto!(ls::LoopSet, q::Expr)
     q.head === :for || throw("Expression must be a for loop.")
     add_loop!(ls, q)
@@ -18,5 +14,7 @@ function LoopSet(q::Expr)
     ls
 end
 
-
+macro avx(q)
+    esc(lower(LoopSet(q)))
+end
 

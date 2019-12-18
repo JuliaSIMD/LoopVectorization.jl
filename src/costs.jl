@@ -123,7 +123,7 @@ const REDUCTION_TRANSLATION = Dict{Symbol,Symbol}(
     :(-) => :evadd,
     :vsub => :evadd,
     :(/) => :evmul,
-    :vdiv => :evmul,
+    :vfdiv => :evmul,
     :muladd => :evadd,
     :fma => :evadd,
     :vmuladd => :evadd,
@@ -141,7 +141,7 @@ const REDUCTION_ZERO = Dict{Symbol,Symbol}(
     :(-) => :zero,
     :vsub => :zero,
     :(/) => :one,
-    :vdiv => :one,
+    :vfdiv => :one,
     :muladd => :zero,
     :fma => :zero,
     :vmuladd => :zero,
@@ -151,12 +151,46 @@ const REDUCTION_ZERO = Dict{Symbol,Symbol}(
     :vfnmadd => :zero,
     :vfnmsub => :zero    
 )
-# const SIMDPIRATES_COST = Dict{Symbol,InstructionCost}()
-# const SLEEFPIRATES_COST = Dict{Symbol,InstructionCost}()
+# Fast functions, because common pattern is
+const REDUCTION_SCALAR_COMBINE = Dict{Symbol,Expr}(
+    :(+) => :(LoopVectorization.reduced_add),
+    :vadd => :(LoopVectorization.reduced_add),
+    :(*) => :(LoopVectorization.reduced_prod),
+    :vmul => :(LoopVectorization.reduced_prod),
+    :(-) => :(LoopVectorization.reduced_add),
+    :vsub => :(LoopVectorization.reduced_add),
+    :(/) => :(LoopVectorization.reduced_prod),
+    :vfdiv => :(LoopVectorization.reduced_prod),
+    :muladd => :(LoopVectorization.reduced_add),
+    :fma => :(LoopVectorization.reduced_add),
+    :vmuladd => :(LoopVectorization.reduced_add),
+    :vfma => :(LoopVectorization.reduced_add),
+    :vfmadd => :(LoopVectorization.reduced_add),
+    :vfmsub => :(LoopVectorization.reduced_add),
+    :vfnmadd => :(LoopVectorization.reduced_add),
+    :vfnmsub => :(LoopVectorization.reduced_add)
+)
 
-# const MODULE_LOOKUP = Dict{Symbol,Dict{Symbol,InstructionCost}}(
-    # :Base => BASE_COST,
-    # :SIMDPirates => SIMDPIRATES_COST,
-    # :SLEEFPirates => SLEEFPIRATES_COST
-# )
+const FUNCTION_MODULES = Dict{Symbol,Expr}(
+    :vadd => :(LoopVectorization.vadd),
+    :vmul => :(LoopVectorization.vmul),
+    :vsub => :(LoopVectorization.vsub),
+    :vfdiv => :(LoopVectorization.vfdiv),
+    :vmuladd => :(LoopVectorization.vmuladd),
+    :vfma => :(LoopVectorization.vfma),
+    :vfmadd => :(LoopVectorization.vfmadd),
+    :vfmsub => :(LoopVectorization.vfmsub),
+    :vfnmadd => :(LoopVectorization.vfnmadd),
+    :vfnmsub => :(LoopVectorization.vfnmsub),
+    :vsqrt => :(LoopVectorization.vsqrt),
+    :log => :(LoopVectorization.SIMDPirates.vlog),
+    :exp => :(LoopVectorization.SIMDPirates.vexp),
+    :sin => :(LoopVectorization.SLEEFPirates.sin),
+    :cos => :(LoopVectorization.SLEEFPirates.cos),
+    :sincos => :(LoopVectorization.SLEEFPirates.sincos)
+)
+function callfun(f::Symbol)
+    Expr(:call, get(FUNCTION_MODULES, f, f))::Expr
+end
+
 

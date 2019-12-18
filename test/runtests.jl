@@ -1,5 +1,5 @@
 using Test
-using LoopVectorization
+using LoopVectorization, VectorizationBase, SIMDPirates
 
 stride1(x) = stride(x, 1)
 @testset "LoopVectorization.jl" begin
@@ -54,8 +54,41 @@ else
     (5,5)
 end
 @test LoopVectorization.choose_order(lsgemm) == (Symbol[:j,:i,:k], U, T)
-LoopVectorization.choose_order(lsgemm)
 LoopVectorization.lower(lsgemm)
+
+
+function mygemm!(C, A, B)
+    @inbounds for i ∈ 1:size(A,1), j ∈ 1:size(B,2)
+        Cᵢⱼ = 0.0
+        @simd ivdep for k ∈ 1:size(A,2)
+            Cᵢⱼ += A[i,k] * B[k,j]
+        end
+        C[i,j] = Cᵢⱼ
+    end
+end
+function mygemmavx!(C, A, B)
+    @avx for i ∈ 1:size(A,1), j ∈ 1:size(B,2)
+        Cᵢⱼ = 0.0
+        for k ∈ 1:size(A,2)
+            Cᵢⱼ += A[i,k] * B[k,j]
+        end
+        C[i,j] = Cᵢⱼ
+    end
+end
+C = Matrix{Float64}(undef, 100, 100); A = randn(100, 100); B = randn(100, 100);
+C2 = similar(C);
+mygemmavx!(C, A, B)
+mygemm!(C2, A, B)
+@test all(C .≈ C2)
+
+using BenchmarkTools
+@benchmark mygemmavx!($C, $A, $B)
+@benchmark mygemm!($C, $A, $B)
+using LinearAlgebra
+BLAS.set_num_threads(1)
+@benchmark mul!($C2, $A, $B)
+
+LoopVectorization.choose_order(lsgemm)
 lsgemm.operations
 
 LoopVectorization.choose_tile(lsgemm)
@@ -68,9 +101,68 @@ dotq = :(for i ∈ eachindex(a)
          s += a[i]*b[i]
          end)
 lsdot = LoopVectorization.LoopSet(dotq);
-@test LoopVectorization.choose_order(lsdot) == (Symbol[:i], 8, -1)
+@test LoopVectorization.choose_order(lsdot) == (Symbol[:i], 4, -1)
 LoopVectorization.lower(lsdot)
 lsdot.operations
+
+function mydot(a, b)
+    @assert length(a) == length(b) "Both arrays must be of equal length."
+    s = 0.0
+    @inbounds @simd for i ∈ eachindex(a)
+        s += a[i]*b[i]
+    end
+    s
+end
+function mydotavx(a, b)
+    @assert length(a) == length(b) "Both arrays must be of equal length."
+    s = 0.0
+    @avx for i ∈ eachindex(a)
+        s += a[i]*b[i]
+    end
+    s
+end
+a = rand(400); b = rand(400);
+@test mydotavx(a,b) ≈ mydot(a,b)
+
+@benchmark mydotavx($a,$b)
+@benchmark mydot($a,$b)
+
+a = rand(43); b = rand(43);
+@benchmark mydotavx($a,$b)
+@benchmark mydot($a,$b)
+
+selfdotq = :(for i ∈ eachindex(a)
+         s += a[i]*a[i]
+         end)
+lsselfdot = LoopVectorization.LoopSet(selfdotq);
+@test LoopVectorization.choose_order(lsselfdot) == (Symbol[:i], 8, -1)
+LoopVectorization.lower(lsselfdot)
+
+function myselfdot(a)
+    s = 0.0
+    @inbounds @simd for i ∈ eachindex(a)
+        s += a[i]*a[i]
+    end
+    s
+end
+function myselfdotavx(a)
+    s = 0.0
+    @avx for i ∈ eachindex(a)
+        s += a[i]*a[i]
+    end
+    s
+end
+
+a = rand(400); b = rand(400);
+@test myselfdotavx(a) ≈ myselfdot(a)
+
+@benchmark myselfdotavx($a)
+@benchmark myselfdot($a)
+
+b = rand(43);
+@benchmark myselfdotavx($b)
+@benchmark myselfdot($b)
+
 
 vexpq = :(for i ∈ eachindex(a)
           b[i] = exp(a[i])
@@ -79,6 +171,28 @@ lsvexp = LoopVectorization.LoopSet(vexpq);
 @test LoopVectorization.choose_order(lsvexp) == (Symbol[:i], 1, -1)
 LoopVectorization.lower(lsvexp)
 
+function myvexp!(b, a)
+    @inbounds for i ∈ eachindex(a)
+        b[i] = exp(a[i])
+    end
+end
+function myvexpavx!(b, a)
+    @avx for i ∈ eachindex(a)
+        b[i] = exp(a[i])
+    end
+end
+a = randn(127);
+b1 = similar(a);
+b2 = similar(a);
+
+myvexp!(b1, a)
+myvexpavx!(b2, a)
+b1'
+b2'
+all(b1 .≈ b2)
+@test all(b1 .≈ b2)
+
+
 vexpsq = :(for i ∈ eachindex(a)
           s += exp(a[i])
           end)
@@ -86,6 +200,25 @@ lsvexps = LoopVectorization.LoopSet(vexpsq);
 @test LoopVectorization.choose_order(lsvexps) == (Symbol[:i], 1, -1)
 LoopVectorization.lower(lsvexps)
 lsvexps.operations
+
+function myvexp(a)
+    s = 0.0
+    @inbounds for i ∈ eachindex(a)
+        s += exp(a[i])
+    end
+    s
+end
+function myvexpavx(a)
+    s = 0.0
+    @avx for i ∈ eachindex(a)
+        s += exp(a[i])
+    end
+    s
+end
+
+@test myvexp(a) ≈ myvexpavx(a)
+
+
 
 gemvq = :(for i ∈ eachindex(y)
           yᵢ = 0.0
@@ -97,6 +230,33 @@ gemvq = :(for i ∈ eachindex(y)
 lsgemv = LoopVectorization.LoopSet(gemvq);
 @test LoopVectorization.choose_order(lsgemv) == (Symbol[:i, :j], 4, -1)
 LoopVectorization.lower(lsgemv)
+
+
+function mygemv!(y, A, x)
+    @inbounds for i ∈ eachindex(y)
+        yᵢ = 0.0
+        @simd for j ∈ eachindex(x)
+            yᵢ += A[i,j] * x[j]
+        end
+        y[i] = yᵢ
+    end
+end
+function mygemvavx!(y, A, x)
+    @avx for i ∈ eachindex(y)
+        yᵢ = 0.0
+        for j ∈ eachindex(x)
+            yᵢ += A[i,j] * x[j]
+        end
+        y[i] = yᵢ
+    end
+end
+A = randn(51, 49);
+x = randn(49);
+y1 = Vector{Float64}(undef, 51); y2 = similar(y1);
+mygemv!(y1, A, x)
+mygemvavx!(y2, A, x)
+
+@test all(y1 .≈ y2)
 
 lsgemv.preamble
 LoopVectorization.lower(lsgemv)

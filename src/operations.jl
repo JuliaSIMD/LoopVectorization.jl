@@ -77,17 +77,22 @@ identifier(op::Operation) = op.identifier + 1
 name(op::Operation) = op.variable
 instruction(op::Operation) = op.instruction
 
+"""
+Returns `0` if the op is the declaration of the constant outerreduction variable.
+Returns `n`, where `n` is the constant declarations's index among parents(op), if op is an outter reduction.
+Returns `-1` if not an outerreduction.
+"""
 function isouterreduction(op::Operation)
-    if isconstant(op)
-        op.instruction === Symbol("##CONSTANT##")
+    if isconstant(op) # equivalent to checking if length(loopdependencies(op)) == 0
+        op.instruction === Symbol("##CONSTANT##") ? 0 : -1
     elseif iscompute(op)
         var = op.variable
-        for opp ∈ parents(op)
-            opp.variable === var && opp.instruction === Symbol("##CONSTANT##") && return true
+        for (n,opp) ∈ enumerate(parents(op))
+            opp.variable === var && opp.instruction === Symbol("##CONSTANT##") && return n
         end
-        false
+        -1
     else
-        false
+        -1
     end
 end
 

@@ -88,22 +88,21 @@ end
 
 # only covers unrolled ops; everything else considered lifted?
 function depchain_cost!(
-    skip::Vector{Bool}, op::Operation, unrolled::Symbol, Wshift::Int, size_T::Int, sl::Int = 0, rt::Float64 = 0.0
+    skip::Vector{Bool}, op::Operation, unrolled::Symbol, Wshift::Int, size_T::Int, rt::Float64 = 0.0, sl::Int = 0
 )
     skip[identifier(op)] = true
     # depth first search
     for opp ∈ parents(op)
         skip[identifier(opp)] && continue
-        sl, rt = depchain_cost!(skip, opp, unrolled, Wshift, size_T, sl, rt)
+        rt, sl = depchain_cost!(skip, opp, unrolled, Wshift, size_T, rt, sl)
     end
     # Basically assuming memory and compute don't conflict, but everything else does
     # Ie, ignoring the fact that integer and floating point operations likely don't either
-    if accesses_memory(op)
-        return sl, rt
+    if iscompute(op)
+        rtᵢ, slᵢ = cost(op, unrolled, Wshift, size_T)
+        rt += rtᵢ; sl += slᵢ
     end
-    # @show instruction(op)
-    rtᵢ, slᵢ = cost(op, unrolled, Wshift, size_T)
-    sl + slᵢ, rt + rtᵢ
+    rt, sl
 end
    
 function determine_unroll_factor(
@@ -116,21 +115,35 @@ function determine_unroll_factor(
     # The assumption here is that unrolling provides no real benefit, unless it is needed to enable OOO execution by breaking up these dependency chains
     num_reductions = sum(isreduction, operations(ls))
     # @show num_reductions
-    iszero(num_reductions) && return 1
+    if iszero(num_reductions) # the 4 is a hack, based on the idea that there is some cost to moving through columns
+        return length(order) == 1 ? 1 : 4
+    end
     # So if num_reductions > 0, we set the unroll factor to be high enough so that the CPU can be kept busy
     # if there are, U = max(1, round(Int, max(latency) * throughput / num_reductions)) = max(1, round(Int, latency / (recip_throughput * num_reductions)))
     # We also make sure register pressure is not too high.
     latency = 0
-    recip_throughput = 0.0
+    compute_recip_throughput = 0.0
     visited_nodes = fill(false, length(operations(ls)))
+    load_recip_throughput = 0.0
+    store_recip_throughput = 0.0
     for op ∈ operations(ls)
-        if isreduction(op) && dependson(op, unrolled)
-            sl, rt = depchain_cost!(visited_nodes, op, unrolled, Wshift, size_T)
+        dependson(op, unrolled) || continue
+        if isreduction(op)
+            rt, sl = depchain_cost!(visited_nodes, op, unrolled, Wshift, size_T)
             latency = max(sl, latency)
-            recip_throughput += rt
+            compute_recip_throughput += rt
+        elseif isload(op)
+            load_recip_throughput += first(cost(op, unrolled, Wshift, size_T))
+        elseif isstore(op)
+            store_recip_throughput += first(cost(op, unrolled, Wshift, size_T))
         end
     end
-    max(1, round(Int, latency / (recip_throughput * num_reductions) ) )  
+    recip_throughput = max(
+        compute_recip_throughput,
+        load_recip_throughput,
+        store_recip_throughput
+    )
+    max(1, round(Int, latency / (recip_throughput * num_reductions) ) )
 end
 
 function tile_cost(X, U, T)

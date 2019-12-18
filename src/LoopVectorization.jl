@@ -1,11 +1,11 @@
 module LoopVectorization
 
 using VectorizationBase, SIMDPirates, SLEEFPirates, MacroTools, Parameters
-using VectorizationBase: REGISTER_SIZE, extract_data, num_vector_load_expr
-using SIMDPirates: VECTOR_SYMBOLS, evadd, evmul
+using VectorizationBase: REGISTER_SIZE, extract_data, num_vector_load_expr, mask
+using SIMDPirates: VECTOR_SYMBOLS, evadd, evmul, vrange, reduced_add, reduced_prod
 using MacroTools: prewalk, postwalk
 
-export vectorizable, @vectorize, @vvectorize
+export vectorizable, @vectorize, @vvectorize, @avx
 
 function isdense end #
 
