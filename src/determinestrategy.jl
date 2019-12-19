@@ -150,7 +150,8 @@ function tile_cost(X, U, T)
     X[1] + X[4] + X[2] / T + X[3] / U
 end
 function solve_tilesize(X, R)
-    first(R) == 0 && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
+    @inbounds any(iszero, (R[1],R[2],R[3])) && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
+    # @inbounds any(iszero, (R[1],R[2],R[3])) && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
     # We use lagrange multiplier to finding floating point values for U and T
     # first solving for U via quadratic formula
     # X is vector of costs, and R is of register pressures
@@ -163,6 +164,7 @@ function solve_tilesize(X, R)
     Ufloat = (sqrt(b^2 - 4a*c) - b) / (2a)
     Tfloat = (RR - Ufloat*R[2])/(Ufloat*R[1])
     # @show Ufloat, Tfloat
+    (isfinite(Tfloat) && isfinite(Ufloat)) || return -1,-1,Inf
     Ulow = max(1, floor(Int, Ufloat)) # must be at least 1
     Tlow = max(1, floor(Int, Tfloat)) # must be at least 1
     Uhigh = Ulow + 1 #ceil(Int, Ufloat)

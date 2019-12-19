@@ -75,7 +75,9 @@ function mygemmavx!(C, A, B)
         C[i,j] = Cᵢⱼ
     end
 end
-C = Matrix{Float64}(undef, 100, 100); A = randn(100, 100); B = randn(100, 100);
+
+M, K, N = rand(70:81, 3);
+C = Matrix{Float64}(undef, M, N); A = randn(M, K); B = randn(K, N);
 C2 = similar(C);
 mygemmavx!(C, A, B)
 mygemm!(C2, A, B)
@@ -97,7 +99,7 @@ LoopVectorization.choose_unroll_order(lsgemm)
 ops = LoopVectorization.oporder(lsgemm);
 findall(length.(ops) .!= 0)
 
-dotq = :(for i ∈ eachindex(a)
+dotq = :(for i ∈ eachindex(a,b)
          s += a[i]*b[i]
          end)
 lsdot = LoopVectorization.LoopSet(dotq);
@@ -106,17 +108,15 @@ LoopVectorization.lower(lsdot)
 lsdot.operations
 
 function mydot(a, b)
-    @assert length(a) == length(b) "Both arrays must be of equal length."
     s = 0.0
-    @inbounds @simd for i ∈ eachindex(a)
+    @inbounds @simd for i ∈ eachindex(a,b)
         s += a[i]*b[i]
     end
     s
 end
 function mydotavx(a, b)
-    @assert length(a) == length(b) "Both arrays must be of equal length."
     s = 0.0
-    @avx for i ∈ eachindex(a)
+    @avx for i ∈ eachindex(a,b)
         s += a[i]*b[i]
     end
     s
@@ -153,13 +153,12 @@ function myselfdotavx(a)
     s
 end
 
-a = rand(400); b = rand(400);
+a = rand(400);
 @test myselfdotavx(a) ≈ myselfdot(a)
 
 @benchmark myselfdotavx($a)
 @benchmark myselfdot($a)
 
-b = rand(43);
 @benchmark myselfdotavx($b)
 @benchmark myselfdot($b)
 
@@ -192,6 +191,9 @@ b2'
 all(b1 .≈ b2)
 @test all(b1 .≈ b2)
 
+@benchmark myvexp!($b1, $a)
+@benchmark myvexpavx!($b2, $a)
+
 
 vexpsq = :(for i ∈ eachindex(a)
           s += exp(a[i])
@@ -218,7 +220,8 @@ end
 
 @test myvexp(a) ≈ myvexpavx(a)
 
-
+@benchmark myvexp($a)
+@benchmark myvexpavx($a)
 
 gemvq = :(for i ∈ eachindex(y)
           yᵢ = 0.0
@@ -257,6 +260,43 @@ mygemv!(y1, A, x)
 mygemvavx!(y2, A, x)
 
 @test all(y1 .≈ y2)
+
+@benchmark mygemv!($y1, $A, $x)
+@benchmark mygemvavx!($y2, $A, $x)
+
+subcolq = :(for i ∈ 1:size(A,2), j ∈ eachindex(x)
+            B[j,i] = A[j,i] - x[j]
+            end)
+lssubcol = LoopVectorization.LoopSet(subcolq);
+@test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], 4, -1)
+LoopVectorization.lower(lssubcol)
+
+function mysubcol!(B, A, x)
+    @inbounds for i ∈ 1:size(A,2)
+        @simd for j ∈ eachindex(x)
+            B[j,i] = A[j,i] - x[j]
+        end
+    end
+end
+function mysubcolavx!(B, A, x)
+    @avx for i ∈ 1:size(A,2), j ∈ eachindex(x)
+        B[j,i] = A[j,i] - x[j]
+    end
+end
+A = randn(199, 498); x = randn(size(A,1));
+B1 = similar(A); B2 = similar(A);
+
+mysubcol!(B1, A, x)
+mysubcolavx!(B2, A, x)
+
+@test all(B1 .≈ B2)
+
+@benchmark mysubcol!($B1, $A, $x)
+@benchmark mysubcolavx!($B2, $A, $x)
+
+@code_native debuginfo=:none mysubcol!(B1, A, x)
+@code_native debuginfo=:none mysubcolavx!(B2, A, x)
+
 
 lsgemv.preamble
 LoopVectorization.lower(lsgemv)
