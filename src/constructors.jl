@@ -18,3 +18,13 @@ macro avx(q)
     esc(lower(LoopSet(q)))
 end
 
+#=
+@generated function vmaterialize(
+    dest::AbstractArray{T,N}, bc::BC
+) where {T,N,BC <: Base.Broadcast.Broadcasted}
+    # we have an N dimensional loop.
+    # need to construct the LoopSet
+    
+end
+=#
+

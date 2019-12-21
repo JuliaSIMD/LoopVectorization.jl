@@ -1,3 +1,52 @@
+struct ArrayReference
+    array::Symbol
+    ref::Vector{Union{Symbol,Int}}
+    loaded::Base.RefValue{Bool}
+end
+function Base.hash(x::ArrayReference, h::UInt)
+    @inbounds for n ∈ eachindex(x)
+        h = hash(x.ref[n], h)
+    end
+    hash(x.array, h)
+end
+loopdependencies(ref::ArrayReference) = filter(i -> i isa Symbol, ref.ref)
+function Base.isequal(x::ArrayReference, y::ArrayReference)
+    x.array === y.array || return false
+    nrefs = length(x.ref)
+    nrefs == length(y.ref) || return false
+    all(n -> x.ref[n] === y.ref[n], 1:nrefs)
+    # for n ∈ 1:nrefs
+        # x.ref[n] === y.ref[n] || return false
+    # end
+    # true
+end
+
+Base.:(==)(x::ArrayReference, y::ArrayReference) = isequal(x, y)
+
+function ref_from_ref(ex::Expr)
+    ArrayReference( ex.args[1], @view(ex.args[2:end]), Ref(false) )
+end
+function ref_from_getindex(ex::Expr)
+    ArrayReference( ex.args[2], @view(ex.args[3:end]), Ref(false) )
+end
+function ArrayReference(ex::Expr)
+    ex.head === :ref ? ref_from_ref(ex) : ref_from_getindex(ex)
+end
+function Base.:(==)(x::ArrayReference, y::Expr)
+    if y.head === :ref
+        isequal(x, ref_from_ref(y))
+    elseif y.head === :call && first(y.args) === :getindex
+        isequal(x, ref_from_getindex(y))
+    else
+        false
+    end
+end
+Base.:(==)(x::ArrayReference, y) = false
+
+
+
+# Avoid memory allocations by accessing this
+const NOTAREFERENCE = ArrayReference(Symbol(""), Union{Symbol,Int}[])
 
 @enum OperationType begin
     constant
@@ -17,8 +66,7 @@ symbolic metadata contains info on direct dependencies / placement within loop.
 if isload(op) -> Symbol(:vptr_, first(op.reduced_deps))
 if istore(op) -> Symbol(:vptr_, op.variable)
 is how we access the memory.
-If numerical_metadata[i] == -1
-Symbol(:stride_, op.variable, :_, op.symbolic_metadata[i])
+
 is the stride for loop index
 symbolic_metadata[i]
 """
@@ -28,9 +76,10 @@ struct Operation
     elementbytes::Int
     instruction::Symbol
     node_type::OperationType
-    dependencies::Vector{Symbol}
+    dependencies::Vector{Symbol}#::Vector{Symbol}
     reduced_deps::Vector{Symbol}
     parents::Vector{Operation}
+    ref::ArrayReference
     # children::Vector{Operation}
     # numerical_metadata::Vector{Int} # stride of -1 indicates dynamic
     # symbolic_metadata::Vector{Symbol}
@@ -42,19 +91,21 @@ struct Operation
         node_type,
         dependencies = Symbol[],
         reduced_deps = Symbol[],
-        parents = Operation[]
+        parents = Operation[],
+        ref::ArrayReference = NOTAREFERENCE
     )
         new(
             identifier, variable, elementbytes, instruction, node_type,
             convert(Vector{Symbol},dependencies),
             convert(Vector{Symbol},reduced_deps),
-            convert(Vector{Operation},parents)
+            convert(Vector{Operation},parents),
+            ref
         )
     end
 end
 
  # negligible save on allocations for operations that don't need these (eg, constants).
-const NODEPENDENCY = Symbol[]
+const NODEPENDENCY = Union{Symbol,Int}[]
 const NOPARENTS = Operation[]
 
 

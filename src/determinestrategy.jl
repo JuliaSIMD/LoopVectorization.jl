@@ -1,5 +1,6 @@
 
 # TODO: FIXME for general case
+# wrong for transposed matrices, and certain views/SubArrays.
 unitstride(op, s) = first(loopdependencies(op)) === s
 
 function cost(op::Operation, unrolled::Symbol, Wshift::Int, size_T::Int = op.elementbytes)

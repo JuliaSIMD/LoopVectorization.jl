@@ -522,7 +522,7 @@ end
 function gc_preserve(ls::LoopSet, q::Expr)
     length(ls.includedarrays) == 0 && return q # is this even possible?
     gcp = Expr(:macrocall, Expr(:(.), :GC, QuoteNode(Symbol("@preserve"))), LineNumberNode(@__LINE__, @__FILE__))
-    for (array,i) ∈ ls.includedarrays
+    for (array,_) ∈ ls.includedarrays
         push!(gcp.args, array)
     end
     push!(q.args, nothing)
@@ -697,4 +697,5 @@ function lower(ls::LoopSet)
 end
 
 Base.convert(::Type{Expr}, ls::LoopSet) = lower(ls)
+Base.show(io::IO, ls::LoopSet) = println(io, lower(ls))
 

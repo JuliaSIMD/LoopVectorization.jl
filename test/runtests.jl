@@ -271,6 +271,9 @@ lssubcol = LoopVectorization.LoopSet(subcolq);
 @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], 4, -1)
 LoopVectorization.lower(lssubcol)
 
+
+## @avx is SLOWER!!!!
+## need to fix!
 function mysubcol!(B, A, x)
     @inbounds for i ∈ 1:size(A,2)
         @simd for j ∈ eachindex(x)
@@ -296,6 +299,156 @@ mysubcolavx!(B2, A, x)
 
 @code_native debuginfo=:none mysubcol!(B1, A, x)
 @code_native debuginfo=:none mysubcolavx!(B2, A, x)
+
+
+
+# invalid
+colsumq = :(for i ∈ 1:size(A,2), j ∈ eachindex(x)
+            x[j] += A[j,i]
+            end)
+colsumq = :(for i ∈ 1:size(A,2), j ∈ eachindex(x)
+            x[j] = x[j] + A[j,i]
+            end)
+# invalid
+# Should model aliasing better
+# after x[j] is assigned, that must be defined as alias of xj
+
+colsumq = :(for i ∈ 1:size(A,2), j ∈ eachindex(x)
+            xj = x[j]
+            x[j] = xj + A[j,i]
+            end)
+# valid
+colsumq = :(for i ∈ 1:size(A,2), j ∈ eachindex(x)
+            xj = x[j]
+            xj = xj + A[j,i]
+            x[j] = xj
+            end)
+#TODO: make this code valid!!!
+lscolsum = LoopVectorization.LoopSet(colsumq);
+lscolsum
+lscolsum.operations
+
+@test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], 4, -1)
+
+function mycolsum!(x, A)
+    @. x = 0
+    @inbounds for i ∈ 1:size(A,2)
+        @simd for j ∈ eachindex(x)
+            x[j] += A[j,i]
+        end
+    end
+end
+
+mycolsum2q = :(for j ∈ eachindex(x)
+        xⱼ = 0.0
+        for i ∈ 1:size(A,2)
+            xⱼ += A[j,i]
+        end
+        x[j] = xⱼ
+    end)
+
+function mycolsumavx!(x, A)
+    @avx for j ∈ eachindex(x)
+        xⱼ = 0.0
+        for i ∈ 1:size(A,2)
+            xⱼ += A[j,i]
+        end
+        x[j] = xⱼ
+    end
+end
+x1 = similar(x); x2 = similar(x);
+mycolsum!(x1, A)
+mycolsumavx!(x2, A)
+
+@test all(x1 .≈ x2)
+@benchmark mycolsum!($x1, $A)
+@benchmark mycolsumavx!($x2, $A)
+
+
+varq = :(for j ∈ eachindex(s²), i ∈ 1:size(A,2)
+         δ = A[j,i] - x̄[j]
+         s²[j] += δ*δ
+         end)
+lsvar = LoopVectorization.LoopSet(varq);
+@test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], 4, -1)
+
+function myvar!(s², A, x̄)
+    @. s² = 0
+    @inbounds for i ∈ 1:size(A,2)
+        @simd for j ∈ eachindex(s²)
+            δ = A[j,i] - x̄[j]
+            s²[j] += δ*δ
+        end
+    end
+end
+function myvaravx!(s², A, x̄)
+    @avx for j ∈ eachindex(s²)
+        s²ⱼ = 0.0
+        x̄ⱼ = x̄[j]
+        for i ∈ 1:size(A,2)
+            δ = A[j,i] - x̄ⱼ
+            s²ⱼ += δ*δ
+        end
+        s²[j] = s²ⱼ
+    end
+end
+
+x̄ = x1 ./ size(A,2);
+myvar!(x1, A, x̄)
+myvaravx!(x2, A, x̄)
+@test all(x1 .≈ x2)
+
+@benchmark myvar!($x1, $A, $x̄)
+@benchmark myvaravx!($x2, $A, $x̄)
+
+
+using SIMDPirates
+function mycolsum2!(
+    means::AbstractVector{T}, sample::AbstractArray{T}
+) where {T}
+    V = VectorizationBase.pick_vector(T)
+    W, Wshift = VectorizationBase.pick_vector_width_shift(T)
+    WT = VectorizationBase.REGISTER_SIZE
+    D, N = size(sample); sample_stride = stride(sample, 2) * sizeof(T)
+    @boundscheck if length(means) < D
+        throw(BoundsError("Size of sample: ($D,$N); length of preallocated mean vector: $(length(means))"))
+    end
+    ptr_mean = pointer(means); ptr_smpl = pointer(sample)
+    # vNinv = vbroadcast(V, 1/N); vNm1inv = vbroadcast(V, 1/(N-1))
+    for _ in 1:(D >>> (Wshift + 2)) # blocks of 4 vectors
+        Base.Cartesian.@nexprs 4 i -> Σδ_i = vbroadcast(V, zero(T))
+        for n ∈ 0:N-1
+            Base.Cartesian.@nexprs 4 i -> δ_i = vload(V, ptr_smpl + WT * (i-1) + n*sample_stride)
+            Base.Cartesian.@nexprs 4 i -> Σδ_i = vadd(δ_i, Σδ_i)
+        end
+        # Base.Cartesian.@nexprs 4 i -> Σδ_i = vmul(vNinv, Σδ_i)
+        Base.Cartesian.@nexprs 4 i -> (vstore!(ptr_mean, Σδ_i); ptr_mean += WT)
+        ptr_smpl += 4WT
+    end
+    for _ in 1:((D & ((W << 2)-1)) >>> Wshift) # single vectors
+        Σδ_i = vbroadcast(V, zero(T))
+        for n ∈ 0:N-1
+            δ_i = vload(V, ptr_smpl + n*sample_stride)
+            Σδ_i = vadd(δ_i, Σδ_i)
+        end
+        # Σδ_i = vmul(vNinv, Σδ_i)
+        vstore!(ptr_mean, Σδ_i); ptr_mean += WT
+        ptr_smpl += WT
+    end
+    r = D & (W-1)
+    if r > 0 # remainder
+        mask = VectorizationBase.mask(T, r)
+        Σδ_i = vbroadcast(V, zero(T))
+        for n ∈ 0:N-1
+            δ_i = vload(V, ptr_smpl + n*sample_stride, mask)
+            Σδ_i = vadd(δ_i, Σδ_i)
+        end
+        # Σδ_i = vmul(vNinv, Σδ_i)
+        vstore!(ptr_mean, Σδ_i, mask)
+    end
+    nothing
+end
+
 
 
 lsgemv.preamble
