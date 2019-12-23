@@ -88,6 +88,13 @@ struct LoopSet
     # ref_to_sym_aliases::Dict{ArrayReference,Symbol}
 end
 
+# function op_to_ref(ls::LoopSet, op::Operation)
+    # s = op.variable
+    # id = findfirst(ls.syms_aliasing_regs)
+    # @assert id !== nothing
+    # ls.refs_aliasing_syms[id]
+# end
+
 function includesarray(ls::LoopSet, array::Symbol)
     for (a,i) ∈ ls.includedarrays
         a === array && return i
@@ -235,7 +242,7 @@ function add_load!(
         :getindex, memload, loopdependencies(ref),
         NODEPENDENCY, NOPARENTS, ref
     )
-    add_vptr!(ls, indexed, identifier(op))
+    add_vptr!(ls, ref.array, identifier(op))
     pushop!(ls, op, var)
 end
 function add_load_ref!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8)
@@ -311,12 +318,16 @@ function maybe_cse_load!(ls::LoopSet, expr::Expr, elementbytes::Int = 8)
     else
         return add_operation!(ls, gensym(:temporary), expr, elementbytes)
     end
-    ref = ArrayReference( ex.args[1+offset], @view(ex.args[2+offset:end]) )::ArrayReference
+    ref = ArrayReference(
+        expr.args[1+offset],
+        @view(expr.args[2+offset:end]),
+        Ref(false)
+    )::ArrayReference
     id = findfirst(r -> r == ref, ls.refs_aliasing_syms)
     if id === nothing
-        add_load!( ls, gensym(:temporary), array, args, elementbytes )
+        add_load!( ls, gensym(:temporary), ref, elementbytes )
     else
-        ls.syms_aliasing_refs[id]
+        getop(ls, ls.syms_aliasing_refs[id])        
     end
     # id = includesarray(ls, array)
     # if id > 0
@@ -371,7 +382,7 @@ function add_compute!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8,
     # op = Operation( length(operations(ls)), var, elementbytes, instr, compute )
     reduction = false
     for arg ∈ args
-        if arg === var
+        if var === arg
             reduction = true
             add_reduction!(parents, deps, reduceddeps, ls, arg, elementbytes)
         elseif ref == arg
@@ -389,18 +400,20 @@ function add_compute!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8,
     end
 end
 function add_store!(
-    ls::LoopSet, indexed::Symbol, var::Symbol, indices::AbstractVector, elementbytes::Int = 8
+    ls::LoopSet, var::Symbol, ref::ArrayReference, elementbytes::Int = 8
 )
     parent = getop(ls, var)
-    op = Operation( length(operations(ls)), indexed, elementbytes, :setindex!, memstore, indices, reduceddependencies(parent), [parent] )
-    add_vptr!(ls, indexed, identifier(op))
+    op = Operation( length(operations(ls)), ref.array, elementbytes, :setindex!, memstore, loopdependencies(ref), reduceddependencies(parent), [parent], ref )
+    add_vptr!(ls, ref.array, identifier(op))
     pushop!(ls, op, var)
 end
 function add_store_ref!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8)
-    add_store!(ls, ex.args[1], var, @view(ex.args[2:end]), elementbytes)
+    ref = ref_from_ref(ex)
+    add_store!(ls, var, ref, elementbytes)
 end
 function add_store_setindex!(ls::LoopSet, ex::Expr, elementbytes::Int = 8)
-    add_store!(ls, ex.args[2], ex.args[3], @view(ex.args[4:end]), elementbytes)
+    ref = ref_from_setindex(ex)
+    add_store!(ls, var, ref, elementbytes)
 end
 # add operation assigns X to var
 function add_operation!(
@@ -413,6 +426,21 @@ function add_operation!(
             add_load_getindex!(ls, LHS, RHS, elementbytes)
         else
             add_compute!(ls, LHS, RHS, elementbytes)
+        end
+    else
+        throw("Expression not recognized:\n$x")
+    end
+end
+function add_operation!(
+    ls::LoopSet, LHS_sym::Symbol, RHS::Expr, LHS_ref::ArrayReference, elementbytes::Int = 8
+)
+    if RHS.head === :ref# || (RHS.head === :call && first(RHS.args) === :getindex)
+        add_load!(ls, LHS_sym, LHS_ref, elementbytes)
+    elseif RHS.head === :call
+        if first(RHS.args) === :getindex
+            add_load!(ls, LHS_sym, LHS_ref, elementbytes)
+        else
+            add_compute!(ls, LHS_sym, RHS, elementbytes, LHS_ref)
         end
     else
         throw("Expression not recognized:\n$x")
@@ -446,7 +474,9 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int = 8)
                 ref = ArrayReference(LHS)
                 id = findfirst(r -> r == ref, ls.refs_aliasing_syms)
                 lrhs = id === nothing ? gensym(:RHS) : ls.syms_aliasing_refs[id]
-                add_operation!(ls, lrhs, RHS, elementbytes, ref)
+                # we pass ref, so it can compare references within RHS, and realize
+                # they equal lrhs
+                add_operation!(ls, lrhs, RHS, ref, elementbytes)
             end
             add_store_ref!(ls, lrhs, LHS, elementbytes)
         else

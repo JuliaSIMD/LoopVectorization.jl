@@ -23,12 +23,12 @@ end
 
 Base.:(==)(x::ArrayReference, y::ArrayReference) = isequal(x, y)
 
-function ref_from_ref(ex::Expr)
-    ArrayReference( ex.args[1], @view(ex.args[2:end]), Ref(false) )
+function ref_from_expr(ex, offset1::Int = 0, offset2 = 0)
+    ArrayReference( ex.args[1 + offset1], @view(ex.args[2 + offset2:end]), Ref(false) )
 end
-function ref_from_getindex(ex::Expr)
-    ArrayReference( ex.args[2], @view(ex.args[3:end]), Ref(false) )
-end
+ref_from_ref(ex::Expr) = ref_from_expr(ex, 0, 0)
+ref_from_getindex(ex::Expr) = ref_from_expr(ex, 1, 1)
+ref_from_setindex(ex::Expr) = ref_from_expr(ex, 1, 2)
 function ArrayReference(ex::Expr)
     ex.head === :ref ? ref_from_ref(ex) : ref_from_getindex(ex)
 end
@@ -46,7 +46,7 @@ Base.:(==)(x::ArrayReference, y) = false
 
 
 # Avoid memory allocations by accessing this
-const NOTAREFERENCE = ArrayReference(Symbol(""), Union{Symbol,Int}[])
+const NOTAREFERENCE = ArrayReference(Symbol(""), Union{Symbol,Int}[], Ref(false))
 
 @enum OperationType begin
     constant
@@ -127,6 +127,9 @@ reduceddependencies(op::Operation) = op.reduced_deps
 identifier(op::Operation) = op.identifier + 1
 name(op::Operation) = op.variable
 instruction(op::Operation) = op.instruction
+
+refname(op::Operation) = Symbol("##vptr##_", op.ref.array)
+
 
 """
 Returns `0` if the op is the declaration of the constant outerreduction variable.

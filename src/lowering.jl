@@ -5,12 +5,13 @@
 function mem_offset(op::Operation, incr::Int = 0)
     @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
     ret = Expr(:tuple, )
-    deps = op.dependencies
+    deps = op.ref.ref
     if incr == 0
         append!(ret.args, deps)
     else
-        push!(ret.args, Expr(:call, :+, first(deps), incr))
-        for n ∈ 2:length(deps)
+        dep = first(deps)
+        push!(ret.args, dep isa Symbol ? Expr(:call, :+, dep, incr) : dep + incr)
+         for n ∈ 2:length(deps)
             push!(ret.args, deps[n])
         end
     end
@@ -19,7 +20,7 @@ end
 function mem_offset(op::Operation, incr::Int, unrolled::Symbol)
     @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
     ret = Expr(:tuple, )
-    deps = op.dependencies
+    deps = op.ref.ref
     if incr == 0
         append!(ret.args, deps)
     else
@@ -55,7 +56,7 @@ function lower_load_scalar!(
     if suffix !== nothing
         var = Symbol(var, :_, suffix)
     end
-    ptr = Symbol("##vptr##_", first(op.reduced_deps))
+    ptr = refname(op)
     push!(q.args, Expr(:(=), Symbol("##", var), Expr(:call, lv(:load),  ptr, mem_offset(op))))
     nothing
 end
@@ -69,7 +70,7 @@ function lower_load_unrolled!(
     if suffix !== nothing
         var = Symbol(var, :_, suffix)
     end
-    ptr = Symbol("##vptr##_", first(op.reduced_deps))
+    ptr = refname(op)
     val = Expr(:call, Expr(:curly, :Val, W))
     if first(loopdependencies(op)) === unrolled # vload
         for u ∈ 0:U-1
@@ -157,7 +158,7 @@ function lower_store_reduction!(
     if suffix !== nothing
         var = Symbol(var, :_, suffix)
     end
-    ptr = Symbol("##vptr##_", op.variable)
+    ptr = refname(op)
     # need to find out reduction type
     instr = first(parents(op)).instruction
     reduce_expr!(q, var, instr, U) # assigns reduction to storevar
@@ -174,7 +175,7 @@ function lower_store_scalar!(
     if suffix !== nothing
         var = Symbol(var, :_, suffix)
     end
-    ptr = Symbol("##vptr##_", op.variable)
+    ptr = refname(op)
     push!(q.args, Expr(:call, lv(:store!), ptr, Symbol("##", var), mem_offset(op)))
     nothing
 end
@@ -188,7 +189,7 @@ function lower_store_unrolled!(
     if suffix !== nothing
         var = Symbol(var, :_, suffix)
     end
-    ptr = Symbol("##vptr##_", op.variable)
+    ptr = refname(op)
     if first(loopdependencies(op)) === unrolled # vstore!
         for u ∈ 0:U-1
             instrcall = Expr(:call,lv(:vstore!), ptr, Symbol("##",var,:_,u), mem_offset(op, u*W))

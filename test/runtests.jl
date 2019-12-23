@@ -77,6 +77,7 @@ function mygemmavx!(C, A, B)
 end
 
 M, K, N = rand(70:81, 3);
+M, K, N = 72, 75, 71;
 C = Matrix{Float64}(undef, M, N); A = randn(M, K); B = randn(K, N);
 C2 = similar(C);
 mygemmavx!(C, A, B)
@@ -328,6 +329,7 @@ lscolsum = LoopVectorization.LoopSet(colsumq);
 lscolsum
 lscolsum.operations
 
+LoopVectorization.choose_order(lscolsum)
 @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], 4, -1)
 
 function mycolsum!(x, A)
@@ -370,6 +372,7 @@ varq = :(for j ∈ eachindex(s²), i ∈ 1:size(A,2)
          s²[j] += δ*δ
          end)
 lsvar = LoopVectorization.LoopSet(varq);
+LoopVectorization.choose_order(lsvar)
 @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], 4, -1)
 
 function myvar!(s², A, x̄)

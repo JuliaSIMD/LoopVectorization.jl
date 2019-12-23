@@ -114,7 +114,12 @@ function determine_unroll_factor(
 
     # The strategy is to use an unroll factor of 1, unless there appears to be loop carried dependencies (ie, num_reductions > 0)
     # The assumption here is that unrolling provides no real benefit, unless it is needed to enable OOO execution by breaking up these dependency chains
-    num_reductions = sum(isreduction, operations(ls))
+    num_reductions = 0#sum(isreduction, operations(ls))
+    for op ∈ operations(ls)
+        if isreduction(op) & iscompute(op)
+            num_reductions += 1
+        end
+    end
     # @show num_reductions
     if iszero(num_reductions) # the 4 is a hack, based on the idea that there is some cost to moving through columns
         return length(order) == 1 ? 1 : 4
