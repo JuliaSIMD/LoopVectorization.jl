@@ -1,7 +1,7 @@
 using Test
-using LoopVectorization, VectorizationBase, SIMDPirates
+using LoopVectorization
 
-stride1(x) = stride(x, 1)
+
 @testset "LoopVectorization.jl" begin
 
     
@@ -10,7 +10,7 @@ stride1(x) = stride(x, 1)
             n = length(x)
             length(r) == n || throw(DimensionMismatch())
             isempty(x) && return -T(Inf)
-            1 == stride1(r) == stride1(x) || throw(error("Arrays not strided"))
+            1 == stride(r,1) == stride(x,1) || throw(error("Arrays not strided"))
 
             u = maximum(x)                                       # max value used to re-center
             abs(u) == Inf && return any(isnan, x) ? T(NaN) : u   # check for non-finite values
@@ -76,7 +76,7 @@ function mygemmavx!(C, A, B)
     end
 end
 
-M, K, N = rand(70:81, 3);
+# M, K, N = rand(70:81, 3);
 M, K, N = 72, 75, 71;
 C = Matrix{Float64}(undef, M, N); A = randn(M, K); B = randn(K, N);
 C2 = similar(C);
@@ -88,7 +88,7 @@ using BenchmarkTools
 @benchmark mygemmavx!($C, $A, $B)
 @benchmark mygemm!($C, $A, $B)
 using LinearAlgebra
-BLAS.set_num_threads(1)
+BLAS.set_num_threads(1); BLAS.vendor()
 @benchmark mul!($C2, $A, $B)
 
 LoopVectorization.choose_order(lsgemm)
@@ -124,13 +124,15 @@ function mydotavx(a, b)
 end
 a = rand(400); b = rand(400);
 @test mydotavx(a,b) ≈ mydot(a,b)
-
+mydotavx(a,b), mydot(a,b), a' * b
 @benchmark mydotavx($a,$b)
 @benchmark mydot($a,$b)
+@benchmark dot($a,$b)
 
 a = rand(43); b = rand(43);
 @benchmark mydotavx($a,$b)
 @benchmark mydot($a,$b)
+@benchmark dot($a,$b)
 
 selfdotq = :(for i ∈ eachindex(a)
          s += a[i]*a[i]
@@ -232,7 +234,7 @@ gemvq = :(for i ∈ eachindex(y)
           y[i] = yᵢ
           end)
 lsgemv = LoopVectorization.LoopSet(gemvq);
-@test LoopVectorization.choose_order(lsgemv) == (Symbol[:i, :j], 4, -1)
+@test LoopVectorization.choose_order(lsgemv) == (Symbol[:i, :j], 8, -1)
 LoopVectorization.lower(lsgemv)
 
 
@@ -373,7 +375,7 @@ varq = :(for j ∈ eachindex(s²), i ∈ 1:size(A,2)
          end)
 lsvar = LoopVectorization.LoopSet(varq);
 LoopVectorization.choose_order(lsvar)
-@test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], 4, -1)
+@test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], 5, -1)
 
 function myvar!(s², A, x̄)
     @. s² = 0

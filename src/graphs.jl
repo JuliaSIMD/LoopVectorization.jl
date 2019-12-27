@@ -1,4 +1,5 @@
-lv(x) = Expr(:(.), :LoopVectorization, QuoteNode(x))
+# lv(x) = Expr(:(.), :LoopVectorization, QuoteNode(x))
+lv(x) = GlobalRef(LoopVectorization, x)
 
 isdense(::Type{<:DenseArray}) = true
 
@@ -94,6 +95,7 @@ end
     # @assert id !== nothing
     # ls.refs_aliasing_syms[id]
 # end
+pushpreamble!(ls::LoopSet, ex) = push!(ls.preamble.args, ex)
 
 function includesarray(ls::LoopSet, array::Symbol)
     for (a,i) ∈ ls.includedarrays
@@ -141,6 +143,17 @@ end
 function Base.length(ls::LoopSet, is::Symbol)
     ls.loops[is].rangehint
 end
+
+function Operation(
+    ls::LoopSet, variable, elementbytes, instruction,
+    node_type, dependencies, reduced_deps, parents, ref
+)
+    Operation(
+        length(operations(ls)), variable, elementbytes, instruction,
+        node_type, dependencies, reduced_deps, parents, ref
+    )
+end
+
 # load_operations(ls::LoopSet) = ls.loadops
 # compute_operations(ls::LoopSet) = ls.computeops
 # store_operations(ls::LoopSet) = ls.storeops
@@ -184,12 +197,12 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
             else
                 Expr(:call, :-, Expr(:call, :+, upper, 1), lower)
             end
-            push!(ls.preamble.args, Expr(:(=), N, ex))
+            pushpreamble!(ls, Expr(:(=), N, ex))
             Loop(itersym, N)
         end
     elseif f === :eachindex
         N = gensym(Symbol(:loop, itersym))
-        push!(ls.preamble.args, Expr(:(=), N, Expr(:call, :length, r.args[2])))
+        pushpreamble!(ls, Expr(:(=), N, Expr(:call, :length, r.args[2])))
         Loop(itersym, N)
     else
         throw("Unrecognized loop range type: $r.")
@@ -219,7 +232,7 @@ end
 function add_vptr!(ls::LoopSet, indexed::Symbol, id::Int)
     if includesarray(ls, indexed) < 0
         push!(ls.includedarrays, (indexed, id))
-        push!(ls.preamble.args, Expr(:(=), Symbol("##vptr##_", indexed), Expr(:call, lv(:stridedpointer), indexed)))
+        pushpreamble!(ls, Expr(:(=), Symbol("##vptr##_", indexed), Expr(:call, lv(:stridedpointer), indexed)))
     end
     nothing
 end
@@ -283,7 +296,7 @@ function add_constant!(ls::LoopSet, var::Symbol, elementbytes::Int = 8)
 end
 function add_constant!(ls::LoopSet, var, elementbytes::Int = 8)
     sym = gensym(:temp)
-    push!(ls.preamble.args, Expr(:(=), sym, var))
+    pushpreamble!(ls, Expr(:(=), sym, var))
     pushop!(ls, Operation(length(operations(ls)), sym, elementbytes, Symbol("##CONSTANT##"), constant, NODEPENDENCY, Symbol[], NOPARENTS), sym)
 end
 # This version has loop dependencies. var gets assigned to sym when lowering.
@@ -293,7 +306,7 @@ function add_constant!(ls::LoopSet, var::Symbol, deps::Vector{Symbol}, sym::Symb
 end
 function add_constant!(ls::LoopSet, var, deps::Vector{Symbol}, sym::Symbol = gensym(:constant), elementbytes::Int = 8)
     sym2 = gensym(:temp)
-    push!(ls.preamble.args, Expr(:(=), sym2, var))
+    pushpreamble!(ls, Expr(:(=), sym2, var))
     pushop!(ls, Operation(length(operations(ls)), sym, elementbytes, sym2, constant, deps, NODEPENDENCY, NOPARENTS), sym)
 end
 function pushparent!(parents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, parent::Operation)
@@ -491,6 +504,17 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int = 8)
     end
 end
 
+function place_after_loop(op::Operation)
+    if isload(op) || length(reduceddependencies(op)) == 0
+        1
+    elseif length(reduceddependencies(op)) > 1
+        2
+    else
+        rd = first(reduceddependencies(op))
+        any(d -> d === rd, loopdependencies(op)) ? 1 : 2
+    end
+end
+
 function fillorder!(ls::LoopSet, order::Vector{Symbol}, loopistiled::Bool)
     lo = ls.loop_order
     ro = lo.loopnames # reverse order; will have same order as lo
@@ -519,7 +543,7 @@ function fillorder!(ls::LoopSet, order::Vector{Symbol}, loopistiled::Bool)
             isunrolled = (unrolled ∈ loopdependencies(op)) + 1
             istiled = (loopistiled ? (tiled ∈ loopdependencies(op)) : false) + 1
             optype = Int(op.node_type) + 1
-            after_loop = isload(op) ? 1 : (length(reduceddependencies(op)) > 0) + 1
+            after_loop = place_after_loop(op)
             push!(lo[optype,isunrolled,istiled,after_loop,_n], op)
         end
     end    

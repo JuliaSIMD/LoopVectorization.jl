@@ -3,6 +3,12 @@ struct ArrayReference
     ref::Vector{Union{Symbol,Int}}
     loaded::Base.RefValue{Bool}
 end
+function ArrayReference(
+    array::Symbol,
+    ref::AbstractVector
+)
+    ArrayReference(array, ref, Ref{Bool}(false))
+end
 function Base.hash(x::ArrayReference, h::UInt)
     @inbounds for n ∈ eachindex(x)
         h = hash(x.ref[n], h)

@@ -440,12 +440,13 @@ function lower_nest(
         lower!(blockq, @view(ops[:,2,1,prepost,n]), W, unrolled, last(order), U, nothing, mask)
         # end
         if sum(length, @view(ops[:,:,2,prepost,n])) > 0
-            for t ∈ 0:T-1   # !U &&  T
+            for t ∈ 0:T-1
                 if t == 0
                     push!(blockq.args, Expr(:(=), last(order), tiledsym(last(order))))
                 else
                     push!(blockq.args, Expr(:+=, last(order), 1))
                 end
+                # !U &&  T
                 lower!(blockq, @view(ops[:,1,2,prepost,n]), W, unrolled, last(order), U, t, mask)
                 # for u ∈ 0:U-1 #  U &&  T
                 lower!(blockq, @view(ops[:,2,2,prepost,n]), W, unrolled, last(order), U, t, mask)
@@ -642,12 +643,17 @@ function lower_tiled(ls::LoopSet, U::Int, T::Int)
     unrolled_iter = looprangehint(ls, unrolled)
     unrolled_itersym = looprangesym(ls, unrolled)
     initialize_outer_reductions!(ls, 0, 4, W, unrolled)
-    q = Expr(:block, ls.preamble, Expr(:(=), mangledtiled, 0))
+    q = Expr(:block, Expr(:(=), mangledtiled, 0))
     # we build up the loop expression.
     Trem = Tt = T
+    nloops = num_loops(ls); addtileonly = sum(length, @view(oporder(ls)[:,:,:,:,end])) > 0
     Texprtype = (static_tile && tiled_iter < 2T) ? :block : :while
     while Tt > 0
-        tiledloopbody = Expr(:block, Expr(:(=), unrolled, 0))
+        tiledloopbody = if addtileonly
+            tiledloopbody = lower_nest(ls, nloops, U, T, nothing, 0, W, nothing, :block)
+        else
+            Expr(:block, Expr(:(=), unrolled, 0))
+        end
         push!(q.args, Texprtype === :block ? tiledloopbody : Expr(Texprtype, looprange(ls, tiled, Tt, tiledsym(tiled)), tiledloopbody))
         lower_unrolled!(tiledloopbody, ls, U, Tt, W, static_unroll, unrolled_iter, unrolled_itersym)
         if static_tile
@@ -669,7 +675,7 @@ function lower_tiled(ls::LoopSet, U::Int, T::Int)
     end
     q = gc_preserve(ls, q)
     reduce_expr!(q, ls, U)
-    q
+    Expr(:block, ls.preamble, q)
 end
 function lower_unrolled(ls::LoopSet, U::Int)
     order = ls.loop_order.loopnames
@@ -679,7 +685,8 @@ function lower_unrolled(ls::LoopSet, U::Int)
     static_unroll = isstaticloop(ls, unrolled)
     unrolled_iter = looprangehint(ls, unrolled)
     unrolled_itersym = looprangesym(ls, unrolled)
-    lower_unrolled!(Expr(:block, ls.preamble, Expr(:(=), unrolled, 0)), ls, U, -1, W, static_unroll, unrolled_iter, unrolled_itersym)
+    q = lower_unrolled!(Expr(:block, Expr(:(=), unrolled, 0)), ls, U, -1, W, static_unroll, unrolled_iter, unrolled_itersym)
+    Expr(:block, ls.preamble, q)
 end
 
 

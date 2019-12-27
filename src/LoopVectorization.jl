@@ -3,9 +3,13 @@ module LoopVectorization
 using VectorizationBase, SIMDPirates, SLEEFPirates, MacroTools, Parameters
 using VectorizationBase: REGISTER_SIZE, extract_data, num_vector_load_expr, mask
 using SIMDPirates: VECTOR_SYMBOLS, evadd, evmul, vrange, reduced_add, reduced_prod
+using Base.Broadcast: Broadcasted, DefaultArrayStyle
+using LinearAlgebra: Adjoint
 using MacroTools: prewalk, postwalk
 
-export vectorizable, @vectorize, @vvectorize, @avx
+
+export LowDimArray, stridedpointer, vectorizable,
+    @vectorize, @vvectorize, @avx, ∗
 
 function isdense end #
 
@@ -896,6 +900,7 @@ end
 include("costs.jl")
 include("operations.jl")
 include("graphs.jl")
+include("broadcast.jl")
 include("determinestrategy.jl")
 include("lowering.jl")
 include("constructors.jl")
