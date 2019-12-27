@@ -656,7 +656,7 @@ function lower_tiled(ls::LoopSet, U::Int, T::Int)
             # Expr(:block, Expr(:(=), unrolled, 0))
         # end
         lower_unrolled!(tiledloopbody, ls, U, Tt, W, static_unroll, unrolled_iter, unrolled_itersym)
-        tiledloopbody = lower_nest(ls, nloops, U, T, tiledloopbody, 0, W, nothing, :block)
+        tiledloopbody = lower_nest(ls, nloops, U, Tt, tiledloopbody, 0, W, nothing, :block)
         push!(q.args, Texprtype === :block ? tiledloopbody : Expr(Texprtype, looprange(ls, tiled, Tt, tiledsym(tiled)), tiledloopbody))
         if static_tile
             Tt = if Tt == T
