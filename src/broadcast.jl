@@ -100,8 +100,7 @@ function add_broadcast!(
 end
 
 # size of dest determines loops
-# @generated
-function vmaterialize!(
+@generated function vmaterialize!(
     dest::AbstractArray{T,N}, bc::BC
 # ) where {T, N, BC <: Broadcasted}
 ) where {N, T, BC <: Broadcasted}
@@ -119,8 +118,11 @@ function vmaterialize!(
     add_broadcast!(ls, :dest, :bc, loopsyms, BC)
     add_store!(ls, :dest, ArrayReference(:dest, loopsyms, Ref{Bool}(false)))
     resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
-    # lower(ls)
-    ls
+    q = lower(ls)
+    push!(q.args, :dest)
+    pushfirst!(q.args, Expr(:meta,:inline))
+    q
+    # ls
 end
 
 function vmaterialize(bc::Broadcasted)

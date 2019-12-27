@@ -646,19 +646,21 @@ function lower_tiled(ls::LoopSet, U::Int, T::Int)
     q = Expr(:block, Expr(:(=), mangledtiled, 0))
     # we build up the loop expression.
     Trem = Tt = T
-    nloops = num_loops(ls); addtileonly = sum(length, @view(oporder(ls)[:,:,:,:,end])) > 0
+    nloops = num_loops(ls);
+    # addtileonly = sum(length, @view(oporder(ls)[:,:,:,:,end])) > 0
     Texprtype = (static_tile && tiled_iter < 2T) ? :block : :while
     while Tt > 0
-        tiledloopbody = if addtileonly
-            tiledloopbody = lower_nest(ls, nloops, U, T, nothing, 0, W, nothing, :block)
-        else
-            Expr(:block, Expr(:(=), unrolled, 0))
-        end
-        push!(q.args, Texprtype === :block ? tiledloopbody : Expr(Texprtype, looprange(ls, tiled, Tt, tiledsym(tiled)), tiledloopbody))
+        # 
+        tiledloopbody = Expr(:block, )
+        # else
+            # Expr(:block, Expr(:(=), unrolled, 0))
+        # end
         lower_unrolled!(tiledloopbody, ls, U, Tt, W, static_unroll, unrolled_iter, unrolled_itersym)
+        tiledloopbody = lower_nest(ls, nloops, U, T, tiledloopbody, 0, W, nothing, :block)
+        push!(q.args, Texprtype === :block ? tiledloopbody : Expr(Texprtype, looprange(ls, tiled, Tt, tiledsym(tiled)), tiledloopbody))
         if static_tile
             Tt = if Tt == T
-                push!(tiledloopbody.args, Expr(:+=, mangledtiled, Tt))
+                # push!(tiledloopbody.args, Expr(:+=, mangledtiled, Tt))
                 Texprtype = :block
                 looprangehint(ls, tiled) % T
             else
@@ -668,7 +670,7 @@ function lower_tiled(ls::LoopSet, U::Int, T::Int)
         else
             Ttold = Tt
             Tt >>>= 1
-            Tt == 0 || push!(tiledloopbody.args, Expr(:+=, mangledtiled, Ttold))
+            # Tt == 0 || push!(tiledloopbody.args, Expr(:+=, mangledtiled, Ttold))
             Texprtype = 2Tt == Ttold ? :if : :while
             nothing
         end

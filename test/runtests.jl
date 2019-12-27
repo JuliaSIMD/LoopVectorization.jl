@@ -407,6 +407,13 @@ myvaravx!(x2, A, x̄)
 @benchmark myvaravx!($x2, $A, $x̄)
 
 
+a = rand(37); B = rand(37, 47); c = rand(47)';
+
+d1 =      @. a + B * c;
+d2 = @avx @. a + B * c;
+
+@test all(d1 .≈ d2)
+
 using SIMDPirates
 function mycolsum2!(
     means::AbstractVector{T}, sample::AbstractArray{T}
