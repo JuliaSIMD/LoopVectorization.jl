@@ -146,7 +146,7 @@ end
 
 function Operation(
     ls::LoopSet, variable, elementbytes, instruction,
-    node_type, dependencies, reduced_deps, parents, ref
+    node_type, dependencies, reduced_deps, parents, ref = NOTAREFERENCE
 )
     Operation(
         length(operations(ls)), variable, elementbytes, instruction,
@@ -283,6 +283,16 @@ function mergesetv!(s1::AbstractVector{T}, s2::AbstractVector{T}) where {T}
     end
     nothing
 end
+function mergesetdiffv!(
+    s1::AbstractVector{T},
+    s2::AbstractVector{T},
+    s3::AbstractVector{T}
+) where {T}
+    for s ∈ s2
+        s ∉ s3 && addsetv!(s1, s)
+    end
+    nothing
+end
 function setdiffv!(s3::AbstractVector{T}, s1::AbstractVector{T}, s2::AbstractVector{T}) where {T}
     for s ∈ s1
         (s ∈ s2) || (s ∉ s3 && push!(s3, s))
@@ -311,7 +321,7 @@ function add_constant!(ls::LoopSet, var, deps::Vector{Symbol}, sym::Symbol = gen
 end
 function pushparent!(parents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, parent::Operation)
     push!(parents, parent)
-    mergesetv!(deps, loopdependencies(parent))
+    mergesetdiffv!(deps, loopdependencies(parent), reduceddependencies(parent))
     if !(isload(parent) || isconstant(parent))
         mergesetv!(reduceddeps, reduceddependencies(parent))
     end

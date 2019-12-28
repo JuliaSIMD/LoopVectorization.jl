@@ -2,9 +2,25 @@ struct Product{A,B}
     a::A
     b::B
 end
+function Base.size(p::Product)
+    M = size(p.a, 1)
+    (M, Base.tail(size(p.b))...)
+end
+@inline Base.length(p::Product) = prod(size(p))
+@inline Base.broadcastable(p::Product) = p
+@inline Base.ndims(p::Type{Product{A,B}}) where {A,B} = ndims(B)
+
+Base.Broadcast._broadcast_getindex_eltype(::Product{A,B}) where {T, A <: AbstractVecOrMat{T}, B <: AbstractVecOrMat{T}} = T
+function Base.Broadcast._broadcast_getindex_eltype(p::Product)
+    promote_type(
+        Base.Broadcast._broadcast_getindex_eltype(p.a),
+        Base.Broadcast._broadcast_getindex_eltype(p.b)
+    )
+end
+
 
 @inline ∗(a::A, b::B) where {A,B} = Product{A,B}(a, b)
-@inline Base.Broadcast.Broadcasted(::typeof(∗), a::A, b::B) where {A, B} = Product{A,B}(a, b)
+@inline Base.Broadcast.broadcasted(::typeof(∗), a::A, b::B) where {A, B} = Product{A,B}(a, b)
 # TODO: Need to make this handle A or B being (1 or 2)-D broadcast objects.
 function add_broadcast!(
     ls::LoopSet, mC::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
@@ -19,17 +35,29 @@ function add_broadcast!(
 
     k = gensym(:k)
     ls.loops[k] = Loop(k, K)
-    m = loopsyms[1]; n = loopsyms[2];
+    m = loopsyms[1];
+    if ndims(B) == 1
+        bloopsyms = Symbol[k]
+        cloopsyms = Symbol[m]
+        reductdeps = Symbol[m, k]
+    elseif ndims(B) == 2
+        n = loopsyms[2];
+        bloopsyms = Symbol[k,n]
+        cloopsyms = Symbol[m,n]
+        reductdeps = Symbol[m, k, n]
+    else
+        throw("B must be a vector or matrix.")
+    end
     # load A
     # loadA = add_load!(ls, gensym(:A), productref(A, mA, m, k), elementbytes)
-    loadA = add_broadcast!(ls, gensym(:A), mA, [m,k], A, elementbytes)
+    loadA = add_broadcast!(ls, gensym(:A), mA, Symbol[m,k], A, elementbytes)
     # load B
-    loadB = add_broadcast!(ls, gensym(:B), mB, [k,n], B, elementbytes)
+    loadB = add_broadcast!(ls, gensym(:B), mB, bloopsyms, B, elementbytes)
     # set Cₘₙ = 0
-    setC = add_constant!(ls, 0.0, Symbol[m, k], mC, elementbytes)
+    setC = add_constant!(ls, 0.0, cloopsyms, mC, elementbytes)
     # compute Cₘₙ += Aₘₖ * Bₖₙ
     reductop = Operation(
-        ls, mC, elementbytes, :vmuladd, compute, Symbol[m, k, n], Symbol[k], Operation[loadA, loadB, setC]
+        ls, mC, elementbytes, :vmuladd, compute, reductdeps, Symbol[k], Operation[loadA, loadB, setC]
     )
     pushop!(ls, reductop, mC)    
 end
@@ -102,8 +130,8 @@ end
 # size of dest determines loops
 @generated function vmaterialize!(
     dest::AbstractArray{T,N}, bc::BC
-# ) where {T, N, BC <: Broadcasted}
-) where {N, T, BC <: Broadcasted}
+) where {T, N, BC <: Broadcasted}
+# ) where {N, T, BC <: Broadcasted}
     # we have an N dimensional loop.
     # need to construct the LoopSet
     loopsyms = [gensym(:n) for n ∈ 1:N]

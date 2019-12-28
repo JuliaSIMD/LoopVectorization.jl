@@ -90,7 +90,7 @@ struct Operation
     # numerical_metadata::Vector{Int} # stride of -1 indicates dynamic
     # symbolic_metadata::Vector{Symbol}
     function Operation(
-        identifier,
+        identifier::Int,
         variable,
         elementbytes,
         instruction,

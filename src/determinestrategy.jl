@@ -105,7 +105,12 @@ function depchain_cost!(
     end
     rt, sl
 end
-   
+function parentsnotreduction(op::Operation)
+    for opp ∈ parents(op)
+        isreduction(opp) && return false
+    end
+    return true
+end
 function determine_unroll_factor(
     ls::LoopSet, order::Vector{Symbol}, unrolled::Symbol = first(order)
 )
@@ -116,7 +121,7 @@ function determine_unroll_factor(
     # The assumption here is that unrolling provides no real benefit, unless it is needed to enable OOO execution by breaking up these dependency chains
     num_reductions = 0#sum(isreduction, operations(ls))
     for op ∈ operations(ls)
-        if isreduction(op) & iscompute(op)
+        if isreduction(op) & iscompute(op) && parentsnotreduction(op)
             num_reductions += 1
         end
     end
