@@ -4,7 +4,7 @@
 unitstride(op, s) = first(loopdependencies(op)) === s
 
 function cost(op::Operation, unrolled::Symbol, Wshift::Int, size_T::Int = op.elementbytes)
-    isconstant(op) && return 0.0, 0, 0
+    isconstant(op) && return 0.0, 0, 1
     # Wshift == dependson(op, unrolled) ? Wshift : 0
     # c = first(cost(instruction(op), Wshift, size_T))::Int
     instr = instruction(op)
@@ -71,7 +71,6 @@ function evaluate_cost_unroll(
         for (id,op) ∈ enumerate(operations(ls))
             # won't define if already defined...
             # id = identifier(op)
-            isconstant(op) && continue
             included_vars[id] && continue
             # it must also be a subset of defined symbols
             loopdependencies(op) ⊆ nested_loop_syms || continue
@@ -193,18 +192,20 @@ function solve_tilesize(X, R)
             U, T = Ulow, Thigh
         end
     end
-    # @show Uhigh*Tlow*R[1] + Uhigh*R[2]
-    if RR ≥ Uhigh*Tlow*R[1] + Uhigh*R[2]
-        tcost_temp = tile_cost(X, Uhigh, Tlow)
-        if tcost_temp < tcost
-            tcost = tcost_temp
-            U, T = Uhigh, Tlow
-        end
+    # The RR + 1 is a hack to get it to favor Uhigh in more scenarios
+    Tl = Tlow
+    while RR < Uhigh*Tl*R[1] + Uhigh*R[2]
+        Tl -= 1
+    end
+    tcost_temp = tile_cost(X, Uhigh, Tl)
+    if tcost_temp < tcost
+        tcost = tcost_temp
+        U, T = Uhigh, Tl
     end
     if RR > Uhigh*Thigh*R[1] + Uhigh*R[2]
         throw("Something went wrong when solving for Tfloat and Ufloat.")
     end
-    U, T, tcost
+    min(U,RR), min(T,RR), tcost
 end
 function solve_tilesize_constU(X, R, U)
     floor(Int, (VectorizationBase.REGISTER_COUNT - R[3] - R[4] - U*R[2]) / (U * R[1]))
@@ -258,8 +259,8 @@ function evaluate_cost_tile(
     # @show order
     cost_vec = zeros(Float64, 4)
     reg_pressure = zeros(Int, 4)
-    @inbounds reg_pressure[2] = 1
-    @inbounds reg_pressure[3] = 1
+    # @inbounds reg_pressure[2] = 1
+    # @inbounds reg_pressure[3] = 1
     for n ∈ 1:N
         itersym = order[n]
         # Add to set of defined symbles
@@ -271,7 +272,7 @@ function evaluate_cost_tile(
         end
         # check which vars we can define at this level of loop nest
         for (id, op) ∈ enumerate(operations(ls))
-            isconstant(op) && continue
+            # isconstant(op) && continue
             # @assert id == identifier(op)+1 # testing, for now
             # won't define if already defined...
             included_vars[id] && continue

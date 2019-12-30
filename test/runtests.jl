@@ -330,4 +330,11 @@ fill!(d4, 91000.0);
 @avx @. d4 = a + B ∗ c;
 @test all(d3 .≈ d4)
 
+M, K, N = 77, 83, 57;
+A = rand(M,K); B = rand(K,N); C = rand(M,N);
+
+D1 = C .+ A * B;
+D2 = @avx C .+ A ∗ B;
+@test all(D1 .≈ D2)
+
 end

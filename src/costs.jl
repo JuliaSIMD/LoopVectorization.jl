@@ -63,8 +63,8 @@ const OPAQUE_INSTRUCTION = InstructionCost(50, 50.0, -1.0, VectorizationBase.REG
 #    consolidated into a single register. The number of LICM-ed setindex!, on the other
 #    hand, should indicate how many registers we're keeping live for the sake of eventually storing.
 const COST = Dict{Symbol,InstructionCost}(
-    :getindex => InstructionCost(-3.0,0.5,3,0),
-    :setindex! => InstructionCost(-3.0,1.0,3,1),
+    :getindex => InstructionCost(-3.0,0.5,3,1),
+    :setindex! => InstructionCost(-3.0,1.0,3,0),
     :zero => InstructionCost(1,0.5),
     :one => InstructionCost(3,0.5),
     :(+) => InstructionCost(4,0.5),

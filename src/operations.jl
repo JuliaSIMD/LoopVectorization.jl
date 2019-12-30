@@ -2,6 +2,16 @@ struct ArrayReference
     array::Symbol
     ref::Vector{Union{Symbol,Int}}
     loaded::Base.RefValue{Bool}
+    function ArrayReference(
+        array, refsin, loadedin = Ref{Bool}(false)
+    )
+        ref = Vector{Union{Symbol,Int}}(undef, length(refsin))
+        for i ∈ eachindex(ref)
+            refᵢ = (refsin[i])::Union{Symbol,Int}
+            ref[i] = refᵢ isa Int ? refᵢ - 1 : refᵢ
+        end
+        new(array, ref, loadedin)
+    end
 end
 function ArrayReference(
     array::Symbol,

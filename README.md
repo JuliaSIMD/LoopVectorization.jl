@@ -18,8 +18,132 @@ Pkg.add(PackageSpec(url="https://github.com/chriselrod/LoopVectorization.jl"))
 
 ## Usage
 
-The current version of LoopVectorization provides a simple, dumb, transform on a single loop.
-What I mean by this is that it will not check for the transformations for validity. To be safe, I would straight loops that transform arrays or calculate reductions.
+This library provides the `@avx` macro, which may be used to prefix a `for` loop or broadcast statement.
+It then tries to vectorize the loop to improve runtime performance.
+
+The macro assumes that loop iterations can be reordered. It also currently supports simple nested loops, where loop bounds of inner loops are constant across iterations of the outer loop, and only a single loop at each level of noop lest. These limitations should be removed in a future version.
+
+A simple example with a single loop is the dot product:
+```julia
+using LoopVectorization, BenchmarkTools
+function mydot(a, b)
+    s = 0.0
+    @inbounds @simd for i ∈ eachindex(a,b)
+        s += a[i]*b[i]
+    end
+    s
+end
+function mydotavx(a, b)
+    s = 0.0
+    @avx for i ∈ eachindex(a,b)
+        s += a[i]*b[i]
+    end
+    s
+end
+a = rand(256); b = rand(256);
+@btime mydot($a, $b)
+@btime mydotavx($a, $b)
+a = rand(43); b = rand(43);
+@btime mydot($a, $b)
+@btime mydotavx($a, $b)
+```
+
+On most recent CPUs, the performance of the dot product is bounded by
+the speed at which it can load data; most recent x86_64 CPUs can perform
+two aligned loads and two fused multiply adds (`fma`) per clock cycle.
+However, the dot product requires two loads per `fma`.
+
+A self-dot function, on the otherhand, requires one load per fma:
+```julia
+function myselfdot(a)
+    s = 0.0
+    @inbounds @simd for i ∈ eachindex(a)
+        s += a[i]*a[i]
+    end
+    s
+end
+function myselfdotavx(a)
+    s = 0.0
+    @avx for i ∈ eachindex(a)
+        s += a[i]*a[i]
+    end
+    s
+end
+a = rand(256);
+@btime myselfdotavx($a)
+@btime myselfdot($a)
+@btime myselfdotavx($b)
+@btime myselfdot($b)
+```
+For this reason, the `@avx` version is roughly twice as fast. The `@inbounds @simd` version, however, is not, because it runs into the problem of loop carried dependencies: to add `a[i]*b[i]` to `s_new = s_old + a[i-j]*b[i-j]`, we must have first finished calculating `s_new`, but -- while two `fma` instructions can be initiated per cycle -- they each take several clock cycles to complete.
+For this reason, we need to unroll the operation to run several independent instances concurrently. The `@avx` macro models this cost to try and pick an optimal unroll factor.
+
+Note that 14 and 12 nm Ryzen chips can only do 1 full width `fma` per clock cycle (and 2 loads), so they should see similar performance with the dot and selfdot. I haven't verified this, but would like to hear from anyone who can.
+
+
+We can also vectorize fancier loops. A likely familiar example to dive into:
+```julia
+function mygemm!(C, A, B)
+    @inbounds for i ∈ 1:size(A,1), j ∈ 1:size(B,2)
+        Cᵢⱼ = 0.0
+        @fastmath for k ∈ 1:size(A,2)
+            Cᵢⱼ += A[i,k] * B[k,j]
+        end
+        C[i,j] = Cᵢⱼ
+    end
+end
+function mygemmavx!(C, A, B)
+    @avx for i ∈ 1:size(A,1), j ∈ 1:size(B,2)
+        Cᵢⱼ = 0.0
+        for k ∈ 1:size(A,2)
+            Cᵢⱼ += A[i,k] * B[k,j]
+        end
+        C[i,j] = Cᵢⱼ
+    end
+end
+M, K, N = 72, 75, 71;
+C1 = Matrix{Float64}(undef, M, N); A = randn(M, K); B = randn(K, N);
+C2 = similar(C1); C3 = similar(C1); 
+@btime mygemmavx!($C1, $A, $B)
+@btime mygemm!($C2, $A, $B)
+using LinearAlgebra, Test
+@test all(C1 .≈ C2)
+BLAS.set_num_threads(1); BLAS.vendor()
+@btime mul!($C3, $A, $B)
+@test all(C1 .≈ C3)
+```
+It can produce a decent macro kernel.
+In the future, I would like it to also model the cost of memory movement in the L1 and L2 cache, and use these to generate loops around the macro kernel following the work of [Low, et al. (2016)](http://www.cs.utexas.edu/users/flame/pubs/TOMS-BLIS-Analytical.pdf).
+
+Until then, performance will degrade rapidly compared to BLAS as the size of the matrices increase. The advantage of the `@avx` macro, however, is that it is general. Not every operation is supported by BLAS.
+
+For example, what if `A` were the outter product of two vectors?
+```julia
+
+
+```
+
+
+Another example, a straightforward operation expressed well via broadcasting:
+```julia
+a = rand(37); B = rand(37, 47); c = rand(47); c′ = c';
+
+d1 =      @. a + B * c′;
+d2 = @avx @. a + B * c′;
+
+@test all(d1 .≈ d2)
+
+@time @.      $d1 = $a + $B * $c′;
+@time @avx @. $d2 = $a + $B * $c′;
+@test all(d1 .≈ d2)
+```
+can be optimized in a similar manner to BLAS, albeit to a much smaller degree because the naive version already benefits from vectorization (unlike the naive BLAS).
+
+
+
+
+Originally, LoopVectorization only provided a simple, dumb, transform on a single loop using the `@vectorize` macro. This transformation took element type and unroll factor arguments, performing no analysis of the loop, simply applying the specified arguments.
+For backwards compatability, this macro is still currently supported. However, it may eventually be deprecated.
 
 For example,
 ```julia
@@ -33,7 +157,7 @@ end
 using LoopVectorization, BenchmarkTools
 function sum_loopvec(x::AbstractVector{Float64})
     s = 0.0
-    @vvectorize 4 for i ∈ eachindex(x)
+    @vectorize 4 for i ∈ eachindex(x)
         s += x[i]
     end
     s

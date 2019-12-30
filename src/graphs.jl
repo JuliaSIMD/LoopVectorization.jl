@@ -346,6 +346,7 @@ function maybe_cse_load!(ls::LoopSet, expr::Expr, elementbytes::Int = 8)
         @view(expr.args[2+offset:end]),
         Ref(false)
     )::ArrayReference
+    # @show ref.ref
     id = findfirst(r -> r == ref, ls.refs_aliasing_syms)
     if id === nothing
         add_load!( ls, gensym(:temporary), ref, elementbytes )

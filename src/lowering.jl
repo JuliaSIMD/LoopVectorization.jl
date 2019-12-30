@@ -199,6 +199,7 @@ function lower_store_unrolled!(
             push!(q.args, instrcall)
         end
     else
+        sn = findfirst(x -> x === unrolled, loopdependencies(op))::Int
         ustrides = Expr(:call, lv(:vmul), Expr(:call, :stride, ptr, sn), Expr(:call, lv(:vrange), Expr(:call, Expr(:curly, :Val, W))))
         for u ∈ 0:U-1
             instrcall = Expr(:call, lv(:scatter!), ptr, Symbol("##",var,:_,u), Expr(:call,lv(:vadd),mem_offset(op,u*W,unrolled),ustrides))
