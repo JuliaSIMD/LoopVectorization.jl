@@ -53,11 +53,12 @@ end
 struct LoopOrder <: AbstractArray{Vector{Operation},5}
     oporder::Vector{Vector{Operation}}
     loopnames::Vector{Symbol}
+    bestorder::Vector{Symbol}
 end
 function LoopOrder(N::Int)
-    LoopOrder( [ Operation[] for i ∈ 1:24N ], Vector{Symbol}(undef, N) )
+    LoopOrder( [ Operation[] for i ∈ 1:24N ], Vector{Symbol}(undef, N), Vector{Symbol}(undef, N) )
 end
-LoopOrder() = LoopOrder(Vector{Operation}[],Symbol[])
+LoopOrder() = LoopOrder(Vector{Operation}[],Symbol[],Symbol[])
 Base.empty!(lo::LoopOrder) = foreach(empty!, lo.oporder)
 function Base.resize!(lo::LoopOrder, N::Int)
     Nold = length(lo.loopnames)
@@ -66,6 +67,7 @@ function Base.resize!(lo::LoopOrder, N::Int)
         lo.oporder[n] = Operation[]
     end
     resize!(lo.loopnames, N)
+    resize!(lo.bestorder, N)
     lo
 end
 Base.size(lo::LoopOrder) = (4,2,2,2,length(lo.loopnames))
@@ -85,9 +87,33 @@ struct LoopSet
     includedarrays::Vector{Tuple{Symbol,Int}}
     syms_aliasing_refs::Vector{Symbol} # O(N) search is faster at small sizes
     refs_aliasing_syms::Vector{ArrayReference}
+    cost_vec::Matrix{Float64}
+    reg_pres::Matrix{Int}
     # sym_to_ref_aliases::Dict{Symbol,ArrayReference}
     # ref_to_sym_aliases::Dict{ArrayReference,Symbol}
 end
+
+function cost_vec_buf(ls::LoopSet)
+    cv = @view(ls.cost_vec[:,2])
+    @inbounds for i ∈ 1:4
+        cv[i] = 0.0
+    end
+    cv
+end
+function reg_pres_buf(ls::LoopSet)
+    ps = @view(ls.reg_pres[:,2])
+    @inbounds for i ∈ 1:4
+        ps[i] = 0
+    end
+    ps
+end
+function save_tilecost!(ls::LoopSet)
+    @inbounds for i ∈ 1:4
+        ls.cost_vec[i,1] = ls.cost_vec[i,2]
+        ls.reg_pres[i,1] = ls.reg_pres[i,2]
+    end
+end
+
 
 # function op_to_ref(ls::LoopSet, op::Operation)
     # s = op.variable
@@ -113,9 +139,9 @@ function LoopSet()
         Expr(:block,),
         Tuple{Symbol,Int}[],
         Symbol[],
-        ArrayReference[]
-        # Dict{Symbol,ArrayReference}()
-        # Dict{ArrayReference,Symbol}()
+        ArrayReference[],
+        Matrix{Float64}(undef, 4, 2),
+        Matrix{Int}(undef, 4, 2)
     )
 end
 num_loops(ls::LoopSet) = length(ls.loops)
@@ -131,8 +157,7 @@ looprangesym(ls::LoopSet, s::Symbol) = ls.loops[s].rangesym
 getop(ls::LoopSet, s::Symbol) = ls.opdict[s]
 getop(ls::LoopSet, i::Int) = ls.operations[i + 1]
 
-function looprange(ls::LoopSet, s::Symbol, incr::Int = 1, mangledname::Symbol = s)
-    loop = ls.loops[s]
+function looprange(ls::LoopSet, s::Symbol, incr::Int = 1, mangledname::Symbol = s, loop = ls.loops[s])
     incr -= 1
     if iszero(incr)
         Expr(:call, :<, mangledname, loop.hintexact ? loop.rangehint : loop.rangesym)

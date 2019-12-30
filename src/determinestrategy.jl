@@ -167,7 +167,7 @@ function solve_tilesize(X, R)
     # X is vector of costs, and R is of register pressures
     # @show X
     # @show R 
-    RR = VectorizationBase.REGISTER_COUNT - R[3] - R[4]
+    RR = REGISTER_COUNT - R[3] - R[4]
     a = (R[1])^2*X[2] - (R[2])^2*R[1]*X[3]/RR
     b = 2*R[1]*R[2]*X[3]
     c = -RR*R[1]*X[3]
@@ -180,7 +180,7 @@ function solve_tilesize(X, R)
     Uhigh = Ulow + 1 #ceil(Int, Ufloat)
     Thigh = Tlow + 1 #ceil(Int, Tfloat)
 
-    RR = VectorizationBase.REGISTER_COUNT - R[3] - R[4]
+    RR = REGISTER_COUNT - R[3] - R[4]
     U, T = Ulow, Tlow
     tcost = tile_cost(X, Ulow, Tlow)
     # @show Ulow*Thigh*R[1] + Ulow*R[2]
@@ -208,10 +208,14 @@ function solve_tilesize(X, R)
     min(U,RR), min(T,RR), tcost
 end
 function solve_tilesize_constU(X, R, U)
-    floor(Int, (VectorizationBase.REGISTER_COUNT - R[3] - R[4] - U*R[2]) / (U * R[1]))
+    floor(Int, (REGISTER_COUNT - R[3] - R[4] - U*R[2]) / (U * R[1]))
 end
 function solve_tilesize_constT(X, R, T)
-    floor(Int, (VectorizationBase.REGISTER_COUNT - R[3] - R[4]) / (T * R[1] + R[2]))
+    floor(Int, (REGISTER_COUNT - R[3] - R[4]) / (T * R[1] + R[2]))
+end
+function solve_tilesize_constT(ls, T)
+    R = @view ls.reg_pres[:,1]
+    floor(Int, (REGISTER_COUNT - R[3] - R[4]) / (T * R[1] + R[2]))
 end
 # Tiling here is about alleviating register pressure for the UxT
 function solve_tilesize(X, R, Umax, Tmax)
@@ -233,7 +237,15 @@ function solve_tilesize(X, R, Umax, Tmax)
     end
     U, T, cost
 end
-
+function solve_tilesize(
+    ls::LoopSet, unrolled::Symbol, tiled::Symbol,
+    cost_vec::AbstractVector{Float64} = @view(ls.cost_vec[:,1]),
+    reg_pressure::AbstractVector{Int} = @view(ls.reg_pres[:,1])
+)
+    maxT = isstaticloop(ls, tiled) ? looprangehint(ls, tiled) : REGISTER_COUNT
+    maxU = isstaticloop(ls, unrolled) ? looprangehint(ls, unrolled) : REGISTER_COUNT
+    solve_tilesize(cost_vec, reg_pressure, maxT, maxU)
+end
 
 # Just tile outer two loops?
 # But optimal order within tile must still be determined
@@ -257,8 +269,8 @@ function evaluate_cost_tile(
     # cost_mat[3] / ( unrolled)
     # cost_mat[4]
     # @show order
-    cost_vec = zeros(Float64, 4)
-    reg_pressure = zeros(Int, 4)
+    cost_vec = cost_vec_buf(ls)
+    reg_pressure = reg_pres_buf(ls)
     # @inbounds reg_pressure[2] = 1
     # @inbounds reg_pressure[3] = 1
     for n ∈ 1:N
@@ -304,22 +316,7 @@ function evaluate_cost_tile(
             end
         end
     end
-    Tstatic = isstaticloop(ls, tiled)
-    Ustatic = isstaticloop(ls, unrolled)
-    # @show order, cost_vec, reg_pressure
-    if Tstatic
-        if Ustatic
-            solve_tilesize(cost_vec, reg_pressure, looprangehint(ls, tiled), looprangehint(ls, unrolled))
-        else
-            solve_tilesize(cost_vec, reg_pressure, looprangehint(ls, tiled), typemax(Int))
-        end
-    else
-        if Ustatic
-            solve_tilesize(cost_vec, reg_pressure, typemax(Int), looprangehint(ls, unrolled))
-        else
-            solve_tilesize(cost_vec, reg_pressure)#, typemax(Int), typemax(Int))
-        end
-    end
+    solve_tilesize(ls, unrolled, tiled, cost_vec, reg_pressure)
 end
 
 
@@ -385,7 +382,7 @@ function choose_unroll_order(ls::LoopSet, lowest_cost::Float64 = Inf)
 end
 function choose_tile(ls::LoopSet)
     lo = LoopOrders(ls)
-    best_order = copy(lo.syms)
+    best_order = copyto!(ls.loop_order.bestorder, lo.syms)
     new_order, state = iterate(lo) # right now, new_order === best_order
     U, T, lowest_cost = 0, 0, Inf
     while true
@@ -394,6 +391,7 @@ function choose_tile(ls::LoopSet)
             lowest_cost = cost_temp
             U, T = U_temp, T_temp
             copyto!(best_order, new_order)
+            save_tilecost!(ls)
         end
         iter = iterate(lo, state)
         iter === nothing && return best_order, U, T, lowest_cost

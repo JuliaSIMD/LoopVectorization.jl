@@ -49,7 +49,6 @@ function lower_load_scalar!(
     q::Expr, op::Operation, W::Int, unrolled::Symbol, U::Int,
     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
 )
-
     loopdeps = loopdependencies(op)
     @assert unrolled ∉ loopdeps
     var = op.variable
@@ -559,7 +558,6 @@ function lower_unrolled!(
     end
     Wt = W
     Ut = U
-    Urem = 0
     Urepeat = true
     while Urepeat
         if Uexprtype !== :skip
@@ -639,7 +637,8 @@ function lower_tiled(ls::LoopSet, U::Int, T::Int)
     unrolled = order[end-1]
     mangledtiled = tiledsym(tiled)
     W = VectorizationBase.pick_vector_width(ls, unrolled)
-    static_tile = isstaticloop(ls, tiled)
+    tiledloop = ls.loops[tiled]
+    static_tile = tiledloop.hintexact
     static_unroll = isstaticloop(ls, unrolled)
     unrolled_iter = looprangehint(ls, unrolled)
     unrolled_itersym = looprangesym(ls, unrolled)
@@ -649,32 +648,51 @@ function lower_tiled(ls::LoopSet, U::Int, T::Int)
     Trem = Tt = T
     nloops = num_loops(ls);
     # addtileonly = sum(length, @view(oporder(ls)[:,:,:,:,end])) > 0
-    Texprtype = (static_tile && tiled_iter < 2T) ? :block : :while
+    # Texprtype = (static_tile && tiled_iter < 2T) ? :block : :while
+    firstiter = true
+    mangledtiled = tiledsym(tiled)
+    local qifelse::Expr
     while Tt > 0
-        # 
         tiledloopbody = Expr(:block, )
-        # else
-            # Expr(:block, Expr(:(=), unrolled, 0))
-        # end
         lower_unrolled!(tiledloopbody, ls, U, Tt, W, static_unroll, unrolled_iter, unrolled_itersym)
         tiledloopbody = lower_nest(ls, nloops, U, Tt, tiledloopbody, 0, W, nothing, :block)
-        push!(q.args, Texprtype === :block ? tiledloopbody : Expr(Texprtype, looprange(ls, tiled, Tt, tiledsym(tiled)), tiledloopbody))
+        if firstiter
+            push!(q.args, (static_tile && tiled_iter < 2T) ? tiledloopbody : Expr(:while, looprange(ls, tiled, Tt, mangledtiled, tiledloop), tiledloopbody))
+        elseif static_tile
+            push!(q.args, tiledloopbody)
+        else # not static, not firstiter
+            comparison = Expr(:call, :(==), mangledtiled, Expr(:call, :-, tiledloop.rangesym, Tt))
+            qifelsenew = Expr(:elseif, comparison, tiledloopbody)
+            push!(qifelse.args, qifelsenew)
+            qifelse = qifelsenew
+        end
         if static_tile
-            Tt = if Tt == T
+            if Tt == T
                 # push!(tiledloopbody.args, Expr(:+=, mangledtiled, Tt))
                 Texprtype = :block
-                looprangehint(ls, tiled) % T
+                Tt = looprangehint(ls, tiled) % T
+                # Recalculate U
+                U = solve_tilesize_constT(ls, Tt)
             else
-                0 # terminate
+                Tt = 0 # terminate
             end
             nothing
         else
-            Ttold = Tt
-            Tt >>>= 1
-            # Tt == 0 || push!(tiledloopbody.args, Expr(:+=, mangledtiled, Ttold))
-            Texprtype = 2Tt == Ttold ? :if : :while
+            if firstiter
+                comparison = Expr(:call, :(==), mangledtiled, tiledloop.rangesym)
+                qifelse = Expr(:if, comparison, Expr(:block)) # do nothing
+                push!(q.args, qifelse)
+                Tt = 0
+            end
+            Tt += 1 # we start counting up by 1
+            if Tt == T # terminate on Tt = T
+                Tt = 0
+            else
+                U = solve_tilesize_constT(ls, Tt)
+            end
             nothing
         end
+        firstiter = false
     end
     q = gc_preserve(ls, q)
     reduce_expr!(q, ls, U)
