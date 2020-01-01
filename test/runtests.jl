@@ -46,7 +46,7 @@ lsgemm = LoopVectorization.LoopSet(gemmq);
 U, T = if LoopVectorization.VectorizationBase.REGISTER_COUNT == 16
     (3,4)
 else
-    (5,5)
+    (4,6)
 end
 @test LoopVectorization.choose_order(lsgemm) == (Symbol[:j,:i,:k], U, T)
 
@@ -75,7 +75,7 @@ C = Matrix{Float64}(undef, M, N); A = randn(M, K); B = randn(K, N);
 C2 = similar(C);
 mygemmavx!(C, A, B)
 mygemm!(C2, A, B)
-@test all(C .≈ C2)
+@test C ≈ C2
 
 dotq = :(for i ∈ eachindex(a,b)
          s += a[i]*b[i]
@@ -98,7 +98,7 @@ function mydotavx(a, b)
     s
 end
     a = rand(400); b = rand(400);
-@test mydotavx(a,b) ≈ mydot(a,b)
+    @test mydotavx(a,b) ≈ mydot(a,b)
 
 selfdotq = :(for i ∈ eachindex(a)
          s += a[i]*a[i]
@@ -148,7 +148,7 @@ myvexp!(b1, a)
 myvexpavx!(b2, a)
 b1'
 b2'
-@test all(b1 .≈ b2)
+@test b1 ≈ b2
 
 vexpsq = :(for i ∈ eachindex(a)
           s += exp(a[i])
@@ -207,7 +207,7 @@ y1 = Vector{Float64}(undef, 51); y2 = similar(y1);
 mygemv!(y1, A, x)
 mygemvavx!(y2, A, x)
 
-@test all(y1 .≈ y2)
+@test y1 ≈ y2
 
 subcolq = :(for i ∈ 1:size(A,2), j ∈ eachindex(x)
             B[j,i] = A[j,i] - x[j]
@@ -235,7 +235,7 @@ B1 = similar(A); B2 = similar(A);
 mysubcol!(B1, A, x)
 mysubcolavx!(B2, A, x)
 
-@test all(B1 .≈ B2)
+@test B1 ≈ B2
 
 colsumq = :(for i ∈ 1:size(A,2), j ∈ eachindex(x)
             x[j] += A[j,i]
@@ -265,7 +265,7 @@ x1 = similar(x); x2 = similar(x);
 mycolsum!(x1, A)
 mycolsumavx!(x2, A)
 
-@test all(x1 .≈ x2)
+@test x1 ≈ x2
 
 varq = :(for j ∈ eachindex(s²), i ∈ 1:size(A,2)
          δ = A[j,i] - x̄[j]
@@ -299,7 +299,7 @@ end
 x̄ = x1 ./ size(A,2);
 myvar!(x1, A, x̄)
 myvaravx!(x2, A, x̄)
-@test all(x1 .≈ x2)
+@test x1 ≈ x2
 
 M, N = 37, 47
 # M = 77;
@@ -308,33 +308,32 @@ a = rand(M); B = rand(M, N); c = rand(N); c′ = c';
 d1 =      @. a + B * c′;
 d2 = @avx @. a + B * c′;
 
-@test all(d1 .≈ d2)
-
+@test d1 ≈ d2
 @.      d1 = a + B * c′;
 @avx @. d2 = a + B * c′;
-@test all(d1 .≈ d2)
+@test d1 ≈ d2
 
 d3 = a .+ B * c;
 # no method matching _similar_for(::UnitRange{Int64}, ::Type{Any}, ::Product)
 d4 = @avx a .+ B ∗ c;
-@test all(d3 .≈ d4)
+@test d3 ≈ d4
 
 fill!(d3, -1000.0);
 fill!(d4, 91000.0);
 
 d3 .= a .+ B * c;
 @avx d4 .= a .+ B ∗ c;
-@test all(d3 .≈ d4)
+@test d3 ≈ d4
 
 fill!(d4, 91000.0);
 @avx @. d4 = a + B ∗ c;
-@test all(d3 .≈ d4)
+@test d3 ≈ d4
 
 M, K, N = 77, 83, 57;
 A = rand(M,K); B = rand(K,N); C = rand(M,N);
 
 D1 = C .+ A * B;
 D2 = @avx C .+ A ∗ B;
-@test all(D1 .≈ D2)
+@test D1 ≈ D2
 
 end

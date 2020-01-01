@@ -472,10 +472,10 @@ function lower_set(ls::LoopSet, U::Int, T::Int, W::Int, mask, Uexprtype::Symbol)
         exprtype = n == nl ? Uexprtype : :while
         loopq = lower_nest(ls, n, U, T, loopq, 0, W, mask, exprtype)
     end
-    if mask isa Symbol
-        loopmax = ls.loops[names(ls)[nl]].rangesym
-        pushfirst!(loopq.args[2].args, Expr(:(=), Symbol("##mask##"), :(LoopVectorization.mask(Val{$W}(), $loopmax & $(W-1)))))
-    end
+    # if mask isa Symbol
+        # loopmax = ls.loops[names(ls)[nl]].rangesym
+        # pushfirst!(loopq.args[2].args, Expr(:(=), Symbol("##mask##"), :(LoopVectorization.mask(Val{$W}(), $loopmax & $(W-1)))))
+    # end
     loopq
 end
 function initialize_outer_reductions!(
@@ -502,15 +502,22 @@ end
 function initialize_outer_reductions!(ls::LoopSet, Umin::Int, Umax::Int, W::Int, unrolled::Symbol, suffix::Union{Symbol,Nothing} = nothing)
     initialize_outer_reductions!(ls.preamble, ls, Umin, Umax, W, unrolled, suffix)
 end
-function add_upper_outer_reductions(ls::LoopSet, loopq::Expr, U::Int, W::Int)
-    Uh = U >> 1
-    unrolled = last(names(ls))
-    # Initialize Uh+1:U
-    ifq = Expr(:block,)
-    initialize_outer_reductions!(ifq, ls, Uh, U, W, unrolled)
+function add_upper_outer_reductions(ls::LoopSet, loopq::Expr, Ulow::Int, Uhigh::Int, W::Int, unrolledloop::Loop)
+    unrolled = unrolledloop.itersymbol
+    ifq = Expr(:block)
+    initialize_outer_reductions!(ifq, ls, Ulow, Uhigh, W, unrolled)
     push!(ifq.args, loopq)
-    reduce_range!(ifq, ls, Uh, U)
-    Expr(:if, looprange(ls, unrolled, U*W), ifq)
+    reduce_range!(ifq, ls, Ulow, Uhigh)
+    # if unrolledloop.hintexact # should not be reached
+        # if unrolledloop.rangehint < Uhigh * W # no reduct
+            # Expr(:block)
+        # else
+            # ifq
+        # end
+    # else
+    comparison = Expr(:call, :!, Expr(:call, :<, unrolledloop.rangesym, Uhigh * W))
+    Expr(:if, comparison, ifq)
+    # end
 end
 function reduce_expr!(q::Expr, ls::LoopSet, U::Int)
     for or ∈ ls.outer_reductions
@@ -532,103 +539,140 @@ function gc_preserve(ls::LoopSet, q::Expr)
     Expr(:block, gcp)
 end
 function lower_unrolled!(
-    q::Expr, ls::LoopSet, U::Int, T::Int, W::Int,
-    static_unroll::Bool, unrolled_iter::Int, unrolled_itersym::Symbol
+    q::Expr, ls::LoopSet, U::Int, T::Int, W::Int, unrolledloop::Loop
 )
-    if static_unroll
-        Urem = unrolled_iter
-        # if static, we use Urem to indicate remainder.
-        if unrolled_iter ≥ 2U*W # we need at least 2 iterations
-            Uexprtype = :while
-        elseif unrolled_iter ≥ U*W # complete unroll
-            Uexprtype = :block
-        else# we have only a single block
-            Uexprtype = :skip
-        end
+    q = if unrolledloop.hintexact
+        Ureduct = U
+        lower_unrolled_static!( q, ls, U, T, W, unrolledloop )
     else
-        Urem = 0
-        Uexprtype = :while
-    end
-    manageouterreductions = T == -1 && length(ls.outer_reductions) > 0
-    if manageouterreductions
-        Umax = (!static_unroll && U > 2) ? U >> 1 : U
-        initialize_outer_reductions!(q, ls, 0, Umax, W, last(names(ls)))
-    else
-        Umax = -1
-    end
-    Wt = W
-    Ut = U
-    Urepeat = true
-    while Urepeat
-        if Uexprtype !== :skip
-            loopq = if Urem == 0 # dynamic
-                if Ut == 0 # remainder iter
-                    lower_set(ls, 1, T, Wt, Symbol("##mask##"), Uexprtype)
-                else
-                    lower_set(ls, Ut, T, Wt, nothing, Uexprtype)
-                end
-            elseif Urem == unrolled_iter || Urem == -1 # static, no mask
-                lower_set(ls, Ut, T, Wt, nothing, Uexprtype)
-            else # static, need mask
-                lower_set(ls, Ut, T, Wt, VectorizationBase.unstable_mask(Wt, Urem), Uexprtype)
-            end
-            if !static_unroll && T == -1 && U == Ut && U > 2 && manageouterreductions
-                # should we use U > 2, or U > 1 ?
-                # if dynamic, we're on the first iteration, and we're unrolling by more than some amount
-                # then we'll initialize some of the outer reduction variables and reduce them within the first block.
-                loopq = add_upper_outer_reductions(ls, loopq, U, W)
-            end
-            push!(q.args, loopq)
-        end
-        if static_unroll
-            if Urem == unrolled_iter
-                remUiter = unrolled_iter % (U*W)
-                if remUiter == 0 # no remainder, we're done with the unroll
-                    Urepeat = false
-                else # remainder, requires another iteration; what size?
-                    Ut, Urem = divrem(remUiter, W)
-                    if Urem == 0 # Ut iters of W
-                        Urem = -1 
-                    else
-                        if Ut == 0 # if Urem == unrolled_iter, we may already be done, othererwise, we may be able to shrink Wt
-                            if Urem == unrolled_iter && Uexprtype !== :skip
-                                Urepeat = false
-                            else
-                                Wt = VectorizationBase.nextpow2(Urem)
-                                if Wt == Urem # no mask needed
-                                    Urem = -1
-                                end
-                            end
-                        end
-                        # because initial Urem > 0 (it either still is, or we shrunk Wt and made it a complete iter)
-                        # we must increment Ut (to perform masked or shrunk complete iter)
-                        Ut += 1
-                    end
-                    Uexprtype = :block
-                end
-            else
-                Urepeat = false
-            end
-        elseif Ut == 0 # dynamic, terminate because we completed the masked iteration
-            Urepeat = false
-        else # dynamic
-            oldUt = Ut
-            Ut >>>= 1
-            # @show Ut, oldUt, Uexprtype
-            if Ut == 0
-                Uexprtype = :if
-                # W == Wt when !static_unroll
-            elseif 2Ut == oldUt
-                Uexprtype = :if
-            else
-                Uexprtype = :while
-            end
-        end
+        Ureduct = min(U,4)
+        lower_unrolled_dynamic!( q, ls, U, T, W, unrolledloop )
     end
     if T == -1
         q = gc_preserve(ls, q)
     end
-    manageouterreductions && reduce_expr!(q, ls, Umax)
+    manageouterreductions = T == -1 && length(ls.outer_reductions) > 0
+    manageouterreductions && reduce_expr!(q, ls, Ureduct)
+    q
+end
+function lower_unrolled_static!(
+    q::Expr, ls::LoopSet, U::Int, T::Int, W::Int, unrolledloop::Loop
+)
+    unrolled = unrolledloop.itersymbol
+    unrolled_numiter = unrolledloop.rangehint
+    Urem = unrolled_numiter
+    # if static, we use Urem to indicate remainder.
+    if unrolled_numiter ≥ 2U*W # we need at least 2 iterations
+        Uexprtype = :while
+    elseif unrolled_numiter ≥ U*W # complete unroll
+        Uexprtype = :block
+    else# we have only a single block
+        Uexprtype = :skip
+    end
+    manageouterreductions = T == -1 && length(ls.outer_reductions) > 0
+    if manageouterreductions
+        # Umax = (!static_unroll && U > 2) ? U >> 1 : U
+        Ureduct = U
+        initialize_outer_reductions!(q, ls, 0, Ureduct, W, last(names(ls)))
+    else
+        Ureduct = -1
+    end
+    Wt = W
+    Ut = U
+    while true
+        if Uexprtype !== :skip
+            loopq = if Urem == unrolled_numiter || Urem == -1 # static, no mask
+                lower_set(ls, Ut, T, Wt, nothing, Uexprtype)
+            else # static, need mask
+                lower_set(ls, Ut, T, Wt, VectorizationBase.unstable_mask(Wt, Urem), Uexprtype)
+            end
+            push!(q.args, loopq)
+        end
+        if Urem == unrolled_numiter
+            remUiter = unrolled_numiter % (U*W)
+            if remUiter == 0 # no remainder, we're done with the unroll
+                break
+            else # remainder, requires another iteration; what size?
+                Ut, Urem = divrem(remUiter, W)
+                if Urem == 0 # Ut iters of W
+                    Urem = -1 
+                else
+                    if Ut == 0 # if Urem == unrolled_numiter, we may already be done, othererwise, we may be able to shrink Wt
+                        if Urem == unrolled_numiter && Uexprtype !== :skip
+                            break
+                        else
+                            Wt = VectorizationBase.nextpow2(Urem)
+                            if Wt == Urem # no mask needed
+                                Urem = -1
+                            end
+                        end
+                    end
+                    # because initial Urem > 0 (it either still is, or we shrunk Wt and made it a complete iter)
+                    # we must increment Ut (to perform masked or shrunk complete iter)
+                    Ut += 1
+                end
+                Uexprtype = :block
+            end
+        else
+            break
+        end
+    end
+    q
+end
+function lower_unrolled_dynamic!(
+    q::Expr, ls::LoopSet, U::Int, T::Int, W::Int, unrolledloop::Loop
+)
+    unrolled = unrolledloop.itersymbol
+    unrolled_numitersym = unrolledloop.rangesym
+    Urem = 0
+    Uexprtype = :while
+    manageouterreductions = T == -1 && length(ls.outer_reductions) > 0
+    if manageouterreductions
+        # Umax = (!static_unroll && U > 2) ? U >> 1 : U
+        Ureduct = min(U, 4)
+        initialize_outer_reductions!(q, ls, 0, Ureduct, W, last(names(ls)))
+    else
+        Ureduct = -1
+    end
+    Wt = W
+    Ut = U
+    local remblock::Expr
+    firstiter = true
+    while true
+        if firstiter # first iter
+            loopq = lower_set(ls, Ut, T, Wt, nothing, Uexprtype)
+            if T == -1 && manageouterreductions && U > 4
+                loopq = add_upper_outer_reductions(ls, loopq, Ureduct, U, W, unrolledloop)
+            end
+            push!(q.args, loopq)
+        elseif U == 1 #
+            push!(remblock.args, lower_set(ls, Ut, T, Wt, Symbol("##mask##"), :block))
+        else
+            comparison = Expr(:call, :>, unrolled, Expr(:call, :-, unrolled_numitersym, Ut*W + 1))
+            remblocknew = Expr(Ut == 1 ? :if : :elseif, comparison, lower_set(ls, Ut, T, Wt, Symbol("##mask##"), :block))
+            push!(remblock.args, remblocknew)
+            remblock = remblocknew
+        end
+        if Ut == U
+            firstiter || break
+            firstiter = false
+            Ut = 1
+            # setup for branchy remainder calculation
+            comparison = Expr(:call, :(!=), unrolled_numitersym, unrolled)
+            masks = Expr(:tuple)
+            for w ∈ 0:W-1
+                push!(masks.args, VectorizationBase.unstable_mask(W, w == 0 ? W : w))
+            end
+            rem = Expr(:call, :&, unrolled_numitersym, W-1)
+            maskassign = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__),
+                              Expr(:(=), Symbol("##mask##"), Expr(:call, :getindex, masks, Expr(:call, :+, 1, rem)))
+                              )
+            remblock = Expr(:block, maskassign)
+            push!(q.args, Expr(:if, comparison, remblock))
+        else
+            Ut += 1
+        end
+    end
     q
 end
 function lower_tiled(ls::LoopSet, U::Int, T::Int)
@@ -639,9 +683,7 @@ function lower_tiled(ls::LoopSet, U::Int, T::Int)
     W = VectorizationBase.pick_vector_width(ls, unrolled)
     tiledloop = ls.loops[tiled]
     static_tile = tiledloop.hintexact
-    static_unroll = isstaticloop(ls, unrolled)
-    unrolled_iter = looprangehint(ls, unrolled)
-    unrolled_itersym = looprangesym(ls, unrolled)
+    unrolledloop = ls.loops[unrolled]
     initialize_outer_reductions!(ls, 0, 4, W, unrolled)
     q = Expr(:block, Expr(:(=), mangledtiled, 0))
     # we build up the loop expression.
@@ -654,7 +696,7 @@ function lower_tiled(ls::LoopSet, U::Int, T::Int)
     local qifelse::Expr
     while Tt > 0
         tiledloopbody = Expr(:block, )
-        lower_unrolled!(tiledloopbody, ls, U, Tt, W, static_unroll, unrolled_iter, unrolled_itersym)
+        lower_unrolled!(tiledloopbody, ls, U, Tt, W, unrolledloop)#static_unroll, unrolled_numiter, unrolled_numitersym)
         tiledloopbody = lower_nest(ls, nloops, U, Tt, tiledloopbody, 0, W, nothing, :block)
         if firstiter
             push!(q.args, (static_tile && tiled_iter < 2T) ? tiledloopbody : Expr(:while, looprange(ls, tiled, Tt, mangledtiled, tiledloop), tiledloopbody))
@@ -687,8 +729,8 @@ function lower_tiled(ls::LoopSet, U::Int, T::Int)
             Tt += 1 # we start counting up by 1
             if Tt == T # terminate on Tt = T
                 Tt = 0
-            else
-                U = solve_tilesize_constT(ls, Tt)
+            # else
+                # U = solve_tilesize_constT(ls, Tt)
             end
             nothing
         end
@@ -703,10 +745,7 @@ function lower_unrolled(ls::LoopSet, U::Int)
     # @show order
     unrolled = last(order)
     W = VectorizationBase.pick_vector_width(ls, unrolled)
-    static_unroll = isstaticloop(ls, unrolled)
-    unrolled_iter = looprangehint(ls, unrolled)
-    unrolled_itersym = looprangesym(ls, unrolled)
-    q = lower_unrolled!(Expr(:block, Expr(:(=), unrolled, 0)), ls, U, -1, W, static_unroll, unrolled_iter, unrolled_itersym)
+    q = lower_unrolled!(Expr(:block, Expr(:(=), unrolled, 0)), ls, U, -1, W, ls.loops[unrolled])
     Expr(:block, ls.preamble, q)
 end
 

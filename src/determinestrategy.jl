@@ -242,8 +242,8 @@ function solve_tilesize(
     cost_vec::AbstractVector{Float64} = @view(ls.cost_vec[:,1]),
     reg_pressure::AbstractVector{Int} = @view(ls.reg_pres[:,1])
 )
-    maxT = isstaticloop(ls, tiled) ? looprangehint(ls, tiled) : REGISTER_COUNT
-    maxU = isstaticloop(ls, unrolled) ? looprangehint(ls, unrolled) : REGISTER_COUNT
+    maxT = isstaticloop(ls, tiled) ? looprangehint(ls, tiled) : 8#REGISTER_COUNT
+    maxU = isstaticloop(ls, unrolled) ? looprangehint(ls, unrolled) : 4#REGISTER_COUNT
     solve_tilesize(cost_vec, reg_pressure, maxT, maxU)
 end
 
