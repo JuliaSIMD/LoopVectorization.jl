@@ -629,7 +629,7 @@ function lower_unrolled_dynamic!(
     manageouterreductions = T == -1 && length(ls.outer_reductions) > 0
     if manageouterreductions
         # Umax = (!static_unroll && U > 2) ? U >> 1 : U
-        Ureduct = min(U, 4)
+        Ureduct = U > 6 ? 4 : U
         initialize_outer_reductions!(q, ls, 0, Ureduct, W, last(names(ls)))
     else
         Ureduct = -1
@@ -653,9 +653,14 @@ function lower_unrolled_dynamic!(
             push!(remblock.args, remblocknew)
             remblock = remblocknew
         end
-        if Ut == U
+        if Ut == U || Ut == Ureduct
             firstiter || break
             firstiter = false
+            if manageouterreductions && Ureduct < U
+                Udiff = U - Ureduct
+                loopq = lower_set(ls, Udiff, T, Wt, nothing, :if)
+                push!(q.args, loopq)
+            end
             Ut = 1
             # setup for branchy remainder calculation
             comparison = Expr(:call, :(!=), unrolled_numitersym, unrolled)

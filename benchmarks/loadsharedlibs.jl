@@ -1,6 +1,5 @@
 
-using VectorizationBase: REGISTER_SIZE
-# run(`gfortran `)
+using LoopVectorization.VectorizationBase: REGISTER_SIZE
 
 pkgdir(pkg::String) = abspath(joinpath(dirname(Base.find_package(pkg)), ".."))
 const LOOPVECBENCHDIR = joinpath(pkgdir("LoopVectorization"), "benchmarks")
@@ -144,5 +143,22 @@ function fOLSlp(y, X, β)
     )
     lp[]
 end
-
+function fvexp!(b, a)
+    N = length(b)
+    ccall(
+        (:vexp, LIBFTEST), Cvoid,
+        (Ptr{Float64}, Ptr{Float64}, Ref{Clong}),
+        b, a, Ref(N)
+    )
+end
+function fvexpsum(a)
+    N = length(a)
+    s = Ref{Float64}()
+    ccall(
+        (:svexp, LIBFTEST), Cvoid,
+        (Ref{Float64}, Ptr{Float64}, Ref{Clong}),
+        s, a, Ref(N)
+    )
+    s[]
+end
 

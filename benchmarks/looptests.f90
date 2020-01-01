@@ -123,6 +123,7 @@ module looptests
          s = s + a(i) * a(i)
       end do
     end subroutine selfdot
+    !GCC$ builtin (exp) attributes simd (notinbranch) if('x86_64')
     subroutine vexp(b, a, N) BIND(C, name="vexp")
       integer(C_long), intent(in) :: N
       real(C_double), dimension(N), intent(in) :: a
