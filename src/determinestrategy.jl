@@ -244,7 +244,7 @@ function solve_tilesize(
 )
     maxT = isstaticloop(ls, tiled) ? looprangehint(ls, tiled) : 8#REGISTER_COUNT
     maxU = isstaticloop(ls, unrolled) ? looprangehint(ls, unrolled) : 4#REGISTER_COUNT
-    solve_tilesize(cost_vec, reg_pressure, maxT, maxU)
+    solve_tilesize(cost_vec, reg_pressure, maxU, maxT)
 end
 
 # Just tile outer two loops?
