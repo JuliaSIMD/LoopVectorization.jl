@@ -176,7 +176,7 @@ module looptests
          end do
       end do
     end subroutine unscaledvar
-    subroutine aplusBc(D, a, B, c, M, N) BIND(C, name="aplucBc")
+    subroutine aplusBc(D, a, B, c, M, N) BIND(C, name="aplusBc")
       integer(C_long), intent(in) :: M, N
       real(C_double), intent(in) :: a(M), B(M,N), c(N)
       real(C_double), dimension(M,N), intent(out) :: D

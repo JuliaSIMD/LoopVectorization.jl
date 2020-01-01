@@ -113,9 +113,9 @@ japlucBcavx!(d, a, B, c) = @avx @. d = a + B * c';
 
 function jOLSlp(y, X, β)
     lp = 0.0
-    @inbounds for i ∈ eachindex(y)
+    @inbounds @fastmath for i ∈ eachindex(y)
         δ = y[i]
-        @simd for j ∈ eachindex(x)
+        @simd for j ∈ eachindex(β)
             δ -= X[i,j] * β[j]
         end
         lp += δ * δ

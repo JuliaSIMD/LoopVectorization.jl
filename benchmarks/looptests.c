@@ -118,7 +118,7 @@ void unscaledvar(double* restrict s, double* restrict A, double* restrict xb, lo
   return;
 }
 
-void aplucBc(double* restrict D, double* restrict a, double* restrict B, double* restrict c, long M, long N){
+void aplusBc(double* restrict D, double* restrict a, double* restrict B, double* restrict c, long M, long N){
   for (long n = 0; n < N; n++){
     for (long m = 0; m < M; m++){
       D[m + n*M] = a[m] + B[m + n*M] * c[n];

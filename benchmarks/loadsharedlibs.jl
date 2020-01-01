@@ -113,16 +113,16 @@ function caplusBc!(D, a, B, c)
     M, K = size(B)
     ccall(
         (:aplusBc, LIBCTEST), Cvoid,
-        (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Clong, Clong),
-        y, A, x, M, K
+        (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Clong, Clong),
+        D, a, B, c, M, K
     )
 end
 function faplusBc!(D, a, B, c)
     M, K = size(B)
     ccall(
         (:aplusBc, LIBFTEST), Cvoid,
-        (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}, Ref{Clong}),
-        y, A, x, Ref(M), Ref(K)
+        (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}, Ref{Clong}),
+        D, a, B, c, Ref(M), Ref(K)
     )
 end
 function cOLSlp(y, X, β)

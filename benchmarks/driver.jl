@@ -129,7 +129,7 @@ function sse!(Xβ, y, X, β)
     dot(Xβ, Xβ)
 end
 function benchmark_sse(sizes)
-    tests = [BLAS.vendor() === :mkl ? "IntelMKL" : "OpenBLAS", "Julia", "Clang-Polly", "GFort-loops", "GFort-intrinsic", "LoopVectorization"]
+    tests = [BLAS.vendor() === :mkl ? "IntelMKL" : "OpenBLAS", "Julia", "Clang-Polly", "GFort-loops", "LoopVectorization"]
     br = BenchmarkResult(tests, sizes)
     for (i,s) ∈ enumerate(sizes)
         N, P = totwotuple(s)
@@ -156,7 +156,7 @@ function benchmark_exp(sizes)
     br = BenchmarkResult(tests, sizes)
     for (i,s) ∈ enumerate(sizes)
         a = rand(s); b = similar(a)
-        n_gflop = s # not really gflops
+        n_gflop = 1e-9*s # not really gflops
         br[1,i] = n_gflop / @belapsed @. $b = exp($a)
         baseb = copy(b)
         br[2,i] = n_gflop / @belapsed fvexp!($b, $a)
