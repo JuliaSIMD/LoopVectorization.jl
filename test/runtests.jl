@@ -43,7 +43,7 @@ gemmq = :(for i ∈ 1:size(A,1), j ∈ 1:size(B,2)
       end)
 
 lsgemm = LoopVectorization.LoopSet(gemmq);
-U, T = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3,4) : (4, 6)
+U, T = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3,4) : (6, 4)
 @test LoopVectorization.choose_order(lsgemm) == (Symbol[:j,:i,:k], U, T)
 
 function mygemm!(C, A, B)
