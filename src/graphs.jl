@@ -1,5 +1,9 @@
 # lv(x) = Expr(:(.), :LoopVectorization, QuoteNode(x))
-lv(x) = GlobalRef(LoopVectorization, x)
+@static if VERSION  < v"1.3.0"
+    lv(x) = Expr(:(.), :LoopVectorization, QuoteNode(x))
+else
+    lv(x) = GlobalRef(LoopVectorization, x)
+end
 
 isdense(::Type{<:DenseArray}) = true
 

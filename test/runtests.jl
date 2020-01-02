@@ -323,9 +323,7 @@ end
 @testset "broadcast" begin
     M, N = 37, 47
     # M = 77;
-    # for T ∈ (Float32, Float64)
-    for T ∈ (Float64, Float32)
-    # let T = Float64
+    for T ∈ (Float32, Float64)
         a = rand(T, M); B = rand(T, M, N); c = rand(T, N); c′ = c';
 
         d1 =      @. a + B * c′;
