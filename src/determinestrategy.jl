@@ -162,11 +162,9 @@ end
 function solve_tilesize(X, R)
     @inbounds any(iszero, (R[1],R[2],R[3])) && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
     # @inbounds any(iszero, (R[1],R[2],R[3])) && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
-    # We use lagrange multiplier to finding floating point values for U and T
+    # We use a lagrange multiplier to find floating point values for U and T
     # first solving for U via quadratic formula
     # X is vector of costs, and R is of register pressures
-    # @show X
-    # @show R 
     RR = REGISTER_COUNT - R[3] - R[4]
     a = (R[1])^2*X[2] - (R[2])^2*R[1]*X[3]/RR
     b = 2*R[1]*R[2]*X[3]
@@ -205,7 +203,7 @@ function solve_tilesize(X, R)
     if RR > Uhigh*Thigh*R[1] + Uhigh*R[2]
         throw("Something went wrong when solving for Tfloat and Ufloat.")
     end
-    min(U,RR), min(T,RR), tcost
+    U, T, tcost
 end
 function solve_tilesize_constU(X, R, U)
     floor(Int, (REGISTER_COUNT - R[3] - R[4] - U*R[2]) / (U * R[1]))
