@@ -9,7 +9,8 @@ using MacroTools: prewalk, postwalk
 
 
 export LowDimArray, stridedpointer, vectorizable,
-    @vectorize, @vvectorize, @avx, ∗
+    @vectorize, @vvectorize, @avx, ∗,
+    vmap, vmap!
 
 function isdense end #
 
@@ -904,6 +905,7 @@ include("broadcast.jl")
 include("determinestrategy.jl")
 include("lowering.jl")
 include("constructors.jl")
+include("map.jl")
 include("precompile.jl")
 _precompile_()
 

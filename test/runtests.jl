@@ -358,4 +358,16 @@ end
         @test D1 ≈ D2
     end
 end
+
+@testset "map" begin
+    foo(x, y) = exp(x) - sin(y)
+    N = 37
+    for T ∈ (Float32,Float64)
+        a = rand(T, N); b = rand(T, N)
+        c1 = map(foo, a, b)
+        c2 = vmap(foo, a, b)
+        @test c1 ≈ c2
+    end
+end
+
 end
