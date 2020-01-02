@@ -1,7 +1,6 @@
 
 
-
-@generated function vmap!(f::F, dest::AbstractArray{T}, args::Vararg{<:AbstractArray,N}) where {F,T,N}
+function vmap_quote(N, ::Type{T}) where {T}
     W, Wshift = VectorizationBase.pick_vector_width_shift(T)
     val = Expr(:curly, :Val, W)
     q = Expr(:block, Expr(:(=), :M, Expr(:call, :length, :dest)), Expr(:(=), :vdest, Expr(:call, :vectorizable, :dest)), Expr(:(=), :m, 0))
@@ -21,6 +20,9 @@
     push!(q.args, ifmask)
     push!(q.args, :dest)
     q
+end
+@generated function vmap!(f::F, dest::AbstractArray{T}, args::Vararg{<:AbstractArray,N}) where {F,T,N}
+    vmap_quote(N, T)
 end
 function vmap(f::F, args...) where {F}
     T = Base._return_type(f, Base.Broadcast.eltypes(args))
