@@ -36,7 +36,7 @@ using LoopVectorization
 
     @testset "GEMM" begin
         gemmq = :(for i ∈ 1:size(A,1), j ∈ 1:size(B,2)
-                  Cᵢⱼ = z#ero(eltype(C))
+                  Cᵢⱼ = zero(eltype(C))
                   for k ∈ 1:size(A,2)
                   Cᵢⱼ += A[i,k] * B[k,j]
                   end
@@ -57,9 +57,8 @@ using LoopVectorization
             end
         end
         function mygemmavx!(C, A, B)
-            z = zero(eltype(C))
             @avx for i ∈ 1:size(A,1), j ∈ 1:size(B,2)
-                Cᵢⱼ = z
+                Cᵢⱼ = zero(eltype(C))
                 for k ∈ 1:size(A,2)
                     Cᵢⱼ += A[i,k] * B[k,j]
                 end
@@ -202,9 +201,8 @@ using LoopVectorization
             end
         end
         function mygemvavx!(y, A, x)
-            z = zero(eltype(y))
             @avx for i ∈ eachindex(y)
-                yᵢ = z
+                yᵢ = zero(eltype(y))
                 for j ∈ eachindex(x)
                     yᵢ += A[i,j] * x[j]
                 end
@@ -262,9 +260,8 @@ using LoopVectorization
     end
 
     function mycolsumavx!(x, A)
-        z = zero(eltype(x))
         @avx for j ∈ eachindex(x)
-            xⱼ = z
+            xⱼ = zero(eltype(x))
             for i ∈ 1:size(A,2)
                 xⱼ += A[j,i]
             end
@@ -290,9 +287,8 @@ using LoopVectorization
         end
     end
     function myvaravx!(s², A, x̄)
-        z = zero(eltype(s²))
         @avx for j ∈ eachindex(s²)
-            s²ⱼ = z
+            s²ⱼ = zero(eltype(s²))
             x̄ⱼ = x̄[j]
             for i ∈ 1:size(A,2)
                 δ = A[j,i] - x̄ⱼ
@@ -328,7 +324,8 @@ end
     M, N = 37, 47
     # M = 77;
     # for T ∈ (Float32, Float64)
-    let T = Float64
+    for T ∈ (Float64, Float32)
+    # let T = Float64
         a = rand(T, M); B = rand(T, M, N); c = rand(T, N); c′ = c';
 
         d1 =      @. a + B * c′;

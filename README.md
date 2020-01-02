@@ -9,10 +9,7 @@
 ## Installation
 ```
 using Pkg
-Pkg.add(PackageSpec(url="https://github.com/chriselrod/VectorizationBase.jl"))
-Pkg.add(PackageSpec(url="https://github.com/chriselrod/SIMDPirates.jl"))
-Pkg.add(PackageSpec(url="https://github.com/chriselrod/SLEEFPirates.jl"))
-Pkg.add(PackageSpec(url="https://github.com/chriselrod/LoopVectorization.jl"))
+Pkg.add("LoopVectorization")
 ```
 
 

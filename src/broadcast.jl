@@ -18,6 +18,19 @@ function Base.Broadcast._broadcast_getindex_eltype(p::Product)
     )
 end
 
+# recursive_eltype(::Type{A}) where {T, A <: AbstractArray{T}} = T
+# recursive_eltype(::Type{NTuple{N,T}}) where {N,T<:Union{Float32,Float64}} = T
+# recursive_eltype(::Type{Float32}) = Float32
+# recursive_eltype(::Type{Float64}) = Float64
+# recursive_eltype(::Type{Tuple{T}}) where {T} = T
+# recursive_eltype(::Type{Tuple{T1,T2}}) where {T1,T2} = promote_type(recursive_eltype(T1), recursive_eltype(T2))
+# recursive_eltype(::Type{Tuple{T1,T2,T3}}) where {T1,T2,T3} = promote_type(recursive_eltype(T1), recursive_eltype(T2), recursive_eltype(T3))
+# recursive_eltype(::Type{Tuple{T1,T2,T3,T4}}) where {T1,T2,T3,T4} = promote_type(recursive_eltype(T1), recursive_eltype(T2), recursive_eltype(T3), recursive_eltype(T4))
+# recursive_eltype(::Type{Tuple{T1,T2,T3,T4,T5}}) where {T1,T2,T3,T4,T5} = promote_type(recursive_eltype(T1), recursive_eltype(T2), recursive_eltype(T3), recursive_eltype(T4), recursive_eltype(T5))
+
+# function recursive_eltype(::Type{Broadcasted{S,A,F,ARGS}}) where {S,A,F,ARGS}
+#     recursive_eltype(ARGS)
+# end
 
 @inline ∗(a::A, b::B) where {A,B} = Product{A,B}(a, b)
 @inline Base.Broadcast.broadcasted(::typeof(∗), a::A, b::B) where {A, B} = Product{A,B}(a, b)
@@ -25,7 +38,7 @@ end
 function add_broadcast!(
     ls::LoopSet, mC::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
     ::Type{Product{A,B}}, elementbytes::Int = 8
-) where {T,A,B}
+) where {A, B}
     K = gensym(:K)
     mA = gensym(:Aₘₖ)
     mB = gensym(:Bₖₙ)
@@ -54,7 +67,12 @@ function add_broadcast!(
     # load B
     loadB = add_broadcast!(ls, gensym(:B), mB, bloopsyms, B, elementbytes)
     # set Cₘₙ = 0
-    setC = add_constant!(ls, 0.0, cloopsyms, mC, elementbytes)
+    # setC = add_constant!(ls, zero(promote_type(recursive_eltype(A), recursive_eltype(B))), cloopsyms, mC, elementbytes)
+    setC = if elementbytes == 4
+        add_constant!(ls, 0f0, cloopsyms, mC, elementbytes)
+    else#if elementbytes == 4
+        add_constant!(ls, 0.0, cloopsyms, mC, elementbytes)
+    end       
     # compute Cₘₙ += Aₘₖ * Bₖₙ
     reductop = Operation(
         ls, mC, elementbytes, :vmuladd, compute, reductdeps, Symbol[k], Operation[loadA, loadB, setC]
@@ -118,7 +136,7 @@ function add_broadcast!(
         argname = gensym(:arg)
         pushpreamble!(ls, Expr(:(=), argname, Expr(:ref, bcargs, i)))
         # dynamic dispatch
-        parent = add_broadcast!(ls, gensym(:temp), argname, loopsyms, arg)::Operation
+        parent = add_broadcast!(ls, gensym(:temp), argname, loopsyms, arg, elementbytes)::Operation
         pushparent!(parents, deps, reduceddeps, parent)
     end
     op = Operation(
@@ -130,7 +148,7 @@ end
 # size of dest determines loops
 @generated function vmaterialize!(
     dest::AbstractArray{T,N}, bc::BC
-) where {T, N, BC <: Broadcasted}
+) where {T <: Union{Float32,Float64}, N, BC <: Broadcasted}
 # ) where {N, T, BC <: Broadcasted}
     # we have an N dimensional loop.
     # need to construct the LoopSet
@@ -143,8 +161,9 @@ end
         push!(sizes.args, Nsym)
     end
     pushpreamble!(ls, Expr(:(=), sizes, Expr(:call, :size, :dest)))
-    add_broadcast!(ls, :dest, :bc, loopsyms, BC)
-    add_store!(ls, :dest, ArrayReference(:dest, loopsyms, Ref{Bool}(false)))
+    elementbytes = sizeof(T)
+    add_broadcast!(ls, :dest, :bc, loopsyms, BC, elementbytes)
+    add_store!(ls, :dest, ArrayReference(:dest, loopsyms, Ref{Bool}(false)), elementbytes)
     resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
     q = lower(ls)
     push!(q.args, :dest)

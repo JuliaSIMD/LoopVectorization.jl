@@ -480,8 +480,13 @@ function add_operation!(
     if RHS.head === :ref
         add_load_ref!(ls, LHS, RHS, elementbytes)
     elseif RHS.head === :call
-        if first(RHS.args) === :getindex
+        f = first(RHS.args)
+        if f === :getindex
             add_load_getindex!(ls, LHS, RHS, elementbytes)
+        elseif f === :zero || f === :one
+            c = gensym(:constant)
+            pushpreamble!(ls, Expr(:(=), c, RHS))
+            add_constant!(ls, c, [keys(ls.loops)...], LHS, elementbytes)
         else
             add_compute!(ls, LHS, RHS, elementbytes)
         end
