@@ -161,12 +161,11 @@ end
 @generated function vmaterialize!(
     dest::AbstractArray{T,N}, bc::BC
 ) where {T <: Union{Float32,Float64}, N, BC <: Broadcasted}
-# ) where {N, T, BC <: Broadcasted}
     # we have an N dimensional loop.
     # need to construct the LoopSet
     loopsyms = [gensym(:n) for n ∈ 1:N]
     ls = LoopSet()
-    sizes = Expr(:tuple,)
+    sizes = Expr(:tuple)
     for (n,itersym) ∈ enumerate(loopsyms)
         Nsym = gensym(:N)
         ls.loops[itersym] = Loop(itersym, Nsym)
@@ -179,6 +178,31 @@ end
     resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
     q = lower(ls)
     push!(q.args, :dest)
+    pushfirst!(q.args, Expr(:meta,:inline))
+    q
+    # ls
+end
+@generated function vmaterialize!(
+    dest′::Union{Adjoint{T,A},Transpose{T,A}}, bc::BC
+) where {T <: Union{Float32,Float64}, N, A <: AbstractArray{T,N}, BC <: Broadcasted}
+    # we have an N dimensional loop.
+    # need to construct the LoopSet
+    loopsyms = [gensym(:n) for n ∈ 1:N]
+    ls = LoopSet()
+    pushpreamble!(ls, Expr(:(=), :dest, Expr(:call, :parent, :dest′)))
+    sizes = Expr(:tuple)
+    for (n,itersym) ∈ enumerate(loopsyms)
+        Nsym = gensym(:N)
+        ls.loops[itersym] = Loop(itersym, Nsym)
+        push!(sizes.args, Nsym)
+    end
+    pushpreamble!(ls, Expr(:(=), sizes, Expr(:call, :size, :dest′)))
+    elementbytes = sizeof(T)
+    add_broadcast!(ls, :dest, :bc, loopsyms, BC, elementbytes)
+    add_store!(ls, :dest, ArrayReference(:dest, reverse(loopsyms), Ref{Bool}(false)), elementbytes)
+    resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
+    q = lower(ls)
+    push!(q.args, :dest′)
     pushfirst!(q.args, Expr(:meta,:inline))
     q
     # ls

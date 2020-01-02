@@ -367,6 +367,19 @@ end
         @. D3 = exp(Bt)
         @avx @. D4 = exp(Bt)
         @test D3 ≈ D4
+
+        D1 = similar(B); D2 = similar(B)
+        D1t = Transpose(D1)
+        D2t = Transpose(D2)
+        @. D1t = exp(Bt)
+        @avx @. D2t = exp(Bt)
+        @test D1t ≈ D2t
+
+        fill!(D1, -1e3)
+        fill!(D2, 9e9)
+        @. D1' = exp(Bt)
+        @avx @. D2' = exp(Bt)
+        @test D1 ≈ D2
     end
 end
 
