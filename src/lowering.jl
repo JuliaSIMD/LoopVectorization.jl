@@ -281,7 +281,7 @@ function lower_compute!(
     # @show instr parentsunrolled
     # parentsyms = [opp.variable for opp ∈ parents(op)]
     Uiter = opunrolled ? U - 1 : 0
-    maskreduct = mask !== nothing && isreduction(op)#any(opp -> opp.variable === var, parents_op)
+    maskreduct = mask !== nothing && isreduction(op) && any(opp -> opp.variable === var, parents_op)
     # if a parent is not unrolled, the compiler should handle broadcasting CSE.
     # because unrolled/tiled parents result in an unrolled/tiled dependendency,
     # we handle both the tiled and untiled case here.
