@@ -4,7 +4,7 @@ using VectorizationBase, SIMDPirates, SLEEFPirates, MacroTools, Parameters
 using VectorizationBase: REGISTER_SIZE, REGISTER_COUNT, extract_data, num_vector_load_expr, mask, masktable, pick_vector_width_val, valmul, valrem, valmuladd
 using SIMDPirates: VECTOR_SYMBOLS, evadd, evmul, vrange, reduced_add, reduced_prod
 using Base.Broadcast: Broadcasted, DefaultArrayStyle
-using LinearAlgebra: Adjoint
+using LinearAlgebra: Adjoint, Transpose
 using MacroTools: prewalk, postwalk
 
 

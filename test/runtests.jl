@@ -1,5 +1,6 @@
 using Test
 using LoopVectorization
+using LinearAlgebra
 
 
 @testset "LoopVectorization.jl" begin
@@ -356,6 +357,16 @@ end
         D1 = C .+ A * B;
         D2 = @avx C .+ A ∗ B;
         @test D1 ≈ D2
+
+        D3 = exp.(B')
+        D4 = @avx exp.(B')
+        @test D3 ≈ D4
+
+        fill!(D3, -1e3); fill!(D4, 9e9)
+        Bt = Transpose(B)
+        @. D3 = exp(Bt)
+        @avx @. D4 = exp(Bt)
+        @test D3 ≈ D4
     end
 end
 

@@ -88,8 +88,10 @@ function lower_load_unrolled!(
     else
         sn = findfirst(x -> x === unrolled, loopdependencies(op))::Int
         ustrides = Expr(:call, lv(:vmul), Expr(:call, :stride, ptr, sn), Expr(:call, lv(:vrange), W))
+        ustride = gensym(:ustride)
+        push!(q.args, Expr(:(=), ustride, ustrides))
         for u ∈ 0:U-1
-            instrcall = Expr(:call, lv(:gather), ptr, Expr(:call,lv(:vadd),mem_offset(op, u, W, unrolled),ustrides))
+            instrcall = Expr(:call, lv(:gather), ptr, mem_offset(op, u, W, unrolled), ustride)
             if mask !== nothing && u == U - 1
                 push!(instrcall.args, mask)
             end
@@ -207,7 +209,7 @@ function lower_store_unrolled!(
         sn = findfirst(x -> x === unrolled, loopdependencies(op))::Int
         ustrides = Expr(:call, lv(:vmul), Expr(:call, :stride, ptr, sn), Expr(:call, lv(:vrange), W))
         for u ∈ 0:U-1
-            instrcall = Expr(:call, lv(:scatter!), ptr, Symbol("##",var,:_,u), Expr(:call,lv(:vadd),mem_offset(op,u,W,unrolled),ustrides))
+            instrcall = Expr(:call, lv(:scatter!), ptr, mem_offset(op,u,W,unrolled), ustrides, Symbol("##",var,:_,u))
             if mask !== nothing && u == U - 1
                 push!(instrcall.args, mask)
             end

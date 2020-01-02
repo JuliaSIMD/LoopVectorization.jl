@@ -115,10 +115,10 @@ In the future, I would like it to also model the cost of memory movement in the 
 Until then, performance will degrade rapidly compared to BLAS as the size of the matrices increase. The advantage of the `@avx` macro, however, is that it is general. Not every operation is supported by BLAS.
 
 For example, what if `A` were the outter product of two vectors?
-```julia
+<!-- ```julia -->
 
 
-```
+<!-- ``` -->
 
 
 Another example, a straightforward operation expressed well via broadcasting:
@@ -136,6 +136,8 @@ d2 = @avx @. a + B * c′;
 ```
 can be optimized in a similar manner to BLAS, albeit to a much smaller degree because the naive version already benefits from vectorization (unlike the naive BLAS).
 
+
+<!-- You can also use `\ast` to for a lazy matrix multiplication that can fuse with broadcasts. `.\ast` behaves similarly, to allow it's arguments to -->
 
 
 

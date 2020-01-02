@@ -61,15 +61,13 @@ uuid = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 
 [[SIMDPirates]]
 deps = ["MacroTools", "VectorizationBase"]
-git-tree-sha1 = "296cae2ccd6e4766aad669e748c1248fb99ab69c"
+git-tree-sha1 = "5f7fc8a48d9806817bb3f8a2ef9793398744e8a6"
 uuid = "21efa798-c60a-11e8-04d3-e1a92915a26a"
-version = "0.1.0"
+version = "0.1.1"
 
 [[SLEEFPirates]]
 deps = ["SIMDPirates", "VectorizationBase"]
 git-tree-sha1 = "1c5b6827da87a12bdb7a4c893f44c3adbce3389d"
-repo-rev = "master"
-repo-url = "https://github.com/chriselrod/SLEEFPirates.jl"
 uuid = "476501e8-09a2-5ece-8869-fb82de89a1fa"
 version = "0.1.1"
 
