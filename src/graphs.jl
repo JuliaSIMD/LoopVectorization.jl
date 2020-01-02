@@ -165,6 +165,15 @@ function looprange(ls::LoopSet, s::Symbol, incr::Int = 1, mangledname::Symbol = 
         Expr(:call, :<, mangledname, loop.hintexact ? loop.rangehint - incr : Expr(:call, :-, loop.rangesym, incr))
     end
 end
+function looprange(ls::LoopSet, s::Symbol, incr::Expr, mangledname::Symbol = s, loop = ls.loops[s])
+    increxpr = Expr(:call, :-, incr, 1)
+    increxpr = if loop.hintexact
+        Expr(:call, :-, loop.rangehint, increxpr)
+    else
+        Expr(:call, :-, loop.rangesym, increxpr)
+    end
+    Expr(:call, :<, mangledname, increxpr)
+end
 function Base.length(ls::LoopSet, is::Symbol)
     ls.loops[is].rangehint
 end

@@ -67,11 +67,11 @@ version = "0.1.0"
 
 [[SLEEFPirates]]
 deps = ["SIMDPirates", "VectorizationBase"]
-git-tree-sha1 = "01ff5ddb2fe743e93a6d80b072a02cceb90592bf"
+git-tree-sha1 = "1c5b6827da87a12bdb7a4c893f44c3adbce3389d"
 repo-rev = "master"
 repo-url = "https://github.com/chriselrod/SLEEFPirates.jl"
 uuid = "476501e8-09a2-5ece-8869-fb82de89a1fa"
-version = "0.1.0"
+version = "0.1.1"
 
 [[Serialization]]
 uuid = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
@@ -85,6 +85,6 @@ uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [[VectorizationBase]]
 deps = ["CpuId", "LinearAlgebra"]
-git-tree-sha1 = "30dd7fd08829bfa0fa6c57bf84a7daeac2e9462b"
+git-tree-sha1 = "5781ee225e9eee92b7463076411c35d26c444570"
 uuid = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
-version = "0.1.1"
+version = "0.1.3"

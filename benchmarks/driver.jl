@@ -1,3 +1,7 @@
+# pkgdir(pkg::String) = abspath(joinpath(dirname(Base.find_package(pkg)), ".."))
+# const LOOPVECBENCHDIR = joinpath(pkgdir("LoopVectorization"), "benchmarks")
+# includet(joinpath(LOOPVECBENCHDIR, "driver.jl"))
+
 pkgdir(pkg::String) = abspath(joinpath(dirname(Base.find_package(pkg)), ".."))
 const LOOPVECBENCHDIR = joinpath(pkgdir("LoopVectorization"), "benchmarks")
 include(joinpath(LOOPVECBENCHDIR, "looptests.jl"))
