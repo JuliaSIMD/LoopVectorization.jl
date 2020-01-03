@@ -11,9 +11,9 @@ version = "0.2.2"
 
 [[DataStructures]]
 deps = ["InteractiveUtils", "OrderedCollections"]
-git-tree-sha1 = "a1b652fb77ae8ca7ea328fa7ba5aa151036e5c10"
+git-tree-sha1 = "f784254f428fb8fd7ac15982e5862a38a44523d3"
 uuid = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
-version = "0.17.6"
+version = "0.17.7"
 
 [[Distributed]]
 deps = ["Random", "Serialization", "Sockets"]
@@ -83,6 +83,6 @@ uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [[VectorizationBase]]
 deps = ["CpuId", "LinearAlgebra"]
-git-tree-sha1 = "5781ee225e9eee92b7463076411c35d26c444570"
+git-tree-sha1 = "1bf40da0680deeb7bb11f0abbadf96a349c6175f"
 uuid = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
-version = "0.1.3"
+version = "0.1.4"
