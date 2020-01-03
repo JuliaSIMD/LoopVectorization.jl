@@ -36,7 +36,7 @@ using LinearAlgebra
     @test logsumexp!(r, x) ≈ 102.35216846104409
 
     @testset "GEMM" begin
-        gemmq = :(for i ∈ 1:size(A,1), j ∈ 1:size(B,2)
+        AmulBq = :(for i ∈ 1:size(A,1), j ∈ 1:size(B,2)
                   Cᵢⱼ = zero(eltype(C))
                   for k ∈ 1:size(A,2)
                   Cᵢⱼ += A[i,k] * B[k,j]
@@ -44,20 +44,19 @@ using LinearAlgebra
                   C[i,j] = Cᵢⱼ
                   end)
 
-        lsgemm = LoopVectorization.LoopSet(gemmq);
+        lsAmulB = LoopVectorization.LoopSet(AmulBq);
         U, T = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3,4) : (6, 4)
-        @test LoopVectorization.choose_order(lsgemm) == (Symbol[:j,:i,:k], :i, U, T)
+        @test LoopVectorization.choose_order(lsAmulB) == (Symbol[:j,:i,:k], :i, U, T)
 
-        function mygemm!(C, A, B)
-            @inbounds for i ∈ 1:size(A,1), j ∈ 1:size(B,2)
-                Cᵢⱼ = zero(eltype(C))
-                @simd ivdep for k ∈ 1:size(A,2)
-                    Cᵢⱼ += A[i,k] * B[k,j]
+        function AmulB!(C, A, B)
+            C .= 0
+            for k ∈ 1:size(A,2), j ∈ 1:size(B,2)
+                @simd ivdep for i ∈ 1:size(A,1)
+                    @inbounds C[i,j] += A[i,k] * B[k,j]
                 end
-                C[i,j] = Cᵢⱼ
             end
         end
-        function mygemmavx!(C, A, B)
+        function AmulBavx!(C, A, B)
             @avx for i ∈ 1:size(A,1), j ∈ 1:size(B,2)
                 Cᵢⱼ = zero(eltype(C))
                 for k ∈ 1:size(A,2)
@@ -67,13 +66,46 @@ using LinearAlgebra
             end
         end
 
-
+        # function AtmulB!(C, A, B)
+        #     for j ∈ 1:size(C,2), i ∈ 1:size(C,1)
+        #         Cᵢⱼ = zero(eltype(C))
+        #         @simd ivdep for k ∈ 1:size(A,1)
+        #             @inbounds Cᵢⱼ += A[k,i] * B[k,j]
+        #         end
+        #         C[i,j] = Cᵢⱼ
+        #     end
+        # end
+        AtmulBq = :(for j ∈ 1:size(C,2), i ∈ 1:size(C,1)
+                Cᵢⱼ = zero(eltype(C))
+                for k ∈ 1:size(A,1)
+                    Cᵢⱼ += A[k,i] * B[k,j]
+                end
+                C[i,j] = Cᵢⱼ
+            end)
+        lsAtmulB = LoopVectorization.LoopSet(AtmulBq);
+        # LoopVectorization.choose_order(lsAtmulB)
+        @test LoopVectorization.choose_order(lsAtmulB) == (Symbol[:j,:i,:k], :k, U, T)
+        
+        function AtmulBavx!(C, A, B)
+            @avx for j ∈ 1:size(C,2), i ∈ 1:size(C,1)
+                Cᵢⱼ = zero(eltype(C))
+                for k ∈ 1:size(A,1)
+                    Cᵢⱼ += A[k,i] * B[k,j]
+                end
+                C[i,j] = Cᵢⱼ
+            end
+        end        
+        
         for T ∈ (Float32, Float64)
             M, K, N = 72, 75, 71;
             C = Matrix{T}(undef, M, N); A = randn(T, M, K); B = randn(T, K, N);
             C2 = similar(C);
-            mygemmavx!(C, A, B)
-            mygemm!(C2, A, B)
+            AmulBavx!(C, A, B)
+            AmulB!(C2, A, B)
+            @test C ≈ C2
+            At = copy(A');
+            fill!(C, 9999.999);
+            AtmulBavx!(C, At, B)
             @test C ≈ C2
         end
     end
@@ -178,6 +210,7 @@ using LinearAlgebra
             myvexpavx!(b2, a)
             @test b1 ≈ b2
             @test myvexp(a) ≈ myvexpavx(a)
+            @test b1 ≈ @avx exp.(a)
         end
     end
 
@@ -225,6 +258,23 @@ using LinearAlgebra
 
 
 @testset "Miscellaneous" begin
+
+    dot3q = :(for m ∈ 1:M, n ∈ 1:N
+            s += x[m] * A[m,n] * y[n]
+              end)
+    lsdot3 = LoopVectorization.LoopSet(dot3q);
+    LoopVectorization.choose_order(lsdot3)
+
+    dot3(x, A, y) = dot(x, A * y)
+    function dot3avx(x, A, y)
+        M, N = size(A)
+        s = zero(promote_type(eltype(x), eltype(A), eltype(y)))
+        @avx for m ∈ 1:M, n ∈ 1:N
+            s += x[m] * A[m,n] * y[n]
+        end
+        s
+    end
+    
     subcolq = :(for i ∈ 1:size(A,2), j ∈ eachindex(x)
                 B[j,i] = A[j,i] - x[j]
                 end)
@@ -246,25 +296,25 @@ using LinearAlgebra
     end
 
     colsumq = :(for i ∈ 1:size(A,2), j ∈ eachindex(x)
-                x[j] += A[j,i]
+                x[j] += A[j,i] - 0.25
                 end)
     lscolsum = LoopVectorization.LoopSet(colsumq);
-    @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, 4, -1)
+    @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, 8, -1)
 
+    # my colsum is wrong (by 0.25), but slightly more interesting
     function mycolsum!(x, A)
         @. x = 0
         @inbounds for i ∈ 1:size(A,2)
             @simd for j ∈ eachindex(x)
-                x[j] += A[j,i]
+                x[j] += A[j,i] - 0.25
             end
         end
     end
-
     function mycolsumavx!(x, A)
         @avx for j ∈ eachindex(x)
             xⱼ = zero(eltype(x))
             for i ∈ 1:size(A,2)
-                xⱼ += A[j,i]
+                xⱼ += A[j,i] - 0.25
             end
             x[j] = xⱼ
         end
@@ -300,8 +350,8 @@ using LinearAlgebra
     end
 
     for T ∈ (Float32, Float64)
-        A = randn(T, 199, 498)
-        x = randn(T, size(A,1))
+        A = randn(T, 199, 498);
+        x = randn(T, size(A,1));
         B1 = similar(A); B2 = similar(A);
 
         mysubcol!(B1, A, x)
@@ -311,13 +361,17 @@ using LinearAlgebra
         x1 = similar(x); x2 = similar(x);
         mycolsum!(x1, A)
         mycolsumavx!(x2, A)
-
         @test x1 ≈ x2
 
         x̄ = x1 ./ size(A,2);
         myvar!(x1, A, x̄)
         myvaravx!(x2, A, x̄)
         @test x1 ≈ x2
+
+        M, N = 47, 73;
+        x = rand(T, M); A = rand(T, M, N); y = rand(T, N);
+        @test dot3avx(x, A, y) ≈ dot3(x, A, y)
+
     end
 end
 
@@ -351,8 +405,6 @@ end
         @avx @. d4 = a + B ∗ c;
         @test d3 ≈ d4
 
-        # T = Float64
-        # T = Float32
         M, K, N = 77, 83, 57;
         A = rand(T,M,K); B = rand(T,K,N); C = rand(T,M,N);
 
@@ -360,17 +412,10 @@ end
         D2 = @avx C .+ A ∗ B;
         @test D1 ≈ D2
 
-        B = rand(T,K,N);
         D3 = exp.(B');
         D4 = @avx exp.(B');
         @test D3 ≈ D4
 
-        d4q = @avx exp.(B')
-        
-        D3c = copy(D3); D4c = copy(D4);
-        D3[1:21,1:10]
-        D4[1:21,1:10]
-        
         fill!(D3, -1e3); fill!(D4, 9e9);
         Bt = Transpose(B);
         @. D3 = exp(Bt);
@@ -390,6 +435,11 @@ end
         lset = @avx @. D2' = exp(Bt);
         
         @test D1 ≈ D2
+
+        a = rand(137);
+        b1 = @avx @. 3*a + sin(a) + sqrt(a);
+        b2 =      @. 3*a + sin(a) + sqrt(a);
+        @test b1 ≈ b2
     end
 end
 

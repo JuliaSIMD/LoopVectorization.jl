@@ -130,7 +130,7 @@ end
 function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{T}, elementbytes::Int = 8
 ) where {T<:Union{Integer,Float32,Float64}}
-    pushpreamble!(ls, Expr(:(=), destname, bcname))
+    pushpreamble!(ls, Expr(:(=), Symbol("##", destname), bcname))
     add_constant!(ls, destname, elementbytes) # or replace elementbytes with sizeof(T) ? 
 end
 function add_broadcast!(

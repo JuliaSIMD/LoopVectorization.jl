@@ -110,6 +110,22 @@ function parentsnotreduction(op::Operation)
     end
     return true
 end
+function unroll_no_reductions(ls, order, vectorized, Wshift, size_T)
+    innermost = last(order)
+    compute_rt = 0.0
+    load_rt = 0.0
+    # latency not a concern, because no depchains
+    for op ∈ operations(ls)
+        dependson(op, innermost) || continue
+        if iscompute(op)
+            compute_rt += first(cost(op, vectorized, Wshift, size_T))
+        elseif isload(op)
+            load_rt += first(cost(op, vectorized, Wshift, size_T))
+        end
+    end
+    # heuristic guess
+    round(Int, (compute_rt + load_rt + 1) / compute_rt)
+end
 function determine_unroll_factor(
     ls::LoopSet, order::Vector{Symbol}, unrolled::Symbol, vectorized::Symbol = first(order)
 )
@@ -124,9 +140,10 @@ function determine_unroll_factor(
             num_reductions += 1
         end
     end
-    # @show num_reductions
-    if iszero(num_reductions) # the 4 is a hack, based on the idea that there is some cost to moving through columns
-        return length(order) == 1 ? 1 : 4
+    if iszero(num_reductions)
+        # if only 1 loop, no need to unroll
+        # if more than 1 loop, there is some cost. Picking 2 here as a heuristic.
+        return length(order) == 1 ? 1 : unroll_no_reductions(ls, order, vectorized, Wshift, size_T)
     end
     # So if num_reductions > 0, we set the unroll factor to be high enough so that the CPU can be kept busy
     # if there are, U = max(1, round(Int, max(latency) * throughput / num_reductions)) = max(1, round(Int, latency / (recip_throughput * num_reductions)))
@@ -410,6 +427,7 @@ function choose_tile(ls::LoopSet)
         new_order, state = iter
     end
 end
+# Last in order is the inner most loop
 function choose_order(ls::LoopSet)
     if num_loops(ls) > 1
         torder, tvec, tU, tT, tc = choose_tile(ls)

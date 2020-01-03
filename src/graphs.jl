@@ -367,7 +367,7 @@ function add_constant!(ls::LoopSet, var::Symbol, elementbytes::Int = 8)
 end
 function add_constant!(ls::LoopSet, var, elementbytes::Int = 8)
     sym = gensym(:temp)
-    pushpreamble!(ls, Expr(:(=), sym, var))
+    pushpreamble!(ls, Expr(:(=), Symbol("##", sym), var))
     pushop!(ls, Operation(length(operations(ls)), sym, elementbytes, Symbol("##CONSTANT##"), constant, NODEPENDENCY, Symbol[], NOPARENTS), sym)
 end
 # This version has loop dependencies. var gets assigned to sym when lowering.

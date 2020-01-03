@@ -828,14 +828,10 @@ function definemask(loop::Loop, W::Symbol, allon::Bool)
         maskexpr(W, loop.rangesym, allon)
     end
 end
-function setup_mainblock(ls::LoopSet, W::Symbol, typeT::Symbol, vectorized::Symbol, unrolled::Symbol, U::Int, q::Expr)
-    preambleW = Expr(
-        :block,
-        Expr(:(=), typeT, determine_eltype(ls)),
-        Expr(:(=), W, determine_width(ls, typeT, unrolled)),
-        definemask(ls.loops[vectorized], W, U > 1 && unrolled === vectorized)
-    )
-    Expr(:block, ls.preamble, preambleW, q)
+function setup_Wmask!(ls::LoopSet, W::Symbol, typeT::Symbol, vectorized::Symbol, unrolled::Symbol, U::Int)
+    pushpreamble!(ls, Expr(:(=), typeT, determine_eltype(ls)))
+    pushpreamble!(ls, Expr(:(=), W, determine_width(ls, typeT, unrolled)))
+    pushpreamble!(ls, definemask(ls.loops[vectorized], W, U > 1 && unrolled === vectorized))
 end
 function lower_tiled(ls::LoopSet, vectorized::Symbol, U::Int, T::Int)
     order = ls.loop_order.loopnames
@@ -844,6 +840,7 @@ function lower_tiled(ls::LoopSet, vectorized::Symbol, U::Int, T::Int)
     mangledtiled = tiledsym(tiled)
     W = gensym(:W)
     typeT = gensym(:T)
+    setup_Wmask!(ls, W, typeT, vectorized, unrolled, U)
     # W = VectorizationBase.pick_vector_width(ls, unrolled)
     tiledloop = ls.loops[tiled]
     static_tile = tiledloop.hintexact
@@ -900,7 +897,7 @@ function lower_tiled(ls::LoopSet, vectorized::Symbol, U::Int, T::Int)
     end
     q = gc_preserve(ls, q)
     reduce_expr!(q, ls, U)
-    setup_mainblock(ls, W, typeT, vectorized, unrolled, U, q)
+    Expr(:block, ls.preamble, q)
 end
 function lower_unrolled(ls::LoopSet, vectorized::Symbol, U::Int)
     order = ls.loop_order.loopnames
@@ -909,8 +906,9 @@ function lower_unrolled(ls::LoopSet, vectorized::Symbol, U::Int)
     # W = VectorizationBase.pick_vector_width(ls, unrolled)
     W = gensym(:W)
     typeT = gensym(:T)
+    setup_Wmask!(ls, W, typeT, vectorized, unrolled, U)
     q = lower_unrolled!(Expr(:block, Expr(:(=), unrolled, 0)), ls, vectorized, U, -1, W, typeT, ls.loops[unrolled])
-    setup_mainblock(ls, W, typeT, vectorized, unrolled, U, q)
+    Expr(:block, ls.preamble, q)
 end
 
 
