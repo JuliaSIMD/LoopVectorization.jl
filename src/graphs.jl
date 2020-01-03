@@ -178,9 +178,9 @@ function vec_looprange(ls::LoopSet, s::Symbol, isunrolled::Bool, W::Symbol, U::I
         Expr(:call, lv(:valsub), W, 1)
     end
     if loop.hintexact
-        Expr(:call, :<, mangledname, Expr(:call, :-, loop.rangehint, incr))
+        Expr(:call, :<, s, Expr(:call, :-, loop.rangehint, incr))
     else
-        Expr(:call, :<, mangledname, Expr(:call, :-, loop.rangesym, incr))
+        Expr(:call, :<, s, Expr(:call, :-, loop.rangesym, incr))
     end
 end                       
 function looprange(ls::LoopSet, s::Symbol, incr::Int = 1, mangledname::Symbol = s, loop = ls.loops[s])

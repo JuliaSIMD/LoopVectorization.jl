@@ -173,6 +173,7 @@ function add_broadcast!(
 end
 
 # size of dest determines loops
+# function vmaterialize!(
 @generated function vmaterialize!(
     dest::AbstractArray{T,N}, bc::BC
 ) where {T <: Union{Float32,Float64}, N, BC <: Broadcasted}

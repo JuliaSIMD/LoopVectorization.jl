@@ -907,7 +907,7 @@ include("determinestrategy.jl")
 include("lowering.jl")
 include("constructors.jl")
 include("map.jl")
-include("precompile.jl")
-_precompile_()
+# include("precompile.jl")
+# _precompile_()
 
 end # module

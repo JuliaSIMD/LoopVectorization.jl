@@ -46,7 +46,7 @@ using LinearAlgebra
 
         lsgemm = LoopVectorization.LoopSet(gemmq);
         U, T = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3,4) : (6, 4)
-        @test LoopVectorization.choose_order(lsgemm) == (Symbol[:j,:i,:k], U, T)
+        @test LoopVectorization.choose_order(lsgemm) == (Symbol[:j,:i,:k], :i, U, T)
 
         function mygemm!(C, A, B)
             @inbounds for i ∈ 1:size(A,1), j ∈ 1:size(B,2)
@@ -83,7 +83,7 @@ using LinearAlgebra
                  s += a[i]*b[i]
                  end)
         lsdot = LoopVectorization.LoopSet(dotq);
-        @test LoopVectorization.choose_order(lsdot) == (Symbol[:i], 4, -1)
+        @test LoopVectorization.choose_order(lsdot) == (Symbol[:i], :i, 4, -1)
 
         function mydot(a, b)
             s = zero(eltype(a))
@@ -104,7 +104,7 @@ using LinearAlgebra
                      s += a[i]*a[i]
                      end)
         lsselfdot = LoopVectorization.LoopSet(selfdotq);
-        @test LoopVectorization.choose_order(lsselfdot) == (Symbol[:i], 8, -1)
+        @test LoopVectorization.choose_order(lsselfdot) == (Symbol[:i], :i, 8, -1)
 
         function myselfdot(a)
             s = zero(eltype(a))
@@ -123,7 +123,7 @@ using LinearAlgebra
 
         # a = rand(400);
         for T ∈ (Float32, Float64)
-            a = rand(T, 400); b = rand(T, 400);
+            a = rand(T, 100); b = rand(T, 100);
             @test mydotavx(a,b) ≈ mydot(a,b)
             @test myselfdotavx(a) ≈ myselfdot(a)
         end
@@ -135,7 +135,7 @@ using LinearAlgebra
                   b[i] = exp(a[i])
                   end)
         lsvexp = LoopVectorization.LoopSet(vexpq);
-        @test LoopVectorization.choose_order(lsvexp) == (Symbol[:i], 1, -1)
+        @test LoopVectorization.choose_order(lsvexp) == (Symbol[:i], :i, 1, -1)
 
         function myvexp!(b, a)
             @inbounds for i ∈ eachindex(a)
@@ -152,7 +152,7 @@ using LinearAlgebra
                    s += exp(a[i])
                    end)
         lsvexps = LoopVectorization.LoopSet(vexpsq);
-        @test LoopVectorization.choose_order(lsvexps) == (Symbol[:i], 1, -1)
+        @test LoopVectorization.choose_order(lsvexps) == (Symbol[:i], :i, 1, -1)
 
         function myvexp(a)
             s = zero(eltype(a))
@@ -190,7 +190,7 @@ using LinearAlgebra
                   y[i] = yᵢ
                   end)
         lsgemv = LoopVectorization.LoopSet(gemvq);
-        @test LoopVectorization.choose_order(lsgemv) == (Symbol[:i, :j], 8, -1)
+        @test LoopVectorization.choose_order(lsgemv) == (Symbol[:i, :j], :i, 8, -1)
 
         function mygemv!(y, A, x)
             @inbounds for i ∈ eachindex(y)
@@ -229,7 +229,7 @@ using LinearAlgebra
                 B[j,i] = A[j,i] - x[j]
                 end)
     lssubcol = LoopVectorization.LoopSet(subcolq);
-    @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], 4, -1)
+    @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, 4, -1)
     ## @avx is SLOWER!!!!
     ## need to fix!
     function mysubcol!(B, A, x)
@@ -249,7 +249,7 @@ using LinearAlgebra
                 x[j] += A[j,i]
                 end)
     lscolsum = LoopVectorization.LoopSet(colsumq);
-    @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], 4, -1)
+    @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, 4, -1)
 
     function mycolsum!(x, A)
         @. x = 0
@@ -276,7 +276,7 @@ using LinearAlgebra
              end)
     lsvar = LoopVectorization.LoopSet(varq);
     LoopVectorization.choose_order(lsvar)
-    @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], 5, -1)
+    @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, 5, -1)
 
     function myvar!(s², A, x̄)
         @. s² = 0
@@ -351,6 +351,8 @@ end
         @avx @. d4 = a + B ∗ c;
         @test d3 ≈ d4
 
+        # T = Float64
+        # T = Float32
         M, K, N = 77, 83, 57;
         A = rand(T,M,K); B = rand(T,K,N); C = rand(T,M,N);
 
@@ -358,27 +360,35 @@ end
         D2 = @avx C .+ A ∗ B;
         @test D1 ≈ D2
 
-        D3 = exp.(B')
-        D4 = @avx exp.(B')
+        B = rand(T,K,N);
+        D3 = exp.(B');
+        D4 = @avx exp.(B');
         @test D3 ≈ D4
 
-        fill!(D3, -1e3); fill!(D4, 9e9)
-        Bt = Transpose(B)
-        @. D3 = exp(Bt)
-        @avx @. D4 = exp(Bt)
+        d4q = @avx exp.(B')
+        
+        D3c = copy(D3); D4c = copy(D4);
+        D3[1:21,1:10]
+        D4[1:21,1:10]
+        
+        fill!(D3, -1e3); fill!(D4, 9e9);
+        Bt = Transpose(B);
+        @. D3 = exp(Bt);
+        @avx @. D4 = exp(Bt);
         @test D3 ≈ D4
 
-        D1 = similar(B); D2 = similar(B)
-        D1t = Transpose(D1)
-        D2t = Transpose(D2)
-        @. D1t = exp(Bt)
-        @avx @. D2t = exp(Bt)
+        D1 = similar(B); D2 = similar(B);
+        D1t = Transpose(D1);
+        D2t = Transpose(D2);
+        @. D1t = exp(Bt);
+        @avx @. D2t = exp(Bt);
         @test D1t ≈ D2t
 
-        fill!(D1, -1e3)
-        fill!(D2, 9e9)
-        @. D1' = exp(Bt)
-        @avx @. D2' = exp(Bt)
+        fill!(D1, -1e3);
+        fill!(D2, 9e9);
+        @. D1' = exp(Bt);
+        lset = @avx @. D2' = exp(Bt);
+        
         @test D1 ≈ D2
     end
 end
