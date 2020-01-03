@@ -59,18 +59,36 @@ end
 #         Expr(:call, :+, q, incr)
 #     end
 # end
-function lower_load_scalar!(
+function pushscalarload!(q::Expr, op, var, u, U)
+    ptr = refname(op)
+    push!(q.args, Expr(:(=), Symbol("##", var), Expr(:call, lv(:load),  ptr, mem_offset(op))))    
+end
+function pushvectorload!(q::Expr, op, var, u, U, W)
+    ptr = refname(op)
+    instrcall = Expr(:call, lv(:vload), W, ptr, mem_offset(op, u, W))
+    if mask !== nothing && u == U - 1
+        push!(instrcall.args, mask)
+    end
+    push!(q.args, Expr(:(=), Symbol("##",var,:_,u), instrcall))
+end
+function lower_load_scalar!( 
     q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol, U::Int,
     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
 )
     loopdeps = loopdependencies(op)
-    @assert unrolled ∉ loopdeps
+    @assert vectorized ∉ loopdeps
     var = op.variable
     if suffix !== nothing
         var = Symbol(var, :_, suffix)
     end
     ptr = refname(op)
-    push!(q.args, Expr(:(=), Symbol("##", var), Expr(:call, lv(:load),  ptr, mem_offset(op))))
+    if unrolled ∈ loopdeps
+        for u ∈ 0:U-1
+            push!(q.args, Expr(:(=), Symbol("##", var,:_, u), Expr(:call, lv(:load),  ptr, mem_offset(op, u))))
+        end
+    else
+        push!(q.args, Expr(:(=), Symbol("##", var), Expr(:call, lv(:load),  ptr, mem_offset(op))))
+    end
     nothing
 end
 function lower_load_unrolled!(
@@ -78,7 +96,7 @@ function lower_load_unrolled!(
     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
 )
     loopdeps = loopdependencies(op)
-    @assert unrolled ∈ loopdeps
+    @assert vectorized ∈ loopdeps
     var = op.variable
     if suffix !== nothing
         var = Symbol(var, :_, suffix)
@@ -116,10 +134,10 @@ function lower_load!(
 )
     # @show op.instruction
     # @show unrolled, loopdependencies(op)
-    if unrolled ∈ loopdependencies(op)
-        lower_load_unrolled!(q, op, W, unrolled, U, suffix, mask)
+    if vectorized ∈ loopdependencies(op)
+        lower_load_unrolled!(q, op, vectorized, W, unrolled, U, suffix, mask)
     else
-        lower_load_scalar!(q, op, W, unrolled, U, suffix, mask)
+        lower_load_scalar!(q, op, vectorized, W, unrolled, U, suffix, mask)
     end
 end
 function reduce_range!(q::Expr, toreduct::Symbol, instr::Symbol, Uh::Int, Uh2::Int)

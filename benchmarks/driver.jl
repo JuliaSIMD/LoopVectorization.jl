@@ -191,5 +191,3 @@ function benchmark_aplusBc(sizes)
     br
 end
 
-
-
