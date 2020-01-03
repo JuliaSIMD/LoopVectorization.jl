@@ -161,6 +161,28 @@ looprangesym(ls::LoopSet, s::Symbol) = ls.loops[s].rangesym
 getop(ls::LoopSet, s::Symbol) = ls.opdict[s]
 getop(ls::LoopSet, i::Int) = ls.operations[i + 1]
 
+@inline extract_val(::Val{N}) where {N} = N
+function determine_veced_increment(ls::LoopSet, iter::Symbol, isunrolled::Bool, W::Symbol, U::Int) # , istiled::Bool, ..., T::Int # may not be tiled
+    if isunrolled
+        Expr(:call, lv(:valmul), W, U)
+    # elseif istiled
+        # Expr(:call, lv(:valmul), W, T)
+    else
+        Expr(:call, lv(:extract_val), W)
+    end
+end
+function vec_looprange(ls::LoopSet, s::Symbol, isunrolled::Bool, W::Symbol, U::Int, loop = ls.loops[s])
+    incr = if isunrolled
+        Expr(:call, lv(:valmuladd), W, U, -1)
+    else
+        Expr(:call, lv(:valsub), W, 1)
+    end
+    if loop.hintexact
+        Expr(:call, :<, mangledname, Expr(:call, :-, loop.rangehint, incr))
+    else
+        Expr(:call, :<, mangledname, Expr(:call, :-, loop.rangesym, incr))
+    end
+end                       
 function looprange(ls::LoopSet, s::Symbol, incr::Int = 1, mangledname::Symbol = s, loop = ls.loops[s])
     incr -= 1
     if iszero(incr)
@@ -178,6 +200,7 @@ function looprange(ls::LoopSet, s::Symbol, incr::Expr, mangledname::Symbol = s, 
     end
     Expr(:call, :<, mangledname, increxpr)
 end
+
 function Base.length(ls::LoopSet, is::Symbol)
     ls.loops[is].rangehint
 end

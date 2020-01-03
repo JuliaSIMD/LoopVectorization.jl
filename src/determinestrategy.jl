@@ -49,7 +49,7 @@ end
 # evaluates cost of evaluating loop in given order
 # heuristically, could simplify analysis by just unrolling outer loop?
 function evaluate_cost_unroll(
-    ls::LoopSet, order::Vector{Symbol}, max_cost = typemax(Float64), unrolled::Symbol = first(order)
+    ls::LoopSet, order::Vector{Symbol}, max_cost = typemax(Float64), vectorized::Symbol = first(order)
 )
     # included_vars = Set{UInt}()
     included_vars = fill(false, length(operations(ls)))
@@ -58,12 +58,12 @@ function evaluate_cost_unroll(
     iter = 1.0
     # Need to check if fusion is possible
     size_T = biggest_type_size(ls)
-    W, Wshift = VectorizationBase.pick_vector_width_shift(length(ls, unrolled), size_T)::Tuple{Int,Int}
+    W, Wshift = VectorizationBase.pick_vector_width_shift(length(ls, vectorized), size_T)::Tuple{Int,Int}
     for itersym ∈ order
         # Add to set of defined symbles
         push!(nested_loop_syms, itersym)
         liter = Float64(length(ls, itersym))
-        if itersym === unrolled
+        if itersym === vectorized
             liter /= W
         end
         iter *= liter
@@ -79,27 +79,27 @@ function evaluate_cost_unroll(
             hasintersection(rd, nested_loop_syms[1:end-length(rd)]) && return Inf
             included_vars[id] = true
             
-            total_cost += iter * first(cost(op, unrolled, Wshift, size_T))
+            total_cost += iter * first(cost(op, vectorized, Wshift, size_T))
             total_cost > max_cost && return total_cost # abort if more expensive; we only want to know the cheapest
         end
     end
     total_cost
 end
 
-# only covers unrolled ops; everything else considered lifted?
+# only covers vectorized ops; everything else considered lifted?
 function depchain_cost!(
-    skip::Vector{Bool}, op::Operation, unrolled::Symbol, Wshift::Int, size_T::Int, rt::Float64 = 0.0, sl::Int = 0
+    skip::Vector{Bool}, op::Operation, vectorized::Symbol, Wshift::Int, size_T::Int, rt::Float64 = 0.0, sl::Int = 0
 )
     skip[identifier(op)] = true
     # depth first search
     for opp ∈ parents(op)
         skip[identifier(opp)] && continue
-        rt, sl = depchain_cost!(skip, opp, unrolled, Wshift, size_T, rt, sl)
+        rt, sl = depchain_cost!(skip, opp, vectorized, Wshift, size_T, rt, sl)
     end
     # Basically assuming memory and compute don't conflict, but everything else does
     # Ie, ignoring the fact that integer and floating point operations likely don't either
     if iscompute(op)
-        rtᵢ, slᵢ = cost(op, unrolled, Wshift, size_T)
+        rtᵢ, slᵢ = cost(op, vectorized, Wshift, size_T)
         rt += rtᵢ; sl += slᵢ
     end
     rt, sl
@@ -111,10 +111,10 @@ function parentsnotreduction(op::Operation)
     return true
 end
 function determine_unroll_factor(
-    ls::LoopSet, order::Vector{Symbol}, unrolled::Symbol = first(order)
+    ls::LoopSet, order::Vector{Symbol}, unrolled::Symbol, vectorized::Symbol = first(order)
 )
     size_T = biggest_type_size(ls)
-    W, Wshift = VectorizationBase.pick_vector_width_shift(length(ls, unrolled), size_T)::Tuple{Int,Int}
+    W, Wshift = VectorizationBase.pick_vector_width_shift(length(ls, vectorized), size_T)::Tuple{Int,Int}
 
     # The strategy is to use an unroll factor of 1, unless there appears to be loop carried dependencies (ie, num_reductions > 0)
     # The assumption here is that unrolling provides no real benefit, unless it is needed to enable OOO execution by breaking up these dependency chains
@@ -139,13 +139,13 @@ function determine_unroll_factor(
     for op ∈ operations(ls)
         dependson(op, unrolled) || continue
         if isreduction(op)
-            rt, sl = depchain_cost!(visited_nodes, op, unrolled, Wshift, size_T)
+            rt, sl = depchain_cost!(visited_nodes, op, vectorized, Wshift, size_T)
             latency = max(sl, latency)
             compute_recip_throughput += rt
         elseif isload(op)
-            load_recip_throughput += first(cost(op, unrolled, Wshift, size_T))
+            load_recip_throughput += first(cost(op, vectorized, Wshift, size_T))
         elseif isstore(op)
-            store_recip_throughput += first(cost(op, unrolled, Wshift, size_T))
+            store_recip_throughput += first(cost(op, vectorized, Wshift, size_T))
         end
     end
     recip_throughput = max(
@@ -240,8 +240,14 @@ function solve_tilesize(
     cost_vec::AbstractVector{Float64} = @view(ls.cost_vec[:,1]),
     reg_pressure::AbstractVector{Int} = @view(ls.reg_pres[:,1])
 )
-    maxT = isstaticloop(ls, tiled) ? looprangehint(ls, tiled) : 4#REGISTER_COUNT
-    maxU = isstaticloop(ls, unrolled) ? looprangehint(ls, unrolled) : 8#REGISTER_COUNT
+    maxT = 4
+    maxU = 8
+    if isstaticloop(ls, tiled)
+        maxT = min(maxT, looprangehint(ls, tiled))
+    end
+    if isstaticloop(ls, unrolled)
+        maxU = min(maxU, looprangehint(ls, unrolled))
+    end
     solve_tilesize(cost_vec, reg_pressure, maxU, maxT)
 end
 
@@ -249,7 +255,7 @@ end
 # But optimal order within tile must still be determined
 # as well as size of the tiles.
 function evaluate_cost_tile(
-    ls::LoopSet, order::Vector{Symbol}
+    ls::LoopSet, order::Vector{Symbol}, vectorized::Symbol
 )
     N = length(order)
     @assert N ≥ 2 "Cannot tile merely $N loops!"
@@ -260,7 +266,7 @@ function evaluate_cost_tile(
     iter = 1.0
     # Need to check if fusion is possible
     size_T = biggest_type_size(ls)
-    W, Wshift = VectorizationBase.pick_vector_width_shift(length(ls, unrolled), size_T)::Tuple{Int,Int}
+    W, Wshift = VectorizationBase.pick_vector_width_shift(length(ls, vectorized), size_T)::Tuple{Int,Int}
     # costs = 
     # cost_mat[1] / ( unrolled * tiled)
     # cost_mat[2] / ( tiled)
@@ -293,7 +299,7 @@ function evaluate_cost_tile(
             rd = reduceddependencies(op)
             hasintersection(rd, nested_loop_syms[1:end-length(rd)]) && return 0,0,Inf
             included_vars[id] = true
-            rt, lat, rp = cost(op, unrolled, Wshift, size_T)
+            rt, lat, rp = cost(op, vectorized, Wshift, size_T)
             # @show instruction(op), rt, lat, rp, iter
             rt *= iter
             isunrolled = unrolled ∈ loopdependencies(op)
@@ -367,48 +373,54 @@ function choose_unroll_order(ls::LoopSet, lowest_cost::Float64 = Inf)
     lo = LoopOrders(ls)
     best_order = lo.syms
     new_order, state = iterate(lo) # right now, new_order === best_order
+    best_vec = first(new_order)
     while true
-        cost_temp = evaluate_cost_unroll(ls, new_order, lowest_cost)
-        if cost_temp < lowest_cost
-            lowest_cost = cost_temp
-            best_order = new_order
+        for new_vec ∈ new_order
+            cost_temp = evaluate_cost_unroll(ls, new_order, lowest_cost, new_vec)
+            if cost_temp < lowest_cost
+                lowest_cost = cost_temp
+                best_order = new_order
+                best_vec = new_vec
+            end
         end
         iter = iterate(lo, state)
-        iter === nothing && return best_order, lowest_cost
+        iter === nothing && return best_order, best_vec, lowest_cost
         new_order, state = iter
     end    
 end
 function choose_tile(ls::LoopSet)
     lo = LoopOrders(ls)
     best_order = copyto!(ls.loop_order.bestorder, lo.syms)
+    best_vec = first(best_order) # filler
     new_order, state = iterate(lo) # right now, new_order === best_order
     U, T, lowest_cost = 0, 0, Inf
     while true
-        U_temp, T_temp, cost_temp = evaluate_cost_tile(ls, new_order)
-        if cost_temp < lowest_cost
-            lowest_cost = cost_temp
-            U, T = U_temp, T_temp
-            copyto!(best_order, new_order)
-            save_tilecost!(ls)
+        for new_vec ∈ @view(new_order[2:end]) # view to skip first
+            U_temp, T_temp, cost_temp = evaluate_cost_tile(ls, new_order, new_vec)
+            if cost_temp < lowest_cost
+                lowest_cost = cost_temp
+                U, T = U_temp, T_temp
+                best_vec = new_vec
+                copyto!(best_order, new_order)
+                save_tilecost!(ls)
+            end
         end
         iter = iterate(lo, state)
-        iter === nothing && return best_order, U, T, lowest_cost
+        iter === nothing && return best_order, best_vec, U, T, lowest_cost
         new_order, state = iter
     end
 end
 function choose_order(ls::LoopSet)
     if num_loops(ls) > 1
-        torder, tU, tT, tc = choose_tile(ls)
+        torder, tvec, tU, tT, tc = choose_tile(ls)
     else
         tc = Inf
     end
-    uorder, uc = choose_unroll_order(ls, tc)
-    if num_loops(ls) <= 1 || tc > uc # if tc == uc, then that probably means we want tc, and no unrolled managed to beat the tiled cost
-        # copyto!(ls.loop_order.loopnames, uorder)
-        return uorder, determine_unroll_factor(ls, uorder), -1
+    uorder, uvec, uc = choose_unroll_order(ls, tc)
+    if num_loops(ls) > 1 && tc < uc
+        return torder, tvec, tU, tT
     else
-        # copyto!(ls.loop_order.loopnames, torder)
-        return torder, tU, tT
+        return uorder, uvec, determine_unroll_factor(ls, uorder, first(uorder), uvec), -1
     end
 end
 

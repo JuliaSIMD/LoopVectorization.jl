@@ -128,6 +128,21 @@ function add_broadcast!(
     add_load!(ls, destname, ArrayReference(bcname, @view(loopsyms[1:N]), Ref{Bool}(false)), elementbytes)
 end
 function add_broadcast!(
+    ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{T}, elementbytes::Int = 8
+) where {T<:Union{Integer,Float32,Float64}}
+    pushpreamble!(ls, Expr(:(=), destname, bcname))
+    add_constant!(ls, destname, elementbytes) # or replace elementbytes with sizeof(T) ? 
+end
+function add_broadcast!(
+    ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
+    ::Type{SubArray{T,N,A,S,B}}, elementbytes::Int = 8
+) where {T,N,N2,A<:AbstractArray{T,N2},B,N3,S <: Tuple{Int,Vararg{Any,N3}}}
+    inds = Vector{Union{Int,Symbol}}(undef, N+1)
+    inds[1] = Symbol("##DISCONTIGUOUSSUBARRAY##")
+    inds[2:end] .= @view(loopsyms[1:N])
+    add_load!(ls, destname, ArrayReference(bcname, inds, Ref{Bool}(false)), elementbytes)
+end
+function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
     ::Type{Broadcasted{DefaultArrayStyle{N},Nothing,F,A}},
     elementbytes::Int = 8
