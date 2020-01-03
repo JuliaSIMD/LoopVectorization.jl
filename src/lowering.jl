@@ -369,7 +369,7 @@ function lower_compute!(
     for u ∈ 0:Uiter
         instrcall = callfun(instr) # Expr(:call, instr)
         varsym = if tiledouterreduction > 0 # then suffix !== nothing
-            modsuff = ((u+suffix*U) & 3)
+            modsuffix = ((u + suffix*U) & 3)
             Symbol("##",var,:_, modsuffix)
         elseif opunrolled
             Symbol("##",var,:_,u)
@@ -896,7 +896,7 @@ function lower_tiled(ls::LoopSet, vectorized::Symbol, U::Int, T::Int)
         firstiter = false
     end
     q = gc_preserve(ls, q)
-    reduce_expr!(q, ls, U)
+    reduce_expr!(q, ls, 4)
     Expr(:block, ls.preamble, q)
 end
 function lower_unrolled(ls::LoopSet, vectorized::Symbol, U::Int)
