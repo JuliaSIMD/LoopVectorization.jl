@@ -36,17 +36,17 @@ using LinearAlgebra
     @test logsumexp!(r, x) ≈ 102.35216846104409
 
     @testset "GEMM" begin
-        AmulBq = :(for i ∈ 1:size(A,1), j ∈ 1:size(B,2)
-                  Cᵢⱼ = zero(eltype(C))
-                  for k ∈ 1:size(A,2)
-                  Cᵢⱼ += A[i,k] * B[k,j]
-                  end
-                  C[i,j] = Cᵢⱼ
-                  end)
-
+        AmulBq = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+                Cₘₙ = zero(eltype(C))
+                for k ∈ 1:size(A,2)
+                    Cₘₙ += A[m,k] * B[k,n]
+                end
+                C[m,n] = Cₘₙ
+           end)
+        
         lsAmulB = LoopVectorization.LoopSet(AmulBq);
-        U, T = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3,4) : (6, 4)
-        @test LoopVectorization.choose_order(lsAmulB) == (Symbol[:j,:i,:k], :i, U, T)
+        U, T = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3,4) : (4, 4)
+        @test LoopVectorization.choose_order(lsAmulB) == (Symbol[:n,:m,:k], :m, U, T)
 
         function AmulB!(C, A, B)
             C .= 0
@@ -57,12 +57,12 @@ using LinearAlgebra
             end
         end
         function AmulBavx!(C, A, B)
-            @avx for i ∈ 1:size(A,1), j ∈ 1:size(B,2)
-                Cᵢⱼ = zero(eltype(C))
+            @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+                Cₘₙ = zero(eltype(C))
                 for k ∈ 1:size(A,2)
-                    Cᵢⱼ += A[i,k] * B[k,j]
+                    Cₘₙ += A[m,k] * B[k,n]
                 end
-                C[i,j] = Cᵢⱼ
+                C[m,n] = Cₘₙ
             end
         end
 
@@ -75,43 +75,42 @@ using LinearAlgebra
         #         C[i,j] = Cᵢⱼ
         #     end
         # end
-        AtmulBq = :(for j ∈ 1:size(C,2), i ∈ 1:size(C,1)
-                Cᵢⱼ = zero(eltype(C))
+        AtmulBq = :(for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
+                Cₘₙ = zero(eltype(C))
                 for k ∈ 1:size(A,1)
-                    Cᵢⱼ += A[k,i] * B[k,j]
+                    Cₘₙ += A[k,m] * B[k,n]
                 end
-                C[i,j] = Cᵢⱼ
+                C[m,n] = Cₘₙ
             end)
         lsAtmulB = LoopVectorization.LoopSet(AtmulBq);
         # LoopVectorization.choose_order(lsAtmulB)
-        @test LoopVectorization.choose_order(lsAtmulB) == (Symbol[:j,:i,:k], :k, U, T)
+        @test LoopVectorization.choose_order(lsAtmulB) == (Symbol[:m,:n,:k], :k, U, T)
         
         function AtmulBavx!(C, A, B)
-            @avx for j ∈ 1:size(C,2), i ∈ 1:size(C,1)
-                Cᵢⱼ = zero(eltype(C))
+            @avx for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
+                Cₘₙ = zero(eltype(C))
                 for k ∈ 1:size(A,1)
-                    Cᵢⱼ += A[k,i] * B[k,j]
+                    Cₘₙ += A[k,m] * B[k,n]
                 end
-                C[i,j] = Cᵢⱼ
+                C[m,n] = Cₘₙ
             end
-        end        
-
+        end
         function rank2AmulB!(C, Aₘ, Aₖ, B)
-            @inbounds for i ∈ 1:size(C,1), j ∈ 1:size(C,2)
-                Cᵢⱼ = zero(eltype(C))
+            @inbounds for m ∈ 1:size(C,1), n ∈ 1:size(C,2)
+                Cₘₙ = zero(eltype(C))
                 @fastmath for k ∈ 1:size(B,1)
-                    Cᵢⱼ += (Aₘ[i,1]*Aₖ[1,k]+Aₘ[i,2]*Aₖ[2,k]) * B[k,j]
+                    Cₘₙ += (Aₘ[m,1]*Aₖ[1,k]+Aₘ[m,2]*Aₖ[2,k]) * B[k,n]
                 end
-                C[i,j] = Cᵢⱼ
+                C[m,n] = Cₘₙ
             end
         end
         function rank2AmulBavx!(C, Aₘ, Aₖ, B)
-            @avx for i ∈ 1:size(C,1), j ∈ 1:size(C,2)
-                Cᵢⱼ = zero(eltype(C))
+            @avx for m ∈ 1:size(C,1), n ∈ 1:size(C,2)
+                Cₘₙ = zero(eltype(C))
                 for k ∈ 1:size(B,1)
-                    Cᵢⱼ += (Aₘ[i,1]*Aₖ[1,k]+Aₘ[i,2]*Aₖ[2,k]) * B[k,j]
+                    Cₘₙ += (Aₘ[m,1]*Aₖ[1,k]+Aₘ[m,2]*Aₖ[2,k]) * B[k,n]
                 end
-                C[i,j] = Cᵢⱼ
+                C[m,n] = Cₘₙ
             end
         end
 
