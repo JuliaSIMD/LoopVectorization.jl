@@ -236,6 +236,8 @@ end
 function solve_tilesize(X, R, Umax, Tmax)
     first(R) == 0 && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
     U, T, cost = solve_tilesize(X, R)
+    T -= T & 1
+    U = min(U, T)
     U_too_large = U > Umax
     T_too_large = T > Tmax
     if U_too_large
@@ -257,7 +259,7 @@ function solve_tilesize(
     cost_vec::AbstractVector{Float64} = @view(ls.cost_vec[:,1]),
     reg_pressure::AbstractVector{Int} = @view(ls.reg_pres[:,1])
 )
-    maxT = 4
+    maxT = 8
     maxU = 8
     if isstaticloop(ls, tiled)
         maxT = min(maxT, looprangehint(ls, tiled))
@@ -436,7 +438,8 @@ function choose_order(ls::LoopSet)
     end
     uorder, uvec, uc = choose_unroll_order(ls, tc)
     if num_loops(ls) > 1 && tc ≤ uc
-        return torder, tvec, tU, tT
+        return torder, tvec, min(tU, tT), tT
+        # return torder, tvec, 4, 4#5, 5
     else
         return uorder, uvec, determine_unroll_factor(ls, uorder, first(uorder), uvec), -1
     end
