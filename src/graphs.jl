@@ -297,7 +297,21 @@ function add_vptr!(ls::LoopSet, indexed::Symbol, id::Int)
     end
     nothing
 end
-
+function intersection(depsplus, ls)
+    deps = Symbol[]
+    for dep ∈ depsplus
+        dep ∈ ls && push!(deps, dep)
+    end
+    deps
+end
+function loopdependencies(ref::ArrayReference, ls::LoopSet)
+    deps = loopdependencies(ref)
+    loopset = keys(ls.loops)
+    for dep ∈ deps
+        dep ∈ loopset || return intersection(deps, loopset)
+    end
+    deps
+end
 function add_load!(
     ls::LoopSet, var::Symbol, ref::ArrayReference, elementbytes::Int = 8
 )
@@ -313,7 +327,7 @@ function add_load!(
     # ls.ref_to_sym_aliases[ ref ] = var
     op = Operation(
         length(operations(ls)), var, elementbytes,
-        :getindex, memload, loopdependencies(ref),
+        :getindex, memload, loopdependencies(ref, ls),
         NODEPENDENCY, NOPARENTS, ref
     )
     add_vptr!(ls, ref.array, identifier(op))

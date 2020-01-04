@@ -95,17 +95,77 @@ using LinearAlgebra
                 C[i,j] = Cᵢⱼ
             end
         end        
+
+        function rank2AmulB!(C, Aₘ, Aₖ, B)
+            @inbounds for i ∈ 1:size(C,1), j ∈ 1:size(C,2)
+                Cᵢⱼ = zero(eltype(C))
+                @fastmath for k ∈ 1:size(B,1)
+                    Cᵢⱼ += (Aₘ[i,1]*Aₖ[1,k]+Aₘ[i,2]*Aₖ[2,k]) * B[k,j]
+                end
+                C[i,j] = Cᵢⱼ
+            end
+        end
+        function rank2AmulBavx!(C, Aₘ, Aₖ, B)
+            @avx for i ∈ 1:size(C,1), j ∈ 1:size(C,2)
+                Cᵢⱼ = zero(eltype(C))
+                for k ∈ 1:size(B,1)
+                    Cᵢⱼ += (Aₘ[i,1]*Aₖ[1,k]+Aₘ[i,2]*Aₖ[2,k]) * B[k,j]
+                end
+                C[i,j] = Cᵢⱼ
+            end
+        end
+
+        function mulCAtB_2x2block!(C, A, B)
+            M, N = size(C); K = size(B,1)
+            @assert size(C, 1) == size(A, 2)
+            @assert size(C, 2) == size(B, 2)
+            @assert size(A, 1) == size(B, 1)
+            T = eltype(C)
+            if mod(M, 2) == 0 && mod(N, 2) == 0
+	        for m ∈ 1:2:M
+	    	    m1 = m + 1
+	    	    for n ∈ 1:2:N 
+	    		n1 = n + 1
+		    	C11, C21, C12, C22 = zero(T), zero(T), zero(T), zero(T)
+		    	@avx for k ∈ 1:K
+		    	    C11 += A[k,m] * B[k,n] 
+		    	    C21 += A[k,m1] * B[k,n] 
+		    	    C12 += A[k,m] * B[k,n1] 
+		    	    C22 += A[k,m1] * B[k,n1]
+		    	end
+		    	C[m,n] = C11
+		    	C[m1,n] = C21
+		    	C[m,n1] = C12
+		    	C[m1,n1] = C22
+		    end
+	        end
+	    else
+		@inbounds for n ∈ 1:N, m ∈ 1:M 
+	    	    Cmn = 0.0
+	    	    @inbounds for k ∈ 1:K
+	    		Cmn += A[k,m] * B[k,n]
+	    	    end
+	    	    C[m,n] = Cmn
+	        end
+	    end
+            return C
+        end
         
         for T ∈ (Float32, Float64)
-            M, K, N = 72, 75, 71;
+            M, K, N = 72, 75, 68;
             C = Matrix{T}(undef, M, N); A = randn(T, M, K); B = randn(T, K, N);
             C2 = similar(C);
             AmulBavx!(C, A, B)
             AmulB!(C2, A, B)
             @test C ≈ C2
             At = copy(A');
-            fill!(C, 9999.999);
-            AtmulBavx!(C, At, B)
+            fill!(C, 9999.999); AtmulBavx!(C, At, B)
+            @test C ≈ C2
+            fill!(C, 9999.999); mulCAtB_2x2block!(C, At, B);
+            @test C ≈ C2
+            Aₘ= rand(T, M, 2); Aₖ = rand(T, 2, K);
+            rank2AmulBavx!(C, Aₘ, Aₖ, B)
+            rank2AmulB!(C2, Aₘ, Aₖ, B)
             @test C ≈ C2
         end
     end

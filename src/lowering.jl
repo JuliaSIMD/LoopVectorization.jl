@@ -9,33 +9,43 @@ function variable_name(op::Operation, suffix)
 end
     
 
-function append_deps!(ret, deps)
-    if first(deps) === Symbol("##DISCONTIGUOUSSUBARRAY##")
-        append!(ret.args, @view(deps[2:end]))
-    else
-        append!(ret.args, deps)
+function append_inds!(ret, indices, deps)
+    start = (first(indices) === Symbol("##DISCONTIGUOUSSUBARRAY##")) + 1# && return append_inds!(ret, @view(indices[2:end]), deps)
+    for ind ∈ @view(indices[start:end])
+        if ind isa Int
+            push!(ret.args, ind - 1)
+        elseif ind ∈ deps
+            push!(ret.args, ind)
+        else
+            push!(ret.args, Expr(:call, :-, ind, 1))
+        end
     end
     ret
 end
 
 function mem_offset(op::Operation)
     @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
-    append_deps!(Expr(:tuple), op.ref.ref)
+    append_inds!(Expr(:tuple), op.ref.ref, op.dependencies)
 end
 function mem_offset(op::Operation, incr::Int, unrolled::Symbol)
     @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
     ret = Expr(:tuple)
-    deps = op.ref.ref
+    indices = op.ref.ref
+    deps = op.dependencies
     if incr == 0
-        append_deps!(ret, deps)
+        append_inds!(ret, indices, deps)
     else
-        for n ∈ 1:length(deps)
-            dep = deps[n]
-            n == 1 && dep === Symbol("##DISCONTIGUOUSSUBARRAY##") && continue
-            if dep === unrolled
-                push!(ret.args, Expr(:call, :+, dep, incr))
+        for n ∈ 1:length(indices)
+            ind = indices[n]
+            n == 1 && ind === Symbol("##DISCONTIGUOUSSUBARRAY##") && continue
+            if ind isa Int
+                push!(ret.args, ind - 1)
+            elseif ind === unrolled
+                push!(ret.args, Expr(:call, :+, ind, incr))
+            elseif ind ∈ deps
+                push!(ret.args, ind)
             else
-                push!(ret.args, dep)
+                push!(ret.args, Expr(:call, :-, ind, 1))
             end
         end
     end
@@ -45,16 +55,22 @@ function mem_offset(op::Operation, mul::Symbol, incr::Int, unrolled::Symbol)
     @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
     ret = Expr(:tuple)
     deps = op.ref.ref
+    indices = op.ref.ref
+    deps = op.dependencies
     if incr == 0
-        append_deps!(ret, deps)
+        append_inds!(ret, indices, deps)
     else
-        for n ∈ 1:length(deps)
-            dep = deps[n]
-            n == 1 && dep === Symbol("##DISCONTIGUOUSSUBARRAY##") && continue
-            if dep === unrolled
-                push!(ret.args, Expr(:call, :+, dep, Expr(:call, lv(:valmul), mul, incr)))
+        for n ∈ 1:length(indices)
+            ind = indices[n]
+            n == 1 && ind === Symbol("##DISCONTIGUOUSSUBARRAY##") && continue
+            if ind isa Int
+                push!(ret.args, ind - 1)
+            elseif ind === unrolled
+                push!(ret.args, Expr(:call, :+, ind, Expr(:call, lv(:valmul), mul, incr)))
+            elseif ind ∈ deps
+                push!(ret.args, ind)
             else
-                push!(ret.args, dep)
+                push!(ret.args, Expr(:call, :-, ind, 1))
             end
         end
     end
