@@ -103,6 +103,29 @@ module looptests
       real(C_double), dimension(K, N), intent(in) :: B
       C = matmul(A, B)
     end subroutine gemmbuiltin
+    subroutine AtmulB(C, A, B, M, K, N) BIND(C, name="AtmulB")
+      integer(C_long), intent(in) :: M, K, N
+      real(C_double), dimension(M, N), intent(out) :: C
+      real(C_double), dimension(K, M), intent(in) :: A
+      real(C_double), dimension(K, N), intent(in) :: B
+      integer(C_long) :: mm, kk, nn
+      C = 0.0
+      do concurrent(nn = 1:N)
+         do concurrent(mm = 1:M)
+            do concurrent(kk = 1:K)
+               C(mm,nn) = C(mm,nn) + A(kk,mm) * B(kk,nn)
+            end do
+         end do
+      end do
+    end subroutine AtmulB
+    subroutine AtmulBbuiltin(C, A, B, M, K, N) BIND(C, name="AtmulBbuiltin")
+      integer(C_long), intent(in) :: M, K, N
+      real(C_double), dimension(M, N), intent(out) :: C
+      real(C_double), dimension(K, M), intent(in) :: A
+      real(C_double), dimension(K, N), intent(in) :: B
+      integer(C_long) :: mm, kk, nn
+      C = matmul(transpose(A), B)
+    end subroutine AtmulBbuiltin
     subroutine dot(s, a, b, N) BIND(C, name="dot")
       integer(C_long), intent(in) :: N
       real(C_double), dimension(N), intent(in) :: a, b
@@ -123,6 +146,17 @@ module looptests
          s = s + a(i) * a(i)
       end do
     end subroutine selfdot
+    subroutine dot3(s, x, A, y, M, N) BIND(C, name="dot3")
+      integer(C_long), intent(in) :: M, N
+      real(C_double), intent(in) :: x(M), A(M,N), y(N)
+      real(C_double), intent(out) :: s
+      integer(C_long) :: mm, nn
+      do concurrent(nn = 1:N)
+         do concurrent(mm = 1:M)
+            s = s + x(mm) * A(mm, nn) * y(nn)
+         end do
+      end do
+    end subroutine dot3
     !GCC$ builtin (exp) attributes simd (notinbranch) if('x86_64')
     subroutine vexp(b, a, N) BIND(C, name="vexp")
       integer(C_long), intent(in) :: N

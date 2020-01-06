@@ -9,12 +9,13 @@ const LIBCTEST = joinpath(LOOPVECBENCHDIR, "libctests.so")
 const LIBFTEST = joinpath(LOOPVECBENCHDIR, "libftests.so")
 
 # requires Clang with polly to build
-if !isfile(LIBCTEST)
-    cfile = joinpath(LOOPVECBENCHDIR, "looptests.c")
-    run(`clang -Ofast -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -mllvm -polly -mllvm -polly-vectorizer=stripmine -shared -fPIC $cfile -o $LIBCTEST`)
+cfile = joinpath(LOOPVECBENCHDIR, "looptests.c")
+if !isfile(LIBCTEST) || mtime(cfile) > mtime(LIBCTEST)    
+    run(`clang -Ofast -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -lm -mllvm -polly -mllvm -polly-vectorizer=stripmine -shared -fPIC $cfile -o $LIBCTEST`)
 end
-if !isfile(LIBFTEST)
-    ffile = joinpath(LOOPVECBENCHDIR, "looptests.f90") # --param max-unroll-times defaults to ≥8, which is generally excessive
+ffile = joinpath(LOOPVECBENCHDIR, "looptests.f90")
+if !isfile(LIBFTEST) || mtime(ffile) > mtime(LIBFTEST)
+    # --param max-unroll-times defaults to ≥8, which is generally excessive
     run(`gfortran -Ofast -march=native -funroll-loops --param max-unroll-times=4 -floop-nest-optimize -mprefer-vector-width=$(8REGISTER_SIZE) -shared -fPIC $ffile -o $LIBFTEST`)
 end
 
@@ -42,6 +43,30 @@ function fgemm_builtin!(C, A, B)
     M, N = size(C); K = size(B, 1)
     ccall(
         (:gemmbuiltin, LIBFTEST), Cvoid,
+        (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}, Ref{Clong}, Ref{Clong}),
+        C, A, B, Ref(M), Ref(K), Ref(N)
+    )
+end
+function cAtmulB!(C, A, B)
+    M, N = size(C); K = size(B, 1)
+    ccall(
+        (:AtmulB, LIBCTEST), Cvoid,
+        (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Clong, Clong, Clong),
+        C, A, B, M, K, N
+    )
+end
+function fAtmulB!(C, A, B)
+    M, N = size(C); K = size(B, 1)
+    ccall(
+        (:AtmulB, LIBFTEST), Cvoid,
+        (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}, Ref{Clong}, Ref{Clong}),
+        C, A, B, Ref(M), Ref(K), Ref(N)
+    )
+end
+function fAtmulB_builtin!(C, A, B)
+    M, N = size(C); K = size(B, 1)
+    ccall(
+        (:AtmulBbuiltin, LIBFTEST), Cvoid,
         (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}, Ref{Clong}, Ref{Clong}),
         C, A, B, Ref(M), Ref(K), Ref(N)
     )
@@ -80,6 +105,24 @@ function fselfdot(a)
         (:selfdot, LIBFTEST), Cvoid,
         (Ref{Float64}, Ptr{Float64}, Ref{Clong}),
         d, a, Ref(N)
+    )
+    d[]
+end
+function cdot3(x, A, y)
+    M, N = size(A)
+    ccall(
+        (:dot3, LIBCTEST), Float64,
+        (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Clong, Clong),
+        x, A, y, M, N
+    )
+end
+function fdot3(x, A, y)
+    M, N = size(A)
+    d = Ref{Float64}()
+    ccall(
+        (:dot3, LIBFTEST), Cvoid,
+        (Ref{Float64}, Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}, Ref{Clong}),
+        d, x, A, y, Ref(M), Ref(N)
     )
     d[]
 end
@@ -142,6 +185,14 @@ function fOLSlp(y, X, β)
         lp, y, X, β, Ref(N), Ref(P)
     )
     lp[]
+end
+function cvexp!(b, a)
+    N = length(b)
+    ccall(
+        (:vexp, LIBCTEST), Cvoid,
+        (Ptr{Float64}, Ptr{Float64}, Clong),
+        b, a, N
+    )
 end
 function fvexp!(b, a)
     N = length(b)

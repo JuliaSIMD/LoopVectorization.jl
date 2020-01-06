@@ -441,6 +441,7 @@ function add_parent!(
     parent = if var isa Symbol
         get!(ls.opdict, var) do
             # might add constant
+            pushpreamble!(ls, Expr(:(=), Symbol("##", var), var))
             add_constant!(ls, var, elementbytes)
         end
     elseif var isa Expr #CSE candidate
@@ -455,8 +456,6 @@ function add_reduction!(
 )
     get!(ls.opdict, var) do
         add_constant!(ls, var, elementbytes)
-        # push!(ls.outer_reductions, identifier(p))
-        # p
     end
     # pushparent!(parents, deps, reduceddeps, parent)
 end
@@ -504,7 +503,7 @@ function add_store!(
     parent = getop(ls, var)
     op = Operation( length(operations(ls)), ref.array, elementbytes, :setindex!, memstore, loopdependencies(ref), reduceddependencies(parent), [parent], ref )
     add_vptr!(ls, ref.array, identifier(op))
-    pushop!(ls, op, var)
+    pushop!(ls, op, ref.array)
 end
 function add_store_ref!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8)
     ref = ref_from_ref(ex)

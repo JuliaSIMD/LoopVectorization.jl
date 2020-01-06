@@ -19,6 +19,24 @@ function gemmavx!(C, A, B)
         C[i,j] = Cᵢⱼ
     end
 end
+function jAtmulB!(C, A, B)
+    @inbounds for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
+        Cₘₙ = zero(eltype(C))
+        @simd ivdep for k ∈ 1:size(A,1)
+            Cₘₙ += A[k,m] * B[k,n]
+        end
+        C[m,n] = Cₘₙ
+    end
+end
+function jAtmulBavx!(C, A, B)
+    @avx for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
+        Cₘₙ = zero(eltype(C))
+        for k ∈ 1:size(A,1)
+            Cₘₙ += A[k,m] * B[k,n]
+        end
+        C[m,n] = Cₘₙ
+    end
+end
 function jdot(a, b)
     s = 0.0
     @inbounds @simd ivdep for i ∈ eachindex(a, b)
@@ -44,6 +62,24 @@ function jselfdotavx(a)
     s = 0.0
     @avx for i ∈ eachindex(a)
         s += a[i] * a[i]
+    end
+    s
+end
+function jdot3(x, A, y)
+    M, N = size(A)
+    s = zero(promote_type(eltype(x), eltype(A), eltype(y)))
+    @inbounds for n ∈ 1:N
+        @simd ivdep for m ∈ 1:M
+            s += x[m] * A[m,n] * y[n]
+        end
+    end
+    s
+end
+function jdot3avx(x, A, y)
+    M, N = size(A)
+    s = zero(promote_type(eltype(x), eltype(A), eltype(y)))
+    @avx for m ∈ 1:M, n ∈ 1:N
+        s += x[m] * A[m,n] * y[n]
     end
     s
 end
@@ -79,7 +115,7 @@ function jgemv!(y, A, x)
         end
     end
 end
-function mygemvavx!(y, A, x)
+function jgemvavx!(y, A, x)
     @avx for i ∈ eachindex(y)
         yᵢ = 0.0
         for j ∈ eachindex(x)
@@ -88,7 +124,7 @@ function mygemvavx!(y, A, x)
         y[i] = yᵢ
     end
 end
-function myvar!(s², A, x̄)
+function jvar!(s², A, x̄)
     @. s² = 0
     @inbounds for i ∈ 1:size(A,2)
         @simd for j ∈ eachindex(s²)
@@ -97,7 +133,7 @@ function myvar!(s², A, x̄)
         end
     end
 end
-function myvaravx!(s², A, x̄)
+function jvaravx!(s², A, x̄)
     @avx for j ∈ eachindex(s²)
         s²ⱼ = 0.0
         x̄ⱼ = x̄[j]

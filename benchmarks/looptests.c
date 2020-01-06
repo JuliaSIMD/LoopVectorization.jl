@@ -1,4 +1,4 @@
-
+#include<math.h>
 
 void gemm_mnk(double* restrict C, double* restrict A, double* restrict B, long M, long K, long N){
   for (long i = 0; i < M*N; i++){
@@ -78,6 +78,19 @@ void gemm_knm(double* restrict C, double* restrict A, double* restrict B, long M
   }
   return;
 }
+void AtmulB(double* restrict C, double* restrict At, double* restrict B, long M, long K, long N){
+  for (long i = 0; i < M*N; i++){
+    C[i] = 0.0;
+  }
+  for (long n = 0; n < N; n++){
+    for (long m = 0; m < M; m++){
+      for (long k = 0; k < K; k++){
+	C[m + n*M] += At[k + m*K] * B[k + n*K];
+      }
+    }
+  }
+  return;
+}
 double dot(double* restrict a, double* restrict b, long N){
   double s = 0.0;
   for (long n = 0; n < N; n++){
@@ -92,7 +105,15 @@ double selfdot(double* restrict a, long N){
   }
   return s;
 }
-
+double dot3(double* restrict x, double* restrict A, double* restrict y, long M, long N){
+  double s = 0.0;
+  for (long n = 0; n < N; n++){
+    for (long m = 0; m < M; m++){
+      s += x[m] * A[m + n*M] * y[n];
+    }
+  }
+  return s;
+}
 void gemv(double* restrict y, double* restrict  A, double* restrict x, long M, long K){
   for (long m = 0; m < M; m++){
     y[m] = 0.0;
@@ -104,7 +125,19 @@ void gemv(double* restrict y, double* restrict  A, double* restrict x, long M, l
   }
   return;
 }
-
+double svexp(double* restrict a, long N){
+  double s = 0.0;
+  for (long n = 0; n < N; n++){
+    s += exp(a[n]);
+  }
+  return s;
+}
+void vexp(double* restrict b, double* restrict a, long N){
+  for (long n = 0; n < N; n++){
+    b[n] = exp(a[n]);
+  }
+  return;
+}
 void unscaledvar(double* restrict s, double* restrict A, double* restrict xb, long M, long N){
   for (long m = 0; m < M; m++){
     s[m] = 0.0;
@@ -117,7 +150,6 @@ void unscaledvar(double* restrict s, double* restrict A, double* restrict xb, lo
   }
   return;
 }
-
 void aplusBc(double* restrict D, double* restrict a, double* restrict B, double* restrict c, long M, long N){
   for (long n = 0; n < N; n++){
     for (long m = 0; m < M; m++){

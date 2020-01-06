@@ -6,28 +6,25 @@ using LinearAlgebra
 @testset "LoopVectorization.jl" begin
 
     
-    @generated function logsumexp!(r::AbstractArray{T}, x::AbstractArray{T}) where {T}
-        quote
-            n = length(x)
-            length(r) == n || throw(DimensionMismatch())
-            isempty(x) && return -T(Inf)
-            1 == stride(r,1) == stride(x,1) || throw(error("Arrays not strided"))
+    function logsumexp!(r::AbstractArray{T}, x::AbstractArray{T}) where {T}
+        n = length(x)
+        length(r) == n || throw(DimensionMismatch())
+        isempty(x) && return -T(Inf)
+        1 == stride(r,1) == stride(x,1) || throw(error("Arrays not strided"))
 
-            u = maximum(x)                                       # max value used to re-center
-            abs(u) == Inf && return any(isnan, x) ? T(NaN) : u   # check for non-finite values
-
-            s = zero(T)
-            @vectorize $T for i = 1:n
-                tmp = exp(x[i] - u)
-                r[i] = tmp
-                s += tmp
-            end
-
-            invs = inv(s)
-            r .*= invs
-
-            return log1p(s-1) + u
+        u = maximum(x)                                       # max value used to re-center
+        abs(u) == Inf && return any(isnan, x) ? T(NaN) : u   # check for non-finite values
+        s = zero(T)
+        @avx for i = 1:n
+            tmp = exp(x[i] - u)
+            r[i] = tmp
+            s += tmp
         end
+
+        invs = inv(s)
+        r .*= invs
+
+        return log1p(s-1) + u
     end
 
     x = collect(1:1_000) ./ 10;
@@ -498,6 +495,9 @@ end
         a = rand(137);
         b1 = @avx @. 3*a + sin(a) + sqrt(a);
         b2 =      @. 3*a + sin(a) + sqrt(a);
+        @test b1 ≈ b2
+        three = 3
+        @avx @. b1 = three*a + sin(a) + sqrt(a);
         @test b1 ≈ b2
     end
 end
