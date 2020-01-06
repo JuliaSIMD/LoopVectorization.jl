@@ -131,7 +131,7 @@ function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{T}, elementbytes::Int = 8
 ) where {T<:Union{Integer,Float32,Float64}}
     pushpreamble!(ls, Expr(:(=), Symbol("##", destname), bcname))
-    add_constant!(ls, destname, elementbytes) # or replace elementbytes with sizeof(T) ? 
+    add_constant!(ls, destname, elementbytes) # or replace elementbytes with sizeof(T) ? u
 end
 function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
@@ -144,9 +144,9 @@ function add_broadcast!(
 end
 function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
-    ::Type{Broadcasted{DefaultArrayStyle{N},Nothing,F,A}},
+    ::Type{Broadcasted{S,Nothing,F,A}},
     elementbytes::Int = 8
-) where {N,F,A}
+) where {N,S<:Base.Broadcast.AbstractArrayStyle{N},F,A}
     instr = get(FUNCTIONSYMBOLS, F) do
         f = gensym(:f)
         pushpreamble!(ls, Expr(:(=), f, Expr(:(.), bcname, QuoteNode(:f))))
@@ -224,7 +224,7 @@ end
     # ls
 end
 
-function vmaterialize(bc::Broadcasted)
+@inline function vmaterialize(bc::Broadcasted)
     ElType = Base.Broadcast.combine_eltypes(bc.f, bc.args)
     vmaterialize!(similar(bc, ElType), bc)
 end

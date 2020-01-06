@@ -648,8 +648,13 @@ function add_upper_outer_reductions(ls::LoopSet, loopq::Expr, Ulow::Int, Uhigh::
     initialize_outer_reductions!(ifq, ls, Ulow, Uhigh, W, typeT, unrolled)
     push!(ifq.args, loopq)
     reduce_range!(ifq, ls, Ulow, Uhigh)
-    comparison = Expr(:call, :!, Expr(:call, :<, unrolledloop.rangesym, Expr(:call, lv(:valmul), W, Uhigh)))
-    Expr(:if, comparison, ifq)
+    comparison = if unrolledloop.hintexact
+        Expr(:call, :<, unrolledloop.rangehint, Expr(:call, lv(:valmul), W, Uhigh))
+    else
+        Expr(:call, :<, unrolledloop.rangesym, Expr(:call, lv(:valmul), W, Uhigh))
+    end
+    ncomparison = Expr(:call, :!, comparison)
+    Expr(:if, ncomparison, ifq)
 end
 function reduce_expr!(q::Expr, ls::LoopSet, U::Int)
     for or ∈ ls.outer_reductions
@@ -805,10 +810,19 @@ function lower_unrolled_dynamic!(
             end
         else
             remblocknew = if unrolled === vectorized
-                comparison = Expr(:call, :>, unrolled, Expr(:call, :-, unrolled_numitersym, Expr(:call, lv(:valmuladd), W, Ut, 1)))
+                itercount = if unrolledloop.hintexact
+                    Expr(:call, :-, unrolledloop.rangehint, Expr(:call, lv(:valmuladd), W, Ut, 1))
+                else
+                    Expr(:call, :-, unrolled_numitersym, Expr(:call, lv(:valmuladd), W, Ut, 1))
+                end
+                comparison = Expr(:call, :>, unrolled, itercount)
                 Expr(Ut == 1 ? :if : :elseif, comparison, lower_set(ls, vectorized, Ut, T, W, Symbol("##mask##"), :block))
             else
-                comparison = Expr(:call, :>, unrolled, Expr(:call, :-, unrolled_numitersym, Ut + 1))
+                comparison = if unrolledloop.hintexact
+                    Expr(:call, :>, unrolled, unrolledloop.rangehint - (Ut + 1))
+                else
+                    Expr(:call, :>, unrolled, Expr(:call, :-, unrolled_numitersym, Ut + 1))
+                end
                 Expr(Ut == 1 ? :if : :elseif, comparison, lower_set(ls, vectorized, Ut, T, W, nothing, :block))
             end
             push!(remblock.args, remblocknew)
@@ -824,7 +838,11 @@ function lower_unrolled_dynamic!(
             end
             Ut = 1
             # setup for branchy remainder calculation
-            comparison = Expr(:call, :(!=), unrolled_numitersym, unrolled)
+            comparison = if unrolledloop.hintexact
+                Expr(:call, :(!=), unrolledloop.rangehint, unrolled)
+            else
+                Expr(:call, :(!=), unrolled_numitersym, unrolled)
+            end
             remblock = Expr(:block)
             push!(q.args, Expr(:if, comparison, remblock))
         else
@@ -857,7 +875,6 @@ function lower_tiled(ls::LoopSet, vectorized::Symbol, U::Int, T::Int)
     W = gensym(:W)
     typeT = gensym(:T)
     setup_Wmask!(ls, W, typeT, vectorized, unrolled, U)
-    # W = VectorizationBase.pick_vector_width(ls, unrolled)
     tiledloop = ls.loops[tiled]
     static_tile = tiledloop.hintexact
     unrolledloop = ls.loops[unrolled]
@@ -866,8 +883,6 @@ function lower_tiled(ls::LoopSet, vectorized::Symbol, U::Int, T::Int)
     # we build up the loop expression.
     Trem = Tt = T
     nloops = num_loops(ls);
-    # addtileonly = sum(length, @view(oporder(ls)[:,:,:,:,end])) > 0
-    # Texprtype = (static_tile && tiled_iter < 2T) ? :block : :while
     firstiter = true
     mangledtiled = tiledsym(tiled)
     local qifelse::Expr
@@ -876,7 +891,7 @@ function lower_tiled(ls::LoopSet, vectorized::Symbol, U::Int, T::Int)
         lower_unrolled!(tiledloopbody, ls, vectorized, U, Tt, W, typeT, unrolledloop)
         tiledloopbody = lower_nest(ls, nloops, vectorized, U, Tt, tiledloopbody, 0, W, nothing, :block)
         if firstiter
-            push!(q.args, (static_tile && tiled_iter < 2T) ? tiledloopbody : Expr(:while, looprange(ls, tiled, Tt, mangledtiled, tiledloop), tiledloopbody))
+            push!(q.args, (static_tile && tiledloop.rangehint < 2T) ? tiledloopbody : Expr(:while, looprange(ls, tiled, Tt, mangledtiled, tiledloop), tiledloopbody))
         elseif static_tile
             push!(q.args, tiledloopbody)
         else # not static, not firstiter
@@ -887,7 +902,6 @@ function lower_tiled(ls::LoopSet, vectorized::Symbol, U::Int, T::Int)
         end
         if static_tile
             if Tt == T
-                # push!(tiledloopbody.args, Expr(:+=, mangledtiled, Tt))
                 Texprtype = :block
                 Tt = looprangehint(ls, tiled) % T
                 # Recalculate U
