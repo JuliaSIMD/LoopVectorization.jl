@@ -137,43 +137,13 @@ d2 = @avx @. a + B * c′;
 can be optimized in a similar manner to BLAS, albeit to a much smaller degree because the naive version already benefits from vectorization (unlike the naive BLAS).
 
 
-<!-- You can also use `\ast` to for a lazy matrix multiplication that can fuse with broadcasts. `.\ast` behaves similarly, to allow it's arguments to -->
+You can also use `\ast` for lazy matrix multiplication that can fuse with broadcasts. `.\ast` behaves similarly, espcaping the broadcast (it is not applied elementwise). This allows you to use `@.` and fuse all the loops, even if the arguments to `\ast` are themselves broadcasted objects. However, it will often be the case that creating an intermediary is faster. I would recomend always checking if splitting the operation into pieces, or at least isolating the matrix multiplication, increases performance. That will often be the case, especially if the matrices are large, where a separate multiplication can leverage BLAS (and perhaps take advantage of threads).
 
-
-
-Originally, LoopVectorization only provided a simple, dumb, transform on a single loop using the `@vectorize` macro. This transformation took element type and unroll factor arguments, performing no analysis of the loop, simply applying the specified arguments.
-For backwards compatability, this macro is still currently supported. However, it may eventually be deprecated.
-
-For example,
+At small sizes, this can be fast.
 ```julia
-function sum_simd(x)
-    s = zero(eltype(x))
-    @simd for xᵢ ∈ x
-        s += xᵢ
-    end
-    s
-end
-using LoopVectorization, BenchmarkTools
-function sum_loopvec(x::AbstractVector{Float64})
-    s = 0.0
-    @vectorize 4 for i ∈ eachindex(x)
-        s += x[i]
-    end
-    s
-end
-x = rand(110);
-@btime sum($x)
-#   20.527 ns (0 allocations: 0 bytes)
-# 53.38001667116997
 
-@btime sum_simd($x)
-#   16.749 ns (0 allocations: 0 bytes)
-# 53.38001667116997
-
-@btime sum_loopvec($x)
-#   12.022 ns (0 allocations: 0 bytes)
-# 53.38001667116997
 ```
+
 
 
 

@@ -54,7 +54,6 @@ end
 function mem_offset(op::Operation, mul::Symbol, incr::Int, unrolled::Symbol)
     @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
     ret = Expr(:tuple)
-    deps = op.ref.ref
     indices = op.ref.ref
     deps = op.dependencies
     if incr == 0
@@ -153,12 +152,12 @@ function lower_load_vectorized!(
     # Urange = unrolled ∈ loopdeps ? 0:U-1 : 0
     var = variable_name(op, suffix)
     vecnotunrolled = vectorized !== unrolled
-    if first(loopdependencies(op)) === vectorized # vload
+    if first(op.ref.ref) === vectorized # vload
         for u ∈ umin:U-1
             pushvectorload!(q, op, var, u, U, W, mask, unrolled, vecnotunrolled)
         end
     else
-        sn = findfirst(x -> x === vectorized, loopdependencies(op))::Int
+        sn = findfirst(x -> x === vectorized, op.ref.ref)::Int
         ustrides = Expr(:call, lv(:vmul), Expr(:call, :stride, refname(op), sn), Expr(:call, lv(:vrange), W))
         ustride = gensym(:ustride)
         push!(q.args, Expr(:(=), ustride, ustrides))
@@ -183,15 +182,14 @@ function lower_load!(
         lower_load_scalar!(q, op, vectorized, W, unrolled, U, suffix, mask)
     end
 end
-function reduce_range!(q::Expr, toreduct::Symbol, instr::Symbol, Uh::Int, Uh2::Int)
-    instr = lv(instr)
+function reduce_range!(q::Expr, toreduct::Symbol, instr::Instruction, Uh::Int, Uh2::Int)
     for u ∈ 0:Uh-1
         tru = Symbol("##",toreduct,:_,u)
-        push!(q.args, Expr(:(=), tru, Expr(:call, instr, tru, Symbol("##",toreduct,:_,u + Uh))))
+        push!(q.args, Expr(:(=), tru, Expr(instr, tru, Symbol("##",toreduct,:_,u + Uh))))
     end
     for u ∈ 2Uh:Uh2-1
         tru = Symbol("##",toreduct,:_, u + 1 - 2Uh)
-        push!(q.args, Expr(:(=), tru, Expr(:call, instr, tru, Symbol("##",toreduct,:_,u))))
+        push!(q.args, Expr(:(=), tru, Expr(instr, tru, Symbol("##",toreduct,:_,u))))
     end
 end
 function reduce_range!(q::Expr, ls::LoopSet, Ulow::Int, Uhigh::Int)
@@ -205,7 +203,7 @@ function reduce_range!(q::Expr, ls::LoopSet, Ulow::Int, Uhigh::Int)
     end
 end
 
-function reduce_expr!(q::Expr, toreduct::Symbol, instr::Symbol, U::Int)
+function reduce_expr!(q::Expr, toreduct::Symbol, instr::Instruction, U::Int)
     U == 1 && return nothing
     instr = get(REDUCTION_TRANSLATION, instr, instr)
     Uh2 = U
@@ -248,10 +246,10 @@ function lower_store_reduction!(
     ptr = refname(op)
     # need to find out reduction type
     instr = first(parents(op)).instruction
-    reduct_instruct = lv(CORRESPONDING_REDUCTION[instr])
+    reduct_instruct = CORRESPONDING_REDUCTION[instr]
     for u ∈ 0:U-1
         reducedname = varassignname(var, u, isunrolled)
-        storevar = Expr(:call, reduct_instruct, reducedname)
+        storevar = Expr(reduct_instruct, reducedname)
         push!(q.args, Expr(:call, lv(:store!), ptr, storevar, mem_offset(op, u, unrolled))) # store storevar
     end
     nothing
@@ -383,7 +381,7 @@ function lower_compute!(
     # that smaller size is more advantageous.
     modsuffix = 0
     for u ∈ 0:Uiter
-        instrcall = callfun(instr) # Expr(:call, instr)
+        instrcall = Expr(instr) # Expr(:call, instr)
         varsym = if tiledouterreduction > 0 # then suffix !== nothing
             modsuffix = ((u + suffix*U) & 3)
             Symbol("##",var,:_, modsuffix)
@@ -437,14 +435,15 @@ function lower_constant!(
     end
     # store parent's reduction deps
     # @show op.instruction, loopdependencies(op), reduceddependencies(op), unrolled, unrolled ∈ loopdependencies(op)
+    constsym = instruction.instr
     if vectorized ∈ loopdependencies(op) || vectorized ∈ reduceddependencies(op)
-        call = Expr(:call, lv(:vbroadcast), W, instruction)
+        call = Expr(:call, lv(:vbroadcast), W, constsym)
         for u ∈ 0:U-1
             push!(q.args, Expr(:(=), Symbol("##", variable, :_, u), call))
         end
     else
         for u ∈ 0:U-1
-            push!(q.args, Expr(:(=), Symbol("##", variable, :_, u), instruction))
+            push!(q.args, Expr(:(=), Symbol("##", variable, :_, u), constsym))
         end
     end
     nothing
@@ -477,7 +476,7 @@ function lower_constant!(
     q::Expr, ops::AbstractVector{Operation}, vectorized::Symbol, W::Symbol, unrolled::Symbol, U::Int,
     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
 )
-    foreach(op -> lower_constant!(q, op, vectorized, W, unrolled, U, suffix, mask), ops)
+    foreach(op -> lower_constan!(q, op, vectorized, W, unrolled, U, suffix, mask), ops)
 end
 
 function lower!(
@@ -623,8 +622,7 @@ function initialize_outer_reductions!(
 )
     # T = op.elementbytes == 8 ? :Float64 : :Float32
     var = op.variable
-    instr = op.instruction # maybe just replace op instead?
-    z = Expr(:call, REDUCTION_ZERO[instr], typeT)
+    z = Expr(:call, REDUCTION_ZERO[op.instruction], typeT)
     if unrolled ∈ reduceddependencies(op)
         z = Expr(:call, lv(:vbroadcast), W, z)
     end

@@ -91,7 +91,7 @@ struct Operation
     identifier::Int
     variable::Symbol
     elementbytes::Int
-    instruction::Symbol
+    instruction::Instruction
     node_type::OperationType
     dependencies::Vector{Symbol}#::Vector{Symbol}
     reduced_deps::Vector{Symbol}
@@ -125,6 +125,21 @@ end
 const NODEPENDENCY = Union{Symbol,Int}[]
 const NOPARENTS = Operation[]
 
+function Base.show(io::IO, op::Operation)
+    if isconstant(op)
+        if op.instruction === LOOPCONSTANT
+            print(io, Expr(:(=), op.variable, 0))
+        else
+            print(io, Expr(:(=), op.variable, op.instruction.instr))
+        end
+    elseif isload(op)
+        print(io, Expr(:(=), op.variable, Expr(:ref, op.ref.array, op.ref.ref...)))
+    elseif iscompute(op)
+        print(io, Expr(:(=), op.variable, Expr(op.instruction, name.(parents(op))...)))
+    elseif isstore(op)
+        print(io, Expr(:(=), Expr(:ref, op.ref.array, op.ref.ref...), name(first(parents(op)))))
+    end
+end
 
 function isreduction(op::Operation)
     ((op.node_type == compute) || (op.node_type == memstore)) && length(op.reduced_deps) > 0
@@ -155,11 +170,11 @@ Returns `-1` if not an outerreduction.
 """
 function isouterreduction(op::Operation)
     if isconstant(op) # equivalent to checking if length(loopdependencies(op)) == 0
-        op.instruction === Symbol("##CONSTANT##") ? 0 : -1
+        op.instruction === LOOPCONSTANT ? 0 : -1
     elseif iscompute(op)
         var = op.variable
         for (n,opp) ∈ enumerate(parents(op))
-            opp.variable === var && opp.instruction === Symbol("##CONSTANT##") && return n
+            opp.variable === var && opp.instruction === LOOPCONSTANT && return n
         end
         -1
     else

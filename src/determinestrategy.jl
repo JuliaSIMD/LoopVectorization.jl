@@ -1,7 +1,7 @@
 
 # TODO: FIXME for general case
 # wrong for transposed matrices, and certain views/SubArrays.
-unitstride(op, s) = first(loopdependencies(op)) === s
+unitstride(op::Operation, s) = first(op.ref.ref) === s
 
 function cost(op::Operation, unrolled::Symbol, Wshift::Int, size_T::Int = op.elementbytes)
     isconstant(op) && return 0.0, 0, 1

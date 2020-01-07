@@ -101,6 +101,14 @@ using LinearAlgebra
                 C[m,n] = Cₘₙ
             end
         end
+        r2ambq = :(for m ∈ 1:size(C,1), n ∈ 1:size(C,2)
+                Cₘₙ = zero(eltype(C))
+                for k ∈ 1:size(B,1)
+                    Cₘₙ += (Aₘ[m,1]*Aₖ[1,k]+Aₘ[m,2]*Aₖ[2,k]) * B[k,n]
+                end
+                C[m,n] = Cₘₙ
+                   end)
+        lsr2amb = LoopVectorization.LoopSet(r2ambq)
         function rank2AmulBavx!(C, Aₘ, Aₖ, B)
             @avx for m ∈ 1:size(C,1), n ∈ 1:size(C,2)
                 Cₘₙ = zero(eltype(C))

@@ -2,7 +2,7 @@
 # @static if VERSION  < v"1.3.0"
     # lv(x) = Expr(:(.), :LoopVectorization, QuoteNode(x))
 # else
-    lv(x) = GlobalRef(LoopVectorization, x)
+
 # end
 
 isdense(::Type{<:DenseArray}) = true
@@ -252,13 +252,19 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
         else
             N = gensym(Symbol(:loop, itersym))
             ex = if lii
-                lower == 1 ? upper : Expr(:call, :-, upper, lower - 1)
-            elseif uii
-                Expr(:call, :-, upper + 1, lower)
+                if lower == 1
+                    pushpreamble!(ls, Expr(:(=), N, upper))
+                else
+                    pushpreamble!(ls, Expr(:(=), N, Expr(:call, :-, upper, lower - 1)))
+                end
             else
-                Expr(:call, :-, Expr(:call, :+, upper, 1), lower)
+                ex = if uii
+                    Expr(:call, :-, upper + 1, lower)
+                else
+                    Expr(:call, :-, Expr(:call, :+, upper, 1), lower)
+                end
+                pushpreamble!(ls, Expr(:(=), N, ex))
             end
-            pushpreamble!(ls, Expr(:(=), N, ex))
             Loop(itersym, N)
         end
     elseif f === :eachindex
@@ -289,6 +295,9 @@ function add_loop!(ls::LoopSet, q::Expr, elementbytes::Int = 8)
     else
         Base.push!(ls, q, elementbytes)
     end
+end
+function add_loop!(ls::LoopSet, loop::Loop)
+    ls.loops[loop.itersym] = loop
 end
 function add_vptr!(ls::LoopSet, indexed::Symbol, id::Int)
     if includesarray(ls, indexed) < 0
@@ -377,12 +386,12 @@ end
 ### if it is a literal, that literal is either var"##ZERO#Float##", var"##ONE#Float##", or has to have been assigned to var in the preamble.
 # if it is a literal, that literal has to have been assigned to var in the preamble.
 function add_constant!(ls::LoopSet, var::Symbol, elementbytes::Int = 8)
-    pushop!(ls, Operation(length(operations(ls)), var, elementbytes, Symbol("##CONSTANT##"), constant, NODEPENDENCY, Symbol[], NOPARENTS), var)
+    pushop!(ls, Operation(length(operations(ls)), var, elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS), var)
 end
 function add_constant!(ls::LoopSet, var, elementbytes::Int = 8)
     sym = gensym(:temp)
     pushpreamble!(ls, Expr(:(=), Symbol("##", sym), var))
-    pushop!(ls, Operation(length(operations(ls)), sym, elementbytes, Symbol("##CONSTANT##"), constant, NODEPENDENCY, Symbol[], NOPARENTS), sym)
+    pushop!(ls, Operation(length(operations(ls)), sym, elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS), sym)
 end
 # This version has loop dependencies. var gets assigned to sym when lowering.
 function add_constant!(ls::LoopSet, var::Symbol, deps::Vector{Symbol}, sym::Symbol = gensym(:constant), elementbytes::Int = 8)
@@ -467,7 +476,7 @@ function add_reduction_update_parent!(
     setdiffv!(reduceddeps, deps, loopdependencies(parent))
     pushparent!(parents, deps, reduceddeps, parent) # deps and reduced deps will not be disjoint
     op = Operation(length(operations(ls)), var, elementbytes, instr, compute, deps, reduceddeps, parents)
-    parent.instruction === Symbol("##CONSTANT##") && push!(ls.outer_reductions, identifier(op))
+    parent.instruction === LOOPCONSTANT && push!(ls.outer_reductions, identifier(op))
     pushop!(ls, op, var) # note this overwrites the entry in the operations dict, but not the vector
 end
 function add_compute!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8, ref = nothing)

@@ -2,9 +2,13 @@ struct Product{A,B}
     a::A
     b::B
 end
-function Base.size(p::Product)
+@inline function Base.size(p::Product)
     M = size(p.a, 1)
     (M, Base.tail(size(p.b))...)
+end
+@inline function Base.size(p::Product, i::Integer)
+    i == 1 && return size(p.a, 1)
+    size(p.b, i)
 end
 @inline Base.length(p::Product) = prod(size(p))
 @inline Base.broadcastable(p::Product) = p
