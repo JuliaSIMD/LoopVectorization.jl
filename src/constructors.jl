@@ -48,6 +48,39 @@ function LoopSet(q::Expr)
     ls
 end
 
+"""
+    @avx
+
+Annotate a `for` loop, or a set of nested `for` loops whose bounds are constant across iterations, to optimize the computation. For example:
+
+    function AmulBavx!(C, A, B)
+        @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+            Cₘₙ = zero(eltype(C))
+            for k ∈ 1:size(A,2)
+                Cₘₙ += A[m,k] * B[k,n]
+            end
+            C[m,n] = Cₘₙ
+        end
+    end
+
+The macro models the set of nested loops, and chooses a 
+
+It may also apply to broadcasts:
+
+```jldoctest
+julia> a = rand(100);
+
+julia> b = @avx exp.(2 .* a);
+
+julia> c = similar(b);
+
+julia> @avx @. c = exp(2a);
+
+julia> b ≈ c 
+true
+```
+
+"""
 macro avx(q)
     q2 = if q.head === :for
         lower(LoopSet(q))

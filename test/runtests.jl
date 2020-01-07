@@ -147,9 +147,12 @@ using LinearAlgebra
             return C
         end
         
-        for T ∈ (Float32, Float64)
+        for T ∈ (Float32, Float64, Int32, Int64)
             M, K, N = 72, 75, 68;
-            C = Matrix{T}(undef, M, N); A = randn(T, M, K); B = randn(T, K, N);
+            TC = sizeof(T) == 4 ? Float32 : Float64
+            R = T <: Integer ? (T(1):T(1000)) : T
+            C = Matrix{TC}(undef, M, N);
+            A = rand(R, M, K); B = rand(R, K, N);
             C2 = similar(C);
             AmulBavx!(C, A, B)
             AmulB!(C2, A, B)
@@ -159,7 +162,7 @@ using LinearAlgebra
             @test C ≈ C2
             fill!(C, 9999.999); mulCAtB_2x2block!(C, At, B);
             @test C ≈ C2
-            Aₘ= rand(T, M, 2); Aₖ = rand(T, 2, K);
+            Aₘ= rand(R, M, 2); Aₖ = rand(R, 2, K);
             rank2AmulBavx!(C, Aₘ, Aₖ, B)
             rank2AmulB!(C2, Aₘ, Aₖ, B)
             @test C ≈ C2
