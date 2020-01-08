@@ -345,7 +345,11 @@ using LinearAlgebra
     lsdot3 = LoopVectorization.LoopSet(dot3q);
     LoopVectorization.choose_order(lsdot3)
 
-    # dot3(x, A, y) = dot(x, A * y)
+    @static if VERSION < v"1.4"
+        dot3(x, A, y) = dot(x, A * y)
+    else
+        dot3(x, A, y) = dot(x, A, y)
+    end
     function dot3avx(x, A, y)
         M, N = size(A)
         s = zero(promote_type(eltype(x), eltype(A), eltype(y)))
@@ -450,7 +454,7 @@ using LinearAlgebra
 
         M, N = 47, 73;
         x = rand(T, M); A = rand(T, M, N); y = rand(T, N);
-        @test dot3avx(x, A, y) ≈ dot(x, A, y)
+        @test dot3avx(x, A, y) ≈ dot3(x, A, y)
 
     end
 end
