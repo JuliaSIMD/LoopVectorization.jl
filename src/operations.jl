@@ -2,16 +2,13 @@ struct ArrayReference
     array::Symbol
     ref::Vector{Union{Symbol,Int}}
     loaded::Base.RefValue{Bool}
-    # function ArrayReference(
-        # array, refsin, loadedin = Ref{Bool}(false)
-    # )
-        # ref = Vector{Union{Symbol,Int}}(undef, length(refsin))
-        # for i ∈ eachindex(ref)
-            # refᵢ = (refsin[i])::Union{Symbol,Int}
-            # ref[i] = refᵢ isa Int ? refᵢ - 1 : refᵢ
-        # end
-        # new(array, ref, loadedin)
-    # end
+    ptr::Symbol
+end
+function ArrayReference(array::Symbol, ref, loaded)
+    ArrayReference(
+        array, ref, loaded,
+        Symbol("##vptr##_", array)
+    )
 end
 ArrayReference(array::Symbol, ref) = ArrayReference(array, ref, Ref{Bool}(false))
 function ArrayReference(
@@ -97,6 +94,7 @@ struct Operation
     reduced_deps::Vector{Symbol}
     parents::Vector{Operation}
     ref::ArrayReference
+    mangledvariable::Symbol
     # children::Vector{Operation}
     # numerical_metadata::Vector{Int} # stride of -1 indicates dynamic
     # symbolic_metadata::Vector{Symbol}
@@ -116,7 +114,8 @@ struct Operation
             convert(Vector{Symbol},dependencies),
             convert(Vector{Symbol},reduced_deps),
             convert(Vector{Operation},parents),
-            ref
+            ref,
+            Symbol("##", variable, :_)
         )
     end
 end
@@ -160,8 +159,23 @@ identifier(op::Operation) = op.identifier + 1
 name(op::Operation) = op.variable
 instruction(op::Operation) = op.instruction
 
-refname(op::Operation) = Symbol("##vptr##_", op.ref.array)
+refname(op::Operation) = op.ref.ptr
+"""
+    mvar = mangledvar(op)
 
+Returns the mangled variable name, for use in the produced expressions.
+These names will be further processed if op is tiled and/or unrolled.
+
+```julia
+    if tiled ∈ loopdependencies(op) # `suffix` is tilenumber
+        mvar = Symbol(op, suffix, :_)
+    end
+    if unrolled ∈ loopdependencies(op) # `u` is unroll number 
+        mvar = Symbol(op, u)
+    end
+```
+"""
+mangledvar(op::Operation) = op.mangledvariable
 
 """
 Returns `0` if the op is the declaration of the constant outerreduction variable.

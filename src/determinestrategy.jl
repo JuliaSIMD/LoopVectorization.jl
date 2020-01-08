@@ -236,8 +236,8 @@ end
 function solve_tilesize(X, R, Umax, Tmax)
     first(R) == 0 && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
     U, T, cost = solve_tilesize(X, R)
-    T -= T & 1
-    U = min(U, T)
+    # T -= T & 1
+    # U = min(U, T)
     U_too_large = U > Umax
     T_too_large = T > Tmax
     if U_too_large
@@ -259,20 +259,21 @@ function solve_tilesize(
     cost_vec::AbstractVector{Float64} = @view(ls.cost_vec[:,1]),
     reg_pressure::AbstractVector{Int} = @view(ls.reg_pres[:,1])
 )
-    maxT = 8
-    maxU = 8
+    maxT = 4#8
+    maxU = 4#8
     if isstaticloop(ls, tiled)
-        maxT = min(maxT, looprangehint(ls, tiled))
+        maxT = min(2maxT, looprangehint(ls, tiled))
     end
     if isstaticloop(ls, unrolled)
-        maxU = min(maxU, looprangehint(ls, unrolled))
+        maxU = min(2maxU, looprangehint(ls, unrolled))
     end
     solve_tilesize(cost_vec, reg_pressure, maxU, maxT)
 end
 
-function set_for_each_parent!(adal::Vector{T}, op::Operation, val::T) where {T}
-    @inbounds for opp ∈ parents(op)
-        adal[identifier(opp)] = val
+function set_upstream_family!(adal::Vector{T}, op::Operation, val::T) where {T}
+    adal[identifier(op)] = val
+    for opp ∈ parents(op)
+        set_upstream_family!(adal, opp, val)
     end
 end
 
@@ -333,7 +334,7 @@ function evaluate_cost_tile(
             unrolledtiled[1,id] = unrolled ∈ loopdependencies(op)
             unrolledtiled[2,id] = tiled ∈ loopdependencies(op)
             iters[id] = iter
-            innerloop ∈ loopdependencies(op) && set_for_each_parent!(descendentsininnerloop, op, true)
+            innerloop ∈ loopdependencies(op) && set_upstream_family!(descendentsininnerloop, op, true)
         end
     end
     for (id, op) ∈ enumerate(ops)

@@ -34,15 +34,15 @@ using LinearAlgebra
 
     @testset "GEMM" begin
         AmulBq = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
-                Cₘₙ = zero(eltype(C))
+                ΔCₘₙ = zero(eltype(C))
                 for k ∈ 1:size(A,2)
-                    Cₘₙ += A[m,k] * B[k,n]
+                    ΔCₘₙ += A[m,k] * B[k,n]
                 end
-                C[m,n] = Cₘₙ
+                C[m,n] += ΔCₘₙ
            end)
         
         lsAmulB = LoopVectorization.LoopSet(AmulBq);
-        U, T = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3,4) : (4, 4)
+        U, T = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 4)
         @test LoopVectorization.choose_order(lsAmulB) == (Symbol[:n,:m,:k], :m, U, T)
 
         function AmulB!(C, A, B)
@@ -60,6 +60,15 @@ using LinearAlgebra
                     Cₘₙ += A[m,k] * B[k,n]
                 end
                 C[m,n] = Cₘₙ
+            end
+        end
+        function AmuladdBavx!(C, A, B)
+            @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+                ΔCₘₙ = zero(eltype(C))
+                for k ∈ 1:size(A,2)
+                    ΔCₘₙ += A[m,k] * B[k,n]
+                end
+                C[m,n] += ΔCₘₙ
             end
         end
 
@@ -165,6 +174,10 @@ using LinearAlgebra
             AmulBavx!(C, A, B)
             AmulB!(C2, A, B)
             @test C ≈ C2
+            fill!(C, 0.0); AmuladdBavx!(C, A, B)
+            @test C ≈ C2
+            AmuladdBavx!(C, A, B)
+            @test C ≈ 2C2
             At = copy(A');
             fill!(C, 9999.999); AtmulBavx!(C, At, B)
             @test C ≈ C2
@@ -332,7 +345,7 @@ using LinearAlgebra
     lsdot3 = LoopVectorization.LoopSet(dot3q);
     LoopVectorization.choose_order(lsdot3)
 
-    dot3(x, A, y) = dot(x, A * y)
+    # dot3(x, A, y) = dot(x, A * y)
     function dot3avx(x, A, y)
         M, N = size(A)
         s = zero(promote_type(eltype(x), eltype(A), eltype(y)))
@@ -437,7 +450,7 @@ using LinearAlgebra
 
         M, N = 47, 73;
         x = rand(T, M); A = rand(T, M, N); y = rand(T, N);
-        @test dot3avx(x, A, y) ≈ dot3(x, A, y)
+        @test dot3avx(x, A, y) ≈ dot(x, A, y)
 
     end
 end
@@ -507,7 +520,7 @@ end
         b1 = @avx @. 3*a + sin(a) + sqrt(a);
         b2 =      @. 3*a + sin(a) + sqrt(a);
         @test b1 ≈ b2
-        three = 3
+        three = 3; fill!(b1, -9999.999);
         @avx @. b1 = three*a + sin(a) + sqrt(a);
         @test b1 ≈ b2
     end

@@ -299,10 +299,10 @@ end
 function add_loop!(ls::LoopSet, loop::Loop)
     ls.loops[loop.itersym] = loop
 end
-function add_vptr!(ls::LoopSet, indexed::Symbol, id::Int)
+function add_vptr!(ls::LoopSet, indexed::Symbol, id::Int, ptr::Symbol = Symbol("##vptr##_", indexed))
     if includesarray(ls, indexed) < 0
         push!(ls.includedarrays, (indexed, id))
-        pushpreamble!(ls, Expr(:(=), Symbol("##vptr##_", indexed), Expr(:call, lv(:stridedpointer), indexed)))
+        pushpreamble!(ls, Expr(:(=), ptr, Expr(:call, lv(:stridedpointer), indexed)))
     end
     nothing
 end
@@ -339,7 +339,7 @@ function add_load!(
         :getindex, memload, loopdependencies(ref, ls),
         NODEPENDENCY, NOPARENTS, ref
     )
-    add_vptr!(ls, ref.array, identifier(op))
+    add_vptr!(ls, ref.array, identifier(op), ref.ptr)
     pushop!(ls, op, var)
 end
 function add_load_ref!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8)
@@ -390,8 +390,9 @@ function add_constant!(ls::LoopSet, var::Symbol, elementbytes::Int = 8)
 end
 function add_constant!(ls::LoopSet, var, elementbytes::Int = 8)
     sym = gensym(:temp)
-    pushpreamble!(ls, Expr(:(=), Symbol("##", sym), var))
-    pushop!(ls, Operation(length(operations(ls)), sym, elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS), sym)
+    op = Operation(length(operations(ls)), sym, elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS)
+    pushpreamble!(ls, Expr(:(=), mangledvar(op), var))
+    pushop!(ls, op, sym)
 end
 # This version has loop dependencies. var gets assigned to sym when lowering.
 function add_constant!(ls::LoopSet, var::Symbol, deps::Vector{Symbol}, sym::Symbol = gensym(:constant), elementbytes::Int = 8)
@@ -450,8 +451,9 @@ function add_parent!(
     parent = if var isa Symbol
         get!(ls.opdict, var) do
             # might add constant
-            pushpreamble!(ls, Expr(:(=), Symbol("##", var), var))
-            add_constant!(ls, var, elementbytes)
+            op = add_constant!(ls, var, elementbytes)
+            pushpreamble!(ls, Expr(:(=), mangledvar(op), var))
+            op
         end
     elseif var isa Expr #CSE candidate
         maybe_cse_load!(ls, var, elementbytes)
@@ -511,7 +513,7 @@ function add_store!(
 )
     parent = getop(ls, var)
     op = Operation( length(operations(ls)), ref.array, elementbytes, :setindex!, memstore, loopdependencies(ref), reduceddependencies(parent), [parent], ref )
-    add_vptr!(ls, ref.array, identifier(op))
+    add_vptr!(ls, ref.array, identifier(op), ref.ptr)
     pushop!(ls, op, ref.array)
 end
 function add_store_ref!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8)
@@ -603,18 +605,6 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int = 8)
     end
 end
 
-function place_after_loop!(adal::Vector{Bool}, op::Operation)
-    pal = if isload(op) || length(reduceddependencies(op)) == 0
-        1
-    elseif length(reduceddependencies(op)) > 1
-        2
-    else
-        rd = first(reduceddependencies(op))
-        any(d -> d === rd, loopdependencies(op)) ? 1 : 2
-    end
-    pal == 1 && set_for_each_parent!(adal, op, false)
-    pal
-end
 
 function fillorder!(ls::LoopSet, order::Vector{Symbol}, loopistiled::Bool)
     lo = ls.loop_order
@@ -633,9 +623,9 @@ function fillorder!(ls::LoopSet, order::Vector{Symbol}, loopistiled::Bool)
     ops = operations(ls)
     nops = length(ops)
     included_vars = fill(false, nops)
-    all_descendents_after_loop = fill(true, nops)
-    positions = fill((-1,-1,-1,-1,-1), nops)#Vector{NTuple{5,Int}}(undef, nops)
+    place_after_loop = fill(true, nops)
     # to go inside out, we just have to include all those not-yet included depending on the current sym
+    empty!(lo)
     for _n ∈ 1:nloops
         n = 1 + nloops - _n
         ro[_n] = loopsym = order[n]
@@ -647,20 +637,11 @@ function fillorder!(ls::LoopSet, order::Vector{Symbol}, loopistiled::Bool)
             isunrolled = (unrolled ∈ loopdependencies(op)) + 1
             istiled = (loopistiled ? (tiled ∈ loopdependencies(op)) : false) + 1
             optype = Int(op.node_type) + 1
-            after_loop = place_after_loop!(all_descendents_after_loop, op)
-            positions[id] = (optype,isunrolled,istiled,after_loop,_n)
+            after_loop = place_after_loop[id] + 1
+            push!(lo[optype,isunrolled,istiled,after_loop,_n], ops[id])
+            set_upstream_family!(place_after_loop, op, false) # parents that have already been included are not moved, so no need to check included_vars to filter
         end
     end
-    empty!(lo)
-    for id ∈ 1:nops
-        optype,isunrolled,istiled,after_loop,_n = positions[id]
-        optype == -1 && continue#@show ops[id]
-        if all_descendents_after_loop[id]
-            after_loop = 2
-        end
-        push!(lo[optype,isunrolled,istiled,after_loop,_n], ops[id])
-    end
-    # 3, ro, order
 end
 
 
