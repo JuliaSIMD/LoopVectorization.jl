@@ -213,7 +213,7 @@ function mul_avx!(C:: StructMatrixComplexFInt64, A::StructMatrixComplexFInt64, B
 end
 ```
 this `mul_avx!` kernel can now accept `StructArray` matrices of complex numbers and multiply them efficiently:
-```juia
+```julia
 M, K, N = 50, 51, 52
 
 A  = StructArray(randn(ComplexF64, M, K)); 
@@ -225,5 +225,8 @@ C2 = collect(similar(C1));
 @btime mul!(    $C2, $(collect(A)), $(collect(B))) # collect turns the StructArray into a regular Array
 @test C1 ≈ C2
 ```
+
+Similar approaches can be taken to make kernels working with a variety of numeric struct types such as [dual numbers](https://github.com/JuliaDiff/DualNumbers.jl), [DoubleFloats](https://github.com/JuliaMath/DoubleFloats.jl), etc. 
+
 </p>
 </details>
