@@ -20,6 +20,12 @@ It then tries to vectorize the loop to improve runtime performance.
 
 The macro assumes that loop iterations can be reordered. It also currently supports simple nested loops, where loop bounds of inner loops are constant across iterations of the outer loop, and only a single loop at each level of noop lest. These limitations should be removed in a future version.
 
+## Examples
+### Dot Product
+<details>
+ <summaryClick me! ></summary>
+<p>
+
 A simple example with a single loop is the dot product:
 ```julia
 using LoopVectorization, BenchmarkTools
@@ -77,6 +83,13 @@ For this reason, we need to unroll the operation to run several independent inst
 
 Note that 14 and 12 nm Ryzen chips can only do 1 full width `fma` per clock cycle (and 2 loads), so they should see similar performance with the dot and selfdot. I haven't verified this, but would like to hear from anyone who can.
 
+</p>
+</details>
+
+### Matrix Multiply
+<details>
+ <summaryClick me! ></summary>
+<p>
 
 We can also vectorize fancier loops. A likely familiar example to dive into:
 ```julia
@@ -114,12 +127,19 @@ In the future, I would like it to also model the cost of memory movement in the 
 
 Until then, performance will degrade rapidly compared to BLAS as the size of the matrices increase. The advantage of the `@avx` macro, however, is that it is general. Not every operation is supported by BLAS.
 
-For example, what if `A` were the outter product of two vectors?
+For example, what if `A` were the outer product of two vectors?
 <!-- ```julia -->
 
 
 <!-- ``` -->
 
+</p>
+</details>
+
+### Broadcasting
+<details>
+ <summaryClick me! ></summary>
+<p>
 
 Another example, a straightforward operation expressed well via broadcasting:
 ```julia
@@ -137,13 +157,76 @@ d2 = @avx @. a + B * c′;
 can be optimized in a similar manner to BLAS, albeit to a much smaller degree because the naive version already benefits from vectorization (unlike the naive BLAS).
 
 
-You can also use `\ast` for lazy matrix multiplication that can fuse with broadcasts. `.\ast` behaves similarly, espcaping the broadcast (it is not applied elementwise). This allows you to use `@.` and fuse all the loops, even if the arguments to `\ast` are themselves broadcasted objects. However, it will often be the case that creating an intermediary is faster. I would recomend always checking if splitting the operation into pieces, or at least isolating the matrix multiplication, increases performance. That will often be the case, especially if the matrices are large, where a separate multiplication can leverage BLAS (and perhaps take advantage of threads).
+You can also use `∗` (which is typed `\ast` and not to be confused with `*`) for lazy matrix multiplication that can fuse with broadcasts. `.\ast` behaves similarly, espcaping the broadcast (it is not applied elementwise). This allows you to use `@.` and fuse all the loops, even if the arguments to `\ast` are themselves broadcasted objects. However, it will often be the case that creating an intermediary is faster. I would recomend always checking if splitting the operation into pieces, or at least isolating the matrix multiplication, increases performance. That will often be the case, especially if the matrices are large, where a separate multiplication can leverage BLAS (and perhaps take advantage of threads).
 
 At small sizes, this can be fast.
 ```julia
 
 ```
 
+</p>
+</details>
 
 
+### Dealing with structs
+<details>
+ <summaryClick me! ></summary>
+<p>
 
+The key to the `@avx` macro's performance gains is leveraging knowledge of exactly how data like `Float64`s and `Int`s are handled by a CPU. As such, it is not strightforward to generalize the `@avx` macro to work on arrays conatining structs such as `Matrix{Complex{Float64}}`. Instead, it is currently reccomended that users wishing to apply `@avx` to arrays of structs use packages such as [StructArrays.jl](https://github.com/JuliaArrays/StructArrays.jl) which transform an array where each element is a struct into a struct where each element is an array. Using StructArrays.jl, we can write a matrix multiply (gemm) kernel that works on matrices of `Complex{Float64}`s and `Complex{Int}`s:
+```julia 
+using LoopVectorization, LinearAlgebra, StructArrays, BenchmarkTools, Test
+
+BLAS.set_num_threads(1); @show BLAS.vendor()
+
+const MatrixFInt64 = Union{Matrix{Float64}, Matrix{Int}}
+
+function mul_avx!(C::MatrixFInt64, A::MatrixFInt64, B::MatrixFInt64)
+    z = zero(eltype(C))
+    @avx for i ∈ 1:size(A,1), j ∈ 1:size(B,2)
+        Cᵢⱼ = z
+        for k ∈ 1:size(A,2)
+            Cᵢⱼ += A[i,k] * B[k,j]
+        end
+        C[i,j] = Cᵢⱼ
+    end
+end
+
+function mul_add_avx!(C::MatrixFInt64, A::MatrixFInt64, B::MatrixFInt64, factor=1)
+    z = zero(eltype(C))
+    @avx for i ∈ 1:size(A,1), j ∈ 1:size(B,2)
+        ΔCᵢⱼ = z
+        for k ∈ 1:size(A,2)
+            ΔCᵢⱼ += A[i,k] * B[k,j]
+        end
+        C[i,j] += factor * ΔCᵢⱼ
+    end
+end
+
+const StructMatrixComplexFInt64 = Union{StructArray{ComplexF64,2}, StructArray{Complex{Int},2}}
+
+function mul_avx!(C:: StructMatrixComplexFInt64, A::StructMatrixComplexFInt64, B::StructMatrixComplexFInt64)
+    mul_avx!(    C.re, A.re, B.re)     # C.re = A.re * B.re
+    mul_add_avx!(C.re, A.im, B.im, -1) # C.re = C.re - A.im * B.im
+    mul_avx!(    C.im, A.re, B.im)     # C.im = A.re * B.im
+    mul_add_avx!(C.im, A.im, B.re)     # C.im = C.im + A.im * B.re
+end
+```
+this `mul_avx!` kernel can now accept `StructArray` matrices of complex numbers and multiply them efficiently:
+```julia
+M, K, N = 50, 51, 52
+
+A  = StructArray(randn(ComplexF64, M, K)); 
+B  = StructArray(randn(ComplexF64, K, N));
+C1 = StructArray(Matrix{ComplexF64}(undef, M, N)); 
+C2 = collect(similar(C1));
+
+@btime mul_avx!($C1, $A, $B)
+@btime mul!(    $C2, $(collect(A)), $(collect(B))) # collect turns the StructArray into a regular Array
+@test C1 ≈ C2
+```
+
+Similar approaches can be taken to make kernels working with a variety of numeric struct types such as [dual numbers](https://github.com/JuliaDiff/DualNumbers.jl), [DoubleFloats](https://github.com/JuliaMath/DoubleFloats.jl), etc. 
+
+</p>
+</details>
