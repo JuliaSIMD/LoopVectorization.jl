@@ -270,6 +270,12 @@ function solve_tilesize(
     solve_tilesize(cost_vec, reg_pressure, maxU, maxT)
 end
 
+function set_for_each_parent!(adal::Vector{T}, op::Operation, val::T) where {T}
+    @inbounds for opp ∈ parents(op)
+        adal[identifier(opp)] = val
+    end
+end
+
 # Just tile outer two loops?
 # But optimal order within tile must still be determined
 # as well as size of the tiles.
@@ -280,7 +286,13 @@ function evaluate_cost_tile(
     @assert N ≥ 2 "Cannot tile merely $N loops!"
     tiled = order[1]
     unrolled = order[2]
-    included_vars = fill(false, length(operations(ls)))
+    ops = operations(ls)
+    nops = length(ops)
+    included_vars = fill(false, nops)
+    unrolledtiled = fill(false, 2, nops)
+    descendentsininnerloop = fill(false, nops)
+    innerloop = last(order)
+    iters = fill(-99.9, nops)
     nested_loop_syms = Symbol[]# Set{Symbol}()
     iter = 1.0
     # Need to check if fusion is possible
@@ -306,7 +318,7 @@ function evaluate_cost_tile(
             iter *= Float64(length(ls, itersym))
         end
         # check which vars we can define at this level of loop nest
-        for (id, op) ∈ enumerate(operations(ls))
+        for (id, op) ∈ enumerate(ops)
             # isconstant(op) && continue
             # @assert id == identifier(op)+1 # testing, for now
             # won't define if already defined...
@@ -318,27 +330,37 @@ function evaluate_cost_tile(
             rd = reduceddependencies(op)
             hasintersection(rd, nested_loop_syms[1:end-length(rd)]) && return 0,0,Inf
             included_vars[id] = true
-            rt, lat, rp = cost(op, vectorized, Wshift, size_T)
-            # @show instruction(op), rt, lat, rp, iter
-            rt *= iter
-            isunrolled = unrolled ∈ loopdependencies(op)
-            istiled = tiled ∈ loopdependencies(op)
-            # @show isunrolled, istiled
-            if isunrolled && istiled # no cost decrease; cost must be repeated
-                cost_vec[1] += rt
-                reg_pressure[1] += rp
-            elseif isunrolled # cost decreased by tiling
-                cost_vec[2] += rt
-                reg_pressure[2] += rp
-            elseif istiled # cost decreased by unrolling
-                cost_vec[3] += rt
-                reg_pressure[3] += rp
-            else# neither unrolled or tiled
-                cost_vec[4] += rt
-                reg_pressure[4] += rp
-            end
+            unrolledtiled[1,id] = unrolled ∈ loopdependencies(op)
+            unrolledtiled[2,id] = tiled ∈ loopdependencies(op)
+            iters[id] = iter
+            innerloop ∈ loopdependencies(op) && set_for_each_parent!(descendentsininnerloop, op, true)
         end
     end
+    for (id, op) ∈ enumerate(ops)
+        iters[id] == -99.9 && continue
+        descendentsininnerloop[id] || continue
+        isunrolled = unrolledtiled[1,id]
+        istiled = unrolledtiled[2,id]
+        rt, lat, rp = cost(op, vectorized, Wshift, size_T)
+            # @show instruction(op), rt, lat, rp, iter
+        rt *= iters[id]
+            # @show isunrolled, istiled
+        if isunrolled && istiled # no cost decrease; cost must be repeated
+            cost_vec[1] += rt
+            reg_pressure[1] += rp
+        elseif isunrolled # cost decreased by tiling
+            cost_vec[2] += rt
+            reg_pressure[2] += rp
+        elseif istiled # cost decreased by unrolling
+            cost_vec[3] += rt
+            reg_pressure[3] += rp
+        else# neither unrolled or tiled
+            cost_vec[4] += rt
+            reg_pressure[4] += rp
+        end
+    end
+    # @show order, vectorized cost_vec reg_pressure
+    # @show solve_tilesize(ls, unrolled, tiled, cost_vec, reg_pressure)
     solve_tilesize(ls, unrolled, tiled, cost_vec, reg_pressure)
 end
 

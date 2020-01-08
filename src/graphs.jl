@@ -603,8 +603,8 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int = 8)
     end
 end
 
-function place_after_loop(op::Operation)
-    if isload(op) || length(reduceddependencies(op)) == 0
+function place_after_loop!(adal::Vector{Bool}, op::Operation)
+    pal = if isload(op) || length(reduceddependencies(op)) == 0
         1
     elseif length(reduceddependencies(op)) > 1
         2
@@ -612,6 +612,8 @@ function place_after_loop(op::Operation)
         rd = first(reduceddependencies(op))
         any(d -> d === rd, loopdependencies(op)) ? 1 : 2
     end
+    pal == 1 && set_for_each_parent!(adal, op, false)
+    pal
 end
 
 function fillorder!(ls::LoopSet, order::Vector{Symbol}, loopistiled::Bool)
@@ -620,7 +622,6 @@ function fillorder!(ls::LoopSet, order::Vector{Symbol}, loopistiled::Bool)
     # @show 1, ro, order
     # copyto!(ro, order)
     # @show 2, ro, order
-    empty!(lo)
     nloops = length(order)
     if loopistiled
         tiled    = order[1]
@@ -629,23 +630,36 @@ function fillorder!(ls::LoopSet, order::Vector{Symbol}, loopistiled::Bool)
         tiled = Symbol("##UNDEFINED##")
         unrolled = first(order)
     end
-    included_vars = fill(false, length(operations(ls)))
+    ops = operations(ls)
+    nops = length(ops)
+    included_vars = fill(false, nops)
+    all_descendents_after_loop = fill(true, nops)
+    positions = fill((-1,-1,-1,-1,-1), nops)#Vector{NTuple{5,Int}}(undef, nops)
     # to go inside out, we just have to include all those not-yet included depending on the current sym
     for _n ∈ 1:nloops
         n = 1 + nloops - _n
         ro[_n] = loopsym = order[n]
         #loopsym = order[n]
-        for (id,op) ∈ enumerate(operations(ls))
+        for (id,op) ∈ enumerate(ops)
             included_vars[id] && continue
             loopsym ∈ loopdependencies(op) || continue
             included_vars[id] = true
             isunrolled = (unrolled ∈ loopdependencies(op)) + 1
             istiled = (loopistiled ? (tiled ∈ loopdependencies(op)) : false) + 1
             optype = Int(op.node_type) + 1
-            after_loop = place_after_loop(op)
-            push!(lo[optype,isunrolled,istiled,after_loop,_n], op)
+            after_loop = place_after_loop!(all_descendents_after_loop, op)
+            positions[id] = (optype,isunrolled,istiled,after_loop,_n)
         end
-    end    
+    end
+    empty!(lo)
+    for id ∈ 1:nops
+        optype,isunrolled,istiled,after_loop,_n = positions[id]
+        optype == -1 && continue#@show ops[id]
+        if all_descendents_after_loop[id]
+            after_loop = 2
+        end
+        push!(lo[optype,isunrolled,istiled,after_loop,_n], ops[id])
+    end
     # 3, ro, order
 end
 
