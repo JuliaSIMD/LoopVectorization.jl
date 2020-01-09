@@ -157,7 +157,7 @@ d2 = @avx @. a + B * c′;
 can be optimized in a similar manner to BLAS, albeit to a much smaller degree because the naive version already benefits from vectorization (unlike the naive BLAS).
 
 
-You can also use `∗` (which is typed `\ast` and not to be confused with `*`) for lazy matrix multiplication that can fuse with broadcasts. `.\ast` behaves similarly, espcaping the broadcast (it is not applied elementwise). This allows you to use `@.` and fuse all the loops, even if the arguments to `\ast` are themselves broadcasted objects. However, it will often be the case that creating an intermediary is faster. I would recomend always checking if splitting the operation into pieces, or at least isolating the matrix multiplication, increases performance. That will often be the case, especially if the matrices are large, where a separate multiplication can leverage BLAS (and perhaps take advantage of threads).
+You can also use `*ˡ` (which is typed `*\^l`) for lazy matrix multiplication that can fuse with broadcasts. `.*ˡ` behaves similarly, espcaping the broadcast (it is not applied elementwise). This allows you to use `@.` and fuse all the loops, even if the arguments to `*ˡ` are themselves broadcasted objects. However, it will often be the case that creating an intermediary is faster. I would recomend always checking if splitting the operation into pieces, or at least isolating the matrix multiplication, increases performance. That will often be the case, especially if the matrices are large, where a separate multiplication can leverage BLAS (and perhaps take advantage of threads).
 
 At small sizes, this can be fast.
 ```julia

@@ -62,13 +62,13 @@ using LinearAlgebra
                 C[m,n] = Cₘₙ
             end
         end
-        function AmuladdBavx!(C, A, B)
+        function AmuladdBavx!(C, A, B, factor = 1)
             @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
                 ΔCₘₙ = zero(eltype(C))
                 for k ∈ 1:size(A,2)
                     ΔCₘₙ += A[m,k] * B[k,n]
                 end
-                C[m,n] += ΔCₘₙ
+                C[m,n] += ΔCₘₙ * factor
             end
         end
 
@@ -178,6 +178,8 @@ using LinearAlgebra
             @test C ≈ C2
             AmuladdBavx!(C, A, B)
             @test C ≈ 2C2
+            AmuladdBavx!(C, A, B, -1)
+            @test C ≈ C2
             At = copy(A');
             fill!(C, 9999.999); AtmulBavx!(C, At, B)
             @test C ≈ C2
@@ -475,25 +477,25 @@ end
 
         d3 = a .+ B * c;
         # no method matching _similar_for(::UnitRange{Int64}, ::Type{Any}, ::Product)
-        d4 = @avx a .+ B ∗ c;
+        d4 = @avx a .+ B *ˡ c;
         @test d3 ≈ d4
 
         fill!(d3, -1000.0);
         fill!(d4, 91000.0);
 
         d3 .= a .+ B * c;
-        @avx d4 .= a .+ B ∗ c;
+        @avx d4 .= a .+ B *ˡ c;
         @test d3 ≈ d4
 
         fill!(d4, 91000.0);
-        @avx @. d4 = a + B ∗ c;
+        @avx @. d4 = a + B *ˡ c;
         @test d3 ≈ d4
 
         M, K, N = 77, 83, 57;
         A = rand(T,M,K); B = rand(T,K,N); C = rand(T,M,N);
 
         D1 = C .+ A * B;
-        D2 = @avx C .+ A ∗ B;
+        D2 = @avx C .+ A *ˡ B;
         @test D1 ≈ D2
 
         D3 = exp.(B');

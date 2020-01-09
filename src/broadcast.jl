@@ -36,8 +36,9 @@ end
 #     recursive_eltype(ARGS)
 # end
 
-@inline ∗(a::A, b::B) where {A,B} = Product{A,B}(a, b)
-@inline Base.Broadcast.broadcasted(::typeof(∗), a::A, b::B) where {A, B} = Product{A,B}(a, b)
+@inline *ˡ(a::A, b::B) where {A,B} = Product{A,B}(a, b)
+@inline Base.Broadcast.broadcasted(::typeof(*ˡ), a::A, b::B) where {A, B} = Product{A,B}(a, b)
+const ∗ = *ˡ
 # TODO: Need to make this handle A or B being (1 or 2)-D broadcast objects.
 function add_broadcast!(
     ls::LoopSet, mC::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},

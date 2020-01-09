@@ -10,7 +10,7 @@ using MacroTools: prewalk, postwalk
 
 
 export LowDimArray, stridedpointer, vectorizable,
-    @avx, ∗,
+    @avx, *ˡ, ∗,
     vmap, vmap!
 
 
