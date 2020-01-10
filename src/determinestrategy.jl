@@ -124,7 +124,8 @@ function unroll_no_reductions(ls, order, vectorized, Wshift, size_T)
         end
     end
     # heuristic guess
-    round(Int, (compute_rt + load_rt + 1) / compute_rt)
+    # @show compute_rt, load_rt
+    min(2, round(Int, (compute_rt + load_rt + 1) / compute_rt))
 end
 function determine_unroll_factor(
     ls::LoopSet, order::Vector{Symbol}, unrolled::Symbol, vectorized::Symbol = first(order)

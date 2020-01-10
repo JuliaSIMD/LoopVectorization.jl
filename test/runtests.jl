@@ -365,7 +365,8 @@ using LinearAlgebra
                 B[j,i] = A[j,i] - x[j]
                 end)
     lssubcol = LoopVectorization.LoopSet(subcolq);
-    @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, 4, -1)
+    # @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, 4, -1)
+    @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, 2, -1)
     ## @avx is SLOWER!!!!
     ## need to fix!
     function mysubcol!(B, A, x)
@@ -465,8 +466,25 @@ end
     M, N = 37, 47
     # M = 77;
     for T ∈ (Float32, Float64)
-        a = rand(T, M); B = rand(T, M, N); c = rand(T, N); c′ = c';
 
+        a = rand(T,100,100,100);
+        b = rand(T,100,100,1);
+        bl = LowDimArray{(true,true,false)}(b);
+        br = reshape(b, (100,100));
+        c1 = a .+ b;
+        c2 = @avx a .+ bl;
+        @test c1 ≈ c2
+        fill!(c2, 99999.9);
+        @avx c2 .= a .+ br;
+        @test c1 ≈ c2
+        br = reshape(b, (100,1,100));
+        bl = LowDimArray{(true,false,true)}(br);
+        @. c1 = a + br;
+        fill!(c2, 99999.9);
+        @avx @. c2 = a + bl;
+        @test c1 ≈ c2
+        
+        a = rand(T, M); B = rand(T, M, N); c = rand(T, N); c′ = c';
         d1 =      @. a + B * c′;
         d2 = @avx @. a + B * c′;
 
@@ -534,6 +552,7 @@ end
         D1 = C .^ 0.3;
         D2 = @avx C .^ 0.3;
         @test D1 ≈ D2
+
     end
 end
 

@@ -278,6 +278,7 @@ function lower_store_vectorized!(
         for u ∈ 0:U-1
             name, mo = name_mo(var, op, u, W, vecnotunrolled, unrolled)
             instrcall = Expr(:call,lv(:vstore!), ptr, name, mo)
+            # @show mask, vecnotunrolled, u, U
             if mask !== nothing && (vecnotunrolled || u == U - 1)
                 push!(instrcall.args, mask)
             end
@@ -500,6 +501,7 @@ function lower_nest(
     nisvectorized = loopsym === vectorized
     nisunrolled = false
     nistiled = false
+    # @show n, mask
     if istiled
         if n == nloops
             loopsym = tiledsym(loopsym)
@@ -571,12 +573,6 @@ function add_vec_rem_iter(
 )
     loopq = lower_nest(ls, n, vectorized, U, T, loopqold, loopstart, W, nothing, Uexprtype)
     if order[n] === vectorized
-        vecloop = ls.loops[vectorized]
-        comparison = if vecloop.hintexact
-            Expr(:call, :(!=), vectorized, vecloop.rangehint)
-        else
-            Expr(:call, :(!=), vectorized, vecloop.rangesym)
-        end
         loopq = Expr(
             :block, loopq,
             lower_nest(ls, n, vectorized, U, T, loopqold, loopstart, W, Symbol("##mask##"), :if)
@@ -586,15 +582,28 @@ function add_vec_rem_iter(
 end
 function lower_set(ls::LoopSet, vectorized::Symbol, U::Int, T::Int, W::Symbol, ::Nothing, Uexprtype::Symbol)
     # @show U, T, W
+    loopstart = 0
     istiled = T != -1
     order = names(ls)
     unrolled = order[end - istiled]
     unrolled === vectorized && return lower_set_unrolled_is_vectorized(ls, vectorized, U, T, W, nothing, Uexprtype)
+    ns = 1
     nl = num_loops(ls) - istiled
-    loopq = add_vec_rem_iter( ls, 1, vectorized, U, T, nothing, 0, W, nl == 1 ? Uexprtype : :while, order )
-    for n ∈ 2:nl
+    exprtype = nl == ns ? Uexprtype : :while
+    nomaskq = lower_nest(ls, 1, vectorized, U, T, nothing, loopstart, W, nothing, exprtype)
+    maskq = lower_nest(ls, 1, vectorized, U, T, nothing, loopstart, W, Symbol("##mask##"), order[ns] === vectorized ? :if : exprtype)
+    while order[ns] !== vectorized
+        ns += 1
+        exprtype = nl == ns ? Uexprtype : :while
+        nomaskq = lower_nest(ls, ns, vectorized, U, T, nomaskq, loopstart, W, nothing, exprtype)
+        maskq = lower_nest(ls, ns, vectorized, U, T, maskq, loopstart, W, Symbol("##mask##"), order[ns] === vectorized ? :if : exprtype)
+    end
+    ns += 1
+    loopq = Expr(:block, nomaskq, maskq)
+    for n ∈ ns:nl
         exprtype = n == nl ? Uexprtype : :while
-        loopq = add_vec_rem_iter( ls, n, vectorized, U, T, loopq, 0, W, exprtype, order )
+        loopq = lower_nest(ls, n, vectorized, U, T, loopq, loopstart, W, nothing, exprtype)
+        # loopq = add_vec_rem_iter( ls, n, vectorized, U, T, loopq, 0, W, exprtype, order )
     end
     loopq
 end
@@ -782,6 +791,7 @@ function lower_unrolled_dynamic!(
         Ureduct = -1
     end
     Ut = U
+    vecisunrolled = unrolled === vectorized
     local remblock::Expr
     firstiter = true
     while true
@@ -792,13 +802,13 @@ function lower_unrolled_dynamic!(
             end
             push!(q.args, loopq)
         elseif U == 1 #
-            if unrolled === vectorized
+            if vecisunrolled
                 push!(remblock.args, lower_set(ls, vectorized, Ut, T, W, Symbol("##mask##"), :block))
             else
                 push!(remblock.args, lower_set(ls, vectorized, Ut, T, W, nothing, :block))
             end
         else
-            remblocknew = if unrolled === vectorized
+            remblocknew = if vecisunrolled
                 itercount = if unrolledloop.hintexact
                     Expr(:call, :-, unrolledloop.rangehint, Expr(:call, lv(:valmuladd), W, Ut, 1))
                 else
@@ -813,12 +823,12 @@ function lower_unrolled_dynamic!(
                     Expr(:call, :>, unrolled, Expr(:call, :-, unrolled_numitersym, Ut + 1))
                 end
                 Expr(Ut == 1 ? :if : :elseif, comparison, lower_set(ls, vectorized, Ut, T, W, nothing, :block))
+                # Expr(Ut == 1 ? :if : :elseif, comparison, lower_set(ls, vectorized, Ut, T, W, Symbol("##mask##"), :block))
             end
             push!(remblock.args, remblocknew)
             remblock = remblocknew
         end
-        if Ut == U || Ut == Ureduct
-            firstiter || break
+        if firstiter
             firstiter = false
             if manageouterreductions && Ureduct < U
                 Udiff = U - Ureduct
@@ -834,6 +844,8 @@ function lower_unrolled_dynamic!(
             end
             remblock = Expr(:block)
             push!(q.args, Expr(:if, comparison, remblock))
+        elseif !(Ut < U - 1 + vecisunrolled) || Ut == Ureduct
+            break
         else
             Ut += 1
         end
