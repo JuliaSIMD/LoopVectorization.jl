@@ -365,8 +365,7 @@ using LinearAlgebra
                 B[j,i] = A[j,i] - x[j]
                 end)
     lssubcol = LoopVectorization.LoopSet(subcolq);
-    # @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, 4, -1)
-    @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, 2, -1)
+    @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, 4, -1)
     ## @avx is SLOWER!!!!
     ## need to fix!
     function mysubcol!(B, A, x)
