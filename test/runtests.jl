@@ -529,6 +529,11 @@ end
         three = 3; fill!(b1, -9999.999);
         @avx @. b1 = three*a + sin(a) + sqrt(a);
         @test b1 ≈ b2
+
+        C = rand(100,10,10);
+        D1 = C .^ 0.3;
+        D2 = @avx C .^ 0.3;
+        @test D1 ≈ D2
     end
 end
 

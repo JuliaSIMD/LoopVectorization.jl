@@ -2,6 +2,12 @@
 # const LOOPVECBENCHDIR = joinpath(pkgdir("LoopVectorization"), "benchmarks")
 # includet(joinpath(LOOPVECBENCHDIR, "driver.jl"))
 
+pkgdir(pkg::String) = abspath(joinpath(dirname(Base.find_package(pkg)), ".."))
+const LOOPVECBENCHDIR = joinpath(pkgdir("LoopVectorization"), "benchmarks")
+include(joinpath(LOOPVECBENCHDIR, "benchmarkflops.jl"))
+include(joinpath(LOOPVECBENCHDIR, "plotbenchmarks.jl"))
+
+
 using Distributed
 
 addprocs(9);
@@ -33,5 +39,23 @@ exp_bench = fetch(exp_future)
 aplusBc_bench = fetch(aplusBc_future)
 
 
-include(joinpath(LOOPVECBENCHDIR, "plotbenchmarks.jl"))
+plot(gemm_bench)
+plot(AtmulB_bench)
+plot(dot_bench)
+plot(selfdot_bench)
+plot(gemv_bench)
+plot(dot3_bench)
+plot(sse_bench)
+plot(exp_bench)
+plot(aplusBc_bench)
+
+save(joinpath("~/Pictures", "bench_gemm_v3.png"), plot(gemm_bench));
+save(joinpath("~/Pictures", "bench_AtmulB_v3.png"), plot(AtmulB_bench));
+save(joinpath("~/Pictures", "bench_dot_v3.png"), plot(dot_bench));
+save(joinpath("~/Pictures", "bench_selfdot_v3.png"), plot(selfdot_bench));
+save(joinpath("~/Pictures", "bench_gemv_v3.png"), plot(gemv_bench));
+save(joinpath("~/Pictures", "bench_dot3_v3.png"), plot(dot3_bench));
+save(joinpath("~/Pictures", "bench_sse_v3.png"), plot(sse_bench));
+save(joinpath("~/Pictures", "bench_exp_v3.png"), plot(exp_bench));
+save(joinpath("~/Pictures", "bench_aplusBc_v3.png"), plot(aplusBc_bench));
 
