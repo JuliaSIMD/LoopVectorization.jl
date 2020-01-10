@@ -483,6 +483,12 @@ end
         fill!(c2, 99999.9);
         @avx @. c2 = a + bl;
         @test c1 ≈ c2
+        br = reshape(b, (1,100,100));
+        bl = LowDimArray{(false,true,true)}(br);
+        @. c1 = a + br;
+        fill!(c2, 99999.9);
+        @avx @. c2 = a + bl;
+        @test c1 ≈ c2
         
         a = rand(T, M); B = rand(T, M, N); c = rand(T, N); c′ = c';
         d1 =      @. a + B * c′;
