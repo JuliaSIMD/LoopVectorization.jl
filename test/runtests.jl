@@ -33,17 +33,33 @@ using LinearAlgebra
     @test logsumexp!(r, x) ≈ 102.35216846104409
 
     @testset "GEMM" begin
-        AmulBq = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
-                Cₘₙ = zero(eltype(C))
+        using LoopVectorization, Test
+        U, T = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 4)
+        AmulBq1 = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+                    C[m,n] = zeroB
+               for k ∈ 1:size(A,2)
+                   C[m,n] += A[m,k] * B[k,n]
+               end
+               end)
+        lsAmulB1 = LoopVectorization.LoopSet(AmulBq1);
+        @test LoopVectorization.choose_order(lsAmulB1) == (Symbol[:n,:m,:k], :m, U, T)
+        AmulBq2 = :(for m ∈ 1:M, n ∈ 1:N
+               C[m,n] = zero(eltype(B))
+               for k ∈ 1:K
+                    C[m,n] += A[m,k] * B[k,n]
+               end
+                end)
+        lsAmulB2 = LoopVectorization.LoopSet(AmulBq2);
+        @test LoopVectorization.choose_order(lsAmulB2) == (Symbol[:n,:m,:k], :m, U, T)
+        AmulBq3 = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+                ΔCₘₙ = zero(eltype(C))
                 for k ∈ 1:size(A,2)
-                    Cₘₙ += A[m,k] * B[k,n]
+                    ΔCₘₙ += A[m,k] * B[k,n]
                 end
-                C[m,n] = Cₘₙ
+                C[m,n] += ΔCₘₙ
            end)
-        
-        lsAmulB = LoopVectorization.LoopSet(AmulBq);
-        U, T = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3,4) : (4, 4)
-        @test LoopVectorization.choose_order(lsAmulB) == (Symbol[:n,:m,:k], :m, U, T)
+        lsAmulB3 = LoopVectorization.LoopSet(AmulBq3);
+        @test LoopVectorization.choose_order(lsAmulB3) == (Symbol[:n,:m,:k], :m, U, T)
 
         function AmulB!(C, A, B)
             C .= 0
@@ -53,13 +69,39 @@ using LinearAlgebra
                 end
             end
         end
-        function AmulBavx!(C, A, B)
+        function AmulBavx1!(C, A, B)
             @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
                 Cₘₙ = zero(eltype(C))
                 for k ∈ 1:size(A,2)
                     Cₘₙ += A[m,k] * B[k,n]
                 end
                 C[m,n] = Cₘₙ
+            end
+        end
+        function AmulBavx2!(C, A, B)
+            z = zero(eltype(C))
+            @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+                C[m,n] = z
+                for k ∈ 1:size(A,2)
+                    C[m,n] += A[m,k] * B[k,n]
+                end
+            end
+        end
+        function AmulBavx3!(C, A, B)
+            @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+                C[m,n] = zero(eltype(C))
+                for k ∈ 1:size(A,2)
+                    C[m,n] += A[m,k] * B[k,n]
+                end
+            end
+        end
+        function AmuladdBavx!(C, A, B, factor = 1)
+            @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+                ΔCₘₙ = zero(eltype(C))
+                for k ∈ 1:size(A,2)
+                    ΔCₘₙ += A[m,k] * B[k,n]
+                end
+                C[m,n] += ΔCₘₙ * factor
             end
         end
 
@@ -162,8 +204,18 @@ using LinearAlgebra
             C = Matrix{TC}(undef, M, N);
             A = rand(R, M, K); B = rand(R, K, N);
             C2 = similar(C);
-            AmulBavx!(C, A, B)
             AmulB!(C2, A, B)
+            AmulBavx1!(C, A, B)
+            @test C ≈ C2
+            fill!(C, 999.99); AmulBavx2!(C, A, B)
+            @test C ≈ C2
+            fill!(C, 999.99); AmulBavx3!(C, A, B)
+            @test C ≈ C2
+            fill!(C, 0.0); AmuladdBavx!(C, A, B)
+            @test C ≈ C2
+            AmuladdBavx!(C, A, B)
+            @test C ≈ 2C2
+            AmuladdBavx!(C, A, B, -1)
             @test C ≈ C2
             At = copy(A');
             fill!(C, 9999.999); AtmulBavx!(C, At, B)
@@ -332,7 +384,11 @@ using LinearAlgebra
     lsdot3 = LoopVectorization.LoopSet(dot3q);
     LoopVectorization.choose_order(lsdot3)
 
-    dot3(x, A, y) = dot(x, A * y)
+    @static if VERSION < v"1.4"
+        dot3(x, A, y) = dot(x, A * y)
+    else
+        dot3(x, A, y) = dot(x, A, y)
+    end
     function dot3avx(x, A, y)
         M, N = size(A)
         s = zero(promote_type(eltype(x), eltype(A), eltype(y)))
@@ -446,8 +502,31 @@ end
     M, N = 37, 47
     # M = 77;
     for T ∈ (Float32, Float64)
-        a = rand(T, M); B = rand(T, M, N); c = rand(T, N); c′ = c';
 
+        a = rand(T,100,100,100);
+        b = rand(T,100,100,1);
+        bl = LowDimArray{(true,true,false)}(b);
+        br = reshape(b, (100,100));
+        c1 = a .+ b;
+        c2 = @avx a .+ bl;
+        @test c1 ≈ c2
+        fill!(c2, 99999.9);
+        @avx c2 .= a .+ br;
+        @test c1 ≈ c2
+        br = reshape(b, (100,1,100));
+        bl = LowDimArray{(true,false,true)}(br);
+        @. c1 = a + br;
+        fill!(c2, 99999.9);
+        @avx @. c2 = a + bl;
+        @test c1 ≈ c2
+        br = reshape(b, (1,100,100));
+        bl = LowDimArray{(false,true,true)}(br);
+        @. c1 = a + br;
+        fill!(c2, 99999.9);
+        @avx @. c2 = a + bl;
+        @test c1 ≈ c2
+        
+        a = rand(T, M); B = rand(T, M, N); c = rand(T, N); c′ = c';
         d1 =      @. a + B * c′;
         d2 = @avx @. a + B * c′;
 
@@ -458,25 +537,25 @@ end
 
         d3 = a .+ B * c;
         # no method matching _similar_for(::UnitRange{Int64}, ::Type{Any}, ::Product)
-        d4 = @avx a .+ B ∗ c;
+        d4 = @avx a .+ B *ˡ c;
         @test d3 ≈ d4
 
         fill!(d3, -1000.0);
         fill!(d4, 91000.0);
 
         d3 .= a .+ B * c;
-        @avx d4 .= a .+ B ∗ c;
+        @avx d4 .= a .+ B *ˡ c;
         @test d3 ≈ d4
 
         fill!(d4, 91000.0);
-        @avx @. d4 = a + B ∗ c;
+        @avx @. d4 = a + B *ˡ c;
         @test d3 ≈ d4
 
         M, K, N = 77, 83, 57;
         A = rand(T,M,K); B = rand(T,K,N); C = rand(T,M,N);
 
         D1 = C .+ A * B;
-        D2 = @avx C .+ A ∗ B;
+        D2 = @avx C .+ A *ˡ B;
         @test D1 ≈ D2
 
         D3 = exp.(B');
@@ -507,9 +586,15 @@ end
         b1 = @avx @. 3*a + sin(a) + sqrt(a);
         b2 =      @. 3*a + sin(a) + sqrt(a);
         @test b1 ≈ b2
-        three = 3
+        three = 3; fill!(b1, -9999.999);
         @avx @. b1 = three*a + sin(a) + sqrt(a);
         @test b1 ≈ b2
+
+        C = rand(100,10,10);
+        D1 = C .^ 0.3;
+        D2 = @avx C .^ 0.3;
+        @test D1 ≈ D2
+
     end
 end
 

@@ -36,8 +36,9 @@ end
 #     recursive_eltype(ARGS)
 # end
 
-@inline ∗(a::A, b::B) where {A,B} = Product{A,B}(a, b)
-@inline Base.Broadcast.broadcasted(::typeof(∗), a::A, b::B) where {A, B} = Product{A,B}(a, b)
+@inline *ˡ(a::A, b::B) where {A,B} = Product{A,B}(a, b)
+@inline Base.Broadcast.broadcasted(::typeof(*ˡ), a::A, b::B) where {A, B} = Product{A,B}(a, b)
+const ∗ = *ˡ
 # TODO: Need to make this handle A or B being (1 or 2)-D broadcast objects.
 function add_broadcast!(
     ls::LoopSet, mC::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
@@ -87,7 +88,14 @@ end
 struct LowDimArray{D,T,N,A<:DenseArray{T,N}} <: DenseArray{T,N}
     data::A
 end
-@inline Base.pointer(A::LowDimArray) = pointer(A)
+@inline Base.pointer(A::LowDimArray) = pointer(A.data)
+Base.size(A::LowDimArray) = Base.size(A.data)
+@generated function VectorizationBase.stridedpointer(A::LowDimArray{D,T,N}) where {D,T,N}
+    s = Expr(:tuple, [Expr(:ref, :strideA, n) for n ∈ 1+D[1]:N if D[n]]...)
+    f = D[1] ? :PackedStridedPointer : :SparseStridedPointer
+    Expr(:block, Expr(:meta,:inline), Expr(:(=), :strideA, Expr(:call, :strides, Expr(:(.), :A, QuoteNode(:data)))),
+         Expr(:call, Expr(:(.), :VectorizationBase, QuoteNode(f)), Expr(:call, :pointer, Expr(:(.), :A, QuoteNode(:data))), s))
+end
 function LowDimArray{D}(data::A) where {D,T,N,A <: AbstractArray{T,N}}
     LowDimArray{D,T,N,A}(data)
 end
@@ -134,8 +142,9 @@ end
 function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{T}, elementbytes::Int = 8
 ) where {T<:Union{Integer,Float32,Float64}}
-    pushpreamble!(ls, Expr(:(=), Symbol("##", destname), bcname))
-    add_constant!(ls, destname, elementbytes) # or replace elementbytes with sizeof(T) ? u
+    op = add_constant!(ls, destname, elementbytes) # or replace elementbytes with sizeof(T) ? u
+    pushpreamble!(ls, Expr(:(=), mangledvar(op), bcname))
+    op
 end
 function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
@@ -152,9 +161,7 @@ function add_broadcast!(
     elementbytes::Int = 8
 ) where {N,S<:Base.Broadcast.AbstractArrayStyle{N},F,A}
     instr = get(FUNCTIONSYMBOLS, F) do
-        f = gensym(:f)
-        pushpreamble!(ls, Expr(:(=), f, Expr(:(.), bcname, QuoteNode(:f))))
-        f
+        Instruction(bcname, :f)
     end
     args = A.parameters
     Nargs = length(args)

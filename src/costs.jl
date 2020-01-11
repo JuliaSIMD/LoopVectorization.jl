@@ -19,6 +19,7 @@ struct InstructionCost
 end
 InstructionCost(sl::Int, srt::Float64, scaling::Float64 = -3.0) = InstructionCost(scaling, srt, sl, 0)
 
+nocost(c::InstructionCost) = c.scalar_reciprical_throughput == 0.0
 flatcost(c::InstructionCost) = c.scaling == -3.0
 offsetscaling(c::InstructionCost) = c.scaling == -2.0
 linearscaling(c::InstructionCost) = c.scaling == -1.0
@@ -29,7 +30,7 @@ function scalar_cost(ic::InstructionCost)#, ::Type{T} = Float64) where {T}
 end
 function vector_cost(ic::InstructionCost, Wshift, sizeof_T)
     srt, sl, srp = scalar_cost(ic)
-    if flatcost(ic) || Wshift == 0 # No scaling
+    if flatcost(ic) || Wshift == 0 || nocost(ic) # No scaling
         return srt, sl, srp
     elseif offsetscaling(ic) # offset scaling
         srt *= 1 << (Wshift + VectorizationBase.intlog2(sizeof_T) - 4)
@@ -85,6 +86,7 @@ const COST = Dict{Instruction,InstructionCost}(
     Instruction(:vmul) => InstructionCost(4,0.5),
     Instruction(:vdiv) => InstructionCost(13,4.0,-2.0),
     Instruction(:abs2) => InstructionCost(4,0.5),
+    Instruction(:vabs2) => InstructionCost(4,0.5),
     Instruction(:(==)) => InstructionCost(1, 0.5),
     Instruction(:isequal) => InstructionCost(1, 0.5),
     Instruction(:(&)) => InstructionCost(1, 0.5),
@@ -94,6 +96,7 @@ const COST = Dict{Instruction,InstructionCost}(
     Instruction(:(>=)) => InstructionCost(1, 0.5),
     Instruction(:(<=)) => InstructionCost(1, 0.5),
     Instruction(:inv) => InstructionCost(13,4.0,-2.0,1),
+    Instruction(:vinv) => InstructionCost(13,4.0,-2.0,1),
     Instruction(:muladd) => InstructionCost(4,0.5), # + and * will fuse into this, so much of the time they're not twice as expensive
     Instruction(:fma) => InstructionCost(4,0.5), # + and * will fuse into this, so much of the time they're not twice as expensive
     Instruction(:vmuladd) => InstructionCost(4,0.5), # + and * will fuse into this, so much of the time they're not twice as expensive
@@ -102,12 +105,19 @@ const COST = Dict{Instruction,InstructionCost}(
     Instruction(:vfmsub) => InstructionCost(4,0.5), # - and * will fuse into this, so much of the time they're not twice as expensive
     Instruction(:vfnmadd) => InstructionCost(4,0.5), # + and -* will fuse into this, so much of the time they're not twice as expensive
     Instruction(:vfnmsub) => InstructionCost(4,0.5), # - and -* will fuse into this, so much of the time they're not twice as expensive
+    Instruction(:vfmadd_fast) => InstructionCost(4,0.5), # + and * will fuse into this, so much of the time they're not twice as expensive
+    Instruction(:vfmsub_fast) => InstructionCost(4,0.5), # - and * will fuse into this, so much of the time they're not twice as expensive
+    Instruction(:vfnmadd_fast) => InstructionCost(4,0.5), # + and -* will fuse into this, so much of the time they're not twice as expensive
+    Instruction(:vfnmsub_fast) => InstructionCost(4,0.5), # - and -* will fuse into this, so much of the time they're not twice as expensive
     Instruction(:sqrt) => InstructionCost(15,4.0,-2.0),
     Instruction(:log) => InstructionCost(20,20.0,40.0,20),
     Instruction(:exp) => InstructionCost(20,20.0,20.0,18),
     Instruction(:sin) => InstructionCost(18,15.0,68.0,23),
     Instruction(:cos) => InstructionCost(18,15.0,68.0,26),
-    Instruction(:sincos) => InstructionCost(25,22.0,70.0,26)#,
+    Instruction(:sincos) => InstructionCost(25,22.0,70.0,26),
+    Instruction(:identity) => InstructionCost(0,0.0,0.0,0),
+    Instruction(:adjoint) => InstructionCost(0,0.0,0.0,0),
+    Instruction(:transpose) => InstructionCost(0,0.0,0.0,0),
     # Symbol("##CONSTANT##") => InstructionCost(0,0.0)
 )
 # for (k, v) ∈ COST # so we can look up Symbol(typeof(function))

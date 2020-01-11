@@ -1,9 +1,3 @@
-# lv(x) = Expr(:(.), :LoopVectorization, QuoteNode(x))
-# @static if VERSION  < v"1.3.0"
-    # lv(x) = Expr(:(.), :LoopVectorization, QuoteNode(x))
-# else
-
-# end
 
 isdense(::Type{<:DenseArray}) = true
 
@@ -158,19 +152,25 @@ isstaticloop(ls::LoopSet, s::Symbol) = ls.loops[s].hintexact
 looprangehint(ls::LoopSet, s::Symbol) = ls.loops[s].rangehint
 looprangesym(ls::LoopSet, s::Symbol) = ls.loops[s].rangesym
 # itersyms(ls::LoopSet) = keys(ls.loops)
-getop(ls::LoopSet, s::Symbol) = ls.opdict[s]
+function getop(ls::LoopSet, var::Symbol, elementbytes::Int = 8)
+    get!(ls.opdict, var) do
+        # might add constant
+        op = add_constant!(ls, var, elementbytes)
+        pushpreamble!(ls, Expr(:(=), mangledvar(op), var))
+        op
+    end
+end
+function getop(ls::LoopSet, var::Symbol, deps, elementbytes::Int = 8)
+    get!(ls.opdict, var) do
+        # might add constant
+        op = add_constant!(ls, var, deps, gensym(:constant), elementbytes)
+        pushpreamble!(ls, Expr(:(=), mangledvar(op), var))
+        op
+    end
+end
 getop(ls::LoopSet, i::Int) = ls.operations[i + 1]
 
 @inline extract_val(::Val{N}) where {N} = N
-function determine_veced_increment(ls::LoopSet, iter::Symbol, isunrolled::Bool, W::Symbol, U::Int) # , istiled::Bool, ..., T::Int # may not be tiled
-    if isunrolled
-        Expr(:call, lv(:valmul), W, U)
-    # elseif istiled
-        # Expr(:call, lv(:valmul), W, T)
-    else
-        Expr(:call, lv(:extract_val), W)
-    end
-end
 function vec_looprange(ls::LoopSet, s::Symbol, isunrolled::Bool, W::Symbol, U::Int, loop = ls.loops[s])
     incr = if isunrolled
         Expr(:call, lv(:valmuladd), W, U, -1)
@@ -191,15 +191,15 @@ function looprange(ls::LoopSet, s::Symbol, incr::Int = 1, mangledname::Symbol = 
         Expr(:call, :<, mangledname, loop.hintexact ? loop.rangehint - incr : Expr(:call, :-, loop.rangesym, incr))
     end
 end
-function looprange(ls::LoopSet, s::Symbol, incr::Expr, mangledname::Symbol = s, loop = ls.loops[s])
-    increxpr = Expr(:call, :-, incr, 1)
-    increxpr = if loop.hintexact
-        Expr(:call, :-, loop.rangehint, increxpr)
-    else
-        Expr(:call, :-, loop.rangesym, increxpr)
-    end
-    Expr(:call, :<, mangledname, increxpr)
-end
+# function looprange(ls::LoopSet, s::Symbol, incr::Expr, mangledname::Symbol = s, loop = ls.loops[s])
+#     increxpr = Expr(:call, :-, incr, 1)
+#     increxpr = if loop.hintexact
+#         Expr(:call, :-, loop.rangehint, increxpr)
+#     else
+#         Expr(:call, :-, loop.rangesym, increxpr)
+#     end
+#     Expr(:call, :<, mangledname, increxpr)
+# end
 
 function Base.length(ls::LoopSet, is::Symbol)
     ls.loops[is].rangehint
@@ -293,16 +293,16 @@ function add_loop!(ls::LoopSet, q::Expr, elementbytes::Int = 8)
     if body.head === :block
         add_block!(ls, body, elementbytes)
     else
-        Base.push!(ls, q, elementbytes)
+        push!(ls, q, elementbytes)
     end
 end
 function add_loop!(ls::LoopSet, loop::Loop)
     ls.loops[loop.itersym] = loop
 end
-function add_vptr!(ls::LoopSet, indexed::Symbol, id::Int)
+function add_vptr!(ls::LoopSet, indexed::Symbol, id::Int, ptr::Symbol = Symbol("##vptr##_", indexed))
     if includesarray(ls, indexed) < 0
         push!(ls.includedarrays, (indexed, id))
-        pushpreamble!(ls, Expr(:(=), Symbol("##vptr##_", indexed), Expr(:call, lv(:stridedpointer), indexed)))
+        pushpreamble!(ls, Expr(:(=), ptr, Expr(:call, lv(:stridedpointer), indexed)))
     end
     nothing
 end
@@ -325,12 +325,18 @@ function add_load!(
     ls::LoopSet, var::Symbol, ref::ArrayReference, elementbytes::Int = 8
 )
     if ref.loaded[] == true
-        op = getop(ls, var)
+        op = getop(ls, var, elementbytes)
         @assert var === op.variable
         return op
     end
-    push!(ls.syms_aliasing_refs, var)
-    push!(ls.refs_aliasing_syms, ref)
+    id = findfirst(r -> r == ref, ls.refs_aliasing_syms)
+    if id === nothing
+        push!(ls.syms_aliasing_refs, var)
+        push!(ls.refs_aliasing_syms, ref)
+    else
+        opp = getop(ls, ls.syms_aliasing_refs[id], elementbytes)
+        return isstore(opp) ? getop(ls, first(parents(opp))) : opp
+    end
     ref.loaded[] = true
     # ls.sym_to_ref_aliases[ var ] = ref
     # ls.ref_to_sym_aliases[ ref ] = var
@@ -339,7 +345,7 @@ function add_load!(
         :getindex, memload, loopdependencies(ref, ls),
         NODEPENDENCY, NOPARENTS, ref
     )
-    add_vptr!(ls, ref.array, identifier(op))
+    add_vptr!(ls, ref.array, identifier(op), ref.ptr)
     pushop!(ls, op, var)
 end
 function add_load_ref!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8)
@@ -390,8 +396,9 @@ function add_constant!(ls::LoopSet, var::Symbol, elementbytes::Int = 8)
 end
 function add_constant!(ls::LoopSet, var, elementbytes::Int = 8)
     sym = gensym(:temp)
-    pushpreamble!(ls, Expr(:(=), Symbol("##", sym), var))
-    pushop!(ls, Operation(length(operations(ls)), sym, elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS), sym)
+    op = Operation(length(operations(ls)), sym, elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS)
+    pushpreamble!(ls, Expr(:(=), mangledvar(op), var))
+    pushop!(ls, op, sym)
 end
 # This version has loop dependencies. var gets assigned to sym when lowering.
 function add_constant!(ls::LoopSet, var::Symbol, deps::Vector{Symbol}, sym::Symbol = gensym(:constant), elementbytes::Int = 8)
@@ -430,29 +437,18 @@ function maybe_cse_load!(ls::LoopSet, expr::Expr, elementbytes::Int = 8)
         @view(expr.args[2+offset:end]),
         Ref(false)
     )::ArrayReference
-    # @show ref.ref
     id = findfirst(r -> r == ref, ls.refs_aliasing_syms)
     if id === nothing
         add_load!( ls, gensym(:temporary), ref, elementbytes )
     else
-        getop(ls, ls.syms_aliasing_refs[id])        
+        getop(ls, ls.syms_aliasing_refs[id], elementbytes)
     end
-    # id = includesarray(ls, array)
-    # if id > 0
-        # ls.operations[id]
-    # else
-        # add_load!( ls, gensym(:temporary), array, args, elementbytes )
-    # end
 end
 function add_parent!(
     parents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet, var, elementbytes::Int = 8
 )
     parent = if var isa Symbol
-        get!(ls.opdict, var) do
-            # might add constant
-            pushpreamble!(ls, Expr(:(=), Symbol("##", var), var))
-            add_constant!(ls, var, elementbytes)
-        end
+        getop(ls, var, elementbytes)
     elseif var isa Expr #CSE candidate
         maybe_cse_load!(ls, var, elementbytes)
     else # assumed constant
@@ -472,7 +468,7 @@ function add_reduction_update_parent!(
     parents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet,
     var::Symbol, instr::Symbol, elementbytes::Int = 8
 )
-    parent = getop(ls, var)
+    parent = getop(ls, var, elementbytes)
     setdiffv!(reduceddeps, deps, loopdependencies(parent))
     pushparent!(parents, deps, reduceddeps, parent) # deps and reduced deps will not be disjoint
     op = Operation(length(operations(ls)), var, elementbytes, instr, compute, deps, reduceddeps, parents)
@@ -509,18 +505,24 @@ end
 function add_store!(
     ls::LoopSet, var::Symbol, ref::ArrayReference, elementbytes::Int = 8
 )
-    parent = getop(ls, var)
-    op = Operation( length(operations(ls)), ref.array, elementbytes, :setindex!, memstore, loopdependencies(ref), reduceddependencies(parent), [parent], ref )
-    add_vptr!(ls, ref.array, identifier(op))
+    ldref = loopdependencies(ref)
+    parent = getop(ls, var, ldref, elementbytes)
+    pvar = parent.variable
+    if pvar ∉ ls.syms_aliasing_refs
+        push!(ls.syms_aliasing_refs, pvar)
+        push!(ls.refs_aliasing_syms, ref)
+    end
+    op = Operation( length(operations(ls)), ref.array, elementbytes, :setindex!, memstore, ldref, reduceddependencies(parent), [parent], ref )
+    add_vptr!(ls, ref.array, identifier(op), ref.ptr)
     pushop!(ls, op, ref.array)
 end
 function add_store_ref!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8)
-    ref = ref_from_ref(ex)
+    ref = ref_from_ref(ex)::ArrayReference
     add_store!(ls, var, ref, elementbytes)
 end
 function add_store_setindex!(ls::LoopSet, ex::Expr, elementbytes::Int = 8)
-    ref = ref_from_setindex(ex)
-    add_store!(ls, var, ref, elementbytes)
+    ref = ref_from_setindex(ex)::ArrayReference
+    add_store!(ls, (ex.args[2])::Symbol, ref, elementbytes)
 end
 # add operation assigns X to var
 function add_operation!(
@@ -549,8 +551,13 @@ function add_operation!(
     if RHS.head === :ref# || (RHS.head === :call && first(RHS.args) === :getindex)
         add_load!(ls, LHS_sym, LHS_ref, elementbytes)
     elseif RHS.head === :call
-        if first(RHS.args) === :getindex
+        f = first(RHS.args)
+        if f === :getindex
             add_load!(ls, LHS_sym, LHS_ref, elementbytes)
+        elseif f === :zero || f === :one
+            c = gensym(:constant)
+            pushpreamble!(ls, Expr(:(=), c, RHS))
+            add_constant!(ls, c, [keys(ls.loops)...], LHS_sym, elementbytes)
         else
             add_compute!(ls, LHS_sym, RHS, elementbytes, LHS_ref)
         end
@@ -585,9 +592,11 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int = 8)
                 # assign RHS to lrhs
                 ref = ArrayReference(LHS)
                 id = findfirst(r -> r == ref, ls.refs_aliasing_syms)
-                lrhs = id === nothing ? gensym(:RHS) : ls.syms_aliasing_refs[id]
-                # we pass ref, so it can compare references within RHS, and realize
-                # they equal lrhs
+                lrhs = if id === nothing
+                    gensym(:RHS)
+                else
+                    ls.syms_aliasing_refs[id]
+                end
                 add_operation!(ls, lrhs, RHS, ref, elementbytes)
             end
             add_store_ref!(ls, lrhs, LHS, elementbytes)
@@ -603,25 +612,10 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int = 8)
     end
 end
 
-function place_after_loop!(adal::Vector{Bool}, op::Operation)
-    pal = if isload(op) || length(reduceddependencies(op)) == 0
-        1
-    elseif length(reduceddependencies(op)) > 1
-        2
-    else
-        rd = first(reduceddependencies(op))
-        any(d -> d === rd, loopdependencies(op)) ? 1 : 2
-    end
-    pal == 1 && set_for_each_parent!(adal, op, false)
-    pal
-end
 
 function fillorder!(ls::LoopSet, order::Vector{Symbol}, loopistiled::Bool)
     lo = ls.loop_order
     ro = lo.loopnames # reverse order; will have same order as lo
-    # @show 1, ro, order
-    # copyto!(ro, order)
-    # @show 2, ro, order
     nloops = length(order)
     if loopistiled
         tiled    = order[1]
@@ -633,9 +627,9 @@ function fillorder!(ls::LoopSet, order::Vector{Symbol}, loopistiled::Bool)
     ops = operations(ls)
     nops = length(ops)
     included_vars = fill(false, nops)
-    all_descendents_after_loop = fill(true, nops)
-    positions = fill((-1,-1,-1,-1,-1), nops)#Vector{NTuple{5,Int}}(undef, nops)
+    place_after_loop = fill(true, nops)
     # to go inside out, we just have to include all those not-yet included depending on the current sym
+    empty!(lo)
     for _n ∈ 1:nloops
         n = 1 + nloops - _n
         ro[_n] = loopsym = order[n]
@@ -647,20 +641,11 @@ function fillorder!(ls::LoopSet, order::Vector{Symbol}, loopistiled::Bool)
             isunrolled = (unrolled ∈ loopdependencies(op)) + 1
             istiled = (loopistiled ? (tiled ∈ loopdependencies(op)) : false) + 1
             optype = Int(op.node_type) + 1
-            after_loop = place_after_loop!(all_descendents_after_loop, op)
-            positions[id] = (optype,isunrolled,istiled,after_loop,_n)
+            after_loop = place_after_loop[id] + 1
+            push!(lo[optype,isunrolled,istiled,after_loop,_n], ops[id])
+            set_upstream_family!(place_after_loop, op, false) # parents that have already been included are not moved, so no need to check included_vars to filter
         end
     end
-    empty!(lo)
-    for id ∈ 1:nops
-        optype,isunrolled,istiled,after_loop,_n = positions[id]
-        optype == -1 && continue#@show ops[id]
-        if all_descendents_after_loop[id]
-            after_loop = 2
-        end
-        push!(lo[optype,isunrolled,istiled,after_loop,_n], ops[id])
-    end
-    # 3, ro, order
 end
 
 
