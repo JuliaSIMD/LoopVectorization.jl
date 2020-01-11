@@ -1,9 +1,3 @@
-# lv(x) = Expr(:(.), :LoopVectorization, QuoteNode(x))
-# @static if VERSION  < v"1.3.0"
-    # lv(x) = Expr(:(.), :LoopVectorization, QuoteNode(x))
-# else
-
-# end
 
 isdense(::Type{<:DenseArray}) = true
 
@@ -443,19 +437,12 @@ function maybe_cse_load!(ls::LoopSet, expr::Expr, elementbytes::Int = 8)
         @view(expr.args[2+offset:end]),
         Ref(false)
     )::ArrayReference
-    # @show ref.ref
     id = findfirst(r -> r == ref, ls.refs_aliasing_syms)
     if id === nothing
         add_load!( ls, gensym(:temporary), ref, elementbytes )
     else
         getop(ls, ls.syms_aliasing_refs[id], elementbytes)
     end
-    # id = includesarray(ls, array)
-    # if id > 0
-        # ls.operations[id]
-    # else
-        # add_load!( ls, gensym(:temporary), array, args, elementbytes )
-    # end
 end
 function add_parent!(
     parents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet, var, elementbytes::Int = 8
@@ -518,8 +505,6 @@ end
 function add_store!(
     ls::LoopSet, var::Symbol, ref::ArrayReference, elementbytes::Int = 8
 )
-    # @show loopdependencies(ref)
-    # @show ls.operations
     ldref = loopdependencies(ref)
     parent = getop(ls, var, ldref, elementbytes)
     pvar = parent.variable
@@ -528,7 +513,6 @@ function add_store!(
         push!(ls.refs_aliasing_syms, ref)
     end
     op = Operation( length(operations(ls)), ref.array, elementbytes, :setindex!, memstore, ldref, reduceddependencies(parent), [parent], ref )
-    # @show loopdependencies(op) op
     add_vptr!(ls, ref.array, identifier(op), ref.ptr)
     pushop!(ls, op, ref.array)
 end
@@ -544,7 +528,6 @@ end
 function add_operation!(
     ls::LoopSet, LHS::Symbol, RHS::Expr, elementbytes::Int = 8
 )
-    # @show LHS, RHS
     if RHS.head === :ref
         add_load_ref!(ls, LHS, RHS, elementbytes)
     elseif RHS.head === :call
@@ -565,7 +548,6 @@ end
 function add_operation!(
     ls::LoopSet, LHS_sym::Symbol, RHS::Expr, LHS_ref::ArrayReference, elementbytes::Int = 8
 )
-    # @show LHS_sym, RHS
     if RHS.head === :ref# || (RHS.head === :call && first(RHS.args) === :getindex)
         add_load!(ls, LHS_sym, LHS_ref, elementbytes)
     elseif RHS.head === :call
@@ -584,7 +566,6 @@ function add_operation!(
     end
 end
 function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int = 8)
-    # @show ex
     if ex.head === :call
         finex = first(ex.args)::Symbol
         if finex === :setindex!
@@ -599,13 +580,11 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int = 8)
             if RHS isa Expr
                 add_operation!(ls, LHS, RHS, elementbytes)
             else
-                # @show [keys(ls.loops)...]
                 add_constant!(ls, RHS, [keys(ls.loops)...], LHS, elementbytes)
             end
         elseif LHS isa Expr
             @assert LHS.head === :ref
             local lrhs::Symbol
-            # @show LHS, RHS
             if RHS isa Symbol
                 lrhs = RHS
             elseif RHS isa Expr
@@ -637,9 +616,6 @@ end
 function fillorder!(ls::LoopSet, order::Vector{Symbol}, loopistiled::Bool)
     lo = ls.loop_order
     ro = lo.loopnames # reverse order; will have same order as lo
-    # @show 1, ro, order
-    # copyto!(ro, order)
-    # @show 2, ro, order
     nloops = length(order)
     if loopistiled
         tiled    = order[1]
