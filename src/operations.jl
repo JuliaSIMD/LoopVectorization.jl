@@ -23,7 +23,13 @@ function Base.hash(x::ArrayReference, h::UInt)
     end
     hash(x.array, h)
 end
-loopdependencies(ref::ArrayReference) = filter(i -> i isa Symbol, ref.ref)
+function loopdependencies(ref::ArrayReference)
+    ld = Symbol[]
+    for r ∈ ref.ref
+        r isa Symbol && push!(ld, r)
+    end
+    ld
+end
 function Base.isequal(x::ArrayReference, y::ArrayReference)
     x.array === y.array || return false
     nrefs = length(x.ref)
@@ -74,15 +80,6 @@ end
 
 # TODO: can some computations be cached in the operations?
 """
-if ooperation_type == memstore || operation_type == memstore# || operation_type == compute_new || operation_type == compute_update
-symbolic metadata contains info on direct dependencies / placement within loop.
-
-if isload(op) -> Symbol(:vptr_, first(op.reduced_deps))
-if istore(op) -> Symbol(:vptr_, op.variable)
-is how we access the memory.
-
-is the stride for loop index
-symbolic_metadata[i]
 """
 struct Operation
     identifier::Int
@@ -90,14 +87,11 @@ struct Operation
     elementbytes::Int
     instruction::Instruction
     node_type::OperationType
-    dependencies::Vector{Symbol}#::Vector{Symbol}
+    dependencies::Vector{Symbol}
     reduced_deps::Vector{Symbol}
     parents::Vector{Operation}
     ref::ArrayReference
     mangledvariable::Symbol
-    # children::Vector{Operation}
-    # numerical_metadata::Vector{Int} # stride of -1 indicates dynamic
-    # symbolic_metadata::Vector{Symbol}
     function Operation(
         identifier::Int,
         variable,

@@ -225,7 +225,7 @@ function reduce_unroll!(q, op, U, unrolled)
         return U, isunrolled
     end
     unrolled ∈ reduceddependencies(op) || return U
-    var = pvariable_name(op, suffix)
+    var = mangledvar(op)
     instr = first(parents(op)).instruction
     reduce_expr!(q, var, instr, U) # assigns reduction to storevar
     1, isunrolled

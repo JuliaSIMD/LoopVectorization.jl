@@ -33,17 +33,33 @@ using LinearAlgebra
     @test logsumexp!(r, x) ≈ 102.35216846104409
 
     @testset "GEMM" begin
-        AmulBq = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+        using LoopVectorization, Test
+        U, T = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 4)
+        AmulBq1 = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+                    C[m,n] = zeroB
+               for k ∈ 1:size(A,2)
+                   C[m,n] += A[m,k] * B[k,n]
+               end
+               end)
+        lsAmulB1 = LoopVectorization.LoopSet(AmulBq1);
+        @test LoopVectorization.choose_order(lsAmulB1) == (Symbol[:n,:m,:k], :m, U, T)
+        AmulBq2 = :(for m ∈ 1:M, n ∈ 1:N
+               C[m,n] = zero(eltype(B))
+               for k ∈ 1:K
+                    C[m,n] += A[m,k] * B[k,n]
+               end
+                end)
+        lsAmulB2 = LoopVectorization.LoopSet(AmulBq2);
+        @test LoopVectorization.choose_order(lsAmulB2) == (Symbol[:n,:m,:k], :m, U, T)
+        AmulBq3 = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
                 ΔCₘₙ = zero(eltype(C))
                 for k ∈ 1:size(A,2)
                     ΔCₘₙ += A[m,k] * B[k,n]
                 end
                 C[m,n] += ΔCₘₙ
            end)
-        
-        lsAmulB = LoopVectorization.LoopSet(AmulBq);
-        U, T = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 4)
-        @test LoopVectorization.choose_order(lsAmulB) == (Symbol[:n,:m,:k], :m, U, T)
+        lsAmulB3 = LoopVectorization.LoopSet(AmulBq3);
+        @test LoopVectorization.choose_order(lsAmulB3) == (Symbol[:n,:m,:k], :m, U, T)
 
         function AmulB!(C, A, B)
             C .= 0
@@ -53,13 +69,30 @@ using LinearAlgebra
                 end
             end
         end
-        function AmulBavx!(C, A, B)
+        function AmulBavx1!(C, A, B)
             @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
                 Cₘₙ = zero(eltype(C))
                 for k ∈ 1:size(A,2)
                     Cₘₙ += A[m,k] * B[k,n]
                 end
                 C[m,n] = Cₘₙ
+            end
+        end
+        function AmulBavx2!(C, A, B)
+            z = zero(eltype(C))
+            @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+                C[m,n] = z
+                for k ∈ 1:size(A,2)
+                    C[m,n] += A[m,k] * B[k,n]
+                end
+            end
+        end
+        function AmulBavx3!(C, A, B)
+            @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+                C[m,n] = zero(eltype(C))
+                for k ∈ 1:size(A,2)
+                    C[m,n] += A[m,k] * B[k,n]
+                end
             end
         end
         function AmuladdBavx!(C, A, B, factor = 1)
@@ -171,8 +204,12 @@ using LinearAlgebra
             C = Matrix{TC}(undef, M, N);
             A = rand(R, M, K); B = rand(R, K, N);
             C2 = similar(C);
-            AmulBavx!(C, A, B)
             AmulB!(C2, A, B)
+            AmulBavx1!(C, A, B)
+            @test C ≈ C2
+            fill!(C, 999.99); AmulBavx2!(C, A, B)
+            @test C ≈ C2
+            fill!(C, 999.99); AmulBavx3!(C, A, B)
             @test C ≈ C2
             fill!(C, 0.0); AmuladdBavx!(C, A, B)
             @test C ≈ C2

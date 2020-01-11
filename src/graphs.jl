@@ -158,7 +158,22 @@ isstaticloop(ls::LoopSet, s::Symbol) = ls.loops[s].hintexact
 looprangehint(ls::LoopSet, s::Symbol) = ls.loops[s].rangehint
 looprangesym(ls::LoopSet, s::Symbol) = ls.loops[s].rangesym
 # itersyms(ls::LoopSet) = keys(ls.loops)
-getop(ls::LoopSet, s::Symbol) = ls.opdict[s]
+function getop(ls::LoopSet, var::Symbol, elementbytes::Int = 8)
+    get!(ls.opdict, var) do
+        # might add constant
+        op = add_constant!(ls, var, elementbytes)
+        pushpreamble!(ls, Expr(:(=), mangledvar(op), var))
+        op
+    end
+end
+function getop(ls::LoopSet, var::Symbol, deps, elementbytes::Int = 8)
+    get!(ls.opdict, var) do
+        # might add constant
+        op = add_constant!(ls, var, deps, gensym(:constant), elementbytes)
+        pushpreamble!(ls, Expr(:(=), mangledvar(op), var))
+        op
+    end
+end
 getop(ls::LoopSet, i::Int) = ls.operations[i + 1]
 
 @inline extract_val(::Val{N}) where {N} = N
@@ -284,7 +299,7 @@ function add_loop!(ls::LoopSet, q::Expr, elementbytes::Int = 8)
     if body.head === :block
         add_block!(ls, body, elementbytes)
     else
-        Base.push!(ls, q, elementbytes)
+        push!(ls, q, elementbytes)
     end
 end
 function add_loop!(ls::LoopSet, loop::Loop)
@@ -316,12 +331,18 @@ function add_load!(
     ls::LoopSet, var::Symbol, ref::ArrayReference, elementbytes::Int = 8
 )
     if ref.loaded[] == true
-        op = getop(ls, var)
+        op = getop(ls, var, elementbytes)
         @assert var === op.variable
         return op
     end
-    push!(ls.syms_aliasing_refs, var)
-    push!(ls.refs_aliasing_syms, ref)
+    id = findfirst(r -> r == ref, ls.refs_aliasing_syms)
+    if id === nothing
+        push!(ls.syms_aliasing_refs, var)
+        push!(ls.refs_aliasing_syms, ref)
+    else
+        opp = getop(ls, ls.syms_aliasing_refs[id], elementbytes)
+        return isstore(opp) ? getop(ls, first(parents(opp))) : opp
+    end
     ref.loaded[] = true
     # ls.sym_to_ref_aliases[ var ] = ref
     # ls.ref_to_sym_aliases[ ref ] = var
@@ -427,7 +448,7 @@ function maybe_cse_load!(ls::LoopSet, expr::Expr, elementbytes::Int = 8)
     if id === nothing
         add_load!( ls, gensym(:temporary), ref, elementbytes )
     else
-        getop(ls, ls.syms_aliasing_refs[id])        
+        getop(ls, ls.syms_aliasing_refs[id], elementbytes)
     end
     # id = includesarray(ls, array)
     # if id > 0
@@ -440,12 +461,7 @@ function add_parent!(
     parents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet, var, elementbytes::Int = 8
 )
     parent = if var isa Symbol
-        get!(ls.opdict, var) do
-            # might add constant
-            op = add_constant!(ls, var, elementbytes)
-            pushpreamble!(ls, Expr(:(=), mangledvar(op), var))
-            op
-        end
+        getop(ls, var, elementbytes)
     elseif var isa Expr #CSE candidate
         maybe_cse_load!(ls, var, elementbytes)
     else # assumed constant
@@ -465,7 +481,7 @@ function add_reduction_update_parent!(
     parents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet,
     var::Symbol, instr::Symbol, elementbytes::Int = 8
 )
-    parent = getop(ls, var)
+    parent = getop(ls, var, elementbytes)
     setdiffv!(reduceddeps, deps, loopdependencies(parent))
     pushparent!(parents, deps, reduceddeps, parent) # deps and reduced deps will not be disjoint
     op = Operation(length(operations(ls)), var, elementbytes, instr, compute, deps, reduceddeps, parents)
@@ -502,23 +518,33 @@ end
 function add_store!(
     ls::LoopSet, var::Symbol, ref::ArrayReference, elementbytes::Int = 8
 )
-    parent = getop(ls, var)
-    op = Operation( length(operations(ls)), ref.array, elementbytes, :setindex!, memstore, loopdependencies(ref), reduceddependencies(parent), [parent], ref )
+    # @show loopdependencies(ref)
+    # @show ls.operations
+    ldref = loopdependencies(ref)
+    parent = getop(ls, var, ldref, elementbytes)
+    pvar = parent.variable
+    if pvar ∉ ls.syms_aliasing_refs
+        push!(ls.syms_aliasing_refs, pvar)
+        push!(ls.refs_aliasing_syms, ref)
+    end
+    op = Operation( length(operations(ls)), ref.array, elementbytes, :setindex!, memstore, ldref, reduceddependencies(parent), [parent], ref )
+    # @show loopdependencies(op) op
     add_vptr!(ls, ref.array, identifier(op), ref.ptr)
     pushop!(ls, op, ref.array)
 end
 function add_store_ref!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8)
-    ref = ref_from_ref(ex)
+    ref = ref_from_ref(ex)::ArrayReference
     add_store!(ls, var, ref, elementbytes)
 end
 function add_store_setindex!(ls::LoopSet, ex::Expr, elementbytes::Int = 8)
-    ref = ref_from_setindex(ex)
-    add_store!(ls, var, ref, elementbytes)
+    ref = ref_from_setindex(ex)::ArrayReference
+    add_store!(ls, (ex.args[2])::Symbol, ref, elementbytes)
 end
 # add operation assigns X to var
 function add_operation!(
     ls::LoopSet, LHS::Symbol, RHS::Expr, elementbytes::Int = 8
 )
+    # @show LHS, RHS
     if RHS.head === :ref
         add_load_ref!(ls, LHS, RHS, elementbytes)
     elseif RHS.head === :call
@@ -539,11 +565,17 @@ end
 function add_operation!(
     ls::LoopSet, LHS_sym::Symbol, RHS::Expr, LHS_ref::ArrayReference, elementbytes::Int = 8
 )
+    # @show LHS_sym, RHS
     if RHS.head === :ref# || (RHS.head === :call && first(RHS.args) === :getindex)
         add_load!(ls, LHS_sym, LHS_ref, elementbytes)
     elseif RHS.head === :call
-        if first(RHS.args) === :getindex
+        f = first(RHS.args)
+        if f === :getindex
             add_load!(ls, LHS_sym, LHS_ref, elementbytes)
+        elseif f === :zero || f === :one
+            c = gensym(:constant)
+            pushpreamble!(ls, Expr(:(=), c, RHS))
+            add_constant!(ls, c, [keys(ls.loops)...], LHS_sym, elementbytes)
         else
             add_compute!(ls, LHS_sym, RHS, elementbytes, LHS_ref)
         end
@@ -552,6 +584,7 @@ function add_operation!(
     end
 end
 function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int = 8)
+    # @show ex
     if ex.head === :call
         finex = first(ex.args)::Symbol
         if finex === :setindex!
@@ -566,11 +599,13 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int = 8)
             if RHS isa Expr
                 add_operation!(ls, LHS, RHS, elementbytes)
             else
+                # @show [keys(ls.loops)...]
                 add_constant!(ls, RHS, [keys(ls.loops)...], LHS, elementbytes)
             end
         elseif LHS isa Expr
             @assert LHS.head === :ref
             local lrhs::Symbol
+            # @show LHS, RHS
             if RHS isa Symbol
                 lrhs = RHS
             elseif RHS isa Expr
@@ -578,9 +613,11 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int = 8)
                 # assign RHS to lrhs
                 ref = ArrayReference(LHS)
                 id = findfirst(r -> r == ref, ls.refs_aliasing_syms)
-                lrhs = id === nothing ? gensym(:RHS) : ls.syms_aliasing_refs[id]
-                # we pass ref, so it can compare references within RHS, and realize
-                # they equal lrhs
+                lrhs = if id === nothing
+                    gensym(:RHS)
+                else
+                    ls.syms_aliasing_refs[id]
+                end
                 add_operation!(ls, lrhs, RHS, ref, elementbytes)
             end
             add_store_ref!(ls, lrhs, LHS, elementbytes)
