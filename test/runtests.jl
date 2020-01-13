@@ -196,7 +196,68 @@ using LinearAlgebra
 	    end
             return C
         end
-        
+
+        function toy1!(G, B,κ)
+            d = size(G,1)
+            @inbounds for d1=1:d
+                G[d1,κ] = B[1,d1]*B[1,κ]
+                for d2=2:d
+                    G[d1,κ] += B[d2,d1]*B[d2,κ]
+                end
+            end
+        end
+        # function toy4!(G, B,κ)
+            # d = size(G,1)
+            # @avx for d1=1:d
+                # G[d1,κ] = B[1,d1]*B[1,κ]
+                # for d2=2:d
+                    # G[d1,κ] += B[d2,d1]*B[d2,κ]
+                # end
+            # end
+        # end
+        # tq1 = :(for d1=1:d
+                # G[d1,κ] = B[1,d1]*B[1,κ]
+                # for d2=2:d
+                    # G[d1,κ] += B[d2,d1]*B[d2,κ]
+                # end
+                # end)
+        # lst1 = LoopVectorization.LoopSet(tq1)
+        function toy2!(G, B,κ)
+            d = size(G,1)
+            z = zero(eltype(G))
+            @avx for d1=1:d
+                G[d1,κ] = z
+                for d2=1:d
+                    G[d1,κ] += B[d2,d1]*B[d2,κ]
+                end
+            end
+        end
+        tq2 = :(for d1=1:d
+                G[d1,κ] = z
+                for d2=1:d
+                    G[d1,κ] += B[d2,d1]*B[d2,κ]
+                end
+                end)
+        lst2 = LoopVectorization.LoopSet(tq2)
+        function toy3!(G, B,κ)
+            d = size(G,1)
+            @avx for d1=1:d
+                z = zero(eltype(G))
+                for d2=1:d
+                    z += B[d2,d1]*B[d2,κ]
+                end
+                G[d1,κ] = z
+            end
+        end
+        tq3 = :(for d1=1:d
+                z = 0
+                for d2=1:d
+                z += B[d2,d1]*B[d2,κ]
+                end
+                G[d1,κ] = z
+                end);
+        lst3 = LoopVectorization.LoopSet(tq3)
+
         for T ∈ (Float32, Float64, Int32, Int64)
             M, K, N = 72, 75, 68;
             TC = sizeof(T) == 4 ? Float32 : Float64
@@ -226,6 +287,18 @@ using LinearAlgebra
             rank2AmulBavx!(C, Aₘ, Aₖ, B)
             rank2AmulB!(C2, Aₘ, Aₖ, B)
             @test C ≈ C2
+
+            B = rand(R, N, N);
+            G1 = Matrix{TC}(undef, N, 1);
+            G2 = similar(G1);
+            # G3 = similar(G1);
+            toy1!(G1,B,1)
+            toy2!(G2,B,1)
+            @test G1 ≈ G2
+            fill!(G2, TC(NaN)), toy3!(G2,B,1);
+            @test G1 ≈ G2
+            # fill!(G2, TC(NaN)), toy4!(G2,B,1);
+            # @test G1 ≈ G2
         end
     end
 

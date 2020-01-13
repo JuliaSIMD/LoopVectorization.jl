@@ -54,7 +54,10 @@ struct LoopOrder <: AbstractArray{Vector{Operation},5}
     bestorder::Vector{Symbol}
 end
 function LoopOrder(N::Int)
-    LoopOrder( [ Operation[] for i ∈ 1:24N ], Vector{Symbol}(undef, N), Vector{Symbol}(undef, N) )
+    LoopOrder(
+        [ Operation[] for _ ∈ 1:32N ],
+        Vector{Symbol}(undef, N), Vector{Symbol}(undef, N)
+    )
 end
 LoopOrder() = LoopOrder(Vector{Operation}[],Symbol[],Symbol[])
 Base.empty!(lo::LoopOrder) = foreach(empty!, lo.oporder)
@@ -87,6 +90,8 @@ struct LoopSet
     refs_aliasing_syms::Vector{ArrayReference}
     cost_vec::Matrix{Float64}
     reg_pres::Matrix{Int}
+    included_vars::Vector{Bool}
+    place_after_loop::Vector{Bool}
     # sym_to_ref_aliases::Dict{Symbol,ArrayReference}
     # ref_to_sym_aliases::Dict{ArrayReference,Symbol}
 end
@@ -139,7 +144,8 @@ function LoopSet()
         Symbol[],
         ArrayReference[],
         Matrix{Float64}(undef, 4, 2),
-        Matrix{Int}(undef, 4, 2)
+        Matrix{Int}(undef, 4, 2),
+        Bool[], Bool[]
     )
 end
 num_loops(ls::LoopSet) = length(ls.loops)
@@ -246,16 +252,19 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
         lower = r.args[2]
         upper = r.args[3]
         lii::Bool = lower isa Integer
+        @assert lii
+        liiv::Int = convert(Int, lii)
+        @assert liiv == 1 "Currently only loops starting from the first index are supported."
         uii::Bool = upper isa Integer
         if lii & uii
-            Loop(itersym, 1 + convert(Int,upper) - convert(Int,lower))
+            Loop(itersym, 1 + convert(Int,upper) - liiv)
         else
             N = gensym(Symbol(:loop, itersym))
             ex = if lii
                 if lower == 1
                     pushpreamble!(ls, Expr(:(=), N, upper))
                 else
-                    pushpreamble!(ls, Expr(:(=), N, Expr(:call, :-, upper, lower - 1)))
+                    pushpreamble!(ls, Expr(:(=), N, Expr(:call, :-, upper, liiv - 1)))
                 end
             else
                 ex = if uii
@@ -437,6 +446,7 @@ function maybe_cse_load!(ls::LoopSet, expr::Expr, elementbytes::Int = 8)
         @view(expr.args[2+offset:end]),
         Ref(false)
     )::ArrayReference
+    # whether this finds load or store, we use that
     id = findfirst(r -> r == ref, ls.refs_aliasing_syms)
     if id === nothing
         add_load!( ls, gensym(:temporary), ref, elementbytes )
@@ -470,6 +480,7 @@ function add_reduction_update_parent!(
 )
     parent = getop(ls, var, elementbytes)
     setdiffv!(reduceddeps, deps, loopdependencies(parent))
+    mergesetv!(reduceddependencies(parent), reduceddeps)
     pushparent!(parents, deps, reduceddeps, parent) # deps and reduced deps will not be disjoint
     op = Operation(length(operations(ls)), var, elementbytes, instr, compute, deps, reduceddeps, parents)
     parent.instruction === LOOPCONSTANT && push!(ls.outer_reductions, identifier(op))
@@ -502,6 +513,19 @@ function add_compute!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8,
         pushop!(ls, op, var)
     end
 end
+function add_unique_store!(ls::LoopSet, ref::ArrayReference, parent::Operation, elementbytes::Int = 8)
+    ldref = loopdependencies(ref, ls)
+    op = Operation( length(operations(ls)), ref.array, elementbytes, :setindex!, memstore, ldref, reduceddependencies(parent), [parent], ref )
+    add_vptr!(ls, ref.array, identifier(op), ref.ptr)
+    pushop!(ls, op, ref.array)
+end
+function cse_store!(ls::LoopSet, id::Int, ref::ArrayReference, parent::Operation, elementbytes::Int = 8)
+    ldref = loopdependencies(ref, ls)
+    op = Operation( length(operations(ls))-1, ref.array, elementbytes, :setindex!, memstore, ldref, reduceddependencies(parent), [parent], ref )
+    ls.operations[id] = op
+    ls.opdict[op.variable] = op
+    op
+end
 function add_store!(
     ls::LoopSet, var::Symbol, ref::ArrayReference, elementbytes::Int = 8
 )
@@ -511,10 +535,16 @@ function add_store!(
     if pvar ∉ ls.syms_aliasing_refs
         push!(ls.syms_aliasing_refs, pvar)
         push!(ls.refs_aliasing_syms, ref)
+        add_unique_store!(ls, ref, parent, elementbytes)
+    else
+        # try to cse store
+        # different from cse load, because the other op here must be a store
+        for opp ∈ operations(ls)
+            isstore(opp) || continue
+            ref == opp.ref && return cse_store!(ls, identifier(opp), ref, parent, elementbytes)
+        end
+        add_unique_store!(ls, ref, parent, elementbytes)        
     end
-    op = Operation( length(operations(ls)), ref.array, elementbytes, :setindex!, memstore, ldref, reduceddependencies(parent), [parent], ref )
-    add_vptr!(ls, ref.array, identifier(op), ref.ptr)
-    pushop!(ls, op, ref.array)
 end
 function add_store_ref!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8)
     ref = ref_from_ref(ex)::ArrayReference
@@ -626,8 +656,10 @@ function fillorder!(ls::LoopSet, order::Vector{Symbol}, loopistiled::Bool)
     end
     ops = operations(ls)
     nops = length(ops)
-    included_vars = fill(false, nops)
-    place_after_loop = fill(true, nops)
+    included_vars = resize!(ls.included_vars, nops)
+    fill!(included_vars, false)
+    place_after_loop = resize!(ls.place_after_loop, nops)
+    fill!(ls.place_after_loop, true)
     # to go inside out, we just have to include all those not-yet included depending on the current sym
     empty!(lo)
     for _n ∈ 1:nloops
@@ -642,13 +674,23 @@ function fillorder!(ls::LoopSet, order::Vector{Symbol}, loopistiled::Bool)
             istiled = (loopistiled ? (tiled ∈ loopdependencies(op)) : false) + 1
             optype = Int(op.node_type) + 1
             after_loop = place_after_loop[id] + 1
-            push!(lo[optype,isunrolled,istiled,after_loop,_n], ops[id])
+            push!(lo[optype,isunrolled,istiled,after_loop,_n], op)
             set_upstream_family!(place_after_loop, op, false) # parents that have already been included are not moved, so no need to check included_vars to filter
         end
     end
 end
 
-
+function define_remaining_ops!(
+    ls::LoopSet, vectorized::Symbol, W, unrolled, tiled, U::Int
+)
+    ops = operations(ls)
+    for (id,incl) ∈ enumerate(ls.included_vars)
+        if !incl
+            op = ops[id]
+            length(reduceddependencies(op)) == 0 && lower!( ls.preamble, op, vectorized, W, unrolled, tiled, U, nothing, nothing )
+        end
+    end
+end
 # function depends_on_assigned(op::Operation, assigned::Vector{Bool})
 #     for p ∈ parents(op)
 #         p === op && continue # don't fall into recursive loop when we have updates, eg a = a + b
