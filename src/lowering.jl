@@ -2,12 +2,12 @@
 variable_name(op::Operation, ::Nothing) = mangledvar(op)
 variable_name(op::Operation, suffix) = Symbol(mangledvar(op), suffix, :_)
 
-function append_inds!(ret, indices, deps)
+function append_inds!(ret::Expr, indices, loopedindex::Vector{Bool})
     start = (first(indices) === Symbol("##DISCONTIGUOUSSUBARRAY##")) + 1# && return append_inds!(ret, @view(indices[2:end]), deps)
-    for ind ∈ @view(indices[start:end])
+    for (n,ind) ∈ enumerate(@view(indices[start:end]))
         if ind isa Int
-            push!(ret.args, ind - 1)
-        elseif ind ∈ deps
+            push!(ret.args, ind)
+        elseif loopedindex[n]
             push!(ret.args, ind)
         else
             push!(ret.args, Expr(:call, :-, ind, 1))
@@ -18,24 +18,24 @@ end
 
 function mem_offset(op::Operation)
     @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
-    append_inds!(Expr(:tuple), op.ref.ref, op.dependencies)
+    append_inds!(Expr(:tuple), getindices(op), op.ref.loopedindex)
 end
 function mem_offset(op::Operation, incr::Int, unrolled::Symbol)
     @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
     ret = Expr(:tuple)
-    indices = op.ref.ref
-    deps = op.dependencies
+    indices = getindices(op)
+    loopedindex = op.ref.loopedindex
     if incr == 0
-        append_inds!(ret, indices, deps)
+        append_inds!(ret, indices, loopedindex)
     else
         for n ∈ 1:length(indices)
             ind = indices[n]
             n == 1 && ind === Symbol("##DISCONTIGUOUSSUBARRAY##") && continue
             if ind isa Int
-                push!(ret.args, ind - 1)
+                push!(ret.args, ind)
             elseif ind === unrolled
                 push!(ret.args, Expr(:call, :+, ind, incr))
-            elseif ind ∈ deps
+            elseif loopedindex[n]
                 push!(ret.args, ind)
             else
                 push!(ret.args, Expr(:call, :-, ind, 1))
@@ -47,19 +47,19 @@ end
 function mem_offset(op::Operation, mul::Symbol, incr::Int, unrolled::Symbol)
     @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
     ret = Expr(:tuple)
-    indices = op.ref.ref
-    deps = op.dependencies
+    indices = getindices(op)
+    loopedindex = op.ref.loopedindex
     if incr == 0
-        append_inds!(ret, indices, deps)
+        append_inds!(ret, indices, loopedindex)
     else
         for n ∈ 1:length(indices)
             ind = indices[n]
             n == 1 && ind === Symbol("##DISCONTIGUOUSSUBARRAY##") && continue
             if ind isa Int
-                push!(ret.args, ind - 1)
+                push!(ret.args, ind)
             elseif ind === unrolled
                 push!(ret.args, Expr(:call, :+, ind, Expr(:call, lv(:valmul), mul, incr)))
-            elseif ind ∈ deps
+            elseif loopedindex[n]
                 push!(ret.args, ind)
             else
                 push!(ret.args, Expr(:call, :-, ind, 1))
@@ -145,12 +145,12 @@ function lower_load_vectorized!(
     # Urange = unrolled ∈ loopdeps ? 0:U-1 : 0
     var = variable_name(op, suffix)
     vecnotunrolled = vectorized !== unrolled
-    if first(op.ref.ref) === vectorized # vload
+    if first(getindices(op)) === vectorized # vload
         for u ∈ umin:U-1
             pushvectorload!(q, op, var, u, U, W, mask, unrolled, vecnotunrolled)
         end
     else
-        sn = findfirst(x -> x === vectorized, op.ref.ref)::Int
+        sn = findfirst(x -> x === vectorized, getindices(op))::Int
         ustrides = Expr(:call, lv(:vmul), Expr(:call, :stride, refname(op), sn), Expr(:call, lv(:vrange), W))
         ustride = gensym(:ustride)
         push!(q.args, Expr(:(=), ustride, ustrides))

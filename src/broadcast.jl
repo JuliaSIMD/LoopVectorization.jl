@@ -104,22 +104,22 @@ function add_broadcast!(
     ::Type{<:LowDimArray{D,T,N}}, elementbytes::Int = 8
 ) where {D,T,N}
     fulldims = Union{Symbol,Int}[loopsyms[n] for n ∈ 1:N if D[n]]
-    ref = ArrayReference(bcname, fulldims, Ref{Bool}(false))
-    add_load!(ls, destname, ref, elementbytes)::Operation
+    ref = ArrayReference(bcname, fulldims)
+    add_simple_load!(ls, destname, ref, elementbytes )::Operation
 end
 function add_broadcast_adjoint_array!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{A}, elementbytes::Int = 8
 ) where {T,N,A<:AbstractArray{T,N}}
     parent = gensym(:parent)
     pushpreamble!(ls, Expr(:(=), parent, Expr(:call, :parent, bcname)))
-    ref = ArrayReference(parent, Union{Symbol,Int}[loopsyms[N + 1 - n] for n ∈ 1:N], Ref{Bool}(false))
-    add_load!( ls, destname, ref, elementbytes )::Operation    
+    ref = ArrayReference(parent, Union{Symbol,Int}[loopsyms[N + 1 - n] for n ∈ 1:N])
+    add_simple_load!( ls, destname, ref, elementbytes )::Operation    
 end
 function add_broadcast_adjoint_array!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{<:AbstractVector}, elementbytes::Int = 8
 )
-    ref = ArrayReference(bcname, Union{Symbol,Int}[loopsyms[2]], Ref{Bool}(false))
-    add_load!( ls, destname, ref, elementbytes )
+    ref = ArrayReference(bcname, Union{Symbol,Int}[loopsyms[2]])
+    add_simple_load!( ls, destname, ref, elementbytes )
 end
 function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
@@ -137,7 +137,7 @@ function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
     ::Type{<:AbstractArray{T,N}}, elementbytes::Int = 8
 ) where {T,N}
-    add_load!(ls, destname, ArrayReference(bcname, @view(loopsyms[1:N]), Ref{Bool}(false)), elementbytes)
+    add_simple_load!(ls, destname, ArrayReference(bcname, @view(loopsyms[1:N])), elementbytes)
 end
 function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{T}, elementbytes::Int = 8
@@ -153,7 +153,7 @@ function add_broadcast!(
     inds = Vector{Union{Int,Symbol}}(undef, N+1)
     inds[1] = Symbol("##DISCONTIGUOUSSUBARRAY##")
     inds[2:end] .= @view(loopsyms[1:N])
-    add_load!(ls, destname, ArrayReference(bcname, inds, Ref{Bool}(false)), elementbytes)
+    add_simple_load!(ls, destname, ArrayReference(bcname, inds), elementbytes)
 end
 function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
@@ -201,7 +201,7 @@ end
     pushpreamble!(ls, Expr(:(=), sizes, Expr(:call, :size, :dest)))
     elementbytes = sizeof(T)
     add_broadcast!(ls, :dest, :bc, loopsyms, BC, elementbytes)
-    add_store!(ls, :dest, ArrayReference(:dest, loopsyms, Ref{Bool}(false)), elementbytes)
+    add_simple_store!(ls, :dest, ArrayReference(:dest, loopsyms), elementbytes)
     resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
     q = lower(ls)
     push!(q.args, :dest)
@@ -226,7 +226,7 @@ end
     pushpreamble!(ls, Expr(:(=), sizes, Expr(:call, :size, :dest′)))
     elementbytes = sizeof(T)
     add_broadcast!(ls, :dest, :bc, loopsyms, BC, elementbytes)
-    add_store!(ls, :dest, ArrayReference(:dest, reverse(loopsyms), Ref{Bool}(false)), elementbytes)
+    add_simple_store!(ls, :dest, ArrayReference(:dest, reverse(loopsyms)), elementbytes)
     resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
     q = lower(ls)
     push!(q.args, :dest′)

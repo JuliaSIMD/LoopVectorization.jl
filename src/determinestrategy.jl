@@ -1,7 +1,7 @@
 
 # TODO: FIXME for general case
 # wrong for transposed matrices, and certain views/SubArrays.
-unitstride(op::Operation, s) = first(op.ref.ref) === s
+unitstride(op::Operation, s) = first(getindices(op)) === s
 
 function cost(op::Operation, unrolled::Symbol, Wshift::Int, size_T::Int = op.elementbytes)
     isconstant(op) && return 0.0, 0, 1
@@ -272,6 +272,7 @@ function solve_tilesize(
 end
 
 function set_upstream_family!(adal::Vector{T}, op::Operation, val::T) where {T}
+    adal[identifier(op)] == val && return # must already have been set
     adal[identifier(op)] = val
     for opp ∈ parents(op)
         set_upstream_family!(adal, opp, val)

@@ -26,7 +26,14 @@ using LinearAlgebra
 
         return log1p(s-1) + u
     end
-
+    feq = :(for i = 1:n
+            tmp = exp(x[i] - u)
+            r[i] = tmp
+            s += tmp
+            end)
+    lsfeq = LoopVectorization.LoopSet(feq);
+    lsfeq.operations
+    
     x = collect(1:1_000) ./ 10;
     r = similar(x);
 
@@ -543,6 +550,27 @@ using LinearAlgebra
             end
             s²[j] = s²ⱼ
         end
+    end
+
+    maxdeg = 20
+    nbasis = 10_000
+    dim = 10
+    basis = rand(1:(maxdeg+1), (dim, nbasis))
+    coeffs = rand(nbasis)
+    P = rand(dim, maxdeg+1)
+
+    function mvp(P, basis, coeffs::Vector{T}) where {T}
+        len_c = length(coeffs)
+        len_P = size(P, 1)
+        p = zero(T)
+        for n = 1:len_c
+            pn = coeffs[n]
+            for a = 1:len_P
+                pn *= P[a, basis[a, n]]
+            end
+            p += pn
+        end
+        return p
     end
 
     for T ∈ (Float32, Float64)
