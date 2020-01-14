@@ -266,6 +266,7 @@ using LinearAlgebra
         lst3 = LoopVectorization.LoopSet(tq3)
 
         for T ∈ (Float32, Float64, Int32, Int64)
+            @show T, @__LINE__
             M, K, N = 72, 75, 68;
             TC = sizeof(T) == 4 ? Float32 : Float64
             R = T <: Integer ? (T(1):T(1000)) : T
@@ -354,6 +355,7 @@ using LinearAlgebra
 
         # a = rand(400);
         for T ∈ (Float32, Float64)
+            @show T, @__LINE__
             a = rand(T, 100); b = rand(T, 100);
             @test mydotavx(a,b) ≈ mydot(a,b)
             @test myselfdotavx(a) ≈ myselfdot(a)
@@ -401,6 +403,7 @@ using LinearAlgebra
         end
 
         for T ∈ (Float32, Float64)
+            @show T, @__LINE__
             a = randn(T, 127);
             b1 = similar(a);
             b2 = similar(a);
@@ -444,6 +447,7 @@ using LinearAlgebra
         end
         M, K = 51, 49
         for T ∈ (Float32, Float64)
+            @show T, @__LINE__
             A = randn(T, M, K);
             x = randn(T, K);
             y1 = Vector{T}(undef, M); y2 = similar(y1);
@@ -574,6 +578,7 @@ using LinearAlgebra
     end
 
     for T ∈ (Float32, Float64)
+        @show T, @__LINE__
         A = randn(T, 199, 498);
         x = randn(T, size(A,1));
         B1 = similar(A); B2 = similar(A);
@@ -603,7 +608,7 @@ end
     M, N = 37, 47
     # M = 77;
     for T ∈ (Float32, Float64)
-
+        @show T, @__LINE__
         a = rand(T,100,100,100);
         b = rand(T,100,100,1);
         bl = LowDimArray{(true,true,false)}(b);
@@ -698,14 +703,15 @@ end
 
     end
 end
-
+T = Float32
 @testset "map" begin
-    foo(x, y) = exp(x) - sin(y)
+    @inline foo(x, y) = exp(x) - sin(y)
     N = 37
     for T ∈ (Float32,Float64)
-        a = rand(T, N); b = rand(T, N)
-        c1 = map(foo, a, b)
-        c2 = vmap(foo, a, b)
+        @show T, @__LINE__
+        a = rand(T, N); b = rand(T, N);
+        c1 = map(foo, a, b);
+        c2 = vmap(foo, a, b);
         @test c1 ≈ c2
     end
 end

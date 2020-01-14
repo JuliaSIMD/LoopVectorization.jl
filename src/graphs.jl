@@ -55,7 +55,7 @@ struct LoopOrder <: AbstractArray{Vector{Operation},5}
 end
 function LoopOrder(N::Int)
     LoopOrder(
-        [ Operation[] for _ ∈ 1:32N ],
+        [ Operation[] for _ ∈ 1:8N ],
         Vector{Symbol}(undef, N), Vector{Symbol}(undef, N)
     )
 end
@@ -63,15 +63,15 @@ LoopOrder() = LoopOrder(Vector{Operation}[],Symbol[],Symbol[])
 Base.empty!(lo::LoopOrder) = foreach(empty!, lo.oporder)
 function Base.resize!(lo::LoopOrder, N::Int)
     Nold = length(lo.loopnames)
-    resize!(lo.oporder, 32N)
-    for n ∈ 32Nold+1:32N
+    resize!(lo.oporder, 8N)
+    for n ∈ 8Nold+1:8N
         lo.oporder[n] = Operation[]
     end
     resize!(lo.loopnames, N)
     resize!(lo.bestorder, N)
     lo
 end
-Base.size(lo::LoopOrder) = (4,2,2,2,length(lo.loopnames))
+Base.size(lo::LoopOrder) = (2,2,2,length(lo.loopnames))
 Base.@propagate_inbounds Base.getindex(lo::LoopOrder, i::Int) = lo.oporder[i]
 Base.@propagate_inbounds Base.getindex(lo::LoopOrder, i...) = lo.oporder[LinearIndices(size(lo))[i...]]
 
@@ -149,7 +149,7 @@ end
 num_loops(ls::LoopSet) = length(ls.loops)
 function oporder(ls::LoopSet)
     N = length(ls.loop_order.loopnames)
-    reshape(ls.loop_order.oporder, (4,2,2,2,N))
+    reshape(ls.loop_order.oporder, (2,2,2,N))
 end
 names(ls::LoopSet) = ls.loop_order.loopnames
 isstaticloop(ls::LoopSet, s::Symbol) = ls.loops[s].hintexact
@@ -352,7 +352,7 @@ function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementby
             parent = add_operation!(ls, gensym(:indexpr), ind, elementbytes)
             pushparent!(parents, loopdependencies, reduceddeps, parent)
             # var = get(ls.opdict, ind, nothing)
-            indices[i] = mangledvar(parent)
+            indices[i] = name(parent)#mangledvar(parent)
         else
             throw("Unrecognized loop index: $ind.")
         end
@@ -734,9 +734,9 @@ function addoptoorder!(
     end
     isunrolled = (unrolled ∈ loopdependencies(op)) + 1
     istiled = (loopistiled ? (tiled ∈ loopdependencies(op)) : false) + 1
-    optype = Int(op.node_type) + 1
+    # optype = Int(op.node_type) + 1
     after_loop = place_after_loop[id] + 1
-    push!(lo[optype,isunrolled,istiled,after_loop,_n], op)
+    push!(lo[isunrolled,istiled,after_loop,_n], op)
     set_upstream_family!(place_after_loop, op, false) # parents that have already been included are not moved, so no need to check included_vars to filter
     nothing
 end

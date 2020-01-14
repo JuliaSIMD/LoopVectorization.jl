@@ -2,31 +2,60 @@
 variable_name(op::Operation, ::Nothing) = mangledvar(op)
 variable_name(op::Operation, suffix) = Symbol(mangledvar(op), suffix, :_)
 
-function append_inds!(ret::Expr, indices, loopedindex::Vector{Bool})
-    start = (first(indices) === Symbol("##DISCONTIGUOUSSUBARRAY##")) + 1# && return append_inds!(ret, @view(indices[2:end]), deps)
-    for (n,ind) ∈ enumerate(@view(indices[start:end]))
+struct TileDescription{T}
+    u::Int
+    unrolled::Symbol
+    tiled::Symbol
+    suffix::T
+end
+function parentind(ind::Symbol, op::Operation)
+    for (id,opp) ∈ enumerate(parents(op))
+        name(opp) === ind && return id
+    end
+    -1
+end
+function symbolind(ind::Symbol, op::Operation, td::TileDescription)
+    id = parentind(ind, op)
+    id == -1 && return Expr(:call, :-, ind, 1)
+    @unpack u, unrolled, tiled, suffix = td
+    parent = parents(op)[id]
+    pvar = if loopdependencies(parent) ∈ tiled
+        variable_name(parent, suffix)
+    else
+        mangledvar(parent)
+    end
+    if loopdependencies(parent) ∈ unrolled
+        pvar = Symbol(pvar, u)
+    end
+    Expr(:call, :-, pvar, 1)
+end
+function mem_offset(op::Operation, td::TileDescription)
+    @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
+    ret = Expr(:tuple)
+    indices = getindices(op)
+    loopedindex = op.ref.loopedindex
+    for (n,ind) ∈ enumerate(indices)
+        n == 1 && ind === Symbol("##DISCONTIGUOUSSUBARRAY##") && continue
         if ind isa Int
             push!(ret.args, ind)
         elseif loopedindex[n]
             push!(ret.args, ind)
         else
-            push!(ret.args, Expr(:call, :-, ind, 1))
+            push!(ret.args, symbolind(ind, op, td))
         end
     end
     ret
 end
-
-function mem_offset(op::Operation)
+function mem_offset_u(op::Operation, td::TileDescription)
     @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
-    append_inds!(Expr(:tuple), getindices(op), op.ref.loopedindex)
-end
-function mem_offset(op::Operation, incr::Int, unrolled::Symbol)
-    @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
+    @unpack unrolled, u = td
+    incr = u
     ret = Expr(:tuple)
     indices = getindices(op)
     loopedindex = op.ref.loopedindex
     if incr == 0
-        append_inds!(ret, indices, loopedindex)
+        return mem_offset(op, td)
+        # append_inds!(ret, indices, loopedindex)
     else
         for n ∈ 1:length(indices)
             ind = indices[n]
@@ -38,19 +67,22 @@ function mem_offset(op::Operation, incr::Int, unrolled::Symbol)
             elseif loopedindex[n]
                 push!(ret.args, ind)
             else
-                push!(ret.args, Expr(:call, :-, ind, 1))
+                push!(ret.args, symbolind(ind, op, td))
             end
         end
     end
     ret
 end
-function mem_offset(op::Operation, mul::Symbol, incr::Int, unrolled::Symbol)
+function mem_offset_u(op::Operation, td::TileDescription, mul::Symbol)
     @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
+    @unpack unrolled, u = td
+    incr = u
     ret = Expr(:tuple)
     indices = getindices(op)
     loopedindex = op.ref.loopedindex
     if incr == 0
-        append_inds!(ret, indices, loopedindex)
+        return mem_offset(op, td)
+        # append_inds!(ret, indices, loopedindex)
     else
         for n ∈ 1:length(indices)
             ind = indices[n]
@@ -62,7 +94,7 @@ function mem_offset(op::Operation, mul::Symbol, incr::Int, unrolled::Symbol)
             elseif loopedindex[n]
                 push!(ret.args, ind)
             else
-                push!(ret.args, Expr(:call, :-, ind, 1))
+                push!(ret.args, symbolind(ind, op, td))
             end
         end
     end
@@ -82,19 +114,21 @@ function varassignname(var::Symbol, u::Int, isunrolled::Bool)
     isunrolled ? Symbol(var, u) : var
 end
 # name_mo only gets called when vectorized
-function name_mo(var::Symbol, op::Operation, u::Int, W::Symbol, vecnotunrolled::Bool, unrolled::Symbol)
+function name_mo(var::Symbol, op::Operation, td::TileDescription, W::Symbol, vecnotunrolled::Bool)
+    @unpack u, unrolled = td
     if u < 0 # sentinel value meaning not unrolled
         name = var
-        mo = mem_offset(op)
+        mo = mem_offset(op, td)
     else
         name = Symbol(var, u)
-        mo = vecnotunrolled ? mem_offset(op, u, unrolled) : mem_offset(op, W, u, unrolled)
+        mo = vecnotunrolled ? mem_offset_u(op, td) : mem_offset_u(op, td, W)
     end
     name, mo
 end
-function pushvectorload!(q::Expr, op::Operation, var::Symbol, u::Int, U::Int, W::Symbol, mask, unrolled::Symbol, vecnotunrolled::Bool)
+function pushvectorload!(q::Expr, op::Operation, var::Symbol, td::TileDescription, U::Int, W::Symbol, mask, vecnotunrolled::Bool)
+    @unpack u, unrolled = td
     ptr = refname(op)
-    name, mo = name_mo(var, op, u, W, vecnotunrolled, unrolled)
+    name, mo = name_mo(var, op, td, W, vecnotunrolled)
     instrcall = Expr(:call, lv(:vload), W, ptr, mo)
     if mask !== nothing && (vecnotunrolled || u == U - 1)
         push!(instrcall.args, mask)
@@ -102,11 +136,12 @@ function pushvectorload!(q::Expr, op::Operation, var::Symbol, u::Int, U::Int, W:
     push!(q.args, Expr(:(=), name, instrcall))
 end
 function pushvectorgather!(
-    q::Expr, op::Operation, var::Symbol, u::Int, U::Int, W::Symbol,
-    mask, unrolled::Symbol, ustride::Symbol, vecnotunrolled::Bool
+    q::Expr, op::Operation, var::Symbol, td::TileDescription, U::Int, W::Symbol,
+    mask, ustride::Symbol, vecnotunrolled::Bool
 )
+    @unpack u, unrolled = td
     ptr = refname(op)
-    name, mo = name_mo(var, op, u, W, vecnotunrolled, unrolled)#, vecnotunrolled)
+    name, mo = name_mo(var, op, td, W, vecnotunrolled)#, vecnotunrolled)
     instrcall = Expr(:call, lv(:gather), ptr, mo, ustride)
     if mask !== nothing && (vecnotunrolled || u == U - 1)
         push!(instrcall.args, mask)
@@ -114,7 +149,7 @@ function pushvectorgather!(
     push!(q.args, Expr(:(=), name, instrcall))
 end
 function lower_load_scalar!( 
-    q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol, U::Int,
+    q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol, tiled::Symbol, U::Int,
     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
 )
     loopdeps = loopdependencies(op)
@@ -125,12 +160,13 @@ function lower_load_scalar!(
     U = isunrolled ? U : 1
     for u ∈ 0:U-1
         varname = varassignname(var, u, isunrolled)
-        push!(q.args, Expr(:(=), varname, Expr(:call, lv(:load),  ptr, mem_offset(op, u, unrolled))))
+        td = TileDescription(u, unrolled, tiled, suffix)
+        push!(q.args, Expr(:(=), varname, Expr(:call, lv(:load),  ptr, mem_offset_u(op, td))))
     end
     nothing
 end
 function lower_load_vectorized!(
-    q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol, U::Int,
+    q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol, tiled::Symbol, U::Int,
     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
 )
     loopdeps = loopdependencies(op)
@@ -147,7 +183,8 @@ function lower_load_vectorized!(
     vecnotunrolled = vectorized !== unrolled
     if first(getindices(op)) === vectorized # vload
         for u ∈ umin:U-1
-            pushvectorload!(q, op, var, u, U, W, mask, unrolled, vecnotunrolled)
+            td = TileDescription(u, unrolled, tiled, suffix)
+            pushvectorload!(q, op, var, td, U, W, mask, vecnotunrolled)
         end
     else
         sn = findfirst(x -> x === vectorized, getindices(op))::Int
@@ -155,7 +192,8 @@ function lower_load_vectorized!(
         ustride = gensym(:ustride)
         push!(q.args, Expr(:(=), ustride, ustrides))
         for u ∈ umin:U-1
-            pushvectorgather!(q, op, var, u, U, W, mask, unrolled, ustride, vecnotunrolled)
+            td = TileDescription(u, unrolled, tiled, suffix)
+            pushvectorgather!(q, op, var, td, U, W, mask, ustride, vecnotunrolled)
         end
     end
     nothing
@@ -164,13 +202,13 @@ end
 # TODO: this code should be rewritten to be more "orthogonal", so that we're just combining separate pieces.
 # Using sentinel values (eg, T = -1 for non tiling) in part to avoid recompilation.
 function lower_load!(
-    q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol, U::Int,
+    q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol, tiled::Symbol, U::Int,
     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
 )
     if vectorized ∈ loopdependencies(op)
-        lower_load_vectorized!(q, op, vectorized, W, unrolled, U, suffix, mask)
+        lower_load_vectorized!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask)
     else
-        lower_load_scalar!(q, op, vectorized, W, unrolled, U, suffix, mask)
+        lower_load_scalar!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask)
     end
 end
 function reduce_range!(q::Expr, toreduct::Symbol, instr::Instruction, Uh::Int, Uh2::Int)
@@ -227,7 +265,7 @@ function reduce_unroll!(q, op, U, unrolled)
     1, isunrolled
 end
 function lower_store_reduction!(
-    q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol, U::Int,
+    q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol, tiled::Symbol, U::Int,
     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned}, isunrolled::Bool
 )
     var = pvariable_name(op, suffix)
@@ -238,24 +276,26 @@ function lower_store_reduction!(
     for u ∈ 0:U-1
         reducedname = varassignname(var, u, isunrolled)
         storevar = Expr(reduct_instruct, reducedname)
-        push!(q.args, Expr(:call, lv(:store!), ptr, storevar, mem_offset(op, u, unrolled))) # store storevar
+        td = TileDescription(u, unrolled, tiled, suffix)
+        push!(q.args, Expr(:call, lv(:store!), ptr, storevar, mem_offset_u(op, td))) # store storevar
     end
     nothing
 end
 function lower_store_scalar!(
-    q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol, U::Int,
+    q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol, tiled::Symbol, U::Int,
     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned}, isunrolled::Bool
 )
     var = pvariable_name(op, suffix)
     ptr = refname(op)
     for u ∈ 0:U-1
         varname = varassignname(var, u, isunrolled)
-        push!(q.args, Expr(:call, lv(:store!), ptr, varname, mem_offset(op, u, unrolled)))
+        td = TileDescription(u, unrolled, tiled, suffix)
+        push!(q.args, Expr(:call, lv(:store!), ptr, varname, mem_offset_u(op, td)))
     end
     nothing
 end
 function lower_store_vectorized!(
-    q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol, U::Int,
+    q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol, tiled::Symbol, U::Int,
     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned}, isunrolled::Bool
 )
     loopdeps = loopdependencies(op)
@@ -272,7 +312,8 @@ function lower_store_vectorized!(
     vecnotunrolled = vectorized !== unrolled
     if first(loopdependencies(op)) === vectorized # vstore!
         for u ∈ 0:U-1
-            name, mo = name_mo(var, op, u, W, vecnotunrolled, unrolled)
+            td = TileDescription(u, unrolled, tiled, suffix)
+            name, mo = name_mo(var, op, td, W, vecnotunrolled)
             instrcall = Expr(:call,lv(:vstore!), ptr, name, mo)
             if mask !== nothing && (vecnotunrolled || u == U - 1)
                 push!(instrcall.args, mask)
@@ -283,7 +324,8 @@ function lower_store_vectorized!(
         sn = findfirst(x -> x === unrolled, loopdependencies(op))::Int
         ustrides = Expr(:call, lv(:vmul), Expr(:call, :stride, ptr, sn), Expr(:call, lv(:vrange), W))
         for u ∈ 0:U-1
-            name, mo = name_mo(var, op, u, W, vecnotunrolled, unrolled)
+            td = TileDescription(u, unrolled, tiled, suffix)
+            name, mo = name_mo(var, op, td, W, vecnotunrolled)
             instrcall = Expr(:call, lv(:scatter!), ptr, mo, ustrides, name)
             if mask !== nothing && (vecnotunrolled || u == U - 1)
                 push!(instrcall.args, mask)
@@ -294,16 +336,16 @@ function lower_store_vectorized!(
     nothing
 end
 function lower_store!(
-    q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol, U::Int,
+    q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol, tiled::Symbol, U::Int,
     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
 )
     U, isunrolled = reduce_unroll!(q, op, U, unrolled)
     if vectorized ∈ reduceddependencies(op)
-        lower_store_reduction!(q, op, vectorized, W, unrolled, U, suffix, mask, isunrolled)
+        lower_store_reduction!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask, isunrolled)
     elseif vectorized ∈ loopdependencies(op)
-        lower_store_vectorized!(q, op, vectorized, W, unrolled, U, suffix, mask, isunrolled)
+        lower_store_vectorized!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask, isunrolled)
     else
-        lower_store_scalar!(q, op, vectorized, W, unrolled, U, suffix, mask, isunrolled)
+        lower_store_scalar!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask, isunrolled)
     end
 end
 # A compute op needs to know the unrolling and tiling status of each of its parents.
@@ -422,36 +464,30 @@ function lower_constant!(
     end
     nothing
 end
-function lower!(
-    q::Expr, ops::AbstractVector{Operation}, vectorized::Symbol, W::Symbol, unrolled::Symbol, tiled::Symbol, U::Int,
-    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
-)
-    foreach(op -> lower!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask), ops)
-end
-function lower_load!(
-    q::Expr, ops::AbstractVector{Operation}, vectorized::Symbol, W::Symbol, unrolled::Symbol, U::Int,
-    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
-)
-    foreach(op -> lower_load!(q, op, vectorized, W, unrolled, U, suffix, mask), ops)
-end
-function lower_compute!(
-    q::Expr, ops::AbstractVector{Operation}, vectorized::Symbol, W::Symbol, unrolled::Symbol, tiled::Symbol, U::Int,
-    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
-)
-    foreach(op -> lower_compute!(q, op, vectorized, W, unrolled, tiled::Symbol, U, suffix, mask), ops)
-end
-function lower_store!(
-    q::Expr, ops::AbstractVector{Operation}, vectorized::Symbol, W::Symbol, unrolled::Symbol, U::Int,
-    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
-)
-    foreach(op -> lower_store!(q, op, vectorized, W, unrolled, U, suffix, mask), ops)
-end
-function lower_constant!(
-    q::Expr, ops::AbstractVector{Operation}, vectorized::Symbol, W::Symbol, unrolled::Symbol, U::Int,
-    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
-)
-    foreach(op -> lower_constant!(q, op, vectorized, W, unrolled, U, suffix, mask), ops)
-end
+# function lower_load!(
+#     q::Expr, ops::AbstractVector{Operation}, vectorized::Symbol, W::Symbol, unrolled::Symbol, U::Int,
+#     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
+# )
+#     foreach(op -> lower_load!(q, op, vectorized, W, unrolled, U, suffix, mask), ops)
+# end
+# function lower_compute!(
+#     q::Expr, ops::AbstractVector{Operation}, vectorized::Symbol, W::Symbol, unrolled::Symbol, tiled::Symbol, U::Int,
+#     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
+# )
+#     foreach(op -> lower_compute!(q, op, vectorized, W, unrolled, tiled::Symbol, U, suffix, mask), ops)
+# end
+# function lower_store!(
+#     q::Expr, ops::AbstractVector{Operation}, vectorized::Symbol, W::Symbol, unrolled::Symbol, U::Int,
+#     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
+# )
+#     foreach(op -> lower_store!(q, op, vectorized, W, unrolled, U, suffix, mask), ops)
+# end
+# function lower_constant!(
+#     q::Expr, ops::AbstractVector{Operation}, vectorized::Symbol, W::Symbol, unrolled::Symbol, U::Int,
+#     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
+# )
+#     foreach(op -> lower_constant!(q, op, vectorized, W, unrolled, U, suffix, mask), ops)
+# end
 
 function lower!(
     q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol, tiled::Symbol, U::Int,
@@ -460,25 +496,31 @@ function lower!(
     if isconstant(op)
         lower_constant!(q, op, vectorized, W, unrolled, U, suffix, mask)
     elseif isload(op)
-        lower_load!(q, op, vectorized, W, unrolled, U, suffix, mask)
+        lower_load!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask)
     elseif iscompute(op)
         lower_compute!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask)
     else#if isstore(op)
-        lower_store!(q, op, vectorized, W, unrolled, U, suffix, mask)
+        lower_store!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask)
     end
 end
 function lower!(
-    q::Expr, ops::AbstractVector{<:AbstractVector{Operation}}, vectorized::Symbol, W::Symbol, unrolled::Symbol, tiled::Symbol, U::Int,
+    q::Expr, ops::AbstractVector{Operation}, vectorized::Symbol, W::Symbol, unrolled::Symbol, tiled::Symbol, U::Int,
     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
 )
-    @assert length(ops) == 4
-    @inbounds begin
-        foreach(op -> lower_constant!(q, op, vectorized, W, unrolled, U, suffix, mask), ops[1])
-        foreach(op -> lower_load!(q, op, vectorized, W, unrolled, U, suffix, mask), ops[2])
-        foreach(op -> lower_compute!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask), ops[3])
-        foreach(op -> lower_store!(q, op, vectorized, W, unrolled, U, suffix, mask), ops[4])
-    end
+    foreach(op -> lower!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask), ops)
 end
+# function lower!(
+#     q::Expr, ops::AbstractVector{<:AbstractVector{Operation}}, vectorized::Symbol, W::Symbol, unrolled::Symbol, tiled::Symbol, U::Int,
+#     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
+# )
+#     @assert length(ops) == 4
+#     @inbounds begin
+#         foreach(op -> lower_constant!(q, op, vectorized, W, unrolled, U, suffix, mask), ops[1])
+#         foreach(op -> lower_load!(q, op, vectorized, W, unrolled, U, suffix, mask), ops[2])
+#         foreach(op -> lower_compute!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask), ops[3])
+#         foreach(op -> lower_store!(q, op, vectorized, W, unrolled, U, suffix, mask), ops[4])
+#     end
+# end
 
 tiledsym(s::Symbol) = Symbol("##outer##", s, "##outer##")
 function lower_nest(
@@ -525,11 +567,11 @@ function lower_nest(
     end
     for prepost ∈ 1:2
         # !U && !T
-        lower!(blockq, @view(ops[:,1,1,prepost,n]), vectorized, W, unrolled, last(order), U, nothing, mask)
+        lower!(blockq, ops[1,1,prepost,n], vectorized, W, unrolled, last(order), U, nothing, mask)
         # for u ∈ 0:U-1     #  U && !T
-        lower!(blockq, @view(ops[:,2,1,prepost,n]), vectorized, W, unrolled, last(order), U, nothing, mask)
+        lower!(blockq, ops[2,1,prepost,n], vectorized, W, unrolled, last(order), U, nothing, mask)
         # end
-        if sum(length, @view(ops[:,:,2,prepost,n])) > 0
+        if length(ops[1,2,prepost,n]) + length(ops[2,2,prepost,n]) > 0
             for t ∈ 0:T-1
                 if t == 0
                     push!(blockq.args, Expr(:(=), last(order), tiledsym(last(order))))
@@ -537,9 +579,9 @@ function lower_nest(
                     push!(blockq.args, Expr(:+=, last(order), 1))
                 end
                 # !U &&  T
-                lower!(blockq, @view(ops[:,1,2,prepost,n]), vectorized, W, unrolled, last(order), U, t, mask)
+                lower!(blockq, ops[1,2,prepost,n], vectorized, W, unrolled, last(order), U, t, mask)
                 # for u ∈ 0:U-1 #  U &&  T
-                lower!(blockq, @view(ops[:,2,2,prepost,n]), vectorized, W, unrolled, last(order), U, t, mask)
+                lower!(blockq, ops[2,2,prepost,n], vectorized, W, unrolled, last(order), U, t, mask)
                 # end
             end
         end
