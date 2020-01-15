@@ -172,7 +172,7 @@ function add_broadcast!(
     reduceddeps = Symbol[]
     for (i,arg) ∈ enumerate(args)
         argname = gensym(:arg)
-        pushpreamble!(ls, Expr(:(=), argname, Expr(:ref, bcargs, i)))
+        pushpreamble!(ls, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,@__FILE__), Expr(:(=), argname, Expr(:ref, bcargs, i))))
         # dynamic dispatch
         parent = add_broadcast!(ls, gensym(:temp), argname, loopsyms, arg, elementbytes)::Operation
         pushparent!(parents, deps, reduceddeps, parent)

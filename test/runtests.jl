@@ -556,12 +556,6 @@ using LinearAlgebra
         end
     end
 
-    maxdeg = 20
-    nbasis = 10_000
-    dim = 10
-    basis = rand(1:(maxdeg+1), (dim, nbasis))
-    coeffs = rand(nbasis)
-    P = rand(dim, maxdeg+1)
 
     function mvp(P, basis, coeffs::Vector{T}) where {T}
         len_c = length(coeffs)
@@ -576,7 +570,29 @@ using LinearAlgebra
         end
         return p
     end
-
+    function mvpavx(P, basis, coeffs::Vector{T}) where {T}
+        len_c = length(coeffs)
+        len_P = size(P, 1)
+        p = zero(T)
+        @avx for n = 1:len_c
+            pn = coeffs[n]
+            for a = 1:len_P
+                pn *= P[a, basis[a, n]]
+            end
+            p += pn
+        end
+        return p
+    end
+    maxdeg = 20; nbasis = 10_000; dim = 10;
+    bq = :(for n = 1:len_c
+           pn = coeffs[n]
+           for a = 1:len_P
+                pn *= P[a, basis[a, n]]
+            end
+            p += pn
+           end)
+    lsb = LoopVectorization.LoopSet(bq)
+    
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
         A = randn(T, 199, 498);
@@ -601,6 +617,11 @@ using LinearAlgebra
         x = rand(T, M); A = rand(T, M, N); y = rand(T, N);
         @test dot3avx(x, A, y) ≈ dot3(x, A, y)
 
+        r = T == Float32 ? (Int32(1):Int32(maxdeg+1)) : (1:maxdeg+1)
+        basis = rand(r, (dim, nbasis));
+        coeffs = rand(T, nbasis);
+        P = rand(T, dim, maxdeg+1);
+        @test mvp(P, basis, coeffs) ≈ mvpavx(P, basis, coeffs)
     end
 end
 

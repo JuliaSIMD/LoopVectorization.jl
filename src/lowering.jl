@@ -3,7 +3,7 @@ variable_name(op::Operation, ::Nothing) = mangledvar(op)
 variable_name(op::Operation, suffix) = Symbol(mangledvar(op), suffix, :_)
 
 struct TileDescription{T}
-    u::Int
+    u::Int32
     unrolled::Symbol
     tiled::Symbol
     suffix::T
@@ -16,18 +16,18 @@ function parentind(ind::Symbol, op::Operation)
 end
 function symbolind(ind::Symbol, op::Operation, td::TileDescription)
     id = parentind(ind, op)
-    id == -1 && return Expr(:call, :-, ind, 1)
+    id == -1 && return Expr(:call, :-, ind, one(Int32))
     @unpack u, unrolled, tiled, suffix = td
     parent = parents(op)[id]
-    pvar = if loopdependencies(parent) ∈ tiled
+    pvar = if tiled ∈ loopdependencies(parent)
         variable_name(parent, suffix)
     else
         mangledvar(parent)
     end
-    if loopdependencies(parent) ∈ unrolled
+    if unrolled ∈ loopdependencies(parent)
         pvar = Symbol(pvar, u)
     end
-    Expr(:call, :-, pvar, 1)
+    Expr(:call, :-, pvar, one(Int32))
 end
 function mem_offset(op::Operation, td::TileDescription)
     @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
@@ -110,7 +110,7 @@ end
 #         Expr(:call, :+, q, incr)
 #     end
 # end
-function varassignname(var::Symbol, u::Int, isunrolled::Bool)
+function varassignname(var::Symbol, u::Int32, isunrolled::Bool)
     isunrolled ? Symbol(var, u) : var
 end
 # name_mo only gets called when vectorized
@@ -158,7 +158,7 @@ function lower_load_scalar!(
     ptr = refname(op)
     isunrolled = unrolled ∈ loopdeps
     U = isunrolled ? U : 1
-    for u ∈ 0:U-1
+    for u ∈ zero(Int32):Base.unsafe_trunc(Int32,U-1)
         varname = varassignname(var, u, isunrolled)
         td = TileDescription(u, unrolled, tiled, suffix)
         push!(q.args, Expr(:(=), varname, Expr(:call, lv(:load),  ptr, mem_offset_u(op, td))))
@@ -172,17 +172,17 @@ function lower_load_vectorized!(
     loopdeps = loopdependencies(op)
     @assert vectorized ∈ loopdeps
     if unrolled ∈ loopdeps
-        umin = 0
+        umin = zero(Int32)
         U = U
     else
-        umin = -1
+        umin = -one(Int32)
         U = 0
     end
     # Urange = unrolled ∈ loopdeps ? 0:U-1 : 0
     var = variable_name(op, suffix)
     vecnotunrolled = vectorized !== unrolled
     if first(getindices(op)) === vectorized # vload
-        for u ∈ umin:U-1
+        for u ∈ umin:Base.unsafe_trunc(Int32,U-1)
             td = TileDescription(u, unrolled, tiled, suffix)
             pushvectorload!(q, op, var, td, U, W, mask, vecnotunrolled)
         end
@@ -191,7 +191,7 @@ function lower_load_vectorized!(
         ustrides = Expr(:call, lv(:vmul), Expr(:call, :stride, refname(op), sn), Expr(:call, lv(:vrange), W))
         ustride = gensym(:ustride)
         push!(q.args, Expr(:(=), ustride, ustrides))
-        for u ∈ umin:U-1
+        for u ∈ umin:Base.unsafe_trunc(Int32,U-1)
             td = TileDescription(u, unrolled, tiled, suffix)
             pushvectorgather!(q, op, var, td, U, W, mask, ustride, vecnotunrolled)
         end
@@ -273,7 +273,7 @@ function lower_store_reduction!(
     # need to find out reduction type
     instr = first(parents(op)).instruction
     reduct_instruct = CORRESPONDING_REDUCTION[instr]
-    for u ∈ 0:U-1
+    for u ∈ zero(Int32):Base.unsafe_trunc(Int32,U-1)
         reducedname = varassignname(var, u, isunrolled)
         storevar = Expr(reduct_instruct, reducedname)
         td = TileDescription(u, unrolled, tiled, suffix)
@@ -287,7 +287,7 @@ function lower_store_scalar!(
 )
     var = pvariable_name(op, suffix)
     ptr = refname(op)
-    for u ∈ 0:U-1
+    for u ∈ zero(Int32):Base.unsafe_trunc(Int32,U-1)
         varname = varassignname(var, u, isunrolled)
         td = TileDescription(u, unrolled, tiled, suffix)
         push!(q.args, Expr(:call, lv(:store!), ptr, varname, mem_offset_u(op, td)))
@@ -302,16 +302,16 @@ function lower_store_vectorized!(
     @assert unrolled ∈ loopdeps
     var = pvariable_name(op, suffix)
     if isunrolled
-        umin = 0
+        umin = zero(Int32)
         U = U
     else
-        umin = -1
+        umin = -one(Int32)
         U = 0
     end
     ptr = refname(op)
     vecnotunrolled = vectorized !== unrolled
     if first(loopdependencies(op)) === vectorized # vstore!
-        for u ∈ 0:U-1
+        for u ∈ zero(Int32):Base.unsafe_trunc(Int32,U-1)
             td = TileDescription(u, unrolled, tiled, suffix)
             name, mo = name_mo(var, op, td, W, vecnotunrolled)
             instrcall = Expr(:call,lv(:vstore!), ptr, name, mo)
@@ -323,7 +323,7 @@ function lower_store_vectorized!(
     else
         sn = findfirst(x -> x === unrolled, loopdependencies(op))::Int
         ustrides = Expr(:call, lv(:vmul), Expr(:call, :stride, ptr, sn), Expr(:call, lv(:vrange), W))
-        for u ∈ 0:U-1
+        for u ∈ zero(Int32):Base.unsafe_trunc(Int32,U-1)
             td = TileDescription(u, unrolled, tiled, suffix)
             name, mo = name_mo(var, op, td, W, vecnotunrolled)
             instrcall = Expr(:call, lv(:scatter!), ptr, mo, ustrides, name)
