@@ -428,6 +428,7 @@ end
 function add_load!(
     ls::LoopSet, var::Symbol, mpref::ArrayReferenceMetaPosition, elementbytes::Int = 8
 )
+    length(mpref.loopdependencies) == 0 && return add_constant!(ls, var, mpref, elementbytes)
     ref = mpref.mref.ref
     # try to CSE
     id = findfirst(r -> r == ref, ls.refs_aliasing_syms)
@@ -518,6 +519,12 @@ function add_constant!(ls::LoopSet, var, elementbytes::Int = 8)
     pushpreamble!(ls, Expr(:(=), mangledvar(op), var))
     pushop!(ls, op, sym)
 end
+function add_constant!(ls::LoopSet, var::Symbol, mpref::ArrayReferenceMetaPosition, elementbytes::Int)
+    op = Operation(length(operations(ls)), var, elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS, mpref.mref)
+    add_vptr!(ls, op)
+    pushpreamble!(ls, Expr(:(=), mangledvar(op), Expr(:call, lv(:load), mpref.mref.ptr, mem_offset(op, TileDescription(zero(Int32), Symbol(""), Symbol(""), nothing)))))
+    pushop!(ls, op, var)
+end
 # This version has loop dependencies. var gets assigned to sym when lowering.
 function add_constant!(ls::LoopSet, var::Symbol, deps::Vector{Symbol}, sym::Symbol = gensym(:constant), f::Symbol = Symbol(""), elementbytes::Int = 8)
     # length(deps) == 0 && push!(ls.preamble.args, Expr(:(=), sym, var))
@@ -533,7 +540,7 @@ end
 function pushparent!(parents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, parent::Operation)
     push!(parents, parent)
     mergesetdiffv!(deps, loopdependencies(parent), reduceddependencies(parent))
-    if !(isload(parent) || isconstant(parent))
+    if !(isload(parent) || isconstant(parent)) && parent.instruction.instr ∉ (:reduced_add, :reduced_prod, :reduce_to_add, :reduce_to_prod)
         mergesetv!(reduceddeps, reduceddependencies(parent))
     end
     nothing
@@ -585,8 +592,12 @@ function add_reduction_update_parent!(
         reductcombine = Symbol("")
     end
     # mergesetv!(reduceddeps, deps)
-    setdiffv!(reduceddeps, deps, loopdependencies(reductinit))
-    mergesetv!(reduceddependencies(reductinit), reduceddeps)
+    if length(reduceddependencies(reductinit)) == 0
+        setdiffv!(reduceddeps, deps, loopdependencies(reductinit))
+    else
+        setdiffv!(reduceddeps, deps, loopdependencies(reductinit))
+    end
+    # mergesetv!(reduceddependencies(reductinit), reduceddeps)
     pushparent!(parents, deps, reduceddeps, reductinit)#parent) # deps and reduced deps will not be disjoint
     op = Operation(length(operations(ls)), reductsym, elementbytes, instr, compute, deps, reduceddeps, parents)
     parent.instruction === LOOPCONSTANT && push!(ls.outer_reductions, identifier(op))

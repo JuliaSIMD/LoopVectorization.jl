@@ -40,7 +40,7 @@ using LinearAlgebra
     @test logsumexp!(r, x) ≈ 102.35216846104409
 
     @testset "GEMM" begin
-        using LoopVectorization, Test
+        using LoopVectorization, Test; T = Float64
         Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 4)
         AmulBq1 = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
                     C[m,n] = zeroB
@@ -209,7 +209,7 @@ using LinearAlgebra
 	    C12 += A[k,m] * B[k,n1] 
 	    C22 += A[k,m1] * B[k,n1]
 	    end)
-lsmul2x2q = LoopVectorization.LoopSet(mul2x2q)
+        # lsmul2x2q = LoopVectorization.LoopSet(mul2x2q)
 
         function toy1!(G, B,κ)
             d = size(G,1)
@@ -220,15 +220,6 @@ lsmul2x2q = LoopVectorization.LoopSet(mul2x2q)
                 end
             end
         end
-        # function toy4!(G, B,κ)
-            # d = size(G,1)
-            # @avx for d1=1:d
-                # G[d1,κ] = B[1,d1]*B[1,κ]
-                # for d2=2:d
-                    # G[d1,κ] += B[d2,d1]*B[d2,κ]
-                # end
-            # end
-        # end
         # tq1 = :(for d1=1:d
                 # G[d1,κ] = B[1,d1]*B[1,κ]
                 # for d2=2:d
@@ -271,6 +262,15 @@ lsmul2x2q = LoopVectorization.LoopSet(mul2x2q)
                 G[d1,κ] = z
                 end);
         lst3 = LoopVectorization.LoopSet(tq3)
+        function toy4!(G, B,κ)
+            d = size(G,1)
+            @avx for d1=1:d
+                G[d1,κ] = B[1,d1]*B[1,κ]
+                for d2=2:d
+                    G[d1,κ] += B[d2,d1]*B[d2,κ]
+                end
+            end
+        end
 
         for T ∈ (Float32, Float64, Int32, Int64)
             @show T, @__LINE__
@@ -311,6 +311,8 @@ lsmul2x2q = LoopVectorization.LoopSet(mul2x2q)
             toy2!(G2,B,1)
             @test G1 ≈ G2
             fill!(G2, TC(NaN)), toy3!(G2,B,1);
+            @test G1 ≈ G2
+            fill!(G2, TC(NaN)), toy4!(G2,B,1);
             @test G1 ≈ G2
             # fill!(G2, TC(NaN)), toy4!(G2,B,1);
             # @test G1 ≈ G2
@@ -448,7 +450,7 @@ lsmul2x2q = LoopVectorization.LoopSet(mul2x2q)
                   y[i] = yᵢ
                   end)
         lsgemv = LoopVectorization.LoopSet(gemvq);
-        @test LoopVectorization.choose_order(lsgemv) == (Symbol[:i, :j], :i, 8, -1)
+        @test LoopVectorization.choose_order(lsgemv) == (Symbol[:i, :j], :i, 4, -1)
 
         function mygemv!(y, A, x)
             @inbounds for i ∈ eachindex(y)
@@ -645,7 +647,9 @@ lsmul2x2q = LoopVectorization.LoopSet(mul2x2q)
         basis = rand(r, (dim, nbasis));
         coeffs = rand(T, nbasis);
         P = rand(T, dim, maxdeg+1);
-        @test_broken mvp(P, basis, coeffs) ≈ mvpavx(P, basis, coeffs)
+        mvp(P, basis, coeffs)
+        mvpavx(P, basis, coeffs)
+        @test mvp(P, basis, coeffs) ≈ mvpavx(P, basis, coeffs)
     end
 end
 

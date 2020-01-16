@@ -30,7 +30,7 @@ function symbolind(ind::Symbol, op::Operation, td::TileDescription)
     Expr(:call, :-, pvar, one(Int32))
 end
 function mem_offset(op::Operation, td::TileDescription)
-    @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
+    # @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
     ret = Expr(:tuple)
     indices = getindices(op)
     loopedindex = op.ref.loopedindex
@@ -146,7 +146,7 @@ function lower_load_scalar!(
     for u ∈ zero(Int32):Base.unsafe_trunc(Int32,U-1)
         varname = varassignname(var, u, isunrolled)
         td = TileDescription(u, unrolled, tiled, suffix)
-        push!(q.args, Expr(:(=), varname, Expr(:call, lv(:load),  ptr, mem_offset_u(op, td))))
+        push!(q.args, Expr(:(=), varname, Expr(:call, lv(:load), ptr, mem_offset_u(op, td))))
     end
     nothing
 end
@@ -512,11 +512,7 @@ function lower_nest(
     blockq = Expr(:block)
     if n > 1
         looptoadd = order[n-1]
-        if looptoadd === vectorized
-            push!(blockq.args, Expr(:(=), looptoadd, Expr(:call, lv(:_MM), W, loopstart)))
-        else
-            push!(blockq.args, Expr(:(=), looptoadd, loopstart))
-        end
+        push!(blockq.args, startloop(ls.loops[looptoadd], looptoadd === vectorized, W, looptoadd))
     end
     loopq = if exprtype === :block
         blockq
@@ -875,11 +871,7 @@ function lower_unrolled(ls::LoopSet, vectorized::Symbol, U::Int)
     W = ls.W
     typeT = ls.T
     setup_Wmask!(ls, W, typeT, vectorized, unrolled, last(order), U)
-    initunrolledcounter = if unrolled === vectorized
-        Expr(:(=), unrolled, Expr(:call, lv(:_MM), W, 0))
-    else
-        Expr(:(=), unrolled, 0)
-    end
+    initunrolledcounter = startloop(ls.loops[unrolled], unrolled === vectorized, W, unrolled)
     q = lower_unrolled!(Expr(:block, initunrolledcounter), ls, vectorized, U, -1, W, typeT, ls.loops[unrolled])
     lsexpr(ls, q)
 end
