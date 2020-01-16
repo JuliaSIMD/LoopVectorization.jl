@@ -1,72 +1,79 @@
+
 struct ArrayReference
     array::Symbol
-    ref::Vector{Union{Symbol,Int}}
-    loaded::Base.RefValue{Bool}
-    ptr::Symbol
-end
-function ArrayReference(array::Symbol, ref, loaded)
-    ArrayReference(
-        array, ref, loaded,
-        Symbol("##vptr##_", array)
-    )
-end
-ArrayReference(array::Symbol, ref) = ArrayReference(array, ref, Ref{Bool}(false))
-function ArrayReference(
-    array::Symbol,
-    ref::AbstractVector
-)
-    ArrayReference(array, ref, Ref{Bool}(false))
-end
-function Base.hash(x::ArrayReference, h::UInt)
-    @inbounds for n ∈ eachindex(x)
-        h = hash(x.ref[n], h)
-    end
-    hash(x.array, h)
-end
-function loopdependencies(ref::ArrayReference)
-    ld = Symbol[]
-    for r ∈ ref.ref
-        r isa Symbol && push!(ld, r)
-    end
-    ld
+    indices::Vector{Union{Symbol,Int}}
 end
 function Base.isequal(x::ArrayReference, y::ArrayReference)
     x.array === y.array || return false
-    nrefs = length(x.ref)
-    nrefs == length(y.ref) || return false
-    all(n -> x.ref[n] === y.ref[n], 1:nrefs)
-    # for n ∈ 1:nrefs
-        # x.ref[n] === y.ref[n] || return false
-    # end
-    # true
+    xinds = x.indices
+    yinds = y.indices
+    nrefs = length(xinds)
+    nrefs == length(yinds) || return false
+    for n ∈ 1:nrefs
+        xinds[n] === yinds[n] || return false
+    end
+    true
 end
-
+struct ArrayReferenceMeta
+    ref::ArrayReference
+    loopedindex::Vector{Bool}
+    # loopdependencies::Vector{Symbol}
+    ptr::Symbol
+end
+function ArrayReferenceMeta(ref::ArrayReference, loopedindex, ptr = vptr(ref))
+    ArrayReferenceMeta(
+    ref, loopedindex, ptr
+    )
+end
+# function Base.hash(x::ArrayReference, h::UInt)
+    # @inbounds for n ∈ eachindex(x)
+        # h = hash(x.ref[n], h)
+    # end
+    # hash(x.array, h)
+# end
+loopdependencies(ref::ArrayReferenceMeta) = ref.ref.indices
+Base.convert(::Type{ArrayReference}, ref::ArrayReferenceMeta) = ref.ref
 Base.:(==)(x::ArrayReference, y::ArrayReference) = isequal(x, y)
+Base.:(==)(x::ArrayReferenceMeta, y::ArrayReferenceMeta) = isequal(x.ref, y.ref)
 
-function ref_from_expr(ex, offset1::Int = 0, offset2 = 0)
-    ArrayReference( ex.args[1 + offset1], @view(ex.args[2 + offset2:end]), Ref(false) )
+
+function ref_from_expr(ex, offset1::Int, offset2::Int)
+    (ex.args[1 + offset1])::Symbol, @view(ex.args[2 + offset2:end])
 end
 ref_from_ref(ex::Expr) = ref_from_expr(ex, 0, 0)
 ref_from_getindex(ex::Expr) = ref_from_expr(ex, 1, 1)
 ref_from_setindex(ex::Expr) = ref_from_expr(ex, 1, 2)
-function ArrayReference(ex::Expr)
-    ex.head === :ref ? ref_from_ref(ex) : ref_from_getindex(ex)
-end
-function Base.:(==)(x::ArrayReference, y::Expr)
-    if y.head === :ref
-        isequal(x, ref_from_ref(y))
-    elseif y.head === :call && first(y.args) === :getindex
-        isequal(x, ref_from_getindex(y))
-    else
-        false
+function ref_from_expr(ex::Expr)
+    if ex.head === :ref
+        ref_from_ref(ex)
+    else#if ex.head === :call
+        f = first(ex.args)::Symbol
+        f === :getindex ? ref_from_getindex(ex) : ref_from_setindex(ex)
     end
 end
+
+function Base.:(==)(x::ArrayReference, y::Expr)::Bool
+    ya, yinds = if y.head === :ref
+        ref_from_ref(y)
+    elseif y.head === :call
+        f = first(y.args)
+        if f === :getindex
+            ya, yinds = ref_from_getindex(y)
+        elseif f === :setindex!
+            ya, yinds = ref_from_setindex(y)
+        else
+            return false
+        end
+    else
+        return false
+    end
+    x.array == ya || return false
+    
+end
+Base.:(==)(x::ArrayReference, y::ArrayReferenceMeta) = x == y.ref
+Base.:(==)(x::ArrayReferenceMeta, y::ArrayReference) = x.ref == y
 Base.:(==)(x::ArrayReference, y) = false
-
-
-
-# Avoid memory allocations by accessing this
-const NOTAREFERENCE = ArrayReference(Symbol(""), Union{Symbol,Int}[], Ref(false))
+Base.:(==)(x::ArrayReferenceMeta, y) = false
 
 @enum OperationType begin
     constant
@@ -74,9 +81,6 @@ const NOTAREFERENCE = ArrayReference(Symbol(""), Union{Symbol,Int}[], Ref(false)
     compute
     memstore
 end
-
-# const ID = Threads.Atomic{UInt}(0)
-
 
 # TODO: can some computations be cached in the operations?
 """
@@ -90,7 +94,7 @@ struct Operation
     dependencies::Vector{Symbol}
     reduced_deps::Vector{Symbol}
     parents::Vector{Operation}
-    ref::ArrayReference
+    ref::ArrayReferenceMeta
     mangledvariable::Symbol
     function Operation(
         identifier::Int,
@@ -101,7 +105,7 @@ struct Operation
         dependencies = Symbol[],
         reduced_deps = Symbol[],
         parents = Operation[],
-        ref::ArrayReference = NOTAREFERENCE
+        ref::ArrayReferenceMeta = NOTAREFERENCE
     )
         new(
             identifier, variable, elementbytes, instruction, node_type,
@@ -112,6 +116,28 @@ struct Operation
             Symbol("##", variable, :_)
         )
     end
+end
+
+function UndefinedStore(id, elementbytes)
+    Operation(
+    id, gensym(:)
+    )
+end
+function matches(op1::Operation, op2::Operation)
+    op1.instruction === op2.instruction || return false
+    op1.node_type == op2.node_type || return false
+    isconstant(op1) && return false
+    op1.dependencies == op2.dependencies || return false
+    op2.reduced_deps == op2.reduced_deps || return false
+    if isload(op1)
+        op1.ref.ref == op2.ref.ref || return false
+    end
+    nparents = length(parents(op1))
+    nparents == length(parents(op2)) || return false
+    for p ∈ 1:nparents
+        matches(op1.parents[p], op2.parents[p]) || return false
+    end
+    true
 end
 
  # negligible save on allocations for operations that don't need these (eg, constants).
@@ -126,11 +152,11 @@ function Base.show(io::IO, op::Operation)
             print(io, Expr(:(=), op.variable, op.instruction.instr))
         end
     elseif isload(op)
-        print(io, Expr(:(=), op.variable, Expr(:ref, op.ref.array, op.ref.ref...)))
+        print(io, Expr(:(=), op.variable, Expr(:ref, name(op.ref), getindices(op)...)))
     elseif iscompute(op)
         print(io, Expr(:(=), op.variable, Expr(op.instruction, name.(parents(op))...)))
     elseif isstore(op)
-        print(io, Expr(:(=), Expr(:ref, op.ref.array, op.ref.ref...), name(first(parents(op)))))
+        print(io, Expr(:(=), Expr(:ref, name(op.ref), getindices(op)...), name(first(parents(op)))))
     end
 end
 
@@ -150,9 +176,15 @@ parents(op::Operation) = op.parents
 loopdependencies(op::Operation) = op.dependencies
 reduceddependencies(op::Operation) = op.reduced_deps
 identifier(op::Operation) = op.identifier + 1
+vptr(x::Symbol) = Symbol("##vptr##_", x)
+vptr(x::ArrayReference) = vptr(x.array)
+vptr(x::ArrayReferenceMeta) = x.ptr
+vptr(x::Operation) = x.ref.ptr
+name(x::ArrayReference) = x.array
+name(x::ArrayReferenceMeta) = x.ref.array
 name(op::Operation) = op.variable
 instruction(op::Operation) = op.instruction
-
+isreductionzero(op::Operation, instr::Symbol) = op.instruction.mod === REDUCTION_ZERO[instr]
 refname(op::Operation) = op.ref.ptr
 """
     mvar = mangledvar(op)
@@ -189,6 +221,30 @@ function isouterreduction(op::Operation)
         -1
     end
 end
+
+struct ArrayReferenceMetaPosition
+    mref::ArrayReferenceMeta
+    parents::Vector{Operation}
+    loopdependencies::Vector{Symbol}
+    reduceddeps::Vector{Symbol}
+end
+function ArrayReferenceMetaPosition(parents::Vector{Operation}, ldref::Vector{Symbol}, reduceddeps::Vector{Symbol})
+    ArrayReferenceMetaPosition( NOTAREFERENCE, parents, ldref, reduceddeps )
+end
+function Operation(id::Int, var::Symbol, elementbytes::Int, instr, optype::OperationType, mpref::ArrayReferenceMetaPosition)
+    Operation( id, var, elementbytes, instr, optype, mpref.loopdependencies, mpref.reduceddeps, mpref.parents, mpref.mref )
+end
+Base.:(==)(x::ArrayReferenceMetaPosition, y::ArrayReferenceMetaPosition) = x.mref.ref == y.mref.ref
+# Avoid memory allocations by using this for ops that aren't references
+const NOTAREFERENCE = ArrayReferenceMeta(ArrayReference(Symbol(""), Union{Symbol,Int}[]),Bool[],Symbol(""))
+const NOTAREFERENCEMP = ArrayReferenceMetaPosition(NOTAREFERENCE, NOPARENTS, Symbol[], Symbol[])
+name(mpref::ArrayReferenceMetaPosition) = name(mpref.mref.ref)
+
+getindices(ref::ArrayReference) = ref.indices
+getindices(mref::ArrayReferenceMeta) = mref.ref.indices
+getindices(mpref::ArrayReferenceMetaPosition) = mpref.ref.ref.indices
+getindices(op::Operation) = op.ref.ref.indices
+
 
 # function hasintersection(s1::Set{T}, s2::Set{T}) where {T}
     # for x ∈ s1

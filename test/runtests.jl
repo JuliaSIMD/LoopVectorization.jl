@@ -26,15 +26,22 @@ using LinearAlgebra
 
         return log1p(s-1) + u
     end
-
+    feq = :(for i = 1:n
+            tmp = exp(x[i] - u)
+            r[i] = tmp
+            s += tmp
+            end)
+    lsfeq = LoopVectorization.LoopSet(feq);
+    lsfeq.operations
+    
     x = collect(1:1_000) ./ 10;
     r = similar(x);
 
     @test logsumexp!(r, x) ≈ 102.35216846104409
 
     @testset "GEMM" begin
-        using LoopVectorization, Test
-        U, T = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 4)
+        using LoopVectorization, Test; T = Float64
+        Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 4)
         AmulBq1 = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
                     C[m,n] = zeroB
                for k ∈ 1:size(A,2)
@@ -42,7 +49,7 @@ using LinearAlgebra
                end
                end)
         lsAmulB1 = LoopVectorization.LoopSet(AmulBq1);
-        @test LoopVectorization.choose_order(lsAmulB1) == (Symbol[:n,:m,:k], :m, U, T)
+        @test LoopVectorization.choose_order(lsAmulB1) == (Symbol[:n,:m,:k], :m, Unum, Tnum)
         AmulBq2 = :(for m ∈ 1:M, n ∈ 1:N
                C[m,n] = zero(eltype(B))
                for k ∈ 1:K
@@ -50,7 +57,7 @@ using LinearAlgebra
                end
                 end)
         lsAmulB2 = LoopVectorization.LoopSet(AmulBq2);
-        @test LoopVectorization.choose_order(lsAmulB2) == (Symbol[:n,:m,:k], :m, U, T)
+        @test LoopVectorization.choose_order(lsAmulB2) == (Symbol[:n,:m,:k], :m, Unum, Tnum)
         AmulBq3 = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
                 ΔCₘₙ = zero(eltype(C))
                 for k ∈ 1:size(A,2)
@@ -59,7 +66,7 @@ using LinearAlgebra
                 C[m,n] += ΔCₘₙ
            end)
         lsAmulB3 = LoopVectorization.LoopSet(AmulBq3);
-        @test LoopVectorization.choose_order(lsAmulB3) == (Symbol[:n,:m,:k], :m, U, T)
+        @test LoopVectorization.choose_order(lsAmulB3) == (Symbol[:n,:m,:k], :m, Unum, Tnum)
 
         function AmulB!(C, A, B)
             C .= 0
@@ -123,7 +130,7 @@ using LinearAlgebra
             end)
         lsAtmulB = LoopVectorization.LoopSet(AtmulBq);
         # LoopVectorization.choose_order(lsAtmulB)
-        @test LoopVectorization.choose_order(lsAtmulB) == (Symbol[:m,:n,:k], :k, U, T)
+        @test LoopVectorization.choose_order(lsAtmulB) == (Symbol[:m,:n,:k], :k, Unum, Tnum)
         
         function AtmulBavx!(C, A, B)
             @avx for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
@@ -196,8 +203,77 @@ using LinearAlgebra
 	    end
             return C
         end
-        
+        mul2x2q = :(for k ∈ 1:K
+	    C11 += A[k,m] * B[k,n] 
+	    C21 += A[k,m1] * B[k,n] 
+	    C12 += A[k,m] * B[k,n1] 
+	    C22 += A[k,m1] * B[k,n1]
+	    end)
+        # lsmul2x2q = LoopVectorization.LoopSet(mul2x2q)
+
+        function toy1!(G, B,κ)
+            d = size(G,1)
+            @inbounds for d1=1:d
+                G[d1,κ] = B[1,d1]*B[1,κ]
+                for d2=2:d
+                    G[d1,κ] += B[d2,d1]*B[d2,κ]
+                end
+            end
+        end
+        # tq1 = :(for d1=1:d
+                # G[d1,κ] = B[1,d1]*B[1,κ]
+                # for d2=2:d
+                    # G[d1,κ] += B[d2,d1]*B[d2,κ]
+                # end
+                # end)
+        # lst1 = LoopVectorization.LoopSet(tq1)
+        function toy2!(G, B,κ)
+            d = size(G,1)
+            z = zero(eltype(G))
+            @avx for d1=1:d
+                G[d1,κ] = z
+                for d2=1:d
+                    G[d1,κ] += B[d2,d1]*B[d2,κ]
+                end
+            end
+        end
+        tq2 = :(for d1=1:d
+                G[d1,κ] = z
+                for d2=1:d
+                    G[d1,κ] += B[d2,d1]*B[d2,κ]
+                end
+                end)
+        lst2 = LoopVectorization.LoopSet(tq2)
+        function toy3!(G, B,κ)
+            d = size(G,1)
+            @avx for d1=1:d
+                z = zero(eltype(G))
+                for d2=1:d
+                    z += B[d2,d1]*B[d2,κ]
+                end
+                G[d1,κ] = z
+            end
+        end
+        tq3 = :(for d1=1:d
+                z = 0
+                for d2=1:d
+                z += B[d2,d1]*B[d2,κ]
+                end
+                G[d1,κ] = z
+                end);
+        lst3 = LoopVectorization.LoopSet(tq3)
+        function toy4!(G, B,κ)
+            d = size(G,1)
+            @avx for d1=1:d
+                G[d1,κ] = B[1,d1]*B[1,κ]
+                for d2=2:d
+                    G[d1,κ] += B[d2,d1]*B[d2,κ]
+                end
+            end
+        end
+
         for T ∈ (Float32, Float64, Int32, Int64)
+            @show T, @__LINE__
             M, K, N = 72, 75, 68;
             TC = sizeof(T) == 4 ? Float32 : Float64
             R = T <: Integer ? (T(1):T(1000)) : T
@@ -226,10 +302,25 @@ using LinearAlgebra
             rank2AmulBavx!(C, Aₘ, Aₖ, B)
             rank2AmulB!(C2, Aₘ, Aₖ, B)
             @test C ≈ C2
+
+            B = rand(R, N, N);
+            G1 = Matrix{TC}(undef, N, 1);
+            G2 = similar(G1);
+            # G3 = similar(G1);
+            toy1!(G1,B,1)
+            toy2!(G2,B,1)
+            @test G1 ≈ G2
+            fill!(G2, TC(NaN)), toy3!(G2,B,1);
+            @test G1 ≈ G2
+            fill!(G2, TC(NaN)), toy4!(G2,B,1);
+            @test G1 ≈ G2
+            # fill!(G2, TC(NaN)), toy4!(G2,B,1);
+            # @test G1 ≈ G2
         end
     end
 
-    @testset "dot" begin
+@testset "dot" begin
+    using LoopVectorization, Test
         dotq = :(for i ∈ eachindex(a,b)
                  s += a[i]*b[i]
                  end)
@@ -274,6 +365,7 @@ using LinearAlgebra
 
         # a = rand(400);
         for T ∈ (Float32, Float64)
+            @show T, @__LINE__
             a = rand(T, 100); b = rand(T, 100);
             @test mydotavx(a,b) ≈ mydot(a,b)
             @test myselfdotavx(a) ≈ myselfdot(a)
@@ -319,8 +411,21 @@ using LinearAlgebra
             end
             s
         end
+        function trianglelogdetavx(L)
+            ld = zero(eltype(L))
+            @avx for i ∈ 1:size(L,1)
+                ld += log(L[i,i])
+            end
+            ld
+        end
+        ldq = :(for i ∈ 1:size(L,1)
+                ld += log(L[i,i])
+                end)
+        lsld = LoopVectorization.LoopSet(ldq)
+        @test LoopVectorization.choose_order(lsld) == (Symbol[:i], :i, 1, -1)
 
         for T ∈ (Float32, Float64)
+            @show T, @__LINE__
             a = randn(T, 127);
             b1 = similar(a);
             b2 = similar(a);
@@ -330,6 +435,9 @@ using LinearAlgebra
             @test b1 ≈ b2
             @test myvexp(a) ≈ myvexpavx(a)
             @test b1 ≈ @avx exp.(a)
+
+            A = rand(T, 73, 73);
+            @test logdet(UpperTriangular(A)) ≈ trianglelogdetavx(A)
         end
     end
 
@@ -342,7 +450,7 @@ using LinearAlgebra
                   y[i] = yᵢ
                   end)
         lsgemv = LoopVectorization.LoopSet(gemvq);
-        @test LoopVectorization.choose_order(lsgemv) == (Symbol[:i, :j], :i, 8, -1)
+        @test LoopVectorization.choose_order(lsgemv) == (Symbol[:i, :j], :i, 4, -1)
 
         function mygemv!(y, A, x)
             @inbounds for i ∈ eachindex(y)
@@ -364,6 +472,7 @@ using LinearAlgebra
         end
         M, K = 51, 49
         for T ∈ (Float32, Float64)
+            @show T, @__LINE__
             A = randn(T, M, K);
             x = randn(T, K);
             y1 = Vector{T}(undef, M); y2 = similar(y1);
@@ -377,7 +486,7 @@ using LinearAlgebra
 
 
 @testset "Miscellaneous" begin
-
+    using LoopVectorization
     dot3q = :(for m ∈ 1:M, n ∈ 1:N
             s += x[m] * A[m,n] * y[n]
               end)
@@ -422,7 +531,7 @@ using LinearAlgebra
                 x[j] += A[j,i] - 0.25
                 end)
     lscolsum = LoopVectorization.LoopSet(colsumq);
-    @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, 8, -1)
+    @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, 4, -1)
 
     # my colsum is wrong (by 0.25), but slightly more interesting
     function mycolsum!(x, A)
@@ -449,7 +558,7 @@ using LinearAlgebra
              end)
     lsvar = LoopVectorization.LoopSet(varq);
     LoopVectorization.choose_order(lsvar)
-    @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, 5, -1)
+    @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, 4, -1)
 
     function myvar!(s², A, x̄)
         @. s² = 0
@@ -472,7 +581,45 @@ using LinearAlgebra
         end
     end
 
+
+    function mvp(P, basis, coeffs::Vector{T}) where {T}
+        len_c = length(coeffs)
+        len_P = size(P, 1)
+        p = zero(T)
+        for n = 1:len_c
+            pn = coeffs[n]
+            for a = 1:len_P
+                pn *= P[a, basis[a, n]]
+            end
+            p += pn
+        end
+        return p
+    end
+    function mvpavx(P, basis, coeffs::Vector{T}) where {T}
+        len_c = length(coeffs)
+        len_P = size(P, 1)
+        p = zero(T)
+        @avx for n = 1:len_c
+            pn = coeffs[n]
+            for a = 1:len_P
+                pn *= P[a, basis[a, n]]
+            end
+            p += pn
+        end
+        return p
+    end
+    bq = :(for n = 1:len_c
+           pn = coeffs[n]
+           for a = 1:len_P
+                pn *= P[a, basis[a, n]]
+            end
+            p += pn
+           end)
+    lsb = LoopVectorization.LoopSet(bq);
+
+    
     for T ∈ (Float32, Float64)
+        @show T, @__LINE__
         A = randn(T, 199, 498);
         x = randn(T, size(A,1));
         B1 = similar(A); B2 = similar(A);
@@ -495,6 +642,14 @@ using LinearAlgebra
         x = rand(T, M); A = rand(T, M, N); y = rand(T, N);
         @test dot3avx(x, A, y) ≈ dot3(x, A, y)
 
+        maxdeg = 20; nbasis = 10_000; dim = 10;
+        r = T == Float32 ? (Int32(1):Int32(maxdeg+1)) : (1:maxdeg+1)
+        basis = rand(r, (dim, nbasis));
+        coeffs = rand(T, nbasis);
+        P = rand(T, dim, maxdeg+1);
+        mvp(P, basis, coeffs)
+        mvpavx(P, basis, coeffs)
+        @test mvp(P, basis, coeffs) ≈ mvpavx(P, basis, coeffs)
     end
 end
 
@@ -502,7 +657,7 @@ end
     M, N = 37, 47
     # M = 77;
     for T ∈ (Float32, Float64)
-
+        @show T, @__LINE__
         a = rand(T,100,100,100);
         b = rand(T,100,100,1);
         bl = LowDimArray{(true,true,false)}(b);
@@ -599,12 +754,13 @@ end
 end
 
 @testset "map" begin
-    foo(x, y) = exp(x) - sin(y)
+    @inline foo(x, y) = exp(x) - sin(y)
     N = 37
     for T ∈ (Float32,Float64)
-        a = rand(T, N); b = rand(T, N)
-        c1 = map(foo, a, b)
-        c2 = vmap(foo, a, b)
+        @show T, @__LINE__
+        a = rand(T, N); b = rand(T, N);
+        c1 = map(foo, a, b);
+        c2 = vmap(foo, a, b);
         @test c1 ≈ c2
     end
 end

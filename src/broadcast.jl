@@ -47,12 +47,12 @@ function add_broadcast!(
     K = gensym(:K)
     mA = gensym(:Aₘₖ)
     mB = gensym(:Bₖₙ)
-    pushpreamble!(ls, Expr(:(=), mA, Expr(:(.), bcname, QuoteNode(:a))))
-    pushpreamble!(ls, Expr(:(=), mB, Expr(:(.), bcname, QuoteNode(:b))))
-    pushpreamble!(ls, Expr(:(=), K, Expr(:call, :size, mB, 1)))
+    pushprepreamble!(ls, Expr(:(=), mA, Expr(:(.), bcname, QuoteNode(:a))))
+    pushprepreamble!(ls, Expr(:(=), mB, Expr(:(.), bcname, QuoteNode(:b))))
+    pushprepreamble!(ls, Expr(:(=), K, Expr(:call, :size, mB, 1)))
 
     k = gensym(:k)
-    ls.loops[k] = Loop(k, K)
+    ls.loops[k] = Loop(k, 0, K)
     m = loopsyms[1];
     if ndims(B) == 1
         bloopsyms = Symbol[k]
@@ -74,9 +74,9 @@ function add_broadcast!(
     # set Cₘₙ = 0
     # setC = add_constant!(ls, zero(promote_type(recursive_eltype(A), recursive_eltype(B))), cloopsyms, mC, elementbytes)
     setC = if elementbytes == 4
-        add_constant!(ls, 0f0, cloopsyms, mC, elementbytes)
+        add_constant!(ls, 0f0, cloopsyms, mC, Symbol(""), elementbytes)
     else#if elementbytes == 4
-        add_constant!(ls, 0.0, cloopsyms, mC, elementbytes)
+        add_constant!(ls, 0.0, cloopsyms, mC, Symbol(""), elementbytes)
     end       
     # compute Cₘₙ += Aₘₖ * Bₖₙ
     reductop = Operation(
@@ -104,22 +104,22 @@ function add_broadcast!(
     ::Type{<:LowDimArray{D,T,N}}, elementbytes::Int = 8
 ) where {D,T,N}
     fulldims = Union{Symbol,Int}[loopsyms[n] for n ∈ 1:N if D[n]]
-    ref = ArrayReference(bcname, fulldims, Ref{Bool}(false))
-    add_load!(ls, destname, ref, elementbytes)::Operation
+    ref = ArrayReference(bcname, fulldims)
+    add_simple_load!(ls, destname, ref, elementbytes )::Operation
 end
 function add_broadcast_adjoint_array!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{A}, elementbytes::Int = 8
 ) where {T,N,A<:AbstractArray{T,N}}
     parent = gensym(:parent)
-    pushpreamble!(ls, Expr(:(=), parent, Expr(:call, :parent, bcname)))
-    ref = ArrayReference(parent, Union{Symbol,Int}[loopsyms[N + 1 - n] for n ∈ 1:N], Ref{Bool}(false))
-    add_load!( ls, destname, ref, elementbytes )::Operation    
+    pushprepreamble!(ls, Expr(:(=), parent, Expr(:call, :parent, bcname)))
+    ref = ArrayReference(parent, Union{Symbol,Int}[loopsyms[N + 1 - n] for n ∈ 1:N])
+    add_simple_load!( ls, destname, ref, elementbytes )::Operation    
 end
 function add_broadcast_adjoint_array!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{<:AbstractVector}, elementbytes::Int = 8
 )
-    ref = ArrayReference(bcname, Union{Symbol,Int}[loopsyms[2]], Ref{Bool}(false))
-    add_load!( ls, destname, ref, elementbytes )
+    ref = ArrayReference(bcname, Union{Symbol,Int}[loopsyms[2]])
+    add_simple_load!( ls, destname, ref, elementbytes )
 end
 function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
@@ -137,13 +137,13 @@ function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
     ::Type{<:AbstractArray{T,N}}, elementbytes::Int = 8
 ) where {T,N}
-    add_load!(ls, destname, ArrayReference(bcname, @view(loopsyms[1:N]), Ref{Bool}(false)), elementbytes)
+    add_simple_load!(ls, destname, ArrayReference(bcname, @view(loopsyms[1:N])), elementbytes)
 end
 function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{T}, elementbytes::Int = 8
 ) where {T<:Union{Integer,Float32,Float64}}
     op = add_constant!(ls, destname, elementbytes) # or replace elementbytes with sizeof(T) ? u
-    pushpreamble!(ls, Expr(:(=), mangledvar(op), bcname))
+    pushprepreamble!(ls, Expr(:(=), mangledvar(op), bcname))
     op
 end
 function add_broadcast!(
@@ -153,7 +153,7 @@ function add_broadcast!(
     inds = Vector{Union{Int,Symbol}}(undef, N+1)
     inds[1] = Symbol("##DISCONTIGUOUSSUBARRAY##")
     inds[2:end] .= @view(loopsyms[1:N])
-    add_load!(ls, destname, ArrayReference(bcname, inds, Ref{Bool}(false)), elementbytes)
+    add_simple_load!(ls, destname, ArrayReference(bcname, inds), elementbytes)
 end
 function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
@@ -172,7 +172,7 @@ function add_broadcast!(
     reduceddeps = Symbol[]
     for (i,arg) ∈ enumerate(args)
         argname = gensym(:arg)
-        pushpreamble!(ls, Expr(:(=), argname, Expr(:ref, bcargs, i)))
+        pushprepreamble!(ls, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,@__FILE__), Expr(:(=), argname, Expr(:ref, bcargs, i))))
         # dynamic dispatch
         parent = add_broadcast!(ls, gensym(:temp), argname, loopsyms, arg, elementbytes)::Operation
         pushparent!(parents, deps, reduceddeps, parent)
@@ -195,13 +195,13 @@ end
     sizes = Expr(:tuple)
     for (n,itersym) ∈ enumerate(loopsyms)
         Nsym = gensym(:N)
-        ls.loops[itersym] = Loop(itersym, Nsym)
+        ls.loops[itersym] = Loop(itersym, 0, Nsym)
         push!(sizes.args, Nsym)
     end
-    pushpreamble!(ls, Expr(:(=), sizes, Expr(:call, :size, :dest)))
+    pushprepreamble!(ls, Expr(:(=), sizes, Expr(:call, :size, :dest)))
     elementbytes = sizeof(T)
     add_broadcast!(ls, :dest, :bc, loopsyms, BC, elementbytes)
-    add_store!(ls, :dest, ArrayReference(:dest, loopsyms, Ref{Bool}(false)), elementbytes)
+    add_simple_store!(ls, :dest, ArrayReference(:dest, loopsyms), elementbytes)
     resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
     q = lower(ls)
     push!(q.args, :dest)
@@ -216,17 +216,17 @@ end
     # need to construct the LoopSet
     loopsyms = [gensym(:n) for n ∈ 1:N]
     ls = LoopSet()
-    pushpreamble!(ls, Expr(:(=), :dest, Expr(:call, :parent, :dest′)))
+    pushprepreamble!(ls, Expr(:(=), :dest, Expr(:call, :parent, :dest′)))
     sizes = Expr(:tuple)
     for (n,itersym) ∈ enumerate(loopsyms)
         Nsym = gensym(:N)
-        ls.loops[itersym] = Loop(itersym, Nsym)
+        ls.loops[itersym] = Loop(itersym, 0, Nsym)
         push!(sizes.args, Nsym)
     end
-    pushpreamble!(ls, Expr(:(=), sizes, Expr(:call, :size, :dest′)))
+    pushprepreamble!(ls, Expr(:(=), sizes, Expr(:call, :size, :dest′)))
     elementbytes = sizeof(T)
     add_broadcast!(ls, :dest, :bc, loopsyms, BC, elementbytes)
-    add_store!(ls, :dest, ArrayReference(:dest, reverse(loopsyms), Ref{Bool}(false)), elementbytes)
+    add_simple_store!(ls, :dest, ArrayReference(:dest, reverse(loopsyms)), elementbytes)
     resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
     q = lower(ls)
     push!(q.args, :dest′)
