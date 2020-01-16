@@ -34,7 +34,7 @@ function find_vars_and_gensym!(x::Symbol, vars::Dict{Symbol, Symbol}, ivars::Vec
         push!(vars, x => gx)
         gx
     else
-        x
+        get(vars, x, x)
     end    
 end
 
@@ -56,8 +56,9 @@ macro _avx(ex)
     tgvars = Tuple(values(D))
 
     quote
-        kwargs = nt($(QuoteNode(tgvars)), $(Expr(:tuple, tvars...)))
-        $(Expr(:tuple, tvars...)) = _avx($(QuoteNode(type_ex)), kwargs)
+        kwargs = LoopVectorization.nt($(QuoteNode(tgvars)), $(Expr(:tuple, tvars...)))
+        $(Expr(:tuple, tvars...)) = LoopVectorization._avx($(QuoteNode(type_ex)), kwargs)
+        # LoopVectorization._avx($(QuoteNode(type_ex)), kwargs) # comment out the above line, uncomment this one, and get rid of the `@generated` on _avx to see the function body.
     end |> esc
 end
 
@@ -70,6 +71,7 @@ end
     end
 
     quote
+        $(Expr(:meta,:inline))
         $var_defs
         $(lower(LoopSet(ex)))
         $(Expr(:tuple, keys...))
