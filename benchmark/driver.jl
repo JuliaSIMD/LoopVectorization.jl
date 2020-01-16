@@ -3,7 +3,7 @@
 # includet(joinpath(LOOPVECBENCHDIR, "driver.jl"))
 
 pkgdir(pkg::String) = abspath(joinpath(dirname(Base.find_package(pkg)), ".."))
-const LOOPVECBENCHDIR = joinpath(pkgdir("LoopVectorization"), "benchmarks")
+const LOOPVECBENCHDIR = joinpath(pkgdir("LoopVectorization"), "benchmark")
 include(joinpath(LOOPVECBENCHDIR, "benchmarkflops.jl"))
 include(joinpath(LOOPVECBENCHDIR, "plotbenchmarks.jl"))
 
@@ -14,8 +14,9 @@ addprocs(9);
 
 @everywhere begin
     pkgdir(pkg::String) = abspath(joinpath(dirname(Base.find_package(pkg)), ".."))
-    const LOOPVECBENCHDIR = joinpath(pkgdir("LoopVectorization"), "benchmarks")
+    const LOOPVECBENCHDIR = joinpath(pkgdir("LoopVectorization"), "benchmark")
     include(joinpath(LOOPVECBENCHDIR, "benchmarkflops.jl"))
+    BenchmarkTools.DEFAULT_PARAMETERS.seconds = 1
 end
 
 gemm_future = @spawnat 2 benchmark_gemm(2:256);
