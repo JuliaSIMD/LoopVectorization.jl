@@ -110,6 +110,13 @@ function parentsnotreduction(op::Operation)
     end
     return true
 end
+function roundpow2(i::Integer)
+    u = VectorizationBase.nextpow2(i)
+    l = u >>> 1
+    ud = u - i
+    ld = i - l
+    ud > ld ? l : u
+end
 function unroll_no_reductions(ls, order, vectorized, Wshift, size_T)
     innermost = last(order)
     compute_rt = 0.0
@@ -125,7 +132,7 @@ function unroll_no_reductions(ls, order, vectorized, Wshift, size_T)
     end
     # heuristic guess
     # @show compute_rt, load_rt
-    min(4, round(Int, (compute_rt + load_rt + 1) / compute_rt))
+    roundpow2(min(4, round(Int, (compute_rt + load_rt + 1) / compute_rt)))
 end
 function determine_unroll_factor(
     ls::LoopSet, order::Vector{Symbol}, unrolled::Symbol, vectorized::Symbol = first(order)
@@ -171,7 +178,7 @@ function determine_unroll_factor(
         load_recip_throughput,
         store_recip_throughput
     )
-    max(1, round(Int, latency / (recip_throughput * num_reductions) ) )
+    roundpow2(max(1, round(Int, latency / (recip_throughput * num_reductions) ) ))
 end
 
 function tile_cost(X, U, T)
@@ -434,6 +441,7 @@ function choose_unroll_order(ls::LoopSet, lowest_cost::Float64 = Inf)
 end
 function choose_tile(ls::LoopSet)
     lo = LoopOrders(ls)
+    # @show lo.syms ls.loop_order.bestorder
     best_order = copyto!(ls.loop_order.bestorder, lo.syms)
     best_vec = first(best_order) # filler
     new_order, state = iterate(lo) # right now, new_order === best_order

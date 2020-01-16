@@ -184,7 +184,7 @@ name(x::ArrayReference) = x.array
 name(x::ArrayReferenceMeta) = x.ref.array
 name(op::Operation) = op.variable
 instruction(op::Operation) = op.instruction
-
+isreductionzero(op::Operation, instr::Symbol) = op.instruction.mod === REDUCTION_ZERO[instr]
 refname(op::Operation) = op.ref.ptr
 """
     mvar = mangledvar(op)
