@@ -48,6 +48,15 @@ function LoopSet(q::Expr)
     ls
 end
 
+function LoopSet(q::Expr, types::Dict{Symbol,DataType})
+    q = SIMDPirates.contract_pass(q)
+    ls = LoopSet()
+    copyto!(ls, q, types)
+    resize!(ls.loop_order, num_loops(ls))
+    ls
+end
+
+
 """
     @avx
 
