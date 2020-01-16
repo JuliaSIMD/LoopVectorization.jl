@@ -19,7 +19,7 @@ to_expr(x) = x
 
 #----------------------------------------------------------------------------------------------------
 
-function find_vars_and_gensym!(ex::Expr, vars::Dict{Symbol, Symbol}, ivars::Vector{Symbol})
+function find_vars_and_gensym!(ex::Expr, vars::Set{Symbol}, ivars::Vector{Symbol})
     if ex.head == :(=) && ex.args[1] isa Symbol
         push!(ivars, ex.args[1])
     elseif ex.head == :call
@@ -28,35 +28,33 @@ function find_vars_and_gensym!(ex::Expr, vars::Dict{Symbol, Symbol}, ivars::Vect
     ex
 end
 
-function find_vars_and_gensym!(x::Symbol, vars::Dict{Symbol, Symbol}, ivars::Vector{Symbol})
-    if (x ∉ keys(vars)) && (x ∉ ivars)
-        gx = gensym(x)
-        push!(vars, x => gx)
-        gx
+function find_vars_and_gensym!(x::Symbol, vars::Set{Symbol}, ivars::Vector{Symbol})
+    if (x ∉ vars) && (x ∉ ivars)
+        push!(vars, x)
+        x
     else
-        get(vars, x, x)
+        x
     end    
 end
 
-find_vars_and_gensym!(x, vars::Dict{Symbol, Symbol}, ivars::Vector{Symbol}) = x
+find_vars_and_gensym!(x, vars::Set{Symbol}, ivars::Vector{Symbol}) = x
 
 #----------------------------------------------------------------------------------------------------
 
 nt(keys, vals) = NamedTuple{keys, typeof(vals)}(vals)
 
 macro _avx(ex)
-    D     = Dict{Symbol, Symbol}()
+    D     = Set{Symbol}()
     ivars = Symbol[]
 
     gex = prewalk(x -> find_vars_and_gensym!(x, D, ivars), ex)
 
     type_ex = to_type(gex)
 
-    tvars  = Tuple(keys(D))
-    tgvars = Tuple(values(D))
+    tvars  = Tuple(D)
 
     quote
-        kwargs = LoopVectorization.nt($(QuoteNode(tgvars)), $(Expr(:tuple, tvars...)))
+        kwargs = LoopVectorization.nt($(QuoteNode(tvars)), $(Expr(:tuple, tvars...)))
         $(Expr(:tuple, tvars...)) = LoopVectorization._avx($(QuoteNode(type_ex)), kwargs)
         # LoopVectorization._avx($(QuoteNode(type_ex)), kwargs) # comment out the above line, uncomment this one, and get rid of the `@generated` on _avx to see the function body.
     end |> esc
