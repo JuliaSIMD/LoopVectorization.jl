@@ -98,6 +98,20 @@ macro avx(q)
     end
     esc(q2)
 end
-
+macro avx(arg, q)
+    @assert q.head === :for
+    @assert arg.head === :(=)
+    local U::Int, T::Int
+    if arg.args[1] === :unroll
+        U = arg.args[2]
+        T = -1
+    elseif arg.args[1] === :tile
+        tup = arg.args[2]
+        @assert tup.head === :tuple
+        U = tup.args[1]
+        T = tup.args[2]
+    end
+    esc(lower(LoopSet(q), U, T))
+end
     
 

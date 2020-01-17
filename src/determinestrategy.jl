@@ -131,8 +131,10 @@ function unroll_no_reductions(ls, order, vectorized, Wshift, size_T)
         end
     end
     # heuristic guess
-    # @show compute_rt, load_rt
-    roundpow2(min(4, round(Int, (compute_rt + load_rt + 1) / compute_rt)))
+    @show compute_rt, load_rt
+    # roundpow2(min(4, round(Int, (compute_rt + load_rt + 1) / compute_rt)))
+    rt = max(compute_rt, load_rt)
+    roundpow2( min( 4, round(Int, 16 / rt) ) )
 end
 function determine_unroll_factor(
     ls::LoopSet, order::Vector{Symbol}, unrolled::Symbol, vectorized::Symbol = first(order)
@@ -151,7 +153,7 @@ function determine_unroll_factor(
     if iszero(num_reductions)
         # if only 1 loop, no need to unroll
         # if more than 1 loop, there is some cost. Picking 2 here as a heuristic.
-        return length(order) == 1 ? 1 : unroll_no_reductions(ls, order, vectorized, Wshift, size_T)
+        return unroll_no_reductions(ls, order, vectorized, Wshift, size_T)
     end
     # So if num_reductions > 0, we set the unroll factor to be high enough so that the CPU can be kept busy
     # if there are, U = max(1, round(Int, max(latency) * throughput / num_reductions)) = max(1, round(Int, latency / (recip_throughput * num_reductions)))

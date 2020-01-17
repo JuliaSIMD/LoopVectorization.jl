@@ -888,6 +888,13 @@ function lower(ls::LoopSet)
     fillorder!(ls, order, istiled)
     istiled ? lower_tiled(ls, vectorized, U, T) : lower_unrolled(ls, vectorized, U)
 end
+function lower(ls::LoopSet, U, T = -1)
+    num_loops(ls) == 1 && @assert T == -1
+    order, vectorized, _U, _T = choose_order(ls)
+    istiled = T != -1
+    fillorder!(ls, order, istiled)
+    istiled ? lower_tiled(ls, vectorized, U, T) : lower_unrolled(ls, vectorized, U)
+end
 
 Base.convert(::Type{Expr}, ls::LoopSet) = lower(ls)
 Base.show(io::IO, ls::LoopSet) = println(io, lower(ls))
