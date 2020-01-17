@@ -131,10 +131,10 @@ function unroll_no_reductions(ls, order, vectorized, Wshift, size_T)
         end
     end
     # heuristic guess
-    @show compute_rt, load_rt
+    # @show compute_rt, load_rt
     # roundpow2(min(4, round(Int, (compute_rt + load_rt + 1) / compute_rt)))
     rt = max(compute_rt, load_rt)
-    roundpow2( min( 4, round(Int, 16 / rt) ) )
+    max(1, roundpow2( min( 4, round(Int, 16 / rt) ) ))
 end
 function determine_unroll_factor(
     ls::LoopSet, order::Vector{Symbol}, unrolled::Symbol, vectorized::Symbol = first(order)

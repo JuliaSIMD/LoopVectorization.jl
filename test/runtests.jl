@@ -1008,14 +1008,13 @@ end
         a = rand(T, M); B = rand(T, M, N); c = rand(T, N); c′ = c';
         d1 =      @. a + B * c′;
         d2 = @avx @. a + B * c′;
-
         @test d1 ≈ d2
+        
         @.      d1 = a + B * c′;
         @avx @. d2 = a + B * c′;
         @test d1 ≈ d2
 
         d3 = a .+ B * c;
-        # no method matching _similar_for(::UnitRange{Int64}, ::Type{Any}, ::Product)
         d4 = @avx a .+ B *ˡ c;
         @test d3 ≈ d4
 
