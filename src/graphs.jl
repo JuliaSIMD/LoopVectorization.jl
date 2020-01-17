@@ -324,6 +324,15 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
         N = gensym(Symbol(:loop, itersym))
         pushpreamble!(ls, Expr(:(=), N, Expr(:call, :length, r.args[2])))
         Loop(itersym, 0, N)
+    elseif f === :OneTo || f === Expr(:(.), :Base, :OneTo)
+        otN = r.args[2]
+        if otN isa Integer
+            Loop(itersym, 0, otN)
+        else
+            N = gensym(Symbol(:loop, itersym))
+            pushpreamble!(ls, Expr(:(=), N, otN))
+            Loop(itersym, 0, N)
+        end
     else
         throw("Unrecognized loop range type: $r.")
     end
@@ -719,6 +728,18 @@ function add_store_setindex!(ls::LoopSet, ex::Expr, elementbytes::Int = 8)
     array, raw_indices = ref_from_setindex(ex)
     add_store!(ls, (ex.args[2])::Symbol, array, rawindices, elementbytes)
 end
+function add_if!(ls::LoopSet, LHS::Symbol, RHS::Expr, elementbytes::Int = 8, mpref::Union{Nothing,ArrayReferenceMetaPosition} = nothing)
+    condition = first(RHS.args)
+    m = gensym(:mask)
+    condop = add_compute!(ls, m, condition, elementbytes, mpref)
+    iftrue = RHS.args[2]
+    iftrueisaexpr = iftrue isa Expr
+    iffalse = RHS.args[3]
+    iffalseisaexpr = iffalse isa Expr
+    trueisablock = iftrueisaexpr && iftrue.head !== :call
+    falseisablock = iffalseisaexpr && iffalse.head !== :call
+    
+end
 # add operation assigns X to var
 function add_operation!(
     ls::LoopSet, LHS::Symbol, RHS::Expr, elementbytes::Int = 8
@@ -736,6 +757,8 @@ function add_operation!(
         else
             add_compute!(ls, LHS, RHS, elementbytes)
         end
+    elseif RHS.head === :if
+        add_if!(ls, LHS, RHS, elementbytes)
     else
         throw("Expression not recognized:\n$x")
     end
@@ -757,6 +780,8 @@ function add_operation!(
         else
             add_compute!(ls, LHS_sym, RHS, elementbytes, LHS_ref)
         end
+    elseif RHS.head === :if
+        add_if!(ls, LHS, RHS, elementbytes, LHS_ref)
     else
         throw("Expression not recognized:\n$x")
     end
@@ -817,6 +842,10 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int = 8)
         add_block!(ls, ex)
     elseif ex.head === :for
         add_loop!(ls, ex)
+    elseif ex.head === :&&
+        add_andblock!(ls, ex)
+    elseif ex.head === :||
+        add_orblock!(ls, ex)
     else
         throw("Don't know how to handle expression:\n$ex")
     end

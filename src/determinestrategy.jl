@@ -3,6 +3,13 @@
 # wrong for transposed matrices, and certain views/SubArrays.
 unitstride(op::Operation, s) = first(getindices(op)) === s
 
+function register_pressure(op::Operation)
+    if isconstant(op)
+        0
+    else
+        instruction_cost(instruction(op)).register_pressure
+    end
+end
 function cost(op::Operation, unrolled::Symbol, Wshift::Int, size_T::Int = op.elementbytes)
     isconstant(op) && return 0.0, 0, 1
     # Wshift == dependson(op, unrolled) ? Wshift : 0
@@ -45,6 +52,10 @@ function hasintersection(a, b)
     end
     false
 end
+function num_iterations(N, step)
+    iter, rem = divrem(N, step)
+    iter + (rem != 0)
+end
 
 # evaluates cost of evaluating loop in given order
 # heuristically, could simplify analysis by just unrolling outer loop?
@@ -62,10 +73,8 @@ function evaluate_cost_unroll(
     for itersym ∈ order
         # Add to set of defined symbles
         push!(nested_loop_syms, itersym)
-        liter = Float64(length(ls, itersym))
-        if itersym === vectorized
-            liter /= W
-        end
+        looplength = length(ls, itersym)
+        liter = itersym === vectorized ? num_iterations(looplength, W) : looplength
         iter *= liter
         # check which vars we can define at this level of loop nest
         for (id,op) ∈ enumerate(operations(ls))
@@ -183,16 +192,16 @@ function determine_unroll_factor(
     roundpow2(max(1, round(Int, latency / (recip_throughput * num_reductions) ) ))
 end
 
-function tile_cost(X, U, T)
-    X[1] + X[4] + X[2] / T + X[3] / U
+function tile_cost(X, U, T, UL, TL)
+    X[1] + X[4] + X[2] * (num_iterations(TL, T)/TL) + X[3] * (num_iterations(UL, U)/UL)
 end
-function solve_tilesize(X, R)
+function solve_tilesize(X, R, UL, TL)
     @inbounds any(iszero, (R[1],R[2],R[3])) && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
     # @inbounds any(iszero, (R[1],R[2],R[3])) && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
     # We use a lagrange multiplier to find floating point values for U and T
     # first solving for U via quadratic formula
     # X is vector of costs, and R is of register pressures
-    RR = REGISTER_COUNT - R[3] - R[4]
+    RR = REGISTER_COUNT - R[3] - R[4] # RR ≡ RemainingRegisters
     a = (R[1])^2*X[2] - (R[2])^2*R[1]*X[3]/RR
     b = 2*R[1]*R[2]*X[3]
     c = -RR*R[1]*X[3]
@@ -205,12 +214,12 @@ function solve_tilesize(X, R)
     Uhigh = Ulow + 1 #ceil(Int, Ufloat)
     Thigh = Tlow + 1 #ceil(Int, Tfloat)
 
-    RR = REGISTER_COUNT - R[3] - R[4]
+    # RR = REGISTER_COUNT - R[3] - R[4]
     U, T = Ulow, Tlow
-    tcost = tile_cost(X, Ulow, Tlow)
+    tcost = tile_cost(X, Ulow, Tlow, UL, TL)
     # @show Ulow*Thigh*R[1] + Ulow*R[2]
     if RR ≥ Ulow*Thigh*R[1] + Ulow*R[2]
-        tcost_temp = tile_cost(X, Ulow, Thigh)
+        tcost_temp = tile_cost(X, Ulow, Thigh, UL, TL)
         # @show tcost_temp, tcost
         if tcost_temp < tcost
             tcost = tcost_temp
@@ -222,7 +231,7 @@ function solve_tilesize(X, R)
     while RR < Uhigh*Tl*R[1] + Uhigh*R[2]
         Tl -= 1
     end
-    tcost_temp = tile_cost(X, Uhigh, Tl)
+    tcost_temp = tile_cost(X, Uhigh, Tl, UL, TL)
     if tcost_temp < tcost
         tcost = tcost_temp
         U, T = Uhigh, Tl
@@ -243,9 +252,9 @@ function solve_tilesize_constT(ls, T)
     floor(Int, (REGISTER_COUNT - R[3] - R[4]) / (T * R[1] + R[2]))
 end
 # Tiling here is about alleviating register pressure for the UxT
-function solve_tilesize(X, R, Umax, Tmax)
+function solve_tilesize(X, R, Umax, Tmax, UL, TL)
     first(R) == 0 && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
-    U, T, cost = solve_tilesize(X, R)
+    U, T, cost = solve_tilesize(X, R, UL, TL)
     # T -= T & 1
     # U = min(U, T)
     U_too_large = U > Umax
@@ -264,6 +273,13 @@ function solve_tilesize(X, R, Umax, Tmax)
     end
     U, T, cost
 end
+function maybedemotesize(U::Int, N::Int)
+    U > 1 || return 1
+    Um1 = U - 1
+    urep = num_iterations(N, U)
+    um1rep = num_iterations(N, Um1)
+    um1rep > urep ? U : Um1
+end
 function solve_tilesize(
     ls::LoopSet, unrolled::Symbol, tiled::Symbol,
     cost_vec::AbstractVector{Float64} = @view(ls.cost_vec[:,1]),
@@ -271,13 +287,23 @@ function solve_tilesize(
 )
     maxT = 4#8
     maxU = 4#8
-    if isstaticloop(ls, tiled)
-        maxT = min(2maxT, looprangehint(ls, tiled))
+    tiledloop = ls.loops[tiled]
+    unrolledloop = ls.loops[unrolled]
+    if isstaticloop(tiledloop)
+        maxT = min(4maxT, length(tiledloop))
     end
-    if isstaticloop(ls, unrolled)
-        maxU = min(2maxU, looprangehint(ls, unrolled))
+    if isstaticloop(unrolledloop)
+        maxU = min(4maxU, length(unrolledloop))
     end
-    solve_tilesize(cost_vec, reg_pressure, maxU, maxT)
+    U, T, cost = solve_tilesize(cost_vec, reg_pressure, maxU, maxT, length(unrolledloop), length(tiledloop))
+    # heuristic to more evenly divide small numbers of iterations
+    if isstaticloop(tiledloop) & T > 1
+        T = maybedemotesize(T, length(tiledloop))
+    end
+    if isstaticloop(unrolledloop)
+        U = maybedemotesize(U, length(unrolledloop))
+    end
+    U, T, cost
 end
 
 function set_upstream_family!(adal::Vector{T}, op::Operation, val::T) where {T}
@@ -306,7 +332,6 @@ function evaluate_cost_tile(
     innerloop = last(order)
     iters = fill(-99.9, nops)
     nested_loop_syms = Symbol[]# Set{Symbol}()
-    iter = 1.0
     # Need to check if fusion is possible
     size_T = biggest_type_size(ls)
     W, Wshift = VectorizationBase.pick_vector_width_shift(length(ls, vectorized), size_T)::Tuple{Int,Int}
@@ -320,14 +345,18 @@ function evaluate_cost_tile(
     reg_pressure = reg_pres_buf(ls)
     # @inbounds reg_pressure[2] = 1
     # @inbounds reg_pressure[3] = 1
+    unrollediter = length(ls, unrolled)
+    tilediter = length(ls, tiled)
+    unrollediter = unrolled === vectorized ? num_iterations(unrollediter, W) : unrollediter # tiled cannot be vectorized, so do not check
+    iter::Int = tilediter * unrollediter
     for n ∈ 1:N
         itersym = order[n]
         # Add to set of defined symbles
         push!(nested_loop_syms, itersym)
-        if n == 1
-            iter = length(ls, itersym) * length(ls, order[2]) / W
-        elseif n > 2
-            iter *= Float64(length(ls, itersym))
+        stepsize = 1
+        if n > 2
+            itersymlooplen = length(ls, itersym)
+            iter *= itersym === vectorized ? num_iterations(itersymlooplen, W) : itersymlooplen
         end
         # check which vars we can define at this level of loop nest
         for (id, op) ∈ enumerate(ops)
@@ -478,5 +507,21 @@ function choose_order(ls::LoopSet)
     else
         return uorder, uvec, determine_unroll_factor(ls, uorder, first(uorder), uvec), -1
     end
+end
+
+function register_pressure(ls::LoopSet)
+    # uses unroll of 1 if not tiling
+    if num_loops(ls) > 1
+        torder, tvec, tU, tT, tc = choose_tile(ls)
+    else
+        tc = Inf
+    end
+    uorder, uvec, uc = choose_unroll_order(ls, tc)
+    if num_loops(ls) > 1 && tc ≤ uc # tile
+        rp = @view ls.reg_pressure[:,1]
+        tU * tT * rp[1] + tU * rp[2] + rp[3] + rp[4]
+    else
+        sum(register_pressure, operations(ls))
+    end    
 end
 

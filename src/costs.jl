@@ -103,6 +103,8 @@ const COST = Dict{Instruction,InstructionCost}(
     Instruction(:(<)) => InstructionCost(1, 0.5),
     Instruction(:(>=)) => InstructionCost(1, 0.5),
     Instruction(:(<=)) => InstructionCost(1, 0.5),
+    Instruction(:ifelse) => InstructionCost(1, 0.5),
+    Instruction(:vifelse) => InstructionCost(1, 0.5),
     Instruction(:inv) => InstructionCost(13,4.0,-2.0,1),
     Instruction(:vinv) => InstructionCost(13,4.0,-2.0,1),
     Instruction(:muladd) => InstructionCost(4,0.5), # + and * will fuse into this, so much of the time they're not twice as expensive
@@ -131,7 +133,7 @@ const COST = Dict{Instruction,InstructionCost}(
     Instruction(:sincos_fast) => InstructionCost(25,22.0,70.0,26),
     Instruction(:identity) => InstructionCost(0,0.0,0.0,0),
     Instruction(:adjoint) => InstructionCost(0,0.0,0.0,0),
-    Instruction(:transpose) => InstructionCost(0,0.0,0.0,0)
+    Instruction(:transpose) => InstructionCost(0,0.0,0.0,0),
     # Symbol("##CONSTANT##") => InstructionCost(0,0.0)
 )
 # for (k, v) ∈ COST # so we can look up Symbol(typeof(function))
