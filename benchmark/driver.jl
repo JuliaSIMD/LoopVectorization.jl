@@ -10,7 +10,7 @@ include(joinpath(LOOPVECBENCHDIR, "plotbenchmarks.jl"))
 
 using Distributed
 
-addprocs(9);
+addprocs(10);
 
 @everywhere begin
     pkgdir(pkg::String) = abspath(joinpath(dirname(Base.find_package(pkg)), ".."))
@@ -28,16 +28,18 @@ dot3_future = @spawnat 7 benchmark_dot3(2:256);
 sse_future = @spawnat 8 benchmark_sse(2:256);
 exp_future = @spawnat 9 benchmark_exp(2:256);
 aplusBc_future = @spawnat 10 benchmark_aplusBc(2:256);
+AplusAt_future = @spawnat 11 benchmark_AplusAt(2:256);
 
-gemm_bench = fetch(gemm_future)
-AtmulB_bench = fetch(AtmulB_future)
 dot_bench = fetch(dot_future)
 selfdot_bench = fetch(selfdot_future)
+AplusAt_bench = fetch(AplusAt_future)
 gemv_bench = fetch(gemv_future)
 dot3_bench = fetch(dot3_future)
 sse_bench = fetch(sse_future)
 exp_bench = fetch(exp_future)
 aplusBc_bench = fetch(aplusBc_future)
+gemm_bench = fetch(gemm_future)
+AtmulB_bench = fetch(AtmulB_future)
 
 
 plot(gemm_bench)
@@ -49,6 +51,7 @@ plot(dot3_bench)
 plot(sse_bench)
 plot(exp_bench)
 plot(aplusBc_bench)
+plot(AplusAt_bench)
 
 save(joinpath("~/Pictures", "bench_gemm_v3.png"), plot(gemm_bench));
 save(joinpath("~/Pictures", "bench_AtmulB_v3.png"), plot(AtmulB_bench));

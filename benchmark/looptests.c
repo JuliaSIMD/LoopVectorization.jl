@@ -171,4 +171,11 @@ double OLSlp(double* restrict y, double* restrict X, double* restrict b, long N,
   return lp;
 }
 
+void AplusAt(double* restrict B, double* restrict A, long N){
+  for (long i = 0; i < N; i++){
+    for (long j = 0; j < N; j++){
+      B[j + i*N] = A[j + i*N] + A[i + j*N];
+    }
+  }
+}
 

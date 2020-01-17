@@ -308,3 +308,33 @@ function benchmark_aplusBc(sizes)
     br
 end
 
+function benchmark_AplusAt(sizes)
+    tests = ["Julia", "Clang-Polly", "GFortran", "GFortran-builtin", "icc", "ifort", "ifort-builtin", "LoopVectorization"]
+    br = BenchmarkResult(tests, sizes)
+    for (i,s) ∈ enumerate(sizes)
+        A = rand(s,s); B = similar(A)
+        n_gflop = 1e-9*s^2
+        br[1,i] = n_gflop / @belapsed @. $B = $A + $A'
+        baseB = copy(B)
+        br[2,i] = n_gflop / @belapsed cAplusAt!($B, $A)
+        @assert B ≈ baseB "Clang wrong?"
+        br[3,i] = n_gflop / @belapsed fAplusAt!($B, $A)
+        @assert B ≈ baseB "Fort wrong?"
+        br[4,i] = n_gflop / @belapsed fAplusAtbuiltin!($B, $A)
+        @assert B ≈ baseB "Fort-builtin wrong?"
+        br[5,i] = n_gflop / @belapsed icAplusAt!($B, $A)
+        @assert B ≈ baseB "icc wrong?"
+        br[6,i] = n_gflop / @belapsed ifAplusAt!($B, $A)
+        @assert B ≈ baseB "ifort wrong?"
+        br[7,i] = n_gflop / @belapsed ifAplusAtbuiltin!($B, $A)
+        @assert B ≈ baseB "ifort-builtin wrong?"
+        br[8,i] = n_gflop / @belapsed @avx @. $B = $A + $A'
+        @assert B ≈ baseB "LoopVec wrong?"
+        # if i % 10 == 0
+            # percent_complete = round(100i/ length(sizes), sigdigits = 4)
+            # @show percent_complete
+        # end
+    end
+    br
+end
+

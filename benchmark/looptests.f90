@@ -236,4 +236,21 @@ module looptests
          lp = lp + d*d
       end do
     end subroutine OLSlp
-end module looptests
+    subroutine AplusAt(B, A, N) BIND(C, name="AplusAt")
+      integer(C_long), intent(in) :: N
+      real(C_double), dimension(N,N), intent(out) :: B
+      real(C_double), dimension(N,N), intent(in) :: A
+      integer(C_long) :: i, j
+      do concurrent(i = 1:N)
+         do concurrent(j = 1:N)
+            B(j,i) = A(j,i) + A(i,j)
+         end do
+      end do
+    end subroutine AplusAt
+    subroutine AplusAtbuiltin(B, A, N) BIND(C, name="AplusAtbuiltin")
+      integer(C_long), intent(in) :: N
+      real(C_double), dimension(N,N), intent(out) :: B
+      real(C_double), dimension(N,N), intent(in) :: A
+      B = A + transpose(A)
+    end subroutine AplusAtbuiltin
+  end module looptests

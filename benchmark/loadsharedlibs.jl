@@ -16,7 +16,7 @@ if !isfile(LIBCTEST) || mtime(cfile) > mtime(LIBCTEST)
     run(`clang -Ofast -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -lm -mllvm -polly -mllvm -polly-vectorizer=stripmine -shared -fPIC $cfile -o $LIBCTEST`)
 end
 if !isfile(LIBICTEST) || mtime(cfile) > mtime(LIBICTEST)
-    run(`icc -fast -qopt-zmm-usage=high -qopt-matmul -shared -fPIC $cfile -o $LIBICTEST`)
+    run(`icc -fast -qopt-zmm-usage=high -shared -fPIC $cfile -o $LIBICTEST`)
 end
 ffile = joinpath(LOOPVECBENCHDIR, "looptests.f90")
 if !isfile(LIBFTEST) || mtime(ffile) > mtime(LIBFTEST)
@@ -24,7 +24,7 @@ if !isfile(LIBFTEST) || mtime(ffile) > mtime(LIBFTEST)
     run(`gfortran -Ofast -march=native -funroll-loops --param max-unroll-times=4 -floop-nest-optimize -mprefer-vector-width=$(8REGISTER_SIZE) -shared -fPIC $ffile -o $LIBFTEST`)
 end
 if !isfile(LIBIFTEST) || mtime(ffile) > mtime(LIBIFTEST)
-    run(`ifort -fast -qopt-zmm-usage=high -qopt-matmul -shared -fPIC $ffile -o $LIBIFTEST`)
+    run(`ifort -fast -qopt-zmm-usage=high -shared -fPIC $ffile -o $LIBIFTEST`)
 end
 
 for (prefix,Cshared,Fshared) ∈ ((Symbol(""),LIBCTEST,LIBFTEST), (:i,LIBICTEST,LIBIFTEST))
@@ -223,4 +223,28 @@ for (prefix,Cshared,Fshared) ∈ ((Symbol(""),LIBCTEST,LIBFTEST), (:i,LIBICTEST,
         s[]
     end
 
+    @eval function $(Symbol(prefix,:fAplusAt!))(B, A)
+        N = size(B,1)
+        ccall(
+            (:AplusAt, $Fshared), Cvoid,
+            (Ptr{Float64}, Ptr{Float64}, Ref{Clong}),
+            B, A, Ref(N)
+        )
+    end
+    @eval function $(Symbol(prefix,:fAplusAtbuiltin!))(B, A)
+        N = size(B,1)
+        ccall(
+            (:AplusAtbuiltin, $Fshared), Cvoid,
+            (Ptr{Float64}, Ptr{Float64}, Ref{Clong}),
+            B, A, Ref(N)
+        )
+    end
+    @eval function $(Symbol(prefix,:cAplusAt!))(B, A)
+        N = size(B,1)
+        ccall(
+            (:AplusAt, $Cshared), Cvoid,
+            (Ptr{Float64}, Ptr{Float64}, Clong),
+            B, A, N
+        )
+    end
 end
