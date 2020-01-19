@@ -33,6 +33,10 @@ isdense(::Type{<:DenseArray}) = true
 # Base.convert(::Type{Vector{T}}, sv::ShortVector{T}) where {T} = sv.data
 
 
+# For passing options like array types and mask
+struct LoopSetOptions
+    
+end
 
 struct Loop
     itersymbol::Symbol
@@ -145,8 +149,12 @@ struct LoopSet
     outer_reductions::Vector{Int} # IDs of reduction operations that need to be reduced at end.
     loop_order::LoopOrder
     # stridesets::Dict{ShortVector{Symbol},ShortVector{Symbol}}
-    preamble::Expr # TODO: add preamble to lowering
-    prepreamble::Expr # TODO: add preamble to lowering
+    preamble::Expr
+    preamble_symsym::Vector{Tuple{Int,Symbol}}
+    preamble_symint::Vector{Tuple{Int,Int}}
+    preamble_symfloat::Vector{Tuple{Int,Float64}}
+    preamble_zeros::Vector{Int}
+    preamble_ones::Vector{Int}
     includedarrays::Vector{Tuple{Symbol,Int}}
     syms_aliasing_refs::Vector{Symbol} # O(N) search is faster at small sizes
     refs_aliasing_syms::Vector{ArrayReference}
@@ -186,8 +194,22 @@ end
     # @assert id !== nothing
     # ls.refs_aliasing_syms[id]
 # end
-pushpreamble!(ls::LoopSet, ex) = push!(ls.preamble.args, ex)
-pushprepreamble!(ls::LoopSet, ex) = push!(ls.prepreamble.args, ex)
+pushpreamble!(ls::LoopSet, op::Operation, v::Symbol) = push!(ls.preamble_symsym, (identifier(op),v))
+pushpreamble!(ls::LoopSet, op::Operation, v::Integer) = push!(ls.preamble_symint, (identifier(op),convert(Int,v)))
+pushpreamble!(ls::LoopSet, op::Operation, v::Real) = push!(ls.preamble_symfloat, (identifier(op),convert(Float64,v)))
+pushpreamble!(ls::LoopSet, ex::Expr) = push!(ls.preamble.args, ex)
+function pushpreamble!(ls::LoopSet, op::Operation, RHS::Expr)
+    c = gensym(:licmconst)
+    if RHS.head === :call && first(RHS.args) === :zero
+        push!(ls.preamble_zeros, identifier(op))
+    elseif RHS.head === :call && first(RHS.args) === :one
+        push!(ls.preamble_ones, identifier(op))
+    else
+        pushpreamble!(ls, Expr(:(=), c, RHS))
+        pushpreamble!(ls, op, c)
+    end
+    nothing
+end
 
 function includesarray(ls::LoopSet, array::Symbol)
     for (a,i) ∈ ls.includedarrays
@@ -202,7 +224,11 @@ function LoopSet()
         Operation[],
         Int[],
         LoopOrder(),
-        Expr(:block),Expr(:block),
+        Expr(:block),
+        Tuple{Int,Symbol}[],
+        Tuple{Int,Int}[],
+        Tuple{Int,Float64}[],
+        Int[],Int[],
         Tuple{Symbol,Int}[],
         Symbol[],
         ArrayReference[],
@@ -226,7 +252,7 @@ function getop(ls::LoopSet, var::Symbol, elementbytes::Int = 8)
     get!(ls.opdict, var) do
         # might add constant
         op = add_constant!(ls, var, elementbytes)
-        pushpreamble!(ls, Expr(:(=), mangledvar(op), var))
+        pushpreamble!(ls, op, var)
         op
     end
 end
@@ -234,7 +260,7 @@ function getop(ls::LoopSet, var::Symbol, deps, elementbytes::Int = 8)
     get!(ls.opdict, var) do
         # might add constant
         op = add_constant!(ls, var, deps, gensym(:constant), Symbol(""), elementbytes)
-        pushpreamble!(ls, Expr(:(=), mangledvar(op), var))
+        pushpreamble!(ls, op, var)
         op
     end
 end
@@ -280,6 +306,29 @@ function add_block!(ls::LoopSet, ex::Expr, elementbytes::Int = 8)
         push!(ls, x, elementbytes)
     end
 end
+function maybestatic!(expr::Expr)
+    if expr.head === :call
+        f = first(expr.args)
+        if f === :length
+            expr.args[1] = lv(:maybestaticlength)
+        elseif f === :size && length(expr.args) == 3
+            i = expr.args[3]
+            if i isa Integer
+                expr.args[1] = lv(:maybestaticsize)
+                expr.args[3] = Expr(:call, Expr(:curly, :Val, convert(Int, i)))
+            end
+        end
+    end
+    expr
+end
+function add_loop_bound!(ls::LoopSet, itersym::Symbol, bound, upper::Bool = true)
+    (bound isa Symbol && upper) && return bound
+    bound isa Expr && maybestatic!(bound)
+    N = gensym(Symbol(itersym, upper ? :_loop_upper_bound : :_loop_lower_bound))
+    pushpreamble!(ls, Expr(:(=), N, upper ? bound : Expr(:call, lv(:staticm1), bound)))
+    N
+end
+
 """
 This function creates a loop, while switching from 1 to 0 based indices
 """
@@ -299,30 +348,22 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
         elseif lii # only lower bound is an integer
             if upper isa Symbol
                 Loop(itersym, liiv, upper)
+            elseif upper isa Expr
+                Loop(itersym, liiv, add_loop_bound!(ls, itersym, upper, true))
             else
-                N = gensym(Symbol(itersym, :_loop_upper_bound))
-                pushpreamble!(ls, Expr(:(=), N, upper))
-                Loop(itersym, liiv, N)
+                Loop(itersym, liiv, add_loop_bound!(ls, itersym, upper, true))
             end
         elseif uii # only upper bound is an integer
             uiiv = convert(Int, upper)
-            L = gensym(Symbol(itersym, :_loop_lower_bound))
-            pushpreamble!(ls, Expr(:(=), L, Expr(:call, :-, lower, 1)))
-            Loop(itersym, L, uiiv)
+            Loop(itersym, add_loop_bound!(ls, itersym, lower, false), uiiv)
         else # neither are integers
-            L = gensym(Symbol(itersym, :_loop_lower_bound))
-            pushpreamble!(ls, Expr(:(=), L, Expr(:call, :-, lower, 1)))
-            if upper isa Symbol
-                Loop(itersym, L, upper)
-            else
-                N = gensym(Symbol(itersym, :_loop_upper_bound))
-                pushpreamble!(ls, Expr(:(=), N, upper))
-                Loop(itersym, L, N)
-            end
+            L = add_loop_bound!(ls, itersym, lower, false)
+            U = add_loop_bound!(ls, itersym, upper, true)
+            Loop(itersym, L, N)
         end
     elseif f === :eachindex
         N = gensym(Symbol(:loop, itersym))
-        pushpreamble!(ls, Expr(:(=), N, Expr(:call, :length, r.args[2])))
+        pushpreamble!(ls, Expr(:(=), N, Expr(:call, lv(:maybestaticlength), r.args[2])))
         Loop(itersym, 0, N)
     elseif f === :OneTo || f === Expr(:(.), :Base, :OneTo)
         otN = r.args[2]
@@ -330,7 +371,7 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
             Loop(itersym, 0, otN)
         else
             N = gensym(Symbol(:loop, itersym))
-            pushpreamble!(ls, Expr(:(=), N, otN))
+            pushpreamble!(ls, Expr(:(=), N, maybestatic!(otN)))
             Loop(itersym, 0, N)
         end
     else
@@ -362,384 +403,12 @@ function add_loop!(ls::LoopSet, loop::Loop)
     ls.loops[loop.itersym] = loop
 end
 
-function add_vptr!(ls::LoopSet, op::Operation)
-    ref = op.ref
-    indexed = name(ref)
-    id = identifier(op)
-    if includesarray(ls, indexed) < 0
-        push!(ls.includedarrays, (indexed, id))
-        pushpreamble!(ls, Expr(:(=), vptr(op), Expr(:call, lv(:stridedpointer), indexed)))
-    end
-    nothing
-end
-# function intersection(depsplus, ls)
-    # deps = Symbol[]
-    # for dep ∈ depsplus
-        # dep ∈ ls && push!(deps, dep)
-    # end
-    # deps
-# end
-
-function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementbytes::Int = 8)
-    indices = Vector{Union{Symbol,Int}}(undef, length(rawindices))
-    loopedindex = fill(false, length(indices))
-    parents = Operation[]
-    loopdependencies = Symbol[]
-    reduceddeps = Symbol[]
-    loopset = keys(ls.loops)
-    for i ∈ eachindex(indices)
-        ind = rawindices[i]
-        if ind isa Integer
-            indices[i] = ind - 1
-        elseif ind isa Symbol
-            indices[i] = ind
-            if ind ∈ loopset
-                loopedindex[i] = true
-                push!(loopdependencies, ind)
-            end
-        elseif ind isa Expr
-            parent = add_operation!(ls, gensym(:indexpr), ind, elementbytes)
-            pushparent!(parents, loopdependencies, reduceddeps, parent)
-            # var = get(ls.opdict, ind, nothing)
-            indices[i] = name(parent)#mangledvar(parent)
-        else
-            throw("Unrecognized loop index: $ind.")
-        end
-    end
-    length(parents) == 0 || pushfirst!(indices, Symbol("##DISCONTIGUOUSSUBARRAY##"))
-    mref = ArrayReferenceMeta(ArrayReference( array, indices ), loopedindex)
-    ArrayReferenceMetaPosition(mref, parents, loopdependencies, reduceddeps)
-end
-function tryrefconvert(ls::LoopSet, ex::Expr, elementbytes::Int = 8)::Tuple{Bool,ArrayReferenceMetaPosition}
-    ya, yinds = if ex.head === :ref
-        ref_from_ref(ex)
-    elseif ex.head === :call
-        f = first(ex.args)
-        if f === :getindex
-            ref_from_getindex(ex)
-        elseif f === :setindex!
-            ref_from_setindex(ex)
-        else
-            return false, NOTAREFERENCEMP
-        end
-    else
-        return false, NOTAREFERENCEMP
-    end
-    true, array_reference_meta!(ls, ya, yinds, elementbytes)
-end
-
-function add_load!(
-    ls::LoopSet, var::Symbol, array::Symbol, rawindices, elementbytes::Int = 8
-)
-    mpref = array_reference_meta!(ls, array, rawindices, elementbytes)
-    add_load!(ls, var, mpref, elementbytes)
-end
-function add_load!(
-    ls::LoopSet, var::Symbol, mpref::ArrayReferenceMetaPosition, elementbytes::Int = 8
-)
-    length(mpref.loopdependencies) == 0 && return add_constant!(ls, var, mpref, elementbytes)
-    ref = mpref.mref.ref
-    # try to CSE
-    id = findfirst(r -> r == ref, ls.refs_aliasing_syms)
-    if id === nothing
-        push!(ls.syms_aliasing_refs, var)
-        push!(ls.refs_aliasing_syms, ref)
-    else
-        opp = getop(ls, ls.syms_aliasing_refs[id], elementbytes)
-        return isstore(opp) ? getop(ls, first(parents(opp))) : opp
-    end
-    # else, don't
-    op = Operation( ls, var, elementbytes, :getindex, memload, mpref )
-    add_vptr!(ls, op)
-    pushop!(ls, op, var)
-end
-
-# for use with broadcasting
-function add_simple_load!(
-    ls::LoopSet, var::Symbol, ref::ArrayReference, elementbytes::Int = 8
-)
-    # if ref.loaded[] == true
-        # op = getop(ls, var, elementbytes)
-        # @assert var === op.variable
-        # return op
-    # end
-    # loopset = keys(ls.loops)
-    # loopdeps = Symbol[s for s ∈ loopdependencies(ref) if (s isa Symbol && s ∈ loopset)]
-    loopdeps = Symbol[s for s ∈ ref.indices]
-    mref = ArrayReferenceMeta(
-        ref, fill(true, length(loopdeps))
-    )
-    op = Operation(
-        length(operations(ls)), var, elementbytes,
-        :getindex, memload, loopdeps,
-        NODEPENDENCY, NOPARENTS, mref
-    )
-    add_vptr!(ls, op)
-    pushop!(ls, op, var)
-end
-function add_load_ref!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8)
-    array, rawindices = ref_from_ref(ex)
-    add_load!(ls, var, array, rawindices, elementbytes)
-end
-function add_load_getindex!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8)
-    array, rawindices = ref_from_getindex(ex)
-    add_load!(ls, var, array, rawindices, elementbytes)
-end
 function instruction(x)
     x isa Symbol ? x : last(x.args).value
 end
 
-function addsetv!(s::AbstractVector{T}, v::T) where {T}
-    for sᵢ ∈ s
-        sᵢ === v && return nothing
-    end
-    push!(s, v)
-    nothing
-end
-function mergesetv!(s1::AbstractVector{T}, s2::AbstractVector{T}) where {T}
-    for s ∈ s2
-        addsetv!(s1, s)
-    end
-    nothing
-end
-function mergesetdiffv!(
-    s1::AbstractVector{T},
-    s2::AbstractVector{T},
-    s3::AbstractVector{T}
-) where {T}
-    for s ∈ s2
-        s ∉ s3 && addsetv!(s1, s)
-    end
-    nothing
-end
-function setdiffv!(s3::AbstractVector{T}, s1::AbstractVector{T}, s2::AbstractVector{T}) where {T}
-    for s ∈ s1
-        (s ∈ s2) || (s ∉ s3 && push!(s3, s))
-    end
-end
 # if it is a literal, that literal has to have been assigned to var in the preamble.
 
-function add_constant!(ls::LoopSet, var::Symbol, elementbytes::Int = 8)
-    pushop!(ls, Operation(length(operations(ls)), var, elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS), var)
-end
-function add_constant!(ls::LoopSet, var, elementbytes::Int = 8)
-    sym = gensym(:temp)
-    op = Operation(length(operations(ls)), sym, elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS)
-    pushpreamble!(ls, Expr(:(=), mangledvar(op), var))
-    pushop!(ls, op, sym)
-end
-function add_constant!(ls::LoopSet, var::Symbol, mpref::ArrayReferenceMetaPosition, elementbytes::Int)
-    op = Operation(length(operations(ls)), var, elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS, mpref.mref)
-    add_vptr!(ls, op)
-    pushpreamble!(ls, Expr(:(=), mangledvar(op), Expr(:call, lv(:load), mpref.mref.ptr, mem_offset(op, TileDescription(zero(Int32), Symbol(""), Symbol(""), nothing)))))
-    pushop!(ls, op, var)
-end
-# This version has loop dependencies. var gets assigned to sym when lowering.
-function add_constant!(ls::LoopSet, var::Symbol, deps::Vector{Symbol}, sym::Symbol = gensym(:constant), f::Symbol = Symbol(""), elementbytes::Int = 8)
-    # length(deps) == 0 && push!(ls.preamble.args, Expr(:(=), sym, var))
-    pushop!(ls, Operation(length(operations(ls)), sym, elementbytes, Instruction(f,var), constant, deps, NODEPENDENCY, NOPARENTS), sym)
-end
-function add_constant!(
-    ls::LoopSet, var, deps::Vector{Symbol}, sym::Symbol = gensym(:constant), f::Symbol = Symbol(""), elementbytes::Int = 8
-)
-    sym2 = gensym(:temp) # hack, passing meta info here
-    pushpreamble!(ls, Expr(:(=), sym2, var))
-    pushop!(ls, Operation(length(operations(ls)), sym, elementbytes, Instruction(f, sym2), constant, deps, NODEPENDENCY, NOPARENTS), sym)
-end
-function pushparent!(parents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, parent::Operation)
-    push!(parents, parent)
-    mergesetdiffv!(deps, loopdependencies(parent), reduceddependencies(parent))
-    if !(isload(parent) || isconstant(parent)) && parent.instruction.instr ∉ (:reduced_add, :reduced_prod, :reduce_to_add, :reduce_to_prod)
-        mergesetv!(reduceddeps, reduceddependencies(parent))
-    end
-    nothing
-end
-function pushparent!(mpref::ArrayReferenceMetaPosition, parent::Operation)
-    pushparent!(mpref.parents, mpref.loopdependencies, mpref.reduceddeps, parent)
-end
-function add_parent!(
-    parents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet, var, elementbytes::Int = 8
-)
-    parent = if var isa Symbol
-        getop(ls, var, elementbytes)
-    elseif var isa Expr #CSE candidate
-        add_operation!(ls, gensym(:temporary), var, elementbytes)
-    else # assumed constant
-        add_constant!(ls, var, elementbytes)
-    end
-    pushparent!(parents, deps, reduceddeps, parent)
-end
-function add_reduction!(
-    parents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet, var::Symbol, elementbytes::Int = 8
-)
-    get!(ls.opdict, var) do
-        add_constant!(ls, var, elementbytes)
-    end
-    # pushparent!(parents, deps, reduceddeps, parent)
-end
-function add_reduction_update_parent!(
-    parents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet,
-    var::Symbol, instr::Symbol, elementbytes::Int = 8
-)
-    parent = getop(ls, var, elementbytes)
-    isloopconstant = parent.instruction === LOOPCONSTANT
-    Instr = Instruction(instr)
-    # if parent is not an outer reduction...
-    if !isloopconstant
-        # and parent is not a reduction_zero
-        reduct_zero = REDUCTION_ZERO[Instr]
-        reductcombine = REDUCTION_SCALAR_COMBINE[Instr].name
-        reductsym = gensym(:reduction)
-        reductinit = add_constant!(ls, Expr(:call, reduct_zero, ls.T), loopdependencies(parent), reductsym, reduct_zero, elementbytes)
-        if isconstant(parent) && reduct_zero === parent.instruction.mod #we can use parent op as initialization.
-            reductcombine = REDUCTION_COMBINETO[reductcombine]
-        # else # we cannot use parent op as initialization.
-        end
-    else
-        reductinit = parent
-        reductsym = var
-        reductcombine = Symbol("")
-    end
-    # mergesetv!(reduceddeps, deps)
-    if length(reduceddependencies(reductinit)) == 0
-        setdiffv!(reduceddeps, deps, loopdependencies(reductinit))
-    else
-        setdiffv!(reduceddeps, deps, loopdependencies(reductinit))
-    end
-    # mergesetv!(reduceddependencies(reductinit), reduceddeps)
-    pushparent!(parents, deps, reduceddeps, reductinit)#parent) # deps and reduced deps will not be disjoint
-    op = Operation(length(operations(ls)), reductsym, elementbytes, instr, compute, deps, reduceddeps, parents)
-    parent.instruction === LOOPCONSTANT && push!(ls.outer_reductions, identifier(op))
-    opout = pushop!(ls, op, var) # note this overwrites the entry in the operations dict, but not the vector
-    isloopconstant && return opout
-    # create child
-    childdeps = Symbol[]; childrdeps = Symbol[]; childparents = Operation[]
-    pushparent!(childparents, childdeps, childrdeps, op) # reduce op
-    pushparent!(childparents, childdeps, childrdeps, parent) # to
-    child = Operation(
-        length(operations(ls)), name(parent), elementbytes, reductcombine, compute, childdeps, childrdeps, childparents
-    )
-    pushop!(ls, child, name(parent))
-end
-function add_compute!(
-    ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8,
-    mpref::Union{Nothing,ArrayReferenceMetaPosition} = nothing
-)
-    @assert ex.head === :call
-    instr = instruction(first(ex.args))::Symbol
-    args = @view(ex.args[2:end])
-    parents = Operation[]
-    deps = Symbol[]
-    reduceddeps = Symbol[]
-    reduction = false
-    for arg ∈ args
-        if var === arg
-            reduction = true
-            add_reduction!(parents, deps, reduceddeps, ls, arg, elementbytes)
-        elseif arg isa Expr
-            isref, argref = tryrefconvert(ls, arg, elementbytes)
-            if isref
-                if mpref == argref
-                    reduction = true
-                    add_load!(ls, var, mpref, elementbytes)
-                else
-                    pushparent!(parents, deps, reduceddeps, add_load!(ls, gensym(:tempload), argref, elementbytes))
-                end
-            else
-                add_parent!(parents, deps, reduceddeps, ls, arg, elementbytes)
-            end
-        else
-            add_parent!(parents, deps, reduceddeps, ls, arg, elementbytes)
-        end
-    end
-    if reduction # arg[reduction] is the reduction
-        add_reduction_update_parent!(parents, deps, reduceddeps, ls, var, instr, elementbytes)
-    else
-        op = Operation(length(operations(ls)), var, elementbytes, instr, compute, deps, reduceddeps, parents)
-        pushop!(ls, op, var)
-    end
-end
-function add_unique_store!(ls::LoopSet, op::Operation)
-    add_vptr!(ls, op)
-    pushop!(ls, op, name(op.ref))
-end
-function cse_store!(ls::LoopSet, op::Operation)
-    id = identifier(op)
-    ls.operations[id] = op
-    ls.opdict[op.variable] = op
-    op
-end
-function add_store!(ls::LoopSet, op::Operation)
-    nops = length(ls.operations)
-    id = op.identifier
-    id == nops ? add_unique_store!(ls, op) : cse_store!(ls, op)
-end
-function add_store!(
-    ls::LoopSet, var::Symbol, mpref::ArrayReferenceMetaPosition, elementbytes::Int = 8
-)
-    parents = mpref.parents
-    ldref = mpref.loopdependencies
-    reduceddeps = mpref.reduceddeps
-    parent = getop(ls, var, ldref, elementbytes)
-    # pushfirst!(parents, parent)
-    pvar = parent.variable
-    nops = length(ls.operations)
-    id = nops
-    if pvar ∉ ls.syms_aliasing_refs
-        push!(ls.syms_aliasing_refs, pvar)
-        push!(ls.refs_aliasing_syms, mpref.mref.ref)
-        # add_unique_store!(ls, mref, parents, ldref, reduceddeps, elementbytes)
-    else
-        # try to cse store
-        # different from cse load, because the other op here must be a store
-        ref = mpref.mref.ref
-        for opp ∈ operations(ls)
-            isstore(opp) || continue
-            if ref == opp.ref.ref# && return cse_store!(ls, identifier(opp), mref, parents, ldref, reduceddeps, elementbytes)
-                id = opp.identifier
-            end
-        end
-        # add_unique_store!(ls, mref, parents, ldref, reduceddeps, elementbytes)        
-    end
-    pushparent!(parents, ldref, reduceddeps, parent)
-    op = Operation( id, name(mpref), elementbytes, :setindex!, memstore, mpref )#loopdependencies, reduceddeps, parents, mpref.mref )
-    add_store!(ls, op)
-end
-function add_store!(
-    ls::LoopSet, var::Symbol, array::Symbol, rawindices, elementbytes::Int = 8
-)
-    mpref = array_reference_meta!(ls, array, rawindices, elementbytes)
-    add_store!(ls, var, mpref, elementbytes)
-end
-function add_simple_store!(ls::LoopSet, var::Symbol, ref::ArrayReference, elementbytes::Int = 8)
-    mref = ArrayReferenceMeta(
-        ref, fill(true, length(getindices(ref)))
-    )
-    parents = [getop(ls, var, elementbytes)]
-    ldref = convert(Vector{Symbol}, getindices(ref))
-    op = Operation( ls, name(mref), elementbytes, :setindex!, memstore, ldref, NODEPENDENCY, parents, mref )
-    add_unique_store!(ls, op)
-end
-function add_store_ref!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8)
-    array, raw_indices = ref_from_ref(ex)
-    add_store!(ls, var, array, raw_indices, elementbytes)
-end
-function add_store_setindex!(ls::LoopSet, ex::Expr, elementbytes::Int = 8)
-    array, raw_indices = ref_from_setindex(ex)
-    add_store!(ls, (ex.args[2])::Symbol, array, rawindices, elementbytes)
-end
-function add_if!(ls::LoopSet, LHS::Symbol, RHS::Expr, elementbytes::Int = 8, mpref::Union{Nothing,ArrayReferenceMetaPosition} = nothing)
-    condition = first(RHS.args)
-    m = gensym(:mask)
-    condop = add_compute!(ls, m, condition, elementbytes, mpref)
-    iftrue = RHS.args[2]
-    iftrueisaexpr = iftrue isa Expr
-    iffalse = RHS.args[3]
-    iffalseisaexpr = iffalse isa Expr
-    trueisablock = iftrueisaexpr && iftrue.head !== :call
-    falseisablock = iffalseisaexpr && iffalse.head !== :call
-    
-end
 # add operation assigns X to var
 function add_operation!(
     ls::LoopSet, LHS::Symbol, RHS::Expr, elementbytes::Int = 8
@@ -751,9 +420,11 @@ function add_operation!(
         if f === :getindex
             add_load_getindex!(ls, LHS, RHS, elementbytes)
         elseif f === :zero || f === :one
-            c = gensym(:constant)
-            pushpreamble!(ls, Expr(:(=), c, RHS))
-            add_constant!(ls, c, [keys(ls.loops)...], LHS, f, elementbytes)
+            c = gensym(f)
+            # pushpreamble!(ls, Expr(:(=), c, RHS))
+            op = add_constant!(ls, c, [keys(ls.loops)...], LHS, f, elementbytes)
+            push!(f === :zero ? ls.preamble_zeros : ls.preamble_ones, identifier(op))
+            op
         else
             add_compute!(ls, LHS, RHS, elementbytes)
         end
@@ -774,9 +445,11 @@ function add_operation!(
         if f === :getindex
             add_load!(ls, LHS_sym, LHS_ref, elementbytes)
         elseif f === :zero || f === :one
-            c = gensym(:constant)
-            pushpreamble!(ls, Expr(:(=), c, RHS))
-            add_constant!(ls, c, [keys(ls.loops)...], LHS_sym, f, elementbytes)
+            c = gensym(f)
+            # pushpreamble!(ls, Expr(:(=), c, RHS))
+            op = add_constant!(ls, c, [keys(ls.loops)...], LHS_sym, f, elementbytes)
+            push!(f === :zero ? ls.preamble_zeros : ls.preamble_ones, identifier(op))
+            op
         else
             add_compute!(ls, LHS_sym, RHS, elementbytes, LHS_ref)
         end
@@ -786,7 +459,7 @@ function add_operation!(
         throw("Expression not recognized:\n$x")
     end
 end
-numsym(x)::Symbol = iszero(x) ? :zero : (isone(x) ? :one : :numconst )
+
 function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int = 8)
     if ex.head === :call
         finex = first(ex.args)::Symbol
@@ -804,16 +477,26 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int = 8)
             else
                 deps = [keys(ls.loops)...]
                 if RHS isa Number
-                    instr = if RHS isa Float64 # is this easier on the compiler?
-                        numsym(RHS)
-                    elseif RHS isa Int
-                        numsym(RHS)
-                    elseif RHS isa Float32
-                        numsym(RHS)
-                    else RHS isa Number
-                        numsym(RHS)
+                    fisone = false
+                    fiszero = false
+                    instr = if iszero(RHS)
+                        fiszero = true
+                        :zero
+                    elseif isone(RHS)
+                        fisone = true
+                        :one
+                    else
+                        :numericalconstant
                     end
-                    add_constant!(ls, RHS, deps, LHS, instr, elementbytes)
+                    op = add_constant!(ls, gensym(instr), deps, LHS, instr, elementbytes)
+                    if fiszero
+                        push!(ls.preamble_zeros, identifier(op))
+                    elseif fisone
+                        push!(ls.preamble_ones, identifier(op))
+                    else
+                        pushpreamble!(ls, op, RHS)
+                    end
+                    op
                 elseif RHS isa Symbol
                     add_constant!(ls, RHS, deps, LHS, :constsym, elementbytes)
                 else

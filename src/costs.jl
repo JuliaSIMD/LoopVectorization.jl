@@ -75,6 +75,7 @@ const OPAQUE_INSTRUCTION = InstructionCost(50, 50.0, -1.0, VectorizationBase.REG
 const COST = Dict{Instruction,InstructionCost}(
     Instruction(:getindex) => InstructionCost(-3.0,0.5,3,1),
     Instruction(:setindex!) => InstructionCost(-3.0,1.0,3,0),
+    Instruction(:conditionalstore!) => InstructionCost(-3.0,1.0,3,0),
     Instruction(:zero) => InstructionCost(1,0.5),
     Instruction(:one) => InstructionCost(3,0.5),
     Instruction(:+) => InstructionCost(4,0.5),

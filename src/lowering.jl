@@ -1,8 +1,16 @@
 
+struct TileDescription
+    vectorized::Symbol
+    unrolled::Symbol
+    tiled::Symbol
+    U::Int
+    T::Int
+end
+
 variable_name(op::Operation, ::Nothing) = mangledvar(op)
 variable_name(op::Operation, suffix) = Symbol(mangledvar(op), suffix, :_)
 
-struct TileDescription{T}
+struct UnrollArgs{T}
     u::Int32
     unrolled::Symbol
     tiled::Symbol
@@ -14,7 +22,7 @@ function parentind(ind::Symbol, op::Operation)
     end
     -1
 end
-function symbolind(ind::Symbol, op::Operation, td::TileDescription)
+function symbolind(ind::Symbol, op::Operation, td::UnrollArgs)
     id = parentind(ind, op)
     id == -1 && return Expr(:call, :-, ind, one(Int32))
     @unpack u, unrolled, tiled, suffix = td
@@ -29,7 +37,7 @@ function symbolind(ind::Symbol, op::Operation, td::TileDescription)
     end
     Expr(:call, :-, pvar, one(Int32))
 end
-function mem_offset(op::Operation, td::TileDescription)
+function mem_offset(op::Operation, td::UnrollArgs)
     # @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
     ret = Expr(:tuple)
     indices = getindices(op)
@@ -46,7 +54,7 @@ function mem_offset(op::Operation, td::TileDescription)
     end
     ret
 end
-function mem_offset_u(op::Operation, td::TileDescription)
+function mem_offset_u(op::Operation, td::UnrollArgs)
     @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
     @unpack unrolled, u = td
     incr = u
@@ -72,7 +80,7 @@ function mem_offset_u(op::Operation, td::TileDescription)
     end
     ret
 end
-function mem_offset_u(op::Operation, td::TileDescription, mul::Symbol)
+function mem_offset_u(op::Operation, td::UnrollArgs, mul::Symbol)
     @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
     @unpack unrolled, u = td
     incr = u
@@ -112,7 +120,7 @@ function varassignname(var::Symbol, u::Int32, isunrolled::Bool)
     isunrolled ? Symbol(var, u) : var
 end
 # name_memoffset only gets called when vectorized
-function name_memoffset(var::Symbol, op::Operation, td::TileDescription, W::Symbol, vecnotunrolled::Bool)
+function name_memoffset(var::Symbol, op::Operation, td::UnrollArgs, W::Symbol, vecnotunrolled::Bool)
     @unpack u, unrolled = td
     if u < 0 # sentinel value meaning not unrolled
         name = var
@@ -123,7 +131,7 @@ function name_memoffset(var::Symbol, op::Operation, td::TileDescription, W::Symb
     end
     name, mo
 end
-function pushvectorload!(q::Expr, op::Operation, var::Symbol, td::TileDescription, U::Int, W::Symbol, mask, vecnotunrolled::Bool)
+function pushvectorload!(q::Expr, op::Operation, var::Symbol, td::UnrollArgs, U::Int, W::Symbol, mask, vecnotunrolled::Bool)
     @unpack u, unrolled = td
     ptr = refname(op)
     name, mo = name_memoffset(var, op, td, W, vecnotunrolled)
@@ -145,7 +153,7 @@ function lower_load_scalar!(
     U = isunrolled ? U : 1
     for u ∈ zero(Int32):Base.unsafe_trunc(Int32,U-1)
         varname = varassignname(var, u, isunrolled)
-        td = TileDescription(u, unrolled, tiled, suffix)
+        td = UnrollArgs(u, unrolled, tiled, suffix)
         push!(q.args, Expr(:(=), varname, Expr(:call, lv(:load), ptr, mem_offset_u(op, td))))
     end
     nothing
@@ -167,7 +175,7 @@ function lower_load_vectorized!(
     var = variable_name(op, suffix)
     vecnotunrolled = vectorized !== unrolled
     for u ∈ umin:Base.unsafe_trunc(Int32,U-1)
-        td = TileDescription(u, unrolled, tiled, suffix)
+        td = UnrollArgs(u, unrolled, tiled, suffix)
         pushvectorload!(q, op, var, td, U, W, mask, vecnotunrolled)
     end
     nothing
@@ -240,23 +248,71 @@ function reduce_unroll!(q, op, U, unrolled)
     reduce_expr!(q, var, instr, U) # assigns reduction to storevar
     1, isunrolled
 end
-function lower_store_reduction!(
+function lowered_variable_name(op::Operation, unrolled::Symbol, tiled::Symbol, u::Int, suffix)
+
+end
+function lowered_variable_name(op::Operation, unrolled::Symbol, tiled::Symbol, u::Int, ::Nothing)
+    varassignname(var, u, isunrolled)
+end
+
+function lower_conditionalstore_scalar!(
     q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol, tiled::Symbol, U::Int,
     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned}, isunrolled::Bool
 )
     var = pvariable_name(op, suffix)
+    cond = last(parents(op))
+    condvar = if suffix === nothing || tiled ∉ loopdependencies(cond)
+        pvariable_name(op, nothing)
+    else
+        pvariable_name(op, suffix)
+    end
+    condunrolled = unrolled ∈ loopdependencies(cond)
     ptr = refname(op)
-    # need to find out reduction type
-    instr = first(parents(op)).instruction
-    reduct_instruct = CORRESPONDING_REDUCTION[instr]
     for u ∈ zero(Int32):Base.unsafe_trunc(Int32,U-1)
-        reducedname = varassignname(var, u, isunrolled)
-        storevar = Expr(reduct_instruct, reducedname)
-        td = TileDescription(u, unrolled, tiled, suffix)
-        push!(q.args, Expr(:call, lv(:store!), ptr, storevar, mem_offset_u(op, td))) # store storevar
+        varname = varassignname(var, u, isunrolled)
+        condvarname = varassignname(condvar, u, condunrolled)
+        td = UnrollArgs(u, unrolled, tiled, suffix)
+        push!(q.args, Expr(:&&, condvarname, Expr(:call, lv(:store!), ptr, varname, mem_offset_u(op, td))))
     end
     nothing
 end
+function lower_conditionalstore_vectorized!(
+    q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol, tiled::Symbol, U::Int,
+    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned}, isunrolled::Bool
+)
+    loopdeps = loopdependencies(op)
+    @assert unrolled ∈ loopdeps
+    var = pvariable_name(op, suffix)
+    if isunrolled
+        umin = zero(Int32)
+        U = U
+    else
+        umin = -one(Int32)
+        U = 0
+    end
+    ptr = refname(op)
+    vecnotunrolled = vectorized !== unrolled
+    cond = last(parents(op))
+    condvar = if suffix === nothing || tiled ∉ loopdependencies(cond)
+        pvariable_name(op, nothing)
+    else
+        pvariable_name(op, suffix)
+    end
+    condunrolled = unrolled ∈ loopdependencies(cond)
+    for u ∈ zero(Int32):Base.unsafe_trunc(Int32,U-1)
+        td = UnrollArgs(u, unrolled, tiled, suffix)
+        name, mo = name_memoffset(var, op, td, W, vecnotunrolled)
+        condvarname = varassignname(condvar, u, condunrolled)
+        instrcall = Expr(:call, lv(:vstore!), ptr, name, mo)
+        if mask !== nothing && (vecnotunrolled || u == U - 1)
+            push!(instrcall.args, Expr(:call, :&, condvarname, mask))
+        else
+            push!(instrcall.args, condvarname)
+        end
+        push!(q.args, instrcall)
+    end
+end
+
 function lower_store_scalar!(
     q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol, tiled::Symbol, U::Int,
     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned}, isunrolled::Bool
@@ -265,7 +321,7 @@ function lower_store_scalar!(
     ptr = refname(op)
     for u ∈ zero(Int32):Base.unsafe_trunc(Int32,U-1)
         varname = varassignname(var, u, isunrolled)
-        td = TileDescription(u, unrolled, tiled, suffix)
+        td = UnrollArgs(u, unrolled, tiled, suffix)
         push!(q.args, Expr(:call, lv(:store!), ptr, varname, mem_offset_u(op, td)))
     end
     nothing
@@ -287,7 +343,7 @@ function lower_store_vectorized!(
     ptr = refname(op)
     vecnotunrolled = vectorized !== unrolled
     for u ∈ zero(Int32):Base.unsafe_trunc(Int32,U-1)
-        td = TileDescription(u, unrolled, tiled, suffix)
+        td = UnrollArgs(u, unrolled, tiled, suffix)
         name, mo = name_memoffset(var, op, td, W, vecnotunrolled)
         instrcall = Expr(:call, lv(:vstore!), ptr, name, mo)
         if mask !== nothing && (vecnotunrolled || u == U - 1)
@@ -301,12 +357,18 @@ function lower_store!(
     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
 )
     U, isunrolled = reduce_unroll!(q, op, U, unrolled)
-    # if vectorized ∈ reduceddependencies(op)
-        # lower_store_reduction!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask, isunrolled)
-    if vectorized ∈ loopdependencies(op)
-        lower_store_vectorized!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask, isunrolled)
+    if instruction(op).instr !== :conditionalstore!
+        if vectorized ∈ loopdependencies(op)
+            lower_store_vectorized!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask, isunrolled)
+        else
+            lower_store_scalar!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask, isunrolled)
+        end
     else
-        lower_store_scalar!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask, isunrolled)
+        if vectorized ∈ loopdependencies(op)
+            lower_conditionalstore_vectorized!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask, isunrolled)
+        else
+            lower_conditionalstore_scalar!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask, isunrolled)
+        end
     end
 end
 # A compute op needs to know the unrolling and tiling status of each of its parents.
@@ -784,18 +846,73 @@ function definemask(loop::Loop, W::Symbol, allon::Bool)
         maskexpr(W, lexpr, allon)
     end
 end
-function setup_Wmask!(ls::LoopSet, W::Symbol, typeT::Symbol, vectorized::Symbol, unrolled::Symbol, tiled::Symbol, U::Int)
-    pushfirst!(ls.preamble.args, Expr(:(=), W, determine_width(ls, typeT, unrolled)))
-    pushfirst!(ls.preamble.args, Expr(:(=), typeT, determine_eltype(ls)))
+@inline sizeequivalentfloat(::Type{T}, x::T) where {T} = x
+@inline sizeequivalentfloat(::Type{Int64}, x::Float64) = x
+@inline sizeequivalentfloat(::Type{Int64}, x::Float32) = Float64(x)
+@inline sizeequivalentfloat(::Type{Int64}, x::Float16) = Float64(x)
+@inline sizeequivalentfloat(::Type{Int32}, x::Float64) = Float32(x)
+@inline sizeequivalentfloat(::Type{Int32}, x::Float32) = x
+@inline sizeequivalentfloat(::Type{Int32}, x::Float16) = Float32(x)
+@inline sizeequivalentfloat(::Type{Int16}, x::Float64) = Float16(x)
+@inline sizeequivalentfloat(::Type{Int16}, x::Float32) = Float16(x)
+@inline sizeequivalentfloat(::Type{Int16}, x::Float16) = x
+@inline sizeequivalentfloat(::Type{Float64}, x::Float32) = Float64(x)
+@inline sizeequivalentfloat(::Type{Float64}, x::Float16) = Float64(x)
+@inline sizeequivalentfloat(::Type{Float32}, x::Float64) = Float32(x)
+@inline sizeequivalentfloat(::Type{Float32}, x::Float16) = Float32(x)
+@inline sizeequivalentfloat(::Type{Float16}, x::Float64) = Float16(x)
+@inline sizeequivalentfloat(::Type{Float16}, x::Float32) = Float16(x)
+@inline sizeequivalentint(::Type{T}, x::T) where {T} = x
+@inline sizeequivalentint(::Type{Int64}, x::Int64) = x
+@inline sizeequivalentint(::Type{Int64}, x::Int32) = Int64(x)
+@inline sizeequivalentint(::Type{Int64}, x::Int16) = Int64(x)
+@inline sizeequivalentint(::Type{Int32}, x::Int64) = Int32(x)
+@inline sizeequivalentint(::Type{Int32}, x::Int32) = x
+@inline sizeequivalentint(::Type{Int32}, x::Int16) = Int32(x)
+@inline sizeequivalentint(::Type{Int16}, x::Int64) = Int16(x)
+@inline sizeequivalentint(::Type{Int16}, x::Int32) = Int16(x)
+@inline sizeequivalentint(::Type{Int16}, x::Int16) = x
+@inline sizeequivalentint(::Type{Float64}, x::Int32) = Int64(x)
+@inline sizeequivalentint(::Type{Float64}, x::Int16) = Int64(x)
+@inline sizeequivalentint(::Type{Float32}, x::Int64) = Int32(x)
+@inline sizeequivalentint(::Type{Float32}, x::Int16) = Int32(x)
+@inline sizeequivalentint(::Type{Float16}, x::Int64) = Int16(x)
+@inline sizeequivalentint(::Type{Float16}, x::Int32) = Int16(x)
+
+function lower_licm_constants!(ls::LoopSet)
+    ops = operations(ls)
+    for (id,sym) ∈ ls.preamble_symsym
+        op = ops[id]
+        mv = mangledvar(op)
+        mv === sym || pushpreamble!(ls, Expr(:(=), mv, sym))
+    end
+    for (id,intval) ∈ ls.preamble_symint
+        op = ops[id]
+        pushpreamble!(ls, Expr(:(=), mangledvar(op), Expr(:call, lv(:sizeequivalentint), ls.T, intval)))
+    end
+    for (id,floatval) ∈ ls.preamble_symfloat
+        op = ops[id]
+        pushpreamble!(ls, Expr(:(=), mangledvar(op), Expr(:call, lv(:sizeequivalentfloat), ls.T, floatval)))
+    end
+    for id ∈ ls.preamble_zeros
+        op = ops[id]
+        pushpreamble!(ls, Expr(:(=), instruction(op).instr, Expr(:call, :zero, ls.T)))
+    end
+    for id ∈ ls.preamble_ones
+        op = ops[id]
+        pushpreamble!(ls, Expr(:(=), instruction(op).instr, Expr(:call, :one, ls.T)))
+    end
+end
+function setup_preamble!(ls::LoopSet, W::Symbol, typeT::Symbol, vectorized::Symbol, unrolled::Symbol, tiled::Symbol, U::Int)
+    # println("Setup preamble")
+    push!(ls.preamble.args, Expr(:(=), typeT, determine_eltype(ls)))
+    push!(ls.preamble.args, Expr(:(=), W, determine_width(ls, typeT, unrolled)))
+    lower_licm_constants!(ls)
     pushpreamble!(ls, definemask(ls.loops[vectorized], W, U > 1 && unrolled === vectorized))
     # define_remaining_ops!( ls, vectorized, W, unrolled, tiled, U )
 end
 function lsexpr(ls::LoopSet, q)
-    if length(ls.prepreamble.args) == 0
-        Expr(:block, ls.preamble, q)
-    else
-        Expr(:block, ls.prepreamble, ls.preamble, q)
-    end
+    Expr(:block, ls.preamble, q)
 end
 function lower_tiled(ls::LoopSet, vectorized::Symbol, U::Int, T::Int)
     order = ls.loop_order.loopnames
@@ -804,7 +921,7 @@ function lower_tiled(ls::LoopSet, vectorized::Symbol, U::Int, T::Int)
     mangledtiled = tiledsym(tiled)
     W = ls.W
     typeT = ls.T
-    setup_Wmask!(ls, W, typeT, vectorized, unrolled, tiled, U)
+    setup_preamble!(ls, W, typeT, vectorized, unrolled, tiled, U)
     tiledloop = ls.loops[tiled]
     static_tile = isstaticloop(tiledloop)
     unrolledloop = ls.loops[unrolled]
@@ -870,7 +987,7 @@ function lower_unrolled(ls::LoopSet, vectorized::Symbol, U::Int)
     # W = VectorizationBase.pick_vector_width(ls, unrolled)
     W = ls.W
     typeT = ls.T
-    setup_Wmask!(ls, W, typeT, vectorized, unrolled, last(order), U)
+    setup_preamble!(ls, W, typeT, vectorized, unrolled, last(order), U)
     initunrolledcounter = startloop(ls.loops[unrolled], unrolled === vectorized, W, unrolled)
     q = lower_unrolled!(Expr(:block, initunrolledcounter), ls, vectorized, U, -1, W, typeT, ls.loops[unrolled])
     lsexpr(ls, q)

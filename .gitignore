@@ -7,7 +7,7 @@
 *~
 src/#*#
 tests/#*#
-benchmarks/#*#
+benchmark/#*#
 *.mem
 *.mod
 *.mod0
