@@ -34,9 +34,9 @@ isdense(::Type{<:DenseArray}) = true
 
 
 # For passing options like array types and mask
-struct LoopSetOptions
+# struct LoopSetOptions
     
-end
+# end
 
 struct Loop
     itersymbol::Symbol
@@ -141,7 +141,7 @@ Base.@propagate_inbounds Base.getindex(lo::LoopOrder, i::Int) = lo.oporder[i]
 Base.@propagate_inbounds Base.getindex(lo::LoopOrder, i...) = lo.oporder[LinearIndices(size(lo))[i...]]
 
 # Must make it easy to iterate
-# outer_reductions is a vector of indixes (within operation vectors) of the reduction operation, eg the vmuladd op in a dot product
+# outer_reductions is a vector of indices (within operation vectors) of the reduction operation, eg the vmuladd op in a dot product
 struct LoopSet
     loopsymbols::Vector{Symbol}
     loops::Vector{Loop}
@@ -234,6 +234,7 @@ function LoopSet()
         Bool[], Bool[], gensym(:W), gensym(:T)
     )
 end
+
 num_loops(ls::LoopSet) = length(ls.loops)
 function oporder(ls::LoopSet)
     N = length(ls.loop_order.loopnames)

@@ -709,7 +709,7 @@ function reduce_expr!(q::Expr, ls::LoopSet, U::Int)
     end
 end
 function gc_preserve(ls::LoopSet, q::Expr)
-    length(ls.includedarrays) == 0 && return q # is this even possible?
+    length(ls.includedarrays) == 0 && return q
     gcp = Expr(:macrocall, Expr(:(.), :GC, QuoteNode(Symbol("@preserve"))), LineNumberNode(@__LINE__, @__FILE__))
     for array ∈ ls.includedarrays
         push!(gcp.args, array)
