@@ -61,9 +61,9 @@ uuid = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 
 [[SIMDPirates]]
 deps = ["MacroTools", "VectorizationBase"]
-git-tree-sha1 = "2583fb65de2462163e7fb6cd272c282fd9cf8207"
+git-tree-sha1 = "3303ab900288f497c738c34bd474f40b456ac8ef"
 uuid = "21efa798-c60a-11e8-04d3-e1a92915a26a"
-version = "0.1.7"
+version = "0.1.8"
 
 [[SLEEFPirates]]
 deps = ["SIMDPirates", "VectorizationBase"]
