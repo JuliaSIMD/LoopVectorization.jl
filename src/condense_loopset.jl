@@ -45,6 +45,7 @@ struct OperationStruct
     loopdeps::UInt64
     reduceddeps::UInt64
     parents::UInt64
+    node_type::OperationType
     array::UInt8
 end
 function findmatchingarray(ls::LoopSet, array::Symbol)
@@ -55,12 +56,14 @@ function findmatchingarray(ls::LoopSet, array::Symbol)
     end
     0x00
 end
-filled_4byte_chunks(u::UInt64) = leading_zeros(u) >>> 2
+filled_4byte_chunks(u::UInt64) = 16 - (leading_zeros(u) >>> 2)
+filled_8byte_chunks(u::UInt64) = 8 - (leading_zeros(u) >>> 3)
+
 num_loop_deps(os::OperationStruct) = filled_4byte_chunks(os.loopdeps)
 num_reduced_deps(os::OperationStruct) = filled_4byte_chunks(os.reduced_deps)
 num_parents(os::OperationStruct) = filled_4byte_chunks(os.parents)
 
-function loopdeps_uint(ls::LoopSet, loopsyms::Vector{Symbol})
+function shifted_loopset(ls::LoopSet, loopsyms::Vector{Symbol})
     ld = zero(UInt64) # leading_zeros(ld) >> 2 yields the number of loopdeps
     for d ∈ loopsyms
         ld <<= 4
@@ -85,7 +88,7 @@ function OperationStruct(ls::LoopSet, op::Operation)
     p = parents_uint(ls, op)
     array = accesses_memory(op) ? findmatchingarray(ls, vptr(op.ref)) : 0x00
     OperationStruct(
-        instr, ld, rd, p, array
+        instr, ld, rd, p, op.node_type, array
     )
 end
 ## turn a LoopSet into a type object which can be used to reconstruct the LoopSet.

@@ -247,6 +247,8 @@ function getloopid(ls::LoopSet, s::Symbol)::Int
     end
 end
 getloop(ls::LoopSet, s::Symbol) = ls.loops[getloopid(ls, s)]
+getloop(ls::LoopSet, i::Integer) = ls.loops[i]
+getloopsym(ls::LoopSet, i::Integer) = ls.loopsymbols[i]
 Base.length(ls::LoopSet, s::Symbol) = length(getloop(ls, s))
 
 isstaticloop(ls::LoopSet, s::Symbol) = isstaticloop(getloop(ls,s))

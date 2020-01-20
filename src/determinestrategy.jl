@@ -15,6 +15,11 @@ function cost(op::Operation, unrolled::Symbol, Wshift::Int, size_T::Int = op.ele
     # Wshift == dependson(op, unrolled) ? Wshift : 0
     # c = first(cost(instruction(op), Wshift, size_T))::Int
     instr = instruction(op)
+    if length(parents(op)) == 1
+        if instr == Instruction(:-) || instr === Instruction(:vsub) || instr == Instruction(:+) || instr == Instruction(:vadd)
+            return 0.0, 0, 1
+        end
+    end
     opisunrolled = dependson(op, unrolled)
     srt, sl, srp = opisunrolled ? vector_cost(instr, Wshift, size_T) : scalar_cost(instr)
     if accesses_memory(op)
