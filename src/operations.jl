@@ -1,7 +1,7 @@
 
 struct ArrayReference
     array::Symbol
-    indices::Vector{Union{Symbol,Int}}
+    indices::Vector{Symbol}
 end
 function Base.isequal(x::ArrayReference, y::ArrayReference)
     x.array === y.array || return false
@@ -17,12 +17,11 @@ end
 struct ArrayReferenceMeta
     ref::ArrayReference
     loopedindex::Vector{Bool}
-    # loopdependencies::Vector{Symbol}
     ptr::Symbol
 end
 function ArrayReferenceMeta(ref::ArrayReference, loopedindex, ptr = vptr(ref))
     ArrayReferenceMeta(
-    ref, loopedindex, ptr
+        ref, loopedindex, ptr
     )
 end
 # function Base.hash(x::ArrayReference, h::UInt)
@@ -34,7 +33,7 @@ end
 loopdependencies(ref::ArrayReferenceMeta) = ref.ref.indices
 Base.convert(::Type{ArrayReference}, ref::ArrayReferenceMeta) = ref.ref
 Base.:(==)(x::ArrayReference, y::ArrayReference) = isequal(x, y)
-Base.:(==)(x::ArrayReferenceMeta, y::ArrayReferenceMeta) = isequal(x.ref, y.ref)
+Base.:(==)(x::ArrayReferenceMeta, y::ArrayReferenceMeta) = isequal(x.ref, y.ref) && x.ptr === y.ptr
 
 
 function ref_from_expr(ex, offset1::Int, offset2::Int)
@@ -68,7 +67,6 @@ function Base.:(==)(x::ArrayReference, y::Expr)::Bool
         return false
     end
     x.array == ya || return false
-    
 end
 Base.:(==)(x::ArrayReference, y::ArrayReferenceMeta) = x == y.ref
 Base.:(==)(x::ArrayReferenceMeta, y::ArrayReference) = x.ref == y
@@ -118,11 +116,6 @@ struct Operation
     end
 end
 
-function UndefinedStore(id, elementbytes)
-    Operation(
-    id, gensym(:)
-    )
-end
 function matches(op1::Operation, op2::Operation)
     op1.instruction === op2.instruction || return false
     op1.node_type == op2.node_type || return false
@@ -130,7 +123,7 @@ function matches(op1::Operation, op2::Operation)
     op1.dependencies == op2.dependencies || return false
     op2.reduced_deps == op2.reduced_deps || return false
     if isload(op1)
-        op1.ref.ref == op2.ref.ref || return false
+        op1.ref == op2.ref || return false
     end
     nparents = length(parents(op1))
     nparents == length(parents(op2)) || return false
@@ -141,7 +134,7 @@ function matches(op1::Operation, op2::Operation)
 end
 
  # negligible save on allocations for operations that don't need these (eg, constants).
-const NODEPENDENCY = Union{Symbol,Int}[]
+const NODEPENDENCY = Symbol[]
 const NOPARENTS = Operation[]
 
 function Base.show(io::IO, op::Operation)

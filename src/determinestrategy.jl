@@ -287,8 +287,8 @@ function solve_tilesize(
 )
     maxT = 4#8
     maxU = 4#8
-    tiledloop = ls.loops[tiled]
-    unrolledloop = ls.loops[unrolled]
+    tiledloop = getloop(ls, tiled)
+    unrolledloop = getloop(ls, unrolled)
     if isstaticloop(tiledloop)
         maxT = min(4maxT, length(tiledloop))
     end
@@ -314,6 +314,27 @@ function set_upstream_family!(adal::Vector{T}, op::Operation, val::T) where {T}
     end
 end
 
+function stride_penalty(ls::LoopSet, op::Operation, order::Vector{Symbol})
+    num_loops = length(order)
+    contigsym = first(loopdependencies(op))
+    contigsym == Symbol("##DISCONTIGUOUSSUBARRAY##") && return 0
+    iter = 0
+    for i ∈ 0:num_loops - 1
+        loopsym = order[num_loops - i]
+        loopsym === contigsym && return iter
+        iter *= length(getloop(ls, loopsym))
+    end
+    iter
+end
+function stride_penalty(ls::LoopSet, order::Vector{Symbol})
+    stridepenalty = 0
+    for op ∈ operations(ls)
+        if accesses_memory(op)
+            stridepenalty += stride_penalty(ls, op, order)
+        end
+    end
+    stridepenalty * 1e-9
+end
 # Just tile outer two loops?
 # But optimal order within tile must still be determined
 # as well as size of the tiles.
@@ -402,7 +423,8 @@ function evaluate_cost_tile(
     end
     # @show order, vectorized cost_vec reg_pressure
     # @show solve_tilesize(ls, unrolled, tiled, cost_vec, reg_pressure)
-    solve_tilesize(ls, unrolled, tiled, cost_vec, reg_pressure)
+    U, T, tcost = solve_tilesize(ls, unrolled, tiled, cost_vec, reg_pressure)
+    U, T, tcost + stride_penalty(ls, order)
 end
 
 
@@ -411,7 +433,7 @@ struct LoopOrders
     buff::Vector{Symbol}
 end
 function LoopOrders(ls::LoopSet)
-    syms = [s for s ∈ keys(ls.loops)]
+    syms = copy(ls.loopsymbols)
     LoopOrders(syms, similar(syms))
 end
 function Base.iterate(lo::LoopOrders)

@@ -132,7 +132,7 @@ using LinearAlgebra
             end)
         lsAtmulB = LoopVectorization.LoopSet(AtmulBq);
         # LoopVectorization.choose_order(lsAtmulB)
-        @test LoopVectorization.choose_order(lsAtmulB) == (Symbol[:m,:n,:k], :k, Unum, Tnum)
+        @test LoopVectorization.choose_order(lsAtmulB) == (Symbol[:n,:m,:k], :k, Unum, Tnum)
         
         function AtmulBavx!(C, A, B)
             @avx for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
@@ -309,7 +309,7 @@ using LinearAlgebra
             @show T, @__LINE__
             M, K, N = 73, 75, 69;
             TC = sizeof(T) == 4 ? Float32 : Float64
-            R = T <: Integer ? (T(1):T(1000)) : T
+            R = T <: Integer ? (T(-1000):T(1000)) : T
             C = Matrix{TC}(undef, M, N);
             A = rand(R, M, K); B = rand(R, K, N);
             At = copy(A');

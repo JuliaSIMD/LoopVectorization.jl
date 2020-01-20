@@ -3,7 +3,7 @@ module LoopVectorization
 using VectorizationBase, SIMDPirates, SLEEFPirates, MacroTools, Parameters
 using VectorizationBase: REGISTER_SIZE, REGISTER_COUNT, extract_data, num_vector_load_expr,
     mask, masktable, pick_vector_width_val, valmul, valrem, valmuladd, valadd, valsub, _MM,
-    maybestaticlength, maybestaticsize, Static, staticm1
+    maybestaticlength, maybestaticsize, Static, staticm1, subsetview
 using SIMDPirates: VECTOR_SYMBOLS, evadd, evmul, vrange, reduced_add, reduced_prod, reduce_to_add, reduce_to_prod
 using Base.Broadcast: Broadcasted, DefaultArrayStyle
 using LinearAlgebra: Adjoint, Transpose

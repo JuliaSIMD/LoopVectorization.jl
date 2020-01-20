@@ -1,11 +1,11 @@
 
-struct TileDescription
-    vectorized::Symbol
-    unrolled::Symbol
-    tiled::Symbol
-    U::Int
-    T::Int
-end
+# struct TileDescription
+    # vectorized::Symbol
+    # unrolled::Symbol
+    # tiled::Symbol
+    # U::Int
+    # T::Int
+# end
 
 variable_name(op::Operation, ::Nothing) = mangledvar(op)
 variable_name(op::Operation, suffix) = Symbol(mangledvar(op), suffix, :_)
@@ -574,14 +574,14 @@ function lower_nest(
     blockq = Expr(:block)
     if n > 1
         looptoadd = order[n-1]
-        push!(blockq.args, startloop(ls.loops[looptoadd], looptoadd === vectorized, W, looptoadd))
+        push!(blockq.args, startloop(getloop(ls, looptoadd), looptoadd === vectorized, W, looptoadd))
     end
     loopq = if exprtype === :block
         blockq
     else
         @assert exprtype === :while || exprtype === :if "Expression type $exprtype not recognized."
         # if we have a mask, we use 1 as the incremement to pass to looprange, so that we get a iter < maxiter condition.
-        lr = terminatecondition(ls.loops[loopsym], W, U, T, nisvectorized, nisunrolled, nistiled, loopsym, mask)
+        lr = terminatecondition(getloop(ls, loopsym), W, U, T, nisvectorized, nisunrolled, nistiled, loopsym, mask)
         Expr(exprtype, lr, blockq)
     end
     for prepost ∈ 1:2
@@ -711,7 +711,7 @@ end
 function gc_preserve(ls::LoopSet, q::Expr)
     length(ls.includedarrays) == 0 && return q # is this even possible?
     gcp = Expr(:macrocall, Expr(:(.), :GC, QuoteNode(Symbol("@preserve"))), LineNumberNode(@__LINE__, @__FILE__))
-    for (array,_) ∈ ls.includedarrays
+    for array ∈ ls.includedarrays
         push!(gcp.args, array)
     end
     push!(q.args, nothing)
@@ -721,16 +721,16 @@ end
 function determine_eltype(ls::LoopSet)
     # length(ls.includedarrays) == 0 && return REGISTER_SIZE >>> 3
     if length(ls.includedarrays) == 1
-        return Expr(:call, :eltype, first(first(ls.includedarrays)))
+        return Expr(:call, :eltype, first(ls.includedarrays))
     end
     promote_q = Expr(:call, :promote_type)
-    for (array,_) ∈ ls.includedarrays
+    for array ∈ ls.includedarrays
         push!(promote_q.args, Expr(:call, :eltype, array))
     end
     promote_q
 end
 function determine_width(ls::LoopSet, typeT::Symbol, unrolled::Symbol)
-    unrolledloop = ls.loops[unrolled]
+    unrolledloop = getloop(ls, unrolled)
     if isstaticloop(unrolledloop)
         Expr(:call, lv(:pick_vector_width_val), Expr(:call, Expr(:curly, :Val, length(unrolledloop))), typeT)
     else
@@ -908,7 +908,7 @@ function setup_preamble!(ls::LoopSet, W::Symbol, typeT::Symbol, vectorized::Symb
     push!(ls.preamble.args, Expr(:(=), typeT, determine_eltype(ls)))
     push!(ls.preamble.args, Expr(:(=), W, determine_width(ls, typeT, unrolled)))
     lower_licm_constants!(ls)
-    pushpreamble!(ls, definemask(ls.loops[vectorized], W, U > 1 && unrolled === vectorized))
+    pushpreamble!(ls, definemask(getloop(ls, vectorized), W, U > 1 && unrolled === vectorized))
     # define_remaining_ops!( ls, vectorized, W, unrolled, tiled, U )
 end
 function lsexpr(ls::LoopSet, q)
@@ -922,9 +922,9 @@ function lower_tiled(ls::LoopSet, vectorized::Symbol, U::Int, T::Int)
     W = ls.W
     typeT = ls.T
     setup_preamble!(ls, W, typeT, vectorized, unrolled, tiled, U)
-    tiledloop = ls.loops[tiled]
+    tiledloop = getloop(ls, tiled)
     static_tile = isstaticloop(tiledloop)
-    unrolledloop = ls.loops[unrolled]
+    unrolledloop = getloop(ls, unrolled)
     initialize_outer_reductions!(ls, 0, 4, W, typeT, vectorized)#unrolled)
     q = Expr(:block, startloop(tiledloop, false, W, mangledtiled))
     # we build up the loop expression.
@@ -988,8 +988,8 @@ function lower_unrolled(ls::LoopSet, vectorized::Symbol, U::Int)
     W = ls.W
     typeT = ls.T
     setup_preamble!(ls, W, typeT, vectorized, unrolled, last(order), U)
-    initunrolledcounter = startloop(ls.loops[unrolled], unrolled === vectorized, W, unrolled)
-    q = lower_unrolled!(Expr(:block, initunrolledcounter), ls, vectorized, U, -1, W, typeT, ls.loops[unrolled])
+    initunrolledcounter = startloop(getloop(ls, unrolled), unrolled === vectorized, W, unrolled)
+    q = lower_unrolled!(Expr(:block, initunrolledcounter), ls, vectorized, U, -1, W, typeT, getloop(ls, unrolled))
     lsexpr(ls, q)
 end
 

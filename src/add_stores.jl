@@ -26,7 +26,7 @@ function add_store!(
     id = nops
     if pvar ∉ ls.syms_aliasing_refs
         push!(ls.syms_aliasing_refs, pvar)
-        push!(ls.refs_aliasing_syms, mpref.mref.ref)
+        push!(ls.refs_aliasing_syms, mpref.mref)
         # add_unique_store!(ls, mref, parents, ldref, reduceddeps, elementbytes)
     else
         # try to cse store

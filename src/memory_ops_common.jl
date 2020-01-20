@@ -1,49 +1,52 @@
-function add_vptr!(ls::LoopSet, op::Operation)
-    ref = op.ref
-    indexed = name(ref)
-    id = identifier(op)
-    if includesarray(ls, indexed) < 0
-        push!(ls.includedarrays, (indexed, id))
-        pushpreamble!(ls, Expr(:(=), vptr(op), Expr(:call, lv(:stridedpointer), indexed)))
+add_vptr!(ls::LoopSet, op::Operation) = add_vptr!(ls, op.ref)
+add_vptr!(ls::LoopSet, mref::ArrayReferenceMeta) = add_vptr!(ls, mref.ref.array, vptr(mref))
+function add_vptr!(ls::LoopSet, array::Symbol, vptrarray::Symbol = vptr(array))
+    if !includesarray(ls, array)
+        push!(ls.includedarrays, array)
+        pushpreamble!(ls, Expr(:(=), vptrarray, Expr(:call, lv(:stridedpointer), array)))
     end
     nothing
 end
-# function intersection(depsplus, ls)
-    # deps = Symbol[]
-    # for dep ∈ depsplus
-        # dep ∈ ls && push!(deps, dep)
-    # end
-    # deps
-# end
+function subset_vptr!(ls::LoopSet, vptr::Symbol, indnum::Int, ind::Integer)
+    subsetvptr = Symbol(vptr, "_subset_$(indnum)_with_$(ind)##")
+    pushpreamble!(ls, Expr(:(=), subsetvptr, Expr(:call, lv(:subsetview), vptr, Expr(:call, Expr(:curly, :Val, indnum)), ind)))
+    subsetvptr
+end
 
 function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementbytes::Int = 8)
-    indices = Vector{Union{Symbol,Int}}(undef, length(rawindices))
-    loopedindex = fill(false, length(indices))
+    vptrarray = vptr(array)
+    add_vptr!(ls, array, vptrarray) # now, subset
+    
+    indices = Symbol[]
+    loopedindex = Bool[]
     parents = Operation[]
     loopdependencies = Symbol[]
     reduceddeps = Symbol[]
-    loopset = keys(ls.loops)
-    for i ∈ eachindex(indices)
-        ind = rawindices[i]
-        if ind isa Integer
-            indices[i] = ind - 1
+    loopset = ls.loopsymbols
+    for ind ∈ rawindices        
+        if ind isa Integer # subset
+            vptrarray = subset_vptr!(ls, vptrarray, length(indices) + 1, ind - 1)
+            length(indices) == 0 && push!(indices, Symbol("##DISCONTIGUOUSSUBARRAY##"))
         elseif ind isa Symbol
-            indices[i] = ind
+            push!(indices, ind)
             if ind ∈ loopset
-                loopedindex[i] = true
+                push!(loopedindex, true)
                 push!(loopdependencies, ind)
+            else
+                push!(loopedindex, false)
             end
         elseif ind isa Expr
             parent = add_operation!(ls, gensym(:indexpr), ind, elementbytes)
             pushparent!(parents, loopdependencies, reduceddeps, parent)
             # var = get(ls.opdict, ind, nothing)
-            indices[i] = name(parent)#mangledvar(parent)
+            push!(indices, name(parent))#mangledvar(parent)
+            push!(loopedindex, false)
         else
             throw("Unrecognized loop index: $ind.")
         end
     end
-    length(parents) == 0 || pushfirst!(indices, Symbol("##DISCONTIGUOUSSUBARRAY##"))
-    mref = ArrayReferenceMeta(ArrayReference( array, indices ), loopedindex)
+    (length(parents) != 0 && first(indices) !== Symbol("##DISCONTIGUOUSSUBARRAY##")) && pushfirst!(indices, Symbol("##DISCONTIGUOUSSUBARRAY##"))
+    mref = ArrayReferenceMeta(ArrayReference( array, indices ), loopedindex, vptrarray)
     ArrayReferenceMetaPosition(mref, parents, loopdependencies, reduceddeps)
 end
 function tryrefconvert(ls::LoopSet, ex::Expr, elementbytes::Int = 8)::Tuple{Bool,ArrayReferenceMetaPosition}

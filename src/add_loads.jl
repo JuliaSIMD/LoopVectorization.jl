@@ -9,7 +9,7 @@ function add_load!(
     ls::LoopSet, var::Symbol, mpref::ArrayReferenceMetaPosition, elementbytes::Int = 8
 )
     length(mpref.loopdependencies) == 0 && return add_constant!(ls, var, mpref, elementbytes)
-    ref = mpref.mref.ref
+    ref = mpref.mref
     # try to CSE
     id = findfirst(r -> r == ref, ls.refs_aliasing_syms)
     if id === nothing
@@ -29,13 +29,6 @@ end
 function add_simple_load!(
     ls::LoopSet, var::Symbol, ref::ArrayReference, elementbytes::Int = 8
 )
-    # if ref.loaded[] == true
-        # op = getop(ls, var, elementbytes)
-        # @assert var === op.variable
-        # return op
-    # end
-    # loopset = keys(ls.loops)
-    # loopdeps = Symbol[s for s ∈ loopdependencies(ref) if (s isa Symbol && s ∈ loopset)]
     loopdeps = Symbol[s for s ∈ ref.indices]
     mref = ArrayReferenceMeta(
         ref, fill(true, length(loopdeps))

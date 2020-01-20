@@ -8,6 +8,13 @@ Base.convert(::Type{Instruction}, instr::Symbol) = Instruction(instr)
 lower(instr::Instruction) = Expr(:(.), instr.mod, QuoteNode(instr.instr))
 Base.Expr(instr::Instruction, args...) = Expr(:call, lower(instr), args...)::Expr
 Base.hash(instr::Instruction, h::UInt64) = hash(instr.instr, hash(instr.mod, h))
+function Base.isless(instr1::Instruction, instr2::Instruction)
+    if instr1.mod === instr2.mod
+        isless(instr1.instr, instr2.instr)
+    else
+        isless(instr1.mod, instr2.mod)
+    end
+end
 
 const LOOPCONSTANT = Instruction(gensym())
 

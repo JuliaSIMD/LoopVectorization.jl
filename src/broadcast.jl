@@ -52,7 +52,7 @@ function add_broadcast!(
     pushpreamble!(ls, Expr(:(=), K, Expr(:call, :size, mB, 1)))
 
     k = gensym(:k)
-    ls.loops[k] = Loop(k, 0, K)
+    add_loop!(ls, Loop(k, 0, K), k)
     m = loopsyms[1];
     if ndims(B) == 1
         bloopsyms = Symbol[k]
@@ -100,7 +100,7 @@ function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
     ::Type{<:LowDimArray{D,T,N}}, elementbytes::Int = 8
 ) where {D,T,N}
-    fulldims = Union{Symbol,Int}[loopsyms[n] for n ∈ 1:N if D[n]]
+    fulldims = Symbol[loopsyms[n] for n ∈ 1:N if D[n]]
     ref = ArrayReference(bcname, fulldims)
     add_simple_load!(ls, destname, ref, elementbytes )::Operation
 end
@@ -109,13 +109,13 @@ function add_broadcast_adjoint_array!(
 ) where {T,N,A<:AbstractArray{T,N}}
     parent = gensym(:parent)
     pushpreamble!(ls, Expr(:(=), parent, Expr(:call, :parent, bcname)))
-    ref = ArrayReference(parent, Union{Symbol,Int}[loopsyms[N + 1 - n] for n ∈ 1:N])
+    ref = ArrayReference(parent, Symbol[loopsyms[N + 1 - n] for n ∈ 1:N])
     add_simple_load!( ls, destname, ref, elementbytes )::Operation    
 end
 function add_broadcast_adjoint_array!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{<:AbstractVector}, elementbytes::Int = 8
 )
-    ref = ArrayReference(bcname, Union{Symbol,Int}[loopsyms[2]])
+    ref = ArrayReference(bcname, Symbol[loopsyms[2]])
     add_simple_load!( ls, destname, ref, elementbytes )
 end
 function add_broadcast!(
@@ -147,7 +147,7 @@ function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
     ::Type{SubArray{T,N,A,S,B}}, elementbytes::Int = 8
 ) where {T,N,N2,A<:AbstractArray{T,N2},B,N3,S <: Tuple{Int,Vararg{Any,N3}}}
-    inds = Vector{Union{Int,Symbol}}(undef, N+1)
+    inds = Vector{Symbol}(undef, N+1)
     inds[1] = Symbol("##DISCONTIGUOUSSUBARRAY##")
     inds[2:end] .= @view(loopsyms[1:N])
     add_simple_load!(ls, destname, ArrayReference(bcname, inds), elementbytes)
@@ -192,7 +192,7 @@ end
     sizes = Expr(:tuple)
     for (n,itersym) ∈ enumerate(loopsyms)
         Nsym = gensym(:N)
-        ls.loops[itersym] = Loop(itersym, 0, Nsym)
+        add_loop!(ls, Loop(itersym, 0, Nsym), itersym)
         push!(sizes.args, Nsym)
     end
     pushpreamble!(ls, Expr(:(=), sizes, Expr(:call, :size, :dest)))
@@ -217,7 +217,7 @@ end
     sizes = Expr(:tuple)
     for (n,itersym) ∈ enumerate(loopsyms)
         Nsym = gensym(:N)
-        ls.loops[itersym] = Loop(itersym, 0, Nsym)
+        add_loop!(ls, Loop(itersym, 0, Nsym), itersym)
         push!(sizes.args, Nsym)
     end
     pushpreamble!(ls, Expr(:(=), sizes, Expr(:call, :size, :dest′)))

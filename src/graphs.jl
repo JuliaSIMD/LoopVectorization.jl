@@ -143,7 +143,8 @@ Base.@propagate_inbounds Base.getindex(lo::LoopOrder, i...) = lo.oporder[LinearI
 # Must make it easy to iterate
 # outer_reductions is a vector of indixes (within operation vectors) of the reduction operation, eg the vmuladd op in a dot product
 struct LoopSet
-    loops::Dict{Symbol,Loop} # sym === loops[sym].itersymbol
+    loopsymbols::Vector{Symbol}
+    loops::Vector{Loop}
     opdict::Dict{Symbol,Operation}
     operations::Vector{Operation} # Split them to make it easier to iterate over just a subset
     outer_reductions::Vector{Int} # IDs of reduction operations that need to be reduced at end.
@@ -155,9 +156,9 @@ struct LoopSet
     preamble_symfloat::Vector{Tuple{Int,Float64}}
     preamble_zeros::Vector{Int}
     preamble_ones::Vector{Int}
-    includedarrays::Vector{Tuple{Symbol,Int}}
+    includedarrays::Vector{Symbol}
     syms_aliasing_refs::Vector{Symbol} # O(N) search is faster at small sizes
-    refs_aliasing_syms::Vector{ArrayReference}
+    refs_aliasing_syms::Vector{ArrayReferenceMeta}
     cost_vec::Matrix{Float64}
     reg_pres::Matrix{Int}
     included_vars::Vector{Bool}
@@ -211,15 +212,11 @@ function pushpreamble!(ls::LoopSet, op::Operation, RHS::Expr)
     nothing
 end
 
-function includesarray(ls::LoopSet, array::Symbol)
-    for (a,i) ∈ ls.includedarrays
-        a === array && return i
-    end
-    -1
-end
+includesarray(ls::LoopSet, array::Symbol) = array ∈ ls.includedarrays
+
 function LoopSet()
     LoopSet(
-        Dict{Symbol,Loop}(),
+        Symbol[], Loop[],
         Dict{Symbol,Operation}(),
         Operation[],
         Int[],
@@ -231,7 +228,7 @@ function LoopSet()
         Int[],Int[],
         Tuple{Symbol,Int}[],
         Symbol[],
-        ArrayReference[],
+        ArrayReferenceMeta[],
         Matrix{Float64}(undef, 4, 2),
         Matrix{Int}(undef, 4, 2),
         Bool[], Bool[], gensym(:W), gensym(:T)
@@ -243,11 +240,17 @@ function oporder(ls::LoopSet)
     reshape(ls.loop_order.oporder, (2,2,2,N))
 end
 names(ls::LoopSet) = ls.loop_order.loopnames
-Base.length(ls::LoopSet, s::Symbol) = length(ls.loops[s])
-isstaticloop(ls::LoopSet, s::Symbol) = isstaticloop(ls.loops[s])
-looprangehint(ls::LoopSet, s::Symbol) = length(ls.loops[s])
-looprangesym(ls::LoopSet, s::Symbol) = ls.loops[s].rangesym
-# itersyms(ls::LoopSet) = keys(ls.loops)
+function getloopid(ls::LoopSet, s::Symbol)::Int
+    for (loopnum,sym) ∈ enumerate(ls.loopsymbols)
+        s === sym && return loopnum
+    end
+end
+getloop(ls::LoopSet, s::Symbol) = ls.loops[getloopid(ls, s)]
+Base.length(ls::LoopSet, s::Symbol) = length(getloop(ls, s))
+
+isstaticloop(ls::LoopSet, s::Symbol) = isstaticloop(getloop(ls,s))
+looprangehint(ls::LoopSet, s::Symbol) = length(getloop(ls, s))
+looprangesym(ls::LoopSet, s::Symbol) = getloop(ls, s).rangesym
 function getop(ls::LoopSet, var::Symbol, elementbytes::Int = 8)
     get!(ls.opdict, var) do
         # might add constant
@@ -377,7 +380,7 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
     else
         throw("Unrecognized loop range type: $r.")
     end
-    ls.loops[itersym] = loop
+    add_loop!(ls, loop, itersym)
     nothing
 end
 function register_loop!(ls::LoopSet, looprange::Expr)
@@ -399,8 +402,10 @@ function add_loop!(ls::LoopSet, q::Expr, elementbytes::Int = 8)
         push!(ls, q, elementbytes)
     end
 end
-function add_loop!(ls::LoopSet, loop::Loop)
-    ls.loops[loop.itersym] = loop
+function add_loop!(ls::LoopSet, loop::Loop, itersym::Symbol = loop.itersym)
+    push!(ls.loopsymbols, itersym)
+    push!(ls.loops, loop)
+    nothing
 end
 
 function instruction(x)
@@ -422,7 +427,7 @@ function add_operation!(
         elseif f === :zero || f === :one
             c = gensym(f)
             # pushpreamble!(ls, Expr(:(=), c, RHS))
-            op = add_constant!(ls, c, [keys(ls.loops)...], LHS, f, elementbytes)
+            op = add_constant!(ls, c, copy(ls.loopsymbols), LHS, f, elementbytes)
             push!(f === :zero ? ls.preamble_zeros : ls.preamble_ones, identifier(op))
             op
         else
@@ -447,7 +452,7 @@ function add_operation!(
         elseif f === :zero || f === :one
             c = gensym(f)
             # pushpreamble!(ls, Expr(:(=), c, RHS))
-            op = add_constant!(ls, c, [keys(ls.loops)...], LHS_sym, f, elementbytes)
+            op = add_constant!(ls, c, copy(ls.loopsymbols), LHS_sym, f, elementbytes)
             push!(f === :zero ? ls.preamble_zeros : ls.preamble_ones, identifier(op))
             op
         else
@@ -475,7 +480,7 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int = 8)
             if RHS isa Expr
                 add_operation!(ls, LHS, RHS, elementbytes)
             else
-                deps = [keys(ls.loops)...]
+                deps = copy(ls.loopsymbols)
                 if RHS isa Number
                     fisone = false
                     fiszero = false
