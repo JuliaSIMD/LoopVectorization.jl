@@ -41,6 +41,7 @@ function substitute_broadcast(q::Expr)
 end
 
 function LoopSet(q::Expr)
+    q = SIMDPirates.contract_pass(q)
     ls = LoopSet()
     copyto!(ls, q)
     resize!(ls.loop_order, num_loops(ls))
@@ -48,6 +49,7 @@ function LoopSet(q::Expr)
 end
 
 function LoopSet(q::Expr, types::Dict{Symbol,DataType})
+    q = SIMDPirates.contract_pass(q)
     ls = LoopSet()
     copyto!(ls, q, types)
     resize!(ls.loop_order, num_loops(ls))
