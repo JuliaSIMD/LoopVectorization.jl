@@ -199,7 +199,7 @@ function reduce_range!(q::Expr, toreduct::Symbol, instr::Instruction, Uh::Int, U
         push!(q.args, Expr(:(=), tru, Expr(instr, tru, Symbol(toreduct, u + Uh))))
     end
     for u ∈ 2Uh:Uh2-1
-        tru = Symbol(toreduct, u + 1 - 2Uh)
+        tru = Symbol(toreduct, u - 2Uh)
         push!(q.args, Expr(:(=), tru, Expr(instr, tru, Symbol(toreduct, u))))
     end
 end

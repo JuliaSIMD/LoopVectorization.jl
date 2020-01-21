@@ -1,4 +1,12 @@
 
+@static if VERSION < v"1.3"
+    lv(x) = Expr(:(.), :LoopVectorization, QuoteNode(x))
+else
+    lv(x) = GlobalRef(LoopVectorization, x)
+end
+
+
+
 struct Instruction
     mod::Symbol
     instr::Symbol
@@ -222,9 +230,9 @@ const REDUCTION_ZERO = Dict{Instruction,Symbol}(
     Instruction(:vfnmsub_fast) => :zero
 )
 
-lv(x) = GlobalRef(LoopVectorization, x)
+const LVGETPROP = @static VERSION < v"1.3" ? Expr : GlobalRef
 # Fast functions, because common pattern is
-const REDUCTION_SCALAR_COMBINE = Dict{Instruction,GlobalRef}(
+const REDUCTION_SCALAR_COMBINE = Dict{Instruction,LVGETPROP}(
     Instruction(:+) => lv(:reduced_add),
     Instruction(:vadd) => lv(:reduced_add),
     Instruction(:*) => lv(:reduced_prod),

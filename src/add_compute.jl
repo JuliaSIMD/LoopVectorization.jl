@@ -72,7 +72,7 @@ function add_reduction_update_parent!(
     if !isloopconstant
         # and parent is not a reduction_zero
         reduct_zero = REDUCTION_ZERO[Instr]
-        reductcombine = REDUCTION_SCALAR_COMBINE[Instr].name
+        reductcombine::Symbol = @static VERSION < v"1.3" ? last(REDUCTION_SCALAR_COMBINE[Instr].args).value : REDUCTION_SCALAR_COMBINE[Instr].name
         reductsym = gensym(:reduction)
         reductinit = add_constant!(ls, Expr(:call, reduct_zero, ls.T), loopdependencies(parent), reductsym, reduct_zero, elementbytes)
         if isconstant(parent) && reduct_zero === parent.instruction.mod #we can use parent op as initialization.
