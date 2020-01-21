@@ -133,6 +133,7 @@ function parents_symvec(ls::LoopSet, u::Unsigned)
 end
 loopdependencies(ls::LoopSet, os::OperationStruct) = parents_symvec(ls, op.loopdeps)
 reduceddependencies(ls::LoopSet, os::OperationStruct) = parents_symvec(ls, op.reduceddeps)
+childdependencies(ls::LoopSet, os::OperationStruct) = parents_symvec(ls, op.childdeps)
 
 
 
@@ -141,7 +142,8 @@ function add_op!(ls::LoopSet, os::OperationStruct, mrefs::Vector{ArrayReferenceM
     op = Operation(
         length(operations(ls)), opsymbol, elementbytes, os.instruction,
         optype, loopdependencies(ls, os), reduceddependencies(ls, os),
-        Operation[], (isload(op) | isstore(op)) ? mrefs[os.array] : NOTAREFERENCE
+        Operation[], (isload(op) | isstore(op)) ? mrefs[os.array] : NOTAREFERENCE,
+        childdependencies(ls, os)
     )
     push!(ls.operations, op)
     op

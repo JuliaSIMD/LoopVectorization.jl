@@ -156,108 +156,58 @@ const COST = Dict{Instruction,InstructionCost}(
 #     COST[Symbol("typeof(", lower(k), ")")] = v
 # end
 
-const CORRESPONDING_REDUCTION = Dict{Instruction,Instruction}(
-    Instruction(:+) => Instruction(:vsum),
-    Instruction(:-) => Instruction(:vsum),
-    Instruction(:*) => Instruction(:vprod),
-    Instruction(:vadd) => Instruction(:vsum),
-    Instruction(:vsub) => Instruction(:vsum),
-    Instruction(:vmul) => Instruction(:vprod),
-    Instruction(:evadd) => Instruction(:vsum),
-    Instruction(:evsub) => Instruction(:vsum),
-    Instruction(:evmul) => Instruction(:vprod),
-    Instruction(:&) => Instruction(:vall),
-    Instruction(:|) => Instruction(:vany),
-    Instruction(:muladd) => Instruction(:vsum),
-    Instruction(:fma) => Instruction(:vsum),
-    Instruction(:vmuladd) => Instruction(:vsum),
-    Instruction(:vfma) => Instruction(:vsum),
-    Instruction(:vfmadd) => Instruction(:vsum),
-    Instruction(:vfmsub) => Instruction(:vsum),
-    Instruction(:vfnmadd) => Instruction(:vsum),
-    Instruction(:vfnmsub) => Instruction(:vsum),
-    Instruction(:vfmadd_fast) => Instruction(:vsum),
-    Instruction(:vfmsub_fast) => Instruction(:vsum),
-    Instruction(:vfnmadd_fast) => Instruction(:vsum),
-    Instruction(:vfnmsub_fast) => Instruction(:vsum)
-)
-const REDUCTION_TRANSLATION = Dict{Instruction,Instruction}(
-    Instruction(:+) => Instruction(:evadd),
-    Instruction(:vadd) => Instruction(:evadd),
-    Instruction(:*) => Instruction(:evmul),
-    Instruction(:vmul) => Instruction(:evmul),
-    Instruction(:-) => Instruction(:evadd),
-    Instruction(:vsub) => Instruction(:evadd),
-    Instruction(:/) => Instruction(:evmul),
-    Instruction(:vfdiv) => Instruction(:evmul),
-    Instruction(:muladd) => Instruction(:evadd),
-    Instruction(:fma) => Instruction(:evadd),
-    Instruction(:vmuladd) => Instruction(:evadd),
-    Instruction(:vfma) => Instruction(:evadd),
-    Instruction(:vfmadd) => Instruction(:evadd),
-    Instruction(:vfmsub) => Instruction(:evadd),
-    Instruction(:vfnmadd) => Instruction(:evadd),
-    Instruction(:vfnmsub) => Instruction(:evadd),
-    Instruction(:vfmadd_fast) => Instruction(:evadd),
-    Instruction(:vfmsub_fast) => Instruction(:evadd),
-    Instruction(:vfnmadd_fast) => Instruction(:evadd),
-    Instruction(:vfnmsub_fast) => Instruction(:evadd)
-)
-const REDUCTION_ZERO = Dict{Instruction,Symbol}(
-    Instruction(:+) => :zero,
-    Instruction(:vadd) => :zero,
-    Instruction(:evadd) => :zero,
-    Instruction(:*) => :one,
-    Instruction(:vmul) => :one,
-    Instruction(:evmul) => :one,
-    Instruction(:-) => :zero,
-    Instruction(:vsub) => :zero,
-    Instruction(:evsub) => :zero,
-    Instruction(:/) => :one,
-    Instruction(:vfdiv) => :one,
-    Instruction(:evfdiv) => :one,
-    Instruction(:muladd) => :zero,
-    Instruction(:fma) => :zero,
-    Instruction(:vmuladd) => :zero,
-    Instruction(:vfma) => :zero,
-    Instruction(:vfmadd) => :zero,
-    Instruction(:vfmsub) => :zero,
-    Instruction(:vfnmadd) => :zero,
-    Instruction(:vfnmsub) => :zero,
-    Instruction(:vfmadd_fast) => :zero,
-    Instruction(:vfmsub_fast) => :zero,
-    Instruction(:vfnmadd_fast) => :zero,
-    Instruction(:vfnmsub_fast) => :zero
-)
+const ADDITIVE_IN_REDUCTIONS = 1.0
+const MULTIPLICATIVE_IN_REDUCTIONS = 2.0
+const ANY = 3.0
+const ALL = 4.0
 
-const LVGETPROP = @static VERSION < v"1.3" ? Expr : GlobalRef
-# Fast functions, because common pattern is
-const REDUCTION_SCALAR_COMBINE = Dict{Instruction,LVGETPROP}(
-    Instruction(:+) => lv(:reduced_add),
-    Instruction(:vadd) => lv(:reduced_add),
-    Instruction(:*) => lv(:reduced_prod),
-    Instruction(:vmul) => lv(:reduced_prod),
-    Instruction(:-) => lv(:reduced_add),
-    Instruction(:vsub) => lv(:reduced_add),
-    Instruction(:/) => lv(:reduced_prod),
-    Instruction(:vfdiv) => lv(:reduced_prod),
-    Instruction(:muladd) => lv(:reduced_add),
-    Instruction(:fma) => lv(:reduced_add),
-    Instruction(:vmuladd) => lv(:reduced_add),
-    Instruction(:vfma) => lv(:reduced_add),
-    Instruction(:vfmadd) => lv(:reduced_add),
-    Instruction(:vfmsub) => lv(:reduced_add),
-    Instruction(:vfnmadd) => lv(:reduced_add),
-    Instruction(:vfnmsub) => lv(:reduced_add),
-    Instruction(:vfmadd_fast) => lv(:reduced_add),
-    Instruction(:vfmsub_fast) => lv(:reduced_add),
-    Instruction(:vfnmadd_fast) => lv(:reduced_add),
-    Instruction(:vfnmsub_fast) => lv(:reduced_add)
+const REDUCTION_CLASS = Dict{Instruction,Float64}(
+    Instruction(:+) => ADDITIVE_IN_REDUCTIONS,
+    Instruction(:-) => ADDITIVE_IN_REDUCTIONS,
+    Instruction(:*) => MULTIPLICATIVE_IN_REDUCTIONS,
+    Instruction(:vadd) => ADDITIVE_IN_REDUCTIONS,
+    Instruction(:vsub) => ADDITIVE_IN_REDUCTIONS,
+    Instruction(:vmul) => MULTIPLICATIVE_IN_REDUCTIONS,
+    Instruction(:evadd) => ADDITIVE_IN_REDUCTIONS,
+    Instruction(:evsub) => ADDITIVE_IN_REDUCTIONS,
+    Instruction(:evmul) => MULTIPLICATIVE_IN_REDUCTIONS,
+    Instruction(:&) => ALL,
+    Instruction(:|) => ANY,
+    Instruction(:muladd) => ADDITIVE_IN_REDUCTIONS,
+    Instruction(:fma) => ADDITIVE_IN_REDUCTIONS,
+    Instruction(:vmuladd) => ADDITIVE_IN_REDUCTIONS,
+    Instruction(:vfma) => ADDITIVE_IN_REDUCTIONS,
+    Instruction(:vfmadd) => ADDITIVE_IN_REDUCTIONS,
+    Instruction(:vfmsub) => ADDITIVE_IN_REDUCTIONS,
+    Instruction(:vfnmadd) => ADDITIVE_IN_REDUCTIONS,
+    Instruction(:vfnmsub) => ADDITIVE_IN_REDUCTIONS,
+    Instruction(:vfmadd_fast) => ADDITIVE_IN_REDUCTIONS,
+    Instruction(:vfmsub_fast) => ADDITIVE_IN_REDUCTIONS,
+    Instruction(:vfnmadd_fast) => ADDITIVE_IN_REDUCTIONS,
+    Instruction(:vfnmsub_fast) => ADDITIVE_IN_REDUCTIONS
 )
-const REDUCTION_COMBINETO = Dict{Symbol,Symbol}(
-    :reduced_add => :reduce_to_add,
-    :reduced_prod => :reduce_to_prod
-)
+reduction_instruction_class(instr::Symbol) = get(REDUCTION_CLASS, Instruction(instr), NaN)
+reduction_instruction_class(instr::Instruction) = get(REDUCTION_CLASS, instr, NaN)
+function reduction_to_single_vector(x::Float64)
+    x == 1.0 ? :evadd : x == 2.0 ? :evmul : x == 3.0 ? :vand : x == 4.0 ? :vor : throw("Reduction not found.")
+end
+reduction_to_single_vector(x) = reduction_to_single_vector(reduction_instruction_class(x))
+function reduction_to_scalar(x::Float64)
+    x == 1.0 ? :vsum : x == 2.0 ? :vprod : x == 3.0 ? :vany : x == 4.0 ? :vall : throw("Reduction not found.")
+end
+reduction_to_scalar(x) = reduction_to_scalar(reduction_instruction_class(x))
+function reduction_scalar_combine(x::Float64)
+    x == 1.0 ? :reduced_add : x == 2.0 ? :reduced_prod : x == 3.0 ? :reduced_any : x == 4.0 ? :reduced_all : throw("Reduction not found.")
+end
+reduction_scalar_combine(x) = reduction_scalar_combine(reduction_instruction_class(x))
+function reduction_combine_to(x::Float64)
+    x == 1.0 ? :reduce_to_add : x == 2.0 ? :reduce_to_prod : x == 3.0 ? :reduce_to_any : x == 4.0 ? :reduce_to_all : throw("Reduction not found.")
+end
+reduction_combine_to(x) = reduction_combine_to(reduction_instruction_class(x))
+function reduction_zero(x::Float64) 
+    x == 1.0 ? :zero : x == 2.0 ? :one : x == 3.0 ? :false : x == 4.0 ? :true : throw("Reduction not found.")
+end
+reduction_zero(x) = reduction_zero(reduction_instruction_class(x))
 
 const FUNCTIONSYMBOLS = Dict{Type{<:Function},Instruction}(
     typeof(+) => :(+),

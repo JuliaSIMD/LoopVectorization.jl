@@ -61,42 +61,58 @@ function add_reduction!(
     end
     # pushparent!(parents, deps, reduceddeps, parent)
 end
+function search_tree(opv::Vector{Operation}, var::Symbol) # relies on cycles being forbidden
+    for opp ∈ opv
+        name(opp) === var && return true
+        search_tree(parents(opp), var) && return true
+    end
+    false
+end
+function update_reduction_status!(parentvec::Vector{Operation}, deps::Vector{Symbol}, parent::Symbol)
+    for opp ∈ parentvec
+        if name(opp) === parent
+            mergesetv!(reducedchildren(opp), deps)
+            break
+        elseif search_tree(parents(opp), parent)
+            mergesetv!(reducedchildren(opp), deps)
+            update_reduction_status!(parents(opp), deps, parent)
+            break
+        end
+    end
+end
 function add_reduction_update_parent!(
     parents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet,
-    var::Symbol, instr::Symbol, elementbytes::Int = 8
+    var::Symbol, instr::Symbol, directdependency::Bool, elementbytes::Int = 8
 )
     parent = getop(ls, var, elementbytes)
-    isloopconstant = parent.instruction === LOOPCONSTANT
+    isouterreduction = parent.instruction === LOOPCONSTANT
     Instr = Instruction(instr)
+    instrclass = reduction_instruction_class(Instr) # key allows for faster lookups
     # if parent is not an outer reduction...
-    if !isloopconstant
+    if !isouterreduction
         # and parent is not a reduction_zero
-        reduct_zero = REDUCTION_ZERO[Instr]
-        reductcombine::Symbol = @static VERSION < v"1.3" ? last(REDUCTION_SCALAR_COMBINE[Instr].args).value : REDUCTION_SCALAR_COMBINE[Instr].name
+        reduct_zero = reduction_zero(instrclass)
+        reductcombine = reduction_scalar_combine(instrclass)
         reductsym = gensym(:reduction)
         reductinit = add_constant!(ls, Expr(:call, reduct_zero, ls.T), loopdependencies(parent), reductsym, reduct_zero, elementbytes)
         if isconstant(parent) && reduct_zero === parent.instruction.mod #we can use parent op as initialization.
-            reductcombine = REDUCTION_COMBINETO[reductcombine]
-        # else # we cannot use parent op as initialization.
+            reductcombine = reduction_combine_to(instrclass)
         end
     else
         reductinit = parent
         reductsym = var
         reductcombine = Symbol("")
     end
-    # mergesetv!(reduceddeps, deps)
-    # if length(reduceddependencies(reductinit)) == 0
-        # setdiffv!(reduceddeps, deps, loopdependencies(reductinit))
-    # else
     setdiffv!(reduceddeps, deps, loopdependencies(reductinit))
-    # end
-    # mergesetv!(reduceddependencies(reductinit), reduceddeps)
-    pushparent!(parents, deps, reduceddeps, reductinit)#parent) # deps and reduced deps will not be disjoint
+    combineddeps = copy(deps); mergesetv!(combineddeps, reduceddeps)
+    directdependency && pushparent!(parents, deps, reduceddeps, reductinit)#parent) # deps and reduced deps will not be disjoint
+    update_reduction_status!(parents, combineddeps, name(reductinit))
+    # this is the op added by add_compute
     op = Operation(length(operations(ls)), reductsym, elementbytes, instr, compute, deps, reduceddeps, parents)
     parent.instruction === LOOPCONSTANT && push!(ls.outer_reductions, identifier(op))
     opout = pushop!(ls, op, var) # note this overwrites the entry in the operations dict, but not the vector
-    isloopconstant && return opout
-    # create child
+    isouterreduction && return opout
+    # create child op, which is the reduction combination
     childdeps = Symbol[]; childrdeps = Symbol[]; childparents = Operation[]
     pushparent!(childparents, childdeps, childrdeps, op) # reduce op
     pushparent!(childparents, childdeps, childrdeps, parent) # to
@@ -104,6 +120,7 @@ function add_reduction_update_parent!(
         length(operations(ls)), name(parent), elementbytes, reductcombine, compute, childdeps, childrdeps, childparents
     )
     pushop!(ls, child, name(parent))
+    opout
 end
 function add_compute!(
     ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8,
@@ -136,8 +153,8 @@ function add_compute!(
             add_parent!(parents, deps, reduceddeps, ls, arg, elementbytes)
         end
     end
-    if reduction # arg[reduction] is the reduction
-        add_reduction_update_parent!(parents, deps, reduceddeps, ls, var, instr, elementbytes)
+    if reduction || search_tree(parents, var)
+        add_reduction_update_parent!(parents, deps, reduceddeps, ls, var, instr, reduction, elementbytes)
     else
         op = Operation(length(operations(ls)), var, elementbytes, instr, compute, deps, reduceddeps, parents)
         pushop!(ls, op, var)

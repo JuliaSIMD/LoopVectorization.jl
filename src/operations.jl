@@ -94,6 +94,7 @@ struct Operation
     parents::Vector{Operation}
     ref::ArrayReferenceMeta
     mangledvariable::Symbol
+    reduced_children::Vector{Symbol}
     function Operation(
         identifier::Int,
         variable,
@@ -103,15 +104,16 @@ struct Operation
         dependencies = Symbol[],
         reduced_deps = Symbol[],
         parents = Operation[],
-        ref::ArrayReferenceMeta = NOTAREFERENCE
+        ref::ArrayReferenceMeta = NOTAREFERENCE,
+        reduced_children = Symbol[]
     )
         new(
             identifier, variable, elementbytes, instruction, node_type,
             convert(Vector{Symbol},dependencies),
             convert(Vector{Symbol},reduced_deps),
             convert(Vector{Operation},parents),
-            ref,
-            Symbol("##", variable, :_)
+            ref, Symbol("##", variable, :_),
+            reduced_children
         )
     end
 end
@@ -168,6 +170,7 @@ parents(op::Operation) = op.parents
 # children(op::Operation) = op.children
 loopdependencies(op::Operation) = op.dependencies
 reduceddependencies(op::Operation) = op.reduced_deps
+reducedchildren(op::Operation) = op.reduced_children
 identifier(op::Operation) = op.identifier + 1
 vptr(x::Symbol) = Symbol("##vptr##_", x)
 vptr(x::ArrayReference) = vptr(x.array)

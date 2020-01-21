@@ -44,6 +44,7 @@ struct OperationStruct
     instruction::Instruction
     loopdeps::UInt64
     reduceddeps::UInt64
+    childdeps::UInt64
     parents::UInt64
     node_type::OperationType
     array::UInt8
@@ -60,7 +61,8 @@ filled_4byte_chunks(u::UInt64) = 16 - (leading_zeros(u) >>> 2)
 filled_8byte_chunks(u::UInt64) = 8 - (leading_zeros(u) >>> 3)
 
 num_loop_deps(os::OperationStruct) = filled_4byte_chunks(os.loopdeps)
-num_reduced_deps(os::OperationStruct) = filled_4byte_chunks(os.reduced_deps)
+num_reduced_deps(os::OperationStruct) = filled_4byte_chunks(os.reduceddeps)
+num_child_deps(os::OperationStruct) = filled_4byte_chunks(os.childdeps)
 num_parents(os::OperationStruct) = filled_4byte_chunks(os.parents)
 
 function shifted_loopset(ls::LoopSet, loopsyms::Vector{Symbol})
@@ -73,6 +75,7 @@ function shifted_loopset(ls::LoopSet, loopsyms::Vector{Symbol})
 end
 loopdeps_uint(ls::LoopSet, op::Operation) = shifted_loopset(ls, loopdependencies(op))
 reduceddeps_uint(ls::LoopSet, op::Operation) = shifted_loopset(ls, reduceddependencies(op))
+childdeps_uint(ls::LoopSet, op::Operation) = shifted_loopset(ls, reducedchildren(op))
 function parents_uint(ls::LoopSet, op::Operation)
     p = zero(UInt64)
     for parent ∈ parents(op)
@@ -85,10 +88,11 @@ function OperationStruct(ls::LoopSet, op::Operation)
     instr = instruction(op)
     ld = loopdeps_uint(ls, op)
     rd = reduceddeps_uint(ls, op)
+    cd = childdeps_uint(ls, op)
     p = parents_uint(ls, op)
     array = accesses_memory(op) ? findmatchingarray(ls, vptr(op.ref)) : 0x00
     OperationStruct(
-        instr, ld, rd, p, op.node_type, array
+        instr, ld, rd, cd, p, op.node_type, array
     )
 end
 ## turn a LoopSet into a type object which can be used to reconstruct the LoopSet.

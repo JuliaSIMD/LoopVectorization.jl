@@ -3,10 +3,10 @@ using LoopVectorization
 using LinearAlgebra
 
 
-@testset "LoopVectorization.jl" begin
+@time @testset "LoopVectorization.jl" begin
 
     
-    @testset "GEMM" begin
+    @time @testset "GEMM" begin
         # using LoopVectorization, Test; T = Float64
         Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 4)
         AmulBq1 = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
@@ -78,6 +78,16 @@ using LinearAlgebra
                 C[m,n] += ΔCₘₙ * factor
             end
         end
+        Amuladdq = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+                ΔCₘₙ = zero(eltype(C))
+                for k ∈ 1:size(A,2)
+                    ΔCₘₙ += A[m,k] * B[k,n]
+                end
+                C[m,n] += ΔCₘₙ * factor
+               end)
+        lsAmuladd = LoopVectorization.LoopSet(Amuladdq);
+        @test LoopVectorization.choose_order(lsAmuladd) == (Symbol[:n,:m,:k], :m, Unum, Tnum)
+        
         function AmulB_avx1!(C, A, B)
             @_avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
                 Cₘₙ = zero(eltype(C))
@@ -302,7 +312,7 @@ using LinearAlgebra
 	    C12 += A[k,m] * B[k,n1] 
 	    C22 += A[k,m1] * B[k,n1]
 	    end)
-        # lsmul2x2q = LoopVectorization.LoopSet(mul2x2q)
+        lsmul2x2q = LoopVectorization.LoopSet(mul2x2q)
 
 
         for T ∈ (Float32, Float64, Int32, Int64)
@@ -314,7 +324,7 @@ using LinearAlgebra
             A = rand(R, M, K); B = rand(R, K, N);
             At = copy(A');
             C2 = similar(C);
-            @testset "avx $T gemm" begin
+            @time @testset "avx $T gemm" begin
                 AmulB!(C2, A, B)
                 AmulBavx1!(C, A, B)
                 @test C ≈ C2
@@ -333,7 +343,7 @@ using LinearAlgebra
                 fill!(C, 9999.999); mulCAtB_2x2blockavx!(C, At, B);
                 @test C ≈ C2
             end
-            @testset "_avx $T gemm" begin
+            @time @testset "_avx $T gemm" begin
                 fill!(C, 999.99); AmulB_avx1!(C, A, B)
                 @test C ≈ C2
                 fill!(C, 999.99); AmulB_avx2!(C, A, B)
@@ -352,7 +362,7 @@ using LinearAlgebra
                 @test C ≈ C2
             end
 
-            @testset "$T rank2mul" begin
+            @time @testset "$T rank2mul" begin
                 Aₘ= rand(R, M, 2); Aₖ = rand(R, 2, K);
                 rank2AmulB!(C2, Aₘ, Aₖ, B)
                 rank2AmulBavx!(C, Aₘ, Aₖ, B)
@@ -364,78 +374,115 @@ using LinearAlgebra
         end
     end
 
-@testset "dot" begin
-    using LoopVectorization, Test
-        dotq = :(for i ∈ eachindex(a,b)
-                 s += a[i]*b[i]
-                 end)
-        lsdot = LoopVectorization.LoopSet(dotq);
-        @test LoopVectorization.choose_order(lsdot) == (Symbol[:i], :i, 4, -1)
-
-        function mydot(a, b)
-            s = zero(eltype(a))
-            @inbounds @simd for i ∈ eachindex(a,b)
-                s += a[i]*b[i]
-            end
-            s
+@time @testset "dot" begin
+    dotq = :(for i ∈ eachindex(a,b)
+             s += a[i]*b[i]
+             end)
+    lsdot = LoopVectorization.LoopSet(dotq);
+    @test LoopVectorization.choose_order(lsdot) == (Symbol[:i], :i, 4, -1)
+    function mydot(a, b)
+        s = zero(eltype(a))
+        @inbounds @simd for i ∈ eachindex(a,b)
+            s += a[i]*b[i]
         end
-        function mydotavx(a, b)
-            s = zero(eltype(a))
-            @avx for i ∈ eachindex(a,b)
-                s += a[i]*b[i]
-            end
-            s
+        s
+    end
+    function mydotavx(a, b)
+        s = zero(eltype(a))
+        @avx for i ∈ eachindex(a,b)
+            s += a[i]*b[i]
         end
-        function mydot_avx(a, b)
-            s = zero(eltype(a))
-            @_avx for i ∈ eachindex(a,b)
-                s += a[i]*b[i]
-            end
-            s
+        s
+    end
+    function mydot_avx(a, b)
+        s = zero(eltype(a))
+        @_avx for i ∈ eachindex(a,b)
+            s += a[i]*b[i]
         end
-
-        selfdotq = :(for i ∈ eachindex(a)
-                     s += a[i]*a[i]
-                     end)
-        lsselfdot = LoopVectorization.LoopSet(selfdotq);
-        @test LoopVectorization.choose_order(lsselfdot) == (Symbol[:i], :i, 8, -1)
-
-        function myselfdot(a)
-            s = zero(eltype(a))
-            @inbounds @simd for i ∈ eachindex(a)
-                s += a[i]*a[i]
-            end
-            s
-        end
-        function myselfdotavx(a)
-            s = zero(eltype(a))
-            @avx for i ∈ eachindex(a)
-                s += a[i]*a[i]
-            end
-            s
-        end
-        function myselfdot_avx(a)
-            s = zero(eltype(a))
-            @_avx for i ∈ eachindex(a)
-                s += a[i]*a[i]
-            end
-            s
-        end
-
-        # a = rand(400);
-        for T ∈ (Float32, Float64)
-            @show T, @__LINE__
-            a = rand(T, 100); b = rand(T, 100);
-            s = mydot(a,b)
-            @test mydotavx(a,b) ≈ s
-            @test mydot_avx(a,b) ≈ s
-            s = myselfdot(a)
-            @test myselfdotavx(a) ≈ s
-            @test myselfdot_avx(a) ≈ s
-        end
+        s
     end
 
-    @testset "Special Functions" begin
+    selfdotq = :(for i ∈ eachindex(a)
+                 s += a[i]*a[i]
+                 end)
+    lsselfdot = LoopVectorization.LoopSet(selfdotq);
+    @test LoopVectorization.choose_order(lsselfdot) == (Symbol[:i], :i, 8, -1)
+
+    function myselfdot(a)
+        s = zero(eltype(a))
+        @inbounds @simd for i ∈ eachindex(a)
+            s += a[i]*a[i]
+        end
+        s
+    end
+    function myselfdotavx(a)
+        s = zero(eltype(a))
+        @avx for i ∈ eachindex(a)
+            s += a[i]*a[i]
+        end
+        s
+    end
+    function myselfdot_avx(a)
+        s = zero(eltype(a))
+        @_avx for i ∈ eachindex(a)
+            s += a[i]*a[i]
+        end
+        s
+    end
+    function dot_unroll2(x::Vector{T}, y::Vector{T}) where {T<:AbstractFloat}
+        z = zero(T)
+        @avx unroll=2 for i ∈ 1:length(x)
+            z += x[i]*y[i]
+        end
+        return z
+    end
+    function dot_unroll3(x::Vector{T}, y::Vector{T}) where {T<:AbstractFloat}
+        z = zero(T)
+        @avx unroll=3 for i ∈ 1:length(x)
+            z += x[i]*y[i]
+        end
+        return z
+    end
+    function complex_dot_soa(
+        xre::AbstractVector{T}, xim::AbstractVector{T},
+        yre::AbstractVector{T}, yim::AbstractVector{T}
+    ) where {T}
+        zre = zero(T)
+        zim = zero(T)
+        @avx for i ∈ 1:length(xre)
+            zre += xre[i]*yre[i] - xim[i]*yim[i]
+            zim += xre[i]*yim[i] + xim[i]*yre[i]
+        end
+        return Complex{T}(zre,zim)
+    end
+    qc = :(for i ∈ 1:length(xre)
+            zre += xre[i]*yre[i] - xim[i]*yim[i]
+            zim += xre[i]*yim[i] + xim[i]*yre[i]
+           end);
+    lsc = LoopVectorization.LoopSet(qc)
+    
+    # a = rand(400);
+    for T ∈ (Float32, Float64)
+        @show T, @__LINE__
+        a = rand(T, 100); b = rand(T, 100);
+        s = mydot(a,b)
+        @test mydotavx(a,b) ≈ s
+        @test mydot_avx(a,b) ≈ s
+        @test dot_unroll2(a,b) ≈ s
+        @test dot_unroll3(a,b) ≈ s
+        s = myselfdot(a)
+        @test myselfdotavx(a) ≈ s
+        @test myselfdot_avx(a) ≈ s
+        @test myselfdotavx(a) ≈ s
+        
+        ac = rand(Complex{T}, 117); bc = rand(Complex{T}, 117);
+        are = real.(ac); aim = imag.(ac);
+        bre = real.(bc); bim = imag.(bc);
+        @test mydot(ac, bc) ≈ complex_dot_soa(are, aim, bre, bim)
+    end
+end
+
+    @time @testset "Special Functions" begin
         vexpq = :(for i ∈ eachindex(a)
                   b[i] = exp(a[i])
                   end)
@@ -607,7 +654,7 @@ using LinearAlgebra
         end
     end
 
-    @testset "GEMV" begin
+    @time @testset "GEMV" begin
         gemvq = :(for i ∈ eachindex(y)
                   yᵢ = 0.0
                   for j ∈ eachindex(x)
@@ -753,8 +800,7 @@ using LinearAlgebra
 
 
 
-@testset "Miscellaneous" begin
-    using LoopVectorization
+@time @testset "Miscellaneous" begin
     dot3q = :(for m ∈ 1:M, n ∈ 1:N
             s += x[m] * A[m,n] * y[n]
               end)
@@ -977,7 +1023,7 @@ using LinearAlgebra
     end
 end
 
-@testset "broadcast" begin
+@time @testset "broadcast" begin
     M, N = 37, 47
     # M = 77;
     for T ∈ (Float32, Float64)
@@ -1076,7 +1122,7 @@ end
     end
 end
 
-@testset "map" begin
+@time @testset "map" begin
     @inline foo(x, y) = exp(x) - sin(y)
     N = 37
     for T ∈ (Float32,Float64)

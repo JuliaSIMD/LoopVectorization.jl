@@ -208,15 +208,14 @@ function reduce_range!(q::Expr, ls::LoopSet, Ulow::Int, Uhigh::Int)
         op = ls.operations[or]
         var = mangledvar(op)
         temp = gensym(var)
-        instr = op.instruction
-        instr = get(REDUCTION_TRANSLATION, instr, instr)
+        instr = Instruction(reduction_to_single_vector(op.instruction))
         reduce_range!(q, var, instr, Ulow, Uhigh)
     end
 end
 
 function reduce_expr!(q::Expr, toreduct::Symbol, instr::Instruction, U::Int)
     U == 1 && return nothing
-    instr = get(REDUCTION_TRANSLATION, instr, instr)
+    instr = Instruction(reduction_to_single_vector(instr))
     Uh2 = U
     iter = 0
     while true # combine vectors
@@ -226,8 +225,6 @@ function reduce_expr!(q::Expr, toreduct::Symbol, instr::Instruction, U::Int)
         Uh2 = Uh
         iter += 1; iter > 4 && throw("Oops! This seems to be excessive unrolling.")
     end
-    # reduce last vector
-    # push!(q.args, Expr(:(=), assignto, Expr(:call, reductfunc, Symbol(toreduct,:_0))))
     nothing
 end
 
@@ -403,7 +400,9 @@ function lower_compute!(
             # if op is an inner reduction, one of its parents will be the initialization of op
             # They will share the same `variable` field. The initialization may not have
             # unrolled in its loop dependencies, but (if opunrolled) op itself is, so we return true
-            parentsunrolled[p] = var === opp.variable ? true : (unrolled ∈ loopdependencies(opp))
+            # pu = (var === opp.variable || search_tree(parents(opp), var)) ? opunrolled : (unrolled ∈ loopdependencies(opp))
+            pu = unrolled ∈ loopdependencies(opp) || unrolled ∈ reducedchildren(opp)
+            parentsunrolled[p] = pu
         end
     else # maybe skip allocating this?
         parentsunrolled = fill(false, nparents)
@@ -662,8 +661,7 @@ end
 function initialize_outer_reductions!(
     q::Expr, op::Operation, Umin::Int, Umax::Int, W::Symbol, typeT::Symbol, vectorized::Symbol, suffix::Union{Symbol,Nothing} = nothing
 )
-    # T = op.elementbytes == 8 ? :Float64 : :Float32
-    z = Expr(:call, REDUCTION_ZERO[op.instruction], typeT)
+    z = Expr(:call, reduction_zero(op.instruction), typeT)
     if vectorized ∈ reduceddependencies(op)
         z = Expr(:call, lv(:vbroadcast), W, z)
     end
@@ -705,7 +703,7 @@ function reduce_expr!(q::Expr, ls::LoopSet, U::Int)
         mvar = mangledvar(op)
         instr = instruction(op)
         reduce_expr!(q, mvar, instr, U)
-        length(ls.opdict) == 0 || push!(q.args, Expr(:(=), var, Expr(:call, REDUCTION_SCALAR_COMBINE[instr], var, Symbol(mvar, 0))))
+        length(ls.opdict) == 0 || push!(q.args, Expr(:(=), var, Expr(:call, lv(reduction_scalar_combine(instr)), var, Symbol(mvar, 0))))
     end
 end
 function gc_preserve(ls::LoopSet, q::Expr)
