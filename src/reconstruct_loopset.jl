@@ -177,6 +177,9 @@ function avx_body(ops, arf, AM, LB, vargs)
     opsymbols = [gensym(:op) for _ ∈ eachindex(ops)]
     mrefs = create_mrefs(ls, arf, arraysymbolinds, opsymbols, vargs)
     add_ops!(ls, ops, mrefs, opsymbols, elementbytes)
+    q = lower(ls)
+    push!(q.args, loopset_return_value(ls))
+    q
 end
 
 
@@ -185,6 +188,6 @@ end
         OperationStruct[OPS.parameters...],
         ArrayRefStruct[ARF.parameters...],
         AM.parameters, LB.parameters, vargs
-    )                    
+    )       
 end
 

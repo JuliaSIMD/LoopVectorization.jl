@@ -701,11 +701,11 @@ end
 function reduce_expr!(q::Expr, ls::LoopSet, U::Int)
     for or ∈ ls.outer_reductions
         op = ls.operations[or]
-        var = op.variable
+        var = name(op)
         mvar = mangledvar(op)
-        instr = op.instruction
+        instr = instruction(op)
         reduce_expr!(q, mvar, instr, U)
-        push!(q.args, Expr(:(=), var, Expr(:call, REDUCTION_SCALAR_COMBINE[instr], var, Symbol(mvar, 0))))
+        length(ls.opdict) == 0 || push!(q.args, Expr(:(=), var, Expr(:call, REDUCTION_SCALAR_COMBINE[instr], var, Symbol(mvar, 0))))
     end
 end
 function gc_preserve(ls::LoopSet, q::Expr)

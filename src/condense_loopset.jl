@@ -126,6 +126,22 @@ function argmeta_and_costs_description(ls::LoopSet, arraysymbolinds)
     )
 end
 
+function loopset_return_value(ls::LoopSet)
+    if length(ls.outer_reductions) == 1
+        Expr(:call, :extract_data, Symbol(mangledvar(operations(ls)[ls.outer_reductions[1]]), 0))
+    elseif length(ls.outer_reductions) > 1
+        ret = Expr(:tuple)
+        ops = operations(ls)
+        for or ∈ ls.outer_reductions
+            push!(ret.args, Expr(:call, :extract_data, Symbol(mangledvar(ops[or]), 0)))
+        end
+        ret
+    else
+        nothing
+    end
+end
+
+
 # Try to condense in type stable manner
 function generate_call(ls::LoopSet)
     operation_descriptions = Expr(:curly, :Tuple)
@@ -144,5 +160,18 @@ function generate_call(ls::LoopSet)
     q
 end
 
+function setup_call(ls::LoopSet)
+    call = generate_call(ls)
+    retv = loopset_return_value(ls)
+    q = Expr(:block,gc_preserve(ls, Expr(:(=), retv, call)))
+    for or ∈ ls.outer_reductions
+        op = ls.operations[or]
+        var = name(op)
+        mvar = mangledvar(op)
+        instr = instruction(op)
+        push!(q.args, Expr(:(=), var, Expr(:call, REDUCTION_SCALAR_COMBINE[instr], var, Symbol(mvar, 0))))
+    end
+
+end
 
 
