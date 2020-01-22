@@ -355,46 +355,75 @@ using LinearAlgebra
                 AmulB!(C2, A, B)
                 AmulBavx1!(C, A, B)
                 @test C ≈ C2
+                fill!(C, 999.99); AmulBavx1!(C, At', B)
+                @test C ≈ C2
                 fill!(C, 999.99); AmulBavx2!(C, A, B)
+                @test C ≈ C2
+                fill!(C, 999.99); AmulBavx2!(C, At', B)
                 @test C ≈ C2
                 fill!(C, 999.99); AmulBavx3!(C, A, B)
                 @test C ≈ C2
+                fill!(C, 999.99); AmulBavx3!(C, At', B)
+                @test C ≈ C2
                 fill!(C, 0.0); AmuladdBavx!(C, A, B)
                 @test C ≈ C2
-                AmuladdBavx!(C, A, B)
+                AmuladdBavx!(C, At', B)
                 @test C ≈ 2C2
                 AmuladdBavx!(C, A, B, -1)
                 @test C ≈ C2
+                AmuladdBavx!(C, At', B, -2)
+                @test C ≈ -C2
                 fill!(C, 9999.999); AtmulBavx!(C, At, B)
+                @test C ≈ C2
+                fill!(C, 9999.999); AtmulBavx!(C, A', B)
                 @test C ≈ C2
                 fill!(C, 9999.999); mulCAtB_2x2blockavx!(C, At, B);
                 @test C ≈ C2
+                fill!(C, 9999.999); mulCAtB_2x2blockavx!(C, A', B);
+                @test C ≈ C2
             end
             @time @testset "_avx $T gemm" begin
-                fill!(C, 999.99); AmulB_avx1!(C, A, B)
+                AmulB_avx1!(C, A, B)
+                @test C ≈ C2
+                fill!(C, 999.99); AmulB_avx1!(C, At', B)
                 @test C ≈ C2
                 fill!(C, 999.99); AmulB_avx2!(C, A, B)
                 @test C ≈ C2
+                fill!(C, 999.99); AmulB_avx2!(C, At', B)
+                @test C ≈ C2
                 fill!(C, 999.99); AmulB_avx3!(C, A, B)
+                @test C ≈ C2
+                fill!(C, 999.99); AmulB_avx3!(C, At', B)
                 @test C ≈ C2
                 fill!(C, 0.0); AmuladdB_avx!(C, A, B)
                 @test C ≈ C2
-                AmuladdB_avx!(C, A, B)
+                AmuladdB_avx!(C, At', B)
                 @test C ≈ 2C2
                 AmuladdB_avx!(C, A, B, -1)
                 @test C ≈ C2
+                AmuladdB_avx!(C, At', B, -2)
+                @test C ≈ -C2
                 fill!(C, 9999.999); AtmulB_avx!(C, At, B)
                 @test C ≈ C2
+                fill!(C, 9999.999); AtmulB_avx!(C, A', B)
+                @test C ≈ C2
                 fill!(C, 9999.999); mulCAtB_2x2block_avx!(C, At, B);
+                @test C ≈ C2
+                fill!(C, 9999.999); mulCAtB_2x2block_avx!(C, A', B);
                 @test C ≈ C2
             end
 
             @time @testset "$T rank2mul" begin
                 Aₘ= rand(R, M, 2); Aₖ = rand(R, 2, K);
+                Aₖ′ = copy(Aₖ')
                 rank2AmulB!(C2, Aₘ, Aₖ, B)
                 rank2AmulBavx!(C, Aₘ, Aₖ, B)
                 @test C ≈ C2
                 fill!(C, 9999.999); rank2AmulB_avx!(C, Aₘ, Aₖ, B)
+                @test C ≈ C2
+                fill!(C, 9999.999); rank2AmulBavx!(C, Aₘ, Aₖ′', B)
+                @test C ≈ C2
+                fill!(C, 9999.999); rank2AmulB_avx!(C, Aₘ, Aₖ′', B)
                 @test C ≈ C2
             end
 
@@ -456,16 +485,47 @@ using LinearAlgebra
         end
         s
     end
-    function dot_unroll2(x::Vector{T}, y::Vector{T}) where {T<:AbstractFloat}
+    function dot_unroll2avx(x::Vector{T}, y::Vector{T}) where {T<:AbstractFloat}
         z = zero(T)
         @avx unroll=2 for i ∈ 1:length(x)
             z += x[i]*y[i]
         end
         return z
     end
-    function dot_unroll3(x::Vector{T}, y::Vector{T}) where {T<:AbstractFloat}
+    @macroexpand @avx unroll=2 for i ∈ 1:length(x)
+            z += x[i]*y[i]
+        end
+    function dot_unroll3avx(x::Vector{T}, y::Vector{T}) where {T<:AbstractFloat}
         z = zero(T)
         @avx unroll=3 for i ∈ 1:length(x)
+            z += x[i]*y[i]
+        end
+        return z
+    end
+    function dot_unroll2avx_noinline(x::Vector{T}, y::Vector{T}) where {T<:AbstractFloat}
+        z = zero(T)
+        @avx inline=true unroll=2 for i ∈ 1:length(x)
+            z += x[i]*y[i]
+        end
+        return z
+    end
+    function dot_unroll3avx_inline(x::Vector{T}, y::Vector{T}) where {T<:AbstractFloat}
+        z = zero(T)
+        @avx unroll=3 inline=false for i ∈ 1:length(x)
+            z += x[i]*y[i]
+        end
+        return z
+    end
+    function dot_unroll2_avx(x::Vector{T}, y::Vector{T}) where {T<:AbstractFloat}
+        z = zero(T)
+        @_avx unroll=2 for i ∈ 1:length(x)
+            z += x[i]*y[i]
+        end
+        return z
+    end
+    function dot_unroll3_avx(x::Vector{T}, y::Vector{T}) where {T<:AbstractFloat}
+        z = zero(T)
+        @_avx unroll=3 for i ∈ 1:length(x)
             z += x[i]*y[i]
         end
         return z
@@ -495,8 +555,12 @@ using LinearAlgebra
         s = mydot(a,b)
         @test mydotavx(a,b) ≈ s
         @test mydot_avx(a,b) ≈ s
-        @test dot_unroll2(a,b) ≈ s
-        @test dot_unroll3(a,b) ≈ s
+        @test dot_unroll2avx(a,b) ≈ s
+        @test dot_unroll3avx(a,b) ≈ s
+        @test dot_unroll2_avx(a,b) ≈ s
+        @test dot_unroll3_avx(a,b) ≈ s
+        @test dot_unroll2avx_noinline(a,b) ≈ s
+        @test dot_unroll3avx_inline(a,b) ≈ s
         s = myselfdot(a)
         @test myselfdotavx(a) ≈ s
         @test myselfdot_avx(a) ≈ s

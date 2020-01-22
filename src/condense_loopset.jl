@@ -161,7 +161,7 @@ end
 
 
 # Try to condense in type stable manner
-function generate_call(ls::LoopSet)
+function generate_call(ls::LoopSet, IUT)
     operation_descriptions = Expr(:curly, :Tuple)
     varnames = Symbol[]
     for op ∈ operations(ls)
@@ -176,7 +176,7 @@ function generate_call(ls::LoopSet)
     argmeta = argmeta_and_consts_description(ls, arraysymbolinds)
     loop_bounds = loop_boundaries(ls)
 
-    q = Expr(:call, lv(:_avx_!), operation_descriptions, arrayref_descriptions, argmeta, loop_bounds)
+    q = Expr(:call, lv(:_avx_!), Expr(:call, Expr(:curly, :Val, IUT)), operation_descriptions, arrayref_descriptions, argmeta, loop_bounds)
 
     foreach(ref -> push!(q.args, vptr(ref)), ls.refs_aliasing_syms)
     foreach(is -> push!(q.args, last(is)), ls.preamble_symsym)
@@ -184,8 +184,8 @@ function generate_call(ls::LoopSet)
     q
 end
 
-function setup_call(ls::LoopSet)
-    call = generate_call(ls)
+function setup_call(ls::LoopSet, inline = one(Int8), U = zero(Int8), T = zero(Int8))
+    call = generate_call(ls, (inline,U,T))
     hasouterreductions = length(ls.outer_reductions) > 0
     if hasouterreductions
         retv = loopset_return_value(ls, Val(false))
@@ -208,7 +208,4 @@ function setup_call(ls::LoopSet)
     ls.preamble
 end
 
-macro _avx(q)
-    esc(setup_call(LoopSet(q)))
-end
 

@@ -17,6 +17,7 @@ export LowDimArray, stridedpointer, vectorizable,
     vmap, vmap!
 
 
+include("map.jl")
 include("costs.jl")
 include("operations.jl")
 include("graphs.jl")
@@ -29,11 +30,9 @@ include("add_ifelse.jl")
 include("broadcast.jl")
 include("determinestrategy.jl")
 include("lowering.jl")
-include("constructors.jl")
-include("map.jl")
-# include("_avx.jl")
 include("condense_loopset.jl")
 include("reconstruct_loopset.jl")
+include("constructors.jl")
 
 export @_avx, _avx, @_avx_, avx_!
 

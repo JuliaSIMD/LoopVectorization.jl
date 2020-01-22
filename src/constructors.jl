@@ -92,26 +92,69 @@ true
 """
 macro avx(q)
     q2 = if q.head === :for
-        lower(LoopSet(q))
+        setup_call(LoopSet(q))
     else# assume broadcast
         substitute_broadcast(q)
     end
     esc(q2)
 end
+
+function check_inline(arg)
+    a1 = (arg.args[1])::Symbol
+    a1 === :inline || return nothing
+    (arg.args[2])::Bool
+end
+function check_tile(arg)
+    a1 = (arg.args[1])::Symbol
+    a1 === :tile || return nothing
+    U = convert(Int8, tup.args[1])
+    T = convert(Int8, tup.args[2])
+    U, T
+end
+function check_unroll(arg)
+    a1 = (arg.args[1])::Symbol
+    a1 === :unroll || return nothing
+    convert(Int8, arg.args[2])
+end
+function check_macro_kwarg(arg, inline::Int8 = one(Int8), U::Int8 = zero(Int8), T::Int8 = zero(Int8))
+    @assert arg.head === :(=)
+    i = check_inline(arg)
+    if i !== nothing
+        inline = i ? Int8(2) : Int8(-1)
+    else
+        u = check_unroll(arg)
+        if u !== nothing
+            U = u
+            T = Int8(-1)
+        else
+            U, T = check_tile(arg)
+        end
+    end
+    inline, U, T
+end
 macro avx(arg, q)
     @assert q.head === :for
     @assert arg.head === :(=)
-    local U::Int, T::Int
-    if arg.args[1] === :unroll
-        U = arg.args[2]
-        T = -1
-    elseif arg.args[1] === :tile
-        tup = arg.args[2]
-        @assert tup.head === :tuple
-        U = tup.args[1]
-        T = tup.args[2]
-    end
+    inline, U, T = check_macro_kwarg(arg)
+    esc(setup_call(LoopSet(q), inline, U, T))
+end
+macro avx(arg1, arg2, q)
+    @assert q.head === :for
+    inline, U, T = check_macro_kwarg(arg1)
+    inline, U, T = check_macro_kwarg(arg2, inline, U, T)
+    esc(setup_call(LoopSet(q), inline, U, T))
+end
+
+
+
+macro _avx(q)
+    esc(lower(LoopSet(q)))
+end
+macro _avx(arg, q)
+    @assert q.head === :for
+    inline, U, T = check_macro_kwarg(arg)
     esc(lower(LoopSet(q), U, T))
 end
-    
+
+
 
