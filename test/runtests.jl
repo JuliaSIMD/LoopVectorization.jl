@@ -86,7 +86,16 @@ using LinearAlgebra
                 C[m,n] += ΔCₘₙ * factor
                end)
         lsAmuladd = LoopVectorization.LoopSet(Amuladdq);
+        lsAmuladd.operations
         @test LoopVectorization.choose_order(lsAmuladd) == (Symbol[:n,:m,:k], :m, Unum, Tnum)
+
+        # @macroexpand @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+        #         ΔCₘₙ = zero(eltype(C))
+        #         for k ∈ 1:size(A,2)
+        #             ΔCₘₙ += A[m,k] * B[k,n]
+        #         end
+        #         C[m,n] += ΔCₘₙ * factor
+        #     end
         
         function AmulB_avx1!(C, A, B)
             @_avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
@@ -770,6 +779,8 @@ end
                 G[d1,κ] = z
             end
         end
+        # exit()
+        # using LoopVectorization
         function AtmulvB_avx3!(G, B,κ)
             d = size(G,1)
             @_avx for d1=1:d
@@ -779,7 +790,24 @@ end
                 end
             end
         end
+        # N = 97; B = rand(N, N);
+        # G1 = Matrix{Float64}(undef, N, 1);
+        # AtmulvB_avx3!(G1, B, 1)
 
+        @macroexpand @_avx for d1=1:d
+                G[d1,κ] = B[1,d1]*B[1,κ]
+                for d2=2:d
+                    G[d1,κ] += B[d2,d1]*B[d2,κ]
+                end
+            end
+        pq = :(for d1=1:d
+                G[d1,κ] = B[1,d1]*B[1,κ]
+                for d2=2:d
+                    G[d1,κ] += B[d2,d1]*B[d2,κ]
+                end
+               end)
+        lsp = LoopVectorization.LoopSet(pq);
+        lsp.preamble_symsym
 
         M, K, N = 51, 49, 61
         for T ∈ (Float32, Float64, Int32, Int64)
