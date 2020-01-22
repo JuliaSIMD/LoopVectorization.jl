@@ -195,7 +195,12 @@ end
     # @assert id !== nothing
     # ls.refs_aliasing_syms[id]
 # end
-pushpreamble!(ls::LoopSet, op::Operation, v::Symbol) = push!(ls.preamble_symsym, (identifier(op),v))
+function pushpreamble!(ls::LoopSet, op::Operation, v::Symbol)
+    if v !== mangledvar(op)
+        push!(ls.preamble_symsym, (identifier(op),v))
+    end
+    nothing
+end
 pushpreamble!(ls::LoopSet, op::Operation, v::Integer) = push!(ls.preamble_symint, (identifier(op),convert(Int,v)))
 pushpreamble!(ls::LoopSet, op::Operation, v::Real) = push!(ls.preamble_symfloat, (identifier(op),convert(Float64,v)))
 pushpreamble!(ls::LoopSet, ex::Expr) = push!(ls.preamble.args, ex)
@@ -405,7 +410,7 @@ function add_loop!(ls::LoopSet, q::Expr, elementbytes::Int = 8)
         push!(ls, q, elementbytes)
     end
 end
-function add_loop!(ls::LoopSet, loop::Loop, itersym::Symbol = loop.itersym)
+function add_loop!(ls::LoopSet, loop::Loop, itersym::Symbol = loop.itersymbol)
     push!(ls.loopsymbols, itersym)
     push!(ls.loops, loop)
     nothing

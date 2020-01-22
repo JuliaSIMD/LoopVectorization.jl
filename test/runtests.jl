@@ -97,6 +97,11 @@ using LinearAlgebra
                 C[m,n] = Cₘₙ
             end
         end
+# exit()
+#         using LoopVectorization, Test
+#         T = Float64
+#         M = 77
+#         A = rand(M, M); B = rand(M, M); C = similar(A);
         function AmulB_avx2!(C, A, B)
             z = zero(eltype(C))
             @_avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
@@ -106,6 +111,16 @@ using LinearAlgebra
                 end
             end
         end
+        # AmulB_avx2!(C, A, B)
+        # gq = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+                # C[m,n] = z
+                # for k ∈ 1:size(A,2)
+                    # C[m,n] += A[m,k] * B[k,n]
+                # end
+               # end);
+        # ls = LoopVectorization.LoopSet(gq);
+        # ls.preamble_symsym
+        # ls.operations[1]
         function AmulB_avx3!(C, A, B)
             @_avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
                 C[m,n] = zero(eltype(C))
@@ -306,14 +321,17 @@ using LinearAlgebra
             end
             return C
         end
-        mul2x2q = :(for k ∈ 1:K
-	    C11 += A[k,m] * B[k,n] 
-	    C21 += A[k,m1] * B[k,n] 
-	    C12 += A[k,m] * B[k,n1] 
-	    C22 += A[k,m1] * B[k,n1]
-	    end)
-        lsmul2x2q = LoopVectorization.LoopSet(mul2x2q)
-
+        # M = 77;
+        # A = rand(M,M); B = rand(M,M); C = similar(A);
+        # mulCAtB_2x2block_avx!(C,A,B)
+        # using LoopVectorization
+        # mul2x2q = :(for k ∈ 1:K
+	    # C11 += A[k,m] * B[k,n] 
+	    # C21 += A[k,m1] * B[k,n] 
+	    # C12 += A[k,m] * B[k,n1] 
+	    # C22 += A[k,m1] * B[k,n1]
+	    # end)
+        # lsmul2x2q = LoopVectorization.LoopSet(mul2x2q)
 
         for T ∈ (Float32, Float64, Int32, Int64)
             @show T, @__LINE__

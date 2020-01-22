@@ -7,12 +7,13 @@ function add_vptr!(ls::LoopSet, array::Symbol, vptrarray::Symbol = vptr(array))
     end
     nothing
 end
-function subset_vptr!(ls::LoopSet, vptr::Symbol, indnum::Int, ind::Integer)
+function subset_vptr!(ls::LoopSet, vptr::Symbol, indnum::Int, ind::Union{Symbol,Int})
     subsetvptr = Symbol(vptr, "_subset_$(indnum)_with_$(ind)##")
-    pushpreamble!(ls, Expr(:(=), subsetvptr, Expr(:call, lv(:subsetview), vptr, Expr(:call, Expr(:curly, :Val, indnum)), ind)))
+    inde = ind isa Symbol ? Expr(:call, :-, ind, 1) : ind - 1
+    pushpreamble!(ls, Expr(:(=), subsetvptr, Expr(:call, lv(:subsetview), vptr, Expr(:call, Expr(:curly, :Val, indnum)), inde)))
     subsetvptr
 end
-
+const DISCONTIGUOUS = Symbol("##DISCONTIGUOUSSUBARRAY##")
 function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementbytes::Int = 8)
     vptrarray = vptr(array)
     add_vptr!(ls, array, vptrarray) # now, subset
@@ -23,24 +24,26 @@ function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementby
     loopdependencies = Symbol[]
     reduceddeps = Symbol[]
     loopset = ls.loopsymbols
+    ninds = 1
     for ind ∈ rawindices        
         if ind isa Integer # subset
-            vptrarray = subset_vptr!(ls, vptrarray, length(indices) + 1, ind - 1)
-            length(indices) == 0 && push!(indices, Symbol("##DISCONTIGUOUSSUBARRAY##"))
-        elseif ind isa Symbol
-            push!(indices, ind)
-            if ind ∈ loopset
-                push!(loopedindex, true)
-                push!(loopdependencies, ind)
-            else
-                push!(loopedindex, false)
-            end
-        elseif ind isa Expr
+            vptrarray = subset_vptr!(ls, vptrarray, ninds, ind)
+            length(indices) == 0 && push!(indices, DISCONTIGUOUS)
+        elseif ind isa Expr || (ind isa Symbol && ind ∈ keys(ls.opdict))
             parent = add_operation!(ls, gensym(:indexpr), ind, elementbytes)
             pushparent!(parents, loopdependencies, reduceddeps, parent)
             # var = get(ls.opdict, ind, nothing)
-            push!(indices, name(parent))#mangledvar(parent)
+            push!(indices, name(parent)); ninds += 1
             push!(loopedindex, false)
+        elseif ind isa Symbol
+            if ind ∈ loopset
+                push!(indices, ind); ninds += 1
+                push!(loopedindex, true)
+                push!(loopdependencies, ind)
+            else
+                vptrarray = subset_vptr!(ls, vptrarray, ninds, ind)
+                length(indices) == 0 && push!(indices, DISCONTIGUOUS)
+            end
         else
             throw("Unrecognized loop index: $ind.")
         end

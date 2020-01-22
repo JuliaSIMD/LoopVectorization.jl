@@ -3,7 +3,9 @@ module LoopVectorization
 using VectorizationBase, SIMDPirates, SLEEFPirates, MacroTools, Parameters
 using VectorizationBase: REGISTER_SIZE, REGISTER_COUNT, extract_data, num_vector_load_expr,
     mask, masktable, pick_vector_width_val, valmul, valrem, valmuladd, valadd, valsub, _MM,
-    maybestaticlength, maybestaticsize, Static, staticm1, subsetview
+    maybestaticlength, maybestaticsize, staticm1, subsetview,
+    Static, StaticUnitRange, StaticLowerUnitRange, StaticUpperUnitRange,
+    PackedStridedPointer, SparseStridedPointer, RowMajorStridedPointer, StaticStridedPointer, StaticStridedStruct
 using SIMDPirates: VECTOR_SYMBOLS, evadd, evmul, vrange, reduced_add, reduced_prod, reduce_to_add, reduce_to_prod
 using Base.Broadcast: Broadcasted, DefaultArrayStyle
 using LinearAlgebra: Adjoint, Transpose
@@ -29,9 +31,11 @@ include("determinestrategy.jl")
 include("lowering.jl")
 include("constructors.jl")
 include("map.jl")
-include("_avx.jl")
+# include("_avx.jl")
+include("condense_loopset.jl")
+include("reconstruct_loopset.jl")
 
-export @_avx, _avx
+export @_avx, _avx, @_avx_, avx_!
 
 # include("precompile.jl")
 # _precompile_()

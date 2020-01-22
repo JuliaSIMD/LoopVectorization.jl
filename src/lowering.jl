@@ -32,9 +32,7 @@ function symbolind(ind::Symbol, op::Operation, td::UnrollArgs)
     else
         mangledvar(parent)
     end
-    if unrolled ∈ loopdependencies(parent)
-        pvar = Symbol(pvar, u)
-    end
+    pvar = unrolled ∈ loopdependencies(parent) ? Symbol(pvar, u) : pvar
     Expr(:call, :-, pvar, one(Int32))
 end
 function mem_offset(op::Operation, td::UnrollArgs)
@@ -473,7 +471,9 @@ function lower_constant!(
     instruction = op.instruction
     mvar = variable_name(op, suffix)
     constsym = instruction.instr
+    # constsym = mangledvar(op)
     if vectorized ∈ loopdependencies(op) || vectorized ∈ reduceddependencies(op)
+        # call = Expr(:call, lv(:vbroadcast), W, mangledvar(op))
         call = Expr(:call, lv(:vbroadcast), W, constsym)
         for u ∈ 0:U-1
             push!(q.args, Expr(:(=), Symbol(mvar, u), call))
@@ -882,7 +882,15 @@ function lower_licm_constants!(ls::LoopSet)
     for (id,sym) ∈ ls.preamble_symsym
         op = ops[id]
         mv = mangledvar(op)
-        mv === sym || pushpreamble!(ls, Expr(:(=), mv, sym))
+        # mv === sym || pushpreamble!(ls, Expr(:(=), instruction(op).instr, sym))
+        if mv !== sym
+            if length(ls.includedarrays) == 0 && instruction(op).mod === Symbol("")
+                pushpreamble!(ls, Expr(:(=), instruction(op).instr, sym))
+            else
+                pushpreamble!(ls, Expr(:(=), mv, sym))
+            end
+            # pushpreamble!(ls, instruction(op) === LOOPCONSTANT ? Expr(:(=), mv, sym) : Expr(:(=), instruction(op).instr, sym))
+        end
     end
     for (id,intval) ∈ ls.preamble_symint
         op = ops[id]
@@ -903,7 +911,7 @@ function lower_licm_constants!(ls::LoopSet)
 end
 function setup_preamble!(ls::LoopSet, W::Symbol, typeT::Symbol, vectorized::Symbol, unrolled::Symbol, tiled::Symbol, U::Int)
     # println("Setup preamble")
-    push!(ls.preamble.args, Expr(:(=), typeT, determine_eltype(ls)))
+    length(ls.includedarrays) == 0 || push!(ls.preamble.args, Expr(:(=), typeT, determine_eltype(ls)))
     push!(ls.preamble.args, Expr(:(=), W, determine_width(ls, typeT, unrolled)))
     lower_licm_constants!(ls)
     pushpreamble!(ls, definemask(getloop(ls, vectorized), W, U > 1 && unrolled === vectorized))

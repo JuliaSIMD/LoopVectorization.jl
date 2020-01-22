@@ -24,10 +24,11 @@ function ArrayRefStruct(ls::LoopSet, mref::ArrayReferenceMeta, arraysymbolinds::
     for (n,ind) ∈ enumerate(@view(indv[start:end]))
         index_types <<= 8
         indices <<= 8
-        if mref.loopindex[n]
+        if mref.loopedindex[n]
             index_types |= LoopIndex
+            indices |= getloopid(ls, ind)
         else
-            parent = getop(opdict, ind, nothing)
+            parent = get(ls.opdict, ind, nothing)
             if parent === nothing
                 index_types |= SymbolicIndex
                 indices |= findindoradd!(arraysymbolinds, ind)
@@ -41,14 +42,19 @@ function ArrayRefStruct(ls::LoopSet, mref::ArrayReferenceMeta, arraysymbolinds::
 end
 
 struct OperationStruct
-    instruction::Instruction
+    # instruction::Instruction
     loopdeps::UInt64
     reduceddeps::UInt64
     childdeps::UInt64
     parents::UInt64
     node_type::OperationType
     array::UInt8
+    symid::UInt8
 end
+isload(os::OperationStruct) = os.node_type == memload
+isstore(os::OperationStruct) = os.node_type == memstore
+iscompute(os::OperationStruct) = os.node_type == compute
+isconstant(os::OperationStruct) = os.node_type == constant
 function findmatchingarray(ls::LoopSet, array::Symbol)
     id = 0x01
     for as ∈ ls.refs_aliasing_syms
@@ -80,11 +86,11 @@ function parents_uint(ls::LoopSet, op::Operation)
     p = zero(UInt64)
     for parent ∈ parents(op)
         p <<= 8
-        p |= identifier(op)
+        p |= identifier(parent)
     end
     p
 end
-function OperationStruct(ls::LoopSet, op::Operation)
+function OperationStruct!(varnames::Vector{Symbol}, ls::LoopSet, op::Operation)
     instr = instruction(op)
     ld = loopdeps_uint(ls, op)
     rd = reduceddeps_uint(ls, op)
@@ -92,7 +98,7 @@ function OperationStruct(ls::LoopSet, op::Operation)
     p = parents_uint(ls, op)
     array = accesses_memory(op) ? findmatchingarray(ls, vptr(op.ref)) : 0x00
     OperationStruct(
-        instr, ld, rd, cd, p, op.node_type, array
+        ld, rd, cd, p, op.node_type, array, findindoradd!(varnames, name(op))
     )
 end
 ## turn a LoopSet into a type object which can be used to reconstruct the LoopSet.
@@ -112,12 +118,12 @@ function loop_boundaries(ls::LoopSet)
         else
             Expr(:call, Expr(:call, :(:), loop.startsym, loop.stopsym))
         end
-        push!(lbd, lexpr)
+        push!(lbd.args, lexpr)
     end
     lbd
 end
 
-function argmeta_and_costs_description(ls::LoopSet, arraysymbolinds)
+function argmeta_and_consts_description(ls::LoopSet, arraysymbolinds)
     Expr(
         :curly, :Tuple,
         length(arraysymbolinds),
@@ -130,14 +136,22 @@ function argmeta_and_costs_description(ls::LoopSet, arraysymbolinds)
     )
 end
 
-function loopset_return_value(ls::LoopSet)
+function loopset_return_value(ls::LoopSet, ::Val{extract}) where {extract}
     if length(ls.outer_reductions) == 1
-        Expr(:call, :extract_data, Symbol(mangledvar(operations(ls)[ls.outer_reductions[1]]), 0))
+        if extract
+            Expr(:call, :extract_data, Symbol(mangledvar(operations(ls)[ls.outer_reductions[1]]), 0))
+        else
+            Symbol(mangledvar(operations(ls)[ls.outer_reductions[1]]), 0)
+        end
     elseif length(ls.outer_reductions) > 1
         ret = Expr(:tuple)
         ops = operations(ls)
         for or ∈ ls.outer_reductions
-            push!(ret.args, Expr(:call, :extract_data, Symbol(mangledvar(ops[or]), 0)))
+            if extract
+                push!(ret.args, Expr(:call, :extract_data, Symbol(mangledvar(ops[or]), 0)))
+            else
+                push!(ret.args, Symbol(mangledvar(ops[or]), 0))
+            end
         end
         ret
     else
@@ -149,14 +163,20 @@ end
 # Try to condense in type stable manner
 function generate_call(ls::LoopSet)
     operation_descriptions = Expr(:curly, :Tuple)
-    foreach(op -> push!(operation_descriptions.args, OperationStruct(ls, op)), operations(ls))
+    varnames = Symbol[]
+    for op ∈ operations(ls)
+        instr = instruction(op)
+        push!(operation_descriptions.args, QuoteNode(instr.mod))
+        push!(operation_descriptions.args, QuoteNode(instr.instr))
+        push!(operation_descriptions.args, OperationStruct!(varnames, ls, op))
+    end
     arraysymbolinds = Symbol[]
     arrayref_descriptions = Expr(:curly, :Tuple)
     foreach(ref -> push!(arrayref_descriptions.args, ArrayRefStruct(ls, ref, arraysymbolinds)), ls.refs_aliasing_syms)
     argmeta = argmeta_and_consts_description(ls, arraysymbolinds)
     loop_bounds = loop_boundaries(ls)
 
-    q = Expr(:call, :_avx!, operation_descriptions, arrayref_descriptions, argmeta, loop_bounds)
+    q = Expr(:call, lv(:_avx_!), operation_descriptions, arrayref_descriptions, argmeta, loop_bounds)
 
     foreach(ref -> push!(q.args, vptr(ref)), ls.refs_aliasing_syms)
     foreach(is -> push!(q.args, last(is)), ls.preamble_symsym)
@@ -166,16 +186,29 @@ end
 
 function setup_call(ls::LoopSet)
     call = generate_call(ls)
-    retv = loopset_return_value(ls)
-    q = Expr(:block,gc_preserve(ls, Expr(:(=), retv, call)))
+    hasouterreductions = length(ls.outer_reductions) > 0
+    if hasouterreductions
+        retv = loopset_return_value(ls, Val(false))
+        call = Expr(:(=), retv, call)
+    end
+    q = Expr(:block,gc_preserve(ls, call))
+    outer_reducts = Expr(:local)
     for or ∈ ls.outer_reductions
         op = ls.operations[or]
         var = name(op)
         mvar = mangledvar(op)
         instr = instruction(op)
-        push!(q.args, Expr(:(=), var, Expr(:call, REDUCTION_SCALAR_COMBINE[instr], var, Symbol(mvar, 0))))
+        out = Symbol(mvar, 0)
+        push!(outer_reducts.args, out)
+        # push!(q.args, Expr(:(=), var, Expr(:call, lv(reduction_scalar_combine(instr)), Expr(:call, lv(:SVec), out), var)))
+        push!(q.args, Expr(:(=), var, Expr(:call, lv(reduction_scalar_combine(instr)), out, var)))
     end
-
+    hasouterreductions && pushpreamble!(ls, outer_reducts)
+    append!(ls.preamble.args, q.args)
+    ls.preamble
 end
 
+macro _avx(q)
+    esc(setup_call(LoopSet(q)))
+end
 

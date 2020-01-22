@@ -20,8 +20,8 @@ end
 
 function add_loops!(ls::LoopSet, LB)
     loopsyms = [gensym(:n) for _ ∈ eachindex(LB)]
-    for l ∈ LB
-        add_loop!(ls, Loop(ls, l, LB)::Loop)
+    for (i,l) ∈ enumerate(LB)
+        add_loop!(ls, Loop(ls, i, l)::Loop)
     end
 end
 function ArrayReferenceMeta(
@@ -50,46 +50,46 @@ function ArrayReferenceMeta(
         ni -= 1
     end
     ArrayReferenceMeta(
-        ArrayReference(vp, index_vec),
-        loopedindex, array
+        ArrayReference(array, index_vec),
+        loopedindex, vp
     )
 end
 
 function add_mref!(ls::LoopSet, ars::ArrayRefStruct, arraysymbolinds::Vector{Symbol}, opsymbols::Vector{Symbol}, i::Int, ::Type{PackedStridedPointer{T, N}}) where {T, N}
-    ar = ArrayReferenceMeta(ls, ar, arraysymbolinds, opsymbols, Symbol(""), gensym())
+    ar = ArrayReferenceMeta(ls, ars, arraysymbolinds, opsymbols, Symbol(""), gensym())
     pushpreamble!(ls, Expr(:(=), vptr(ar), Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:ref, :vargs, i))))
     ar
 end
 function add_mref!(ls::LoopSet, ars::ArrayRefStruct, arraysymbolinds::Vector{Symbol}, opsymbols::Vector{Symbol}, i::Int, ::Type{RowMajorStridedPointer{T, N}}) where {T, N}
-    ar = ArrayReferenceMeta(ls, ar, arraysymbolinds, opsymbols, Symbol(""), gensym())
+    ar = ArrayReferenceMeta(ls, ars, arraysymbolinds, opsymbols, Symbol(""), gensym())
     reverse!(ar.loopedindex); reverse!(getindices(ar)) # reverse the listed indices here, and transpose it to make it column major
     pushpreamble!(ls, Expr(:(=), vptr(ar), Expr(:call, lv(:Transpose), Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:ref, :vargs, i)))))
     ar
 end
 function add_mref!(ls::LoopSet, ars::ArrayRefStruct, arraysymbolinds::Vector{Symbol}, opsymbols::Vector{Symbol}, i::Int, ::Type{StaticStridedPointer{T, X}}) where {T, X <: Tuple{1,Vararg}}
-    ar = ArrayReferenceMeta(ls, ar, arraysymbolinds, opsymbols, Symbol(""), gensym())
+    ar = ArrayReferenceMeta(ls, ars, arraysymbolinds, opsymbols, Symbol(""), gensym())
     pushpreamble!(ls, Expr(:(=), vptr(ar), Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:ref, :vargs, i))))
     ar
 end
 function add_mref!(ls::LoopSet, ars::ArrayRefStruct, arraysymbolinds::Vector{Symbol}, opsymbols::Vector{Symbol}, i::Int, ::Type{StaticStridedPointer{T, X}}) where {T, X <: Tuple}
-    ar = ArrayReferenceMeta(ls, ar, arraysymbolinds, opsymbols, Symbol(""), gensym())
+    ar = ArrayReferenceMeta(ls, ars, arraysymbolinds, opsymbols, Symbol(""), gensym())
     pushpreamble!(ls, Expr(:(=), vptr(ar), Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:ref, :vargs, i))))
     pushfirst!(getindices(ar), Symbol("##DISCONTIGUOUSSUBARRAY##"))
     ar
 end
 function add_mref!(ls::LoopSet, ars::ArrayRefStruct, arraysymbolinds::Vector{Symbol}, opsymbols::Vector{Symbol}, i::Int, ::Type{SparseStridedPointer{T, N}}) where {T, N}
-    ar = ArrayReferenceMeta(ls, ar, arraysymbolinds, opsymbols, Symbol(""), gensym())
+    ar = ArrayReferenceMeta(ls, ars, arraysymbolinds, opsymbols, Symbol(""), gensym())
     pushpreamble!(ls, Expr(:(=), vptr(ar), Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:ref, :vargs, i))))
     pushfirst!(getindices(ar), Symbol("##DISCONTIGUOUSSUBARRAY##"))
     ar
 end
 function add_mref!(ls::LoopSet, ars::ArrayRefStruct, arraysymbolinds::Vector{Symbol}, opsymbols::Vector{Symbol}, i::Int, ::Type{StaticStridedStruct{T, X}}) where {T, X <: Tuple{1,Vararg}}
-    ar = ArrayReferenceMeta(ls, ar, arraysymbolinds, opsymbols, Symbol(""), gensym())
+    ar = ArrayReferenceMeta(ls, ars, arraysymbolinds, opsymbols, Symbol(""), gensym())
     pushpreamble!(ls, Expr(:(=), vptr(ar), Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:ref, :vargs, i))))
     ar
 end
 function add_mref!(ls::LoopSet, ars::ArrayRefStruct, arraysymbolinds::Vector{Symbol}, opsymbols::Vector{Symbol}, i::Int, ::Type{StaticStridedStruct{T, X}}) where {T, X <: Tuple}
-    ar = ArrayReferenceMeta(ls, ar, arraysymbolinds, opsymbols, Symbol(""), gensym())
+    ar = ArrayReferenceMeta(ls, ars, arraysymbolinds, opsymbols, Symbol(""), gensym())
     pushpreamble!(ls, Expr(:(=), vptr(ar), Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:ref, :vargs, i))))
     pushfirst!(getindices(ar), Symbol("##DISCONTIGUOUSSUBARRAY##"))
     ar
@@ -113,7 +113,7 @@ function process_metadata!(ls::LoopSet, AM, num_arrays::Int)
         sii = si::Int
         s = gensym(:symlicm)
         push!(ls.preamble_symsym, (si,s))
-        pushpreamble!(ls, Expr(:(=), s, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,@__FILE__), Expr(:ref, :varg, num_arrays + i))))
+        pushpreamble!(ls, Expr(:(=), s, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,@__FILE__), Expr(:ref, :vargs, num_arrays + i))))
     end
     append!(ls.preamble_symint, AM[4].parameters)
     append!(ls.preamble_symfloat, AM[5].parameters)
@@ -131,18 +131,21 @@ function parents_symvec(ls::LoopSet, u::Unsigned)
     end
     loops
 end
-loopdependencies(ls::LoopSet, os::OperationStruct) = parents_symvec(ls, op.loopdeps)
-reduceddependencies(ls::LoopSet, os::OperationStruct) = parents_symvec(ls, op.reduceddeps)
-childdependencies(ls::LoopSet, os::OperationStruct) = parents_symvec(ls, op.childdeps)
+loopdependencies(ls::LoopSet, os::OperationStruct) = parents_symvec(ls, os.loopdeps)
+reduceddependencies(ls::LoopSet, os::OperationStruct) = parents_symvec(ls, os.reduceddeps)
+childdependencies(ls::LoopSet, os::OperationStruct) = parents_symvec(ls, os.childdeps)
 
 
 
-function add_op!(ls::LoopSet, os::OperationStruct, mrefs::Vector{ArrayReferenceMeta}, opsymbol::Symbol, elementbytes::Int)
+function add_op!(
+    ls::LoopSet, instr::Instruction, os::OperationStruct, mrefs::Vector{ArrayReferenceMeta}, opsymbol, elementbytes::Int
+)
     optype = os.node_type
+    # opsymbol = (isconstant(os) && instr != LOOPCONSTANT) ? instr.instr : opsymbol
     op = Operation(
-        length(operations(ls)), opsymbol, elementbytes, os.instruction,
+        length(operations(ls)), opsymbol, elementbytes, instr,
         optype, loopdependencies(ls, os), reduceddependencies(ls, os),
-        Operation[], (isload(op) | isstore(op)) ? mrefs[os.array] : NOTAREFERENCE,
+        Operation[], (isload(os) | isstore(os)) ? mrefs[os.array] : NOTAREFERENCE,
         childdependencies(ls, os)
     )
     push!(ls.operations, op)
@@ -156,13 +159,17 @@ function add_parents_to_op!(ls::LoopSet, parents::Vector{Operation}, up::Unsigne
     end
 end
 function add_parents_to_ops!(ls::LoopSet, ops::Vector{OperationStruct})
-    for i ∈ eachindex(ops)
-        add_parents_to_op!(ls, parents(getop(ls, i)), ops[i].parents)
+    for (i,op) ∈ enumerate(operations(ls))
+        add_parents_to_op!(ls, parents(op), ops[i].parents)
     end
 end
-function add_ops!(ls::LoopSet, ops::Vector{OperationStruct}, mrefs::Vector{ArrayReferenceMeta}, opsymbols::Vector{Symbol}, elementbytes::Int)
+function add_ops!(
+    ls::LoopSet, instr::Vector{Instruction}, ops::Vector{OperationStruct}, mrefs::Vector{ArrayReferenceMeta}, opsymbols::Vector{Symbol}, elementbytes::Int
+)
     for i ∈ eachindex(ops)
-        add_op!(ls, ops[i], mrefs, opsymbols[i], elementbytes)
+        os = ops[i]
+        opsymbol = opsymbols[os.symid]
+        add_op!(ls, instr[i], os, mrefs, opsymbol, elementbytes)
     end
     add_parents_to_ops!(ls, ops)
 end
@@ -170,24 +177,46 @@ end
 # elbytes(::VectorizationBase.AbstractPointer{T}) where {T} = sizeof(T)::Int
 typeeltype(::Type{P}) where {T,P<:VectorizationBase.AbstractPointer{T}} = T
 
-function avx_body(ops, arf, AM, LB, vargs)
+function add_array_symbols!(ls::LoopSet, arraysymbolinds::Vector{Symbol}, offset::Int)
+    for (i,as) ∈ enumerate(arraysymbolinds)
+        pushpreamble!(ls, Expr(:(=), as, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:ref, :vargs, i + offset))))
+    end
+end
+function sizeofeltypes(v, num_arrays)::Int
+    T = typeeltype(v[1])
+    for i ∈ 2:num_arrays
+        T = promote_type(T, typeeltype(v[i]))
+    end
+    sizeof(T)
+end
+
+function avx_body(instr, ops, arf, AM, LB, vargs)
     ls = LoopSet()
     # elementbytes = mapreduce(elbytes, min, @view(vargs[Base.OneTo(length(arf))]))::Int
-    elementbytes = sizeof(mapreduce(typeeltype,promote_type,@view(vargs[Base.OneTo(length(arf))])))::Int
+    num_arrays = length(arf)
+    elementbytes = sizeofeltypes(vargs, num_arrays)
     add_loops!(ls, LB)
+    resize!(ls.loop_order, length(LB))
     arraysymbolinds = process_metadata!(ls, AM, length(arf))
     opsymbols = [gensym(:op) for _ ∈ eachindex(ops)]
-    mrefs = create_mrefs(ls, arf, arraysymbolinds, opsymbols, vargs)
-    add_ops!(ls, ops, mrefs, opsymbols, elementbytes)
+    mrefs = create_mrefs!(ls, arf, arraysymbolinds, opsymbols, vargs)
+    add_ops!(ls, instr, ops, mrefs, opsymbols, elementbytes)
+    add_array_symbols!(ls, arraysymbolinds, num_arrays + length(ls.preamble_symsym))
+    pushpreamble!(ls, Expr(:(=), ls.T, Expr(:call, :promote_type, [Expr(:call, :eltype, vptr(mref)) for mref ∈ mrefs]...)))
     q = lower(ls)
-    push!(q.args, loopset_return_value(ls))
+    push!(q.args, loopset_return_value(ls, Val(true)))
+    # @show q
+    length(ls.outer_reductions) > 1 && pushfirst!(q.args, Expr(:meta, :inline))
     q
 end
 
-
-@generated function _avx!(::Type{OPS}, ::Type{ARF}, ::Type{AM}, lb::LB, vargs...)
+@generated function _avx_!(::Type{OPS}, ::Type{ARF}, ::Type{AM}, lb::LB, vargs...) where {OPS, ARF, AM, LB}
+    OPSsv = OPS.parameters
+    nops = length(OPSsv) ÷ 3
+    instr = Instruction[Instruction(OPSsv[3i+1], OPSsv[3i+2]) for i ∈ 0:nops-1]
+    ops = OperationStruct[ OPSsv[3i] for i ∈ 1:nops ]
     avx_body(
-        OperationStruct[OPS.parameters...],
+        instr, ops,
         ArrayRefStruct[ARF.parameters...],
         AM.parameters, LB.parameters, vargs
     )       
