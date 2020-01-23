@@ -10,7 +10,7 @@ include(joinpath(LOOPVECBENCHDIR, "plotbenchmarks.jl"))
 
 using Distributed
 
-addprocs(10);
+addprocs(11);
 
 @everywhere begin
     pkgdir(pkg::String) = abspath(joinpath(dirname(Base.find_package(pkg)), ".."))
@@ -29,17 +29,34 @@ sse_future = @spawnat 8 benchmark_sse(2:256);
 exp_future = @spawnat 9 benchmark_exp(2:256);
 aplusBc_future = @spawnat 10 benchmark_aplusBc(2:256);
 AplusAt_future = @spawnat 11 benchmark_AplusAt(2:256);
+randomaccess_future = @spawnat 12 benchmark_random_access(2:256);
 
 dot_bench = fetch(dot_future)
 selfdot_bench = fetch(selfdot_future)
 AplusAt_bench = fetch(AplusAt_future)
 gemv_bench = fetch(gemv_future)
+randomaccess_bench = fetch(randomaccess_future)
 dot3_bench = fetch(dot3_future)
 sse_bench = fetch(sse_future)
 exp_bench = fetch(exp_future)
 aplusBc_bench = fetch(aplusBc_future)
 gemm_bench = fetch(gemm_future)
 AtmulB_bench = fetch(AtmulB_future)
+
+
+v = 1
+const PICTURES = "/home/chriselrod/Pictures"
+save(joinpath(PICTURES, "bench_gemm_v$v.png"), plot(gemm_bench));
+save(joinpath(PICTURES, "bench_AtmulB_v$v.png"), plot(AtmulB_bench));
+save(joinpath(PICTURES, "bench_dot_v$v.png"), plot(dot_bench));
+save(joinpath(PICTURES, "bench_selfdot_v$v.png"), plot(selfdot_bench));
+save(joinpath(PICTURES, "bench_gemv_v$v.png"), plot(gemv_bench));
+save(joinpath(PICTURES, "bench_dot3_v$v.png"), plot(dot3_bench));
+save(joinpath(PICTURES, "bench_sse_v$v.png"), plot(sse_bench));
+save(joinpath(PICTURES, "bench_exp_v$v.png"), plot(exp_bench));
+save(joinpath(PICTURES, "bench_aplusBc_v$v.png"), plot(aplusBc_bench));
+save(joinpath(PICTURES, "bench_AplusAt_v$v.png"), plot(AplusAt_bench));
+save(joinpath(PICTURES, "bench_random_access_v$v.png"), plot(randomaccess_bench));
 
 
 plot(gemm_bench)
@@ -53,13 +70,5 @@ plot(exp_bench)
 plot(aplusBc_bench)
 plot(AplusAt_bench)
 
-save(joinpath("~/Pictures", "bench_gemm_v3.png"), plot(gemm_bench));
-save(joinpath("~/Pictures", "bench_AtmulB_v3.png"), plot(AtmulB_bench));
-save(joinpath("~/Pictures", "bench_dot_v3.png"), plot(dot_bench));
-save(joinpath("~/Pictures", "bench_selfdot_v3.png"), plot(selfdot_bench));
-save(joinpath("~/Pictures", "bench_gemv_v3.png"), plot(gemv_bench));
-save(joinpath("~/Pictures", "bench_dot3_v3.png"), plot(dot3_bench));
-save(joinpath("~/Pictures", "bench_sse_v3.png"), plot(sse_bench));
-save(joinpath("~/Pictures", "bench_exp_v3.png"), plot(exp_bench));
-save(joinpath("~/Pictures", "bench_aplusBc_v3.png"), plot(aplusBc_bench));
+
 

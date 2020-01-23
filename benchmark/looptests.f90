@@ -253,4 +253,20 @@ module looptests
       real(C_double), dimension(N,N), intent(in) :: A
       B = A + transpose(A)
     end subroutine AplusAtbuiltin
+    subroutine randomaccess(pp, P, basis, coefs, A, C) BIND(C, name="randomaccess")
+      integer(C_long), intent(in) :: A, C
+      real(C_double), intent(in) :: P(A,C), coefs(C)
+      integer(C_long), intent(in) :: basis(A,C)
+      real(C_double), intent(out) :: pp
+      real(C_double) :: pc
+      integer(C_long) :: aa, cc
+      pp = 0
+      do cc = 1,C
+         pc = coefs(cc)
+         do aa = 1,A
+            pc = pc * P(aa, basis(aa, cc))
+         end do
+         pp = pp + pc
+      end do
+    end subroutine randomaccess
   end module looptests

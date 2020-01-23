@@ -178,4 +178,16 @@ void AplusAt(double* restrict B, double* restrict A, long N){
     }
   }
 }
+double randomaccess(double* restrict P, long* restrict basis, double* restrict coefs, long A, long C){
+  double p = 0.0;
+  for (long c = 0; c < C; c++){
+    double pc = coefs[c];
+    for (long a = 0; a < A; a++){
+      pc *= P[a + (basis[a + c*A]-1)*A];
+    }
+    p += pc;
+  }
+  return p;
+}
+
 

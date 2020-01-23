@@ -116,7 +116,7 @@ function check_unroll(arg)
     a1 === :unroll || return nothing
     convert(Int8, arg.args[2])
 end
-function check_macro_kwarg(arg, inline::Int8 = one(Int8), U::Int8 = zero(Int8), T::Int8 = zero(Int8))
+function check_macro_kwarg(arg, inline::Int8 = Int8(2), U::Int8 = zero(Int8), T::Int8 = zero(Int8))
     @assert arg.head === :(=)
     i = check_inline(arg)
     if i !== nothing

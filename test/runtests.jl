@@ -1053,15 +1053,15 @@ end
         return p
     end
     function mvpavx(P, basis, coeffs::Vector{T}) where {T}
-        len_c = length(coeffs)
-        len_P = size(P, 1)
+        C = length(coeffs)
+        A = size(P, 1)
         p = zero(T)
-        @avx for n = 1:len_c
-            pn = coeffs[n]
-            for a = 1:len_P
-                pn *= P[a, basis[a, n]]
+        @avx for c ∈ 1:C
+            pc = coeffs[c]
+            for a = 1:A
+                pc *= P[a, basis[a, c]]
             end
-            p += pn
+            p += pc
         end
         return p
     end

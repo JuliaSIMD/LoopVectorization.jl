@@ -47,8 +47,8 @@ for (prefix,Cshared,Fshared) ∈ ((Symbol(""),LIBCTEST,LIBFTEST), (:i,LIBICTEST,
             )
         end
     end
-
-    
+    @eval @inline $(Symbol(prefix,:cgemm!))(C, A, B) = $(Symbol(prefix, :cgemm_nkm!))(C, A, B)
+    @eval @inline $(Symbol(prefix,:fgemm!))(C, A, B) = $(Symbol(prefix, :fgemm_nkm!))(C, A, B)
     @eval function $(Symbol(prefix,:fgemm_builtin!))(C, A, B)
         M, N = size(C); K = size(B, 1)
         ccall(
@@ -57,28 +57,28 @@ for (prefix,Cshared,Fshared) ∈ ((Symbol(""),LIBCTEST,LIBFTEST), (:i,LIBICTEST,
             C, A, B, Ref(M), Ref(K), Ref(N)
         )
     end
-    @eval function $(Symbol(prefix,:cAtmulB!))(C, A, B)
+    @eval @inline function $(Symbol(prefix,:cgemm!))(C, A::Adjoint, B)
         M, N = size(C); K = size(B, 1)
         ccall(
             (:AtmulB, $Cshared), Cvoid,
             (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Clong, Clong, Clong),
-            C, A, B, M, K, N
+            C, parent(A), B, M, K, N
         )
     end
-    @eval function $(Symbol(prefix,:fAtmulB!))(C, A, B)
+    @eval @inline function $(Symbol(prefix,:fgemm!))(C, A::Adjoint, B)
         M, N = size(C); K = size(B, 1)
         ccall(
             (:AtmulB, $Fshared), Cvoid,
             (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}, Ref{Clong}, Ref{Clong}),
-            C, A, B, Ref(M), Ref(K), Ref(N)
+            C, parent(A), B, Ref(M), Ref(K), Ref(N)
         )
     end
-    @eval function $(Symbol(prefix,:fAtmulB_builtin!))(C, A, B)
+    @eval @inline function $(Symbol(prefix,:fgemm_builtin!))(C, A::Adjoint, B)
         M, N = size(C); K = size(B, 1)
         ccall(
             (:AtmulBbuiltin, $Fshared), Cvoid,
             (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}, Ref{Clong}, Ref{Clong}),
-            C, A, B, Ref(M), Ref(K), Ref(N)
+            C, parent(A), B, Ref(M), Ref(K), Ref(N)
         )
     end
 
@@ -247,4 +247,23 @@ for (prefix,Cshared,Fshared) ∈ ((Symbol(""),LIBCTEST,LIBFTEST), (:i,LIBICTEST,
             B, A, N
         )
     end
+    @eval function $(Symbol(prefix,:crandomaccess))(P, basis, coefs)
+        A, C = size(P)
+        ccall(
+            (:randomaccess, $Cshared), Float64,
+            (Ptr{Float64}, Ptr{Clong}, Ptr{Float64}, Clong, Clong),
+            P, basis, coefs, A, C
+        )
+    end
+    @eval function $(Symbol(prefix,:frandomaccess))(P, basis, coefs)
+        A, C = size(P)
+        p = Ref{Float64}()
+        ccall(
+            (:randomaccess, $Cshared), Cvoid,
+            (Ref{Float64}, Ptr{Float64}, Ptr{Clong}, Ptr{Float64}, Ref{Clong}, Ref{Clong}),
+            p, P, basis, coefs, Ref(A), Ref(C)
+        )
+        p[]
+    end
+    
 end

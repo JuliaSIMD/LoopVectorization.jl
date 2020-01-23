@@ -1,7 +1,7 @@
 using LoopVectorization, LinearAlgebra
 BLAS.set_num_threads(1)
 
-function jgemm_nkm!(C, A, B)
+function jgemm!(C, A, B)
     C .= 0
     M, N = size(C); K = size(B,1)
     @inbounds for n ∈ 1:N, k ∈ 1:K
@@ -10,28 +10,20 @@ function jgemm_nkm!(C, A, B)
         end
     end
 end
-function gemmavx!(C, A, B)
-    @avx for i ∈ 1:size(A,1), j ∈ 1:size(B,2)
-        Cᵢⱼ = 0.0
+@inline function gemmavx!(C, A, B)
+    @avx inline=true for i ∈ 1:size(A,1), j ∈ 1:size(B,2)
+        Cᵢⱼ = zero(eltype(C))
         for k ∈ 1:size(A,2)
             Cᵢⱼ += A[i,k] * B[k,j]
         end
         C[i,j] = Cᵢⱼ
     end
 end
-function jAtmulB!(C, A, B)
+@inline function jgemm!(C, Aᵀ::Adjoint, B)
+    A = parent(Aᵀ)
     @inbounds for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
         Cₘₙ = zero(eltype(C))
         @simd ivdep for k ∈ 1:size(A,1)
-            Cₘₙ += A[k,m] * B[k,n]
-        end
-        C[m,n] = Cₘₙ
-    end
-end
-function jAtmulBavx!(C, A, B)
-    @avx for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
-        Cₘₙ = zero(eltype(C))
-        for k ∈ 1:size(A,1)
             Cₘₙ += A[k,m] * B[k,n]
         end
         C[m,n] = Cₘₙ
@@ -168,6 +160,32 @@ function jOLSlp_avx(y, X, β)
         lp += δ * δ
     end
     lp
+end
+function randomaccess(P, basis, coeffs::Vector{T}) where {T}
+    C = length(coeffs)
+    A = size(P, 1)
+    p = zero(T)
+    @avx for c ∈ 1:C
+        pc = coeffs[c]
+        for a = 1:A
+            pc *= P[a, basis[a, c]]
+        end
+        p += pc
+    end
+    return p
+end
+function randomaccessavx(P, basis, coeffs::Vector{T}) where {T}
+    C = length(coeffs)
+    A = size(P, 1)
+    p = zero(T)
+    @avx for c ∈ 1:C
+        pc = coeffs[c]
+        for a = 1:A
+            pc *= P[a, basis[a, c]]
+        end
+        p += pc
+    end
+    return p
 end
 
 

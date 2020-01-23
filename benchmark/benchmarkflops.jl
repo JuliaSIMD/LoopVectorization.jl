@@ -49,17 +49,17 @@ function benchmark_gemm(sizes)
         n_gflop = M*K*N*2e-9
         br[1,i] = n_gflop / @belapsed mul!($C, $A, $B)
         Cblas = copy(C)
-        br[2,i] = n_gflop / @belapsed jgemm_nkm!($C, $A, $B)
+        br[2,i] = n_gflop / @belapsed jgemm!($C, $A, $B)
         @assert C ≈ Cblas "Julia gemm wrong?"
-        br[3,i] = n_gflop / @belapsed cgemm_nkm!($C, $A, $B)
+        br[3,i] = n_gflop / @belapsed cgemm!($C, $A, $B)
         @assert C ≈ Cblas "Polly gemm wrong?"
-        br[4,i] = n_gflop / @belapsed fgemm_nkm!($C, $A, $B)
+        br[4,i] = n_gflop / @belapsed fgemm!($C, $A, $B)
         @assert C ≈ Cblas "Fort gemm wrong?"
         br[5,i] = n_gflop / @belapsed fgemm_builtin!($C, $A, $B)
         @assert C ≈ Cblas "Fort intrinsic gemm wrong?"
-        br[6,i] = n_gflop / @belapsed icgemm_nkm!($C, $A, $B)
+        br[6,i] = n_gflop / @belapsed icgemm!($C, $A, $B)
         @assert C ≈ Cblas "icc gemm wrong?"
-        br[7,i] = n_gflop / @belapsed ifgemm_nkm!($C, $A, $B)
+        br[7,i] = n_gflop / @belapsed ifgemm!($C, $A, $B)
         @assert C ≈ Cblas "ifort gemm wrong?"
         br[8,i] = n_gflop / @belapsed ifgemm_builtin!($C, $A, $B)
         @assert C ≈ Cblas "ifort intrinsic gemm wrong?"
@@ -83,21 +83,21 @@ function benchmark_AtmulB(sizes)
         n_gflop = M*K*N*2e-9
         br[1,i] = n_gflop / @belapsed mul!($C, $At', $B)
         Cblas = copy(C)
-        br[2,i] = n_gflop / @belapsed jAtmulB!($C, $At, $B)
+        br[2,i] = n_gflop / @belapsed jgemm!($C, $At', $B)
         @assert C ≈ Cblas "Julia gemm wrong?"
-        br[3,i] = n_gflop / @belapsed cAtmulB!($C, $At, $B)
+        br[3,i] = n_gflop / @belapsed cgemm!($C, $At', $B)
         @assert C ≈ Cblas "Polly gemm wrong?"
-        br[4,i] = n_gflop / @belapsed fAtmulB!($C, $At, $B)
+        br[4,i] = n_gflop / @belapsed fgemm!($C, $At', $B)
         @assert C ≈ Cblas "Fort gemm wrong?"
-        br[5,i] = n_gflop / @belapsed fAtmulB_builtin!($C, $At, $B)
+        br[5,i] = n_gflop / @belapsed fgemm_builtin!($C, $At', $B)
         @assert C ≈ Cblas "Fort intrinsic gemm wrong?"
-        br[6,i] = n_gflop / @belapsed cAtmulB!($C, $At, $B)
+        br[6,i] = n_gflop / @belapsed icgemm!($C, $At', $B)
         @assert C ≈ Cblas "icc gemm wrong?"
-        br[7,i] = n_gflop / @belapsed ifAtmulB!($C, $At, $B)
+        br[7,i] = n_gflop / @belapsed ifgemm!($C, $At', $B)
         @assert C ≈ Cblas "iort gemm wrong?"
-        br[8,i] = n_gflop / @belapsed ifAtmulB_builtin!($C, $At, $B)
+        br[8,i] = n_gflop / @belapsed ifgemm_builtin!($C, $At', $B)
         @assert C ≈ Cblas "ifort intrinsic gemm wrong?"
-        br[9,i] = n_gflop / @belapsed jAtmulBavx!($C, $At, $B)
+        br[9,i] = n_gflop / @belapsed gemmavx!($C, $At', $B)
         @assert C ≈ Cblas "LoopVec gemm wrong?"
         # if i % 10 == 0
             # percent_complete = round(100i/ length(sizes), sigdigits = 4)
@@ -223,11 +223,14 @@ function sse!(Xβ, y, X, β)
     mul!(copyto!(Xβ, y), X, β, 1.0, -1.0)
     dot(Xβ, Xβ)
 end
+sse_totwotuple(s::NTuple{2}) = s
+sse_totwotuple(s::Integer) = ((3s) >> 1, s >> 1)
+
 function benchmark_sse(sizes)
     tests = [BLAS.vendor() === :mkl ? "IntelMKL" : "OpenBLAS", "Julia", "Clang-Polly", "GFortran", "icc", "ifort", "LoopVectorization"]
     br = BenchmarkResult(tests, sizes)
     for (i,s) ∈ enumerate(sizes)
-        N, P = totwotuple(s)
+        N, P = sse_totwotuple(s)
         y = rand(N); β = rand(P)
         X = randn(N, P)
         Xβ = similar(y)
@@ -330,6 +333,35 @@ function benchmark_AplusAt(sizes)
         @assert B ≈ baseB "ifort-builtin wrong?"
         br[8,i] = n_gflop / @belapsed @avx @. $B = $A + $A'
         @assert B ≈ baseB "LoopVec wrong?"
+        # if i % 10 == 0
+            # percent_complete = round(100i/ length(sizes), sigdigits = 4)
+            # @show percent_complete
+        # end
+    end
+    br
+end
+
+function benchmark_random_access(sizes)
+    tests = ["Julia", "Clang-Polly", "GFortran", "icc", "ifort", "LoopVectorization"]
+    br = BenchmarkResult(tests, sizes)
+    for (i,s) ∈ enumerate(sizes)
+        A, C = totwotuple(s)
+        P = rand(A, C);
+        basis = rand(1:C, A, C);
+        coefs = randn(C)
+        n_gflop = 1e-9*(A*C + C)
+        p = randomaccess(P, basis, coefs)
+        br[1,i] = n_gflop / @belapsed  randomaccess($P, $basis, $coefs)
+        br[2,i] = n_gflop / @belapsed crandomaccess($P, $basis, $coefs)
+        @assert p ≈ crandomaccess(P, basis, coefs) "Clang wrong?"
+        br[3,i] = n_gflop / @belapsed frandomaccess($P, $basis, $coefs)
+        @assert p ≈ frandomaccess(P, basis, coefs) "Fort wrong?"
+        br[4,i] = n_gflop / @belapsed icrandomaccess($P, $basis, $coefs)
+        @assert p ≈ icrandomaccess(P, basis, coefs) "icc wrong?"
+        br[5,i] = n_gflop / @belapsed ifrandomaccess($P, $basis, $coefs)
+        @assert p ≈ ifrandomaccess(P, basis, coefs) "ifort wrong?"
+        br[6,i] = n_gflop / @belapsed @avx randomaccessavx($P, $basis, $coefs)
+        @assert p ≈ randomaccessavx(P, basis, coefs) "LoopVec wrong?"
         # if i % 10 == 0
             # percent_complete = round(100i/ length(sizes), sigdigits = 4)
             # @show percent_complete
