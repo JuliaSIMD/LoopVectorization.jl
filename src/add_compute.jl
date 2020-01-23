@@ -94,7 +94,15 @@ function add_reduction_update_parent!(
         reduct_zero = reduction_zero(instrclass)
         reductcombine = reduction_scalar_combine(instrclass)
         reductsym = gensym(:reduction)
-        reductinit = add_constant!(ls, Expr(:call, reduct_zero, ls.T), loopdependencies(parent), reductsym, reduct_zero, elementbytes)
+        reductinit = add_constant!(ls, gensym(:reductzero), loopdependencies(parent), reductsym, elementbytes, :numericconstant)
+        if reduct_zero === :zero
+            push!(ls.preamble_zeros, identifier(reductinit))
+        elseif reduct_zero === :one
+            push!(ls.preamble_ones, identifier(reductinit))
+        else
+            pushpreamble!(ls, Expr(:(=), name(reductinit), reductzero))
+            pushpreamble!(ls, op, name, reductinit)
+        end
         if isconstant(parent) && reduct_zero === parent.instruction.mod #we can use parent op as initialization.
             reductcombine = reduction_combine_to(instrclass)
         end

@@ -116,7 +116,7 @@ function loop_boundaries(ls::LoopSet)
         elseif stopexact
             Expr(:call, Expr(:curly, lv(:StaticUpperUnitRange), loop.stophint), loop.startsym)
         else
-            Expr(:call, Expr(:call, :(:), loop.startsym, loop.stopsym))
+            Expr(:call, :(:), loop.startsym, loop.stopsym)
         end
         push!(lbd.args, lexpr)
     end
@@ -159,6 +159,14 @@ function loopset_return_value(ls::LoopSet, ::Val{extract}) where {extract}
     end
 end
 
+function add_reassigned_syms!(q::Expr, ls::LoopSet)
+    for op ∈ operations(ls)
+        if isconstant(op)
+            instr = instruction(op)
+            (instr == LOOPCONSTANT || instr.mod === :numericconstant) || push!(q.args, instr.instr)
+        end
+    end
+end
 
 # Try to condense in type stable manner
 function generate_call(ls::LoopSet, IUT)
@@ -177,14 +185,14 @@ function generate_call(ls::LoopSet, IUT)
     loop_bounds = loop_boundaries(ls)
 
     q = Expr(:call, lv(:_avx_!), Expr(:call, Expr(:curly, :Val, IUT)), operation_descriptions, arrayref_descriptions, argmeta, loop_bounds)
-
     foreach(ref -> push!(q.args, vptr(ref)), ls.refs_aliasing_syms)
     foreach(is -> push!(q.args, last(is)), ls.preamble_symsym)
     append!(q.args, arraysymbolinds)
+    add_reassigned_syms!(q, ls)
     q
 end
 
-function setup_call(ls::LoopSet, inline = one(Int8), U = zero(Int8), T = zero(Int8))
+function setup_call(ls::LoopSet, inline = Int8(2), U = zero(Int8), T = zero(Int8))
     call = generate_call(ls, (inline,U,T))
     hasouterreductions = length(ls.outer_reductions) > 0
     if hasouterreductions

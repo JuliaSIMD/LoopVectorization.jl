@@ -877,36 +877,37 @@ end
 @inline sizeequivalentint(::Type{Float16}, x::Int64) = Int16(x)
 @inline sizeequivalentint(::Type{Float16}, x::Int32) = Int16(x)
 
+function setop!(ls, op, val)
+    if instruction(op) === LOOPCONSTANT# && mangledvar(op) !== val
+        pushpreamble!(ls, Expr(:(=), mangledvar(op), val))
+    else
+        pushpreamble!(ls, Expr(:(=), instruction(op).instr, val))
+    end
+    nothing
+end
+function setconstantop!(ls, op, val)
+    if instruction(op) === LOOPCONSTANT# && mangledvar(op) !== val
+        pushpreamble!(ls, Expr(:(=), mangledvar(op), val))
+    end
+    nothing
+end
+
 function lower_licm_constants!(ls::LoopSet)
     ops = operations(ls)
-    for (id,sym) ∈ ls.preamble_symsym
-        op = ops[id]
-        mv = mangledvar(op)
-        # mv === sym || pushpreamble!(ls, Expr(:(=), instruction(op).instr, sym))
-        if mv !== sym
-            if length(ls.includedarrays) == 0 && instruction(op).mod === Symbol("")
-                pushpreamble!(ls, Expr(:(=), instruction(op).instr, sym))
-            else
-                pushpreamble!(ls, Expr(:(=), mv, sym))
-            end
-            # pushpreamble!(ls, instruction(op) === LOOPCONSTANT ? Expr(:(=), mv, sym) : Expr(:(=), instruction(op).instr, sym))
-        end
+    for (id, sym) ∈ ls.preamble_symsym
+        setconstantop!(ls, ops[id], sym)
     end
     for (id,intval) ∈ ls.preamble_symint
-        op = ops[id]
-        pushpreamble!(ls, Expr(:(=), mangledvar(op), Expr(:call, lv(:sizeequivalentint), ls.T, intval)))
+        setop!(ls, ops[id], Expr(:call, lv(:sizeequivalentint), ls.T, intval))
     end
     for (id,floatval) ∈ ls.preamble_symfloat
-        op = ops[id]
-        pushpreamble!(ls, Expr(:(=), mangledvar(op), Expr(:call, lv(:sizeequivalentfloat), ls.T, floatval)))
+        setop!(ls, ops[id], Expr(:call, lv(:sizeequivalentfloat), ls.T, intval))
     end
     for id ∈ ls.preamble_zeros
-        op = ops[id]
-        pushpreamble!(ls, Expr(:(=), instruction(op).instr, Expr(:call, :zero, ls.T)))
+        setop!(ls, ops[id], Expr(:call, :zero, ls.T))
     end
     for id ∈ ls.preamble_ones
-        op = ops[id]
-        pushpreamble!(ls, Expr(:(=), instruction(op).instr, Expr(:call, :one, ls.T)))
+        setop!(ls, ops[id], Expr(:call, :one, ls.T))
     end
 end
 function setup_preamble!(ls::LoopSet, W::Symbol, typeT::Symbol, vectorized::Symbol, unrolled::Symbol, tiled::Symbol, U::Int)

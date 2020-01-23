@@ -11,7 +11,7 @@ function jgemm!(C, A, B)
     end
 end
 @inline function gemmavx!(C, A, B)
-    @avx inline=true for i ∈ 1:size(A,1), j ∈ 1:size(B,2)
+    @avx for i ∈ 1:size(A,1), j ∈ 1:size(B,2)
         Cᵢⱼ = zero(eltype(C))
         for k ∈ 1:size(A,2)
             Cᵢⱼ += A[i,k] * B[k,j]

@@ -261,18 +261,12 @@ looprangehint(ls::LoopSet, s::Symbol) = length(getloop(ls, s))
 looprangesym(ls::LoopSet, s::Symbol) = getloop(ls, s).rangesym
 function getop(ls::LoopSet, var::Symbol, elementbytes::Int = 8)
     get!(ls.opdict, var) do
-        # might add constant
-        op = add_constant!(ls, var, elementbytes)
-        pushpreamble!(ls, op, var)
-        op
+        add_constant!(ls, var, elementbytes)
     end
 end
 function getop(ls::LoopSet, var::Symbol, deps, elementbytes::Int = 8)
     get!(ls.opdict, var) do
-        # might add constant
-        op = add_constant!(ls, var, deps, gensym(:constant), Symbol(""), elementbytes)
-        pushpreamble!(ls, op, var)
-        op
+        add_constant!(ls, var, deps, gensym(:constant), elementbytes)
     end
 end
 getop(ls::LoopSet, i::Int) = ls.operations[i + 1]
@@ -370,7 +364,7 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
         else # neither are integers
             L = add_loop_bound!(ls, itersym, lower, false)
             U = add_loop_bound!(ls, itersym, upper, true)
-            Loop(itersym, L, N)
+            Loop(itersym, L, U)
         end
     elseif f === :eachindex
         N = gensym(Symbol(:loop, itersym))
@@ -434,8 +428,7 @@ function add_operation!(
             add_load_getindex!(ls, LHS, RHS, elementbytes)
         elseif f === :zero || f === :one
             c = gensym(f)
-            # pushpreamble!(ls, Expr(:(=), c, RHS))
-            op = add_constant!(ls, c, copy(ls.loopsymbols), LHS, f, elementbytes)
+            op = add_constant!(ls, c, copy(ls.loopsymbols), LHS, elementbytes, :numericconstant)
             push!(f === :zero ? ls.preamble_zeros : ls.preamble_ones, identifier(op))
             op
         else
@@ -459,8 +452,7 @@ function add_operation!(
             add_load!(ls, LHS_sym, LHS_ref, elementbytes)
         elseif f === :zero || f === :one
             c = gensym(f)
-            # pushpreamble!(ls, Expr(:(=), c, RHS))
-            op = add_constant!(ls, c, copy(ls.loopsymbols), LHS_sym, f, elementbytes)
+            op = add_constant!(ls, c, copy(ls.loopsymbols), LHS_sym, elementbytes, :numericconstant)
             push!(f === :zero ? ls.preamble_zeros : ls.preamble_ones, identifier(op))
             op
         else
@@ -488,33 +480,7 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int = 8)
             if RHS isa Expr
                 add_operation!(ls, LHS, RHS, elementbytes)
             else
-                deps = copy(ls.loopsymbols)
-                if RHS isa Number
-                    fisone = false
-                    fiszero = false
-                    instr = if iszero(RHS)
-                        fiszero = true
-                        :zero
-                    elseif isone(RHS)
-                        fisone = true
-                        :one
-                    else
-                        :numericalconstant
-                    end
-                    op = add_constant!(ls, gensym(instr), deps, LHS, instr, elementbytes)
-                    if fiszero
-                        push!(ls.preamble_zeros, identifier(op))
-                    elseif fisone
-                        push!(ls.preamble_ones, identifier(op))
-                    else
-                        pushpreamble!(ls, op, RHS)
-                    end
-                    op
-                elseif RHS isa Symbol
-                    add_constant!(ls, RHS, deps, LHS, :constsym, elementbytes)
-                else
-                    add_constant!(ls, RHS, deps, LHS, :constmisc, elementbytes)
-                end
+                add_constant!(ls, RHS, copy(ls.loopsymbols), LHS, elementbytes)
             end
         elseif LHS isa Expr
             @assert LHS.head === :ref

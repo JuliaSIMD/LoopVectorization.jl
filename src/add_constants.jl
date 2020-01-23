@@ -1,15 +1,12 @@
 function add_constant!(ls::LoopSet, var::Symbol, elementbytes::Int = 8)
     op = Operation(length(operations(ls)), var, elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS)
-    pushpreamble!(ls, op, mangledvar(op))
+    pushpreamble!(ls, op, var)
     pushop!(ls, op, var)
 end
 function add_constant!(ls::LoopSet, var, elementbytes::Int = 8)
-    sym = gensym(:temp)
-    op = Operation(length(operations(ls)), sym, elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS)
-    temp = gensym(:intermediateconst)
-    pushpreamble!(ls, Expr(:(=), temp, var))
-    pushpreamble!(ls, op, temp)
-    pushop!(ls, op, sym)
+    sym = gensym(:loopconstant)
+    pushpreamble!(ls, Expr(:(=), sym, var))
+    add_constant!(ls, sym, elementbytes)
 end
 function add_constant!(ls::LoopSet, var::Symbol, mpref::ArrayReferenceMetaPosition, elementbytes::Int)
     op = Operation(length(operations(ls)), var, elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS, mpref.mref)
@@ -17,22 +14,32 @@ function add_constant!(ls::LoopSet, var::Symbol, mpref::ArrayReferenceMetaPositi
     temp = gensym(:intermediateconstref)
     pushpreamble!(ls, Expr(:(=), temp, Expr(:call, lv(:load), mpref.mref.ptr, mem_offset(op, UnrollArgs(zero(Int32), Symbol(""), Symbol(""), nothing)))))
     pushpreamble!(ls, op, temp)
-    pushop!(ls, op, var)
+    pushop!(ls, op, temp)
 end
 # This version has loop dependencies. var gets assigned to sym when lowering.
-function add_constant!(ls::LoopSet, var::Symbol, deps::Vector{Symbol}, sym::Symbol = gensym(:constant), f::Symbol = Symbol(""), elementbytes::Int = 8)
-    # length(deps) == 0 && push!(ls.preamble.args, Expr(:(=), sym, var))
-    pushop!(ls, Operation(length(operations(ls)), sym, elementbytes, Instruction(f,var), constant, deps, NODEPENDENCY, NOPARENTS), sym)
-end
-
 function add_constant!(
-    ls::LoopSet, var, deps::Vector{Symbol}, sym::Symbol = gensym(:constant), f::Symbol = Symbol(""), elementbytes::Int = 8
+    ls::LoopSet, value::Symbol, deps::Vector{Symbol}, assignedsym::Symbol = gensym(:constant), elementbytes::Int = 8, f::Symbol = Symbol("")
 )
-    sym2 = gensym(:temp) # hack, passing meta info here
-    op = Operation(length(operations(ls)), sym, elementbytes, Instruction(f, sym2), constant, deps, NODEPENDENCY, NOPARENTS)
-    # @show f, sym, name(op), mangledvar(op)
-    # temp = gensym(:temp2)
-    # pushpreamble!(ls, Expr(:(=), temp, var))
-    pushpreamble!(ls, op, var)#temp)
-    pushop!(ls, op, sym)
+    op = Operation(length(operations(ls)), assignedsym, elementbytes, Instruction(f, value), constant, deps, NODEPENDENCY, NOPARENTS)
+    pushop!(ls, op, assignedsym)
+end
+function add_constant!(
+    ls::LoopSet, value, deps::Vector{Symbol}, assignedsym::Symbol = gensym(:constant), elementbytes::Int = 8, f::Symbol = Symbol("")
+)
+    intermediary = gensym(:intermediate) # hack, passing meta info here
+    pushpreamble!(ls, Expr(:(=), intermediary, value))
+    add_constant!(ls, intermediary, deps, assignedsym, f, elementbytes)
+end
+function add_constant!(
+    ls::LoopSet, value::Number, deps::Vector{Symbol}, assignedsym::Symbol = gensym(:constant), elementbytes::Int = 8
+)
+    op = add_constant!(ls, gensym(Symbol(value)), deps, assignedsym, elementbytes, :numericconstant)
+    if iszero(value)
+        push!(ls.preamble_zeros, identifier(op))
+    elseif isone(value)
+        push!(ls.preamble_ones, identifier(op))
+    else
+        pushpreamble!(ls, op, value)
+    end
+    op
 end

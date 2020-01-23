@@ -72,7 +72,7 @@ function add_broadcast!(
     loadB = add_broadcast!(ls, gensym(:B), mB, bloopsyms, B, elementbytes)
     # set Cₘₙ = 0
     # setC = add_constant!(ls, zero(promote_type(recursive_eltype(A), recursive_eltype(B))), cloopsyms, mC, elementbytes)
-    setC = add_constant!(ls, gensym(:zero), cloopsyms, mC, :zero, elementbytes)
+    setC = add_constant!(ls, gensym(:zero), cloopsyms, mC, elementbytes, :numericconstant)
     push!(ls.preamble_zeros, identifier(setC))
     # compute Cₘₙ += Aₘₖ * Bₖₙ
     reductop = Operation(
@@ -136,11 +136,9 @@ function add_broadcast!(
     add_simple_load!(ls, destname, ArrayReference(bcname, @view(loopsyms[1:N])), elementbytes)
 end
 function add_broadcast!(
-    ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{T}, elementbytes::Int = 8
-) where {T<:Union{Integer,Float32,Float64}}
-    op = add_constant!(ls, destname, elementbytes) # or replace elementbytes with sizeof(T) ? u
-    pushpreamble!(ls, Expr(:(=), mangledvar(op), bcname))
-    op
+    ls::LoopSet, ::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{T}, elementbytes::Int = 8
+) where {T<:Number}
+    add_constant!(ls, bcname, elementbytes) # or replace elementbytes with sizeof(T) ? u
 end
 function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
@@ -168,7 +166,7 @@ function add_broadcast!(
     reduceddeps = Symbol[]
     for (i,arg) ∈ enumerate(args)
         argname = gensym(:arg)
-        pushpreamble!(ls, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,@__FILE__), Expr(:(=), argname, Expr(:ref, bcargs, i))))
+        pushpreamble!(ls, Expr(:(=), argname, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,@__FILE__), Expr(:ref, bcargs, i))))
         # dynamic dispatch
         parent = add_broadcast!(ls, gensym(:temp), argname, loopsyms, arg, elementbytes)::Operation
         pushparent!(parents, deps, reduceddeps, parent)

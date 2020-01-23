@@ -1,7 +1,7 @@
 using Test
 using LoopVectorization
 using LinearAlgebra
-
+T = Float32
 
 @time @testset "LoopVectorization.jl" begin
 
@@ -9,6 +9,15 @@ using LinearAlgebra
     @time @testset "GEMM" begin
         # using LoopVectorization, Test; T = Float64
         Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 4)
+        AmulBtq1 = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+                    C[m,n] = zeroB
+               for k ∈ 1:size(A,2)
+                   C[m,n] += A[m,k] * B[n,k]
+               end
+               end)
+        lsAmulBt1 = LoopVectorization.LoopSet(AmulBtq1);
+        @test LoopVectorization.choose_order(lsAmulBt1) == (Symbol[:n,:m,:k], :m, Unum, Tnum)
+
         AmulBq1 = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
                     C[m,n] = zeroB
                for k ∈ 1:size(A,2)
@@ -168,7 +177,7 @@ using LinearAlgebra
         # LoopVectorization.choose_order(lsAtmulB)
         @test LoopVectorization.choose_order(lsAtmulB) == (Symbol[:n,:m,:k], :k, Unum, Tnum)
         
-        function AtmulBavx!(C, A, B)
+        function AtmulBavx1!(C, A, B)
             @avx for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
                 Cₘₙ = zero(eltype(C))
                 for k ∈ 1:size(A,1)
@@ -177,7 +186,7 @@ using LinearAlgebra
                 C[m,n] = Cₘₙ
             end
         end
-        function AtmulB_avx!(C, A, B)
+        function AtmulB_avx1!(C, A, B)
             @_avx for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
                 Cₘₙ = zero(eltype(C))
                 for k ∈ 1:size(A,1)
@@ -185,6 +194,38 @@ using LinearAlgebra
                 end
                 C[m,n] = Cₘₙ
             end
+        end
+        function AtmulBavx2!(C, A, B)
+            M, N = size(C); K = size(B,1)
+            @assert size(C, 1) == size(A, 2)
+            @assert size(C, 2) == size(B, 2)
+            @assert size(A, 1) == size(B, 1)
+            # When the @avx macro is available, this code is faster:
+            z = zero(eltype(C))
+            @avx for n in 1:size(C,2), m in 1:size(C,1)
+                Cmn = z
+                for k in 1:size(A,1)
+                    Cmn += A[k,m] * B[k,n]
+                end
+                C[m,n] = Cmn
+            end
+            return C
+        end
+        function AtmulB_avx2!(C, A, B)
+            M, N = size(C); K = size(B,1)
+            @assert size(C, 1) == size(A, 2)
+            @assert size(C, 2) == size(B, 2)
+            @assert size(A, 1) == size(B, 1)
+            # When the @avx macro is available, this code is faster:
+            z = zero(eltype(C))
+            @_avx for n in 1:size(C,2), m in 1:size(C,1)
+                Cmn = z
+                for k in 1:size(A,1)
+                    Cmn += A[k,m] * B[k,n]
+                end
+                C[m,n] = Cmn
+            end
+            return C
         end
         function rank2AmulB!(C, Aₘ, Aₖ, B)
             @inbounds for m ∈ 1:size(C,1), n ∈ 1:size(C,2)
@@ -373,9 +414,13 @@ using LinearAlgebra
                 @test C ≈ C2
                 AmuladdBavx!(C, At', B, -2)
                 @test C ≈ -C2
-                fill!(C, 9999.999); AtmulBavx!(C, At, B)
+                fill!(C, 9999.999); AtmulBavx1!(C, At, B)
                 @test C ≈ C2
-                fill!(C, 9999.999); AtmulBavx!(C, A', B)
+                fill!(C, 9999.999); AtmulBavx1!(C, A', B)
+                @test C ≈ C2
+                fill!(C, 9999.999); AtmulBavx2!(C, At, B)
+                @test C ≈ C2
+                fill!(C, 9999.999); AtmulBavx2!(C, A', B)
                 @test C ≈ C2
                 fill!(C, 9999.999); mulCAtB_2x2blockavx!(C, At, B);
                 @test C ≈ C2
@@ -403,9 +448,13 @@ using LinearAlgebra
                 @test C ≈ C2
                 AmuladdB_avx!(C, At', B, -2)
                 @test C ≈ -C2
-                fill!(C, 9999.999); AtmulB_avx!(C, At, B)
+                fill!(C, 9999.999); AtmulB_avx1!(C, At, B)
                 @test C ≈ C2
-                fill!(C, 9999.999); AtmulB_avx!(C, A', B)
+                fill!(C, 9999.999); AtmulB_avx1!(C, A', B)
+                @test C ≈ C2
+                fill!(C, 9999.999); AtmulB_avx2!(C, At, B)
+                @test C ≈ C2
+                fill!(C, 9999.999); AtmulB_avx2!(C, A', B)
                 @test C ≈ C2
                 fill!(C, 9999.999); mulCAtB_2x2block_avx!(C, At, B);
                 @test C ≈ C2
@@ -843,8 +892,15 @@ end
                 G[d1,κ] = z
             end
         end
-        # exit()
-        # using LoopVectorization
+        gemvq = :(for d1=1:d
+                z = zero(eltype(G))
+                for d2=1:d
+                    z += B[d2,d1]*B[d2,κ]
+                end
+                G[d1,κ] = z
+                  end)
+        lsgemv = LoopVectorization.LoopSet(gemvq)
+        @test LoopVectorization.choose_order(lsgemv) == ([:d1,:d2], :d2, 4, -1)
         function AtmulvB_avx3!(G, B,κ)
             d = size(G,1)
             @_avx for d1=1:d
@@ -854,16 +910,6 @@ end
                 end
             end
         end
-        # N = 97; B = rand(N, N);
-        # G1 = Matrix{Float64}(undef, N, 1);
-        # AtmulvB_avx3!(G1, B, 1)
-
-        @macroexpand @_avx for d1=1:d
-                G[d1,κ] = B[1,d1]*B[1,κ]
-                for d2=2:d
-                    G[d1,κ] += B[d2,d1]*B[d2,κ]
-                end
-            end
         pq = :(for d1=1:d
                 G[d1,κ] = B[1,d1]*B[1,κ]
                 for d2=2:d
@@ -871,7 +917,8 @@ end
                 end
                end)
         lsp = LoopVectorization.LoopSet(pq);
-        lsp.preamble_symsym
+        @test LoopVectorization.choose_order(lsp) == ([:d1, :d2], :d2, 4, -1)
+        # lsp.preamble_symsym
 
         M, K, N = 51, 49, 61
         for T ∈ (Float32, Float64, Int32, Int64)
@@ -896,6 +943,7 @@ end
             AtmulvBavx1!(G2,B,1)
             @test G1 ≈ G2
             fill!(G2, TC(NaN)); AtmulvBavx2!(G2,B,1);
+
             @test G1 ≈ G2
             fill!(G2, TC(NaN)); AtmulvBavx3!(G2,B,1);
             @test G1 ≈ G2

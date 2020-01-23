@@ -36,7 +36,7 @@ include("constructors.jl")
 
 export @_avx, _avx, @_avx_, avx_!
 
-include("precompile.jl")
-_precompile_()
+# include("precompile.jl")
+# _precompile_()
 
 end # module

@@ -105,7 +105,12 @@ function create_mrefs!(ls::LoopSet, arf::Vector{ArrayRefStruct}, as::Vector{Symb
     end
     mrefs
 end
-function process_metadata!(ls::LoopSet, AM, num_arrays::Int)
+function num_parameters(AM)
+    num_param::Int = AM[1]
+    num_param += length(AM[2].parameters)
+    num_param + length(AM[4].parameters)
+end
+function process_metadata!(ls::LoopSet, AM, num_arrays::Int)::Vector{Symbol}
     num_asi = (AM[1])::Int
     arraysymbolinds = [gensym(:asi) for _ ∈ 1:num_asi]
     append!(ls.outer_reductions, AM[2].parameters)
@@ -158,20 +163,27 @@ function add_parents_to_op!(ls::LoopSet, parents::Vector{Operation}, up::Unsigne
         up >>>= 8
     end
 end
-function add_parents_to_ops!(ls::LoopSet, ops::Vector{OperationStruct})
+function add_parents_to_ops!(ls::LoopSet, ops::Vector{OperationStruct}, constoffset)
     for (i,op) ∈ enumerate(operations(ls))
         add_parents_to_op!(ls, parents(op), ops[i].parents)
+        if isconstant(op)
+            instr = instruction(op)
+            if instr != LOOPCONSTANT && instr.mod !== :numericconstant
+                constoffset += 1
+                pushpreamble!(ls, Expr(:(=), instr.instr, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:ref, :vargs, constoffset))))
+            end
+        end
     end
 end
 function add_ops!(
-    ls::LoopSet, instr::Vector{Instruction}, ops::Vector{OperationStruct}, mrefs::Vector{ArrayReferenceMeta}, opsymbols::Vector{Symbol}, elementbytes::Int
+    ls::LoopSet, instr::Vector{Instruction}, ops::Vector{OperationStruct}, mrefs::Vector{ArrayReferenceMeta}, opsymbols::Vector{Symbol}, constoffset::Int, elementbytes::Int
 )
     for i ∈ eachindex(ops)
         os = ops[i]
         opsymbol = opsymbols[os.symid]
         add_op!(ls, instr[i], os, mrefs, opsymbol, elementbytes)
     end
-    add_parents_to_ops!(ls, ops)
+    add_parents_to_ops!(ls, ops, constoffset)
 end
 
 # elbytes(::VectorizationBase.AbstractPointer{T}) where {T} = sizeof(T)::Int
@@ -200,12 +212,12 @@ function avx_body(IUT, instr, ops, arf, AM, LB, vargs)
     arraysymbolinds = process_metadata!(ls, AM, length(arf))
     opsymbols = [gensym(:op) for _ ∈ eachindex(ops)]
     mrefs = create_mrefs!(ls, arf, arraysymbolinds, opsymbols, vargs)
-    add_ops!(ls, instr, ops, mrefs, opsymbols, elementbytes)
-    add_array_symbols!(ls, arraysymbolinds, num_arrays + length(ls.preamble_symsym))
     pushpreamble!(ls, Expr(:(=), ls.T, Expr(:call, :promote_type, [Expr(:call, :eltype, vptr(mref)) for mref ∈ mrefs]...)))
+    add_ops!(ls, instr, ops, mrefs, opsymbols, num_arrays + num_parameters(AM), elementbytes)
+    add_array_symbols!(ls, arraysymbolinds, num_arrays + length(ls.preamble_symsym))
     inline, U, T = IUT
     q = iszero(U) ? lower(ls, inline) : lower(ls, U, T, inline)
-    length(ls.outer_reductions) > 0 ? push!(q.args, loopset_return_value(ls, Val(true))) : push!(q.args, nothing)
+    length(ls.outer_reductions) == 0 ? push!(q.args, nothing) : push!(q.args, loopset_return_value(ls, Val(true)))
     # @show q
     q
 end

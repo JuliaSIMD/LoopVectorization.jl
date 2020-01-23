@@ -405,13 +405,12 @@ function evaluate_cost_tile(
     end
     for (id, op) ∈ enumerate(ops)
         iters[id] == -99.9 && continue
-        descendentsininnerloop[id] || continue
+        opisininnerloop = descendentsininnerloop[id]
         isunrolled = unrolledtiled[1,id]
         istiled = unrolledtiled[2,id]
         rt, lat, rp = cost(op, vectorized, Wshift, size_T)
-            # @show instruction(op), rt, lat, rp, iter
+        rp = opisininnerloop ? rp : 0 # we only care about register pressure within the inner most loop
         rt *= iters[id]
-            # @show isunrolled, istiled
         if isunrolled && istiled # no cost decrease; cost must be repeated
             cost_vec[1] += rt
             reg_pressure[1] += rp

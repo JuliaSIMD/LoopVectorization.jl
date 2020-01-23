@@ -23,6 +23,7 @@ function Base.isless(instr1::Instruction, instr2::Instruction)
         isless(instr1.mod, instr2.mod)
     end
 end
+Base.isequal(ins1::Instruction, ins2::Instruction) = (ins1.instr === ins2.instr) && (ins1.mod === ins2.mod)
 
 const LOOPCONSTANT = Instruction(gensym())
 
