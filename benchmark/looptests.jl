@@ -20,8 +20,9 @@ end
         C[m,n] = Cₘₙ
     end
 end
-@inline function jgemm!(C, A, B::Adjoint)
+@inline function jgemm!(C, A, Bᵀ::Adjoint)
     C .= 0
+    B = parent(B)
     M, N = size(C); K = size(B,1)
     @inbounds for k ∈ 1:K, n ∈ 1:N
         @simd ivdep for m ∈ 1:M

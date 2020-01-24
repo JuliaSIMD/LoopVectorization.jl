@@ -29,8 +29,8 @@ function plot(br::BenchmarkResult)
         x = :Size,
         y = :GFLOPS,
         color = :Method,
-        width = 549,
-        height = 372
+        width = 720,
+        height = 480
     )
 end
 

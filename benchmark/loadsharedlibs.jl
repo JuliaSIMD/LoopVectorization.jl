@@ -306,7 +306,7 @@ for (prefix,Cshared,Fshared) ∈ ((Symbol(""),LIBCTEST,LIBFTEST), (:i,LIBICTEST,
         A, C = size(P)
         p = Ref{Float64}()
         ccall(
-            (:randomaccess, $Cshared), Cvoid,
+            (:randomaccess, $Fshared), Cvoid,
             (Ref{Float64}, Ptr{Float64}, Ptr{Clong}, Ptr{Float64}, Ref{Clong}, Ref{Clong}),
             p, P, basis, coefs, Ref(A), Ref(C)
         )

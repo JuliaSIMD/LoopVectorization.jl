@@ -292,9 +292,8 @@ module looptests
       B = A + transpose(A)
     end subroutine AplusAtbuiltin
     subroutine randomaccess(pp, P, basis, coefs, A, C) BIND(C, name="randomaccess")
-      integer(C_long), intent(in) :: A, C
+      integer(C_long), intent(in) :: A, C, basis(A,C)
       real(C_double), intent(in) :: P(A,C), coefs(C)
-      integer(C_long), intent(in) :: basis(A,C)
       real(C_double), intent(out) :: pp
       real(C_double) :: pc
       integer(C_long) :: aa, cc

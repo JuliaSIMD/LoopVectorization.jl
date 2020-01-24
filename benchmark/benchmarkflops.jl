@@ -407,11 +407,11 @@ function benchmark_random_access(sizes)
     br = BenchmarkResult(tests, sizes)
     for (i,s) ∈ enumerate(sizes)
         A, C = totwotuple(s)
-        P = rand(A, C);
+        P = rand(A, C) .+= 0.5;
         basis = rand(1:C, A, C);
-        coefs = randn(C)
+        coefs = randn(C);
         n_gflop = 1e-9*(A*C + C)
-        p = randomaccess(P, basis, coefs)
+        p = randomaccess(P, basis, coefs);
         br[1,i] = n_gflop / @belapsed  randomaccess($P, $basis, $coefs)
         br[2,i] = n_gflop / @belapsed crandomaccess($P, $basis, $coefs)
         @assert p ≈ crandomaccess(P, basis, coefs) "Clang wrong?"
