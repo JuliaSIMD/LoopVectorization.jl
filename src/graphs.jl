@@ -374,13 +374,14 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
         N = gensym(Symbol(:loop, itersym))
         pushpreamble!(ls, Expr(:(=), N, Expr(:call, lv(:maybestaticlength), r.args[2])))
         Loop(itersym, 0, N)
-    elseif f === :OneTo || f === Expr(:(.), :Base, :OneTo)
+    elseif f === :OneTo || f == Expr(:(.), :Base, QuoteNode(:OneTo))
         otN = r.args[2]
         if otN isa Integer
             Loop(itersym, 0, otN)
         else
+            otN isa Expr && maybestatic!(otN)
             N = gensym(Symbol(:loop, itersym))
-            pushpreamble!(ls, Expr(:(=), N, maybestatic!(otN)))
+            pushpreamble!(ls, Expr(:(=), N, otN))
             Loop(itersym, 0, N)
         end
     else
@@ -463,7 +464,7 @@ function add_operation!(
             add_compute!(ls, LHS_sym, RHS, elementbytes, LHS_ref)
         end
     elseif RHS.head === :if
-        add_if!(ls, LHS, RHS, elementbytes, LHS_ref)
+        add_if!(ls, LHS_sym, RHS, elementbytes, LHS_ref)
     else
         throw("Expression not recognized:\n$x")
     end
@@ -509,9 +510,9 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int = 8)
     elseif ex.head === :for
         add_loop!(ls, ex)
     elseif ex.head === :&&
-        add_andblock!(ls, ex)
+        add_andblock!(ls, ex, elementbytes)
     elseif ex.head === :||
-        add_orblock!(ls, ex)
+        add_orblock!(ls, ex, elementbytes)
     else
         throw("Don't know how to handle expression:\n$ex")
     end

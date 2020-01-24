@@ -710,7 +710,7 @@ end
             n = length(x)
             length(r) == n || throw(DimensionMismatch())
             isempty(x) && return -T(Inf)
-            1 == stride(r,1) == stride(x,1) || throw(error("Arrays not strided"))
+            1 == LinearAlgebra.stride1(r) == LinearAlgebra.stride1(x) || throw(error("Arrays not strided"))
 
             u = maximum(x)                                       # max value used to re-center
             abs(u) == Inf && return any(isnan, x) ? T(NaN) : u   # check for non-finite values
@@ -730,7 +730,7 @@ end
             n = length(x)
             length(r) == n || throw(DimensionMismatch())
             isempty(x) && return -T(Inf)
-            1 == stride(r,1) == stride(x,1) || throw(error("Arrays not strided"))
+            1 == LinearAlgebra.stride1(r) == LinearAlgebra.stride1(x) || throw(error("Arrays not strided"))
 
             u = maximum(x)                                       # max value used to re-center
             abs(u) == Inf && return any(isnan, x) ? T(NaN) : u   # check for non-finite values
@@ -750,7 +750,7 @@ end
             n = length(x)
             length(r) == n || throw(DimensionMismatch())
             isempty(x) && return -T(Inf)
-            1 == stride(r,1) == stride(x,1) || throw(error("Arrays not strided"))
+            1 == LinearAlgebra.stride1(r) == LinearAlgebra.stride1(x) || throw(error("Arrays not strided"))
 
             u = maximum(x)                                       # max value used to re-center
             abs(u) == Inf && return any(isnan, x) ? T(NaN) : u   # check for non-finite values
@@ -1163,7 +1163,128 @@ end
             ret[j] = clenshaw(x[j], coeff)
         end
     end
+    
+    function softmax3_core!(lse, qq, xx, tmpmax, maxk, nk)
+        for k in Base.OneTo(maxk)
+            @inbounds for i in eachindex(lse)
+                tmp = exp(xx[i,k] - tmpmax[i])
+                lse[i] += tmp
+                qq[i,k] = tmp
+            end
+        end
+        for k in maxk+1:nk
+            @inbounds for i in eachindex(lse)
+                tmp = exp(xx[i,k] - tmpmax[i])
+                lse[i] += tmp
+            end
+        end
+        qq[:,Base.OneTo(maxk)] ./= vec(lse)
+    end
+    function softmax3_coreavx1!(lse, qq, xx, tmpmax, maxk, nk)
+        for k in Base.OneTo(maxk)
+            @avx for i in eachindex(lse)
+                tmp = exp(xx[i,k] - tmpmax[i])
+                lse[i] += tmp
+                qq[i,k] = tmp
+            end
+        end
+        for k in maxk+1:nk
+            @avx for i in eachindex(lse)
+                tmp = exp(xx[i,k] - tmpmax[i])
+                lse[i] += tmp
+            end
+        end
+        qq[:,Base.OneTo(maxk)] ./= vec(lse)
+    end
+    function softmax3_core_avx1!(lse, qq, xx, tmpmax, maxk, nk)
+        for k in Base.OneTo(maxk)
+            @_avx for i in eachindex(lse)
+                tmp = exp(xx[i,k] - tmpmax[i])
+                lse[i] += tmp
+                qq[i,k] = tmp
+            end
+        end
+        for k in maxk+1:nk
+            @_avx for i in eachindex(lse)
+                tmp = exp(xx[i,k] - tmpmax[i])
+                lse[i] += tmp
+            end
+        end
+        qq[:,Base.OneTo(maxk)] ./= vec(lse)
+    end
+    function softmax3_coreavx2!(lse, qq, xx, tmpmax, maxk, nk)
+        @avx for k in Base.OneTo(maxk)
+             for i in eachindex(lse)
+                tmp = exp(xx[i,k] - tmpmax[i])
+                lse[i] += tmp
+                qq[i,k] = tmp
+            end
+        end
+        @avx for k in maxk+1:nk
+            for i in eachindex(lse)
+                tmp = exp(xx[i,k] - tmpmax[i])
+                lse[i] += tmp
+            end
+        end
+        qq[:,Base.OneTo(maxk)] ./= vec(lse)
+    end
+    function softmax3_core_avx2!(lse, qq, xx, tmpmax, maxk, nk)
+        @_avx for k in Base.OneTo(maxk)
+            for i in eachindex(lse)
+                tmp = exp(xx[i,k] - tmpmax[i])
+                lse[i] += tmp
+                qq[i,k] = tmp
+            end
+        end
+        @_avx for k in maxk+1:nk
+            for i in eachindex(lse)
+                tmp = exp(xx[i,k] - tmpmax[i])
+                lse[i] += tmp
+            end
+        end
+        qq[:,Base.OneTo(maxk)] ./= vec(lse)
+    end
 
+    add_1_dim(x::AbstractArray) = reshape(x, size(x)..., 1)
+    check_finite(x::AbstractArray) = all(isfinite.(x)) || throw(error("x not finite!"))
+    function softmax3_setup!(q::AA, lse::A, tmpmax::A, x::AA, maxk=size(q, ndims(q)) ) where {T<:Real, A<:Array{T}, AA<:AbstractArray{T}}
+        ndims(q) == 1+ndims(lse) || throw(DimensionMismatch())
+        xsizes = size(x)
+        xsizes == size(q) || throw(DimensionMismatch("size(x) = $(size(x)) but size(q) = $(size(q))"))
+        nk = last(xsizes)
+        for i = Base.OneTo(ndims(lse))
+            size(q,i) == size(lse,i) == size(tmpmax,i) || throw(DimensionMismatch("size(x) = $(size(x)),  size(lse) = $(size(lse)), and size(tmpmax) = $(size(tmpmax))"))
+        end
+        0 < maxk <= nk || throw(DomainError(maxk))
+        1 == LinearAlgebra.stride1(q) == LinearAlgebra.stride1(x) || throw(error("Arrays not strided"))
+        isempty(x) && throw(error("x empty"))
+        check_finite(x)
+        maximum!(add_1_dim(tmpmax), x)
+        fill!(lse, zero(T))
+        xx = reshape(x, :, nk)
+        qq = reshape(q, :, nk)
+        lse, qq, xx, tmpmax, maxk, nk
+    end
+    function softmax3_base!(q::AA, lse::A, tmpmax::A, x::AA, maxk=size(q, ndims(q)) ) where {T<:Real, A<:Array{T}, AA<:AbstractArray{T}}
+        lse, qq, xx, tmpmax, maxk, nk = softmax3_setup!(q, lse, tmpmax, x, maxk)
+        softmax3_core!(lse, qq, xx, tmpmax, maxk, nk)
+    end
+    function softmax3avx1!(q::AA, lse::A, tmpmax::A, x::AA, maxk=size(q, ndims(q)) ) where {T<:Real, A<:Array{T}, AA<:AbstractArray{T}}
+        lse, qq, xx, tmpmax, maxk, nk = softmax3_setup!(q, lse, tmpmax, x, maxk)
+        softmax3_coreavx1!(lse, qq, xx, tmpmax, maxk, nk)
+    end
+    function softmax3_avx1!(q::AA, lse::A, tmpmax::A, x::AA, maxk=size(q, ndims(q)) ) where {T<:Real, A<:Array{T}, AA<:AbstractArray{T}}
+        lse, qq, xx, tmpmax, maxk, nk = softmax3_setup!(q, lse, tmpmax, x, maxk)
+        softmax3_core_avx1!(lse, qq, xx, tmpmax, maxk, nk)
+    end
+    function softmax3avx2!(q::AA, lse::A, tmpmax::A, x::AA, maxk=size(q, ndims(q)) ) where {T<:Real, A<:Array{T}, AA<:AbstractArray{T}}
+        lse, qq, xx, tmpmax, maxk, nk = softmax3_setup!(q, lse, tmpmax, x, maxk)
+        softmax3_coreavx2!(lse, qq, xx, tmpmax, maxk, nk)
+    end
+    function softmax3_avx2!(q::AA, lse::A, tmpmax::A, x::AA, maxk=size(q, ndims(q)) ) where {T<:Real, A<:Array{T}, AA<:AbstractArray{T}}
+        lse, qq, xx, tmpmax, maxk, nk = softmax3_setup!(q, lse, tmpmax, x, maxk)
+        softmax3_core_avx2!(lse, qq, xx, tmpmax, maxk, nk)
+    end
     
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
@@ -1212,6 +1333,40 @@ end
         clenshaw!(y1,x,c)
         clenshaw_avx!(y2,x,c)
         @test y1 ≈ y2
+
+
+        ni, nj, nk = (100, 100, 10)
+        x = rand(T, ni, nj, nk);
+        q1 = similar(x);
+        q2 = similar(x);
+        tmpmax = zeros(T, ni,nj);
+        lse = similar(tmpmax);
+        fill!(q1, 0); fill!(lse, 0);  softmax3_base!(q1, lse, tmpmax, x);
+
+        fill!(q2, 0); fill!(lse, 0);  softmax3avx1!(q2, lse, tmpmax, x, 1);
+        @test all(sum(q2; dims=3) .<= 1)
+        fill!(q2, 0); fill!(lse, 0);  softmax3avx1!(q2, lse, tmpmax, x);
+        @test q1 ≈ q2
+        @test sum(q2; dims=3) ≈ ones(T,ni,nj)
+
+        fill!(q2, 0); fill!(lse, 0);  softmax3_avx1!(q2, lse, tmpmax, x, 1);
+        @test all(sum(q2; dims=3) .<= 1)
+        fill!(q2, 0); fill!(lse, 0);  softmax3_avx1!(q2, lse, tmpmax, x);
+        @test q1 ≈ q2
+        @test sum(q2; dims=3) ≈ ones(T,ni,nj)
+
+        fill!(q2, 0); fill!(lse, 0);  softmax3avx2!(q2, lse, tmpmax, x, 1);
+        @test all(sum(q2; dims=3) .<= 1)
+        fill!(q2, 0); fill!(lse, 0);  softmax3avx2!(q2, lse, tmpmax, x);
+        @test q1 ≈ q2
+        @test sum(q2; dims=3) ≈ ones(T,ni,nj)
+
+        fill!(q2, 0); fill!(lse, 0);  softmax3_avx2!(q2, lse, tmpmax, x, 1);
+        @test all(sum(q2; dims=3) .<= 1)
+        fill!(q2, 0); fill!(lse, 0);  softmax3_avx2!(q2, lse, tmpmax, x);
+        @test q1 ≈ q2
+        @test sum(q2; dims=3) ≈ ones(T,ni,nj)
+        
     end
 end
 
@@ -1311,6 +1466,113 @@ end
         D2 = @avx C .^ 0.3;
         @test D1 ≈ D2
 
+    end
+end
+
+@time @testset "ifelse (masks)" begin
+    function addormul!(c, a, b)
+        for i ∈ eachindex(c,a,b)
+            c[i] = a[i] > b[i] ? a[i] + b[i] : a[i] * b[i]
+        end
+    end
+    function addormul_avx!(c, a, b)
+        @_avx for i ∈ eachindex(c,a,b)
+            c[i] = a[i] > b[i] ? a[i] + b[i] : a[i] * b[i]
+        end
+    end
+    function addormulavx!(c, a, b)
+        @avx for i ∈ eachindex(c,a,b)
+            c[i] = a[i] > b[i] ? a[i] + b[i] : a[i] * b[i]
+        end
+    end
+
+
+    function maybewriteand!(c, a, b)
+        @inbounds for i ∈ eachindex(c,a,b)
+            a[i] > b[i] && (c[i] = a[i] + b[i])
+        end
+    end
+    function maybewriteand_avx!(c, a, b)
+        @_avx for i ∈ eachindex(c,a,b)
+            a[i] > b[i] && (c[i] = a[i] + b[i])
+        end
+    end
+    function maybewriteandavx!(c, a, b)
+        @avx for i ∈ eachindex(c,a,b)
+            a[i] > b[i] && (c[i] = a[i] + b[i])
+        end
+    end
+    function maybewriteor!(c, a, b)
+        @inbounds for i ∈ eachindex(c,a,b)
+            a[i] > b[i] || (c[i] = a[i] ^ b[i])
+        end
+    end
+    function maybewriteor_avx!(c, a, b)
+        @_avx for i ∈ eachindex(c,a,b)
+            a[i] > b[i] || (c[i] = a[i] ^ b[i])
+        end
+    end
+    function maybewriteoravx!(c, a, b)
+        @avx for i ∈ eachindex(c,a,b)
+            a[i] > b[i] || (c[i] = a[i] ^ b[i])
+        end
+    end
+    function maybewriteor!(c, a, b)
+        @inbounds for i ∈ eachindex(c,a,b)
+            a[i] > b[i] || (c[i] = a[i] ^ b[i])
+        end
+    end
+    function maybewriteor_avx!(c, a, b)
+        @_avx for i ∈ eachindex(c,a,b)
+            a[i] > b[i] || (c[i] = a[i] ^ b[i])
+        end
+    end
+    function maybewriteoravx!(c, a, b)
+        @avx for i ∈ eachindex(c,a,b)
+            a[i] > b[i] || (c[i] = a[i] ^ b[i])
+        end
+    end
+    function maybewriteor!(c::AbstractVector{<:Integer}, a, b)
+        @inbounds for i ∈ eachindex(c,a,b)
+            a[i] > b[i] || (c[i] = a[i] & b[i])
+        end
+    end
+    function maybewriteor_avx!(c::AbstractVector{<:Integer}, a, b)
+        @_avx for i ∈ eachindex(c,a,b)
+            a[i] > b[i] || (c[i] = a[i] & b[i])
+        end
+    end
+    function maybewriteoravx!(c::AbstractVector{<:Integer}, a, b)
+        @avx for i ∈ eachindex(c,a,b)
+            a[i] > b[i] || (c[i] = a[i] & b[i])
+        end
+    end
+
+    N = 117
+    for T ∈ (Float32, Float64, Int32, Int64)
+        if T <: Integer
+            a = rand(-T(100):T(100), N); b = rand(-T(100):T(100), N);
+        else
+            a = rand(T, N); b = rand(T, N);
+        end
+        c1 = similar(a); c2 = similar(a);
+        addormul!(c1, a, b)
+        addormul_avx!(c2, a, b)
+        @test c1 ≈ c2
+        fill!(c2, -999999999); addormulavx!(c2, a, b)
+        @test c1 ≈ c2
+
+        fill!(c1, -999999999); maybewriteand!(c1, a, b)
+        fill!(c2, -999999999); maybewriteand_avx!(c2, a, b)
+        @test c1 ≈ c2
+        fill!(c2, -999999999); maybewriteandavx!(c2, a, b)
+        @test c1 ≈ c2
+
+        fill!(c1, -999999999); maybewriteor!(c1, a, b)
+        fill!(c2, -999999999); maybewriteor_avx!(c2, a, b)
+        @test c1 ≈ c2
+        fill!(c2, -999999999); maybewriteoravx!(c2, a, b)
+        @test c1 ≈ c2
     end
 end
 

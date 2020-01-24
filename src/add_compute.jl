@@ -59,7 +59,6 @@ function add_reduction!(
     get!(ls.opdict, var) do
         add_constant!(ls, var, elementbytes)
     end
-    # pushparent!(parents, deps, reduceddeps, parent)
 end
 function search_tree(opv::Vector{Operation}, var::Symbol) # relies on cycles being forbidden
     for opp ∈ opv

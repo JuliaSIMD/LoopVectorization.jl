@@ -49,9 +49,9 @@ function lower_conditionalstore_scalar!(
     var = pvariable_name(op, suffix)
     cond = last(parents(op))
     condvar = if suffix === nothing || tiled ∉ loopdependencies(cond)
-        pvariable_name(op, nothing)
+        variable_name(cond, nothing)
     else
-        pvariable_name(op, suffix)
+        variable_name(cond, suffix)
     end
     condunrolled = unrolled ∈ loopdependencies(cond)
     ptr = refname(op)
@@ -81,10 +81,11 @@ function lower_conditionalstore_vectorized!(
     vecnotunrolled = vectorized !== unrolled
     cond = last(parents(op))
     condvar = if suffix === nothing || tiled ∉ loopdependencies(cond)
-        pvariable_name(op, nothing)
+        variable_name(cond, nothing)
     else
-        pvariable_name(op, suffix)
+        variable_name(cond, suffix)
     end
+    # @show parents(op) cond condvar
     condunrolled = unrolled ∈ loopdependencies(cond)
     for u ∈ zero(Int32):Base.unsafe_trunc(Int32,U-1)
         td = UnrollArgs(u, unrolled, tiled, suffix)
@@ -143,7 +144,6 @@ function lower_store!(
     q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol, tiled::Symbol, U::Int,
     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
 )
-    # @show unrolled, tiled, U
     isunrolled = unrolled ∈ loopdependencies(op)
     U = isunrolled ? U : 1
     if instruction(op).instr !== :conditionalstore!

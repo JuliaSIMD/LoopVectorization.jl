@@ -113,6 +113,7 @@ const COST = Dict{Symbol,InstructionCost}(
     :vabs2 => InstructionCost(4,0.5),
     :(==) => InstructionCost(1, 0.5),
     :isequal => InstructionCost(1, 0.5),
+    :(~) => InstructionCost(1, 0.5),
     :(&) => InstructionCost(1, 0.5),
     :(|) => InstructionCost(1, 0.5),
     :(>) => InstructionCost(1, 0.5),
@@ -139,6 +140,7 @@ const COST = Dict{Symbol,InstructionCost}(
     :sqrt_fast => InstructionCost(15,4.0,-2.0),
     :log => InstructionCost(20,20.0,40.0,20),
     :exp => InstructionCost(20,20.0,20.0,18),
+    :^ => InstructionCost(40,40.0,40.0,26), # FIXME
     :sin => InstructionCost(18,15.0,68.0,23),
     :cos => InstructionCost(18,15.0,68.0,26),
     :sincos => InstructionCost(25,22.0,70.0,26),
