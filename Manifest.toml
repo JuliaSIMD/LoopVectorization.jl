@@ -61,15 +61,15 @@ uuid = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 
 [[SIMDPirates]]
 deps = ["MacroTools", "VectorizationBase"]
-git-tree-sha1 = "940312fea488c218b46fe1aac8af932b926cfbc4"
+git-tree-sha1 = "594f8373e555905a64a3a52da6f59fbe96c14134"
 uuid = "21efa798-c60a-11e8-04d3-e1a92915a26a"
-version = "0.2.0"
+version = "0.3.0"
 
 [[SLEEFPirates]]
 deps = ["SIMDPirates", "VectorizationBase"]
-git-tree-sha1 = "6c006734c0d33e1363ad80a2f31ffb44276bca72"
+git-tree-sha1 = "c124a9a15d6308601982bf18b19e527394f87a36"
 uuid = "476501e8-09a2-5ece-8869-fb82de89a1fa"
-version = "0.2.0"
+version = "0.3.0"
 
 [[Serialization]]
 uuid = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
@@ -83,6 +83,6 @@ uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [[VectorizationBase]]
 deps = ["CpuId", "LinearAlgebra"]
-git-tree-sha1 = "5afec48a494f1e84fb39045ce5ab5147309746f3"
+git-tree-sha1 = "fa35fe3bea4507c5adeb0aff8184a3f6eea7da45"
 uuid = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
-version = "0.2.0"
+version = "0.2.2"
