@@ -1,3 +1,14 @@
+using PrettyTables
+
+const HIGHLIGHT_BEST = Highlighter(
+    (br,i,j) -> (j > 1 && maximum(@view(br.results[:, i])) == br.results[j-1,i]),
+    foreground = :green
+);
+function Base.show(io::IO, br::BenchmarkResult)
+    pretty_table(
+        io, br.sizedresults, br.tests, crop = :none, highlighters = (HIGHLIGHT_BEST,)
+    )
+end
 
 using VegaLite, IndexedTables
 function plot(br::BenchmarkResult)

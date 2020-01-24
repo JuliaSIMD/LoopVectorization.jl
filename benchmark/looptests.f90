@@ -123,9 +123,30 @@ module looptests
       real(C_double), dimension(M, N), intent(out) :: C
       real(C_double), dimension(K, M), intent(in) :: A
       real(C_double), dimension(K, N), intent(in) :: B
-      integer(C_long) :: mm, kk, nn
       C = matmul(transpose(A), B)
     end subroutine AtmulBbuiltin
+    subroutine AmulBt(C, A, B, M, K, N) BIND(C, name="AmulBt")
+      integer(C_long), intent(in) :: M, K, N
+      real(C_double), dimension(M, N), intent(out) :: C
+      real(C_double), dimension(M, K), intent(in) :: A
+      real(C_double), dimension(N, K), intent(in) :: B
+      integer(C_long) :: mm, kk, nn
+      C = 0.0
+      do concurrent(kk = 1:K)
+         do concurrent(nn = 1:N)
+            do concurrent(mm = 1:M)
+               C(mm,nn) = C(mm,nn) + A(mm,kk) * B(nn,kk)
+            end do
+         end do
+      end do
+    end subroutine AmulBt
+    subroutine AmulBtbuiltin(C, A, B, M, K, N) BIND(C, name="AmulBtbuiltin")
+      integer(C_long), intent(in) :: M, K, N
+      real(C_double), dimension(M, N), intent(out) :: C
+      real(C_double), dimension(M, K), intent(in) :: A
+      real(C_double), dimension(N, K), intent(in) :: B
+      C = matmul(A, transpose(B))
+    end subroutine AmulBtbuiltin
     subroutine dot(s, a, b, N) BIND(C, name="dot")
       integer(C_long), intent(in) :: N
       real(C_double), dimension(N), intent(in) :: a, b
@@ -189,13 +210,30 @@ module looptests
          end do
       end do
     end subroutine gemv
-    subroutine gemvbuiltin(y, A, x, M, K) BIND(C, name="gemv_builtin")
+    subroutine gemvbuiltin(y, A, x, M, K) BIND(C, name="gemvbuiltin")
       integer(C_long), intent(in) :: M, K
       real(C_double), intent(in) :: A(M,K), x(K)
       real(C_double), dimension(M), intent(out) :: y
-      integer(C_long) :: mm, kk
       y = matmul(A, x)
     end subroutine gemvbuiltin
+    subroutine Atmulvb(y, A, x, M, K) BIND(C, name="Atmulvb")
+      integer(C_long), intent(in) :: M, K
+      real(C_double), intent(in) :: A(K,M), x(K)
+      real(C_double), dimension(M), intent(out) :: y
+      integer(C_long) :: mm, kk
+      y = 0.0
+      do concurrent(mm = 1:M)
+         do concurrent(kk = 1:K)
+            y(mm) = y(mm) + A(kk,mm) * x(kk)
+         end do
+      end do
+    end subroutine Atmulvb
+    subroutine Atmulvbbuiltin(y, A, x, M, K) BIND(C, name="Atmulvbbuiltin")
+      integer(C_long), intent(in) :: M, K
+      real(C_double), intent(in) :: A(K,M), x(K)
+      real(C_double), dimension(M), intent(out) :: y
+      y = matmul(transpose(A), x)
+    end subroutine Atmulvbbuiltin
     subroutine unscaledvar(s, A, x, M, N) BIND(C, name="unscaledvar")
       integer(C_long), intent(in) :: M, N
       real(C_double), intent(in) :: A(M,N), x(M)

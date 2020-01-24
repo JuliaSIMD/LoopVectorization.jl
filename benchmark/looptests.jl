@@ -10,15 +10,6 @@ function jgemm!(C, A, B)
         end
     end
 end
-@inline function gemmavx!(C, A, B)
-    @avx for i ∈ 1:size(A,1), j ∈ 1:size(B,2)
-        Cᵢⱼ = zero(eltype(C))
-        for k ∈ 1:size(A,2)
-            Cᵢⱼ += A[i,k] * B[k,j]
-        end
-        C[i,j] = Cᵢⱼ
-    end
-end
 @inline function jgemm!(C, Aᵀ::Adjoint, B)
     A = parent(Aᵀ)
     @inbounds for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
@@ -27,6 +18,24 @@ end
             Cₘₙ += A[k,m] * B[k,n]
         end
         C[m,n] = Cₘₙ
+    end
+end
+@inline function jgemm!(C, A, B::Adjoint)
+    C .= 0
+    M, N = size(C); K = size(B,1)
+    @inbounds for k ∈ 1:K, n ∈ 1:N
+        @simd ivdep for m ∈ 1:M
+            C[m,n] += A[m,k] * B[n,k]
+        end
+    end
+end
+@inline function gemmavx!(C, A, B)
+    @avx for i ∈ 1:size(A,1), j ∈ 1:size(B,2)
+        Cᵢⱼ = zero(eltype(C))
+        for k ∈ 1:size(A,2)
+            Cᵢⱼ += A[i,k] * B[k,j]
+        end
+        C[i,j] = Cᵢⱼ
     end
 end
 function jdot(a, b)
@@ -101,13 +110,22 @@ function jsvexpavx(a)
 end
 function jgemv!(y, A, x)
     y .= 0.0
-    for j ∈ eachindex(x)
+    @inbounds for j ∈ eachindex(x)
         @simd ivdep for i ∈ eachindex(y)
             y[i] += A[i,j] * x[j]
         end
     end
 end
-function jgemvavx!(y, A, x)
+@inline function jgemv!(y, At::Adjoint, x)
+    A = parent(At)
+    y .= 0.0
+    @inbounds for i ∈ eachindex(y)
+        @simd ivdep for j ∈ eachindex(x)
+            y[i] += A[j,i] * x[j]
+        end
+    end
+end
+@inline function jgemvavx!(y, A, x)
     @avx for i ∈ eachindex(y)
         yᵢ = 0.0
         for j ∈ eachindex(x)
@@ -165,7 +183,7 @@ function randomaccess(P, basis, coeffs::Vector{T}) where {T}
     C = length(coeffs)
     A = size(P, 1)
     p = zero(T)
-    @avx for c ∈ 1:C
+    @fastmath @inbounds for c ∈ 1:C
         pc = coeffs[c]
         for a = 1:A
             pc *= P[a, basis[a, c]]

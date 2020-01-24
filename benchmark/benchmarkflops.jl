@@ -1,7 +1,7 @@
 include(joinpath(LOOPVECBENCHDIR, "looptests.jl"))
 include(joinpath(LOOPVECBENCHDIR, "loadsharedlibs.jl"))
 
-using PrettyTables, BenchmarkTools
+using BenchmarkTools
 struct SizedResults{V <: AbstractVector} <: AbstractMatrix{String}
     results::Matrix{Float64}
     sizes::V
@@ -26,15 +26,6 @@ function Base.getindex(br::SizedResults, row, col)
 end
 Base.setindex!(br::BenchmarkResult, v, i...) = br.sizedresults.results[i...] = v
 
-const HIGHLIGHT_BEST = Highlighter(
-    (br,i,j) -> (j > 1 && maximum(@view(br.results[:, i])) == br.results[j-1,i]),
-    foreground = :green
-);
-function Base.show(io::IO, br::BenchmarkResult)
-    pretty_table(
-        io, br.sizedresults, br.tests, crop = :none, highlighters = (HIGHLIGHT_BEST,)
-    )
-end
 
 tothreetuple(i::Int) = (i,i,i)
 tothreetuple(i::NTuple{3,Int}) = i
@@ -106,6 +97,40 @@ function benchmark_AtmulB(sizes)
     end
     br
 end
+function benchmark_AmulBt(sizes)
+    tests = [BLAS.vendor() === :mkl ? "IntelMKL" : "OpenBLAS", "Julia", "Clang-Polly", "GFortran", "GFort-intrinsic", "icc", "ifort", "ifort-intrinsic", "LoopVectorization"]
+    br = BenchmarkResult(tests, sizes)
+    for (i,s) ∈ enumerate(sizes)
+        M, K, N = tothreetuple(s)
+        C = Matrix{Float64}(undef, M, N)
+        A = rand(M, K)
+        Bt = rand(N, K)
+        n_gflop = M*K*N*2e-9
+        br[1,i] = n_gflop / @belapsed mul!($C, $A, $Bt')
+        Cblas = copy(C)
+        br[2,i] = n_gflop / @belapsed jgemm!($C, $A, $Bt')
+        @assert C ≈ Cblas "Julia gemm wrong?"
+        br[3,i] = n_gflop / @belapsed cgemm!($C, $A, $Bt')
+        @assert C ≈ Cblas "Polly gemm wrong?"
+        br[4,i] = n_gflop / @belapsed fgemm!($C, $A, $Bt')
+        @assert C ≈ Cblas "Fort gemm wrong?"
+        br[5,i] = n_gflop / @belapsed fgemm_builtin!($C, $A, $Bt')
+        @assert C ≈ Cblas "Fort intrinsic gemm wrong?"
+        br[6,i] = n_gflop / @belapsed icgemm!($C, $A, $Bt')
+        @assert C ≈ Cblas "icc gemm wrong?"
+        br[7,i] = n_gflop / @belapsed ifgemm!($C, $A, $Bt')
+        @assert C ≈ Cblas "iort gemm wrong?"
+        br[8,i] = n_gflop / @belapsed ifgemm_builtin!($C, $A, $Bt')
+        @assert C ≈ Cblas "ifort intrinsic gemm wrong?"
+        br[9,i] = n_gflop / @belapsed gemmavx!($C, $A, $Bt')
+        @assert C ≈ Cblas "LoopVec gemm wrong?"
+        # if i % 10 == 0
+            # percent_complete = round(100i/ length(sizes), sigdigits = 4)
+            # @show percent_complete
+        # end
+    end
+    br
+end
 
 function benchmark_dot(sizes)
     tests = [BLAS.vendor() === :mkl ? "IntelMKL" : "OpenBLAS", "Julia", "Clang-Polly", "GFortran", "icc", "ifort", "LoopVectorization"]
@@ -164,7 +189,7 @@ end
 totwotuple(i::Int) = (i,i)
 totwotuple(i::Tuple{Int,Int}) = i
 function benchmark_gemv(sizes)
-    tests = [BLAS.vendor() === :mkl ? "IntelMKL" : "OpenBLAS", "Julia", "Clang-Polly", "GFortran", "icc", "ifort", "LoopVectorization"]
+    tests = [BLAS.vendor() === :mkl ? "IntelMKL" : "OpenBLAS", "Julia", "Clang-Polly", "GFortran", "GFort-intrinsic", "icc", "ifort", "ifort-intrinsic", "LoopVectorization"]
     br = BenchmarkResult(tests, sizes)
     for (i,s) ∈ enumerate(sizes)
         M, N = totwotuple(s)
@@ -178,11 +203,47 @@ function benchmark_gemv(sizes)
         @assert x ≈ xblas "Polly wrong?"
         br[4,i] = n_gflop / @belapsed fgemv!($x, $A, $y)
         @assert x ≈ xblas "Fort wrong?"
-        br[5,i] = n_gflop / @belapsed icgemv!($x, $A, $y)
+        br[5,i] = n_gflop / @belapsed fgemv_builtin!($x, $A, $y)
+        @assert x ≈ xblas "Fort wrong?"
+        br[6,i] = n_gflop / @belapsed icgemv!($x, $A, $y)
         @assert x ≈ xblas "icc wrong?"
-        br[6,i] = n_gflop / @belapsed ifgemv!($x, $A, $y)
+        br[7,i] = n_gflop / @belapsed ifgemv!($x, $A, $y)
         @assert x ≈ xblas "ifort wrong?"
-        br[7,i] = n_gflop / @belapsed jgemvavx!($x, $A, $y)
+        br[8,i] = n_gflop / @belapsed ifgemv_builtin!($x, $A, $y)
+        @assert x ≈ xblas "ifort wrong?"
+        br[9,i] = n_gflop / @belapsed jgemvavx!($x, $A, $y)
+        @assert x ≈ xblas "LoopVec wrong?"
+        # if i % 10 == 0
+            # percent_complete = round(100i/ length(sizes), sigdigits = 4)
+            # @show percent_complete
+        # end
+    end
+    br
+end
+function benchmark_Atmulvb(sizes)
+    tests = [BLAS.vendor() === :mkl ? "IntelMKL" : "OpenBLAS", "Julia", "Clang-Polly", "GFortran", "GFort-intrinsic", "icc", "ifort", "ifort-intrinsic", "LoopVectorization"]
+    br = BenchmarkResult(tests, sizes)
+    for (i,s) ∈ enumerate(sizes)
+        M, N = totwotuple(s)
+        x = Vector{Float64}(undef, M); A = rand(N, M); y = rand(N);
+        n_gflop = M*N * 2e-9
+        br[1,i] = n_gflop / @belapsed mul!($x, $A', $y)
+        xblas = copy(x)
+        br[2,i] = n_gflop / @belapsed jgemv!($x, $A', $y)
+        @assert x ≈ xblas "Julia wrong?"
+        br[3,i] = n_gflop / @belapsed cgemv!($x, $A', $y)
+        @assert x ≈ xblas "Polly wrong?"
+        br[4,i] = n_gflop / @belapsed fgemv!($x, $A', $y)
+        @assert x ≈ xblas "Fort wrong?"
+        br[5,i] = n_gflop / @belapsed fgemv_builtin!($x, $A', $y)
+        @assert x ≈ xblas "Fort wrong?"
+        br[6,i] = n_gflop / @belapsed icgemv!($x, $A', $y)
+        @assert x ≈ xblas "icc wrong?"
+        br[7,i] = n_gflop / @belapsed ifgemv!($x, $A', $y)
+        @assert x ≈ xblas "ifort wrong?"
+        br[8,i] = n_gflop / @belapsed ifgemv_builtin!($x, $A', $y)
+        @assert x ≈ xblas "ifort wrong?"
+        br[9,i] = n_gflop / @belapsed jgemvavx!($x, $A', $y)
         @assert x ≈ xblas "LoopVec wrong?"
         # if i % 10 == 0
             # percent_complete = round(100i/ length(sizes), sigdigits = 4)
@@ -323,13 +384,13 @@ function benchmark_AplusAt(sizes)
         @assert B ≈ baseB "Clang wrong?"
         br[3,i] = n_gflop / @belapsed fAplusAt!($B, $A)
         @assert B ≈ baseB "Fort wrong?"
-        br[4,i] = n_gflop / @belapsed fAplusAtbuiltin!($B, $A)
+        br[4,i] = n_gflop / @belapsed fAplusAt_builtin!($B, $A)
         @assert B ≈ baseB "Fort-builtin wrong?"
         br[5,i] = n_gflop / @belapsed icAplusAt!($B, $A)
         @assert B ≈ baseB "icc wrong?"
         br[6,i] = n_gflop / @belapsed ifAplusAt!($B, $A)
         @assert B ≈ baseB "ifort wrong?"
-        br[7,i] = n_gflop / @belapsed ifAplusAtbuiltin!($B, $A)
+        br[7,i] = n_gflop / @belapsed ifAplusAt_builtin!($B, $A)
         @assert B ≈ baseB "ifort-builtin wrong?"
         br[8,i] = n_gflop / @belapsed @avx @. $B = $A + $A'
         @assert B ≈ baseB "LoopVec wrong?"

@@ -91,6 +91,19 @@ void AtmulB(double* restrict C, double* restrict At, double* restrict B, long M,
   }
   return;
 }
+void AmulBt(double* restrict C, double* restrict A, double* restrict Bt, long M, long K, long N){
+  for (long i = 0; i < M*N; i++){
+    C[i] = 0.0;
+  }
+  for (long k = 0; k < K; k++){
+    for (long n = 0; n < N; n++){
+      for (long m = 0; m < M; m++){
+	C[m + n*M] += A[m + M*k] * Bt[n + N*k];
+      }
+    }
+  }
+  return;
+}
 double dot(double* restrict a, double* restrict b, long N){
   double s = 0.0;
   for (long n = 0; n < N; n++){
@@ -121,6 +134,17 @@ void gemv(double* restrict y, double* restrict  A, double* restrict x, long M, l
   for (long k = 0; k < K; k++){
     for (long m = 0; m < M; m++){
       y[m] += A[m + k*M] * x[k]; 
+    }
+  }
+  return;
+}
+void Atmulvb(double* restrict y, double* restrict  A, double* restrict x, long M, long K){
+  for (long m = 0; m < M; m++){
+    y[m] = 0.0;
+  }
+  for (long m = 0; m < M; m++){
+    for (long k = 0; k < K; k++){
+      y[m] += A[k + m*K] * x[k]; 
     }
   }
   return;

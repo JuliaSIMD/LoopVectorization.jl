@@ -81,7 +81,30 @@ for (prefix,Cshared,Fshared) ∈ ((Symbol(""),LIBCTEST,LIBFTEST), (:i,LIBICTEST,
             C, parent(A), B, Ref(M), Ref(K), Ref(N)
         )
     end
-
+    @eval @inline function $(Symbol(prefix,:cgemm!))(C, A, B::Adjoint)
+        M, N = size(C); K = size(B, 1)
+        ccall(
+            (:AmulBt, $Cshared), Cvoid,
+            (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Clong, Clong, Clong),
+            C, A, parent(B), M, K, N
+        )
+    end
+    @eval @inline function $(Symbol(prefix,:fgemm!))(C, A, B::Adjoint)
+        M, N = size(C); K = size(B, 1)
+        ccall(
+            (:AmulBt, $Fshared), Cvoid,
+            (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}, Ref{Clong}, Ref{Clong}),
+            C, A, parent(B), Ref(M), Ref(K), Ref(N)
+        )
+    end
+    @eval @inline function $(Symbol(prefix,:fgemm_builtin!))(C, A, B::Adjoint)
+        M, N = size(C); K = size(B, 1)
+        ccall(
+            (:AmulBtbuiltin, $Fshared), Cvoid,
+            (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}, Ref{Clong}, Ref{Clong}),
+            C, A, parent(B), Ref(M), Ref(K), Ref(N)
+        )
+    end
     @eval function $(Symbol(prefix,:cdot))(a, b)
         N = length(a)
         ccall(
@@ -161,6 +184,30 @@ for (prefix,Cshared,Fshared) ∈ ((Symbol(""),LIBCTEST,LIBFTEST), (:i,LIBICTEST,
             y, A, x, Ref(M), Ref(K)
         )
     end
+    @eval @inline function $(Symbol(prefix,:cgemv!))(y, A::Adjoint, x)
+        M, K = size(A)
+        ccall(
+            (:Atmulvb, $Cshared), Cvoid,
+            (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Clong, Clong),
+            y, parent(A), x, M, K
+        )
+    end
+    @eval @inline function $(Symbol(prefix,:fgemv!))(y, A::Adjoint, x)
+        M, K = size(A)
+        ccall(
+            (:Atmulvb, $Fshared), Cvoid,
+            (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}, Ref{Clong}),
+            y, parent(A), x, Ref(M), Ref(K)
+        )
+    end
+    @eval function $(Symbol(prefix,:fgemv_builtin!))(y, A::Adjoint, x)
+        M, K = size(A)
+        ccall(
+            (:Atmulvbbuiltin, $Fshared), Cvoid,
+            (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}, Ref{Clong}),
+            y, parent(A), x, Ref(M), Ref(K)
+        )
+    end
 
     @eval function $(Symbol(prefix,:caplusBc!))(D, a, B, c)
         M, K = size(B)
@@ -231,7 +278,7 @@ for (prefix,Cshared,Fshared) ∈ ((Symbol(""),LIBCTEST,LIBFTEST), (:i,LIBICTEST,
             B, A, Ref(N)
         )
     end
-    @eval function $(Symbol(prefix,:fAplusAtbuiltin!))(B, A)
+    @eval function $(Symbol(prefix,:fAplusAt_builtin!))(B, A)
         N = size(B,1)
         ccall(
             (:AplusAtbuiltin, $Fshared), Cvoid,
