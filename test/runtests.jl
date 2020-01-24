@@ -899,8 +899,12 @@ end
                 end
                 G[d1,κ] = z
                   end)
-        lsgemv = LoopVectorization.LoopSet(gemvq)
-        @test LoopVectorization.choose_order(lsgemv) == ([:d1,:d2], :d2, 4, -1)
+        # if LoopVectorization.VectorizationBase.REGISTER_COUNT == 16
+        # else
+        # end
+        Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (4, -1) : (4, 6)
+        lsgemv = LoopVectorization.LoopSet(gemvq);
+        @test LoopVectorization.choose_order(lsgemv) == ([:d1,:d2], :d2, Unum, Tnum)
         function AtmulvB_avx3!(G, B,κ)
             d = size(G,1)
             @_avx for d1=1:d

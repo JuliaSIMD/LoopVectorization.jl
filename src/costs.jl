@@ -185,7 +185,11 @@ const REDUCTION_CLASS = Dict{Instruction,Float64}(
     Instruction(:vfmadd_fast) => ADDITIVE_IN_REDUCTIONS,
     Instruction(:vfmsub_fast) => ADDITIVE_IN_REDUCTIONS,
     Instruction(:vfnmadd_fast) => ADDITIVE_IN_REDUCTIONS,
-    Instruction(:vfnmsub_fast) => ADDITIVE_IN_REDUCTIONS
+    Instruction(:vfnmsub_fast) => ADDITIVE_IN_REDUCTIONS,
+    Instruction(:reduced_add) => ADDITIVE_IN_REDUCTIONS,
+    Instruction(:reduced_prod) => MULTIPLICATIVE_IN_REDUCTIONS,
+    Instruction(:reduced_all) => ALL,
+    Instruction(:reduced_any) => ANY
 )
 reduction_instruction_class(instr::Symbol) = get(REDUCTION_CLASS, Instruction(instr), NaN)
 reduction_instruction_class(instr::Instruction) = get(REDUCTION_CLASS, instr, NaN)
