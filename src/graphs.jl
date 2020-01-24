@@ -165,7 +165,10 @@ struct LoopSet
     place_after_loop::Vector{Bool}
     W::Symbol
     T::Symbol
+    mod::Symbol
 end
+
+instruction(ls::LoopSet, f::Symbol) = instruction(f, ls.mod)
 
 function cost_vec_buf(ls::LoopSet)
     cv = @view(ls.cost_vec[:,2])
@@ -219,7 +222,7 @@ end
 
 includesarray(ls::LoopSet, array::Symbol) = array ∈ ls.includedarrays
 
-function LoopSet()
+function LoopSet(mod::Symbol)# = :LoopVectorization)
     LoopSet(
         Symbol[], Loop[],
         Dict{Symbol,Operation}(),
@@ -236,7 +239,8 @@ function LoopSet()
         ArrayReferenceMeta[],
         Matrix{Float64}(undef, 4, 2),
         Matrix{Int}(undef, 4, 2),
-        Bool[], Bool[], gensym(:W), gensym(:T)
+        Bool[], Bool[],
+        gensym(:W), gensym(:T), mod
     )
 end
 

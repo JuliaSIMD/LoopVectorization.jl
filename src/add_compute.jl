@@ -86,7 +86,7 @@ function add_reduction_update_parent!(
 )
     parent = getop(ls, var, elementbytes)
     isouterreduction = parent.instruction === LOOPCONSTANT
-    Instr = Instruction(instr)
+    Instr = instruction(ls, instr)
     instrclass = reduction_instruction_class(Instr) # key allows for faster lookups
     # if parent is not an outer reduction...
     if !isouterreduction
@@ -164,7 +164,7 @@ function add_compute!(
     if reduction || search_tree(parents, var)
         add_reduction_update_parent!(parents, deps, reduceddeps, ls, var, instr, reduction, elementbytes)
     else
-        op = Operation(length(operations(ls)), var, elementbytes, instr, compute, deps, reduceddeps, parents)
+        op = Operation(length(operations(ls)), var, elementbytes, instruction(ls,instr), compute, deps, reduceddeps, parents)
         pushop!(ls, op, var)
     end
 end

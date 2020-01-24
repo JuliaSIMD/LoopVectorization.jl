@@ -180,12 +180,12 @@ end
 # size of dest determines loops
 # function vmaterialize!(
 @generated function vmaterialize!(
-    dest::AbstractArray{T,N}, bc::BC
-) where {T <: Union{Float32,Float64}, N, BC <: Broadcasted}
+    dest::AbstractArray{T,N}, bc::BC, ::Val{Mod}
+) where {T <: Union{Float32,Float64}, N, BC <: Broadcasted, Mod}
     # we have an N dimensional loop.
     # need to construct the LoopSet
     loopsyms = [gensym(:n) for n ∈ 1:N]
-    ls = LoopSet()
+    ls = LoopSet(Mod)
     sizes = Expr(:tuple)
     for (n,itersym) ∈ enumerate(loopsyms)
         Nsym = gensym(:N)
@@ -204,12 +204,12 @@ end
     # ls
 end
 @generated function vmaterialize!(
-    dest′::Union{Adjoint{T,A},Transpose{T,A}}, bc::BC
-) where {T <: Union{Float32,Float64}, N, A <: AbstractArray{T,N}, BC <: Broadcasted}
+    dest′::Union{Adjoint{T,A},Transpose{T,A}}, bc::BC, ::Val{Mod}
+) where {T <: Union{Float32,Float64}, N, A <: AbstractArray{T,N}, BC <: Broadcasted, Mod}
     # we have an N dimensional loop.
     # need to construct the LoopSet
     loopsyms = [gensym(:n) for n ∈ 1:N]
-    ls = LoopSet()
+    ls = LoopSet(Mod)
     pushpreamble!(ls, Expr(:(=), :dest, Expr(:call, :parent, :dest′)))
     sizes = Expr(:tuple)
     for (n,itersym) ∈ enumerate(loopsyms)
@@ -229,7 +229,7 @@ end
     # ls
 end
 
-@inline function vmaterialize(bc::Broadcasted)
+@inline function vmaterialize(bc::Broadcasted, ::Val{Mod}) where {Mod}
     ElType = Base.Broadcast.combine_eltypes(bc.f, bc.args)
-    vmaterialize!(similar(bc, ElType), bc)
+    vmaterialize!(similar(bc, ElType), bc, Val{Mod}())
 end

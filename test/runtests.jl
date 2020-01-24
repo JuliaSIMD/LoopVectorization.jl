@@ -3,6 +3,20 @@ using LoopVectorization
 using LinearAlgebra
 T = Float32
 
+
+function clenshaw(x,coeff)
+    len_c = length(coeff)
+    tmp = zero(x)
+    ret = zero(x)
+    for i in len_c:-1:2
+        ret     = muladd(x,2tmp,coeff[i]-ret)
+        ret,tmp = tmp,ret
+    end
+    ret = muladd(x,tmp,coeff[1]-ret)
+    return ret
+end
+
+
 @time @testset "LoopVectorization.jl" begin
 
     
@@ -1139,6 +1153,17 @@ end
            end)
     lsb = LoopVectorization.LoopSet(bq);
 
+    function clenshaw!(ret,x,coeff)
+        @inbounds for j in 1:length(ret)
+            ret[j] = clenshaw(x[j], coeff)
+        end
+    end
+    function clenshaw_avx!(ret,x,coeff)
+        @_avx for j in 1:length(ret)
+            ret[j] = clenshaw(x[j], coeff)
+        end
+    end
+
     
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
@@ -1182,6 +1207,11 @@ end
         mvpv = mvp(P, basis, coeffs)
         @test mvpv ≈ mvpavx(P, basis, coeffs)
         @test mvpv ≈ mvp_avx(P, basis, coeffs)
+
+        c = rand(T,100); x = rand(T,10^4); y1 = similar(x); y2 = similar(x);
+        clenshaw!(y1,x,c)
+        clenshaw_avx!(y2,x,c)
+        @test y1 ≈ y2
     end
 end
 
@@ -1293,6 +1323,11 @@ end
         c1 = map(foo, a, b);
         c2 = vmap(foo, a, b);
         @test c1 ≈ c2
+        
+        c = rand(T,100); x = rand(T,10^4); y1 = similar(x); y2 = similar(x);
+        map!(xᵢ -> clenshaw(xᵢ, c), y1, x)
+        vmap!(xᵢ -> clenshaw(xᵢ, c), y2, x)
+        @test y1 ≈ y2
     end
 end
 

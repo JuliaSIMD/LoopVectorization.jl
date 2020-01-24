@@ -38,26 +38,6 @@ end
 pvariable_name(op::Operation, ::Nothing) = mangledvar(first(parents(op)))
 pvariable_name(op::Operation, suffix) = Symbol(pvariable_name(op, nothing), suffix, :_)
 
-# function reduce_operation!(q, op, U, unrolled, vectorized)
-# end
-function reduce_unroll!(q, op, U, unrolled)
-    loopdeps = loopdependencies(op)
-    isunrolled = unrolled ∈ loopdeps
-    parent = first(parents(op))
-    if (unrolled ∉ reduceddependencies(parent))
-        U = isunrolled ? U : 1
-        # @show U, reduceddependencies(op), unrolled
-        return U, isunrolled
-    end
-    var = mangledvar(op)
-    instr = instruction(parent)
-    reduce_expr!(q, var, instr, U) # assigns reduction to storevar
-    # @show var, instr, U
-    1, isunrolled
-end
-function lowered_variable_name(op::Operation, unrolled::Symbol, tiled::Symbol, u::Int, suffix)
-
-end
 function lowered_variable_name(op::Operation, unrolled::Symbol, tiled::Symbol, u::Int, ::Nothing)
     varassignname(var, u, isunrolled)
 end
@@ -164,7 +144,6 @@ function lower_store!(
     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
 )
     # @show unrolled, tiled, U
-    # U, isunrolled = reduce_unroll!(q, op, U, unrolled)
     isunrolled = unrolled ∈ loopdependencies(op)
     U = isunrolled ? U : 1
     if instruction(op).instr !== :conditionalstore!

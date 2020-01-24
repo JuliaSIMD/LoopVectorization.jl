@@ -203,7 +203,7 @@ function sizeofeltypes(v, num_arrays)::Int
 end
 
 function avx_body(IUT, instr, ops, arf, AM, LB, vargs)
-    ls = LoopSet()
+    ls = LoopSet(:LoopVectorization)
     # elementbytes = mapreduce(elbytes, min, @view(vargs[Base.OneTo(length(arf))]))::Int
     num_arrays = length(arf)
     elementbytes = sizeofeltypes(vargs, num_arrays)

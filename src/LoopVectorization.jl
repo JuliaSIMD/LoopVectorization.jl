@@ -13,7 +13,7 @@ using MacroTools: prewalk, postwalk
 
 
 export LowDimArray, stridedpointer, vectorizable,
-    @avx, *ˡ, ∗,
+    @avx, @_avx, *ˡ, _avx_!,
     vmap, vmap!
 
 
@@ -38,8 +38,6 @@ include("lowering.jl")
 include("condense_loopset.jl")
 include("reconstruct_loopset.jl")
 include("constructors.jl")
-
-export @_avx, _avx, @_avx_, avx_!
 
 # include("precompile.jl")
 # _precompile_()
