@@ -12,3 +12,4 @@ benchmark/#*#
 *.mod
 *.mod0
 *.so
+*.s

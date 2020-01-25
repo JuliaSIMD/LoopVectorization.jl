@@ -140,12 +140,11 @@ void gemv(double* restrict y, double* restrict  A, double* restrict x, long M, l
 }
 void Atmulvb(double* restrict y, double* restrict  A, double* restrict x, long M, long K){
   for (long m = 0; m < M; m++){
-    y[m] = 0.0;
-  }
-  for (long m = 0; m < M; m++){
+    double ym = 0.0;
     for (long k = 0; k < K; k++){
-      y[m] += A[k + m*K] * x[k]; 
+      ym += A[k + m*K] * x[k]; 
     }
+    y[m] = ym;
   }
   return;
 }

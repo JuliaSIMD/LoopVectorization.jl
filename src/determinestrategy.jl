@@ -270,43 +270,58 @@ function solve_tilesize(X, R, Umax, Tmax, UL, TL)
             T = Tmax
         else # U too large, resolve T
             U = Umax
-            T = solve_tilesize_constU(X, R, U)
+            T = min(Tmax, solve_tilesize_constU(X, R, U))
         end
     elseif T_too_large
         T = Tmax
-        U = solve_tilesize_constT(X, R, T)
+        U = min(Umax, solve_tilesize_constT(X, R, T))
     end
     U, T, cost
 end
 function maybedemotesize(U::Int, N::Int)
-    U > 1 || return 1
+    # U > 1 || return 1
     Um1 = U - 1
     urep = num_iterations(N, U)
     um1rep = num_iterations(N, Um1)
     um1rep > urep ? U : Um1
 end
+function maybedemotesize(T::Int, N::Int, U::Int, Uloop::Loop, maxTbase::Int)
+    T > 1 || return T
+    T == N && return T
+    T = maybedemotesize(T, N)
+    if !(isstaticloop(Uloop) && length(Uloop) == U)
+        if N % T != 0
+            T = min(T, maxTbase)
+        end
+    end
+    T
+end
 function solve_tilesize(
     ls::LoopSet, unrolled::Symbol, tiled::Symbol,
-    cost_vec::AbstractVector{Float64} = @view(ls.cost_vec[:,1]),
-    reg_pressure::AbstractVector{Int} = @view(ls.reg_pres[:,1])
+    cost_vec::AbstractVector{Float64}, 
+    reg_pressure::AbstractVector{Int},
+    W::Int, vectorized::Symbol
 )
-    maxT = 4#8
-    maxU = 4#8
+    maxTbase = maxUbase = 4
+    maxT = maxTbase#8
+    maxU = maxUbase#8
     tiledloop = getloop(ls, tiled)
     unrolledloop = getloop(ls, unrolled)
     if isstaticloop(tiledloop)
         maxT = min(4maxT, length(tiledloop))
     end
     if isstaticloop(unrolledloop)
-        maxU = min(4maxU, length(unrolledloop))
+        UL = length(unrolledloop)
+        UL = unrolled === vectorized ? cld(UL,W) : UL
+        maxU = min(4maxU, UL)
     end
     U, T, cost = solve_tilesize(cost_vec, reg_pressure, maxU, maxT, length(unrolledloop), length(tiledloop))
     # heuristic to more evenly divide small numbers of iterations
-    if isstaticloop(tiledloop) & T > 1
-        T = maybedemotesize(T, length(tiledloop))
+    if isstaticloop(tiledloop)
+        T = maybedemotesize(T, length(tiledloop), U, unrolledloop, maxTbase)
     end
     if isstaticloop(unrolledloop)
-        U = maybedemotesize(U, length(unrolledloop))
+        U = maybedemotesize(U, length(unrolledloop), T, tiledloop, maxUbase)
     end
     U, T, cost
 end
@@ -427,7 +442,7 @@ function evaluate_cost_tile(
     end
     # @show order, vectorized cost_vec reg_pressure
     # @show solve_tilesize(ls, unrolled, tiled, cost_vec, reg_pressure)
-    U, T, tcost = solve_tilesize(ls, unrolled, tiled, cost_vec, reg_pressure)
+    U, T, tcost = solve_tilesize(ls, unrolled, tiled, cost_vec, reg_pressure, W, vectorized)
     U, T, tcost + stride_penalty(ls, order)
 end
 

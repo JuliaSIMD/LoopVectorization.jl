@@ -221,18 +221,21 @@ module looptests
       real(C_double), intent(in) :: A(K,M), x(K)
       real(C_double), dimension(M), intent(out) :: y
       integer(C_long) :: mm, kk
-      y = 0.0
+      real(C_double) :: ymm
       do concurrent(mm = 1:M)
+         ymm = 0
          do concurrent(kk = 1:K)
-            y(mm) = y(mm) + A(kk,mm) * x(kk)
+            ymm = ymm + A(kk,mm) * x(kk)
          end do
+         y(mm) = ymm
       end do
     end subroutine Atmulvb
     subroutine Atmulvbbuiltin(y, A, x, M, K) BIND(C, name="Atmulvbbuiltin")
       integer(C_long), intent(in) :: M, K
-      real(C_double), intent(in) :: A(K,M), x(K)
-      real(C_double), dimension(M), intent(out) :: y
-      y = matmul(transpose(A), x)
+      real(C_double), intent(in) :: A(K,M), x(1,K)
+      real(C_double), dimension(1,M), intent(out) :: y
+      ! y = matmul(transpose(A), x)
+      y = matmul(x, A)
     end subroutine Atmulvbbuiltin
     subroutine unscaledvar(s, A, x, M, N) BIND(C, name="unscaledvar")
       integer(C_long), intent(in) :: M, N

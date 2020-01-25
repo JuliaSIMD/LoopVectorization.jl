@@ -119,11 +119,12 @@ function jgemv!(y, A, x)
 end
 @inline function jgemv!(y, Aᵀ::Adjoint, x)
     A = parent(Aᵀ)
-    y .= 0.0
     @inbounds for i ∈ eachindex(y)
+        yᵢ = 0.0
         @simd ivdep for j ∈ eachindex(x)
-            y[i] += A[j,i] * x[j]
+            yᵢ += A[j,i] * x[j]
         end
+        y[i] = yᵢ
     end
 end
 @inline function jgemvavx!(y, A, x)
