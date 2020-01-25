@@ -22,7 +22,7 @@ end
 end
 @inline function jgemm!(C, A, Bᵀ::Adjoint)
     C .= 0
-    B = parent(B)
+    B = parent(Bᵀ)
     M, N = size(C); K = size(B,1)
     @inbounds for k ∈ 1:K, n ∈ 1:N
         @simd ivdep for m ∈ 1:M
@@ -117,8 +117,8 @@ function jgemv!(y, A, x)
         end
     end
 end
-@inline function jgemv!(y, At::Adjoint, x)
-    A = parent(At)
+@inline function jgemv!(y, Aᵀ::Adjoint, x)
+    A = parent(Aᵀ)
     y .= 0.0
     @inbounds for i ∈ eachindex(y)
         @simd ivdep for j ∈ eachindex(x)
