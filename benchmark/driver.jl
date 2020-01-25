@@ -47,7 +47,7 @@ AtmulB_bench = fetch(AtmulB_future)
 AmulBt_bench = fetch(AmulBt_future)
 Atmulvb_bench = fetch(Atmulvb_future)
 
-v = 3
+v = 4
 const PICTURES = "/home/chriselrod/Pictures"
 save(joinpath(PICTURES, "bench_gemm_v$v.png"), plot(gemm_bench));
 save(joinpath(PICTURES, "bench_AtmulB_v$v.png"), plot(AtmulB_bench));

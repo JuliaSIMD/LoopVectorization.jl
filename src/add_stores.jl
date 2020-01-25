@@ -13,26 +13,35 @@ function add_store!(ls::LoopSet, op::Operation)
     id = op.identifier
     id == nops ? add_unique_store!(ls, op) : cse_store!(ls, op)
 end
-function add_store!(
-    ls::LoopSet, var::Symbol, mpref::ArrayReferenceMetaPosition, elementbytes::Int = 8
+function add_copystore!(
+    ls::LoopSet, parent::Operation, mpref::ArrayReferenceMetaPosition, elementbytes::Int
 )
+    op = add_compute!(ls, gensym(), :identity, [parent], elementbytes)
+    add_store!(ls, name(op), mpref, elementbytes, op)
+end
+
+function add_store!(
+    ls::LoopSet, var::Symbol, mpref::ArrayReferenceMetaPosition, elementbytes::Int = 8, parent = getop(ls, var, mpref.loopdependencies, elementbytes)
+)
+    isload(parent) && return add_copystore!(ls, parent, mpref, elementbytes)
     parents = mpref.parents
     ldref = mpref.loopdependencies
     reduceddeps = mpref.reduceddeps
-    parent = getop(ls, var, ldref, elementbytes)
-    pvar = parent.variable
+    pvar = name(parent)
     id = length(ls.operations)
     if pvar ∉ ls.syms_aliasing_refs
         push!(ls.syms_aliasing_refs, pvar)
         push!(ls.refs_aliasing_syms, mpref.mref)
     else
         # try to cse store, by replacing the previous one
-         ref = mpref.mref.ref
+        ref = mpref.mref.ref
         for opp ∈ operations(ls)
             isstore(opp) || continue
             if ref == opp.ref.ref
                 id = opp.identifier
                 break
+            else
+                @show ref opp.ref.ref
             end
         end
     end
@@ -40,6 +49,7 @@ function add_store!(
     op = Operation( id, name(mpref), elementbytes, :setindex!, memstore, mpref )#loopdependencies, reduceddeps, parents, mpref.mref )
     add_store!(ls, op)
 end
+
 function add_store!(
     ls::LoopSet, var::Symbol, array::Symbol, rawindices, elementbytes::Int = 8
 )

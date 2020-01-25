@@ -192,12 +192,6 @@ function save_tilecost!(ls::LoopSet)
 end
 
 
-# function op_to_ref(ls::LoopSet, op::Operation)
-    # s = op.variable
-    # id = findfirst(ls.syms_aliasing_regs)
-    # @assert id !== nothing
-    # ls.refs_aliasing_syms[id]
-# end
 function pushpreamble!(ls::LoopSet, op::Operation, v::Symbol)
     if v !== mangledvar(op)
         push!(ls.preamble_symsym, (identifier(op),v))
@@ -450,7 +444,10 @@ function add_operation!(
     ls::LoopSet, LHS_sym::Symbol, RHS::Expr, LHS_ref::ArrayReferenceMetaPosition, elementbytes::Int = 8
 )
     if RHS.head === :ref# || (RHS.head === :call && first(RHS.args) === :getindex)
-        add_load!(ls, LHS_sym, LHS_ref, elementbytes)
+        array, rawindices = ref_from_expr(RHS)
+        RHS_ref = array_reference_meta!(ls, array, rawindices, elementbytes)
+        op = add_load!(ls, gensym(LHS_sym), RHS_ref, elementbytes)
+        add_compute!(ls, LHS_sym, :identity, [op], elementbytes)
     elseif RHS.head === :call
         f = first(RHS.args)
         if f === :getindex

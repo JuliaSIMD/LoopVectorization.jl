@@ -1285,6 +1285,29 @@ end
         lse, qq, xx, tmpmax, maxk, nk = softmax3_setup!(q, lse, tmpmax, x, maxk)
         softmax3_core_avx2!(lse, qq, xx, tmpmax, maxk, nk)
     end
+
+    function copyavx1!(x, y)
+        @avx for i ∈ eachindex(x)
+            x[i] = y[i]
+        end
+    end
+    function copy_avx1!(x, y)
+        @_avx for i ∈ eachindex(x)
+            x[i] = y[i]
+        end
+    end
+    function copyavx2!(x, y)
+        @avx for i ∈ eachindex(x)
+            yᵢ = y[i]
+            x[i] = yᵢ
+        end
+    end
+    function copy_avx2!(x, y)
+        @_avx for i ∈ eachindex(x)
+            yᵢ = y[i]
+            x[i] = yᵢ
+        end
+    end
     
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
@@ -1366,7 +1389,15 @@ end
         fill!(q2, 0); fill!(lse, 0);  softmax3_avx2!(q2, lse, tmpmax, x);
         @test q1 ≈ q2
         @test sum(q2; dims=3) ≈ ones(T,ni,nj)
-        
+
+        fill!(q2, NaN); copyavx1!(q2, x)
+        @test x == q2
+        fill!(q2, NaN); copy_avx1!(q2, x)
+        @test x == q2
+        fill!(q2, NaN); copyavx2!(q2, x)
+        @test x == q2
+        fill!(q2, NaN); copy_avx2!(q2, x)
+        @test x == q2
     end
 end
 
