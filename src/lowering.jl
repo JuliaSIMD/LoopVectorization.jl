@@ -383,6 +383,9 @@ function setup_preamble!(ls::LoopSet, W::Symbol, typeT::Symbol, vectorized::Symb
     push!(ls.preamble.args, Expr(:(=), W, determine_width(ls, typeT, unrolled)))
     lower_licm_constants!(ls)
     pushpreamble!(ls, definemask(getloop(ls, vectorized), W, U > 1 && unrolled === vectorized))
+    for op ∈ operations(ls)
+        (iszero(length(loopdependencies(op))) && iscompute(op)) && lower_compute!(ls.preamble, op, vectorized, ls.W, unrolled, tiled, U, nothing, nothing)
+    end
     # define_remaining_ops!( ls, vectorized, W, unrolled, tiled, U )
 end
 function lsexpr(ls::LoopSet, q)

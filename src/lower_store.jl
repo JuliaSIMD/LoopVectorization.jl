@@ -55,7 +55,7 @@ function lower_conditionalstore_scalar!(
     end
     condunrolled = unrolled ∈ loopdependencies(cond)
     ptr = refname(op)
-    for u ∈ zero(Int32):Base.unsafe_trunc(Int32,U-1)
+    for u ∈ 0:U-1
         varname = varassignname(var, u, isunrolled)
         condvarname = varassignname(condvar, u, condunrolled)
         td = UnrollArgs(u, unrolled, tiled, suffix)
@@ -71,10 +71,10 @@ function lower_conditionalstore_vectorized!(
     @assert unrolled ∈ loopdeps
     var = pvariable_name(op, suffix)
     if isunrolled
-        umin = zero(Int32)
+        umin = 0
         U = U
     else
-        umin = -one(Int32)
+        umin = -1
         U = 0
     end
     ptr = refname(op)
@@ -87,7 +87,7 @@ function lower_conditionalstore_vectorized!(
     end
     # @show parents(op) cond condvar
     condunrolled = unrolled ∈ loopdependencies(cond)
-    for u ∈ zero(Int32):Base.unsafe_trunc(Int32,U-1)
+    for u ∈ 0:U-1
         td = UnrollArgs(u, unrolled, tiled, suffix)
         name, mo = name_memoffset(var, op, td, W, vecnotunrolled)
         condvarname = varassignname(condvar, u, condunrolled)
@@ -107,7 +107,7 @@ function lower_store_scalar!(
 )
     var = pvariable_name(op, suffix)
     ptr = refname(op)
-    for u ∈ zero(Int32):Base.unsafe_trunc(Int32,U-1)
+    for u ∈ 0:U-1
         varname = varassignname(var, u, isunrolled)
         td = UnrollArgs(u, unrolled, tiled, suffix)
         push!(q.args, Expr(:call, lv(:store!), ptr, varname, mem_offset_u(op, td)))
@@ -122,15 +122,15 @@ function lower_store_vectorized!(
     @assert unrolled ∈ loopdeps
     var = pvariable_name(op, suffix)
     if isunrolled
-        umin = zero(Int32)
+        umin = 0
         U = U
     else
-        umin = -one(Int32)
+        umin = -1
         U = 0
     end
     ptr = refname(op)
     vecnotunrolled = vectorized !== unrolled
-    for u ∈ zero(Int32):Base.unsafe_trunc(Int32,U-1)
+    for u ∈ 0:U-1
         td = UnrollArgs(u, unrolled, tiled, suffix)
         name, mo = name_memoffset(var, op, td, W, vecnotunrolled)
         instrcall = Expr(:call, lv(:vstore!), ptr, name, mo)

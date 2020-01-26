@@ -1,6 +1,6 @@
 
 struct UnrollArgs{T}
-    u::Int32
+    u::Int
     unrolled::Symbol
     tiled::Symbol
     suffix::T
@@ -13,7 +13,7 @@ function parentind(ind::Symbol, op::Operation)
 end
 function symbolind(ind::Symbol, op::Operation, td::UnrollArgs)
     id = parentind(ind, op)
-    id == -1 && return Expr(:call, :-, ind, one(Int32))
+    id == -1 && return Expr(:call, :-, ind, 1)
     @unpack u, unrolled, tiled, suffix = td
     parent = parents(op)[id]
     pvar = if tiled ∈ loopdependencies(parent)
@@ -22,7 +22,7 @@ function symbolind(ind::Symbol, op::Operation, td::UnrollArgs)
         mangledvar(parent)
     end
     pvar = unrolled ∈ loopdependencies(parent) ? Symbol(pvar, u) : pvar
-    Expr(:call, :-, pvar, one(Int32))
+    Expr(:call, :-, pvar, 1)
 end
 function mem_offset(op::Operation, td::UnrollArgs)
     # @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
@@ -103,7 +103,7 @@ end
 #         Expr(:call, :+, q, incr)
 #     end
 # end
-function varassignname(var::Symbol, u::Int32, isunrolled::Bool)
+function varassignname(var::Symbol, u::Int, isunrolled::Bool)
     isunrolled ? Symbol(var, u) : var
 end
 # name_memoffset only gets called when vectorized

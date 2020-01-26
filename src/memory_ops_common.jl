@@ -29,7 +29,7 @@ function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementby
         if ind isa Integer # subset
             vptrarray = subset_vptr!(ls, vptrarray, ninds, ind)
             length(indices) == 0 && push!(indices, DISCONTIGUOUS)
-        elseif ind isa Expr || (ind isa Symbol && ind ∈ keys(ls.opdict))
+        elseif ind isa Expr
             parent = add_operation!(ls, gensym(:indexpr), ind, elementbytes)
             pushparent!(parents, loopdependencies, reduceddeps, parent)
             # var = get(ls.opdict, ind, nothing)
@@ -41,8 +41,16 @@ function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementby
                 push!(loopedindex, true)
                 push!(loopdependencies, ind)
             else
-                vptrarray = subset_vptr!(ls, vptrarray, ninds, ind)
-                length(indices) == 0 && push!(indices, DISCONTIGUOUS)
+                indop = get(ls.opdict, ind, nothing)
+                if indop !== nothing  && !isconstant(indop)
+                    pushparent!(parents, loopdependencies, reduceddeps, parent)
+                    # var = get(ls.opdict, ind, nothing)
+                    push!(indices, name(parent)); ninds += 1
+                    push!(loopedindex, false)
+                else
+                    vptrarray = subset_vptr!(ls, vptrarray, ninds, ind)
+                    length(indices) == 0 && push!(indices, DISCONTIGUOUS)
+                end
             end
         else
             throw("Unrecognized loop index: $ind.")

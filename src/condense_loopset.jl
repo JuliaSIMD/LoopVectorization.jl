@@ -75,7 +75,7 @@ function shifted_loopset(ls::LoopSet, loopsyms::Vector{Symbol})
     ld = zero(UInt64) # leading_zeros(ld) >> 2 yields the number of loopdeps
     for d ∈ loopsyms
         ld <<= 4
-        ld |= getloopid(ls, d)
+        ld |= getloopid(ls, d)::Int
     end
     ld
 end

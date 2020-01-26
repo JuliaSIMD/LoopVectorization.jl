@@ -19,8 +19,7 @@ function add_if!(ls::LoopSet, LHS::Symbol, RHS::Expr, elementbytes::Int = 8, mpr
     add_compute!(ls, LHS, :vifelse, [condop, trueop, falseop], elementbytes)
 end
 
-function add_andblock!(ls::LoopSet, condop::Operation, LHS, RHS, elementbytes::Int)
-    rhsop = add_compute!(ls, gensym(:iftruerhs), RHS, elementbytes)
+function add_andblock!(ls::LoopSet, condop::Operation, LHS, rhsop::Operation, elementbytes::Int)
     if LHS isa Symbol
         altop = getop(ls, LHS)
         return add_compute!(ls, LHS, :vifelse, [condop, rhsop, altop], elementbytes)
@@ -29,6 +28,14 @@ function add_andblock!(ls::LoopSet, condop::Operation, LHS, RHS, elementbytes::I
     else
         throw("Don't know how to assign onto $LHS.")
     end        
+end
+function add_andblock!(ls::LoopSet, condop::Operation, LHS, RHS::Expr, elementbytes::Int)
+    rhsop = add_compute!(ls, gensym(:iftruerhs), RHS, elementbytes)
+    add_andblock!(ls, condop, LHS, rhsop, elementbytes)
+end
+function add_andblock!(ls::LoopSet, condop::Operation, LHS, RHS, elementbytes::Int)
+    rhsop = getop(ls, RHS)
+    add_andblock!(ls, condop, LHS, rhsop, elementbytes)
 end
 function add_andblock!(ls::LoopSet, condexpr::Expr, condeval::Expr, elementbytes::Int)
     condop = add_compute!(ls, gensym(:mask), condexpr, elementbytes)
@@ -42,8 +49,7 @@ function add_andblock!(ls::LoopSet, ex::Expr, elementbytes::Int)
     add_andblock!(ls, first(ex.args)::Expr, last(ex.args)::Expr, elementbytes)
 end
 
-function add_orblock!(ls::LoopSet, condop::Operation, LHS, RHS, elementbytes::Int)
-    rhsop = add_compute!(ls, gensym(:iffalserhs), RHS, elementbytes)
+function add_orblock!(ls::LoopSet, condop::Operation, LHS, rhsop::Operation, elementbytes::Int)
     if LHS isa Symbol
         altop = getop(ls, LHS)
         return add_compute!(ls, LHS, :vifelse, [condop, altop, rhsop], elementbytes)
@@ -53,6 +59,14 @@ function add_orblock!(ls::LoopSet, condop::Operation, LHS, RHS, elementbytes::In
     else
         throw("Don't know how to assign onto $LHS.")
     end
+end
+function add_orblock!(ls::LoopSet, condop::Operation, LHS, RHS::Expr, elementbytes::Int)
+    rhsop = add_compute!(ls, gensym(:iffalserhs), RHS, elementbytes)
+    add_orblock!(ls, condop, LHS, rhsop, elementbytes)
+end
+function add_orblock!(ls::LoopSet, condop::Operation, LHS, RHS, elementbytes::Int)
+    rhsop = getop(ls, RHS)
+    add_orblock!(ls, condop, LHS, rhsop, elementbytes)
 end
 function add_orblock!(ls::LoopSet, condexpr::Expr, condeval::Expr, elementbytes::Int)
     condop = add_compute!(ls, gensym(:mask), condexpr, elementbytes)

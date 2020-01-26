@@ -706,6 +706,25 @@ end
         lsld = LoopVectorization.LoopSet(ldq)
         @test LoopVectorization.choose_order(lsld) == (Symbol[:i], :i, 1, -1)
 
+        function calc_sins!(res::AbstractArray{T}) where {T}
+            code_phase_delta = T(0.01)
+            @inbounds for i ∈ eachindex(res)
+                res[i] = sin(i * code_phase_delta)
+            end
+        end
+        function calc_sinsavx!(res::AbstractArray{T}) where {T}
+            code_phase_delta = T(0.01)
+            @avx for i ∈ eachindex(res)
+                res[i] = sin(i * code_phase_delta)
+            end
+        end
+        function calc_sins_avx!(res::AbstractArray{T}) where {T}
+            code_phase_delta = T(0.01)
+            @_avx for i ∈ eachindex(res)
+                res[i] = sin(i * code_phase_delta)
+            end
+        end
+        
         function logsumexp!(r::AbstractArray{T}, x::AbstractArray{T}) where {T}
             n = length(x)
             length(r) == n || throw(DimensionMismatch())
@@ -801,10 +820,16 @@ end
             r2 = similar(x);
             lse = logsumexp!(r1, x);
             @test logsumexpavx!(r2, x) ≈ lse
-            @test r1 ≈ r2;
+            @test r1 ≈ r2
             fill!(r2, T(NaN));
             @test logsumexp_avx!(r2, x) ≈ lse
-            @test r1 ≈ r2;
+            @test r1 ≈ r2
+
+            calc_sins!(r1)
+            calc_sinsavx!(r2)
+            @test r1 ≈ r2
+            fill!(r2, NaN); calc_sins_avx!(r2)
+            @test r1 ≈ r2
         end
     end
 
@@ -1163,7 +1188,7 @@ end
             ret[j] = clenshaw(x[j], coeff)
         end
     end
-    
+
     function softmax3_core!(lse, qq, xx, tmpmax, maxk, nk)
         for k in Base.OneTo(maxk)
             @inbounds for i in eachindex(lse)
@@ -1244,6 +1269,52 @@ end
         end
         qq[:,Base.OneTo(maxk)] ./= vec(lse)
     end
+    function softmax3_coreavx3!(lse, qq, xx, tmpmax, maxk, nk)
+        for k in Base.OneTo(nk)
+            @avx for i in eachindex(lse)
+                tmp = exp(xx[i,k] - tmpmax[i])
+                lse[i] += tmp
+                k <= maxk && (qq[i,k] = tmp)
+            end
+        end
+        qq[:,Base.OneTo(maxk)] ./= vec(lse)
+    end
+    function softmax3_core_avx3!(lse, qq, xx, tmpmax, maxk, nk)
+        for k in Base.OneTo(nk)
+            @_avx for i in eachindex(lse)
+                tmp = exp(xx[i,k] - tmpmax[i])
+                lse[i] += tmp
+                k <= maxk && (qq[i,k] = tmp)
+            end
+        end
+        qq[:,Base.OneTo(maxk)] ./= vec(lse)
+    end
+    # qif = :(for i in eachindex(lse)
+    #             tmp = exp(xx[i,k] - tmpmax[i])
+    #             lse[i] += tmp
+    #             k <= maxk && (qq[i,k] = tmp)
+    #          end)
+    # lsif = LoopVectorization.LoopSet(qif)
+    function softmax3_coreavx4!(lse, qq, xx, tmpmax, maxk, nk)
+        @avx for k in Base.OneTo(nk)
+            for i in eachindex(lse)
+                tmp = exp(xx[i,k] - tmpmax[i])
+                lse[i] += tmp
+                k <= maxk && (qq[i,k] = tmp)
+            end
+        end
+        qq[:,Base.OneTo(maxk)] ./= vec(lse)
+    end
+    function softmax3_core_avx4!(lse, qq, xx, tmpmax, maxk, nk)
+        @_avx for k in Base.OneTo(nk)
+            for i in eachindex(lse)
+                tmp = exp(xx[i,k] - tmpmax[i])
+                lse[i] += tmp
+                k <= maxk && (qq[i,k] = tmp)
+            end
+        end
+        qq[:,Base.OneTo(maxk)] ./= vec(lse)
+    end
 
     add_1_dim(x::AbstractArray) = reshape(x, size(x)..., 1)
     check_finite(x::AbstractArray) = all(isfinite.(x)) || throw(error("x not finite!"))
@@ -1284,6 +1355,22 @@ end
     function softmax3_avx2!(q::AA, lse::A, tmpmax::A, x::AA, maxk=size(q, ndims(q)) ) where {T<:Real, A<:Array{T}, AA<:AbstractArray{T}}
         lse, qq, xx, tmpmax, maxk, nk = softmax3_setup!(q, lse, tmpmax, x, maxk)
         softmax3_core_avx2!(lse, qq, xx, tmpmax, maxk, nk)
+    end
+    function softmax3avx3!(q::AA, lse::A, tmpmax::A, x::AA, maxk=size(q, ndims(q)) ) where {T<:Real, A<:Array{T}, AA<:AbstractArray{T}}
+        lse, qq, xx, tmpmax, maxk, nk = softmax3_setup!(q, lse, tmpmax, x, maxk)
+        softmax3_coreavx3!(lse, qq, xx, tmpmax, maxk, nk)
+    end
+    function softmax3_avx3!(q::AA, lse::A, tmpmax::A, x::AA, maxk=size(q, ndims(q)) ) where {T<:Real, A<:Array{T}, AA<:AbstractArray{T}}
+        lse, qq, xx, tmpmax, maxk, nk = softmax3_setup!(q, lse, tmpmax, x, maxk)
+        softmax3_core_avx3!(lse, qq, xx, tmpmax, maxk, nk)
+    end
+    function softmax3avx4!(q::AA, lse::A, tmpmax::A, x::AA, maxk=size(q, ndims(q)) ) where {T<:Real, A<:Array{T}, AA<:AbstractArray{T}}
+        lse, qq, xx, tmpmax, maxk, nk = softmax3_setup!(q, lse, tmpmax, x, maxk)
+        softmax3_coreavx4!(lse, qq, xx, tmpmax, maxk, nk)
+    end
+    function softmax3_avx4!(q::AA, lse::A, tmpmax::A, x::AA, maxk=size(q, ndims(q)) ) where {T<:Real, A<:Array{T}, AA<:AbstractArray{T}}
+        lse, qq, xx, tmpmax, maxk, nk = softmax3_setup!(q, lse, tmpmax, x, maxk)
+        softmax3_core_avx4!(lse, qq, xx, tmpmax, maxk, nk)
     end
 
     function copyavx1!(x, y)
@@ -1387,6 +1474,30 @@ end
         fill!(q2, 0); fill!(lse, 0);  softmax3_avx2!(q2, lse, tmpmax, x, 1);
         @test all(sum(q2; dims=3) .<= 1)
         fill!(q2, 0); fill!(lse, 0);  softmax3_avx2!(q2, lse, tmpmax, x);
+        @test q1 ≈ q2
+        @test sum(q2; dims=3) ≈ ones(T,ni,nj)
+
+        fill!(q2, 0); fill!(lse, 0);  softmax3avx3!(q2, lse, tmpmax, x, 1);
+        @test all(sum(q2; dims=3) .<= 1)
+        fill!(q2, 0); fill!(lse, 0);  softmax3avx3!(q2, lse, tmpmax, x);
+        @test q1 ≈ q2
+        @test sum(q2; dims=3) ≈ ones(T,ni,nj)
+
+        fill!(q2, 0); fill!(lse, 0);  softmax3_avx3!(q2, lse, tmpmax, x, 1);
+        @test all(sum(q2; dims=3) .<= 1)
+        fill!(q2, 0); fill!(lse, 0);  softmax3_avx3!(q2, lse, tmpmax, x);
+        @test q1 ≈ q2
+        @test sum(q2; dims=3) ≈ ones(T,ni,nj)
+
+        fill!(q2, 0); fill!(lse, 0);  softmax3avx4!(q2, lse, tmpmax, x, 1);
+        @test all(sum(q2; dims=3) .<= 1)
+        fill!(q2, 0); fill!(lse, 0);  softmax3avx4!(q2, lse, tmpmax, x);
+        @test q1 ≈ q2
+        @test sum(q2; dims=3) ≈ ones(T,ni,nj)
+
+        fill!(q2, 0); fill!(lse, 0);  softmax3_avx4!(q2, lse, tmpmax, x, 1);
+        @test all(sum(q2; dims=3) .<= 1)
+        fill!(q2, 0); fill!(lse, 0);  softmax3_avx4!(q2, lse, tmpmax, x);
         @test q1 ≈ q2
         @test sum(q2; dims=3) ≈ ones(T,ni,nj)
 

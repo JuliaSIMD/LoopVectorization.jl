@@ -156,6 +156,13 @@ function add_compute!(
             else
                 add_parent!(parents, deps, reduceddeps, ls, arg, elementbytes)
             end
+        elseif arg ∈ ls.loopsymbols
+            loopsym = gensym(arg)
+            pushpreamble!(ls, Expr(:(=), loopsym, LoopValue()))
+            loopsymop = add_simple_load!(ls, gensym(loopsym), ArrayReference(loopsym, [arg]), elementbytes)
+            push!(ls.syms_aliasing_refs, name(loopsymop))
+            push!(ls.refs_aliasing_syms, loopsymop.ref)
+            pushparent!(parents, deps, reduceddeps, loopsymop)
         else
             add_parent!(parents, deps, reduceddeps, ls, arg, elementbytes)
         end

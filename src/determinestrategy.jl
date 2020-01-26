@@ -233,7 +233,7 @@ function solve_tilesize(X, R, UL, TL)
     end
     # The RR + 1 is a hack to get it to favor Uhigh in more scenarios
     Tl = Tlow
-    while RR < Uhigh*Tl*R[1] + Uhigh*R[2]
+    while RR < Uhigh*Tl*R[1] + Uhigh*R[2] && Tl > 1
         Tl -= 1
     end
     tcost_temp = tile_cost(X, Uhigh, Tl, UL, TL)
@@ -440,6 +440,7 @@ function evaluate_cost_tile(
             reg_pressure[4] += rp
         end
     end
+    sum(reg_pressure) > VectorizationBase.REGISTER_COUNT && return 0, 0, Inf
     # @show order, vectorized cost_vec reg_pressure
     # @show solve_tilesize(ls, unrolled, tiled, cost_vec, reg_pressure)
     U, T, tcost = solve_tilesize(ls, unrolled, tiled, cost_vec, reg_pressure, W, vectorized)

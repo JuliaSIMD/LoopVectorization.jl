@@ -94,6 +94,11 @@ function add_mref!(ls::LoopSet, ars::ArrayRefStruct, arraysymbolinds::Vector{Sym
     pushfirst!(getindices(ar), Symbol("##DISCONTIGUOUSSUBARRAY##"))
     ar
 end
+function add_mref!(ls::LoopSet, ars::ArrayRefStruct, arraysymbolinds::Vector{Symbol}, opsymbols::Vector{Symbol}, i::Int, ::Type{LoopValue})
+    ar = ArrayReferenceMeta(ls, ars, arraysymbolinds, opsymbols, Symbol(""), gensym())
+    pushpreamble!(ls, Expr(:(=), vptr(ar), LoopValue()))
+    ar
+end
 
 
 
@@ -188,6 +193,7 @@ end
 
 # elbytes(::VectorizationBase.AbstractPointer{T}) where {T} = sizeof(T)::Int
 typeeltype(::Type{P}) where {T,P<:VectorizationBase.AbstractPointer{T}} = T
+typeeltype(::Type{LoopValue}) = Int8
 
 function add_array_symbols!(ls::LoopSet, arraysymbolinds::Vector{Symbol}, offset::Int)
     for (i,as) ∈ enumerate(arraysymbolinds)

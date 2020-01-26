@@ -77,12 +77,10 @@ end
 # For now, it is illegal to load from a conditional store.
 # if you want that sort of behavior, do a conditional reassignment, and store that result unconditionally.
 function add_conditional_store!(ls::LoopSet, LHS, condop::Operation, storeop::Operation, elementbytes::Int)
-    array, raw_indices = ref_from_ref(LHS)
-    ref = ArrayReference(array, raw_indices)
-    mref = ArrayReferenceMeta(
-        ref, fill(true, length(getindices(ref)))
-    )
-    ldref = convert(Vector{Symbol}, getindices(ref))
+    array, rawindices = ref_from_ref(LHS)
+    mpref = array_reference_meta!(ls, array, rawindices, elementbytes)
+    mref = mpref.mref
+    ldref = mpref.loopdependencies
 
     pvar = storeop.variable
     id = length(ls.operations)

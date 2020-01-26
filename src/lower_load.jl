@@ -18,7 +18,7 @@ function lower_load_scalar!(
     ptr = refname(op)
     isunrolled = unrolled ∈ loopdeps
     U = isunrolled ? U : 1
-    for u ∈ zero(Int32):Base.unsafe_trunc(Int32,U-1)
+    for u ∈ 0:U-1
         varname = varassignname(var, u, isunrolled)
         td = UnrollArgs(u, unrolled, tiled, suffix)
         push!(q.args, Expr(:(=), varname, Expr(:call, lv(:load), ptr, mem_offset_u(op, td))))
@@ -32,16 +32,16 @@ function lower_load_vectorized!(
     loopdeps = loopdependencies(op)
     @assert vectorized ∈ loopdeps
     if unrolled ∈ loopdeps
-        umin = zero(Int32)
+        umin = 0
         U = U
     else
-        umin = -one(Int32)
+        umin = -1
         U = 0
     end
     # Urange = unrolled ∈ loopdeps ? 0:U-1 : 0
     var = variable_name(op, suffix)
     vecnotunrolled = vectorized !== unrolled
-    for u ∈ umin:Base.unsafe_trunc(Int32,U-1)
+    for u ∈ umin:U-1
         td = UnrollArgs(u, unrolled, tiled, suffix)
         pushvectorload!(q, op, var, td, U, W, mask, vecnotunrolled)
     end
