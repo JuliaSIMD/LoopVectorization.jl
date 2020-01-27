@@ -64,8 +64,10 @@ function vector_cost(ic::InstructionCost, Wshift, sizeof_T)
     end    
     srt, sl, srp
 end
-instruction_cost(instruction::Symbol) = get(COST, instruction, OPAQUE_INSTRUCTION)
-instruction_cost(instruction::Instruction) = instruction_cost(instruction.instr)
+# instruction_cost(instruction::Symbol) = get(COST, instruction, OPAQUE_INSTRUCTION)
+# instruction_cost(instruction::Instruction) = instruction_cost(instruction.instr)
+instruction_cost(instruction::Instruction) = get(COST, instruction, OPAQUE_INSTRUCTION)
+instruction_cost(instruction::Symbol) = instruction_cost(Instruction(instruction))
 scalar_cost(instr::Instruction) = scalar_cost(instruction_cost(instr))
 vector_cost(instr::Instruction, Wshift, sizeof_T) = vector_cost(instruction_cost(instr), Wshift, sizeof_T)
 function cost(instruction::InstructionCost, Wshift, sizeof_T)
@@ -87,76 +89,78 @@ const OPAQUE_INSTRUCTION = InstructionCost(50, 50.0, -1.0, VectorizationBase.REG
 #    as a heuristic means of approximating register pressure, since many loads can be
 #    consolidated into a single register. The number of LICM-ed setindex!, on the other
 #    hand, should indicate how many registers we're keeping live for the sake of eventually storing.
-const COST = Dict{Symbol,InstructionCost}(
-    :getindex => InstructionCost(-3.0,0.5,3,1),
-    :setindex! => InstructionCost(-3.0,1.0,3,0),
-    :conditionalstore! => InstructionCost(-3.0,1.0,3,0),
-    :zero => InstructionCost(1,0.5),
-    :one => InstructionCost(3,0.5),
-    :(+) => InstructionCost(4,0.5),
-    :(-) => InstructionCost(4,0.5),
-    :(*) => InstructionCost(4,0.5),
-    :(/) => InstructionCost(13,4.0,-2.0),
-    :vadd => InstructionCost(4,0.5),
-    :vsub => InstructionCost(4,0.5),
-    :vmul => InstructionCost(4,0.5),
-    :vfdiv => InstructionCost(13,4.0,-2.0),
-    :evadd => InstructionCost(4,0.5),
-    :evsub => InstructionCost(4,0.5),
-    :evmul => InstructionCost(4,0.5),
-    :evfdiv => InstructionCost(13,4.0,-2.0),
-    :reduced_add => InstructionCost(4,0.5),# ignoring reduction part of cost, might be nop
-    :reduced_prod => InstructionCost(4,0.5),# ignoring reduction part of cost, might be nop
-    :reduce_to_add => InstructionCost(0,0.0,0.0,0),
-    :reduce_to_prod => InstructionCost(0,0.0,0.0,0),
-    :abs2 => InstructionCost(4,0.5),
-    :vabs2 => InstructionCost(4,0.5),
-    :(==) => InstructionCost(1, 0.5),
-    :isequal => InstructionCost(1, 0.5),
-    :(~) => InstructionCost(1, 0.5),
-    :(&) => InstructionCost(1, 0.5),
-    :(|) => InstructionCost(1, 0.5),
-    :(>) => InstructionCost(1, 0.5),
-    :(<) => InstructionCost(1, 0.5),
-    :(>=) => InstructionCost(1, 0.5),
-    :(<=) => InstructionCost(1, 0.5),
-    :ifelse => InstructionCost(1, 0.5),
-    :vifelse => InstructionCost(1, 0.5),
-    :inv => InstructionCost(13,4.0,-2.0,1),
-    :vinv => InstructionCost(13,4.0,-2.0,1),
-    :muladd => InstructionCost(4,0.5), # + and * will fuse into this, so much of the time they're not twice as expensive
-    :fma => InstructionCost(4,0.5), # + and * will fuse into this, so much of the time they're not twice as expensive
-    :vmuladd => InstructionCost(4,0.5), # + and * will fuse into this, so much of the time they're not twice as expensive
-    :vfma => InstructionCost(4,0.5), # + and * will fuse into this, so much of the time they're not twice as expensive
-    :vfmadd => InstructionCost(4,0.5), # + and * will fuse into this, so much of the time they're not twice as expensive
-    :vfmsub => InstructionCost(4,0.5), # - and * will fuse into this, so much of the time they're not twice as expensive
-    :vfnmadd => InstructionCost(4,0.5), # + and -* will fuse into this, so much of the time they're not twice as expensive
-    :vfnmsub => InstructionCost(4,0.5), # - and -* will fuse into this, so much of the time they're not twice as expensive
-    :vfmadd_fast => InstructionCost(4,0.5), # + and * will fuse into this, so much of the time they're not twice as expensive
-    :vfmsub_fast => InstructionCost(4,0.5), # - and * will fuse into this, so much of the time they're not twice as expensive
-    :vfnmadd_fast => InstructionCost(4,0.5), # + and -* will fuse into this, so much of the time they're not twice as expensive
-    :vfnmsub_fast => InstructionCost(4,0.5), # - and -* will fuse into this, so much of the time they're not twice as expensive
-    :sqrt => InstructionCost(15,4.0,-2.0),
-    :sqrt_fast => InstructionCost(15,4.0,-2.0),
-    :log => InstructionCost(20,20.0,40.0,20),
-    :exp => InstructionCost(20,20.0,20.0,18),
-    :^ => InstructionCost(40,40.0,40.0,26), # FIXME
-    :sin => InstructionCost(18,15.0,68.0,23),
-    :cos => InstructionCost(18,15.0,68.0,26),
-    :sincos => InstructionCost(25,22.0,70.0,26),
-    :log_fast => InstructionCost(20,20.0,40.0,20),
-    :exp_fast => InstructionCost(20,20.0,20.0,18),
-    :sin_fast => InstructionCost(18,15.0,68.0,23),
-    :cos_fast => InstructionCost(18,15.0,68.0,26),
-    :sincos_fast => InstructionCost(25,22.0,70.0,26),
-    :identity => InstructionCost(0,0.0,0.0,0),
-    :adjoint => InstructionCost(0,0.0,0.0,0),
-    :transpose => InstructionCost(0,0.0,0.0,0),
+const COST = Dict{Instruction,InstructionCost}(
+    Instruction(:getindex) => InstructionCost(-3.0,0.5,3,1),
+    Instruction(:setindex!) => InstructionCost(-3.0,1.0,3,0),
+    Instruction(:conditionalstore!) => InstructionCost(-3.0,1.0,3,0),
+    Instruction(:zero) => InstructionCost(1,0.5),
+    Instruction(:one) => InstructionCost(3,0.5),
+    Instruction(:(+)) => InstructionCost(4,0.5),
+    Instruction(:(-)) => InstructionCost(4,0.5),
+    Instruction(:(*)) => InstructionCost(4,0.5),
+    Instruction(:(/)) => InstructionCost(13,4.0,-2.0),
+    Instruction(:vadd) => InstructionCost(4,0.5),
+    Instruction(:vsub) => InstructionCost(4,0.5),
+    Instruction(:vmul) => InstructionCost(4,0.5),
+    Instruction(:vfdiv) => InstructionCost(13,4.0,-2.0),
+    Instruction(:evadd) => InstructionCost(4,0.5),
+    Instruction(:evsub) => InstructionCost(4,0.5),
+    Instruction(:evmul) => InstructionCost(4,0.5),
+    Instruction(:evfdiv) => InstructionCost(13,4.0,-2.0),
+    Instruction(:reduced_add) => InstructionCost(4,0.5),# ignoring reduction part of cost, might be nop
+    Instruction(:reduced_prod) => InstructionCost(4,0.5),# ignoring reduction part of cost, might be nop
+    Instruction(:reduce_to_add) => InstructionCost(0,0.0,0.0,0),
+    Instruction(:reduce_to_prod) => InstructionCost(0,0.0,0.0,0),
+    Instruction(:abs2) => InstructionCost(4,0.5),
+    Instruction(:vabs2) => InstructionCost(4,0.5),
+    Instruction(:(==)) => InstructionCost(1, 0.5),
+    Instruction(:isequal) => InstructionCost(1, 0.5),
+    Instruction(:(~)) => InstructionCost(1, 0.5),
+    Instruction(:(&)) => InstructionCost(1, 0.5),
+    Instruction(:(|)) => InstructionCost(1, 0.5),
+    Instruction(:(>)) => InstructionCost(1, 0.5),
+    Instruction(:(<)) => InstructionCost(1, 0.5),
+    Instruction(:(>=)) => InstructionCost(1, 0.5),
+    Instruction(:(<=)) => InstructionCost(1, 0.5),
+    Instruction(:ifelse) => InstructionCost(1, 0.5),
+    Instruction(:vifelse) => InstructionCost(1, 0.5),
+    Instruction(:inv) => InstructionCost(13,4.0,-2.0,1),
+    Instruction(:vinv) => InstructionCost(13,4.0,-2.0,1),
+    Instruction(:muladd) => InstructionCost(4,0.5), # + and * will fuse into this, so much of the time they're not twice as expensive
+    Instruction(:fma) => InstructionCost(4,0.5), # + and * will fuse into this, so much of the time they're not twice as expensive
+    Instruction(:vmuladd) => InstructionCost(4,0.5), # + and * will fuse into this, so much of the time they're not twice as expensive
+    Instruction(:vfma) => InstructionCost(4,0.5), # + and * will fuse into this, so much of the time they're not twice as expensive
+    Instruction(:vfmadd) => InstructionCost(4,0.5), # + and * will fuse into this, so much of the time they're not twice as expensive
+    Instruction(:vfmsub) => InstructionCost(4,0.5), # - and * will fuse into this, so much of the time they're not twice as expensive
+    Instruction(:vfnmadd) => InstructionCost(4,0.5), # + and -* will fuse into this, so much of the time they're not twice as expensive
+    Instruction(:vfnmsub) => InstructionCost(4,0.5), # - and -* will fuse into this, so much of the time they're not twice as expensive
+    Instruction(:vfmadd_fast) => InstructionCost(4,0.5), # + and * will fuse into this, so much of the time they're not twice as expensive
+    Instruction(:vfmsub_fast) => InstructionCost(4,0.5), # - and * will fuse into this, so much of the time they're not twice as expensive
+    Instruction(:vfnmadd_fast) => InstructionCost(4,0.5), # + and -* will fuse into this, so much of the time they're not twice as expensive
+    Instruction(:vfnmsub_fast) => InstructionCost(4,0.5), # - and -* will fuse into this, so much of the time they're not twice as expensive
+    Instruction(:sqrt) => InstructionCost(15,4.0,-2.0),
+    Instruction(:sqrt_fast) => InstructionCost(15,4.0,-2.0),
+    Instruction(:log) => InstructionCost(20,20.0,40.0,20),
+    Instruction(:exp) => InstructionCost(20,20.0,20.0,18),
+    Instruction(:(^)) => InstructionCost(40,40.0,40.0,26), # FIXME
+    Instruction(:sin) => InstructionCost(18,15.0,68.0,23),
+    Instruction(:cos) => InstructionCost(18,15.0,68.0,26),
+    Instruction(:sincos) => InstructionCost(25,22.0,70.0,26),
+    Instruction(:log_fast) => InstructionCost(20,20.0,40.0,20),
+    Instruction(:exp_fast) => InstructionCost(20,20.0,20.0,18),
+    Instruction(:sin_fast) => InstructionCost(18,15.0,68.0,23),
+    Instruction(:cos_fast) => InstructionCost(18,15.0,68.0,26),
+    Instruction(:sincos_fast) => InstructionCost(25,22.0,70.0,26),
+    Instruction(:identity) => InstructionCost(0,0.0,0.0,0),
+    Instruction(:adjoint) => InstructionCost(0,0.0,0.0,0),
+    Instruction(:transpose) => InstructionCost(0,0.0,0.0,0),
     # Symbol("##CONSTANT##") => InstructionCost(0,0.0)
 )
 
-const KNOWNINSTRUCTIONS = keys(COST)
-instruction(f, m) = f ∈ KNOWNINSTRUCTIONS ? Instruction(:LoopVectorization, f) : Instruction(m, f)
+# const KNOWNINSTRUCTIONS = keys(COST)
+# instruction(f, m) = f ∈ KNOWNINSTRUCTIONS ? Instruction(:LoopVectorization, f) : Instruction(m, f)
+instruction(f::Symbol, m) = Instruction(f) ∈ keys(COST) ? Instruction(f) : Instruction(m, f)
+# instruction(f, m) = get(COST, f, Instruction(m, f))
 
 # for (k, v) ∈ COST # so we can look up Symbol(typeof(function))
 #     COST[Symbol("typeof(", lower(k), ")")] = v

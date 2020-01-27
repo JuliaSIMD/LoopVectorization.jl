@@ -1,7 +1,7 @@
 using Test
 using LoopVectorization
 using LinearAlgebra
-T = Float32
+# T = Float32
 
 
 function clenshaw(x,coeff)
@@ -1188,6 +1188,11 @@ end
             ret[j] = clenshaw(x[j], coeff)
         end
     end
+    function clenshawavx!(ret,x,coeff)
+        @avx for j in 1:length(ret)
+            ret[j] = clenshaw(x[j], coeff)
+        end
+    end
 
     function softmax3_core!(lse, qq, xx, tmpmax, maxk, nk)
         for k in Base.OneTo(maxk)
@@ -1442,6 +1447,8 @@ end
         c = rand(T,100); x = rand(T,10^4); y1 = similar(x); y2 = similar(x);
         clenshaw!(y1,x,c)
         clenshaw_avx!(y2,x,c)
+        @test y1 ≈ y2
+        clenshawavx!(y2,x,c)
         @test y1 ≈ y2
 
 

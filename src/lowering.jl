@@ -8,11 +8,16 @@
 # end
 
 function lower!(
-    q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol, tiled::Symbol, U::Int,
-    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
+    q::Expr, op::Operation, vectorized::Symbol, ls::LoopSet, unrolled::Symbol, tiled::Symbol, U::Int,
+    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned}
 )
+    W = ls.W
     if isconstant(op)
-        lower_constant!(q, op, vectorized, W, unrolled, U, suffix, mask)
+        if identifier(op) ∈ ls.preamble_zeros
+            lower_zero!(q, op, vectorized, W, unrolled, U, suffix, ls.T)
+        else
+            lower_constant!(q, op, vectorized, W, unrolled, U, suffix)
+        end
     elseif isload(op)
         lower_load!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask)
     elseif iscompute(op)
@@ -22,10 +27,10 @@ function lower!(
     end
 end
 function lower!(
-    q::Expr, ops::AbstractVector{Operation}, vectorized::Symbol, W::Symbol, unrolled::Symbol, tiled::Symbol, U::Int,
-    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
+    q::Expr, ops::AbstractVector{Operation}, vectorized::Symbol, ls::LoopSet, unrolled::Symbol, tiled::Symbol, U::Int,
+    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned}
 )
-    foreach(op -> lower!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask), ops)
+    foreach(op -> lower!(q, op, vectorized, ls, unrolled, tiled, U, suffix, mask), ops)
 end
 
 tiledsym(s::Symbol) = Symbol("##outer##", s, "##outer##")
@@ -70,9 +75,9 @@ function lower_nest(
     end
     for prepost ∈ 1:2
         # !U && !T
-        lower!(blockq, ops[1,1,prepost,n], vectorized, W, unrolled, last(order), U, nothing, mask)
+        lower!(blockq, ops[1,1,prepost,n], vectorized, ls, unrolled, last(order), U, nothing, mask)
         # for u ∈ 0:U-1     #  U && !T
-        lower!(blockq, ops[2,1,prepost,n], vectorized, W, unrolled, last(order), U, nothing, mask)
+        lower!(blockq, ops[2,1,prepost,n], vectorized, ls, unrolled, last(order), U, nothing, mask)
         # end
         if length(ops[1,2,prepost,n]) + length(ops[2,2,prepost,n]) > 0
             for t ∈ 0:T-1
@@ -82,9 +87,9 @@ function lower_nest(
                     push!(blockq.args, Expr(:+=, last(order), 1))
                 end
                 # !U &&  T
-                lower!(blockq, ops[1,2,prepost,n], vectorized, W, unrolled, last(order), U, t, mask)
+                lower!(blockq, ops[1,2,prepost,n], vectorized, ls, unrolled, last(order), U, t, mask)
                 # for u ∈ 0:U-1 #  U &&  T
-                lower!(blockq, ops[2,2,prepost,n], vectorized, W, unrolled, last(order), U, t, mask)
+                lower!(blockq, ops[2,2,prepost,n], vectorized, ls, unrolled, last(order), U, t, mask)
                 # end
             end
         end
@@ -146,9 +151,16 @@ end
 function initialize_outer_reductions!(
     q::Expr, op::Operation, Umin::Int, Umax::Int, W::Symbol, typeT::Symbol, vectorized::Symbol, suffix::Union{Symbol,Nothing} = nothing
 )
-    z = Expr(:call, reduction_zero(op.instruction), typeT)
-    if vectorized ∈ reduceddependencies(op)
-        z = Expr(:call, lv(:vbroadcast), W, z)
+    reduct_zero = reduction_zero(op.instruction)
+    isvectorized = vectorized ∈ reduceddependencies(op)
+    z = if isvectorized
+        if reduct_zero === :zero
+            Expr(:call, lv(:vzero), W, typeT)
+        else
+            Expr(:call, lv(:vbroadcast), W, Expr(:call, reduct_zero, typeT))
+        end
+    else
+        Expr(:call, reduct_zero, typeT)
     end
     mvar = variable_name(op, suffix)
     for u ∈ Umin:Umax-1
@@ -362,20 +374,6 @@ end
 @inline sizeequivalentint(::Type{Float16}, x::Int64) = Int16(x)
 @inline sizeequivalentint(::Type{Float16}, x::Int32) = Int16(x)
 
-function setop!(ls, op, val)
-    if instruction(op) === LOOPCONSTANT# && mangledvar(op) !== val
-        pushpreamble!(ls, Expr(:(=), mangledvar(op), val))
-    else
-        pushpreamble!(ls, Expr(:(=), instruction(op).instr, val))
-    end
-    nothing
-end
-function setconstantop!(ls, op, val)
-    if instruction(op) === LOOPCONSTANT# && mangledvar(op) !== val
-        pushpreamble!(ls, Expr(:(=), mangledvar(op), val))
-    end
-    nothing
-end
 
 function setup_preamble!(ls::LoopSet, W::Symbol, typeT::Symbol, vectorized::Symbol, unrolled::Symbol, tiled::Symbol, U::Int)
     # println("Setup preamble")
