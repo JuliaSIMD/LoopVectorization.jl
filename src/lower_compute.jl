@@ -58,7 +58,6 @@ function lower_compute!(
             for u ∈ 0:U-1
                 push!(q.args, Expr(:(=), Symbol(newparentname, u), Symbol(parentname, u)))
             end
-            # @show #instruction(newparentop)
             reduce_expr!(q, newparentname, Instruction(reduction_to_single_vector(instruction(newparentop))), U)
             push!(q.args, Expr(:(=), newparentname, Symbol(newparentname, 0)))
         end

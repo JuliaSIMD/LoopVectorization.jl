@@ -4,22 +4,22 @@
 ## although stores and return values will.
 
 
-function add_if!(ls::LoopSet, LHS::Symbol, RHS::Expr, elementbytes::Int = 8, mpref::Union{Nothing,ArrayReferenceMetaPosition} = nothing)
+function add_if!(ls::LoopSet, LHS::Symbol, RHS::Expr, elementbytes::Int, position::Int, mpref::Union{Nothing,ArrayReferenceMetaPosition} = nothing)
     # for now, just simple 1-liners
     @assert length(RHS.args) == 3 "if statements without an else cannot be assigned to a variable."
     condition = first(RHS.args)
-    condop = add_compute!(ls, gensym(:mask), condition, elementbytes, mpref)
+    condop = add_compute!(ls, gensym(:mask), condition, elementbytes, position, mpref)
     iftrue = RHS.args[2]
     (iftrue isa Expr && iftrue.head !== :call) && throw("Only calls or constant expressions are currently supported in if/else blocks.")
-    trueop = add_operation!(ls, Symbol(:iftrue), iftrue, elementbytes)
+    trueop = add_operation!(ls, Symbol(:iftrue), iftrue, elementbytes, position)
     iffalse = RHS.args[3]
     (iffalse isa Expr && iffalse.head !== :call) && throw("Only calls or constant expressions are currently supported in if/else blocks.")
-    falseop = add_operation!(ls, Symbol(:iffalse), iffalse, elementbytes)
+    falseop = add_operation!(ls, Symbol(:iffalse), iffalse, elementbytes, position)
 
     add_compute!(ls, LHS, :vifelse, [condop, trueop, falseop], elementbytes)
 end
 
-function add_andblock!(ls::LoopSet, condop::Operation, LHS, rhsop::Operation, elementbytes::Int)
+function add_andblock!(ls::LoopSet, condop::Operation, LHS, rhsop::Operation, elementbytes::Int, position::Int)
     if LHS isa Symbol
         altop = getop(ls, LHS)
         return add_compute!(ls, LHS, :vifelse, [condop, rhsop, altop], elementbytes)
@@ -29,27 +29,27 @@ function add_andblock!(ls::LoopSet, condop::Operation, LHS, rhsop::Operation, el
         throw("Don't know how to assign onto $LHS.")
     end        
 end
-function add_andblock!(ls::LoopSet, condop::Operation, LHS, RHS::Expr, elementbytes::Int)
-    rhsop = add_compute!(ls, gensym(:iftruerhs), RHS, elementbytes)
-    add_andblock!(ls, condop, LHS, rhsop, elementbytes)
+function add_andblock!(ls::LoopSet, condop::Operation, LHS, RHS::Expr, elementbytes::Int, position::Int)
+    rhsop = add_compute!(ls, gensym(:iftruerhs), RHS, elementbytes, position)
+    add_andblock!(ls, condop, LHS, rhsop, elementbytes, position)
 end
-function add_andblock!(ls::LoopSet, condop::Operation, LHS, RHS, elementbytes::Int)
+function add_andblock!(ls::LoopSet, condop::Operation, LHS, RHS, elementbytes::Int, position::Int)
     rhsop = getop(ls, RHS)
-    add_andblock!(ls, condop, LHS, rhsop, elementbytes)
+    add_andblock!(ls, condop, LHS, rhsop, elementbytes, position)
 end
-function add_andblock!(ls::LoopSet, condexpr::Expr, condeval::Expr, elementbytes::Int)
-    condop = add_compute!(ls, gensym(:mask), condexpr, elementbytes)
+function add_andblock!(ls::LoopSet, condexpr::Expr, condeval::Expr, elementbytes::Int, position::Int)
+    condop = add_compute!(ls, gensym(:mask), condexpr, elementbytes, position)
     @assert condeval.head === :(=)
     @assert length(condeval.args) == 2
     LHS = condeval.args[1]
     RHS = condeval.args[2]
-    add_andblock!(ls, condop, LHS, RHS, elementbytes)
+    add_andblock!(ls, condop, LHS, RHS, elementbytes, position)
 end
-function add_andblock!(ls::LoopSet, ex::Expr, elementbytes::Int)
-    add_andblock!(ls, first(ex.args)::Expr, last(ex.args)::Expr, elementbytes)
+function add_andblock!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
+    add_andblock!(ls, first(ex.args)::Expr, last(ex.args)::Expr, elementbytes, position)
 end
 
-function add_orblock!(ls::LoopSet, condop::Operation, LHS, rhsop::Operation, elementbytes::Int)
+function add_orblock!(ls::LoopSet, condop::Operation, LHS, rhsop::Operation, elementbytes::Int, position::Int)
     if LHS isa Symbol
         altop = getop(ls, LHS)
         return add_compute!(ls, LHS, :vifelse, [condop, altop, rhsop], elementbytes)
@@ -60,23 +60,23 @@ function add_orblock!(ls::LoopSet, condop::Operation, LHS, rhsop::Operation, ele
         throw("Don't know how to assign onto $LHS.")
     end
 end
-function add_orblock!(ls::LoopSet, condop::Operation, LHS, RHS::Expr, elementbytes::Int)
-    rhsop = add_compute!(ls, gensym(:iffalserhs), RHS, elementbytes)
-    add_orblock!(ls, condop, LHS, rhsop, elementbytes)
+function add_orblock!(ls::LoopSet, condop::Operation, LHS, RHS::Expr, elementbytes::Int, position::Int)
+    rhsop = add_compute!(ls, gensym(:iffalserhs), RHS, elementbytes, position)
+    add_orblock!(ls, condop, LHS, rhsop, elementbytes, position)
 end
-function add_orblock!(ls::LoopSet, condop::Operation, LHS, RHS, elementbytes::Int)
+function add_orblock!(ls::LoopSet, condop::Operation, LHS, RHS, elementbytes::Int, position::Int)
     rhsop = getop(ls, RHS)
-    add_orblock!(ls, condop, LHS, rhsop, elementbytes)
+    add_orblock!(ls, condop, LHS, rhsop, elementbytes, position)
 end
-function add_orblock!(ls::LoopSet, condexpr::Expr, condeval::Expr, elementbytes::Int)
-    condop = add_compute!(ls, gensym(:mask), condexpr, elementbytes)
+function add_orblock!(ls::LoopSet, condexpr::Expr, condeval::Expr, elementbytes::Int, position::Int)
+    condop = add_compute!(ls, gensym(:mask), condexpr, elementbytes, position)
     @assert condeval.head === :(=)
     @assert length(condeval.args) == 2
     LHS = condeval.args[1]
     RHS = condeval.args[2]
-    add_orblock!(ls, condop, LHS, RHS, elementbytes)
+    add_orblock!(ls, condop, LHS, RHS, elementbytes, position)
 end
-function add_orblock!(ls::LoopSet, ex::Expr, elementbytes::Int)
-    add_orblock!(ls, first(ex.args)::Expr, last(ex.args)::Expr, elementbytes)
+function add_orblock!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
+    add_orblock!(ls, first(ex.args)::Expr, last(ex.args)::Expr, elementbytes, position)
 end
 

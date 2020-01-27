@@ -6,8 +6,8 @@ using VectorizationBase: REGISTER_SIZE, REGISTER_COUNT, extract_data, num_vector
     maybestaticlength, maybestaticsize, staticm1, subsetview, vzero,
     Static, StaticUnitRange, StaticLowerUnitRange, StaticUpperUnitRange,
     PackedStridedPointer, SparseStridedPointer, RowMajorStridedPointer, StaticStridedPointer, StaticStridedStruct
-using SIMDPirates: VECTOR_SYMBOLS, evadd, evmul, vrange, reduced_add, reduced_prod, reduce_to_add, reduce_to_prod,
-    vmullog2, vmullog10, vdivlog2, vdivlog2add, vdivlog10, vdivlog10add, vfmaddaddone
+using SIMDPirates: VECTOR_SYMBOLS, evadd, evmul, vrange, reduced_add, reduced_prod, reduce_to_add, reduce_to_prod#,
+#    vmullog2, vmullog10, vdivlog2, vdivlog2add, vdivlog10, vdivlog10add, vfmaddaddone
 using Base.Broadcast: Broadcasted, DefaultArrayStyle
 using LinearAlgebra: Adjoint, Transpose
 using MacroTools: prewalk, postwalk
@@ -22,6 +22,7 @@ include("map.jl")
 include("costs.jl")
 include("operations.jl")
 include("graphs.jl")
+include("operation_evaluation_order.jl")
 include("memory_ops_common.jl")
 include("add_loads.jl")
 include("add_stores.jl")
@@ -39,6 +40,7 @@ include("lowering.jl")
 include("condense_loopset.jl")
 include("reconstruct_loopset.jl")
 include("constructors.jl")
+
 
 include("precompile.jl")
 _precompile_()

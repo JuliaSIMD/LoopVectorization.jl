@@ -17,6 +17,8 @@ function add_constant!(ls::LoopSet, var::Symbol, mpref::ArrayReferenceMetaPositi
     pushop!(ls, op, temp)
 end
 # This version has loop dependencies. var gets assigned to sym when lowering.
+# value is what will get assigned within the loop.
+# assignedsym will be assigned to value within the preamble
 function add_constant!(
     ls::LoopSet, value::Symbol, deps::Vector{Symbol}, assignedsym::Symbol = gensym(:constant), elementbytes::Int = 8, f::Symbol = Symbol("")
 )

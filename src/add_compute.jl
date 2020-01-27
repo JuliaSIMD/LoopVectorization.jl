@@ -21,16 +21,23 @@ function mergesetdiffv!(
     end
     nothing
 end
+# Everything in arg2 (s1) that isn't in arg3 (s2) is added to arg1 (s3)
 function setdiffv!(s3::AbstractVector{T}, s1::AbstractVector{T}, s2::AbstractVector{T}) where {T}
     for s ∈ s1
         (s ∈ s2) || (s ∉ s3 && push!(s3, s))
     end
 end
+function setdiffv!(s4::AbstractVector{T}, s3::AbstractVector{T}, s1::AbstractVector{T}, s2::AbstractVector{T}) where {T}
+    for s ∈ s1
+        (s ∈ s2) ? (s ∉ s4 && push!(s4, s)) : (s ∉ s3 && push!(s3, s))
+    end
+end
 function update_deps!(deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, parent::Operation)
-    mergesetdiffv!(deps, loopdependencies(parent), reduceddependencies(parent))
+    mergesetv!(deps, loopdependencies(parent))#, reduceddependencies(parent))        
     if !(isload(parent) || isconstant(parent)) && parent.instruction.instr ∉ (:reduced_add, :reduced_prod, :reduce_to_add, :reduce_to_prod)
         mergesetv!(reduceddeps, reduceddependencies(parent))
     end
+    # 
     nothing
 end
 
@@ -42,19 +49,19 @@ function pushparent!(mpref::ArrayReferenceMetaPosition, parent::Operation)
     pushparent!(mpref.parents, mpref.loopdependencies, mpref.reduceddeps, parent)
 end
 function add_parent!(
-    parents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet, var, elementbytes::Int = 8
+    parents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet, var, elementbytes::Int, position::Int
 )
     parent = if var isa Symbol
         getop(ls, var, elementbytes)
     elseif var isa Expr #CSE candidate
-        add_operation!(ls, gensym(:temporary), var, elementbytes)
+        add_operation!(ls, gensym(:temporary), var, elementbytes, position)
     else # assumed constant
         add_constant!(ls, var, elementbytes)
     end
     pushparent!(parents, deps, reduceddeps, parent)
 end
 function add_reduction!(
-    parents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet, var::Symbol, elementbytes::Int = 8
+    parents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet, var::Symbol, elementbytes::Int
 )
     get!(ls.opdict, var) do
         add_constant!(ls, var, elementbytes)
@@ -80,10 +87,10 @@ function update_reduction_status!(parentvec::Vector{Operation}, deps::Vector{Sym
     end
 end
 function add_reduction_update_parent!(
-    parents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet,
-    var::Symbol, instr::Symbol, directdependency::Bool, elementbytes::Int = 8
+    vparents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet,
+    parent::Operation, instr::Symbol, directdependency::Bool, elementbytes::Int
 )
-    parent = getop(ls, var, elementbytes)
+    var = name(parent)
     isouterreduction = parent.instruction === LOOPCONSTANT
     Instr = instruction(ls, instr)
     instrclass = reduction_instruction_class(Instr) # key allows for faster lookups
@@ -110,19 +117,19 @@ function add_reduction_update_parent!(
         reductsym = var
         reductcombine = Symbol("")
     end
-    setdiffv!(reduceddeps, deps, loopdependencies(reductinit))
     combineddeps = copy(deps); mergesetv!(combineddeps, reduceddeps)
-    directdependency && pushparent!(parents, deps, reduceddeps, reductinit)#parent) # deps and reduced deps will not be disjoint
-    update_reduction_status!(parents, combineddeps, name(reductinit))
+    directdependency && pushparent!(vparents, deps, reduceddeps, reductinit)#parent) # deps and reduced deps will not be disjoint
+    update_reduction_status!(vparents, combineddeps, name(reductinit))
     # this is the op added by add_compute
-    op = Operation(length(operations(ls)), reductsym, elementbytes, instr, compute, deps, reduceddeps, parents)
+    op = Operation(length(operations(ls)), reductsym, elementbytes, instr, compute, deps, reduceddeps, vparents)
     parent.instruction === LOOPCONSTANT && push!(ls.outer_reductions, identifier(op))
     opout = pushop!(ls, op, var) # note this overwrites the entry in the operations dict, but not the vector
+    # isouterreduction || iszero(length(reduceddeps)) && return opout
     isouterreduction && return opout
     # create child op, which is the reduction combination
-    childdeps = Symbol[]; childrdeps = Symbol[]; childparents = Operation[]
-    pushparent!(childparents, childdeps, childrdeps, op) # reduce op
-    pushparent!(childparents, childdeps, childrdeps, parent) # to
+    childrdeps = Symbol[]; childparents = Operation[ op, parent ]
+    childdeps = loopdependencies(reductinit)
+    setdiffv!(childrdeps, loopdependencies(op), childdeps)
     child = Operation(
         length(operations(ls)), name(parent), elementbytes, reductcombine, compute, childdeps, childrdeps, childparents
     )
@@ -130,7 +137,7 @@ function add_reduction_update_parent!(
     opout
 end
 function add_compute!(
-    ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8,
+    ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int, position::Int,
     mpref::Union{Nothing,ArrayReferenceMetaPosition} = nothing
 )
     @assert ex.head === :call
@@ -149,12 +156,12 @@ function add_compute!(
             if isref
                 if mpref == argref
                     reduction = true
-                    add_load!(ls, var, mpref, elementbytes)
+                    add_load!(ls, var, argref, elementbytes)
                 else
                     pushparent!(parents, deps, reduceddeps, add_load!(ls, gensym(:tempload), argref, elementbytes))
                 end
             else
-                add_parent!(parents, deps, reduceddeps, ls, arg, elementbytes)
+                add_parent!(parents, deps, reduceddeps, ls, arg, elementbytes, position)
             end
         elseif arg ∈ ls.loopsymbols
             loopsym = gensym(arg)
@@ -164,11 +171,30 @@ function add_compute!(
             push!(ls.refs_aliasing_syms, loopsymop.ref)
             pushparent!(parents, deps, reduceddeps, loopsymop)
         else
-            add_parent!(parents, deps, reduceddeps, ls, arg, elementbytes)
+            add_parent!(parents, deps, reduceddeps, ls, arg, elementbytes, position)
         end
     end
+    if iszero(length(deps)) && reduction
+        loopnestview = view(ls.loopsymbols, 1:position) 
+        append!(deps, loopnestview)
+        append!(reduceddeps, loopnestview)
+    else
+        loopnestview = view(ls.loopsymbols, 1:position) 
+        newloopdeps = Symbol[]; newreduceddeps = Symbol[];
+        setdiffv!(newloopdeps, newreduceddeps, deps, loopnestview)
+        mergesetv!(newreduceddeps, reduceddeps)
+        deps = newloopdeps; reduceddeps = newreduceddeps
+    end
     if reduction || search_tree(parents, var)
-        add_reduction_update_parent!(parents, deps, reduceddeps, ls, var, instr, reduction, elementbytes)
+        parent = getop(ls, var, elementbytes)
+        setdiffv!(reduceddeps, deps, loopdependencies(parent))
+        if length(reduceddeps) == 0
+            push!(parents, parent)
+            op = Operation(length(operations(ls)), var, elementbytes, instruction(ls,instr), compute, deps, reduceddeps, parents)
+            pushop!(ls, op, var)
+        else
+            add_reduction_update_parent!(parents, deps, reduceddeps, ls, parent, instr, reduction, elementbytes)
+        end
     else
         op = Operation(length(operations(ls)), var, elementbytes, instruction(ls,instr), compute, deps, reduceddeps, parents)
         pushop!(ls, op, var)

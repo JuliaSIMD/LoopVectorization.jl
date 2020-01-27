@@ -19,13 +19,13 @@ function lower_zero!(
 end
 function lower_constant!(
     q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol, U::Int,
-    suffix::Union{Nothing,Int}
+    suffix::Union{Nothing,Int}, typeT::Symbol
 )
     instruction = op.instruction
     mvar = variable_name(op, suffix)
     constsym = instruction.instr
     if vectorized ∈ loopdependencies(op) || vectorized ∈ reducedchildren(op) || vectorized ∈ reduceddependencies(op)
-        call = Expr(:call, lv(:vbroadcast), W, constsym)
+        call = Expr(:call, lv(:vbroadcast), W, Expr(:call, lv(:maybeconvert), typeT, constsym))
         if unrolled ∈ loopdependencies(op) || unrolled ∈ reducedchildren(op) || unrolled ∈ reduceddependencies(op)
             for u ∈ 0:U-1
                 push!(q.args, Expr(:(=), Symbol(mvar, u), call))
@@ -45,6 +45,7 @@ function lower_constant!(
     nothing
 end
 
+
 function setop!(ls, op, val)
     if instruction(op) === LOOPCONSTANT# && mangledvar(op) !== val
         pushpreamble!(ls, Expr(:(=), mangledvar(op), val))
@@ -60,11 +61,14 @@ function setconstantop!(ls, op, val)
     nothing
 end
 
+@inline maybeconvert(::Type{T}, s::Number) where {T} = convert(T, s)
+@inline maybeconvert(::Type{T}, s::T) where {T <: Number} = s
+@inline maybeconvert(::Type, s) = s
 
 function lower_licm_constants!(ls::LoopSet)
     ops = operations(ls)
     for (id, sym) ∈ ls.preamble_symsym
-        setconstantop!(ls, ops[id], sym)
+        setconstantop!(ls, ops[id], Expr(:call, lv(:maybeconvert), ls.T, sym))
     end
     for (id,intval) ∈ ls.preamble_symint
         setop!(ls, ops[id], Expr(:call, lv(:sizeequivalentint), ls.T, intval))

@@ -163,16 +163,21 @@ function add_broadcast!(
     # this is the var name in the loop
     parents = Operation[]
     deps = Symbol[]
-    reduceddeps = Symbol[]
+    # reduceddeps = Symbol[]
     for (i,arg) ∈ enumerate(args)
         argname = gensym(:arg)
         pushpreamble!(ls, Expr(:(=), argname, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,@__FILE__), Expr(:ref, bcargs, i))))
         # dynamic dispatch
         parent = add_broadcast!(ls, gensym(:temp), argname, loopsyms, arg, elementbytes)::Operation
-        pushparent!(parents, deps, reduceddeps, parent)
+        push!(parents, parent)
+        mergesetdiffv!(deps, loopdependencies(parent), reduceddependencies(parent))
+        # if !(isload(parent) || isconstant(parent))# && parent.instruction.instr ∉ (:reduced_add, :reduced_prod, :reduce_to_add, :reduce_to_prod)
+            # mergesetv!(reduceddeps, reduceddependencies(parent))
+        # end
+        # pushparent!(parents, deps, reduceddeps, parent)
     end
     op = Operation(
-        length(operations(ls)), destname, elementbytes, instr, compute, deps, reduceddeps, parents
+        length(operations(ls)), destname, elementbytes, instr, compute, deps, NOPARENTS, parents
     )
     pushop!(ls, op, destname)
 end

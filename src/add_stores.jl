@@ -40,8 +40,8 @@ function add_store!(
             if ref == opp.ref.ref
                 id = opp.identifier
                 break
-            else
-                @show ref opp.ref.ref
+            # else
+                # @show ref opp.ref.ref
             end
         end
     end
@@ -68,6 +68,14 @@ end
 function add_store_ref!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8)
     array, raw_indices = ref_from_ref(ex)
     add_store!(ls, var, array, raw_indices, elementbytes)
+end
+function add_store_ref!(ls::LoopSet, var, ex::Expr, elementbytes::Int = 8)
+    # array, raw_indices = ref_from_ref(ex)
+    # mpref = array_reference_meta!(ls, array, raw_indices, elementbytes)
+    # c = add_constant!(ls, var, loopdependencies(mpref), gensym(:storeconst), elementbytes)
+    # add_store!(ls, name(c), mpref, elementbytes)
+    c = add_constant!(ls, var, elementbytes)
+    add_store_ref!(ls, name(c), ex, elementbytes)
 end
 function add_store_setindex!(ls::LoopSet, ex::Expr, elementbytes::Int = 8)
     array, raw_indices = ref_from_setindex(ex)

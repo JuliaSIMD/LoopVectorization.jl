@@ -109,7 +109,9 @@ end
                 C[m,n] += ΔCₘₙ * factor
                end)
         lsAmuladd = LoopVectorization.LoopSet(Amuladdq);
-        lsAmuladd.operations
+        # lsAmuladd.operations
+        # LoopVectorization.loopdependencies.(lsAmuladd.operations)
+        # LoopVectorization.reduceddependencies.(lsAmuladd.operations)
         @test LoopVectorization.choose_order(lsAmuladd) == (Symbol[:n,:m,:k], :m, Unum, Tnum)
 
         # @macroexpand @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
@@ -129,6 +131,13 @@ end
                 C[m,n] = Cₘₙ
             end
         end
+        fq = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+                Cₘₙ = zero(eltype(C))
+                for k ∈ 1:size(A,2)
+                    Cₘₙ += A[m,k] * B[k,n]
+                end
+                C[m,n] = Cₘₙ
+            end)
 # exit()
 #         using LoopVectorization, Test
 #         T = Float64
@@ -200,6 +209,17 @@ end
                 C[m,n] = Cₘₙ
             end
         end
+        Atq = :(for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
+                Cₘₙ = zero(eltype(C))
+                for k ∈ 1:size(A,1)
+                    Cₘₙ += A[k,m] * B[k,n]
+                end
+                C[m,n] += Cₘₙ * factor
+                end)
+        atls = LoopVectorization.LoopSet(Atq)
+        # LoopVectorization.operations(atls)
+        # LoopVectorization.loopdependencies.(operations(atls))
+        # LoopVectorization.reduceddependencies.(operations(atls))
         function AtmulB_avx1!(C, A, B)
             @_avx for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
                 Cₘₙ = zero(eltype(C))
@@ -791,7 +811,7 @@ end
                 s += tmp
                 end)
         lsfeq = LoopVectorization.LoopSet(feq);
-        lsfeq.operations
+        # lsfeq.operations
         
         
         for T ∈ (Float32, Float64)
@@ -1400,6 +1420,26 @@ end
             x[i] = yᵢ
         end
     end
+    function make2point3avx!(x)
+        @avx for i ∈ eachindex(x)
+            x[i] = 2.3
+        end
+    end
+    function make2point3_avx!(x)
+        @_avx for i ∈ eachindex(x)
+            x[i] = 2.3
+        end
+    end
+    function myfillavx!(x, a)
+        @avx for i ∈ eachindex(x)
+            x[i] = a
+        end
+    end
+    function myfill_avx!(x, a)
+        @_avx for i ∈ eachindex(x)
+            x[i] = a
+        end
+    end
     
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
@@ -1515,6 +1555,32 @@ end
         fill!(q2, NaN); copyavx2!(q2, x)
         @test x == q2
         fill!(q2, NaN); copy_avx2!(q2, x)
+        @test x == q2
+        fill!(q2, NaN); @avx q2 .= x;
+        @test x == q2
+
+        myfillavx!(x, -9829732.153);
+        fill!(q2, -9829732.153);
+        @test x == q2
+        myfill_avx!(x, 9732.153);
+        fill!(q2, 9732.153);
+        @test x == q2
+        myfill_avx!(x, 5);
+        fill!(q2, 5)
+        @test x == q2
+        myfillavx!(x, 5345);
+        fill!(q2, 5345)
+        @test x == q2
+        make2point3avx!(x)
+        fill!(q2, 2.3)
+        @test x == q2
+        fill!(x, NaN); make2point3_avx!(x)
+        @test x == q2        
+        @avx x .= 34;
+        fill!(q2, 34)
+        @test x == q2
+        @avx x .= 34.242;
+        fill!(q2, 34.242)
         @test x == q2
     end
 end

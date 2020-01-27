@@ -14,7 +14,7 @@ function subset_vptr!(ls::LoopSet, vptr::Symbol, indnum::Int, ind::Union{Symbol,
     subsetvptr
 end
 const DISCONTIGUOUS = Symbol("##DISCONTIGUOUSSUBARRAY##")
-function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementbytes::Int = 8)
+function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementbytes::Int)
     vptrarray = vptr(array)
     add_vptr!(ls, array, vptrarray) # now, subset
     
@@ -30,7 +30,7 @@ function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementby
             vptrarray = subset_vptr!(ls, vptrarray, ninds, ind)
             length(indices) == 0 && push!(indices, DISCONTIGUOUS)
         elseif ind isa Expr
-            parent = add_operation!(ls, gensym(:indexpr), ind, elementbytes)
+            parent = add_operation!(ls, gensym(:indexpr), ind, elementbytes, length(ls.loopsymbols)) #FIXME: position wont be length(ls.loopsymbols) in general
             pushparent!(parents, loopdependencies, reduceddeps, parent)
             # var = get(ls.opdict, ind, nothing)
             push!(indices, name(parent)); ninds += 1

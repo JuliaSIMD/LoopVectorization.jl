@@ -148,6 +148,7 @@ function unroll_no_reductions(ls, order, vectorized, Wshift, size_T)
     # @show compute_rt, load_rt
     # roundpow2(min(4, round(Int, (compute_rt + load_rt + 1) / compute_rt)))
     rt = max(compute_rt, load_rt)
+    rt == 0.0 && return 4
     max(1, roundpow2( min( 4, round(Int, 16 / rt) ) ))
 end
 function determine_unroll_factor(

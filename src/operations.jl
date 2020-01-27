@@ -235,7 +235,8 @@ Base.:(==)(x::ArrayReferenceMetaPosition, y::ArrayReferenceMetaPosition) = x.mre
 const NOTAREFERENCE = ArrayReferenceMeta(ArrayReference(Symbol(""), Union{Symbol,Int}[]),Bool[],Symbol(""))
 const NOTAREFERENCEMP = ArrayReferenceMetaPosition(NOTAREFERENCE, NOPARENTS, Symbol[], Symbol[])
 name(mpref::ArrayReferenceMetaPosition) = name(mpref.mref.ref)
-
+loopdependencies(ref::ArrayReferenceMetaPosition) = ref.loopdependencies
+reduceddependencies(ref::ArrayReferenceMetaPosition) = ref.reduceddeps
 getindices(ref::ArrayReference) = ref.indices
 getindices(mref::ArrayReferenceMeta) = mref.ref.indices
 getindices(mpref::ArrayReferenceMetaPosition) = mpref.ref.ref.indices

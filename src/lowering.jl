@@ -16,7 +16,7 @@ function lower!(
         if identifier(op) ∈ ls.preamble_zeros
             lower_zero!(q, op, vectorized, W, unrolled, U, suffix, ls.T)
         else
-            lower_constant!(q, op, vectorized, W, unrolled, U, suffix)
+            lower_constant!(q, op, vectorized, W, unrolled, U, suffix, ls.T)
         end
     elseif isload(op)
         lower_load!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask)

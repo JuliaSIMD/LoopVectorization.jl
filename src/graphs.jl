@@ -303,10 +303,10 @@ function pushop!(ls::LoopSet, op::Operation, var::Symbol = name(op))
     ls.opdict[var] = op
     op
 end
-function add_block!(ls::LoopSet, ex::Expr, elementbytes::Int = 8)
+function add_block!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
     for x ∈ ex.args
         x isa Expr || continue # be that general?
-        push!(ls, x, elementbytes)
+        push!(ls, x, elementbytes, position)
     end
 end
 function maybestatic!(expr::Expr)
@@ -394,13 +394,14 @@ function register_loop!(ls::LoopSet, looprange::Expr)
         register_single_loop!(ls, looprange)
     end
 end
-function add_loop!(ls::LoopSet, q::Expr, elementbytes::Int = 8)
+function add_loop!(ls::LoopSet, q::Expr, elementbytes::Int)
     register_loop!(ls, q.args[1])
     body = q.args[2]
+    position = length(ls.loopsymbols)
     if body.head === :block
-        add_block!(ls, body, elementbytes)
+        add_block!(ls, body, elementbytes, position)
     else
-        push!(ls, q, elementbytes)
+        push!(ls, q, elementbytes, position)
     end
 end
 function add_loop!(ls::LoopSet, loop::Loop, itersym::Symbol = loop.itersymbol)
@@ -412,12 +413,8 @@ end
 function instruction(x)
     x isa Symbol ? x : last(x.args).value
 end
-
-# if it is a literal, that literal has to have been assigned to var in the preamble.
-
-# add operation assigns X to var
 function add_operation!(
-    ls::LoopSet, LHS::Symbol, RHS::Expr, elementbytes::Int = 8
+    ls::LoopSet, LHS::Symbol, RHS::Expr, elementbytes::Int, position::Int
 )
     if RHS.head === :ref
         add_load_ref!(ls, LHS, RHS, elementbytes)
@@ -427,11 +424,11 @@ function add_operation!(
             add_load_getindex!(ls, LHS, RHS, elementbytes)
         elseif f === :zero || f === :one
             c = gensym(f)
-            op = add_constant!(ls, c, copy(ls.loopsymbols), LHS, elementbytes, :numericconstant)
+            op = add_constant!(ls, c, ls.loopsymbols[1:position], LHS, elementbytes, :numericconstant)
             push!(f === :zero ? ls.preamble_zeros : ls.preamble_ones, identifier(op))
             op
         else
-            add_compute!(ls, LHS, RHS, elementbytes)
+            add_compute!(ls, LHS, RHS, elementbytes, position)
         end
     elseif RHS.head === :if
         add_if!(ls, LHS, RHS, elementbytes)
@@ -439,9 +436,9 @@ function add_operation!(
         throw("Expression not recognized:\n$x")
     end
 end
-add_operation!(ls::LoopSet, RHS::Expr, elementbytes::Int = 8) = add_operation!(ls, gensym(:LHS), RHS, elementbytes)
+add_operation!(ls::LoopSet, RHS::Expr, elementbytes::Int, position::Int) = add_operation!(ls, gensym(:LHS), RHS, elementbytes, position)
 function add_operation!(
-    ls::LoopSet, LHS_sym::Symbol, RHS::Expr, LHS_ref::ArrayReferenceMetaPosition, elementbytes::Int = 8
+    ls::LoopSet, LHS_sym::Symbol, RHS::Expr, LHS_ref::ArrayReferenceMetaPosition, elementbytes::Int, position::Int
 )
     if RHS.head === :ref# || (RHS.head === :call && first(RHS.args) === :getindex)
         array, rawindices = ref_from_expr(RHS)
@@ -454,20 +451,20 @@ function add_operation!(
             add_load!(ls, LHS_sym, LHS_ref, elementbytes)
         elseif f === :zero || f === :one
             c = gensym(f)
-            op = add_constant!(ls, c, copy(ls.loopsymbols), LHS_sym, elementbytes, :numericconstant)
+            op = add_constant!(ls, c, ls.loopsymbols[1:position], LHS_sym, elementbytes, :numericconstant)
             push!(f === :zero ? ls.preamble_zeros : ls.preamble_ones, identifier(op))
             op
         else
-            add_compute!(ls, LHS_sym, RHS, elementbytes, LHS_ref)
+            add_compute!(ls, LHS_sym, RHS, elementbytes, position, LHS_ref)
         end
     elseif RHS.head === :if
-        add_if!(ls, LHS_sym, RHS, elementbytes, LHS_ref)
+        add_if!(ls, LHS_sym, RHS, elementbytes, position, LHS_ref)
     else
         throw("Expression not recognized:\n$x")
     end
 end
 
-function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int = 8)
+function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
     if ex.head === :call
         finex = first(ex.args)::Symbol
         if finex === :setindex!
@@ -480,9 +477,9 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int = 8)
         RHS = ex.args[2]
         if LHS isa Symbol
             if RHS isa Expr
-                add_operation!(ls, LHS, RHS, elementbytes)
+                add_operation!(ls, LHS, RHS, elementbytes, position)
             else
-                add_constant!(ls, RHS, copy(ls.loopsymbols), LHS, elementbytes)
+                add_constant!(ls, RHS, ls.loopsymbols[1:position], LHS, elementbytes)
             end
         elseif LHS isa Expr
             @assert LHS.head === :ref
@@ -496,108 +493,26 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int = 8)
                 ref = mpref.mref.ref
                 id = findfirst(r -> r == ref, ls.refs_aliasing_syms)
                 lrhs = id === nothing ? gensym(:RHS) : ls.syms_aliasing_refs[id]
-                add_operation!(ls, lrhs, RHS, mpref, elementbytes)
-                add_store!( ls, lrhs, mpref, elementbytes )
+                add_operation!(ls, lrhs, RHS, mpref, elementbytes, position)
+                add_store!( ls, lrhs, mpref, elementbytes)
+            else
+                add_store_ref!(ls, RHS, LHS, elementbytes)
             end
         else
             throw("LHS not understood:\n$LHS")
         end
     elseif ex.head === :block
-        add_block!(ls, ex)
+        add_block!(ls, ex, elementbytes, position)
     elseif ex.head === :for
-        add_loop!(ls, ex)
+        add_loop!(ls, ex, elementbytes)
     elseif ex.head === :&&
-        add_andblock!(ls, ex, elementbytes)
+        add_andblock!(ls, ex, elementbytes, position)
     elseif ex.head === :||
-        add_orblock!(ls, ex, elementbytes)
+        add_orblock!(ls, ex, elementbytes, position)
     else
         throw("Don't know how to handle expression:\n$ex")
     end
 end
-
-function addoptoorder!(
-    lo::LoopOrder, included_vars::Vector{Bool}, place_after_loop::Vector{Bool}, op::Operation, loopsym::Symbol, _n::Int, unrolled::Symbol, tiled::Symbol, loopistiled::Bool
-)
-    id = identifier(op)
-    included_vars[id] && return nothing
-    loopsym ∈ loopdependencies(op) || return nothing
-    included_vars[id] = true
-    for opp ∈ parents(op) # ensure parents are added first
-        addoptoorder!(lo, included_vars, place_after_loop, opp, loopsym, _n, unrolled, tiled, loopistiled)
-    end
-    isunrolled = (unrolled ∈ loopdependencies(op)) + 1
-    istiled = (loopistiled ? (tiled ∈ loopdependencies(op)) : false) + 1
-    # optype = Int(op.node_type) + 1
-    after_loop = place_after_loop[id] + 1
-    push!(lo[isunrolled,istiled,after_loop,_n], op)
-    set_upstream_family!(place_after_loop, op, false) # parents that have already been included are not moved, so no need to check included_vars to filter
-    nothing
-end
-
-function fillorder!(ls::LoopSet, order::Vector{Symbol}, loopistiled::Bool)
-    lo = ls.loop_order
-    ro = lo.loopnames # reverse order; will have same order as lo
-    nloops = length(order)
-    if loopistiled
-        tiled    = order[1]
-        unrolled = order[2]
-    else
-        tiled = Symbol("##UNDEFINED##")
-        unrolled = first(order)
-    end
-    ops = operations(ls)
-    nops = length(ops)
-    included_vars = resize!(ls.included_vars, nops)
-    fill!(included_vars, false)
-    place_after_loop = resize!(ls.place_after_loop, nops)
-    fill!(ls.place_after_loop, true)
-    # to go inside out, we just have to include all those not-yet included depending on the current sym
-    empty!(lo)
-    for _n ∈ 1:nloops
-        n = 1 + nloops - _n
-        ro[_n] = loopsym = order[n]
-        #loopsym = order[n]
-        for op ∈ ops
-            addoptoorder!( lo, included_vars, place_after_loop, op, loopsym, _n, unrolled, tiled, loopistiled )
-        end
-    end
-end
-
-# function define_remaining_ops!(
-#     ls::LoopSet, vectorized::Symbol, W, unrolled, tiled, U::Int
-# )
-#     ops = operations(ls)
-#     for (id,incl) ∈ enumerate(ls.included_vars)
-#         if !incl
-#             op = ops[id]
-#             length(reduceddependencies(op)) == 0 && lower!( ls.preamble, op, vectorized, W, unrolled, tiled, U, nothing, nothing )
-#         end
-#     end
-# end
-
-# function depends_on_assigned(op::Operation, assigned::Vector{Bool})
-#     for p ∈ parents(op)
-#         p === op && continue # don't fall into recursive loop when we have updates, eg a = a + b
-#         assigned[identifier(op)] && return true
-#         depends_on_assigned(p, assigned) && return true
-#     end
-#     false
-# end
-# ind gets increased across tiles / unroll, so we need steps.
-# function replace_ind_in_offset!(offset::Vector, op::Operation, ind::Int, t)
-#     t == 0 && return nothing
-#     var = op.variable
-#     siter = op.symbolic_metadata[ind]
-#     striden = op.numerical_metadata[ind]
-#     strides = Symbol(:stride_, var)
-#     offset[ind] = if tstriden == -1
-#         Expr(:call, :*, Expr(:call, :+, strides, t), siter)
-#     else
-#         Expr(:call, :*, striden + t, siter)
-#     end
-#     nothing
-# end
-
 
 
 

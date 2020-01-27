@@ -107,13 +107,13 @@ function varassignname(var::Symbol, u::Int, isunrolled::Bool)
     isunrolled ? Symbol(var, u) : var
 end
 # name_memoffset only gets called when vectorized
-function name_memoffset(var::Symbol, op::Operation, td::UnrollArgs, W::Symbol, vecnotunrolled::Bool)
+function name_memoffset(var::Symbol, op::Operation, td::UnrollArgs, W::Symbol, vecnotunrolled::Bool, parentisunrolled::Bool = true)
     @unpack u, unrolled = td
     if u < 0 # sentinel value meaning not unrolled
         name = var
         mo = mem_offset(op, td)
     else
-        name = Symbol(var, u)
+        name = parentisunrolled ? Symbol(var, u) : var
         mo = vecnotunrolled ? mem_offset_u(op, td) : mem_offset_u(op, td, W)
     end
     name, mo
