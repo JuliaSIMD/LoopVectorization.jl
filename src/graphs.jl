@@ -142,6 +142,7 @@ Base.@propagate_inbounds Base.getindex(lo::LoopOrder, i...) = lo.oporder[LinearI
 
 # Must make it easy to iterate
 # outer_reductions is a vector of indices (within operation vectors) of the reduction operation, eg the vmuladd op in a dot product
+# O(N) search is faster at small sizes
 struct LoopSet
     loopsymbols::Vector{Symbol}
     loops::Vector{Loop}
@@ -149,7 +150,6 @@ struct LoopSet
     operations::Vector{Operation} # Split them to make it easier to iterate over just a subset
     outer_reductions::Vector{Int} # IDs of reduction operations that need to be reduced at end.
     loop_order::LoopOrder
-    # stridesets::Dict{ShortVector{Symbol},ShortVector{Symbol}}
     preamble::Expr
     preamble_symsym::Vector{Tuple{Int,Symbol}}
     preamble_symint::Vector{Tuple{Int,Int}}
@@ -157,7 +157,7 @@ struct LoopSet
     preamble_zeros::Vector{Int}
     preamble_ones::Vector{Int}
     includedarrays::Vector{Symbol}
-    syms_aliasing_refs::Vector{Symbol} # O(N) search is faster at small sizes
+    syms_aliasing_refs::Vector{Symbol}
     refs_aliasing_syms::Vector{ArrayReferenceMeta}
     cost_vec::Matrix{Float64}
     reg_pres::Matrix{Int}

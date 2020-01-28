@@ -67,8 +67,7 @@ end
 function evaluate_cost_unroll(
     ls::LoopSet, order::Vector{Symbol}, max_cost = typemax(Float64), vectorized::Symbol = first(order)
 )
-    # included_vars = Set{UInt}()
-    included_vars = fill(false, length(operations(ls)))
+    included_vars = fill!(resize!(ls.included_vars, length(operations(ls))), false)
     nested_loop_syms = Symbol[]#Set{Symbol}()
     total_cost = 0.0
     iter = 1.0
@@ -368,9 +367,9 @@ function evaluate_cost_tile(
     unrolled = order[2]
     ops = operations(ls)
     nops = length(ops)
-    included_vars = fill(false, nops)
+    included_vars = fill!(resize!(ls.included_vars, nops), false)
     unrolledtiled = fill(false, 2, nops)
-    descendentsininnerloop = fill(false, nops)
+    descendentsininnerloop = fill!(resize!(ls.place_after_loop, nops), false)
     innerloop = last(order)
     iters = fill(-99.9, nops)
     nested_loop_syms = Symbol[]# Set{Symbol}()

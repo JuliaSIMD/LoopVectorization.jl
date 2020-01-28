@@ -61,10 +61,8 @@ function fillorder!(ls::LoopSet, order::Vector{Symbol}, loopistiled::Bool)
     end
     ops = operations(ls)
     nops = length(ops)
-    included_vars = resize!(ls.included_vars, nops)
-    fill!(included_vars, false)
-    place_after_loop = resize!(ls.place_after_loop, nops)
-    fill!(ls.place_after_loop, true)
+    included_vars = fill!(resize!(ls.included_vars, nops), false)        
+    place_after_loop = fill!(resize!(ls.place_after_loop, nops), true)
     # to go inside out, we just have to include all those not-yet included depending on the current sym
     empty!(lo)
     for _n ∈ 1:nloops
