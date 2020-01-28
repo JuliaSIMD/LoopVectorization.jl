@@ -54,6 +54,7 @@ end
 struct LoopValue end
 @inline VectorizationBase.stridedpointer(::LoopValue) = LoopValue()
 @inline SIMDPirates.vload(::LoopValue, i::Tuple{_MM{W}}) where {W} = SVec(SIMDPirates.vrangeincr(Val{W}(), @inbounds(i[1].i), Val{1}()))
+@inline SIMDPirates.vload(::LoopValue, i::Tuple{_MM{W}}, ::Unsigned) where {W} = SVec(SIMDPirates.vrangeincr(Val{W}(), @inbounds(i[1].i), Val{1}()))
 @inline VectorizationBase.load(::LoopValue, i::Integer) = i + one(i)
 @inline VectorizationBase.load(::LoopValue, i::Tuple{I}) where {I<:Integer} = @inbounds(i[1]) + one(I)
 @inline Base.eltype(::LoopValue) = Int8
