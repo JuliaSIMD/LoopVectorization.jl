@@ -84,6 +84,12 @@ end
                 end
             end
         end
+        @macroexpand @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+                C[m,n] = z
+                for k ∈ 1:size(A,2)
+                    C[m,n] += A[m,k] * B[k,n]
+                end
+            end
         function AmulBavx3!(C, A, B)
             @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
                 C[m,n] = zero(eltype(C))
@@ -1487,7 +1493,7 @@ end
         clenshaw!(y1,x,c)
         clenshaw_avx!(y2,x,c)
         @test y1 ≈ y2
-        clenshawavx!(y2,x,c)
+        fill!(y2, NaN); clenshawavx!(y2,x,c)
         @test y1 ≈ y2
 
 

@@ -1,4 +1,4 @@
-function add_constant!(ls::LoopSet, var::Symbol, elementbytes::Int = 8)
+function add_constant!(ls::LoopSet, var::Symbol, elementbytes::Int)
     op = Operation(length(operations(ls)), var, elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS)
     pushpreamble!(ls, op, var)
     pushop!(ls, op, var)
@@ -20,20 +20,20 @@ end
 # value is what will get assigned within the loop.
 # assignedsym will be assigned to value within the preamble
 function add_constant!(
-    ls::LoopSet, value::Symbol, deps::Vector{Symbol}, assignedsym::Symbol = gensym(:constant), elementbytes::Int = 8, f::Symbol = Symbol("")
+    ls::LoopSet, value::Symbol, deps::Vector{Symbol}, assignedsym::Symbol, elementbytes::Int, f::Symbol = Symbol("")
 )
     op = Operation(length(operations(ls)), assignedsym, elementbytes, Instruction(f, value), constant, deps, NODEPENDENCY, NOPARENTS)
     pushop!(ls, op, assignedsym)
 end
 function add_constant!(
-    ls::LoopSet, value, deps::Vector{Symbol}, assignedsym::Symbol = gensym(:constant), elementbytes::Int = 8, f::Symbol = Symbol("")
+    ls::LoopSet, value, deps::Vector{Symbol}, assignedsym::Symbol, elementbytes::Int, f::Symbol = Symbol("")
 )
     intermediary = gensym(:intermediate) # hack, passing meta info here
     pushpreamble!(ls, Expr(:(=), intermediary, value))
     add_constant!(ls, intermediary, deps, assignedsym, f, elementbytes)
 end
 function add_constant!(
-    ls::LoopSet, value::Number, deps::Vector{Symbol}, assignedsym::Symbol = gensym(:constant), elementbytes::Int = 8
+    ls::LoopSet, value::Number, deps::Vector{Symbol}, assignedsym::Symbol, elementbytes::Int
 )
     op = add_constant!(ls, gensym(Symbol(value)), deps, assignedsym, elementbytes, :numericconstant)
     if iszero(value)

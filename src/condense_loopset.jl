@@ -167,6 +167,16 @@ function add_reassigned_syms!(q::Expr, ls::LoopSet)
         end
     end
 end
+function add_external_functions!(q::Expr, ls::LoopSet)
+    for op ∈ operations(ls)
+        if iscompute(op)
+            instr = instruction(op)
+            if instr.mod !== :LoopVectorization
+                push!(q.args, Expr(:(.), instr.mod, QuoteNode(instr.instr)))
+            end
+        end
+    end
+end
 
 # Try to condense in type stable manner
 function generate_call(ls::LoopSet, IUT)
@@ -189,6 +199,7 @@ function generate_call(ls::LoopSet, IUT)
     foreach(is -> push!(q.args, last(is)), ls.preamble_symsym)
     append!(q.args, arraysymbolinds)
     add_reassigned_syms!(q, ls)
+    add_external_functions!(q, ls)
     q
 end
 

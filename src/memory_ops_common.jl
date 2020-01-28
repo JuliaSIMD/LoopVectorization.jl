@@ -60,7 +60,7 @@ function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementby
     mref = ArrayReferenceMeta(ArrayReference( array, indices ), loopedindex, vptrarray)
     ArrayReferenceMetaPosition(mref, parents, loopdependencies, reduceddeps)
 end
-function tryrefconvert(ls::LoopSet, ex::Expr, elementbytes::Int = 8)::Tuple{Bool,ArrayReferenceMetaPosition}
+function tryrefconvert(ls::LoopSet, ex::Expr, elementbytes::Int)::Tuple{Bool,ArrayReferenceMetaPosition}
     ya, yinds = if ex.head === :ref
         ref_from_ref(ex)
     elseif ex.head === :call

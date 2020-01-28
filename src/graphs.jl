@@ -257,12 +257,12 @@ Base.length(ls::LoopSet, s::Symbol) = length(getloop(ls, s))
 isstaticloop(ls::LoopSet, s::Symbol) = isstaticloop(getloop(ls,s))
 looprangehint(ls::LoopSet, s::Symbol) = length(getloop(ls, s))
 looprangesym(ls::LoopSet, s::Symbol) = getloop(ls, s).rangesym
-function getop(ls::LoopSet, var::Symbol, elementbytes::Int = 8)
+function getop(ls::LoopSet, var::Symbol, elementbytes::Int)
     get!(ls.opdict, var) do
         add_constant!(ls, var, elementbytes)
     end
 end
-function getop(ls::LoopSet, var::Symbol, deps, elementbytes::Int = 8)
+function getop(ls::LoopSet, var::Symbol, deps, elementbytes::Int)
     get!(ls.opdict, var) do
         add_constant!(ls, var, deps, gensym(:constant), elementbytes)
     end

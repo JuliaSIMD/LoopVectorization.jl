@@ -113,7 +113,7 @@ end
 function num_parameters(AM)
     num_param::Int = AM[1]
     num_param += length(AM[2].parameters)
-    num_param + length(AM[4].parameters)
+    num_param + length(AM[3].parameters)
 end
 function process_metadata!(ls::LoopSet, AM, num_arrays::Int)::Vector{Symbol}
     num_asi = (AM[1])::Int
@@ -122,7 +122,7 @@ function process_metadata!(ls::LoopSet, AM, num_arrays::Int)::Vector{Symbol}
     for (i,si) ∈ enumerate(AM[3].parameters)
         sii = si::Int
         s = gensym(:symlicm)
-        push!(ls.preamble_symsym, (si,s))
+        push!(ls.preamble_symsym, (si, s))
         pushpreamble!(ls, Expr(:(=), s, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,@__FILE__), Expr(:ref, :vargs, num_arrays + i))))
     end
     append!(ls.preamble_symint, AM[4].parameters)
@@ -179,6 +179,7 @@ function add_parents_to_ops!(ls::LoopSet, ops::Vector{OperationStruct}, constoff
             end
         end
     end
+    constoffset
 end
 function add_ops!(
     ls::LoopSet, instr::Vector{Instruction}, ops::Vector{OperationStruct}, mrefs::Vector{ArrayReferenceMeta}, opsymbols::Vector{Symbol}, constoffset::Int, elementbytes::Int
@@ -200,6 +201,18 @@ function add_array_symbols!(ls::LoopSet, arraysymbolinds::Vector{Symbol}, offset
         pushpreamble!(ls, Expr(:(=), as, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:ref, :vargs, i + offset))))
     end
 end
+function extract_external_functions!(ls::LoopSet, offset::Int)
+    for op ∈ operations(ls)
+        if iscompute(op)
+            instr = instruction(op)
+            if instr.mod != :LoopVectorization
+                offset += 1
+                pushpreamble!(ls, Expr(:(=), instr.instr, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:ref, :vargs, offset))))
+            end
+        end
+    end
+    offset
+end
 function sizeofeltypes(v, num_arrays)::Int
     T = typeeltype(v[1])
     for i ∈ 2:num_arrays
@@ -219,8 +232,11 @@ function avx_body(IUT, instr, ops, arf, AM, LB, vargs)
     opsymbols = [gensym(:op) for _ ∈ eachindex(ops)]
     mrefs = create_mrefs!(ls, arf, arraysymbolinds, opsymbols, vargs)
     pushpreamble!(ls, Expr(:(=), ls.T, Expr(:call, :promote_type, [Expr(:call, :eltype, vptr(mref)) for mref ∈ mrefs]...)))
-    add_ops!(ls, instr, ops, mrefs, opsymbols, num_arrays + num_parameters(AM), elementbytes)
+    num_params = num_arrays + num_parameters(AM)
+    num_params = add_ops!(ls, instr, ops, mrefs, opsymbols, num_params, elementbytes)
     add_array_symbols!(ls, arraysymbolinds, num_arrays + length(ls.preamble_symsym))
+    num_params 
+    num_params = extract_external_functions!(ls, num_params)
     inline, U, T = IUT
     q = iszero(U) ? lower(ls, inline) : lower(ls, U, T, inline)
     length(ls.outer_reductions) == 0 ? push!(q.args, nothing) : push!(q.args, loopset_return_value(ls, Val(true)))

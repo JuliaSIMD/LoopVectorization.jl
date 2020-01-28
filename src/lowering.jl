@@ -209,7 +209,7 @@ function gc_preserve(ls::LoopSet, q::Expr)
     for array ∈ ls.includedarrays
         push!(gcp.args, array)
     end
-    push!(q.args, nothing)
+    q.head === :block && push!(q.args, nothing)
     push!(gcp.args, q)
     Expr(:block, gcp)
 end

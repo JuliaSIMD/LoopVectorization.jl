@@ -34,7 +34,7 @@ function add_andblock!(ls::LoopSet, condop::Operation, LHS, RHS::Expr, elementby
     add_andblock!(ls, condop, LHS, rhsop, elementbytes, position)
 end
 function add_andblock!(ls::LoopSet, condop::Operation, LHS, RHS, elementbytes::Int, position::Int)
-    rhsop = getop(ls, RHS)
+    rhsop = getop(ls, RHS, elementbytes)
     add_andblock!(ls, condop, LHS, rhsop, elementbytes, position)
 end
 function add_andblock!(ls::LoopSet, condexpr::Expr, condeval::Expr, elementbytes::Int, position::Int)

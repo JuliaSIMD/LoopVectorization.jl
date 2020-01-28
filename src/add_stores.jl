@@ -21,7 +21,7 @@ function add_copystore!(
 end
 
 function add_store!(
-    ls::LoopSet, var::Symbol, mpref::ArrayReferenceMetaPosition, elementbytes::Int = 8, parent = getop(ls, var, mpref.loopdependencies, elementbytes)
+    ls::LoopSet, var::Symbol, mpref::ArrayReferenceMetaPosition, elementbytes::Int, parent = getop(ls, var, mpref.loopdependencies, elementbytes)
 )
     isload(parent) && return add_copystore!(ls, parent, mpref, elementbytes)
     parents = mpref.parents
@@ -51,12 +51,12 @@ function add_store!(
 end
 
 function add_store!(
-    ls::LoopSet, var::Symbol, array::Symbol, rawindices, elementbytes::Int = 8
+    ls::LoopSet, var::Symbol, array::Symbol, rawindices, elementbytes::Int
 )
     mpref = array_reference_meta!(ls, array, rawindices, elementbytes)
     add_store!(ls, var, mpref, elementbytes)
 end
-function add_simple_store!(ls::LoopSet, var::Symbol, ref::ArrayReference, elementbytes::Int = 8)
+function add_simple_store!(ls::LoopSet, var::Symbol, ref::ArrayReference, elementbytes::Int)
     mref = ArrayReferenceMeta(
         ref, fill(true, length(getindices(ref)))
     )
@@ -65,11 +65,11 @@ function add_simple_store!(ls::LoopSet, var::Symbol, ref::ArrayReference, elemen
     op = Operation( ls, name(mref), elementbytes, :setindex!, memstore, ldref, NODEPENDENCY, parents, mref )
     add_unique_store!(ls, op)
 end
-function add_store_ref!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8)
+function add_store_ref!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int)
     array, raw_indices = ref_from_ref(ex)
     add_store!(ls, var, array, raw_indices, elementbytes)
 end
-function add_store_ref!(ls::LoopSet, var, ex::Expr, elementbytes::Int = 8)
+function add_store_ref!(ls::LoopSet, var, ex::Expr, elementbytes::Int)
     # array, raw_indices = ref_from_ref(ex)
     # mpref = array_reference_meta!(ls, array, raw_indices, elementbytes)
     # c = add_constant!(ls, var, loopdependencies(mpref), gensym(:storeconst), elementbytes)
@@ -77,7 +77,7 @@ function add_store_ref!(ls::LoopSet, var, ex::Expr, elementbytes::Int = 8)
     c = add_constant!(ls, var, elementbytes)
     add_store_ref!(ls, name(c), ex, elementbytes)
 end
-function add_store_setindex!(ls::LoopSet, ex::Expr, elementbytes::Int = 8)
+function add_store_setindex!(ls::LoopSet, ex::Expr, elementbytes::Int)
     array, raw_indices = ref_from_setindex(ex)
     add_store!(ls, (ex.args[2])::Symbol, array, rawindices, elementbytes)
 end

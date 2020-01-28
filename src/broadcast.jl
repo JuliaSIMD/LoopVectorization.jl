@@ -41,7 +41,7 @@ end
 # TODO: Need to make this handle A or B being (1 or 2)-D broadcast objects.
 function add_broadcast!(
     ls::LoopSet, mC::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
-    ::Type{Product{A,B}}, elementbytes::Int = 8
+    ::Type{Product{A,B}}, elementbytes::Int
 ) where {A, B}
     K = gensym(:K)
     mA = gensym(:Aₘₖ)
@@ -97,14 +97,14 @@ function LowDimArray{D}(data::A) where {D,T,N,A <: AbstractArray{T,N}}
 end
 function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
-    ::Type{<:LowDimArray{D,T,N}}, elementbytes::Int = 8
+    ::Type{<:LowDimArray{D,T,N}}, elementbytes::Int
 ) where {D,T,N}
     fulldims = Symbol[loopsyms[n] for n ∈ 1:N if D[n]]
     ref = ArrayReference(bcname, fulldims)
     add_simple_load!(ls, destname, ref, elementbytes )::Operation
 end
 function add_broadcast_adjoint_array!(
-    ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{A}, elementbytes::Int = 8
+    ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{A}, elementbytes::Int
 ) where {T,N,A<:AbstractArray{T,N}}
     parent = gensym(:parent)
     pushpreamble!(ls, Expr(:(=), parent, Expr(:call, :parent, bcname)))
@@ -112,37 +112,37 @@ function add_broadcast_adjoint_array!(
     add_simple_load!( ls, destname, ref, elementbytes )::Operation    
 end
 function add_broadcast_adjoint_array!(
-    ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{<:AbstractVector}, elementbytes::Int = 8
+    ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{<:AbstractVector}, elementbytes::Int
 )
     ref = ArrayReference(bcname, Symbol[loopsyms[2]])
     add_simple_load!( ls, destname, ref, elementbytes )
 end
 function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
-    ::Type{Adjoint{T,A}}, elementbytes::Int = 8
+    ::Type{Adjoint{T,A}}, elementbytes::Int
 ) where {T, A <: AbstractArray{T}}
     add_broadcast_adjoint_array!( ls, destname, bcname, loopsyms, A, elementbytes )
 end
 function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
-    ::Type{Transpose{T,A}}, elementbytes::Int = 8
+    ::Type{Transpose{T,A}}, elementbytes::Int
 ) where {T, A <: AbstractArray{T}}
     add_broadcast_adjoint_array!( ls, destname, bcname, loopsyms, A, elementbytes )
 end
 function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
-    ::Type{<:AbstractArray{T,N}}, elementbytes::Int = 8
+    ::Type{<:AbstractArray{T,N}}, elementbytes::Int
 ) where {T,N}
     add_simple_load!(ls, destname, ArrayReference(bcname, @view(loopsyms[1:N])), elementbytes)
 end
 function add_broadcast!(
-    ls::LoopSet, ::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{T}, elementbytes::Int = 8
+    ls::LoopSet, ::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{T}, elementbytes::Int
 ) where {T<:Number}
     add_constant!(ls, bcname, elementbytes) # or replace elementbytes with sizeof(T) ? u
 end
 function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
-    ::Type{SubArray{T,N,A,S,B}}, elementbytes::Int = 8
+    ::Type{SubArray{T,N,A,S,B}}, elementbytes::Int
 ) where {T,N,N2,A<:AbstractArray{T,N2},B,N3,S <: Tuple{Int,Vararg{Any,N3}}}
     inds = Vector{Symbol}(undef, N+1)
     inds[1] = Symbol("##DISCONTIGUOUSSUBARRAY##")
@@ -152,10 +152,12 @@ end
 function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
     ::Type{Broadcasted{S,Nothing,F,A}},
-    elementbytes::Int = 8
+    elementbytes::Int
 ) where {N,S<:Base.Broadcast.AbstractArrayStyle{N},F,A}
     instr = get(FUNCTIONSYMBOLS, F) do
-        Instruction(bcname, :f)
+        f = gensym(:func)
+        pushpreamble!(ls, Expr(:(=), f, Expr(:(.), bcname, QuoteNode(:f))))
+        Instruction(Symbol(""), f)
     end
     args = A.parameters
     Nargs = length(args)

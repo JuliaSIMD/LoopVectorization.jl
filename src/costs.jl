@@ -13,8 +13,14 @@ struct Instruction
 end
 Instruction(instr::Symbol) = Instruction(:LoopVectorization, instr)
 Base.convert(::Type{Instruction}, instr::Symbol) = Instruction(instr)
-lower(instr::Instruction) = Expr(:(.), instr.mod, QuoteNode(instr.instr))
-Base.Expr(instr::Instruction, args...) = Expr(:call, lower(instr), args...)::Expr
+# lower(instr::Instruction) = Expr(:(.), instr.mod, QuoteNode(instr.instr))
+function Base.Expr(instr::Instruction, args...)
+    if instr.mod === :LoopVectorization
+        Expr(:call, lv(instr.instr), args...)::Expr
+    else
+        Expr(:call, instr.instr, args...)::Expr
+    end
+end
 Base.hash(instr::Instruction, h::UInt64) = hash(instr.instr, hash(instr.mod, h))
 function Base.isless(instr1::Instruction, instr2::Instruction)
     if instr1.mod === instr2.mod
@@ -122,6 +128,9 @@ const COST = Dict{Instruction,InstructionCost}(
     Instruction(:(<)) => InstructionCost(1, 0.5),
     Instruction(:(>=)) => InstructionCost(1, 0.5),
     Instruction(:(<=)) => InstructionCost(1, 0.5),
+    Instruction(:>>) => InstructionCost(1, 0.5),
+    Instruction(:>>>) => InstructionCost(1, 0.5),
+    Instruction(:<<) => InstructionCost(1, 0.5),
     Instruction(:ifelse) => InstructionCost(1, 0.5),
     Instruction(:vifelse) => InstructionCost(1, 0.5),
     Instruction(:inv) => InstructionCost(13,4.0,-2.0,1),
@@ -159,7 +168,7 @@ const COST = Dict{Instruction,InstructionCost}(
     Instruction(:sincospi_fast) => InstructionCost(25,22.0,70.0,26),
     Instruction(:identity) => InstructionCost(0,0.0,0.0,0),
     Instruction(:adjoint) => InstructionCost(0,0.0,0.0,0),
-    Instruction(:transpose) => InstructionCost(0,0.0,0.0,0),
+    Instruction(:transpose) => InstructionCost(0,0.0,0.0,0)
     # Symbol("##CONSTANT##") => InstructionCost(0,0.0)
 )
 

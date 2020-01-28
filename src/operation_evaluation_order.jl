@@ -1,4 +1,21 @@
 
+# struct ParentsBeforeChildrenIterator
+#     ops::Vector{Operation}
+#     visited::Vector{Bool}
+# end
+# function iterate(pbci::ParentsBeforeChildrenIterator)
+#     for (i,op) ∈ enumerate(pbci.ops)
+#         if iszero(length(parents(op)))
+#             pbci.visited[i] = true
+#             return op, pbci
+#         end
+#     end
+#     nothing
+# end
+# function iterate()
+
+# end
+
 function set_upstream_family!(adal::Vector{T}, op::Operation, val::T, ld::Vector{Symbol}, id::Int) where {T}
     adal[identifier(op)] == val && return # must already have been set
     # ld != loopdependencies(op) &&

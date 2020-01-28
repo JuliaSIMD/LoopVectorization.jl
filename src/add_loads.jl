@@ -1,12 +1,12 @@
 
 function add_load!(
-    ls::LoopSet, var::Symbol, array::Symbol, rawindices, elementbytes::Int = 8
+    ls::LoopSet, var::Symbol, array::Symbol, rawindices, elementbytes::Int
 )
     mpref = array_reference_meta!(ls, array, rawindices, elementbytes)
     add_load!(ls, var, mpref, elementbytes)
 end
 function add_load!(
-    ls::LoopSet, var::Symbol, mpref::ArrayReferenceMetaPosition, elementbytes::Int = 8
+    ls::LoopSet, var::Symbol, mpref::ArrayReferenceMetaPosition, elementbytes::Int
 )
     length(mpref.loopdependencies) == 0 && return add_constant!(ls, var, mpref, elementbytes)
     ref = mpref.mref
@@ -27,7 +27,7 @@ end
 
 # for use with broadcasting
 function add_simple_load!(
-    ls::LoopSet, var::Symbol, ref::ArrayReference, elementbytes::Int = 8
+    ls::LoopSet, var::Symbol, ref::ArrayReference, elementbytes::Int
 )
     loopdeps = Symbol[s for s ∈ ref.indices]
     mref = ArrayReferenceMeta(
@@ -41,11 +41,11 @@ function add_simple_load!(
     add_vptr!(ls, op)
     pushop!(ls, op, var)
 end
-function add_load_ref!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8)
+function add_load_ref!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int)
     array, rawindices = ref_from_ref(ex)
     add_load!(ls, var, array, rawindices, elementbytes)
 end
-function add_load_getindex!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int = 8)
+function add_load_getindex!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int)
     array, rawindices = ref_from_getindex(ex)
     add_load!(ls, var, array, rawindices, elementbytes)
 end
