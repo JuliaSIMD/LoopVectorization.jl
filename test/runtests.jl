@@ -1340,7 +1340,6 @@ end
         end
         qq[:,Base.OneTo(maxk)] ./= vec(lse)
     end
-
     add_1_dim(x::AbstractArray) = reshape(x, size(x)..., 1)
     check_finite(x::AbstractArray) = all(isfinite.(x)) || throw(error("x not finite!"))
     function softmax3_setup!(q::AA, lse::A, tmpmax::A, x::AA, maxk=size(q, ndims(q)) ) where {T<:Real, A<:Array{T}, AA<:AbstractArray{T}}
@@ -1492,7 +1491,7 @@ end
         @test y1 ≈ y2
 
 
-        ni, nj, nk = (100, 100, 10)
+        ni, nj, nk = (127, 113, 13)
         x = rand(T, ni, nj, nk);
         q1 = similar(x);
         q2 = similar(x);

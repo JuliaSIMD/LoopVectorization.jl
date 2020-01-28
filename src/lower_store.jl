@@ -70,6 +70,10 @@ function lower_conditionalstore_scalar!(
     end
     nothing
 end
+@inline combinemasks(a::Unsigned, b::Unsigned) = a & b
+@inline combinemasks(a::Unsigned, b::Bool) = b ? a : zero(a)
+@inline combinemasks(a::Bool, b::Unsigned) = a ? b : zero(b)
+@inline combinemasks(a::Bool, b::Bool) = a & b
 function lower_conditionalstore_vectorized!(
     q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol, tiled::Symbol, U::Int,
     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned}, isunrolled::Bool
@@ -101,7 +105,7 @@ function lower_conditionalstore_vectorized!(
         condvarname = varassignname(condvar, u, condunrolled)
         instrcall = Expr(:call, lv(:vstore!), ptr, name, mo)
         if mask !== nothing && (vecnotunrolled || u == U - 1)
-            push!(instrcall.args, Expr(:call, :&, condvarname, mask))
+            push!(instrcall.args, Expr(:call, lv(:combinemasks), condvarname, mask))
         else
             push!(instrcall.args, condvarname)
         end
