@@ -90,8 +90,13 @@ function add_mref!(ls::LoopSet, ars::ArrayRefStruct, arraysymbolinds::Vector{Sym
 end
 function add_mref!(ls::LoopSet, ars::ArrayRefStruct, arraysymbolinds::Vector{Symbol}, opsymbols::Vector{Symbol}, i::Int, ::Type{StaticStridedStruct{T, X}}) where {T, X <: Tuple}
     ar = ArrayReferenceMeta(ls, ars, arraysymbolinds, opsymbols, Symbol(""), gensym())
-    pushpreamble!(ls, Expr(:(=), vptr(ar), Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:ref, :vargs, i))))
-    pushfirst!(getindices(ar), Symbol("##DISCONTIGUOUSSUBARRAY##"))
+    if last(X.parameters)::Int == 1
+        reverse!(ar.loopedindex); reverse!(getindices(ar))
+        pushpreamble!(ls, Expr(:(=), vptr(ar), Expr(:call, lv(:Transpose), Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:ref, :vargs, i)))))
+    else
+        pushpreamble!(ls, Expr(:(=), vptr(ar), Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:ref, :vargs, i))))
+        pushfirst!(getindices(ar), Symbol("##DISCONTIGUOUSSUBARRAY##"))
+    end
     ar
 end
 function add_mref!(ls::LoopSet, ars::ArrayRefStruct, arraysymbolinds::Vector{Symbol}, opsymbols::Vector{Symbol}, i::Int, ::Type{LoopValue})
