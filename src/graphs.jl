@@ -157,6 +157,7 @@ struct LoopSet
     preamble_zeros::Vector{Int}
     preamble_ones::Vector{Int}
     includedarrays::Vector{Symbol}
+    includedactualarrays::Vector{Symbol}
     syms_aliasing_refs::Vector{Symbol}
     refs_aliasing_syms::Vector{ArrayReferenceMeta}
     cost_vec::Matrix{Float64}
@@ -228,8 +229,7 @@ function LoopSet(mod::Symbol)# = :LoopVectorization)
         Tuple{Int,Int}[],
         Tuple{Int,Float64}[],
         Int[],Int[],
-        Tuple{Symbol,Int}[],
-        Symbol[],
+        Symbol[], Symbol[], Symbol[],
         ArrayReferenceMeta[],
         Matrix{Float64}(undef, 4, 2),
         Matrix{Int}(undef, 4, 2),

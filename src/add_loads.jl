@@ -27,7 +27,7 @@ end
 
 # for use with broadcasting
 function add_simple_load!(
-    ls::LoopSet, var::Symbol, ref::ArrayReference, elementbytes::Int
+    ls::LoopSet, var::Symbol, ref::ArrayReference, elementbytes::Int, actualarray::Bool = true
 )
     loopdeps = Symbol[s for s ∈ ref.indices]
     mref = ArrayReferenceMeta(
@@ -38,7 +38,7 @@ function add_simple_load!(
         :getindex, memload, loopdeps,
         NODEPENDENCY, NOPARENTS, mref
     )
-    add_vptr!(ls, op)
+    add_vptr!(ls, op.ref.ref.array, vptr(op.ref), actualarray)
     pushop!(ls, op, var)
 end
 function add_load_ref!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int)

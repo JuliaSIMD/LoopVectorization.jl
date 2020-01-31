@@ -94,14 +94,14 @@ end
     end
     function dot_unroll2avx_noinline(x::Vector{T}, y::Vector{T}) where {T<:AbstractFloat}
         z = zero(T)
-        @avx inline=true unroll=2 for i ∈ 1:length(x)
+        @avx inline=false unroll=2 for i ∈ 1:length(x)
             z += x[i]*y[i]
         end
         return z
     end
     function dot_unroll3avx_inline(x::Vector{T}, y::Vector{T}) where {T<:AbstractFloat}
         z = zero(T)
-        @avx unroll=3 inline=false for i ∈ 1:length(x)
+        @avx unroll=3 inline=true for i ∈ 1:length(x)
             z += x[i]*y[i]
         end
         return z
@@ -245,6 +245,9 @@ end
                 res[i] = sin(i * code_phase_delta)
             end
         end
+        @macroexpand @avx for i ∈ eachindex(res)
+                res[i] = sin(i * code_phase_delta)
+            end
         function calc_sins_avx!(res::AbstractArray{T}) where {T}
             code_phase_delta = T(0.01)
             @_avx for i ∈ eachindex(res)

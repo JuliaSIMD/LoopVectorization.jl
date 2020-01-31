@@ -131,6 +131,8 @@ const COST = Dict{Instruction,InstructionCost}(
     Instruction(:>>) => InstructionCost(1, 0.5),
     Instruction(:>>>) => InstructionCost(1, 0.5),
     Instruction(:<<) => InstructionCost(1, 0.5),
+    Instruction(:max) => InstructionCost(4,0.5),
+    Instruction(:min) => InstructionCost(4,0.5),
     Instruction(:ifelse) => InstructionCost(1, 0.5),
     Instruction(:vifelse) => InstructionCost(1, 0.5),
     Instruction(:inv) => InstructionCost(13,4.0,-2.0,1),
@@ -185,6 +187,8 @@ const ADDITIVE_IN_REDUCTIONS = 1.0
 const MULTIPLICATIVE_IN_REDUCTIONS = 2.0
 const ANY = 3.0
 const ALL = 4.0
+const MAX = 5.0
+const MIN = 6.0
 
 const REDUCTION_CLASS = Dict{Symbol,Float64}(
     :+ => ADDITIVE_IN_REDUCTIONS,
@@ -213,28 +217,30 @@ const REDUCTION_CLASS = Dict{Symbol,Float64}(
     :reduced_add => ADDITIVE_IN_REDUCTIONS,
     :reduced_prod => MULTIPLICATIVE_IN_REDUCTIONS,
     :reduced_all => ALL,
-    :reduced_any => ANY
+    :reduced_any => ANY,
+    :max => MAX,
+    :min => MIN
 )
 reduction_instruction_class(instr::Symbol) = get(REDUCTION_CLASS, instr, NaN)
 reduction_instruction_class(instr::Instruction) = get(REDUCTION_CLASS, instr.instr, NaN)
 function reduction_to_single_vector(x::Float64)
-    x == 1.0 ? :evadd : x == 2.0 ? :evmul : x == 3.0 ? :vand : x == 4.0 ? :vor : throw("Reduction not found.")
+    x == 1.0 ? :evadd : x == 2.0 ? :evmul : x == 3.0 ? :vor : x == 4.0 ? :vand : x == 5.0 ? :max : x == 6.0 ? :min : throw("Reduction not found.")
 end
 reduction_to_single_vector(x) = reduction_to_single_vector(reduction_instruction_class(x))
 function reduction_to_scalar(x::Float64)
-    x == 1.0 ? :vsum : x == 2.0 ? :vprod : x == 3.0 ? :vany : x == 4.0 ? :vall : throw("Reduction not found.")
+    x == 1.0 ? :vsum : x == 2.0 ? :vprod : x == 3.0 ? :vany : x == 4.0 ? :vall : x == 5.0 ? :maximum : x == 6.0 ? :minimum : throw("Reduction not found.")
 end
 reduction_to_scalar(x) = reduction_to_scalar(reduction_instruction_class(x))
 function reduction_scalar_combine(x::Float64)
-    x == 1.0 ? :reduced_add : x == 2.0 ? :reduced_prod : x == 3.0 ? :reduced_any : x == 4.0 ? :reduced_all : throw("Reduction not found.")
+    x == 1.0 ? :reduced_add : x == 2.0 ? :reduced_prod : x == 3.0 ? :reduced_any : x == 4.0 ? :reduced_all : x == 5.0 ? :reduced_max : x == 6.0 ? :reduced_min : throw("Reduction not found.")
 end
 reduction_scalar_combine(x) = reduction_scalar_combine(reduction_instruction_class(x))
 function reduction_combine_to(x::Float64)
-    x == 1.0 ? :reduce_to_add : x == 2.0 ? :reduce_to_prod : x == 3.0 ? :reduce_to_any : x == 4.0 ? :reduce_to_all : throw("Reduction not found.")
+    x == 1.0 ? :reduce_to_add : x == 2.0 ? :reduce_to_prod : x == 3.0 ? :reduce_to_any : x == 4.0 ? :reduce_to_all : x == 5.0 ? :reduce_to_max : x == 6.0 ? :reduce_to_min : throw("Reduction not found.")
 end
 reduction_combine_to(x) = reduction_combine_to(reduction_instruction_class(x))
 function reduction_zero(x::Float64) 
-    x == 1.0 ? :zero : x == 2.0 ? :one : x == 3.0 ? :false : x == 4.0 ? :true : throw("Reduction not found.")
+    x == 1.0 ? :zero : x == 2.0 ? :one : x == 3.0 ? :false : x == 4.0 ? :true : x == 5.0 ? :typemin : x == 6.0 ? :typemax : throw("Reduction not found.")
 end
 reduction_zero(x) = reduction_zero(reduction_instruction_class(x))
 
@@ -291,6 +297,11 @@ const FUNCTIONSYMBOLS = Dict{Type{<:Function},Instruction}(
     typeof(SLEEFPirates.cos) => :cos,
     typeof(sincos) => :sincos,
     typeof(Base.FastMath.sincos_fast) => :sincos,
-    typeof(SLEEFPirates.sincos) => :sincos
+    typeof(SLEEFPirates.sincos) => :sincos,
+    typeof(max) => :max,
+    typeof(min) => :min,
+    typeof(<<) => :<<,
+    typeof(>>) => :>>,
+    typeof(>>>) => :>>>
 )
 

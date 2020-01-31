@@ -106,7 +106,11 @@ function add_reduction_update_parent!(
         elseif reduct_zero === :one
             push!(ls.preamble_ones, identifier(reductinit))
         else
-            pushpreamble!(ls, Expr(:(=), name(reductinit), reductzero))
+            if reductzero === :true || reductzero === :false
+                pushpreamble!(ls, Expr(:(=), name(reductinit), reductzero))
+            else
+                pushpreamble!(ls, Expr(:(=), name(reductinit), Expr(:call, reductzero, ls.T)))
+            end
             pushpreamble!(ls, op, name, reductinit)
         end
         if isconstant(parent) && reduct_zero === parent.instruction.mod #we can use parent op as initialization.
@@ -166,7 +170,7 @@ function add_compute!(
         elseif arg ∈ ls.loopsymbols
             loopsym = gensym(arg)
             pushpreamble!(ls, Expr(:(=), loopsym, LoopValue()))
-            loopsymop = add_simple_load!(ls, gensym(loopsym), ArrayReference(loopsym, [arg]), elementbytes)
+            loopsymop = add_simple_load!(ls, gensym(loopsym), ArrayReference(loopsym, [arg]), elementbytes, false)
             push!(ls.syms_aliasing_refs, name(loopsymop))
             push!(ls.refs_aliasing_syms, loopsymop.ref)
             pushparent!(parents, deps, reduceddeps, loopsymop)

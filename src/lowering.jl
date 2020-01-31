@@ -204,9 +204,9 @@ function reduce_expr!(q::Expr, ls::LoopSet, U::Int)
     end
 end
 function gc_preserve(ls::LoopSet, q::Expr)
-    length(ls.includedarrays) == 0 && return q
+    length(ls.includedactualarrays) == 0 && return q
     gcp = Expr(:macrocall, Expr(:(.), :GC, QuoteNode(Symbol("@preserve"))), LineNumberNode(@__LINE__, @__FILE__))
-    for array ∈ ls.includedarrays
+    for array ∈ ls.includedactualarrays
         push!(gcp.args, array)
     end
     q.head === :block && push!(q.args, nothing)
@@ -214,12 +214,13 @@ function gc_preserve(ls::LoopSet, q::Expr)
     Expr(:block, gcp)
 end
 function determine_eltype(ls::LoopSet)
-    # length(ls.includedarrays) == 0 && return REGISTER_SIZE >>> 3
-    if length(ls.includedarrays) == 1
-        return Expr(:call, :eltype, first(ls.includedarrays))
+    if length(ls.includedactualarrays) == 0
+        return Expr(:call, :typeof, 0)
+    elseif length(ls.includedactualarrays) == 1
+        return Expr(:call, :eltype, first(ls.includedactualarrays))
     end
     promote_q = Expr(:call, :promote_type)
-    for array ∈ ls.includedarrays
+    for array ∈ ls.includedactualarrays
         push!(promote_q.args, Expr(:call, :eltype, array))
     end
     promote_q

@@ -41,6 +41,7 @@ function substitute_broadcast(q::Expr, mod::Symbol)
     ex
 end
 
+
 function LoopSet(q::Expr, mod::Symbol = :LoopVectorization)
     q = SIMDPirates.contract_pass(q)
     ls = LoopSet(mod)
@@ -48,7 +49,7 @@ function LoopSet(q::Expr, mod::Symbol = :LoopVectorization)
     resize!(ls.loop_order, num_loops(ls))
     ls
 end
-
+LoopSet(q::Expr, m::Module) = LoopSet(macroexpand(m, q), Symbol(m))
 
 """
     @avx
@@ -84,11 +85,10 @@ true
 
 """
 macro avx(q)
-    mod = Symbol(__module__)
     q2 = if q.head === :for
-        setup_call(LoopSet(q, mod))
+        setup_call(LoopSet(q, __module__))
     else# assume broadcast
-        substitute_broadcast(q, mod)
+        substitute_broadcast(q, Symbol(__module__))
     end
     esc(q2)
 end
@@ -130,24 +130,24 @@ macro avx(arg, q)
     @assert q.head === :for
     @assert arg.head === :(=)
     inline, U, T = check_macro_kwarg(arg)
-    esc(setup_call(LoopSet(q, Symbol(__module__)), inline, U, T))
+    esc(setup_call(LoopSet(q, __module__), inline, U, T))
 end
 macro avx(arg1, arg2, q)
     @assert q.head === :for
     inline, U, T = check_macro_kwarg(arg1)
     inline, U, T = check_macro_kwarg(arg2, inline, U, T)
-    esc(setup_call(LoopSet(q, Symbol(__module__)), inline, U, T))
+    esc(setup_call(LoopSet(q, __module__), inline, U, T))
 end
 
 
 
 macro _avx(q)
-    esc(lower(LoopSet(q, Symbol(__module__))))
+    esc(lower(LoopSet(q, __module__)))
 end
 macro _avx(arg, q)
     @assert q.head === :for
     inline, U, T = check_macro_kwarg(arg)
-    esc(lower(LoopSet(q, Symbol(__module__)), U, T))
+    esc(lower(LoopSet(q, __module__), U, T))
 end
 
 

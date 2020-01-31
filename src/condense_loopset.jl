@@ -203,7 +203,41 @@ function generate_call(ls::LoopSet, IUT)
     q
 end
 
-function setup_call(ls::LoopSet, inline = Int8(2), U = zero(Int8), T = zero(Int8))
+function setup_call_noinline(ls::LoopSet, inline = Int8(2), U = zero(Int8), T = zero(Int8))
+    call = generate_call(ls, (inline,U,T))
+    hasouterreductions = length(ls.outer_reductions) > 0
+    q = ls.preamble
+    if hasouterreductions
+        outer_reducts = Expr(:local)
+        for or ∈ ls.outer_reductions
+            op = ls.operations[or]
+            var = name(op)
+            mvar = mangledvar(op)
+            out = Symbol(mvar, 0)
+            push!(outer_reducts.args, out)
+        end
+        push!(q.args, outer_reducts)
+        retv = loopset_return_value(ls, Val(false))
+        call = Expr(:(=), retv, call)
+        push!(q.args, gc_preserve(ls, call))
+        push!(q.args, Expr(:return, retv))
+        q = Expr(:block, Expr(:(=), retv, Expr(:call, Expr(:(->), Expr(:tuple, ls.includedactualarrays...), q), ls.includedactualarrays...)))
+        for or ∈ ls.outer_reductions
+            op = ls.operations[or]
+            var = name(op)
+            mvar = mangledvar(op)
+            instr = instruction(op)
+            out = Symbol(mvar, 0)
+            push!(q.args, Expr(:(=), var, Expr(:call, lv(reduction_scalar_combine(instr)), out, var)))
+        end
+    else
+        push!(q.args, gc_preserve(ls, call))
+        push!(q.args, Expr(:return, :nothing))
+        q = Expr(:call, Expr(:(->), Expr(:tuple, ls.includedactualarrays...), q), ls.includedactualarrays...)
+    end
+    q
+end
+function setup_call_inline(ls::LoopSet, inline = Int8(2), U = zero(Int8), T = zero(Int8))
     call = generate_call(ls, (inline,U,T))
     hasouterreductions = length(ls.outer_reductions) > 0
     if hasouterreductions
@@ -219,12 +253,22 @@ function setup_call(ls::LoopSet, inline = Int8(2), U = zero(Int8), T = zero(Int8
         instr = instruction(op)
         out = Symbol(mvar, 0)
         push!(outer_reducts.args, out)
-        # push!(q.args, Expr(:(=), var, Expr(:call, lv(reduction_scalar_combine(instr)), Expr(:call, lv(:SVec), out), var)))
         push!(q.args, Expr(:(=), var, Expr(:call, lv(reduction_scalar_combine(instr)), out, var)))
     end
     hasouterreductions && pushpreamble!(ls, outer_reducts)
     append!(ls.preamble.args, q.args)
     ls.preamble
 end
-
+function setup_call(ls::LoopSet, inline = Int8(2), U = zero(Int8), T = zero(Int8))
+    # We outline/inline at the macro level by creating/not creating an anonymous function.
+    # The old API instead was based on inlining or not inline the generated function, but
+    # the generated function must be inlined into the initial loop preamble for performance reasons.
+    # Creating an anonymous function and calling it also achieves the outlining, while still
+    # inlining the generated function into the loop preamble.
+    if inline == Int8(2)
+        setup_call_inline(ls, Int8(2), U, T)
+    else
+        setup_call_noinline(ls, Int8(2), U, T)
+    end
+end
 
