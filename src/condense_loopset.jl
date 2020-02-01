@@ -178,6 +178,13 @@ function add_external_functions!(q::Expr, ls::LoopSet)
     end
 end
 
+@inline unwrap_array(A) = A
+@inline unwrap_array(A::Union{SubArray,Transpose,Adjoint}) = parent(A)
+@inline array_wrapper(A) = nothing
+@inline array_wrapper(A::Transpose) = Transpose
+@inline array_wrapper(A::Adjoint) = Adjoint
+@inline array_wrapper(A::SubArray) = A.indices
+
 # Try to condense in type stable manner
 function generate_call(ls::LoopSet, IUT)
     operation_descriptions = Expr(:curly, :Tuple)
