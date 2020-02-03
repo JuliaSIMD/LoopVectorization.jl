@@ -18,8 +18,17 @@ end
 
 
 @time @testset "LoopVectorization.jl" begin
-
-
+    selfdotq = :(for i ∈ eachindex(a)
+                 s += a[i]*a[i]
+                 end)
+    lsselfdot = LoopVectorization.LoopSet(selfdotq);
+    io = IOBuffer();
+    println(io, LoopVectorization.operations(lsselfdot))
+    s = String(take!(io))
+    @test occursin("Operation[var\"", s)
+    @test occursin("s = 0", s)
+    @test occursin("s = LoopVectorization.vfmadd", s)
+    
 @time @testset "dot" begin
     dotq = :(for i ∈ eachindex(a,b)
              s += a[i]*b[i]
@@ -1268,6 +1277,35 @@ end
         end
     end
 
+    function AtmulBpos!(C, A, B)
+        @inbounds for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
+            Cₘₙ = zero(eltype(C))
+            @simd ivdep for k ∈ 1:size(A,1)
+                Cₘₙ += A[k,m] * B[k,n]
+            end
+            C[m,n] > 0 && (C[m,n] = Cₘₙ)
+        end
+    end
+    function AtmulBposavx!(C, A, B)
+        @avx for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
+            Cₘₙ = zero(eltype(C))
+            for k ∈ 1:size(A,1)
+                Cₘₙ += A[k,m] * B[k,n]
+            end
+            C[m,n] > 0 && (C[m,n] = Cₘₙ)
+        end
+    end
+    function AtmulBpos_avx!(C, A, B)
+        @_avx for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
+            Cₘₙ = zero(eltype(C))
+            for k ∈ 1:size(A,1)
+                Cₘₙ += A[k,m] * B[k,n]
+            end
+            C[m,n] > 0 && (C[m,n] = Cₘₙ)
+        end
+    end
+
+
     N = 117
     for T ∈ (Float32, Float64, Int32, Int64)
         if T <: Integer
@@ -1293,6 +1331,23 @@ end
         @test c1 ≈ c2
         fill!(c2, -999999999); maybewriteoravx!(c2, a, b)
         @test c1 ≈ c2
+
+        M, K, N = 83, 85, 79;
+        if T <: Integer
+            A = rand(T(-100):T(100), K, M);
+            B = rand(T(-100):T(100), K, N);
+            C1 = rand(T(-100):T(100), M, N);
+        else
+            A = randn(T, K, M);
+            B = randn(T, K, N);
+            C1 = randn(T, M, N);
+        end
+        C2 = copy(C1); C3 = copy(C1);
+        AtmulBpos!(C1, A, B)
+        AtmulBposavx!(C2, A, B)
+        AtmulBpos_avx!(C3, A, B)
+        @test C1 ≈ C2
+        @test C1 ≈ C3
     end
 end
 
@@ -1387,6 +1442,15 @@ end
                 end
             end
         end
+        myzero(A) = zero(eltype(A))
+        # function AmulBavx4!(C, A, B)
+        #     @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+        #         C[m,n] = myzero(C)
+        #         for k ∈ 1:size(A,2)
+        #             C[m,n] += A[m,k] * B[k,n]
+        #         end
+        #     end
+        # end
         function AmuladdBavx!(C, A, B, factor = 1)
             @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
                 ΔCₘₙ = zero(eltype(C))
@@ -1457,6 +1521,21 @@ end
                 end
             end
         end
+        # function AmulB_avx4!(C, A, B)
+        #     @_avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+        #         C[m,n] = myzero(C)
+        #         for k ∈ 1:size(A,2)
+        #             C[m,n] += A[m,k] * B[k,n]
+        #         end
+        #     end
+        # end
+        # q = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+        #       C[m,n] = myzero(C)
+        #       for k ∈ 1:size(A,2)
+        #       C[m,n] += A[m,k] * B[k,n]
+        #       end
+        #       end)
+        # ls = LoopVectorization.LoopSet(q);
         function AmuladdB_avx!(C, A, B, factor = 1)
             @_avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
                 ΔCₘₙ = zero(eltype(C))

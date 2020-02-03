@@ -57,6 +57,7 @@ function add_parent!(
         add_operation!(ls, gensym(:temporary), var, elementbytes, position)
     else # assumed constant
         add_constant!(ls, var, elementbytes)
+        # add_constant!(ls, var, deps, gensym(:loopredefconst), elementbytes)
     end
     pushparent!(parents, deps, reduceddeps, parent)
 end
@@ -90,6 +91,16 @@ function add_compute!(ls::LoopSet, op::Operation)
     @assert iscompute(op)
     pushop!(ls, child, name(op))
 end
+function isreductzero(op::Operation, ls::LoopSet, reduct_zero::Symbol)
+    isconstant(op) || return false
+    reduct_zero === op.instruction.mod && return true
+    if reduct_zero === :zero
+        identifier(op) ∈ ls.preamble_zeros && return true
+    elseif reduct_zero === :one
+        identifier(op) ∈ ls.preamble_ones && return true
+    end
+    false
+end
 
 function add_reduction_update_parent!(
     vparents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet,
@@ -118,7 +129,7 @@ function add_reduction_update_parent!(
             end
             pushpreamble!(ls, op, name, reductinit)
         end
-        if isconstant(parent) && reduct_zero === parent.instruction.mod #we can use parent op as initialization.
+        if isreductzero(parent, ls, reduct_zero)
             reductcombine = reduction_combine_to(instrclass)
         end
     else
@@ -128,7 +139,8 @@ function add_reduction_update_parent!(
     end
     combineddeps = copy(deps); mergesetv!(combineddeps, reduceddeps)
     directdependency && pushparent!(vparents, deps, reduceddeps, reductinit)#parent) # deps and reduced deps will not be disjoint
-    update_reduction_status!(vparents, combineddeps, name(reductinit))
+    # update_reduction_status!(vparents, combineddeps, name(reductinit))
+    update_reduction_status!(vparents, reduceddeps, name(reductinit))
     # this is the op added by add_compute
     op = Operation(length(operations(ls)), reductsym, elementbytes, instr, compute, deps, reduceddeps, vparents)
     parent.instruction === LOOPCONSTANT && push!(ls.outer_reductions, identifier(op))
