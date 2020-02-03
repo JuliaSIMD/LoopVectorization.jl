@@ -51,23 +51,6 @@ function ref_from_expr(ex::Expr)
     end
 end
 
-function Base.:(==)(x::ArrayReference, y::Expr)::Bool
-    ya, yinds = if y.head === :ref
-        ref_from_ref(y)
-    elseif y.head === :call
-        f = first(y.args)
-        if f === :getindex
-            ya, yinds = ref_from_getindex(y)
-        elseif f === :setindex!
-            ya, yinds = ref_from_setindex(y)
-        else
-            return false
-        end
-    else
-        return false
-    end
-    x.array == ya || return false
-end
 Base.:(==)(x::ArrayReference, y::ArrayReferenceMeta) = x == y.ref
 Base.:(==)(x::ArrayReferenceMeta, y::ArrayReference) = x.ref == y
 Base.:(==)(x::ArrayReference, y) = false
