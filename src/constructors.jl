@@ -43,7 +43,7 @@ end
 
 
 function LoopSet(q::Expr, mod::Symbol = :LoopVectorization)
-    q = SIMDPirates.contract_pass(q)
+    SIMDPirates.contract_pass!(q)
     ls = LoopSet(mod)
     copyto!(ls, q)
     resize!(ls.loop_order, num_loops(ls))

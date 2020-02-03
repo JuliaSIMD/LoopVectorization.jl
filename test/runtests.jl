@@ -28,7 +28,7 @@ end
     @test occursin("Operation[", s)
     @test occursin("s = 0", s)
     @test occursin("s = LoopVectorization.vfmadd", s)
-    
+# using LoopVectorization    
 @time @testset "dot" begin
     dotq = :(for i ∈ eachindex(a,b)
              s += a[i]*b[i]
@@ -395,6 +395,13 @@ end
                 y[i] = yᵢ
             end
         end
+        q = :(for i ∈ eachindex(y)
+                yᵢ = zero(eltype(y))
+                for j ∈ eachindex(x)
+                    yᵢ += A[i,j] * x[j]
+                end
+                y[i] = yᵢ
+            end)
         function mygemv_avx!(y, A, x)
             @_avx for i ∈ eachindex(y)
                 yᵢ = zero(eltype(y))

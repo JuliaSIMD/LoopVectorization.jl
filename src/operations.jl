@@ -36,21 +36,6 @@ Base.:(==)(x::ArrayReference, y::ArrayReference) = isequal(x, y)
 Base.:(==)(x::ArrayReferenceMeta, y::ArrayReferenceMeta) = isequal(x.ref, y.ref) && x.ptr === y.ptr
 
 
-function ref_from_expr(ex, offset1::Int, offset2::Int)
-    (ex.args[1 + offset1])::Symbol, @view(ex.args[2 + offset2:end])
-end
-ref_from_ref(ex::Expr) = ref_from_expr(ex, 0, 0)
-ref_from_getindex(ex::Expr) = ref_from_expr(ex, 1, 1)
-ref_from_setindex(ex::Expr) = ref_from_expr(ex, 1, 2)
-function ref_from_expr(ex::Expr)
-    if ex.head === :ref
-        ref_from_ref(ex)
-    else#if ex.head === :call
-        f = first(ex.args)::Symbol
-        f === :getindex ? ref_from_getindex(ex) : ref_from_setindex(ex)
-    end
-end
-
 Base.:(==)(x::ArrayReference, y::ArrayReferenceMeta) = x == y.ref
 Base.:(==)(x::ArrayReferenceMeta, y::ArrayReference) = x.ref == y
 Base.:(==)(x::ArrayReference, y) = false

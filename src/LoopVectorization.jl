@@ -1,6 +1,6 @@
 module LoopVectorization
 
-using VectorizationBase, SIMDPirates, SLEEFPirates, MacroTools, Parameters
+using VectorizationBase, SIMDPirates, SLEEFPirates, Parameters
 using VectorizationBase: REGISTER_SIZE, REGISTER_COUNT, extract_data, num_vector_load_expr,
     mask, masktable, pick_vector_width_val, valmul, valrem, valmuladd, valadd, valsub, _MM,
     maybestaticlength, maybestaticsize, staticm1, subsetview, vzero, stridedpointer_for_broadcast,
@@ -10,7 +10,6 @@ using SIMDPirates: VECTOR_SYMBOLS, evadd, evmul, vrange, reduced_add, reduced_pr
 #    vmullog2, vmullog10, vdivlog2, vdivlog2add, vdivlog10, vdivlog10add, vfmaddaddone
 using Base.Broadcast: Broadcasted, DefaultArrayStyle
 using LinearAlgebra: Adjoint, Transpose
-using MacroTools: prewalk, postwalk
 
 
 export LowDimArray, stridedpointer, vectorizable,

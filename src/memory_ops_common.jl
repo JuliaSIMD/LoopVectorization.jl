@@ -1,3 +1,18 @@
+function ref_from_expr(ex, offset1::Int, offset2::Int)
+    (ex.args[1 + offset1])::Symbol, @view(ex.args[2 + offset2:end])
+end
+ref_from_ref(ex::Expr) = ref_from_expr(ex, 0, 0)
+ref_from_getindex(ex::Expr) = ref_from_expr(ex, 1, 1)
+ref_from_setindex(ex::Expr) = ref_from_expr(ex, 1, 2)
+function ref_from_expr(ex::Expr)
+    if ex.head === :ref
+        ref_from_ref(ex)
+    else#if ex.head === :call
+        f = first(ex.args)::Symbol
+        f === :getindex ? ref_from_getindex(ex) : ref_from_setindex(ex)
+    end
+end
+
 add_vptr!(ls::LoopSet, op::Operation) = add_vptr!(ls, op.ref)
 add_vptr!(ls::LoopSet, mref::ArrayReferenceMeta) = add_vptr!(ls, mref.ref.array, vptr(mref))
 function add_vptr!(ls::LoopSet, array::Symbol, vptrarray::Symbol = vptr(array), actualarray::Bool = true, broadcast::Bool = false)
