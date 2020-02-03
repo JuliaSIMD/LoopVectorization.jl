@@ -474,7 +474,7 @@ end
         # if LoopVectorization.VectorizationBase.REGISTER_COUNT == 16
         # else
         # end
-        Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (4, -1) : (4, 4)
+        Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (2, 2) : (4, 4)
         lsgemv = LoopVectorization.LoopSet(gemvq);
         @test LoopVectorization.choose_order(lsgemv) == ([:d1,:d2], :d2, Unum, Tnum)
         function AtmulvB_avx3!(G, B,κ)
