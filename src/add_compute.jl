@@ -86,6 +86,11 @@ function update_reduction_status!(parentvec::Vector{Operation}, deps::Vector{Sym
         end
     end
 end
+function add_compute!(ls::LoopSet, op::Operation)
+    @assert iscompute(op)
+    pushop!(ls, child, name(op))
+end
+
 function add_reduction_update_parent!(
     vparents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet,
     parent::Operation, instr::Symbol, directdependency::Bool, elementbytes::Int

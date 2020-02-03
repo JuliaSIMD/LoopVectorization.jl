@@ -101,7 +101,7 @@ function add_broadcast!(
 ) where {D,T,N}
     fulldims = Symbol[loopsyms[n] for n ∈ 1:N if D[n]]
     ref = ArrayReference(bcname, fulldims)
-    add_simple_load!(ls, destname, ref, elementbytes )::Operation
+    add_simple_load!(ls, destname, ref, elementbytes, true, false )::Operation
 end
 function add_broadcast_adjoint_array!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{A}, elementbytes::Int
@@ -109,13 +109,13 @@ function add_broadcast_adjoint_array!(
     parent = gensym(:parent)
     pushpreamble!(ls, Expr(:(=), parent, Expr(:call, :parent, bcname)))
     ref = ArrayReference(parent, Symbol[loopsyms[N + 1 - n] for n ∈ 1:N])
-    add_simple_load!( ls, destname, ref, elementbytes )::Operation    
+    add_simple_load!( ls, destname, ref, elementbytes, true, true )::Operation    
 end
 function add_broadcast_adjoint_array!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{<:AbstractVector}, elementbytes::Int
 )
     ref = ArrayReference(bcname, Symbol[loopsyms[2]])
-    add_simple_load!( ls, destname, ref, elementbytes )
+    add_simple_load!( ls, destname, ref, elementbytes, true, true )
 end
 function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
@@ -133,7 +133,7 @@ function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
     ::Type{<:AbstractArray{T,N}}, elementbytes::Int
 ) where {T,N}
-    add_simple_load!(ls, destname, ArrayReference(bcname, @view(loopsyms[1:N])), elementbytes)
+    add_simple_load!(ls, destname, ArrayReference(bcname, @view(loopsyms[1:N])), elementbytes, true, true)
 end
 function add_broadcast!(
     ls::LoopSet, ::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{T}, elementbytes::Int
@@ -147,7 +147,7 @@ function add_broadcast!(
     inds = Vector{Symbol}(undef, N+1)
     inds[1] = Symbol("##DISCONTIGUOUSSUBARRAY##")
     inds[2:end] .= @view(loopsyms[1:N])
-    add_simple_load!(ls, destname, ArrayReference(bcname, inds), elementbytes)
+    add_simple_load!(ls, destname, ArrayReference(bcname, inds), elementbytes, true, true)
 end
 function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},

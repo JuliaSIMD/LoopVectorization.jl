@@ -471,18 +471,18 @@ end
 
 
 
-function maybeinline!(q, ls, istiled, prependinlineORorUnroll)
-    if prependinlineORorUnroll == 1
-        if !istiled | length(ls.outer_reductions) > 1
-            pushfirst!(q.args, Expr(:meta, :inline))
-        end
-    elseif prependinlineORorUnroll == 2
-        pushfirst!(q.args, Expr(:meta, :inline))
-    elseif prependinlineORorUnroll == -1
-        pushfirst!(q.args, Expr(:meta, :noinline))
-    end
-    q
-end
+# function maybeinline!(q, ls, istiled, prependinlineORorUnroll)
+#     if prependinlineORorUnroll == 1
+#         if !istiled | length(ls.outer_reductions) > 1
+#             pushfirst!(q.args, Expr(:meta, :inline))
+#         end
+#     elseif prependinlineORorUnroll == 2
+#         pushfirst!(q.args, Expr(:meta, :inline))
+#     elseif prependinlineORorUnroll == -1
+#         pushfirst!(q.args, Expr(:meta, :noinline))
+#     end
+#     q
+# end
 # Here, we have to figure out how to convert the loopset into a vectorized expression.
 # This must traverse in a parent -> child pattern
 # but order is also dependent on which loop inds they depend on.
@@ -492,20 +492,24 @@ end
 # 0 : nothing
 # 1 : inline if length(ls.outer_reductions) > 1
 # 2 : force inline
-function lower(ls::LoopSet, prependinlineORorUnroll = 0)
+function lower(ls::LoopSet)#, prependinlineORorUnroll = 0)
     order, vectorized, U, T = choose_order(ls)
     istiled = T != -1
     fillorder!(ls, order, istiled)
     q = istiled ? lower_tiled(ls, vectorized, U, T) : lower_unrolled(ls, vectorized, U)
-    maybeinline!(q, ls, istiled, prependinlineORorUnroll)
+    pushfirst!(q.args, Expr(:meta, :inline))
+    q
+    # maybeinline!(q, ls, istiled, prependinlineORorUnroll)
 end
-function lower(ls::LoopSet, U, T, prependinlineORorUnroll = 0)
+function lower(ls::LoopSet, U, T)#, prependinlineORorUnroll = 0)
     num_loops(ls) == 1 && @assert T == -1
     order, vectorized, _U, _T = choose_order(ls)
     istiled = T != -1
     fillorder!(ls, order, istiled)
     q = istiled ? lower_tiled(ls, vectorized, Int(U), Int(T)) : lower_unrolled(ls, vectorized, Int(U))
-    maybeinline!(q, ls, istiled, prependinlineORorUnroll)
+    pushfirst!(q.args, Expr(:meta, :inline))
+    q
+    # maybeinline!(q, ls, istiled, prependinlineORorUnroll)
 end
 
 Base.convert(::Type{Expr}, ls::LoopSet) = lower(ls)

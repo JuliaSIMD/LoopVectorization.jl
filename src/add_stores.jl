@@ -8,10 +8,14 @@ function cse_store!(ls::LoopSet, op::Operation)
     ls.opdict[op.variable] = op
     op
 end
-function add_store!(ls::LoopSet, op::Operation)
-    nops = length(ls.operations)
+function add_store!(ls::LoopSet, op::Operation, add_pvar::Bool = name(first(parents(op))) ∉ ls.syms_aliasing_refs)
+    @assert isstore(op)
+    if add_pvar
+        push!(ls.syms_aliasing_refs, name(first(parents(op))))
+        push!(ls.refs_aliasing_syms, op.ref)
+    end
     id = op.identifier
-    id == nops ? add_unique_store!(ls, op) : cse_store!(ls, op)
+    id == length(operations(ls)) ? add_unique_store!(ls, op) : cse_store!(ls, op)
 end
 function add_copystore!(
     ls::LoopSet, parent::Operation, mpref::ArrayReferenceMetaPosition, elementbytes::Int
@@ -19,6 +23,7 @@ function add_copystore!(
     op = add_compute!(ls, gensym(), :identity, [parent], elementbytes)
     add_store!(ls, name(op), mpref, elementbytes, op)
 end
+
 
 function add_store!(
     ls::LoopSet, var::Symbol, mpref::ArrayReferenceMetaPosition, elementbytes::Int, parent = getop(ls, var, mpref.loopdependencies, elementbytes)
@@ -29,10 +34,7 @@ function add_store!(
     reduceddeps = mpref.reduceddeps
     pvar = name(parent)
     id = length(ls.operations)
-    if pvar ∉ ls.syms_aliasing_refs
-        push!(ls.syms_aliasing_refs, pvar)
-        push!(ls.refs_aliasing_syms, mpref.mref)
-    else
+    if pvar ∈ ls.syms_aliasing_refs
         # try to cse store, by replacing the previous one
         ref = mpref.mref.ref
         for opp ∈ operations(ls)
@@ -44,10 +46,13 @@ function add_store!(
                 # @show ref opp.ref.ref
             end
         end
+        add_pvar = false
+    else
+        add_pvar = true
     end
     pushparent!(parents, ldref, reduceddeps, parent)
     op = Operation( id, name(mpref), elementbytes, :setindex!, memstore, mpref )#loopdependencies, reduceddeps, parents, mpref.mref )
-    add_store!(ls, op)
+    add_store!(ls, op, add_pvar)
 end
 
 function add_store!(

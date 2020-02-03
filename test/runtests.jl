@@ -82,9 +82,6 @@ end
         end
         return z
     end
-    @macroexpand @avx unroll=2 for i ∈ 1:length(x)
-            z += x[i]*y[i]
-        end
     function dot_unroll3avx(x::Vector{T}, y::Vector{T}) where {T<:AbstractFloat}
         z = zero(T)
         @avx unroll=3 for i ∈ 1:length(x)
@@ -245,9 +242,6 @@ end
                 res[i] = sin(i * code_phase_delta)
             end
         end
-        @macroexpand @avx for i ∈ eachindex(res)
-                res[i] = sin(i * code_phase_delta)
-            end
         function calc_sins_avx!(res::AbstractArray{T}) where {T}
             code_phase_delta = T(0.01)
             @_avx for i ∈ eachindex(res)
@@ -345,7 +339,7 @@ end
             @test ld ≈ trianglelogdetavx(A)
             @test ld ≈ trianglelogdet_avx(A)
 
-            x = rand(1000);
+            x = rand(T, 1000);
             r1 = similar(x);
             r2 = similar(x);
             lse = logsumexp!(r1, x);
@@ -1106,14 +1100,16 @@ end
         c1 = a .+ b;
         c2 = @avx a .+ bl;
         @test c1 ≈ c2
-        fill!(c2, 99999.9);
-        @avx c2 .= a .+ br;
+        fill!(c2, 99999.9); @avx c2 .= a .+ br;
+        @test c1 ≈ c2
+        fill!(c2, 99999.9); @avx c2 .= a .+ b;
         @test c1 ≈ c2
         br = reshape(b, (100,1,100));
         bl = LowDimArray{(true,false,true)}(br);
         @. c1 = a + br;
-        fill!(c2, 99999.9);
-        @avx @. c2 = a + bl;
+        fill!(c2, 99999.9); @avx @. c2 = a + bl;
+        @test c1 ≈ c2
+        fill!(c2, 99999.9); @avx @. c2 = a + br;
         @test c1 ≈ c2
         br = reshape(b, (1,100,100));
         bl = LowDimArray{(false,true,true)}(br);
@@ -1383,12 +1379,6 @@ end
                 end
             end
         end
-        @macroexpand @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
-                C[m,n] = z
-                for k ∈ 1:size(A,2)
-                    C[m,n] += A[m,k] * B[k,n]
-                end
-            end
         function AmulBavx3!(C, A, B)
             @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
                 C[m,n] = zero(eltype(C))
@@ -1419,14 +1409,6 @@ end
         # LoopVectorization.reduceddependencies.(lsAmuladd.operations)
         @test LoopVectorization.choose_order(lsAmuladd) == (Symbol[:n,:m,:k], :m, Unum, Tnum)
 
-        # @macroexpand @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
-        #         ΔCₘₙ = zero(eltype(C))
-        #         for k ∈ 1:size(A,2)
-        #             ΔCₘₙ += A[m,k] * B[k,n]
-        #         end
-        #         C[m,n] += ΔCₘₙ * factor
-        #     end
-        
         function AmulB_avx1!(C, A, B)
             @_avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
                 Cₘₙ = zero(eltype(C))

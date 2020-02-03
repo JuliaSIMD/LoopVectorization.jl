@@ -226,7 +226,8 @@ function sizeofeltypes(v, num_arrays)::Int
     sizeof(T)
 end
 
-function avx_body(IUT, instr, ops, arf, AM, LB, vargs)
+
+function avx_body(UT, instr, ops, arf, AM, LB, vargs)
     ls = LoopSet(:LoopVectorization)
     # elementbytes = mapreduce(elbytes, min, @view(vargs[Base.OneTo(length(arf))]))::Int
     num_arrays = length(arf)
@@ -242,22 +243,22 @@ function avx_body(IUT, instr, ops, arf, AM, LB, vargs)
     add_array_symbols!(ls, arraysymbolinds, num_arrays + length(ls.preamble_symsym))
     num_params 
     num_params = extract_external_functions!(ls, num_params)
-    inline, U, T = IUT
-    q = iszero(U) ? lower(ls, inline) : lower(ls, U, T, inline)
+    U, T = UT
+    q = iszero(U) ? lower(ls) : lower(ls, U, T)
     length(ls.outer_reductions) == 0 ? push!(q.args, nothing) : push!(q.args, loopset_return_value(ls, Val(true)))
     # @show q
     q
 end
 
-@generated function _avx_!(::Val{IUT}, ::Type{OPS}, ::Type{ARF}, ::Type{AM}, lb::LB, vargs...) where {IUT, OPS, ARF, AM, LB}
+@generated function _avx_!(::Val{UT}, ::Type{OPS}, ::Type{ARF}, ::Type{AM}, lb::LB, vargs...) where {UT, OPS, ARF, AM, LB}
     OPSsv = OPS.parameters
     nops = length(OPSsv) ÷ 3
     instr = Instruction[Instruction(OPSsv[3i+1], OPSsv[3i+2]) for i ∈ 0:nops-1]
     ops = OperationStruct[ OPSsv[3i] for i ∈ 1:nops ]
     avx_body(
-        IUT, instr, ops,
+        UT, instr, ops,
         ArrayRefStruct[ARF.parameters...],
         AM.parameters, LB.parameters, vargs
-    )       
+    )
 end
 

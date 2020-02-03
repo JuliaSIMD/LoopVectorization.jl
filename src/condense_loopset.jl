@@ -185,6 +185,48 @@ end
 @inline array_wrapper(A::Adjoint) = Adjoint
 @inline array_wrapper(A::SubArray) = A.indices
 
+
+
+@generated function __avx__!(
+    ::Val{UT}, ::Type{OPS}, ::Type{ARF}, ::Type{AM}, lb::LB,
+    ::Val{AR}, ::Val{D}, ::Val{IND}, subsetvals, arraydescript, vargs::Vararg{<:Any,N}
+) where {UT, OPS, ARF, AM, LB, N, AR, D, IND}
+    num_vptrs = length(ARF.parameters)::Int
+    vptrs = [gensym(:vptr) for _ ∈ 1:num_vptrs]
+    call = Expr(:call, lv(:_avx_!), Val{UT}(), OPS, ARF, AM, :lb)
+    for n ∈ 1:num_vptrs
+        push!(call.args, vptrs[n])
+    end
+    q = Expr(:block)
+    j = 0
+    assigned_names = Vector{Symbol}(undef, length(AR))
+    num_arrays = 0
+    for i ∈ eachindex(AR)
+        ari = (AR[i])::Int
+        ind = (IND[i])::Union{Nothing,Int}
+        LHS = ind === nothing ? gensym() : vptrs[ind]
+        assigned_names[i] = LHS
+        d = (D[i])::Union{Nothing,Int}
+        if d === nothing # stridedpointer
+            if ari == -1
+                RHS = Expr(:call, :LoopValue)
+            else
+                num_arrays += 1
+                RHS = Expr(:call, lv(:stridedpointer), Expr(:ref, :vargs, ari), Expr(:ref, :arraydescript, ari))
+            end
+        else #subsetview
+            j += 1
+            RHS = Expr(:call, :subsetview, assigned_names[ari], Expr(:call, Expr(:curly, :Val, d)), Expr(:ref, :subsetvals, j))
+        end
+        push!(q.args, Expr(:(=), LHS, RHS))
+    end
+    for n ∈ num_arrays+1:N
+        push!(call.args, Expr(:ref, :vargs, n))
+    end
+    push!(q.args, call)
+    Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), q)
+end
+
 # Try to condense in type stable manner
 function generate_call(ls::LoopSet, IUT)
     operation_descriptions = Expr(:curly, :Tuple)
@@ -200,9 +242,18 @@ function generate_call(ls::LoopSet, IUT)
     foreach(ref -> push!(arrayref_descriptions.args, ArrayRefStruct(ls, ref, arraysymbolinds)), ls.refs_aliasing_syms)
     argmeta = argmeta_and_consts_description(ls, arraysymbolinds)
     loop_bounds = loop_boundaries(ls)
-
-    q = Expr(:call, lv(:_avx_!), Expr(:call, Expr(:curly, :Val, IUT)), operation_descriptions, arrayref_descriptions, argmeta, loop_bounds)
-    foreach(ref -> push!(q.args, vptr(ref)), ls.refs_aliasing_syms)
+    inline, U, T = IUT
+    if inline
+        q = Expr(:call, lv(:_avx_!), Expr(:call, Expr(:curly, :Val, (U,T))), operation_descriptions, arrayref_descriptions, argmeta, loop_bounds)
+        foreach(ref -> push!(q.args, vptr(ref)), ls.refs_aliasing_syms)
+    else
+        arraydescript = Expr(:tuple)
+        q = Expr(:call, lv(:__avx__!), Expr(:call, Expr(:curly, :Val, (U,T))), operation_descriptions, arrayref_descriptions, argmeta, loop_bounds, arraydescript)
+        for array ∈ ls.includedactualarrays
+            push!(q.args, Expr(:call, lv(:unwrap_array), array))
+            push!(arraydescript.args, Expr(:call, lv(:array_wrapper), array))
+        end
+    end
     foreach(is -> push!(q.args, last(is)), ls.preamble_symsym)
     append!(q.args, arraysymbolinds)
     add_reassigned_syms!(q, ls)
@@ -210,10 +261,58 @@ function generate_call(ls::LoopSet, IUT)
     q
 end
 
-function setup_call_noinline(ls::LoopSet, inline = Int8(2), U = zero(Int8), T = zero(Int8))
-    call = generate_call(ls, (inline,U,T))
+function setup_call_noinline(ls::LoopSet, U = zero(Int8), T = zero(Int8))
+    call = generate_call(ls, (false,U,T))
     hasouterreductions = length(ls.outer_reductions) > 0
-    q = ls.preamble
+    q = Expr(:block)
+    vptrarrays = Expr(:tuple)
+    vptrsubsetvals = Expr(:tuple)
+    vptrsubsetdims = Expr(:tuple)
+    vptrindices = Expr(:tuple)
+    stridedpointerLHS = Symbol[]
+    loopvalueLHS = Symbol[]
+    for ex ∈ ls.preamble.args
+        # vptrcalls = Expr(:tuple)
+        if ex isa Expr && ex.head === :(=) && length(ex.args) == 2
+            if ex.args[2] isa Expr && ex.args[2].head === :call
+                gr = first(ex.args[2].args)
+                if gr == lv(:stridedpointer)
+                    array = ex.args[2].args[2]
+                    arrayid = findfirst(a -> a === array, ls.includedactualarrays)
+                    if arrayid isa Int
+                        push!(vptrarrays.args, arrayid)
+                    else
+                        @assert array ∈ loopvalueLHS
+                        push!(vptrarrays.args, -1)
+                    end
+                    push!(vptrsubsetdims.args, nothing)
+                    vp = first(ex.args)::Symbol
+                    push!(stridedpointerLHS, vp)
+                    push!(vptrindices.args, findfirst(a -> vptr(a) == vp, ls.refs_aliasing_syms))
+                elseif gr == lv(:subsetview)
+                    array = ex.args[2].args[2]
+                    vptrarrayid = findfirst(a -> a === array, stridedpointerLHS)#::Int
+                    if vptrarrayid === nothing
+                        @show array, stridedpointerLHS
+                        @assert vptrarrayid isa Int
+                    end
+                    push!(vptrarrays.args, vptrarrayid::Int)
+                    push!(vptrsubsetdims.args, ex.args[2].args[3].args[1].args[2])
+                    push!(vptrsubsetvals.args, ex.args[2].args[4])
+                    vp = first(ex.args)::Symbol
+                    push!(stridedpointerLHS, vp)
+                    push!(vptrindices.args, findfirst(a -> vptr(a) == vp, ls.refs_aliasing_syms))
+                end
+            elseif ex.args[2] == LoopValue()
+                push!(loopvalueLHS, first(ex.args))
+            end
+        end
+        push!(q.args, ex)
+    end
+    insert!(call.args, 7, Expr(:call, Expr(:curly, :Val, vptrarrays)))
+    insert!(call.args, 8, Expr(:call, Expr(:curly, :Val, vptrsubsetdims)))
+    insert!(call.args, 9, Expr(:call, Expr(:curly, :Val, vptrindices)))
+    insert!(call.args, 10, vptrsubsetvals)
     if hasouterreductions
         outer_reducts = Expr(:local)
         for or ∈ ls.outer_reductions
@@ -227,8 +326,6 @@ function setup_call_noinline(ls::LoopSet, inline = Int8(2), U = zero(Int8), T = 
         retv = loopset_return_value(ls, Val(false))
         call = Expr(:(=), retv, call)
         push!(q.args, gc_preserve(ls, call))
-        push!(q.args, Expr(:return, retv))
-        q = Expr(:block, Expr(:(=), retv, Expr(:call, Expr(:(->), Expr(:tuple, ls.includedactualarrays...), q), ls.includedactualarrays...)))
         for or ∈ ls.outer_reductions
             op = ls.operations[or]
             var = name(op)
@@ -239,13 +336,11 @@ function setup_call_noinline(ls::LoopSet, inline = Int8(2), U = zero(Int8), T = 
         end
     else
         push!(q.args, gc_preserve(ls, call))
-        push!(q.args, Expr(:return, :nothing))
-        q = Expr(:call, Expr(:(->), Expr(:tuple, ls.includedactualarrays...), q), ls.includedactualarrays...)
     end
     q
 end
-function setup_call_inline(ls::LoopSet, inline = Int8(2), U = zero(Int8), T = zero(Int8))
-    call = generate_call(ls, (inline,U,T))
+function setup_call_inline(ls::LoopSet, U = zero(Int8), T = zero(Int8))
+    call = generate_call(ls, (true,U,T))
     hasouterreductions = length(ls.outer_reductions) > 0
     if hasouterreductions
         retv = loopset_return_value(ls, Val(false))
@@ -273,9 +368,9 @@ function setup_call(ls::LoopSet, inline = Int8(2), U = zero(Int8), T = zero(Int8
     # Creating an anonymous function and calling it also achieves the outlining, while still
     # inlining the generated function into the loop preamble.
     if inline == Int8(2)
-        setup_call_inline(ls, Int8(2), U, T)
+        setup_call_inline(ls, U, T)
     else
-        setup_call_noinline(ls, Int8(2), U, T)
+        setup_call_noinline(ls, U, T)
     end
 end
 

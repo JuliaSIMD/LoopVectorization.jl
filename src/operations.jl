@@ -83,7 +83,7 @@ end
 # TODO: can some computations be cached in the operations?
 """
 """
-struct Operation
+mutable struct Operation
     identifier::Int
     variable::Symbol
     elementbytes::Int

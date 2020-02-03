@@ -1,10 +1,14 @@
 add_vptr!(ls::LoopSet, op::Operation) = add_vptr!(ls, op.ref)
 add_vptr!(ls::LoopSet, mref::ArrayReferenceMeta) = add_vptr!(ls, mref.ref.array, vptr(mref))
-function add_vptr!(ls::LoopSet, array::Symbol, vptrarray::Symbol = vptr(array), actualarray::Bool = true)
+function add_vptr!(ls::LoopSet, array::Symbol, vptrarray::Symbol = vptr(array), actualarray::Bool = true, broadcast::Bool = false)
     if !includesarray(ls, array)
         push!(ls.includedarrays, array)
         actualarray && push!(ls.includedactualarrays, array)
-        pushpreamble!(ls, Expr(:(=), vptrarray, Expr(:call, lv(:stridedpointer), array)))
+        if broadcast
+            pushpreamble!(ls, Expr(:(=), vptrarray, Expr(:call, lv(:stridedpointer_for_broadcast), array)))
+        else
+            pushpreamble!(ls, Expr(:(=), vptrarray, Expr(:call, lv(:stridedpointer), array)))
+        end
     end
     nothing
 end
