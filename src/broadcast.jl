@@ -188,7 +188,7 @@ end
 # function vmaterialize!(
 @generated function vmaterialize!(
     dest::AbstractArray{T,N}, bc::BC, ::Val{Mod}
-) where {T <: Union{Float32,Float64}, N, BC <: Broadcasted, Mod}
+) where {T <: SUPPORTED_TYPES, N, BC <: Broadcasted, Mod}
     # we have an N dimensional loop.
     # need to construct the LoopSet
     loopsyms = [gensym(:n) for n ∈ 1:N]
@@ -212,7 +212,7 @@ end
 end
 @generated function vmaterialize!(
     dest′::Union{Adjoint{T,A},Transpose{T,A}}, bc::BC, ::Val{Mod}
-) where {T <: Union{Float32,Float64}, N, A <: AbstractArray{T,N}, BC <: Broadcasted, Mod}
+) where {T <: SUPPORTED_TYPES, N, A <: AbstractArray{T,N}, BC <: Broadcasted, Mod}
     # we have an N dimensional loop.
     # need to construct the LoopSet
     loopsyms = [gensym(:n) for n ∈ 1:N]

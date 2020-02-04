@@ -11,13 +11,16 @@ using SIMDPirates: VECTOR_SYMBOLS, evadd, evmul, vrange, reduced_add, reduced_pr
 using Base.Broadcast: Broadcasted, DefaultArrayStyle
 using LinearAlgebra: Adjoint, Transpose
 
+const SUPPORTED_TYPES = Union{Float16,Float32,Float64,Integer}
 
 export LowDimArray, stridedpointer, vectorizable,
     @avx, @_avx, *ˡ, _avx_!,
-    vmap, vmap!
+    vmap, vmap!,
+    vfilter, vfilter!
 
 
 include("map.jl")
+include("filter.jl")
 include("costs.jl")
 include("operations.jl")
 include("graphs.jl")
