@@ -959,6 +959,21 @@ end
                 x[i] = a
             end
         end
+
+        function mysumavx(x)
+            s = zero(eltype(x))
+            @avx for i ∈ eachindex(x)
+                s += x[i]
+            end
+            s
+        end
+        function mysum_avx(x)
+            s = zero(eltype(x))
+            @_avx for i ∈ eachindex(x)
+                s += x[i]
+            end
+            s
+        end
         
         for T ∈ (Float32, Float64)
             @show T, @__LINE__
@@ -1101,6 +1116,19 @@ end
             @avx x .= 34.242;
             fill!(q2, 34.242)
             @test x == q2
+
+            s = sum(x)
+            @test s ≈ mysumavx(x)
+            @test s ≈ mysum_avx(x)
+            r = T == Float32 ? (Int32(-10):Int32(234)) : -10:234
+            s = sum(r)
+            @test s ≈ mysumavx(r)
+            @test s ≈ mysum_avx(r)
+            r = T(-10):T(2.3):T(1000)
+            s = T == Float32 ? sum(collect(r)) : sum(r)
+            @test s ≈ mysumavx(r)
+            @test s ≈ mysum_avx(r)
+            
         end
 end
 

@@ -104,6 +104,11 @@ function add_mref!(ls::LoopSet, ars::ArrayRefStruct, arraysymbolinds::Vector{Sym
     pushpreamble!(ls, Expr(:(=), vptr(ar), LoopValue()))
     ar
 end
+function add_mref!(ls::LoopSet, ars::ArrayRefStruct, arraysymbolinds::Vector{Symbol}, opsymbols::Vector{Symbol}, i::Int, ::Type{<:AbstractRange{T}}) where {T}
+    ar = ArrayReferenceMeta(ls, ars, arraysymbolinds, opsymbols, Symbol(""), gensym())
+    pushpreamble!(ls, Expr(:(=), vptr(ar), Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:ref, :vargs, i))))
+    ar
+end
 
 
 
@@ -200,6 +205,7 @@ end
 # elbytes(::VectorizationBase.AbstractPointer{T}) where {T} = sizeof(T)::Int
 typeeltype(::Type{P}) where {T,P<:VectorizationBase.AbstractPointer{T}} = T
 typeeltype(::Type{LoopValue}) = Int8
+typeeltype(::Type{<:AbstractRange{T}}) where {T} = T
 
 function add_array_symbols!(ls::LoopSet, arraysymbolinds::Vector{Symbol}, offset::Int)
     for (i,as) ∈ enumerate(arraysymbolinds)

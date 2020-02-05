@@ -7,7 +7,8 @@
 [![Codecov](https://codecov.io/gh/chriselrod/LoopVectorization.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/chriselrod/LoopVectorization.jl)
 
 ## Installation
-```
+
+```julia
 using Pkg
 Pkg.add("LoopVectorization")
 ```
