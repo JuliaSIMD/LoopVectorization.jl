@@ -21,7 +21,7 @@ function vfilter!(f::F, x::Vector{T}, y::AbstractArray{T}) where {F,T <: SUPPORT
         mask = rem_mask & f(SVec(vy))
         SIMDPirates.compressstore!(gep(ptr_x, j), vy, mask)
         j += count_ones(mask)
-        resize!(x, j)
+        Base._deleteend!(x, N-j) # resize!(x, j)
     end
     x
 end
