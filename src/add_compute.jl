@@ -118,9 +118,9 @@ function add_reduction_update_parent!(
         reductsym = gensym(:reduction)
         reductinit = add_constant!(ls, gensym(:reductzero), loopdependencies(parent), reductsym, elementbytes, :numericconstant)
         if reduct_zero === :zero
-            push!(ls.preamble_zeros, identifier(reductinit))
+            push!(ls.preamble_zeros, (identifier(reductinit), IntOrFloat))
         elseif reduct_zero === :one
-            push!(ls.preamble_ones, identifier(reductinit))
+            push!(ls.preamble_ones, (identifier(reductinit), IntOrFloat))
         else
             if reductzero === :true || reductzero === :false
                 pushpreamble!(ls, Expr(:(=), name(reductinit), reductzero))
@@ -185,11 +185,7 @@ function add_compute!(
                 add_parent!(parents, deps, reduceddeps, ls, arg, elementbytes, position)
             end
         elseif arg ∈ ls.loopsymbols
-            loopsym = gensym(arg)
-            pushpreamble!(ls, Expr(:(=), loopsym, LoopValue()))
-            loopsymop = add_simple_load!(ls, gensym(loopsym), ArrayReference(loopsym, [arg]), elementbytes, false)
-            push!(ls.syms_aliasing_refs, name(loopsymop))
-            push!(ls.refs_aliasing_syms, loopsymop.ref)
+            loopsymop = add_loopvalue!(ls, arg, elementbytes)
             pushparent!(parents, deps, reduceddeps, loopsymop)
         else
             add_parent!(parents, deps, reduceddeps, ls, arg, elementbytes, position)

@@ -140,6 +140,8 @@ Base.size(lo::LoopOrder) = (2,2,2,length(lo.loopnames))
 Base.@propagate_inbounds Base.getindex(lo::LoopOrder, i::Int) = lo.oporder[i]
 Base.@propagate_inbounds Base.getindex(lo::LoopOrder, i...) = lo.oporder[LinearIndices(size(lo))[i...]]
 
+@enum NumberType::Int8 HardInt HardFloat IntOrFloat INVALID
+
 # Must make it easy to iterate
 # outer_reductions is a vector of indices (within operation vectors) of the reduction operation, eg the vmuladd op in a dot product
 # O(N) search is faster at small sizes
@@ -154,8 +156,8 @@ struct LoopSet
     preamble_symsym::Vector{Tuple{Int,Symbol}}
     preamble_symint::Vector{Tuple{Int,Int}}
     preamble_symfloat::Vector{Tuple{Int,Float64}}
-    preamble_zeros::Vector{Int}
-    preamble_ones::Vector{Int}
+    preamble_zeros::Vector{Tuple{Int,NumberType}}
+    preamble_ones::Vector{Tuple{Int,NumberType}}
     includedarrays::Vector{Symbol}
     includedactualarrays::Vector{Symbol}
     syms_aliasing_refs::Vector{Symbol}
@@ -199,21 +201,41 @@ function pushpreamble!(ls::LoopSet, op::Operation, v::Symbol)
     end
     nothing
 end
-pushpreamble!(ls::LoopSet, op::Operation, v::Integer) = push!(ls.preamble_symint, (identifier(op),convert(Int,v)))
-pushpreamble!(ls::LoopSet, op::Operation, v::Real) = push!(ls.preamble_symfloat, (identifier(op),convert(Float64,v)))
+function pushpreamble!(ls::LoopSet, op::Operation, v::Number)
+    typ = v isa Integer ? HardInt : HardFloat
+    id = identifier(op)
+    if iszero(v)
+        push!(ls.preamble_zeros, (id, typ))
+    elseif isone(v)
+        push!(ls.preamble_ones, (id, typ))
+    elseif v isa Integer
+        push!(ls.preamble_symint, (id, convert(Int,v)))
+    else
+        push!(ls.preamble_symfloat, (id, convert(Float64,v)))
+    end
+end
 pushpreamble!(ls::LoopSet, ex::Expr) = push!(ls.preamble.args, ex)
 function pushpreamble!(ls::LoopSet, op::Operation, RHS::Expr)
     c = gensym(:licmconst)
     if RHS.head === :call && first(RHS.args) === :zero
-        push!(ls.preamble_zeros, identifier(op))
+        push!(ls.preamble_zeros, (identifier(op), IntOrFloat))
     elseif RHS.head === :call && first(RHS.args) === :one
-        push!(ls.preamble_ones, identifier(op))
+        push!(ls.preamble_ones, (identifier(op), IntOrFloat))
     else
         pushpreamble!(ls, Expr(:(=), c, RHS))
         pushpreamble!(ls, op, c)
     end
     nothing
 end
+function zerotype(ls::LoopSet, op::Operation)
+    opid = identifier(op)
+    for (id,typ) ∈ ls.preamble_zeros
+        id == opid && return typ
+    end
+    INVALID
+end
+
+
 
 includesarray(ls::LoopSet, array::Symbol) = array ∈ ls.includedarrays
 
@@ -425,7 +447,7 @@ function add_operation!(
         elseif f === :zero || f === :one
             c = gensym(f)
             op = add_constant!(ls, c, ls.loopsymbols[1:position], LHS, elementbytes, :numericconstant)
-            push!(f === :zero ? ls.preamble_zeros : ls.preamble_ones, identifier(op))
+            push!(f === :zero ? ls.preamble_zeros : ls.preamble_ones, (identifier(op), IntOrFloat))
             op
         else
             add_compute!(ls, LHS, RHS, elementbytes, position)
@@ -452,7 +474,7 @@ function add_operation!(
         elseif f === :zero || f === :one
             c = gensym(f)
             op = add_constant!(ls, c, ls.loopsymbols[1:position], LHS_sym, elementbytes, :numericconstant)
-            push!(f === :zero ? ls.preamble_zeros : ls.preamble_ones, identifier(op))
+            push!(f === :zero ? ls.preamble_zeros : ls.preamble_ones, (identifier(op), IntOrFloat))
             op
         else
             add_compute!(ls, LHS_sym, RHS, elementbytes, position, LHS_ref)

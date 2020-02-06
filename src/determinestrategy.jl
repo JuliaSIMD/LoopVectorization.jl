@@ -91,12 +91,12 @@ function evaluate_cost_unroll(
             rd = reduceddependencies(op)
             hasintersection(rd, nested_loop_syms[1:end-length(rd)]) && return Inf
             included_vars[id] = true
-            
+            # @show op first(cost(op, vectorized, Wshift, size_T)), iter
             total_cost += iter * first(cost(op, vectorized, Wshift, size_T))
             total_cost > max_cost && return total_cost # abort if more expensive; we only want to know the cheapest
         end
     end
-    total_cost
+    total_cost + stride_penalty(ls, order)
 end
 
 # only covers vectorized ops; everything else considered lifted?
@@ -198,7 +198,10 @@ function determine_unroll_factor(
 end
 
 function tile_cost(X, U, T, UL, TL)
-    X[1] + X[4] + X[2] * (num_iterations(TL, T)/TL) + X[3] * (num_iterations(UL, U)/UL)
+    Tfactor = (num_iterations(TL, T)/TL)
+    Ufactor = (num_iterations(UL, U)/UL)
+    # X[1]*Tfactor*Ufactor + X[4] + X[2] * Tfactor + X[3] * Ufactor
+    X[1] + X[4] + X[2] * Tfactor + X[3] * Ufactor
 end
 function solve_tilesize(X, R, UL, TL)
     @inbounds any(iszero, (R[1],R[2],R[3])) && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
@@ -338,7 +341,7 @@ function stride_penalty(ls::LoopSet, op::Operation, order::Vector{Symbol})
     num_loops = length(order)
     contigsym = first(loopdependencies(op))
     contigsym == Symbol("##DISCONTIGUOUSSUBARRAY##") && return 0
-    iter = 0
+    iter = 1
     for i ∈ 0:num_loops - 1
         loopsym = order[num_loops - i]
         loopsym === contigsym && return iter
@@ -386,19 +389,13 @@ function evaluate_cost_tile(
     reg_pressure = reg_pres_buf(ls)
     # @inbounds reg_pressure[2] = 1
     # @inbounds reg_pressure[3] = 1
-    unrollediter = length(ls, unrolled)
-    tilediter = length(ls, tiled)
-    unrollediter = unrolled === vectorized ? num_iterations(unrollediter, W) : unrollediter # tiled cannot be vectorized, so do not check
-    iter::Int = tilediter * unrollediter
+    iter::Int = 1
     for n ∈ 1:N
         itersym = order[n]
         # Add to set of defined symbles
         push!(nested_loop_syms, itersym)
-        stepsize = 1
-        if n > 2
-            itersymlooplen = length(ls, itersym)
-            iter *= itersym === vectorized ? num_iterations(itersymlooplen, W) : itersymlooplen
-        end
+        looplength = length(ls, itersym)
+        iter *= itersym === vectorized ? num_iterations(looplength, W) : looplength
         # check which vars we can define at this level of loop nest
         for (id, op) ∈ enumerate(ops)
             # isconstant(op) && continue
@@ -406,7 +403,7 @@ function evaluate_cost_tile(
             # won't define if already defined...
             included_vars[id] && continue
             # it must also be a subset of defined symbols
-            loopdependencies(op) ⊆ nested_loop_syms || continue
+            all(ld -> ld ∈ nested_loop_syms, loopdependencies(op)) || continue
             # # @show nested_loop_syms
             # # @show reduceddependencies(op)
             rd = reduceddependencies(op)
@@ -414,6 +411,7 @@ function evaluate_cost_tile(
             included_vars[id] = true
             unrolledtiled[1,id] = unrolled ∈ loopdependencies(op)
             unrolledtiled[2,id] = tiled ∈ loopdependencies(op)
+            # @show op iter, unrolledtiled[:,id]
             iters[id] = iter
             innerloop ∈ loopdependencies(op) && set_upstream_family!(descendentsininnerloop, op, true)
         end

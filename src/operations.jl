@@ -87,9 +87,12 @@ mutable struct Operation
 end
 
 function matches(op1::Operation, op2::Operation)
+    op1 === op2 && return true
     op1.instruction === op2.instruction || return false
     op1.node_type == op2.node_type || return false
-    isconstant(op1) && return false
+    if isconstant(op1)
+        return false
+    end
     op1.dependencies == op2.dependencies || return false
     op2.reduced_deps == op2.reduced_deps || return false
     if isload(op1)

@@ -73,7 +73,7 @@ function add_broadcast!(
     # set Cₘₙ = 0
     # setC = add_constant!(ls, zero(promote_type(recursive_eltype(A), recursive_eltype(B))), cloopsyms, mC, elementbytes)
     setC = add_constant!(ls, gensym(:zero), cloopsyms, mC, elementbytes, :numericconstant)
-    push!(ls.preamble_zeros, identifier(setC))
+    push!(ls.preamble_zeros, (identifier(setC), IntOrFloat))
     # compute Cₘₙ += Aₘₖ * Bₖₙ
     reductop = Operation(
         ls, mC, elementbytes, :vmuladd, compute, reductdeps, Symbol[k], Operation[loadA, loadB, setC]

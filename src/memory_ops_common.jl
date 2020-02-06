@@ -50,7 +50,8 @@ function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementby
             vptrarray = subset_vptr!(ls, vptrarray, ninds, ind)
             length(indices) == 0 && push!(indices, DISCONTIGUOUS)
         elseif ind isa Expr
-            parent = add_operation!(ls, gensym(:indexpr), ind, elementbytes, length(ls.loopsymbols)) #FIXME: position wont be length(ls.loopsymbols) in general
+            #FIXME: position (in loopnest) wont be length(ls.loopsymbols) in general
+            parent = add_operation!(ls, gensym(:indexpr), ind, elementbytes, length(ls.loopsymbols))
             pushparent!(parents, loopdependencies, reduceddeps, parent)
             # var = get(ls.opdict, ind, nothing)
             push!(indices, name(parent)); ninds += 1

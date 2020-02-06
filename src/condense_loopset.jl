@@ -55,10 +55,10 @@ isload(os::OperationStruct) = os.node_type == memload
 isstore(os::OperationStruct) = os.node_type == memstore
 iscompute(os::OperationStruct) = os.node_type == compute
 isconstant(os::OperationStruct) = os.node_type == constant
-function findmatchingarray(ls::LoopSet, array::Symbol)
+function findmatchingarray(ls::LoopSet, mref::ArrayReferenceMeta)
     id = 0x01
-    for as ∈ ls.refs_aliasing_syms
-        vptr(as) === array && return id
+    for r ∈ ls.refs_aliasing_syms
+        r == mref && return id
         id += 0x01
     end
     0x00
@@ -96,7 +96,7 @@ function OperationStruct!(varnames::Vector{Symbol}, ls::LoopSet, op::Operation)
     rd = reduceddeps_uint(ls, op)
     cd = childdeps_uint(ls, op)
     p = parents_uint(ls, op)
-    array = accesses_memory(op) ? findmatchingarray(ls, vptr(op.ref)) : 0x00
+    array = accesses_memory(op) ? findmatchingarray(ls, op.ref) : 0x00
     OperationStruct(
         ld, rd, cd, p, op.node_type, array, findindoradd!(varnames, name(op))
     )
@@ -228,7 +228,7 @@ end
 end
 
 # Try to condense in type stable manner
-function generate_call(ls::LoopSet, IUT)
+function generate_call(ls::LoopSet, IUT, debug::Bool = false)
     operation_descriptions = Expr(:curly, :Tuple)
     varnames = Symbol[]
     for op ∈ operations(ls)
@@ -243,12 +243,19 @@ function generate_call(ls::LoopSet, IUT)
     argmeta = argmeta_and_consts_description(ls, arraysymbolinds)
     loop_bounds = loop_boundaries(ls)
     inline, U, T = IUT
-    if inline
-        q = Expr(:call, lv(:_avx_!), Expr(:call, Expr(:curly, :Val, (U,T))), operation_descriptions, arrayref_descriptions, argmeta, loop_bounds)
+    if inline | debug
+        func = debug ? lv(:_avx_loopset) : lv(:_avx_!)
+        q = Expr(
+            :call, func, Expr(:call, Expr(:curly, :Val, (U,T))),
+            operation_descriptions, arrayref_descriptions, argmeta, loop_bounds
+        )
         foreach(ref -> push!(q.args, vptr(ref)), ls.refs_aliasing_syms)
     else
         arraydescript = Expr(:tuple)
-        q = Expr(:call, lv(:__avx__!), Expr(:call, Expr(:curly, :Val, (U,T))), operation_descriptions, arrayref_descriptions, argmeta, loop_bounds, arraydescript)
+        q = Expr(
+            :call, lv(:__avx__!), Expr(:call, Expr(:curly, :Val, (U,T))),
+            operation_descriptions, arrayref_descriptions, argmeta, loop_bounds, arraydescript
+        )
         for array ∈ ls.includedactualarrays
             push!(q.args, Expr(:call, lv(:unwrap_array), array))
             push!(arraydescript.args, Expr(:call, lv(:array_wrapper), array))
@@ -359,6 +366,11 @@ function setup_call_inline(ls::LoopSet, U = zero(Int8), T = zero(Int8))
     end
     hasouterreductions && pushpreamble!(ls, outer_reducts)
     append!(ls.preamble.args, q.args)
+    ls.preamble
+end
+function setup_call_debug(ls::LoopSet)
+    # avx_loopset(instr, ops, arf, AM, LB, vargs)
+    pushpreamble!(ls, generate_call(ls, (true,zero(Int8),zero(Int8)), true))
     ls.preamble
 end
 function setup_call(ls::LoopSet, inline = Int8(2), U = zero(Int8), T = zero(Int8))

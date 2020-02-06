@@ -54,6 +54,22 @@ function add_load_getindex!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::In
     add_load!(ls, var, array, rawindices, elementbytes)
 end
 
+function add_loopvalue!(ls::LoopSet, arg::Symbol, elementbytes::Int)
+    # check for CSE opportunity
+    loopsym = Symbol("##LOOPSYMBOL##", arg)
+    ar = ArrayReference(loopsym, [arg])
+    for op ∈ operations(ls)
+        if isload(op) && op.ref.ref == ar
+            return op
+        end
+    end
+    pushpreamble!(ls, Expr(:(=), loopsym, LoopValue()))
+    loopsymop = add_simple_load!(ls, gensym(loopsym), ar, elementbytes, false)
+    push!(ls.syms_aliasing_refs, name(loopsymop))
+    push!(ls.refs_aliasing_syms, loopsymop.ref)
+    loopsymop
+end
+
 
 struct LoopValue end
 @inline VectorizationBase.stridedpointer(::LoopValue) = LoopValue()

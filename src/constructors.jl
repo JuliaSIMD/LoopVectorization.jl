@@ -151,4 +151,7 @@ macro _avx(arg, q)
 end
 
 
+macro avx_debug(q)
+    esc(LoopVectorization.setup_call_debug(LoopSet(q, __module__)))
+end
 

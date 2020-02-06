@@ -13,10 +13,11 @@ function lower!(
 )
     W = ls.W
     if isconstant(op)
-        if identifier(op) ∈ ls.preamble_zeros
-            lower_zero!(q, op, vectorized, W, unrolled, U, suffix, ls.T)
-        else
+        zerotyp = zerotype(ls, op)
+        if zerotyp == INVALID
             lower_constant!(q, op, vectorized, W, unrolled, U, suffix, ls.T)
+        else
+            lower_zero!(q, op, vectorized, W, unrolled, U, suffix, ls.T, zerotyp)
         end
     elseif isload(op)
         lower_load!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask)
