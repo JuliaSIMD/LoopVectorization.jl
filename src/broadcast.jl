@@ -57,11 +57,13 @@ function add_broadcast!(
         bloopsyms = Symbol[k]
         cloopsyms = Symbol[m]
         reductdeps = Symbol[m, k]
+        kvec = bloopsyms
     elseif ndims(B) == 2
         n = loopsyms[2];
         bloopsyms = Symbol[k,n]
         cloopsyms = Symbol[m,n]
         reductdeps = Symbol[m, k, n]
+        kvec = Symbol[k]
     else
         throw("B must be a vector or matrix.")
     end
@@ -72,13 +74,22 @@ function add_broadcast!(
     loadB = add_broadcast!(ls, gensym(:B), mB, bloopsyms, B, elementbytes)
     # set Cₘₙ = 0
     # setC = add_constant!(ls, zero(promote_type(recursive_eltype(A), recursive_eltype(B))), cloopsyms, mC, elementbytes)
+    # targetC will be used for reduce_to_add
+    mCt = gensym(mC)
+    targetC = add_constant!(ls, gensym(:zero), cloopsyms, mCt, elementbytes, :numericconstant)
+    push!(ls.preamble_zeros, (identifier(targetC), IntOrFloat))
     setC = add_constant!(ls, gensym(:zero), cloopsyms, mC, elementbytes, :numericconstant)
     push!(ls.preamble_zeros, (identifier(setC), IntOrFloat))
+    setC.reduced_children = kvec
     # compute Cₘₙ += Aₘₖ * Bₖₙ
     reductop = Operation(
-        ls, mC, elementbytes, :vmuladd, compute, reductdeps, Symbol[k], Operation[loadA, loadB, setC]
+        ls, mC, elementbytes, :vmuladd, compute, reductdeps, kvec, Operation[loadA, loadB, setC]
     )
-    pushop!(ls, reductop, mC)    
+    reductop = pushop!(ls, reductop, mC)    
+    reductfinal = Operation(
+        ls, mCt, elementbytes, :reduce_to_add, compute, cloopsyms, kvec, Operation[reductop, targetC]
+    )
+    pushop!(ls, reductfinal, mCt)
 end
 
 struct LowDimArray{D,T,N,A<:DenseArray{T,N}} <: DenseArray{T,N}

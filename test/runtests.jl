@@ -1255,9 +1255,11 @@ end
 
         M, K, N = 77, 83, 57;
         A = rand(R,M,K); B = rand(R,K,N); C = rand(R,M,N);
-
+        At = copy(A')
         D1 = C .+ A * B;
         D2 = @avx C .+ A *ˡ B;
+        @test D1 ≈ D2
+        fill!(D2, -999999); D2 = @avx C .+ At' *ˡ B;
         @test D1 ≈ D2
         if T <: Union{Float32,Float64}
             D3 = cos.(B');
