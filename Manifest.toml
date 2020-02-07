@@ -55,9 +55,9 @@ version = "0.3.7"
 
 [[SLEEFPirates]]
 deps = ["Libdl", "SIMDPirates", "VectorizationBase"]
-git-tree-sha1 = "2137e852f44a1a1653d2a4b743568f08a624e198"
+git-tree-sha1 = "de898399ffa0f2e0c1bd6d4b7db02fd065e88788"
 uuid = "476501e8-09a2-5ece-8869-fb82de89a1fa"
-version = "0.3.3"
+version = "0.3.4"
 
 [[Serialization]]
 uuid = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
