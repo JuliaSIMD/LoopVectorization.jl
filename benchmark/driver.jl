@@ -35,33 +35,35 @@ Atmulvb_future = @spawnat 14 benchmark_Atmulvb(2:256);
 
 dot_bench = fetch(dot_future)
 selfdot_bench = fetch(selfdot_future)
-AplusAt_bench = fetch(AplusAt_future)
 gemv_bench = fetch(gemv_future)
 randomaccess_bench = fetch(randomaccess_future)
 dot3_bench = fetch(dot3_future)
 sse_bench = fetch(sse_future)
 exp_bench = fetch(exp_future)
+AplusAt_bench = fetch(AplusAt_future)
 aplusBc_bench = fetch(aplusBc_future)
 gemm_bench = fetch(gemm_future)
 AtmulB_bench = fetch(AtmulB_future)
 AmulBt_bench = fetch(AmulBt_future)
 Atmulvb_bench = fetch(Atmulvb_future)
 
-v = 6
-const PICTURES = "/home/chriselrod/Pictures"
-save(joinpath(PICTURES, "bench_gemm_v$v.png"), plot(gemm_bench));
-save(joinpath(PICTURES, "bench_AtmulB_v$v.png"), plot(AtmulB_bench));
-save(joinpath(PICTURES, "bench_dot_v$v.png"), plot(dot_bench));
-save(joinpath(PICTURES, "bench_selfdot_v$v.png"), plot(selfdot_bench));
-save(joinpath(PICTURES, "bench_gemv_v$v.png"), plot(gemv_bench));
-save(joinpath(PICTURES, "bench_dot3_v$v.png"), plot(dot3_bench));
-save(joinpath(PICTURES, "bench_sse_v$v.png"), plot(sse_bench));
-save(joinpath(PICTURES, "bench_exp_v$v.png"), plot(exp_bench));
-save(joinpath(PICTURES, "bench_aplusBc_v$v.png"), plot(aplusBc_bench));
-save(joinpath(PICTURES, "bench_AplusAt_v$v.png"), plot(AplusAt_bench));
-save(joinpath(PICTURES, "bench_random_access_v$v.png"), plot(randomaccess_bench));
-save(joinpath(PICTURES, "bench_AmulBt_v$v.png"), plot(AmulBt_bench));
-save(joinpath(PICTURES, "bench_Atmulvb_v$v.png"), plot(Atmulvb_bench));
+
+v = 1
+filetype = "svg"
+const PICTURES = joinpath(pkgdir("LoopVectorization"), "docs", "src", "assets")
+save(joinpath(PICTURES, "bench_gemm_v$v.$filetype"), plot(gemm_bench));
+save(joinpath(PICTURES, "bench_AtmulB_v$v.$filetype"), plot(AtmulB_bench));
+save(joinpath(PICTURES, "bench_dot_v$v.$filetype"), plot(dot_bench));
+save(joinpath(PICTURES, "bench_selfdot_v$v.$filetype"), plot(selfdot_bench));
+save(joinpath(PICTURES, "bench_gemv_v$v.$filetype"), plot(gemv_bench));
+save(joinpath(PICTURES, "bench_dot3_v$v.$filetype"), plot(dot3_bench));
+save(joinpath(PICTURES, "bench_sse_v$v.$filetype"), plot(sse_bench));
+save(joinpath(PICTURES, "bench_aplusBc_v$v.$filetype"), plot(aplusBc_bench));
+save(joinpath(PICTURES, "bench_AplusAt_v$v.$filetype"), plot(AplusAt_bench));
+save(joinpath(PICTURES, "bench_random_access_v$v.$filetype"), plot(randomaccess_bench));
+save(joinpath(PICTURES, "bench_AmulBt_v$v.$filetype"), plot(AmulBt_bench));
+save(joinpath(PICTURES, "bench_Atmulvb_v$v.$filetype"), plot(Atmulvb_bench));
+save(joinpath(PICTURES, "bench_exp_v$v.$filetype"), plot(exp_bench));
 
 
 

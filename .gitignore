@@ -5,11 +5,9 @@
 *.jl.*.cov
 *.jl.mem
 *~
-src/#*#
-tests/#*#
-benchmark/#*#
 *.mem
 *.mod
 *.mod0
 *.so
 *.s
+*#

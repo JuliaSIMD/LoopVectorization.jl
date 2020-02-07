@@ -43,18 +43,18 @@
 @inline equivalentfloat(::Type{UInt64}) = Float64
 
 function lower_zero!(
-    q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol, U::Int,
-    suffix::Union{Nothing,Int}, typeT::Symbol, zerotyp::NumberType
+    q::Expr, op::Operation, vectorized::Symbol, ls::LoopSet, unrolled::Symbol, U::Int, suffix::Union{Nothing,Int}, zerotyp::NumberType = zerotype(ls, op)
 )
+    W = ls.W; typeT = ls.T
     mvar = variable_name(op, suffix)
     if zerotyp == HardInt
         newtypeT = gensym(:IntType)
-        pushpreamble!(ls, Expr(:(=), newtypeT, Expr(:call, lv(:equivalentint), typT)))
-        typT = newtypeT
+        pushpreamble!(ls, Expr(:(=), newtypeT, Expr(:call, lv(:equivalentint), typeT)))
+        typeT = newtypeT
     elseif zerotyp == HardFloat
         newtypeT = gensym(:FloatType)
-        pushpreamble!(ls, Expr(:(=), newtypeT, Expr(:call, lv(:equivalentfloat), typT)))
-        typT = newtypeT
+        pushpreamble!(ls, Expr(:(=), newtypeT, Expr(:call, lv(:equivalentfloat), typeT)))
+        typeT = newtypeT
     end
     if vectorized ∈ loopdependencies(op) || vectorized ∈ reducedchildren(op) || vectorized ∈ reduceddependencies(op)
         call = Expr(:call, lv(:vzero), W, typeT)
@@ -71,9 +71,9 @@ function lower_zero!(
     nothing    
 end
 function lower_constant!(
-    q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol, U::Int,
-    suffix::Union{Nothing,Int}, typeT::Symbol
+    q::Expr, op::Operation, vectorized::Symbol, ls::LoopSet, unrolled::Symbol, U::Int, suffix::Union{Nothing,Int}
 )
+    W = ls.W; typeT = ls.T
     instruction = op.instruction
     mvar = variable_name(op, suffix)
     constsym = instruction.instr

@@ -71,6 +71,8 @@ The macro models the set of nested loops, and chooses a
 It may also apply to broadcasts:
 
 ```jldoctest
+julia> using LoopVectorization
+
 julia> a = rand(100);
 
 julia> b = @avx exp.(2 .* a);
@@ -140,7 +142,12 @@ macro avx(arg1, arg2, q)
 end
 
 
+"""
+    @_avx
 
+This macro transforms loops, making default assumptions rather than punting to a generated
+function that is often capable of using type information in place of some assumptions.
+"""
 macro _avx(q)
     esc(lower(LoopSet(q, __module__)))
 end

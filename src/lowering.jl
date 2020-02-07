@@ -15,9 +15,9 @@ function lower!(
     if isconstant(op)
         zerotyp = zerotype(ls, op)
         if zerotyp == INVALID
-            lower_constant!(q, op, vectorized, W, unrolled, U, suffix, ls.T)
+            lower_constant!(q, op, vectorized, ls, unrolled, U, suffix)
         else
-            lower_zero!(q, op, vectorized, W, unrolled, U, suffix, ls.T, zerotyp)
+            lower_zero!(q, op, vectorized, ls, unrolled, U, suffix, zerotyp)
         end
     elseif isload(op)
         lower_load!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask)

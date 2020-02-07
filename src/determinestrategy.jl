@@ -273,11 +273,13 @@ function solve_tilesize(X, R, Umax, Tmax, UL, TL)
             T = Tmax
         else # U too large, resolve T
             U = Umax
-            T = min(Tmax, solve_tilesize_constU(X, R, U))
+            T = min(Tmax, max(1,solve_tilesize_constU(X, R, U)))
         end
+        cost = tile_cost(X, U, T, UL, TL)
     elseif T_too_large
         T = Tmax
-        U = min(Umax, solve_tilesize_constT(X, R, T))
+        U = min(Umax, max(1,solve_tilesize_constT(X, R, T)))
+        cost = tile_cost(X, U, T, UL, TL)
     end
     U, T, cost
 end

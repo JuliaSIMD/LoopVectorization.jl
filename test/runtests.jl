@@ -442,8 +442,9 @@ end
               y[i] = yᵢ
               end)
         function mygemv_avx!(y, A, x)
+            # Need to test 0s somewhere!
             @_avx for i ∈ eachindex(y)
-                yᵢ = zero(eltype(y))
+                yᵢ = 0.0#zero(eltype(y))
                 for j ∈ eachindex(x)
                     yᵢ += A[i,j] * x[j]
                 end
