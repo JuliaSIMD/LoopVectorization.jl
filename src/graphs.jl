@@ -467,7 +467,7 @@ function add_operation!(
         RHS_ref = array_reference_meta!(ls, array, rawindices, elementbytes)
         op = add_load!(ls, gensym(LHS_sym), RHS_ref, elementbytes)
         iop = add_compute!(ls, LHS_sym, :identity, [op], elementbytes)
-        pushfirst!(LHS_ref.parents, iop)
+        # pushfirst!(LHS_ref.parents, iop)
     elseif RHS.head === :call
         f = first(RHS.args)
         if f === :getindex

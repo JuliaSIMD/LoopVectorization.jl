@@ -230,6 +230,21 @@ end
                 b[i] = exp(a[i])
             end
         end
+        function offset_exp!(A, B)
+            @avx for i=1:size(A,1), j=1:size(B,2)
+	        A[i,j] = exp(B[i,j])
+            end
+        end
+        function offset_expavx!(A, B)
+            @avx for i=1:size(A,1), j=1:size(B,2)
+	        A[i,j] = exp(B[i,j])
+            end
+        end
+        function offset_exp_avx!(A, B)
+            @_avx for i=1:size(A,1), j=1:size(B,2)
+	        A[i,j] = exp(B[i,j])
+            end
+        end
 
         vexpsq = :(for i ∈ eachindex(a)
                    s += exp(a[i])
@@ -251,6 +266,19 @@ end
             end
             s
         end
+
+
+
+
+
+
+
+
+
+
+
+
+
         function myvexp_avx(a)
             s = zero(eltype(a))
             @_avx for i ∈ eachindex(a)
@@ -402,6 +430,16 @@ end
             @test r1 ≈ r2
             fill!(r2, NaN); calc_sins_avx!(r2)
             @test r1 ≈ r2
+
+            N,M = 47,53
+            B = reshape(cumsum(ones(T, 3N)),N,:)
+            A1 = zeros(T, N, M)
+            A2 = zeros(T, N, M)
+            offset_exp!(A1, B)
+            offset_expavx!(A2, B)
+            @test A1 ≈ A2
+            fill!(A2, 0); offset_exp_avx!(A2, B)
+            @test A1 ≈ A2
         end
     end
 
