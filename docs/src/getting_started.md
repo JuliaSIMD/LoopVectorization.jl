@@ -42,7 +42,6 @@ Aside from loops, `LoopVectorization.jl` also supports broadcasting.
 
 ```julia
 julia> using LoopVectorization, BenchmarkTools
-[ Info: Precompiling LoopVectorization [bdcacae8-1622-11e9-2a5c-532679323890]
 
 julia> M, K, N = 47, 73, 7;
 
