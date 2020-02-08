@@ -360,21 +360,21 @@ end
 @inline sizeequivalentfloat(::Type{Float16}, x::Float64) = Float16(x)
 @inline sizeequivalentfloat(::Type{Float16}, x::Float32) = Float16(x)
 @inline sizeequivalentint(::Type{T}, x::T) where {T} = x
-@inline sizeequivalentint(::Type{Int64}, x::Int64) = x
 @inline sizeequivalentint(::Type{Int64}, x::Int32) = Int64(x)
 @inline sizeequivalentint(::Type{Int64}, x::Int16) = Int64(x)
 @inline sizeequivalentint(::Type{Int32}, x::Int64) = Int32(x)
-@inline sizeequivalentint(::Type{Int32}, x::Int32) = x
 @inline sizeequivalentint(::Type{Int32}, x::Int16) = Int32(x)
 @inline sizeequivalentint(::Type{Int16}, x::Int64) = Int16(x)
 @inline sizeequivalentint(::Type{Int16}, x::Int32) = Int16(x)
-@inline sizeequivalentint(::Type{Int16}, x::Int16) = x
+@inline sizeequivalentint(::Type{Float64}, x::Int64) = x
 @inline sizeequivalentint(::Type{Float64}, x::Int32) = Int64(x)
 @inline sizeequivalentint(::Type{Float64}, x::Int16) = Int64(x)
 @inline sizeequivalentint(::Type{Float32}, x::Int64) = Int32(x)
+@inline sizeequivalentint(::Type{Float32}, x::Int32) = x
 @inline sizeequivalentint(::Type{Float32}, x::Int16) = Int32(x)
 @inline sizeequivalentint(::Type{Float16}, x::Int64) = Int16(x)
 @inline sizeequivalentint(::Type{Float16}, x::Int32) = Int16(x)
+@inline sizeequivalentint(::Type{Float16}, x::Int16) = x
 
 
 function setup_preamble!(ls::LoopSet, W::Symbol, typeT::Symbol, vectorized::Symbol, unrolled::Symbol, tiled::Symbol, U::Int)
