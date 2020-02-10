@@ -1152,7 +1152,11 @@ end
             @test test_bit_shift(r) == test_bit_shift_avx(r)
 
             r = T(-10):T(2.3):T(1000)
-            s = T == Float32 ? sum(collect(r)) : sum(r)
+            s = if VERSION >= v"1.5.0-DEV.255" || T != Float32
+                sum(r)
+            else
+                sum(identity, r)
+            end
             @test s ≈ mysumavx(r)
             @test s ≈ mysum_avx(r)
             
@@ -1609,7 +1613,7 @@ end
                  for k ∈ 1:size(A,2)
                  C[m,n] += A[m,k] * B[n,k]
                  end
-                 end)
+                 end);
     lsAmulBt1 = LoopVectorization.LoopSet(AmulBtq1);
     @test LoopVectorization.choose_order(lsAmulBt1) == (Symbol[:n,:m,:k], :m, Unum, Tnum)
 

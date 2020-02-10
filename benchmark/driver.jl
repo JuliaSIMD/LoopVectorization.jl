@@ -51,6 +51,7 @@ Atmulvb_bench = fetch(Atmulvb_future)
 v = 1
 filetype = "svg"
 const PICTURES = joinpath(pkgdir("LoopVectorization"), "docs", "src", "assets")
+save(joinpath(PICTURES, "bench_exp_v$v.$filetype"), plot(exp_bench));
 save(joinpath(PICTURES, "bench_gemm_v$v.$filetype"), plot(gemm_bench));
 save(joinpath(PICTURES, "bench_AtmulB_v$v.$filetype"), plot(AtmulB_bench));
 save(joinpath(PICTURES, "bench_dot_v$v.$filetype"), plot(dot_bench));
@@ -63,7 +64,6 @@ save(joinpath(PICTURES, "bench_AplusAt_v$v.$filetype"), plot(AplusAt_bench));
 save(joinpath(PICTURES, "bench_random_access_v$v.$filetype"), plot(randomaccess_bench));
 save(joinpath(PICTURES, "bench_AmulBt_v$v.$filetype"), plot(AmulBt_bench));
 save(joinpath(PICTURES, "bench_Atmulvb_v$v.$filetype"), plot(Atmulvb_bench));
-save(joinpath(PICTURES, "bench_exp_v$v.$filetype"), plot(exp_bench));
 
 
 
