@@ -1009,6 +1009,20 @@ end
             end
             s
         end
+        function myprodavx(x)
+            p = one(eltype(x))
+            @avx for i ∈ eachindex(x)
+                p *= x[i]
+            end
+            p
+        end
+        function myprod_avx(x)
+            p = one(eltype(x))
+            @_avx for i ∈ eachindex(x)
+                p *= x[i]
+            end
+            p
+        end
 
         function test_bit_shift(counter)
             accu = zero(first(counter))
@@ -1140,13 +1154,20 @@ end
             @test q1 ≈ q2
             @test sum(q2; dims=3) ≈ ones(T,ni,nj)
 
+            x .+= 0.545;
             s = sum(x)
             @test s ≈ mysumavx(x)
             @test s ≈ mysum_avx(x)
+            p = prod(x)
+            @test p ≈ myprodavx(x)
+            @test p ≈ myprod_avx(x)
             r = T == Float32 ? (Int32(-10):Int32(234)) : -10:234
             s = sum(r)
             @test s ≈ mysumavx(r)
             @test s ≈ mysum_avx(r)
+            p = prod(r)
+            @test p ≈ myprodavx(r)
+            @test p ≈ myprod_avx(r)
 
             @test test_bit_shift(r) == test_bit_shiftavx(r)
             @test test_bit_shift(r) == test_bit_shift_avx(r)

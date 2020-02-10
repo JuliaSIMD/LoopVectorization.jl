@@ -153,6 +153,7 @@ name(op::Operation) = op.variable
 instruction(op::Operation) = op.instruction
 isreductionzero(op::Operation, instr::Symbol) = op.instruction.mod === REDUCTION_ZERO[instr]
 refname(op::Operation) = op.ref.ptr
+isreductcombineinstr(op::Operation) = iscompute(op) && isreductcombineinstr(instruction(op))
 """
     mvar = mangledvar(op)
 

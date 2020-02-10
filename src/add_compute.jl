@@ -34,10 +34,9 @@ function setdiffv!(s4::AbstractVector{T}, s3::AbstractVector{T}, s1::AbstractVec
 end
 function update_deps!(deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, parent::Operation)
     mergesetv!(deps, loopdependencies(parent))#, reduceddependencies(parent))        
-    if !(isload(parent) || isconstant(parent)) && parent.instruction.instr ∉ (:reduced_add, :reduced_prod, :reduce_to_add, :reduce_to_prod)
+    if !(isload(parent) || isconstant(parent)) && !isreductcombineinstr(parent)
         mergesetv!(reduceddeps, reduceddependencies(parent))
     end
-    # 
     nothing
 end
 
@@ -139,7 +138,6 @@ function add_reduction_update_parent!(
     end
     combineddeps = copy(deps); mergesetv!(combineddeps, reduceddeps)
     directdependency && pushparent!(vparents, deps, reduceddeps, reductinit)#parent) # deps and reduced deps will not be disjoint
-    # update_reduction_status!(vparents, combineddeps, name(reductinit))
     update_reduction_status!(vparents, reduceddeps, name(reductinit))
     # this is the op added by add_compute
     op = Operation(length(operations(ls)), reductsym, elementbytes, instr, compute, deps, reduceddeps, vparents)

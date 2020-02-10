@@ -224,25 +224,35 @@ const REDUCTION_CLASS = Dict{Symbol,Float64}(
 reduction_instruction_class(instr::Symbol) = get(REDUCTION_CLASS, instr, NaN)
 reduction_instruction_class(instr::Instruction) = get(REDUCTION_CLASS, instr.instr, NaN)
 function reduction_to_single_vector(x::Float64)
-    x == 1.0 ? :evadd : x == 2.0 ? :evmul : x == 3.0 ? :vor : x == 4.0 ? :vand : x == 5.0 ? :max : x == 6.0 ? :min : throw("Reduction not found.")
+    # x == 1.0 ? :evadd : x == 2.0 ? :evmul : x == 3.0 ? :vor : x == 4.0 ? :vand : x == 5.0 ? :max : x == 6.0 ? :min : throw("Reduction not found.")
+    x == 1.0 ? :evadd : x == 2.0 ? :evmul : x == 5.0 ? :max : x == 6.0 ? :min : throw("Reduction not found.")
 end
 reduction_to_single_vector(x) = reduction_to_single_vector(reduction_instruction_class(x))
 function reduction_to_scalar(x::Float64)
-    x == 1.0 ? :vsum : x == 2.0 ? :vprod : x == 3.0 ? :vany : x == 4.0 ? :vall : x == 5.0 ? :maximum : x == 6.0 ? :minimum : throw("Reduction not found.")
+    # x == 1.0 ? :vsum : x == 2.0 ? :vprod : x == 3.0 ? :vany : x == 4.0 ? :vall : x == 5.0 ? :maximum : x == 6.0 ? :minimum : throw("Reduction not found.")
+    x == 1.0 ? :vsum : x == 2.0 ? :vprod : x == 5.0 ? :maximum : x == 6.0 ? :minimum : throw("Reduction not found.")
 end
 reduction_to_scalar(x) = reduction_to_scalar(reduction_instruction_class(x))
 function reduction_scalar_combine(x::Float64)
-    x == 1.0 ? :reduced_add : x == 2.0 ? :reduced_prod : x == 3.0 ? :reduced_any : x == 4.0 ? :reduced_all : x == 5.0 ? :reduced_max : x == 6.0 ? :reduced_min : throw("Reduction not found.")
+    # x == 1.0 ? :reduced_add : x == 2.0 ? :reduced_prod : x == 3.0 ? :reduced_any : x == 4.0 ? :reduced_all : x == 5.0 ? :reduced_max : x == 6.0 ? :reduced_min : throw("Reduction not found.")
+    x == 1.0 ? :reduced_add : x == 2.0 ? :reduced_prod : x == 5.0 ? :reduced_max : x == 6.0 ? :reduced_min : throw("Reduction not found.")
 end
 reduction_scalar_combine(x) = reduction_scalar_combine(reduction_instruction_class(x))
 function reduction_combine_to(x::Float64)
-    x == 1.0 ? :reduce_to_add : x == 2.0 ? :reduce_to_prod : x == 3.0 ? :reduce_to_any : x == 4.0 ? :reduce_to_all : x == 5.0 ? :reduce_to_max : x == 6.0 ? :reduce_to_min : throw("Reduction not found.")
+    # x == 1.0 ? :reduce_to_add : x == 2.0 ? :reduce_to_prod : x == 3.0 ? :reduce_to_any : x == 4.0 ? :reduce_to_all : x == 5.0 ? :reduce_to_max : x == 6.0 ? :reduce_to_min : throw("Reduction not found.")
+    x == 1.0 ? :reduce_to_add : x == 2.0 ? :reduce_to_prod : x == 5.0 ? :reduce_to_max : x == 6.0 ? :reduce_to_min : throw("Reduction not found.")
 end
 reduction_combine_to(x) = reduction_combine_to(reduction_instruction_class(x))
 function reduction_zero(x::Float64) 
-    x == 1.0 ? :zero : x == 2.0 ? :one : x == 3.0 ? :false : x == 4.0 ? :true : x == 5.0 ? :typemin : x == 6.0 ? :typemax : throw("Reduction not found.")
+    # x == 1.0 ? :zero : x == 2.0 ? :one : x == 3.0 ? :false : x == 4.0 ? :true : x == 5.0 ? :typemin : x == 6.0 ? :typemax : throw("Reduction not found.")
+    x == 1.0 ? :zero : x == 2.0 ? :one : x == 5.0 ? :typemin : x == 6.0 ? :typemax : throw("Reduction not found.")
 end
 reduction_zero(x) = reduction_zero(reduction_instruction_class(x))
+
+function isreductcombineinstr(instr::Symbol)
+    instr ∈ (:reduced_add, :reduced_prod, :reduce_to_add, :reduce_to_prod, :reduced_max, :reduced_min, :reduce_to_max, :reduce_to_min)
+end
+isreductcombineinstr(instr::Instruction) = isreductcombineinstr(instr.instr)
 
 const FUNCTIONSYMBOLS = Dict{Type{<:Function},Instruction}(
     typeof(+) => :(+),
