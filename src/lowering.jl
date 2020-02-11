@@ -263,7 +263,7 @@ function lower_unrolled_dynamic!(
     end
     Ut = U
     vecisunrolled = unrolled === vectorized
-    local remblock::Expr
+    remblock = Expr(:block)
     firstiter = true
     while true
         if firstiter # first iter
@@ -313,7 +313,6 @@ function lower_unrolled_dynamic!(
             else
                 Expr(:call, :(!=), unrolled_stopsym, unrolled)
             end
-            remblock = Expr(:block)
             push!(q.args, Expr(:if, comparison, remblock))
         elseif !(Ut < U - 1 + vecisunrolled) || Ut == Ureduct
             break
@@ -379,7 +378,7 @@ function lower_tiled(ls::LoopSet, vectorized::Symbol, U::Int, T::Int)
     nloops = num_loops(ls);
     firstiter = true
     mangledtiled = tiledsym(tiled)
-    local qifelse::Expr
+    qifelse = q # local declaration of qifelse; will be replaced before first use
     while Tt > 0
         tiledloopbody = Expr(:block)
         lower_unrolled!(tiledloopbody, ls, vectorized, U, Tt, W, typeT, unrolledloop)
