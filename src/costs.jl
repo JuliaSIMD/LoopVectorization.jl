@@ -22,13 +22,13 @@ function Base.Expr(instr::Instruction, args...)
     end
 end
 Base.hash(instr::Instruction, h::UInt64) = hash(instr.instr, hash(instr.mod, h))
-function Base.isless(instr1::Instruction, instr2::Instruction)
-    if instr1.mod === instr2.mod
-        isless(instr1.instr, instr2.instr)
-    else
-        isless(instr1.mod, instr2.mod)
-    end
-end
+# function Base.isless(instr1::Instruction, instr2::Instruction)
+#     if instr1.mod === instr2.mod
+#         isless(instr1.instr, instr2.instr)
+#     else
+#         isless(instr1.mod, instr2.mod)
+#     end
+# end
 Base.isequal(ins1::Instruction, ins2::Instruction) = (ins1.instr === ins2.instr) && (ins1.mod === ins2.mod)
 
 const LOOPCONSTANT = Instruction(gensym())

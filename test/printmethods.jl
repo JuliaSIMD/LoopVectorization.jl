@@ -1,5 +1,6 @@
 @testset "Print Methods" begin
-        selfdotq = :(for i ∈ eachindex(a)
+    @show @__LINE__
+    selfdotq = :(for i ∈ eachindex(a)
                  s += a[i]*a[i]
                  end)
     lsselfdot = LoopVectorization.LoopSet(selfdotq);
@@ -9,6 +10,4 @@
     @test occursin("Operation[", s)
     @test occursin("s = 0", s)
     @test occursin("s = LoopVectorization.vfmadd", s)
-
-    
 end

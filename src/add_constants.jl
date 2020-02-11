@@ -49,7 +49,13 @@ end
 function add_constant!(
     ls::LoopSet, value::Symbol, deps::Vector{Symbol}, assignedsym::Symbol, elementbytes::Int, f::Symbol = Symbol("")
 )
-    op = Operation(length(operations(ls)), assignedsym, elementbytes, Instruction(f, value), constant, deps, NODEPENDENCY, NOPARENTS)
+    retop = get(ls.opdict, value, nothing)
+    # @show retop, value ls.opdict
+    if retop !== nothing
+        op = Operation(length(operations(ls)), assignedsym, elementbytes, :identity, compute, deps, reduceddependencies(retop), [retop])
+    else
+        op = Operation(length(operations(ls)), assignedsym, elementbytes, Instruction(f, value), constant, deps, NODEPENDENCY, NOPARENTS)
+    end
     pushop!(ls, op, assignedsym)
 end
 # function add_constant!(

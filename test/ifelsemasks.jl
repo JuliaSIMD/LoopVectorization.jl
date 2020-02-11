@@ -109,9 +109,10 @@
             x1 = 2*x[i]-100
             x2 = x1*x1
             x3 = x2 + x1
+            x4 = x3
             x[i] = x1
             (x1 < -50) && (x[i] = x2)
-            (x1 < 60) || (x[i] = x3)
+            (x1 < 60) || (x[i] = x4)
         end
     end
     function condstoreavx!(x)
@@ -134,7 +135,6 @@
             (x1 < 60) || (x[i] = x3)
         end
     end
-
 
     N = 117
     for T ∈ (Float32, Float64, Int32, Int64)

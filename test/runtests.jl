@@ -15,9 +15,9 @@ function clenshaw(x,coeff)
 end
 
 @time @testset "LoopVectorization.jl" begin
-    
-    @time include("gemm.jl")
 
+    @time include("printmethods.jl")
+    
     @time include("dot.jl")
 
     @time include("special.jl")
@@ -37,5 +37,7 @@ end
     if Base.libllvm_version > v"7"
         @time include("filter.jl")
     end
+
+    @time include("gemm.jl")
 
 end

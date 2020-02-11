@@ -30,28 +30,25 @@ function add_store!(
     ls::LoopSet, var::Symbol, mpref::ArrayReferenceMetaPosition, elementbytes::Int, parent = getop(ls, var, mpref.loopdependencies, elementbytes)
 )
     isload(parent) && return add_copystore!(ls, parent, mpref, elementbytes)
-    parents = mpref.parents
+    vparents = mpref.parents
     ldref = mpref.loopdependencies
     reduceddeps = mpref.reduceddeps
     pvar = name(parent)
     id = length(ls.operations)
-    if pvar ∈ ls.syms_aliasing_refs
-        # try to cse store, by replacing the previous one
-        ref = mpref.mref.ref
-        for opp ∈ operations(ls)
-            isstore(opp) || continue
-            if ref == opp.ref.ref
-                id = opp.identifier
-                break
-            end
+    # try to cse store, by replacing the previous one
+    ref = mpref.mref.ref
+    add_pvar = true
+    for opp ∈ operations(ls)
+        isstore(opp) || continue
+        if ref == opp.ref.ref
+            id = opp.identifier
+            break
         end
-        add_pvar = false
-    else
-        add_pvar = true
+        add_pvar &= (name(first(parents(opp))) != pvar)
     end
-    pushfirst!(parents, parent)
+    pushfirst!(vparents, parent)
     update_deps!(ldref, reduceddeps, parent)
-    op = Operation( id, name(mpref), elementbytes, :setindex!, memstore, mpref )#loopdependencies, reduceddeps, parents, mpref.mref )
+    op = Operation( id, name(mpref), elementbytes, :setindex!, memstore, mpref )
     add_store!(ls, op, add_pvar)
 end
 
@@ -97,39 +94,42 @@ function add_conditional_store!(ls::LoopSet, LHS, condop::Operation, storeop::Op
 
     pvar = storeop.variable
     id = length(ls.operations)
-    if pvar ∉ ls.syms_aliasing_refs
-        push!(ls.syms_aliasing_refs, pvar)
-        push!(ls.refs_aliasing_syms, mref)
-        storeparents = [storeop, condop]
-    else
-        # for now, we don't try to cse the store
-        # later, as an optimization, we could:
-        # 1. cse the store
-        # 2. use the mask to combine the vector we're trying to store here with the vector that would have been stored in the now cse-ed 1.
-        # 3. use a regular (non-masked) store on that vector.
-        ref = mpref.mref.ref
-        for opp ∈ operations(ls)
-            isstore(opp) || continue
-            if ref == opp.ref.ref# && return cse_store!(ls, identifier(opp), mref, parents, ldref, reduceddeps, elementbytes)
-                id = opp.identifier
-                break
-            end
-        end
-        if id != length(ls.operations) # then there was a previous store
-            prevstore = getop(ls, id + 1)
-            storeop = add_compute!(ls, gensym(:combinedstoreop), Instruction(:vifelse), [condop, storeop, first(parents(prevstore))], elementbytes)
-            storeparents = [storeop]
-            storeinstr = if prevstore.instruction.instr === :conditionalstore!
-                push!(storeparents, add_compute!(ls, gensym(:combinedmask), Instruction(:|), [condop, last(parents(prevstore))], elementbytes))
-                :conditionalstore!
-            else
-                :setindex!
-            end
-            op = Operation( id, name(mref), elementbytes, storeinstr, memstore, ldref, NODEPENDENCY, storeparents, mref )
-            cse_store!(ls, op)
-        end
-    end
-    
+    @assert pvar ∉ ls.syms_aliasing_refs
+    # if pvar ∉ ls.syms_aliasing_refs
+    # FIXME properly handle CSE of conditional stores.
+    push!(ls.syms_aliasing_refs, pvar)
+    push!(ls.refs_aliasing_syms, mref)
+    storeparents = [storeop, condop]
+    # else
+    #     # for now, we don't try to cse the store
+    #     # later, as an optimization, we could:
+    #     # 1. cse the store
+    #     # 2. use the mask to combine the vector we're trying to store here with the vector that would have been stored in the now cse-ed 1.
+    #     # 3. use a regular (non-masked) store on that vector.
+    #     ref = mpref.mref.ref
+    #     for opp ∈ operations(ls)
+    #         isstore(opp) || continue
+    #         if ref == opp.ref.ref# && return cse_store!(ls, identifier(opp), mref, parents, ldref, reduceddeps, elementbytes)
+    #             id = opp.identifier
+    #             break
+    #         end
+    #     end
+    #     if id != length(ls.operations) # then there was a previous store
+    #         prevstore = getop(ls, id + 1)
+    #         # @show prevstore prevstore.node_type, loopdependencies(prevstore)
+    #         # @show operations(ls)
+    #         storeop = add_compute!(ls, gensym(:combinedstoreop), Instruction(:vifelse), [condop, storeop, first(parents(prevstore))], elementbytes)
+    #         storeparents = [storeop]
+    #         storeinstr = if prevstore.instruction.instr === :conditionalstore!
+    #             push!(storeparents, add_compute!(ls, gensym(:combinedmask), Instruction(:|), [condop, last(parents(prevstore))], elementbytes))
+    #             :conditionalstore!
+    #         else
+    #             :setindex!
+    #         end
+    #         op = Operation( id, name(mref), elementbytes, storeinstr, memstore, ldref, NODEPENDENCY, storeparents, mref )
+    #         return cse_store!(ls, op)
+    #     end
+    # end
     op = Operation( id, name(mref), elementbytes, :conditionalstore!, memstore, ldref, NODEPENDENCY, storeparents, mref )
     add_unique_store!(ls, op)
 end
