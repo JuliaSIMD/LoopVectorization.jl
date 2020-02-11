@@ -234,7 +234,20 @@ function zerotype(ls::LoopSet, op::Operation)
     end
     INVALID
 end
-
+function Base.iszero(ls::LoopSet, op::Operation)
+    opid = identifier(op)
+    for (id,_) ∈ ls.preamble_zeros
+        opid == id && return true
+    end
+    false
+end
+function Base.isone(ls::LoopSet, op::Operation)
+    opid = identifier(op)
+    for (id,_) ∈ ls.preamble_ones
+        opid == id && return true
+    end
+    false
+end
 
 
 includesarray(ls::LoopSet, array::Symbol) = array ∈ ls.includedarrays

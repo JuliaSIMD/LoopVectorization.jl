@@ -3,11 +3,11 @@ function add_constant!(ls::LoopSet, var::Symbol, elementbytes::Int)
     pushpreamble!(ls, op, var)
     pushop!(ls, op, var)
 end
-function add_constant!(ls::LoopSet, var, elementbytes::Int = 8)
-    sym = gensym(:loopconstant)
-    pushpreamble!(ls, Expr(:(=), sym, var))
-    add_constant!(ls, sym, elementbytes)
-end
+# function add_constant!(ls::LoopSet, var, elementbytes::Int = 8)
+#     sym = gensym(:loopconstant)
+#     pushpreamble!(ls, Expr(:(=), sym, var))
+#     add_constant!(ls, sym, elementbytes)
+# end
 function add_constant!(ls::LoopSet, var::Number, elementbytes::Int = 8)
     op = Operation(length(operations(ls)), gensym(:loopconstnumber), elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS)
     ops = operations(ls)
@@ -52,13 +52,13 @@ function add_constant!(
     op = Operation(length(operations(ls)), assignedsym, elementbytes, Instruction(f, value), constant, deps, NODEPENDENCY, NOPARENTS)
     pushop!(ls, op, assignedsym)
 end
-function add_constant!(
-    ls::LoopSet, value, deps::Vector{Symbol}, assignedsym::Symbol, elementbytes::Int, f::Symbol = Symbol("")
-)
-    intermediary = gensym(:intermediate) # hack, passing meta info here
-    pushpreamble!(ls, Expr(:(=), intermediary, value))
-    add_constant!(ls, intermediary, deps, assignedsym, f, elementbytes)
-end
+# function add_constant!(
+#     ls::LoopSet, value, deps::Vector{Symbol}, assignedsym::Symbol, elementbytes::Int, f::Symbol = Symbol("")
+# )
+#     intermediary = gensym(:intermediate) # hack, passing meta info here
+#     pushpreamble!(ls, Expr(:(=), intermediary, value))
+#     add_constant!(ls, intermediary, deps, assignedsym, f, elementbytes)
+# end
 function add_constant!(
     ls::LoopSet, value::Number, deps::Vector{Symbol}, assignedsym::Symbol, elementbytes::Int
 )

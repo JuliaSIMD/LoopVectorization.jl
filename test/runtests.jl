@@ -995,33 +995,23 @@ end
             softmax3_core_avx4!(lse, qq, xx, tmpmax, maxk, nk)
         end
 
-        function mysumavx(x)
+        function sumprodavx(x)
             s = zero(eltype(x))
-            @avx for i ∈ eachindex(x)
-                s += x[i]
-            end
-            s
-        end
-        function mysum_avx(x)
-            s = zero(eltype(x))
-            @_avx for i ∈ eachindex(x)
-                s += x[i]
-            end
-            s
-        end
-        function myprodavx(x)
             p = one(eltype(x))
             @avx for i ∈ eachindex(x)
-                p *= x[i]
+                s += x[i]
+                p *=x[i]
             end
-            p
+            s, p
         end
-        function myprod_avx(x)
+        function sumprod_avx(x)
+            s = zero(eltype(x))
             p = one(eltype(x))
             @_avx for i ∈ eachindex(x)
-                p *= x[i]
+                s += x[i]
+                p *=x[i]
             end
-            p
+            s, p
         end
 
         function test_bit_shift(counter)
@@ -1155,19 +1145,21 @@ end
             @test sum(q2; dims=3) ≈ ones(T,ni,nj)
 
             x .+= 0.545;
-            s = sum(x)
-            @test s ≈ mysumavx(x)
-            @test s ≈ mysum_avx(x)
-            p = prod(x)
-            @test p ≈ myprodavx(x)
-            @test p ≈ myprod_avx(x)
-            r = T == Float32 ? (Int32(-10):Int32(234)) : -10:234
-            s = sum(r)
-            @test s ≈ mysumavx(r)
-            @test s ≈ mysum_avx(r)
-            p = prod(r)
-            @test p ≈ myprodavx(r)
-            @test p ≈ myprod_avx(r)
+            s = sum(x); p = prod(x)
+            s1, p1 = sumprodavx(x)
+            @test s ≈ s1
+            @test p ≈ p1
+            s1, p1 = sumprod_avx(x)
+            @test s ≈ s1
+            @test p ≈ p1
+            r = T == Float32 ? (Int32(-10):Int32(107)) : (Int64(-10):Int64(107))
+            s = sum(r); p = prod(r)
+            s1, p1 = sumprodavx(r)
+            @test s ≈ s1
+            @test p ≈ p1
+            s1, p1 = sumprod_avx(r)
+            @test s ≈ s1
+            @test p ≈ p1
 
             @test test_bit_shift(r) == test_bit_shiftavx(r)
             @test test_bit_shift(r) == test_bit_shift_avx(r)
@@ -1178,9 +1170,13 @@ end
             else
                 sum(identity, r)
             end
-            @test s ≈ mysumavx(r)
-            @test s ≈ mysum_avx(r)
-            
+            p = prod(r);
+            s1, p1 = sumprodavx(r)
+            @test s ≈ s1
+            @test p ≈ p1
+            s1, p1 = sumprod_avx(r)
+            @test s ≈ s1
+            @test p ≈ p1
         end
 end
 
@@ -1541,34 +1537,34 @@ end
             C[m,n] > 0 && (C[m,n] = Cₘₙ)
         end
     end
-    function condstore!(y, x)
-        @inbounds for i ∈ eachindex(y, x)
-            x1 = x[i]
+    function condstore!(x)
+        @inbounds for i ∈ eachindex(x)
+            x1 = 2*x[i]-100
             x2 = x1*x1
             x3 = x2 + x1
-            y[i] = x1
-            (x1 < 30) && (y[i] = x2)
-            (x1 < 80) || (y[i] = x3)
+            x[i] = x1
+            (x1 < -50) && (x[i] = x2)
+            (x1 < 60) || (x[i] = x3)
         end
     end
-    function condstoreavx!(y, x)
-        @avx for i ∈ eachindex(y, x)
-            x1 = x[i]
+    function condstoreavx!(x)
+        @avx for i ∈ eachindex(x)
+            x1 = 2*x[i]-100
             x2 = x1*x1
             x3 = x2 + x1
-            y[i] = x1
-            (x1 < 30) && (y[i] = x2)
-            (x1 < 80) || (y[i] = x3)
+            x[i] = x1
+            (x1 < -50) && (x[i] = x2)
+            (x1 < 60) || (x[i] = x3)
         end
     end
-    function condstore_avx!(y, x)
-        @_avx for i ∈ eachindex(y, x)
-            x1 = x[i]
+    function condstore_avx!(x)
+        @_avx for i ∈ eachindex(x)
+            x1 = 2*x[i]-100
             x2 = x1*x1
             x3 = x2 + x1
-            y[i] = x1
-            (x1 < 30) && (y[i] = x2)
-            (x1 < 80) || (y[i] = x3)
+            x[i] = x1
+            (x1 < -50) && (x[i] = x2)
+            (x1 < 60) || (x[i] = x3)
         end
     end
 
@@ -1603,12 +1599,13 @@ end
         if T <: Union{Float32,Float64}
             a .*= 100;
         end
-        b2 = similar(b);
-        condstore!(b, a)
-        condstoreavx!(b2, a)
-        @test b == b2
-        fill!(b2, -999999); condstore_avx!(b2, a)
-        @test b == b2
+        b1 = copy(a);
+        b2 = copy(a);
+        condstore!(b1)
+        condstoreavx!(b2)
+        @test b1 == b2
+        copyto!(b2, a); condstore_avx!(b2)
+        @test b1 == b2
 
         M, K, N = 83, 85, 79;
         if T <: Integer

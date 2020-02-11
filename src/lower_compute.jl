@@ -1,17 +1,5 @@
 # A compute op needs to know the unrolling and tiling status of each of its parents.
-#
-function lower_compute_scalar!(
-    q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol, tiled::Symbol, U::Int,
-    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
-)
-    lower_compute!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask, false)
-end
-function lower_compute_unrolled!(
-    q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol, tiled::Symbol, U::Int,
-    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
-)
-    lower_compute!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask, true)
-end
+
 struct FalseCollection end
 Base.getindex(::FalseCollection, i...) = false
 function lower_compute!(

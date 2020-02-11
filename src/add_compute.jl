@@ -94,9 +94,9 @@ function isreductzero(op::Operation, ls::LoopSet, reduct_zero::Symbol)
     isconstant(op) || return false
     reduct_zero === op.instruction.mod && return true
     if reduct_zero === :zero
-        identifier(op) ∈ ls.preamble_zeros && return true
+        iszero(ls, op) && return true
     elseif reduct_zero === :one
-        identifier(op) ∈ ls.preamble_ones && return true
+        isone(ls, op) && return true
     end
     false
 end
