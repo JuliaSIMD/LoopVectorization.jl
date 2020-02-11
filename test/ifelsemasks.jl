@@ -115,7 +115,7 @@
             (x1 < 60) || (x[i] = x4)
         end
     end
-    function condstoreavx!(x)
+    function condstore1avx!(x)
         @avx for i ∈ eachindex(x)
             x1 = 2*x[i]-100
             x2 = x1*x1
@@ -125,7 +125,7 @@
             (x1 < 60) || (x[i] = x3)
         end
     end
-    function condstore_avx!(x)
+    function condstore1_avx!(x)
         @_avx for i ∈ eachindex(x)
             x1 = 2*x[i]-100
             x2 = x1*x1
@@ -133,6 +133,26 @@
             x[i] = x1
             (x1 < -50) && (x[i] = x2)
             (x1 < 60) || (x[i] = x3)
+        end
+    end
+    function condstore2avx!(x)
+        @avx for i ∈ eachindex(x)
+            x1 = 2*getindex(x, i)-100
+            x2 = x1*x1
+            x3 = x2 + x1
+            setindex!(x, x1, i)
+            (x1 < -50) && setindex!(x, x2, i)
+            (x1 < 60) || setindex!(x, x3, i)
+        end
+    end
+    function condstore2_avx!(x)
+        @_avx for i ∈ eachindex(x)
+            x1 = 2*getindex(x, i)-100
+            x2 = x1*x1
+            x3 = x2 + x1
+            setindex!(x, x1, i)
+            (x1 < -50) && setindex!(x, x2, i)
+            (x1 < 60) || setindex!(x, x3, i)
         end
     end
 
@@ -169,9 +189,13 @@
         b1 = copy(a);
         b2 = copy(a);
         condstore!(b1)
-        condstoreavx!(b2)
+        condstore1avx!(b2)
         @test b1 == b2
-        copyto!(b2, a); condstore_avx!(b2)
+        copyto!(b2, a); condstore1_avx!(b2)
+        @test b1 == b2
+        copyto!(b2, a); condstore2avx!(b2)
+        @test b1 == b2
+        copyto!(b2, a); condstore2_avx!(b2)
         @test b1 == b2
 
         M, K, N = 83, 85, 79;

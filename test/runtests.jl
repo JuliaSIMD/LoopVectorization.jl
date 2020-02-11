@@ -18,6 +18,8 @@ end
 
     @time include("printmethods.jl")
     
+    @time include("ifelsemasks.jl")
+
     @time include("dot.jl")
 
     @time include("special.jl")
@@ -29,8 +31,6 @@ end
     @time include("copy.jl")
 
     @time include("broadcast.jl")
-
-    @time include("ifelsemasks.jl")
 
     @time include("map.jl")
 

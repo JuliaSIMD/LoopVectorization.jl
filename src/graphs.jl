@@ -302,9 +302,7 @@ function getop(ls::LoopSet, var::Symbol, deps, elementbytes::Int)
         add_constant!(ls, var, deps, gensym(:constant), elementbytes)
     end
 end
-getop(ls::LoopSet, i::Int) = ls.operations[i + 1]
-
-@inline extract_val(::Val{N}) where {N} = N
+getop(ls::LoopSet, i::Int) = ls.operations[i]
 
 function Operation(
     ls::LoopSet, variable, elementbytes, instruction,

@@ -139,9 +139,9 @@ end
 function loopset_return_value(ls::LoopSet, ::Val{extract}) where {extract}
     if length(ls.outer_reductions) == 1
         if extract
-            Expr(:call, :extract_data, Symbol(mangledvar(operations(ls)[ls.outer_reductions[1]]), 0))
+            Expr(:call, :extract_data, Symbol(mangledvar(getop(ls, ls.outer_reductions[1])), 0))
         else
-            Symbol(mangledvar(operations(ls)[ls.outer_reductions[1]]), 0)
+            Symbol(mangledvar(getop(ls, ls.outer_reductions[1])), 0)
         end
     elseif length(ls.outer_reductions) > 1
         ret = Expr(:tuple)

@@ -6,7 +6,6 @@ function cse_store!(ls::LoopSet, op::Operation)
     id = identifier(op)
     ls.operations[id] = op
     ls.opdict[op.variable] = op
-    op
 end
 function add_store!(ls::LoopSet, op::Operation, add_pvar::Bool = name(first(parents(op))) ∉ ls.syms_aliasing_refs)
     @assert isstore(op)
@@ -81,7 +80,7 @@ function add_store_ref!(ls::LoopSet, var, ex::Expr, elementbytes::Int)
 end
 function add_store_setindex!(ls::LoopSet, ex::Expr, elementbytes::Int)
     array, raw_indices = ref_from_setindex(ex)
-    add_store!(ls, (ex.args[2])::Symbol, array, rawindices, elementbytes)
+    add_store!(ls, (ex.args[3])::Symbol, array, raw_indices, elementbytes)
 end
 
 # For now, it is illegal to load from a conditional store.
@@ -92,7 +91,7 @@ function add_conditional_store!(ls::LoopSet, LHS, condop::Operation, storeop::Op
     mref = mpref.mref
     ldref = mpref.loopdependencies
 
-    pvar = storeop.variable
+    pvar = name(storeop)
     id = length(ls.operations)
     @assert pvar ∉ ls.syms_aliasing_refs
     # if pvar ∉ ls.syms_aliasing_refs
