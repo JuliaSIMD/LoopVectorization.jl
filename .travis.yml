@@ -25,3 +25,8 @@ jobs:
           Pkg.instantiate();
           include("docs/make.jl");'
       after_success: skip
+env:
+  global:
+    - COVERALLS_PARALLEL=true
+  notifications:
+    webhooks: https://coveralls.io/webhook

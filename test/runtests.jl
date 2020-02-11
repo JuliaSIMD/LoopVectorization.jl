@@ -1395,7 +1395,6 @@ end
         fill!(D2, -999999); D2 = @avx C .+ At' *ˡ B;
         @test D1 ≈ D2
         if T <: Union{Float32,Float64}
-            @show T, @__LINE__
             D3 = cos.(B');
             D4 = @avx cos.(B');
             @test D3 ≈ D4
@@ -1575,7 +1574,7 @@ end
 
 
     N = 117
-    @time for T ∈ (Float32, Float64, Int32, Int64)
+    for T ∈ (Float32, Float64, Int32, Int64)
         @show T, @__LINE__
         if T <: Integer
             a = rand(-T(100):T(100), N); b = rand(-T(100):T(100), N);
