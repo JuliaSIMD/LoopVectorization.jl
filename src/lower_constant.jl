@@ -1,46 +1,9 @@
 
-@inline zerointeger(::Type{Float16}) = zero(Int16)
-@inline zerointeger(::Type{Float32}) = zero(Int32)
-@inline zerointeger(::Type{Float64}) = zero(Int64)
-@inline zerointeger(::Type{I}) where {I<:Integer} = zero(I)
-@inline zerofloat(::Type{Float16}) = zero(Float16)
-@inline zerofloat(::Type{Float32}) = zero(Float32)
-@inline zerofloat(::Type{Float64}) = zero(Float64)
-@inline zerofloat(::Type{UInt16}) = zero(Float16)
-@inline zerofloat(::Type{UInt32}) = zero(Float32)
-@inline zerofloat(::Type{UInt64}) = zero(Float64)
-@inline zerofloat(::Type{Int16}) = zero(Float16)
-@inline zerofloat(::Type{Int32}) = zero(Float32)
-@inline zerofloat(::Type{Int64}) = zero(Float64)
+@inline onefloat(::Type{T}) where {T} = one(sizeequivalentfloat(T))
+@inline oneinteger(::Type{T}) where {T} = one(sizeequivalentint(T))
+@inline zerofloat(::Type{T}) where {T} = zero(sizeequivalentfloat(T))
+@inline zerointeger(::Type{T}) where {T} = zero(sizeequivalentint(T))
 
-
-@inline oneinteger(::Type{Float16}) = one(Int16)
-@inline oneinteger(::Type{Float32}) = one(Int32)
-@inline oneinteger(::Type{Float64}) = one(Int64)
-@inline oneinteger(::Type{I}) where {I<:Integer} = one(I)
-@inline onefloat(::Type{Float16}) = one(Float16)
-@inline onefloat(::Type{Float32}) = one(Float32)
-@inline onefloat(::Type{Float64}) = one(Float64)
-@inline onefloat(::Type{UInt16}) = one(Float16)
-@inline onefloat(::Type{UInt32}) = one(Float32)
-@inline onefloat(::Type{UInt64}) = one(Float64)
-@inline onefloat(::Type{Int16}) = one(Float16)
-@inline onefloat(::Type{Int32}) = one(Float32)
-@inline onefloat(::Type{Int64}) = one(Float64)
-
-@inline equivalentint(::Type{I}) where {I<:Integer} = I
-@inline equivalentint(::Type{Float16}) = Int16
-@inline equivalentint(::Type{Float32}) = Int32
-@inline equivalentint(::Type{Float64}) = Int64
-@inline equivalentfloat(::Type{Float16}) = Float16
-@inline equivalentfloat(::Type{Float32}) = Float64
-@inline equivalentfloat(::Type{Float64}) = Float64
-@inline equivalentfloat(::Type{Int16}) = Float16
-@inline equivalentfloat(::Type{Int32}) = Float64
-@inline equivalentfloat(::Type{Int64}) = Float64
-@inline equivalentfloat(::Type{UInt16}) = Float16
-@inline equivalentfloat(::Type{UInt32}) = Float64
-@inline equivalentfloat(::Type{UInt64}) = Float64
 
 function lower_zero!(
     q::Expr, op::Operation, vectorized::Symbol, ls::LoopSet, unrolled::Symbol, U::Int, suffix::Union{Nothing,Int}, zerotyp::NumberType = zerotype(ls, op)
@@ -49,11 +12,11 @@ function lower_zero!(
     mvar = variable_name(op, suffix)
     if zerotyp == HardInt
         newtypeT = gensym(:IntType)
-        pushpreamble!(ls, Expr(:(=), newtypeT, Expr(:call, lv(:equivalentint), typeT)))
+        pushpreamble!(ls, Expr(:(=), newtypeT, Expr(:call, lv(:sizeequivalentint), typeT)))
         typeT = newtypeT
     elseif zerotyp == HardFloat
         newtypeT = gensym(:FloatType)
-        pushpreamble!(ls, Expr(:(=), newtypeT, Expr(:call, lv(:equivalentfloat), typeT)))
+        pushpreamble!(ls, Expr(:(=), newtypeT, Expr(:call, lv(:sizeequivalentfloat), typeT)))
         typeT = newtypeT
     end
     if vectorized ∈ loopdependencies(op) || vectorized ∈ reducedchildren(op) || vectorized ∈ reduceddependencies(op)

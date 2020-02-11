@@ -65,7 +65,7 @@ function add_orblock!(ls::LoopSet, condop::Operation, LHS, RHS::Expr, elementbyt
     add_orblock!(ls, condop, LHS, rhsop, elementbytes, position)
 end
 function add_orblock!(ls::LoopSet, condop::Operation, LHS, RHS, elementbytes::Int, position::Int)
-    rhsop = getop(ls, RHS)
+    rhsop = getop(ls, RHS, elementbytes)
     add_orblock!(ls, condop, LHS, rhsop, elementbytes, position)
 end
 function add_orblock!(ls::LoopSet, condexpr::Expr, condeval::Expr, elementbytes::Int, position::Int)

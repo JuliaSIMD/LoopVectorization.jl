@@ -1395,6 +1395,7 @@ end
         fill!(D2, -999999); D2 = @avx C .+ At' *ˡ B;
         @test D1 ≈ D2
         if T <: Union{Float32,Float64}
+            @show T, @__LINE__
             D3 = cos.(B');
             D4 = @avx cos.(B');
             @test D3 ≈ D4
@@ -1541,10 +1542,41 @@ end
             C[m,n] > 0 && (C[m,n] = Cₘₙ)
         end
     end
+    function condstore!(y, x)
+        @inbounds for i ∈ eachindex(y, x)
+            x1 = x[i]
+            x2 = x1*x1
+            x3 = x2 + x1
+            y[i] = x1
+            (x1 < 30) && (y[i] = x2)
+            (x1 < 80) || (y[i] = x3)
+        end
+    end
+    function condstoreavx!(y, x)
+        @avx for i ∈ eachindex(y, x)
+            x1 = x[i]
+            x2 = x1*x1
+            x3 = x2 + x1
+            y[i] = x1
+            (x1 < 30) && (y[i] = x2)
+            (x1 < 80) || (y[i] = x3)
+        end
+    end
+    function condstore_avx!(y, x)
+        @_avx for i ∈ eachindex(y, x)
+            x1 = x[i]
+            x2 = x1*x1
+            x3 = x2 + x1
+            y[i] = x1
+            (x1 < 30) && (y[i] = x2)
+            (x1 < 80) || (y[i] = x3)
+        end
+    end
 
 
     N = 117
     @time for T ∈ (Float32, Float64, Int32, Int64)
+        @show T, @__LINE__
         if T <: Integer
             a = rand(-T(100):T(100), N); b = rand(-T(100):T(100), N);
         else
@@ -1568,6 +1600,16 @@ end
         @test c1 ≈ c2
         fill!(c2, -999999999); maybewriteoravx!(c2, a, b)
         @test c1 ≈ c2
+
+        if T <: Union{Float32,Float64}
+            a .*= 100;
+        end
+        b2 = similar(b);
+        condstore!(b, a)
+        condstoreavx!(b2, a)
+        @test b == b2
+        fill!(b2, -999999); condstore_avx!(b2, a)
+        @test b == b2
 
         M, K, N = 83, 85, 79;
         if T <: Integer
