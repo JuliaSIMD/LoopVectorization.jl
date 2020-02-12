@@ -3,16 +3,20 @@ struct Product{A,B}
     b::B
 end
 @inline function Base.size(p::Product)
-    M = size(p.a, 1)
+    M = @inbounds size(p.a)[1]
     (M, Base.tail(size(p.b))...)
 end
 @inline function Base.size(p::Product, i::Integer)
-    i == 1 && return size(p.a, 1)
-    size(p.b, i)
+    i == 1 && return @inbounds size(p.a)[1]
+    @inbounds size(p.b)[i]
 end
 @inline Base.length(p::Product) = prod(size(p))
 @inline Base.broadcastable(p::Product) = p
-@inline Base.ndims(p::Type{Product{A,B}}) where {A,B} = ndims(B)
+@inline numdims(A) = ndims(A) # fallback
+@inline numdims(::Type{Product{A,B}}) where {A,B} = numdims(B)
+@inline Base.ndims(::Type{Product{A,B}}) where {A,B} = numdims(B)
+# This numdims nonsense is a hack to avoid type piracy in defining:
+@inline numdims(::Type{B}) where {N, S <: Base.Broadcast.AbstractArrayStyle{N}, B <: Base.Broadcast.Broadcasted{S}} = N
 
 Base.Broadcast._broadcast_getindex_eltype(::Product{A,B}) where {T, A <: AbstractVecOrMat{T}, B <: AbstractVecOrMat{T}} = T
 function Base.Broadcast._broadcast_getindex_eltype(p::Product)
@@ -48,17 +52,16 @@ function add_broadcast!(
     mB = gensym(:Bₖₙ)
     pushpreamble!(ls, Expr(:(=), mA, Expr(:(.), bcname, QuoteNode(:a))))
     pushpreamble!(ls, Expr(:(=), mB, Expr(:(.), bcname, QuoteNode(:b))))
-    pushpreamble!(ls, Expr(:(=), K, Expr(:call, :size, mB, 1)))
-
+    pushpreamble!(ls, Expr(:(=), K, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,@__FILE__), Expr(:ref, Expr(:call, :size, mB), 1))))
     k = gensym(:k)
     add_loop!(ls, Loop(k, 0, K), k)
     m = loopsyms[1];
-    if ndims(B) == 1
+    if numdims(B) == 1
         bloopsyms = Symbol[k]
         cloopsyms = Symbol[m]
         reductdeps = Symbol[m, k]
         kvec = bloopsyms
-    elseif ndims(B) == 2
+    elseif numdims(B) == 2
         n = loopsyms[2];
         bloopsyms = Symbol[k,n]
         cloopsyms = Symbol[m,n]
@@ -202,6 +205,7 @@ end
 ) where {T <: SUPPORTED_TYPES, N, BC <: Broadcasted, Mod}
     # we have an N dimensional loop.
     # need to construct the LoopSet
+    # @show typeof(dest)
     loopsyms = [gensym(:n) for n ∈ 1:N]
     ls = LoopSet(Mod)
     sizes = Expr(:tuple)
