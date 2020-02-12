@@ -174,6 +174,25 @@
         end
     end
 
+    function AmulB2x2avx!(C, A, B)
+        @avx tile=(2,2) for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+            ΔCₘₙ = zero(eltype(C))
+            for k ∈ 1:size(A,2)
+                ΔCₘₙ += A[m,k] * B[k,n]
+            end
+            C[m,n] = ΔCₘₙ
+        end
+    end
+    function AmulB2x2_avx!(C, A, B)
+        @_avx tile=(2,2) for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+            ΔCₘₙ = zero(eltype(C))
+            for k ∈ 1:size(A,2)
+                ΔCₘₙ += A[m,k] * B[k,n]
+            end
+            C[m,n] = ΔCₘₙ
+        end
+    end
+
     # function AtmulB!(C, A, B)
     #     for j ∈ 1:size(C,2), i ∈ 1:size(C,1)
     #         Cᵢⱼ = zero(eltype(C))
@@ -532,6 +551,10 @@
             @test C ≈ C2
             AmuladdBavx!(C, At', B, -2)
             @test C ≈ -C2
+            fill!(C, 9999.999); AmulB2x2avx!(C, A, B);
+            @test C ≈ C2
+            fill!(C, 9999.999); AmulB2x2avx!(C, At', B);
+            @test C ≈ C2
             fill!(C, 9999.999); AtmulBavx1!(C, At, B)
             @test C ≈ C2
             fill!(C, 9999.999); AtmulBavx1!(C, A', B)
@@ -570,6 +593,10 @@
             @test C ≈ C2
             AmuladdB_avx!(C, At', B, -2)
             @test C ≈ -C2
+            fill!(C, 9999.999); AmulB2x2_avx!(C, A, B);
+            @test C ≈ C2
+            fill!(C, 9999.999); AmulB2x2_avx!(C, At', B);
+            @test C ≈ C2
             fill!(C, 9999.999); AtmulB_avx1!(C, At, B)
             @test C ≈ C2
             fill!(C, 9999.999); AtmulB_avx1!(C, A', B)
@@ -604,6 +631,10 @@
             @test Cs ≈ C2
             AmuladdBavx!(Cs, Ats', Bs, -2)
             @test Cs ≈ -C2
+            fill!(Cs, 9999.999); AmulB2x2avx!(Cs, As, Bs)
+            @test Cs ≈ C2
+            fill!(Cs, 9999.999); AmulB2x2avx!(Cs, Ats', Bs)
+            @test Cs ≈ C2
             fill!(Cs, 9999.999); AtmulBavx1!(Cs, Ats, Bs)
             @test Cs ≈ C2
             fill!(Cs, 9999.999); AtmulBavx1!(Cs, As', Bs)
@@ -642,6 +673,10 @@
             @test Cs ≈ C2
             AmuladdB_avx!(Cs, Ats', Bs, -2)
             @test Cs ≈ -C2
+            fill!(Cs, 9999.999); AmulB2x2_avx!(Cs, As, Bs)
+            @test Cs ≈ C2
+            fill!(Cs, 9999.999); AmulB2x2_avx!(Cs, Ats', Bs)
+            @test Cs ≈ C2
             fill!(Cs, 9999.999); AtmulB_avx1!(Cs, Ats, Bs)
             @test Cs ≈ C2
             fill!(Cs, 9999.999); AtmulB_avx1!(Cs, As', Bs)

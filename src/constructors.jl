@@ -103,6 +103,8 @@ end
 function check_tile(arg)
     a1 = (arg.args[1])::Symbol
     a1 === :tile || return nothing
+    tup = arg.args[2]
+    @assert length(tup.args) == 2
     U = convert(Int8, tup.args[1])
     T = convert(Int8, tup.args[2])
     U, T
