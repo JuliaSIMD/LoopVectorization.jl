@@ -35,11 +35,11 @@ Base.convert(::Type{ArrayReference}, ref::ArrayReferenceMeta) = ref.ref
 Base.:(==)(x::ArrayReference, y::ArrayReference) = isequal(x, y)
 Base.:(==)(x::ArrayReferenceMeta, y::ArrayReferenceMeta) = isequal(x.ref, y.ref) && x.ptr === y.ptr
 
-
-Base.:(==)(x::ArrayReference, y::ArrayReferenceMeta) = x == y.ref
-Base.:(==)(x::ArrayReferenceMeta, y::ArrayReference) = x.ref == y
-Base.:(==)(x::ArrayReference, y) = false
-Base.:(==)(x::ArrayReferenceMeta, y) = false
+# Errors preferable than silently working?
+# Base.:(==)(x::ArrayReference, y::ArrayReferenceMeta) = x == y.ref
+# Base.:(==)(x::ArrayReferenceMeta, y::ArrayReference) = x.ref == y
+# Base.:(==)(x::ArrayReference, y) = false
+# Base.:(==)(x::ArrayReferenceMeta, y) = false
 
 @enum OperationType begin
     constant
