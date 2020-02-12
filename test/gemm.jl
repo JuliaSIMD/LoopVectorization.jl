@@ -290,6 +290,15 @@
             C[m,n] = Cₘₙ
         end
     end
+    function rank2AmulBavx_noinline!(C, Aₘ, Aₖ, B)
+        @avx inline=false for m ∈ 1:size(C,1), n ∈ 1:size(C,2)
+            Cₘₙ = zero(eltype(C))
+            for k ∈ 1:size(B,1)
+                Cₘₙ += (Aₘ[m,1]*Aₖ[1,k]+Aₘ[m,2]*Aₖ[2,k]) * B[k,n]
+            end
+            C[m,n] = Cₘₙ
+        end
+    end
 
     function mulCAtB_2x2blockavx!(C, A, B)
         M, N = size(C); K = size(B,1)
@@ -399,6 +408,60 @@
         end
         return C
     end
+    function mulCAtB_2x2blockavx_noinline!(C, A, B)
+        M, N = size(C); K = size(B,1)
+        @assert size(C, 1) == size(A, 2)
+        @assert size(C, 2) == size(B, 2)
+        @assert size(A, 1) == size(B, 1)
+        T = eltype(C)
+	for m ∈ 1:2:(M & -2)
+	    m1 = m + 1
+	    for n ∈ 1:2:(N & -2)
+	    	n1 = n + 1
+		C11, C21, C12, C22 = zero(T), zero(T), zero(T), zero(T)
+		@avx inline=false for k ∈ 1:K
+		    C11 += A[k,m] * B[k,n] 
+		    C21 += A[k,m1] * B[k,n] 
+		    C12 += A[k,m] * B[k,n1] 
+		    C22 += A[k,m1] * B[k,n1]
+		end
+		C[m,n] = C11
+		C[m1,n] = C21
+		C[m,n1] = C12
+		C[m1,n1] = C22
+	    end
+            if isodd(N)
+	    	C1n = 0.0
+	    	C2n = 0.0
+	    	@avx inline=false for k ∈ 1:K
+	    	    C1n += A[k,m] * B[k,N]
+	    	    C2n += A[k,m1] * B[k,N]
+	    	end
+	    	C[m,N] = C1n                    
+	    	C[m1,N] = C2n                    
+            end
+        end
+        if isodd(M)
+	    for n ∈ 1:2:(N & -2)
+	    	n1 = n + 1
+		Cm1, Cm2 = zero(T), zero(T)
+		@avx inline=false for k ∈ 1:K
+		    Cm1 += A[k,M] * B[k,n] 
+		    Cm2 += A[k,M] * B[k,n1] 
+		end
+		C[M,n] = Cm1
+		C[M,n1] = Cm2
+	    end
+            if isodd(N)
+	    	Cmn = 0.0
+	    	@avx inline=false for k ∈ 1:K
+	    	    Cmn += A[k,M] * B[k,N]
+	    	end
+	    	C[M,N] = Cmn
+            end
+        end
+        return C
+    end
     # M = 77;
     # A = rand(M,M); B = rand(M,M); C = similar(A);
     # mulCAtB_2x2block_avx!(C,A,B)
@@ -481,6 +544,10 @@
             @test C ≈ C2
             fill!(C, 9999.999); mulCAtB_2x2blockavx!(C, A', B);
             @test C ≈ C2
+            fill!(C, 9999.999); mulCAtB_2x2blockavx_noinline!(C, At, B);
+            @test C ≈ C2
+            fill!(C, 9999.999); mulCAtB_2x2blockavx_noinline!(C, A', B);
+            @test C ≈ C2
         end
         @time @testset "_avx $T dynamic gemm" begin
             AmulB_avx1!(C, A, B)
@@ -549,6 +616,10 @@
             @test Cs ≈ C2
             fill!(Cs, 9999.999); mulCAtB_2x2blockavx!(Cs, As', Bs);
             @test Cs ≈ C2
+            fill!(Cs, 9999.999); mulCAtB_2x2blockavx_noinline!(Cs, Ats, Bs);
+            @test Cs ≈ C2
+            fill!(Cs, 9999.999); mulCAtB_2x2blockavx_noinline!(Cs, As', Bs);
+            @test Cs ≈ C2
         end
         @time @testset "_avx $T static gemm" begin
             AmulB_avx1!(Cs, As, Bs)
@@ -593,9 +664,13 @@
             @test C ≈ C2
             fill!(C, 9999.999); rank2AmulB_avx!(C, Aₘ, Aₖ, B)
             @test C ≈ C2
+            fill!(C, 9999.999); rank2AmulBavx_noinline!(C, Aₘ, Aₖ, B)
+            @test C ≈ C2
             fill!(C, 9999.999); rank2AmulBavx!(C, Aₘ, Aₖ′', B)
             @test C ≈ C2
             fill!(C, 9999.999); rank2AmulB_avx!(C, Aₘ, Aₖ′', B)
+            @test C ≈ C2
+            fill!(C, 9999.999); rank2AmulBavx_noinline!(C, Aₘ, Aₖ′', B)
             @test C ≈ C2
         end
 
