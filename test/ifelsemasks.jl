@@ -14,6 +14,21 @@
             c[i] = a[i] > b[i] ? a[i] + b[i] : a[i] * b[i]
         end
     end
+    function addormulp1!(c, a, b)
+        for i ∈ eachindex(c,a,b)
+            c[i] = 1 + (a[i] > b[i] ? a[i] + b[i] : a[i] * b[i])
+        end
+    end
+    function addormulp1_avx!(c, a, b)
+        @_avx for i ∈ eachindex(c,a,b)
+            c[i] = 1 + (a[i] > b[i] ? a[i] + b[i] : a[i] * b[i])
+        end
+    end
+    function addormulp1avx!(c, a, b)
+        @avx for i ∈ eachindex(c,a,b)
+            c[i] = 1 + (a[i] > b[i] ? a[i] + b[i] : a[i] * b[i])
+        end
+    end
 
 
     function maybewriteand!(c, a, b)
@@ -155,7 +170,34 @@
             (x1 < 60) || setindex!(x, x3, i)
         end
     end
-
+    function andorassignment!(x, y, z)
+        @inbounds for i ∈ eachindex(x, y, z)
+            yᵢ = y[i]
+            zᵢ = z[i]
+            (yᵢ > 0.5) || (yᵢ *= 2)
+            (zᵢ < 0.5) && (zᵢ *= 2)
+            x[i] = yᵢ * zᵢ
+        end
+    end
+    function andorassignmentavx!(x, y, z)
+        @avx for i ∈ eachindex(x, y, z)
+            yᵢ = y[i]
+            zᵢ = z[i]
+            (yᵢ > 0.5) || (yᵢ *= 2)
+            (zᵢ < 0.5) && (zᵢ *= 2)
+            x[i] = yᵢ * zᵢ
+        end
+    end
+    function andorassignment_avx!(x, y, z)
+        @avx for i ∈ eachindex(x, y, z)
+            yᵢ = y[i]
+            zᵢ = z[i]
+            (yᵢ > 0.5) || (yᵢ *= 2)
+            (zᵢ < 0.5) && (zᵢ *= 2)
+            x[i] = yᵢ * zᵢ
+        end
+    end
+    
     N = 117
     for T ∈ (Float32, Float64, Int32, Int64)
         @show T, @__LINE__
@@ -170,6 +212,11 @@
         @test c1 ≈ c2
         fill!(c2, -999999999); addormulavx!(c2, a, b)
         @test c1 ≈ c2
+        addormulp1!(c1, a, b)
+        addormulp1_avx!(c2, a, b)
+        @test c1 ≈ c2
+        fill!(c2, -999999999); addormulp1avx!(c2, a, b)
+        @test c1 ≈ c2
 
         fill!(c1, -999999999); maybewriteand!(c1, a, b)
         fill!(c2, -999999999); maybewriteand_avx!(c2, a, b)
@@ -183,6 +230,12 @@
         fill!(c2, -999999999); maybewriteoravx!(c2, a, b)
         @test c1 ≈ c2
 
+        andorassignment!(c1, a, b)
+        andorassignmentavx!(c2, a, b)
+        @test c1 ≈ c2
+        fill!(c2, -999999999); andorassignment_avx!(c2, a, b)
+        @test c1 ≈ c2
+        
         if T <: Union{Float32,Float64}
             a .*= 100;
         end

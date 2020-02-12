@@ -21,13 +21,13 @@ end
 
 function add_andblock!(ls::LoopSet, condop::Operation, LHS, rhsop::Operation, elementbytes::Int, position::Int)
     if LHS isa Symbol
-        altop = getop(ls, LHS)
+        altop = getop(ls, LHS, elementbytes)
         return add_compute!(ls, LHS, :vifelse, [condop, rhsop, altop], elementbytes)
     elseif LHS isa Expr && LHS.head === :ref
         return add_conditional_store!(ls, LHS, condop, rhsop, elementbytes)
     else
         throw("Don't know how to assign onto $LHS.")
-    end        
+    end
 end
 function add_andblock!(ls::LoopSet, condop::Operation, LHS, RHS::Expr, elementbytes::Int, position::Int)
     rhsop = add_compute!(ls, gensym(:iftruerhs), RHS, elementbytes, position)
@@ -56,11 +56,15 @@ function add_andblock!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
 end
 
 function add_orblock!(ls::LoopSet, condop::Operation, LHS, rhsop::Operation, elementbytes::Int, position::Int)
+    negatedcondop = add_compute!(ls, gensym(:negated_mask), :~, [condop], elementbytes)
     if LHS isa Symbol
-        altop = getop(ls, LHS)
-        return add_compute!(ls, LHS, :vifelse, [condop, altop, rhsop], elementbytes)
+        altop = getop(ls, LHS, elementbytes)
+        # return add_compute!(ls, LHS, :vifelse, [condop, altop, rhsop], elementbytes)
+        # Placing altop second seems to let LLVM fuse operations; but as of LLVM 9.0.1 it will not if altop is first
+        # therefore, we negate the condition and switch order so that the altop is second.
+        return add_compute!(ls, LHS, :vifelse, [negatedcondop, rhsop, altop], elementbytes)
     elseif LHS isa Expr && LHS.head === :ref
-        negatedcondop = add_compute!(ls, gensym(:negated_mask), :~, [condop], elementbytes)
+        # negatedcondop = add_compute!(ls, gensym(:negated_mask), :~, [condop], elementbytes)
         return add_conditional_store!(ls, LHS, negatedcondop, rhsop, elementbytes)
     else
         throw("Don't know how to assign onto $LHS.")

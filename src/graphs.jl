@@ -1,6 +1,4 @@
 
-isdense(::Type{<:DenseArray}) = true
-
 # """
 # ShortVector{T} simply wraps a Vector{T}, but uses a different hash function that is faster for short vectors to support using it as the keys of a Dict.
 # This hash function scales O(N) with length of the vectors, so it is slow for long vectors.
@@ -464,7 +462,7 @@ function add_operation!(
             add_compute!(ls, LHS, RHS, elementbytes, position)
         end
     elseif RHS.head === :if
-        add_if!(ls, LHS, RHS, elementbytes)
+        add_if!(ls, LHS, RHS, elementbytes, position)
     else
         throw("Expression not recognized:\n$x")
     end
