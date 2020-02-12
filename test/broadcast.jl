@@ -62,12 +62,14 @@
         fill!(D2, -999999); D2 = @avx C .+ At' *ˡ B;
         @test D1 ≈ D2
 
-        b = rand(T,K); x = rand(R,N);
-        D1 .= C .+ A * (b .+ x');
-        @avx @. D2 = C + A *ˡ (b + x');
-        @test D1 ≈ D2
-        D2 = @avx @. C + A *ˡ (b + x');
-        @test D1 ≈ D2        
+        if VERSION > v"1.2"
+            b = rand(T,K); x = rand(R,N);
+            D1 .= C .+ A * (b .+ x');
+            @avx @. D2 = C + A *ˡ (b + x');
+            @test D1 ≈ D2
+            D2 = @avx @. C + A *ˡ (b + x');
+            @test D1 ≈ D2
+        end
         
         if T <: Union{Float32,Float64}
             D3 = cos.(B');
