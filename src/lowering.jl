@@ -226,13 +226,21 @@ function determine_eltype(ls::LoopSet)
     end
     promote_q
 end
-function determine_width(ls::LoopSet, typeT::Symbol, unrolled::Symbol)
-    unrolledloop = getloop(ls, unrolled)
-    if isstaticloop(unrolledloop)
-        Expr(:call, lv(:pick_vector_width_val), Expr(:call, Expr(:curly, :Val, length(unrolledloop))), typeT)
-    else
-        Expr(:call, lv(:pick_vector_width_val), typeT)
+function determine_width(ls::LoopSet, vectorized::Symbol)
+    vloop = getloop(ls, vectorized)
+    vwidth_q = Expr(:call, lv(:pick_vector_width_val))
+    if isstaticloop(vloop)
+        push!(vwidth_q.args, Expr(:call, Expr(:curly, :Val, length(vloop))))
     end
+    push!(vwidth_q.args, ls.T)
+    # if length(ls.includedactualarrays) < 2
+    #     push!(vwidth_q.args, ls.T)
+    # else
+    #     for array ∈ ls.includedactualarrays
+    #         push!(vwidth_q.args, Expr(:call, :eltype, array))
+    #     end
+    # end
+    vwidth_q
 end
 function lower_unrolled!(
     q::Expr, ls::LoopSet, vectorized::Symbol, U::Int, T::Int, W::Symbol, typeT::Symbol, unrolledloop::Loop
@@ -329,7 +337,7 @@ end
 function definemask(loop::Loop, W::Symbol, allon::Bool)
     if isstaticloop(loop)
         maskexpr(W, length(loop), allon)
-    elseif loop.starthint == 0
+    elseif loop.startexact && loop.starthint == 0
         maskexpr(W, loop.stopsym, allon)
     else
         lexpr = if loop.startexact
@@ -349,7 +357,7 @@ using SIMDPirates: sizeequivalentfloat, sizeequivalentint
 function setup_preamble!(ls::LoopSet, W::Symbol, typeT::Symbol, vectorized::Symbol, unrolled::Symbol, tiled::Symbol, U::Int)
     # println("Setup preamble")
     length(ls.includedarrays) == 0 || push!(ls.preamble.args, Expr(:(=), typeT, determine_eltype(ls)))
-    push!(ls.preamble.args, Expr(:(=), W, determine_width(ls, typeT, unrolled)))
+    push!(ls.preamble.args, Expr(:(=), W, determine_width(ls, vectorized)))
     lower_licm_constants!(ls)
     pushpreamble!(ls, definemask(getloop(ls, vectorized), W, U > 1 && unrolled === vectorized))
     for op ∈ operations(ls)

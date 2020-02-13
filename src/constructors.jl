@@ -134,7 +134,8 @@ macro avx(arg, q)
     @assert q.head === :for
     @assert arg.head === :(=)
     inline, U, T = check_macro_kwarg(arg)
-    esc(setup_call(LoopSet(q, __module__), inline, U, T))
+    ls = LoopSet(q, __module__)
+    esc(setup_call(ls, inline, U, T))
 end
 macro avx(arg1, arg2, q)
     @assert q.head === :for

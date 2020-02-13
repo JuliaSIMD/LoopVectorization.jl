@@ -415,7 +415,21 @@
         end
         accu
     end
-    
+    function test_for_with_different_index!(c, a, b, start_sample, num_samples)
+        @inbounds for i = start_sample:num_samples + start_sample - 1
+            c[i] = b[i] * a[i]
+        end
+    end
+    function test_for_with_different_indexavx!(c, a, b, start_sample, num_samples)
+        @avx for i = start_sample:num_samples + start_sample - 1
+            c[i] = b[i] * a[i]
+        end
+    end
+    function test_for_with_different_index_avx!(c, a, b, start_sample, num_samples)
+        @_avx for i = start_sample:num_samples + start_sample - 1
+            c[i] = b[i] * a[i]
+        end
+    end
     
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
@@ -467,7 +481,15 @@
         fill!(y2, NaN); clenshawavx!(y2,x,c)
         @test y1 ≈ y2
 
-
+        C = randn(T, 199, 498);
+        start_sample = 29; num_samples = 800;
+        test_for_with_different_index!(B1, A, C, start_sample, num_samples)
+        test_for_with_different_indexavx!(B2, A, C, start_sample, num_samples)
+        r = start_sample:start_sample+num_samples - 1
+        @test view(vec(B1), r) == view(vec(B2), r)
+        fill!(B2, NaN); test_for_with_different_index_avx!(B2, A, C, start_sample, num_samples)
+        @test view(vec(B1), r) == view(vec(B2), r)
+        
         ni, nj, nk = (127, 113, 13)
         x = rand(T, ni, nj, nk);
         q1 = similar(x);
