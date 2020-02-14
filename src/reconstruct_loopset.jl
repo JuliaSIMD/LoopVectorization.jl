@@ -55,71 +55,48 @@ function ArrayReferenceMeta(
     )
 end
 
-function add_mref!(ls::LoopSet, ars::ArrayRefStruct, arraysymbolinds::Vector{Symbol}, opsymbols::Vector{Symbol}, i::Int, ::Type{PackedStridedPointer{T, N}}) where {T, N}
-    ar = ArrayReferenceMeta(ls, ars, arraysymbolinds, opsymbols, Symbol(""), gensym())
-    pushpreamble!(ls, Expr(:(=), vptr(ar), Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:ref, :vargs, i))))
-    ar
-end
-function add_mref!(ls::LoopSet, ars::ArrayRefStruct, arraysymbolinds::Vector{Symbol}, opsymbols::Vector{Symbol}, i::Int, ::Type{RowMajorStridedPointer{T, N}}) where {T, N}
-    ar = ArrayReferenceMeta(ls, ars, arraysymbolinds, opsymbols, Symbol(""), gensym())
+extract_varg(i) = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:ref, :vargs, i))
+pushvarg!(ls::LoopSet, ar::ArrayReferenceMeta, i) = pushpreamble!(ls, Expr(:(=), vptr(ar), extract_varg(i)))
+function pushvarg′!(ls::LoopSet, ar::ArrayReferenceMeta, i)
     reverse!(ar.loopedindex); reverse!(getindices(ar)) # reverse the listed indices here, and transpose it to make it column major
-    pushpreamble!(ls, Expr(:(=), vptr(ar), Expr(:call, lv(:Transpose), Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:ref, :vargs, i)))))
-    ar
+    pushpreamble!(ls, Expr(:(=), vptr(ar), Expr(:call, lv(:Transpose), extract_varg(i))))
 end
-function add_mref!(ls::LoopSet, ars::ArrayRefStruct, arraysymbolinds::Vector{Symbol}, opsymbols::Vector{Symbol}, i::Int, ::Type{StaticStridedPointer{T, X}}) where {T, X <: Tuple{1,Vararg}}
-    ar = ArrayReferenceMeta(ls, ars, arraysymbolinds, opsymbols, Symbol(""), gensym())
-    pushpreamble!(ls, Expr(:(=), vptr(ar), Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:ref, :vargs, i))))
-    ar
+function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{PackedStridedPointer{T, N}}) where {T, N}
+    pushvarg!(ls, ar, i)
 end
-function add_mref!(ls::LoopSet, ars::ArrayRefStruct, arraysymbolinds::Vector{Symbol}, opsymbols::Vector{Symbol}, i::Int, ::Type{StaticStridedPointer{T, X}}) where {T, X <: Tuple}
-    ar = ArrayReferenceMeta(ls, ars, arraysymbolinds, opsymbols, Symbol(""), gensym())
-    pushpreamble!(ls, Expr(:(=), vptr(ar), Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:ref, :vargs, i))))
-    pushfirst!(getindices(ar), Symbol("##DISCONTIGUOUSSUBARRAY##"))
-    ar
+function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{RowMajorStridedPointer{T, N}}) where {T, N}
+    pushvarg′!(ls, ar, i)
 end
-function add_mref!(ls::LoopSet, ars::ArrayRefStruct, arraysymbolinds::Vector{Symbol}, opsymbols::Vector{Symbol}, i::Int, ::Type{SparseStridedPointer{T, N}}) where {T, N}
-    ar = ArrayReferenceMeta(ls, ars, arraysymbolinds, opsymbols, Symbol(""), gensym())
-    pushpreamble!(ls, Expr(:(=), vptr(ar), Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:ref, :vargs, i))))
-    pushfirst!(getindices(ar), Symbol("##DISCONTIGUOUSSUBARRAY##"))
-    ar
-end
-function add_mref!(ls::LoopSet, ars::ArrayRefStruct, arraysymbolinds::Vector{Symbol}, opsymbols::Vector{Symbol}, i::Int, ::Type{StaticStridedStruct{T, X}}) where {T, X <: Tuple{1,Vararg}}
-    ar = ArrayReferenceMeta(ls, ars, arraysymbolinds, opsymbols, Symbol(""), gensym())
-    pushpreamble!(ls, Expr(:(=), vptr(ar), Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:ref, :vargs, i))))
-    ar
-end
-function add_mref!(ls::LoopSet, ars::ArrayRefStruct, arraysymbolinds::Vector{Symbol}, opsymbols::Vector{Symbol}, i::Int, ::Type{StaticStridedStruct{T, X}}) where {T, X <: Tuple}
-    ar = ArrayReferenceMeta(ls, ars, arraysymbolinds, opsymbols, Symbol(""), gensym())
+function add_mref!(
+    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}
+) where {T, X <: Tuple, S <: VectorizationBase.AbstractStaticStridedPointer{T,X}}
     if last(X.parameters)::Int == 1
-        reverse!(ar.loopedindex); reverse!(getindices(ar))
-        pushpreamble!(ls, Expr(:(=), vptr(ar), Expr(:call, lv(:Transpose), Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:ref, :vargs, i)))))
+        pushvarg′!(ls, ar, i)
     else
-        pushpreamble!(ls, Expr(:(=), vptr(ar), Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:ref, :vargs, i))))
-        pushfirst!(getindices(ar), Symbol("##DISCONTIGUOUSSUBARRAY##"))
+        pushvarg!(ls, ar, i)
+        first(X.parameters)::Int == 1 || pushfirst!(getindices(ar), Symbol("##DISCONTIGUOUSSUBARRAY##"))
     end
-    ar
 end
-function add_mref!(ls::LoopSet, ars::ArrayRefStruct, arraysymbolinds::Vector{Symbol}, opsymbols::Vector{Symbol}, i::Int, ::Type{LoopValue})
-    ar = ArrayReferenceMeta(ls, ars, arraysymbolinds, opsymbols, Symbol(""), gensym())
+function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{SparseStridedPointer{T, N}}) where {T, N}
+    pushvarg!(ls, ar, i)
+    pushfirst!(getindices(ar), Symbol("##DISCONTIGUOUSSUBARRAY##"))
+end
+function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{LoopValue})
     pushpreamble!(ls, Expr(:(=), vptr(ar), LoopValue()))
-    ar
 end
-function add_mref!(ls::LoopSet, ars::ArrayRefStruct, arraysymbolinds::Vector{Symbol}, opsymbols::Vector{Symbol}, i::Int, ::Type{<:AbstractRange{T}}) where {T}
-    ar = ArrayReferenceMeta(ls, ars, arraysymbolinds, opsymbols, Symbol(""), gensym())
-    pushpreamble!(ls, Expr(:(=), vptr(ar), Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:ref, :vargs, i))))
-    ar
+function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{<:AbstractRange{T}}) where {T}
+    pushvarg!(ls, ar, i)
 end
-
-
-
 function create_mrefs!(ls::LoopSet, arf::Vector{ArrayRefStruct}, as::Vector{Symbol}, os::Vector{Symbol}, vargs)
     mrefs = Vector{ArrayReferenceMeta}(undef, length(arf))
     for i ∈ eachindex(arf)
-        ref = add_mref!(ls, arf[i], as, os, i, vargs[i])::ArrayReferenceMeta
-        mrefs[i] = ref
+        ar = ArrayReferenceMeta(ls, arf[i], as, os, Symbol(""), gensym())
+        add_mref!(ls, ar, i, vargs[i])
+        mrefs[i] = ar
     end
     mrefs
 end
+
 function num_parameters(AM)
     num_param::Int = AM[1]
     num_param += length(AM[2].parameters)
