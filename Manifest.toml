@@ -49,9 +49,9 @@ uuid = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 
 [[SIMDPirates]]
 deps = ["VectorizationBase"]
-git-tree-sha1 = "832b1b3adaa1793f81db7b3417b58fed30f7712b"
+git-tree-sha1 = "53bf63cb056de62ad90256f9636c77a20ded8111"
 uuid = "21efa798-c60a-11e8-04d3-e1a92915a26a"
-version = "0.3.9"
+version = "0.3.10"
 
 [[SLEEFPirates]]
 deps = ["Libdl", "SIMDPirates", "VectorizationBase"]
@@ -71,6 +71,6 @@ uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [[VectorizationBase]]
 deps = ["CpuId", "LinearAlgebra"]
-git-tree-sha1 = "e4019f1c1e22f7d68dd153eb9283079af5d84866"
+git-tree-sha1 = "47209cb34f04e6f6d4855e5011644ec111066f6f"
 uuid = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
-version = "0.2.6"
+version = "0.2.7"

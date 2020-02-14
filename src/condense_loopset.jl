@@ -66,10 +66,10 @@ end
 filled_4byte_chunks(u::UInt64) = 16 - (leading_zeros(u) >>> 2)
 filled_8byte_chunks(u::UInt64) = 8 - (leading_zeros(u) >>> 3)
 
-num_loop_deps(os::OperationStruct) = filled_4byte_chunks(os.loopdeps)
-num_reduced_deps(os::OperationStruct) = filled_4byte_chunks(os.reduceddeps)
-num_child_deps(os::OperationStruct) = filled_4byte_chunks(os.childdeps)
-num_parents(os::OperationStruct) = filled_4byte_chunks(os.parents)
+# num_loop_deps(os::OperationStruct) = filled_4byte_chunks(os.loopdeps)
+# num_reduced_deps(os::OperationStruct) = filled_4byte_chunks(os.reduceddeps)
+# num_child_deps(os::OperationStruct) = filled_4byte_chunks(os.childdeps)
+# num_parents(os::OperationStruct) = filled_4byte_chunks(os.parents)
 
 function shifted_loopset(ls::LoopSet, loopsyms::Vector{Symbol})
     ld = zero(UInt64) # leading_zeros(ld) >> 2 yields the number of loopdeps
