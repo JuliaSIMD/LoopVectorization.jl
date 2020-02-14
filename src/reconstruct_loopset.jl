@@ -226,34 +226,28 @@ function avx_loopset(instr, ops, arf, AM, LB, vargs)
     num_params = extract_external_functions!(ls, num_params)
     ls
 end
-function avx_body(UT, instr, ops, arf, AM, LB, vargs)
-    ls = avx_loopset(instr, ops, arf, AM, LB, vargs)
+function avx_body(ls, UT)
     U, T = UT
     q = iszero(U) ? lower(ls) : lower(ls, U, T)
     length(ls.outer_reductions) == 0 ? push!(q.args, nothing) : push!(q.args, loopset_return_value(ls, Val(true)))
     q
 end
 
-function _avx_loopset(::Val{UT}, ::Type{OPS}, ::Type{ARF}, ::Type{AM}, lb::LB, vargs...) where {UT, OPS, ARF, AM, LB}
-    OPSsv = OPS.parameters
+function _avx_loopset_debug(::Type{OPS}, ::Type{ARF}, ::Type{AM}, ::Type{LB}, vargs...) where {UT, OPS, ARF, AM, LB}
+    _avx_loopset(OPS.parameters, ARF.parameters, AM.parameters, LB.parameters, typeof.(vargs))
+end
+function _avx_loopset(OPSsv, ARFsv, AMsv, LBsv, vargs) where {UT, OPS, ARF, AM, LB}
     nops = length(OPSsv) ÷ 3
     instr = Instruction[Instruction(OPSsv[3i+1], OPSsv[3i+2]) for i ∈ 0:nops-1]
     ops = OperationStruct[ OPSsv[3i] for i ∈ 1:nops ]
     avx_loopset(
         instr, ops,
-        ArrayRefStruct[ARF.parameters...],
-        AM.parameters, LB.parameters, typeof.(vargs)
+        ArrayRefStruct[ARFsv...],
+        AMsv, LBsv, vargs
     )
 end
 @generated function _avx_!(::Val{UT}, ::Type{OPS}, ::Type{ARF}, ::Type{AM}, lb::LB, vargs...) where {UT, OPS, ARF, AM, LB}
-    OPSsv = OPS.parameters
-    nops = length(OPSsv) ÷ 3
-    instr = Instruction[Instruction(OPSsv[3i+1], OPSsv[3i+2]) for i ∈ 0:nops-1]
-    ops = OperationStruct[ OPSsv[3i] for i ∈ 1:nops ]
-    avx_body(
-        UT, instr, ops,
-        ArrayRefStruct[ARF.parameters...],
-        AM.parameters, LB.parameters, vargs
-    )
+    ls = _avx_loopset(OPS.parameters, ARF.parameters, AM.parameters, LB.parameters, vargs)
+    avx_body(ls, UT)
 end
 

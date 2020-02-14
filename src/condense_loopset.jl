@@ -244,11 +244,13 @@ function generate_call(ls::LoopSet, IUT, debug::Bool = false)
     loop_bounds = loop_boundaries(ls)
     inline, U, T = IUT
     if inline | debug
-        func = debug ? lv(:_avx_loopset) : lv(:_avx_!)
+        func = debug ? lv(:_avx_loopset_debug) : lv(:_avx_!)
+        lbarg = debug ? Expr(:call, :typeof, loop_bounds) : loop_bounds
         q = Expr(
             :call, func, Expr(:call, Expr(:curly, :Val, (U,T))),
-            operation_descriptions, arrayref_descriptions, argmeta, loop_bounds
+            operation_descriptions, arrayref_descriptions, argmeta, lbarg
         )
+        debug && deleteat!(q.args, 2)
         foreach(ref -> push!(q.args, vptr(ref)), ls.refs_aliasing_syms)
     else
         arraydescript = Expr(:tuple)
