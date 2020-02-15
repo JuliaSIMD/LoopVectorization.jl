@@ -86,10 +86,10 @@ function update_reduction_status!(parentvec::Vector{Operation}, deps::Vector{Sym
         end
     end
 end
-function add_compute!(ls::LoopSet, op::Operation)
-    @assert iscompute(op)
-    pushop!(ls, child, name(op))
-end
+# function add_compute!(ls::LoopSet, op::Operation)
+    # @assert iscompute(op)
+    # pushop!(ls, child, name(op))
+# end
 function isreductzero(op::Operation, ls::LoopSet, reduct_zero::Symbol)
     isconstant(op) || return false
     reduct_zero === op.instruction.mod && return true

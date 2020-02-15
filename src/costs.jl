@@ -222,7 +222,7 @@ const REDUCTION_CLASS = Dict{Symbol,Float64}(
     :min => MIN
 )
 reduction_instruction_class(instr::Symbol) = get(REDUCTION_CLASS, instr, NaN)
-reduction_instruction_class(instr::Instruction) = get(REDUCTION_CLASS, instr.instr, NaN)
+reduction_instruction_class(instr::Instruction) = reduction_instruction_class(instr.instr)
 function reduction_to_single_vector(x::Float64)
     # x == 1.0 ? :evadd : x == 2.0 ? :evmul : x == 3.0 ? :vor : x == 4.0 ? :vand : x == 5.0 ? :max : x == 6.0 ? :min : throw("Reduction not found.")
     x == 1.0 ? :evadd : x == 2.0 ? :evmul : x == 5.0 ? :max : x == 6.0 ? :min : throw("Reduction not found.")
