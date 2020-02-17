@@ -254,6 +254,14 @@ function lower_unrolled!(
     manageouterreductions && reduce_expr!(q, ls, Ureduct)
     q
 end
+function init_remblock(unrolledloop::Loop, unrolled::Symbol = unrolledloop.itersymbol, unrolled_stopsym::Symbol = unrolledloop.stopsym)
+    condition = if isstaticloop(unrolledloop)
+        Expr(:call, :(==), length(unrolledloop), unrolled)
+    else
+        Expr(:call, :(==), unrolled_stopsym, unrolled)
+    end
+    Expr(:if, condition, nothing)
+end
 
 function lower_unrolled_dynamic!(
     q::Expr, ls::LoopSet, vectorized::Symbol, U::Int, T::Int, W::Symbol, typeT::Symbol, unrolledloop::Loop
@@ -271,16 +279,21 @@ function lower_unrolled_dynamic!(
     end
     Ut = U
     vecisunrolled = unrolled === vectorized
-    remblock = Expr(:block)
-    firstiter = true
+    loopq = lower_set(ls, vectorized, Ut, T, W, nothing, Uexprtype)
+    if T == -1 && manageouterreductions && U > 4
+        loopq = add_upper_outer_reductions(ls, loopq, Ureduct, U, W, typeT, unrolledloop, vectorized)
+    end
+    push!(q.args, loopq)
+    if manageouterreductions && Ureduct < U
+        Udiff = U - Ureduct
+        loopq = lower_set(ls, vectorized, Udiff, T, W, nothing, :if)
+        push!(q.args, loopq)
+    end
+    remblock = init_remblock(unrolledloop, unrolled, unrolled_stopsym)
+    push!(q.args, remblock)
+    Ut = 1
     while true
-        if firstiter # first iter
-            loopq = lower_set(ls, vectorized, Ut, T, W, nothing, Uexprtype)
-            if T == -1 && manageouterreductions && U > 4
-                loopq = add_upper_outer_reductions(ls, loopq, Ureduct, U, W, typeT, unrolledloop, vectorized)
-            end
-            push!(q.args, loopq)
-        elseif U == 1 #
+        if U == 1 #
             if vecisunrolled
                 push!(remblock.args, lower_set(ls, vectorized, Ut, T, W, Symbol("##mask##"), :block))
             else
@@ -294,35 +307,22 @@ function lower_unrolled_dynamic!(
                     Expr(:call, :-, unrolled_stopsym, Expr(:call, lv(:valmuladd), W, Ut, 1))
                 end
                 comparison = Expr(:call, :>, unrolled, itercount)
-                Expr(Ut == 1 ? :if : :elseif, comparison, lower_set(ls, vectorized, Ut, T, W, Symbol("##mask##"), :block))
+                # Expr(Ut == 1 ? :if : :elseif, comparison, lower_set(ls, vectorized, Ut, T, W, Symbol("##mask##"), :block))
+                Expr(:elseif, comparison, lower_set(ls, vectorized, Ut, T, W, Symbol("##mask##"), :block))
             else
                 comparison = if isstaticloop(unrolledloop)
                     Expr(:call, :>, unrolled, length(unrolledloop) - (Ut + 1))
                 else
                     Expr(:call, :>, unrolled, Expr(:call, :-, unrolled_stopsym, Ut + 1))
                 end
-                Expr(Ut == 1 ? :if : :elseif, comparison, lower_set(ls, vectorized, Ut, T, W, nothing, :block))
+                # Expr(Ut == 1 ? :if : :elseif, comparison, lower_set(ls, vectorized, Ut, T, W, nothing, :block))
+                Expr(:elseif, comparison, lower_set(ls, vectorized, Ut, T, W, nothing, :block))
                 # Expr(Ut == 1 ? :if : :elseif, comparison, lower_set(ls, vectorized, Ut, T, W, Symbol("##mask##"), :block))
             end
             push!(remblock.args, remblocknew)
             remblock = remblocknew
         end
-        if firstiter
-            firstiter = false
-            if manageouterreductions && Ureduct < U
-                Udiff = U - Ureduct
-                loopq = lower_set(ls, vectorized, Udiff, T, W, nothing, :if)
-                push!(q.args, loopq)
-            end
-            Ut = 1
-            # setup for branchy remainder calculation
-            comparison = if isstaticloop(unrolledloop)
-                Expr(:call, :(!=), length(unrolledloop), unrolled)
-            else
-                Expr(:call, :(!=), unrolled_stopsym, unrolled)
-            end
-            push!(q.args, Expr(:if, comparison, remblock))
-        elseif !(Ut < U - 1 + vecisunrolled) || Ut == Ureduct
+        if !(Ut < U - 1 + vecisunrolled) || Ut == Ureduct
             break
         else
             Ut += 1

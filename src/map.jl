@@ -30,4 +30,7 @@ function vmap(f::F, args...) where {F}
     vmap!(f, dest, args...)
 end
 
+# @inline vmap!(f, y, x...) = @avx y .= f.(x...)
+# @inline vmap(f, x...) = @avx f.(x...)
+
 

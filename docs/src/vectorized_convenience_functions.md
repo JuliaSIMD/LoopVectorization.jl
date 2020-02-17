@@ -2,7 +2,7 @@
 
 ## vmap
 
-
+This is simply a vectorized `map` function.
 
 
 ## vfilter

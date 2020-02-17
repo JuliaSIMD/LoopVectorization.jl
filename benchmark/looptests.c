@@ -104,6 +104,19 @@ void AmulBt(double* restrict C, double* restrict A, double* restrict Bt, long M,
   }
   return;
 }
+void AtmulBt(double* restrict C, double* restrict A, double* restrict Bt, long M, long K, long N){
+  for (long i = 0; i < M*N; i++){
+    C[i] = 0.0;
+  }
+  for (long n = 0; n < N; n++){
+    for (long k = 0; k < K; k++){
+      for (long m = 0; m < M; m++){
+	C[m + n*M] += A[k + K*m] * Bt[n + N*k];
+      }
+    }
+  }
+  return;
+}
 double dot(double* restrict a, double* restrict b, long N){
   double s = 0.0;
   for (long n = 0; n < N; n++){
@@ -212,5 +225,11 @@ double randomaccess(double* restrict P, long* restrict basis, double* restrict c
   }
   return p;
 }
-
+double logdettriangle(double* T, long N){
+  double ld = 0;
+  for (long n = 0; n < N; n++){
+    ld += log(T[n + n*N]);
+  }
+  return ld;
+}
 

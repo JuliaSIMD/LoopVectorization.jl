@@ -15,10 +15,10 @@ makedocs(;
         "Vectorized Convenience Functions" => "vectorized_convenience_functions.md",
         "Future Work" => "future_work.md"
     ],
-    repo="https://github.com/chriselrod/LoopVectorization.jl/blob/{commit}{path}#L{line}",
+    # repo="https://github.com/chriselrod/LoopVectorization.jl/blob/{commit}{path}#L{line}",
     sitename="LoopVectorization.jl",
-    authors="Chris Elrod",
-    assets=[],
+    authors="Chris Elrod"
+    # assets=[],
 )
 
 deploydocs(;

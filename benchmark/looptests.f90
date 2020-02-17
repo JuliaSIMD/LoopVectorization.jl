@@ -147,6 +147,28 @@ module looptests
       real(C_double), dimension(N, K), intent(in) :: B
       C = matmul(A, transpose(B))
     end subroutine AmulBtbuiltin
+    subroutine AtmulBt(C, A, B, M, K, N) BIND(C, name="AtmulBt")
+      integer(C_long), intent(in) :: M, K, N
+      real(C_double), dimension(M, N), intent(out) :: C
+      real(C_double), dimension(K, M), intent(in) :: A
+      real(C_double), dimension(N, K), intent(in) :: B
+      integer(C_long) :: mm, kk, nn
+      C = 0.0
+      do concurrent(nn = 1:N)
+         do concurrent(kk = 1:K)
+            do concurrent(mm = 1:M)
+               C(mm,nn) = C(mm,nn) + A(kk,mm) * B(nn,kk)
+            end do
+         end do
+      end do
+    end subroutine AtmulBt
+    subroutine AtmulBtbuiltin(C, A, B, M, K, N) BIND(C, name="AtmulBtbuiltin")
+      integer(C_long), intent(in) :: M, K, N
+      real(C_double), dimension(M, N), intent(out) :: C
+      real(C_double), dimension(K, M), intent(in) :: A
+      real(C_double), dimension(N, K), intent(in) :: B
+      C = transpose(matmul(B, A))
+    end subroutine AtmulBtbuiltin
     subroutine dot(s, a, b, N) BIND(C, name="dot")
       integer(C_long), intent(in) :: N
       real(C_double), dimension(N), intent(in) :: a, b
@@ -309,4 +331,14 @@ module looptests
          pp = pp + pc
       end do
     end subroutine randomaccess
+    subroutine logdettriangle(ld, T, N) BIND(C, name="logdettriangle")
+      integer(C_long), intent(in) :: N
+      real(C_double), intent(in) :: T(N,N)
+      real(C_double), intent(out) :: ld
+      integer(C_long) :: nn
+      ld = 0
+      do concurrent(nn = 1:N)
+         ld = ld + log(T(nn,nn))
+      end do
+    end subroutine logdettriangle
   end module looptests

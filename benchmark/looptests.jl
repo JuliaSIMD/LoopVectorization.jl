@@ -6,7 +6,7 @@ function jgemm!(𝐂, 𝐀, 𝐁)
     M, N = size(𝐂); K = size(𝐁,1)
     @inbounds for n ∈ 1:N, k ∈ 1:K
         @simd ivdep for m ∈ 1:M
-            𝐂[m,n] += 𝐀[m,k] * 𝐁[k,n]
+            @fastmath 𝐂[m,n] += 𝐀[m,k] * 𝐁[k,n]
         end
     end
 end
@@ -15,7 +15,7 @@ end
     @inbounds for n ∈ 1:size(𝐂,2), m ∈ 1:size(𝐂,1)
         𝐂ₘₙ = zero(eltype(𝐂))
         @simd ivdep for k ∈ 1:size(𝐀,1)
-            𝐂ₘₙ += 𝐀[k,m] * 𝐁[k,n]
+            @fastmath 𝐂ₘₙ += 𝐀[k,m] * 𝐁[k,n]
         end
         𝐂[m,n] = 𝐂ₘₙ
     end
@@ -23,10 +23,21 @@ end
 @inline function jgemm!(𝐂, 𝐀, 𝐁ᵀ::Adjoint)
     𝐂 .= 0
     𝐁 = parent(𝐁ᵀ)
-    M, N = size(𝐂); K = size(𝐁,1)
+    M, N = size(𝐂); K = size(𝐁ᵀ,1)
     @inbounds for k ∈ 1:K, n ∈ 1:N
         @simd ivdep for m ∈ 1:M
-            𝐂[m,n] += 𝐀[m,k] * 𝐁[n,k]
+            @fastmath 𝐂[m,n] += 𝐀[m,k] * 𝐁[n,k]
+        end
+    end
+end
+@inline function jgemm!(𝐂, 𝐀ᵀ::Adjoint, 𝐁ᵀ::Adjoint)
+    𝐂 .= 0
+    𝐀 = parent(𝐀ᵀ)
+    𝐁 = parent(𝐁ᵀ)
+    M, N = size(𝐂); K = size(𝐁ᵀ,1)
+    @inbounds for n ∈ 1:N, k ∈ 1:K
+        @simd ivdep for m ∈ 1:M
+            @fastmath 𝐂[m,n] += 𝐀[k,m] * 𝐁[n,k]
         end
     end
 end
@@ -72,7 +83,7 @@ function jdot3(x, A, y)
     s = zero(promote_type(eltype(x), eltype(A), eltype(y)))
     @inbounds for n ∈ 1:N
         @simd ivdep for m ∈ 1:M
-            s += x[m] * A[m,n] * y[n]
+            @fastmath s += x[m] * A[m,n] * y[n]
         end
     end
     s
@@ -113,7 +124,7 @@ function jgemv!(y, 𝐀, x)
     y .= zero(eltype(y))
     @inbounds for j ∈ eachindex(x)
         @simd ivdep for i ∈ eachindex(y)
-            y[i] += 𝐀[i,j] * x[j]
+            @fastmath y[i] += 𝐀[i,j] * x[j]
         end
     end
 end
@@ -122,7 +133,7 @@ end
     @inbounds for i ∈ eachindex(𝐲)
         𝐲ᵢ = zero(eltype(𝐲))
         @simd ivdep for j ∈ eachindex(𝐱)
-            𝐲ᵢ += 𝐀[j,i] * 𝐱[j]
+            @fastmath 𝐲ᵢ += 𝐀[j,i] * 𝐱[j]
         end
         𝐲[i] = 𝐲ᵢ
     end
@@ -138,7 +149,7 @@ end
 end
 function jvar!(𝐬², 𝐀, x̄)
     @. s² = zero(eltype(𝐬²))
-    @inbounds for i ∈ 1:size(𝐀,2)
+    @inbounds @fastmath for i ∈ 1:size(𝐀,2)
         @simd for j ∈ eachindex(𝐬²)
             δ = 𝐀[j,i] - x̄[j]
             𝐬²[j] += δ*δ
@@ -207,6 +218,19 @@ function randomaccessavx(P, basis, coeffs::Vector{T}) where {T}
     end
     return p
 end
-
+function jlogdettriangle(T::Union{LowerTriangular,UpperTriangular})
+    ld = 0.0
+    @inbounds for n ∈ 1:size(T,1)
+        ld += log(T[n,n])
+    end
+    ld
+end
+function jlogdettriangleavx(T::Union{LowerTriangular,UpperTriangular})
+    ld = 0.0
+    @avx for n ∈ 1:size(T,1)
+        ld += log(T[n,n])
+    end
+    ld
+end
 
 
