@@ -81,6 +81,9 @@ function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{SparseStr
     pushvarg!(ls, ar, i)
     pushfirst!(getindices(ar), Symbol("##DISCONTIGUOUSSUBARRAY##"))
 end
+function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{MappedStridedPointer{F,T,P}}) where {F,T,P}
+    add_mref!(ls, ar, i, P)
+end
 function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{LoopValue})
     pushpreamble!(ls, Expr(:(=), vptr(ar), LoopValue()))
 end
