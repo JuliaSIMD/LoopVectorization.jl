@@ -169,9 +169,9 @@ function add_broadcast!(
     elementbytes::Int
 ) where {N,S<:Base.Broadcast.AbstractArrayStyle{N},F,A}
     instr = get(FUNCTIONSYMBOLS, F) do
-        f = gensym(:func)
-        pushpreamble!(ls, Expr(:(=), f, Expr(:(.), bcname, QuoteNode(:f))))
-        Instruction(Symbol(""), f)
+        # f = gensym(:func)
+        # pushpreamble!(ls, Expr(:(=), f, Expr(:(.), bcname, QuoteNode(:f))))
+        Instruction(bcname, :f)
     end
     args = A.parameters
     Nargs = length(args)

@@ -14,11 +14,12 @@ end
 Instruction(instr::Symbol) = Instruction(:LoopVectorization, instr)
 Base.convert(::Type{Instruction}, instr::Symbol) = Instruction(instr)
 # lower(instr::Instruction) = Expr(:(.), instr.mod, QuoteNode(instr.instr))
+Base.convert(::Type{Expr}, instr::Instruction) = Expr(:(.), instr.mod, QuoteNode(instr.instr))
 function Base.Expr(instr::Instruction, args...)
     if instr.mod === :LoopVectorization
         Expr(:call, lv(instr.instr), args...)::Expr
     else
-        Expr(:call, instr.instr, args...)::Expr
+        Expr(:call, convert(Expr, instr), args...)::Expr
     end
 end
 Base.hash(instr::Instruction, h::UInt64) = hash(instr.instr, hash(instr.mod, h))
@@ -128,6 +129,8 @@ const COST = Dict{Instruction,InstructionCost}(
     Instruction(:(<)) => InstructionCost(1, 0.5),
     Instruction(:(>=)) => InstructionCost(1, 0.5),
     Instruction(:(<=)) => InstructionCost(1, 0.5),
+    Instruction(:(≥)) => InstructionCost(1, 0.5),
+    Instruction(:(≤)) => InstructionCost(1, 0.5),
     Instruction(:>>) => InstructionCost(1, 0.5),
     Instruction(:>>>) => InstructionCost(1, 0.5),
     Instruction(:<<) => InstructionCost(1, 0.5),

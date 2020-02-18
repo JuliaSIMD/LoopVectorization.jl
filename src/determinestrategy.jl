@@ -14,7 +14,8 @@ function cost(op::Operation, unrolled::Symbol, Wshift::Int, size_T::Int = op.ele
     isconstant(op) && return 0.0, 0, 1
     # Wshift == dependson(op, unrolled) ? Wshift : 0
     # c = first(cost(instruction(op), Wshift, size_T))::Int
-    instr = instruction(op)
+    instr = Instruction(:LoopVectorization, instruction(op).instr)
+    # instr = instruction(op)
     if length(parents(op)) == 1
         if instr == Instruction(:-) || instr === Instruction(:vsub) || instr == Instruction(:+) || instr == Instruction(:vadd)
             return 0.0, 0, 1
