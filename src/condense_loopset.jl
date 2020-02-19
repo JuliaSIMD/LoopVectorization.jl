@@ -224,7 +224,7 @@ end
         push!(call.args, Expr(:ref, :vargs, n))
     end
     push!(q.args, call)
-    Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), q)
+    Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), q)
 end
 
 # Try to condense in type stable manner

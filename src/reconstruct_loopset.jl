@@ -1,17 +1,17 @@
 function Loop(ls::LoopSet, l::Int, ::Type{UnitRange{Int}})
     start = gensym(:loopstart); stop = gensym(:loopstop)
-    pushpreamble!(ls, Expr(:(=), start, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:(.), Expr(:ref, :lb, l), QuoteNode(:start)))))
-    pushpreamble!(ls, Expr(:(=), stop, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:(.), Expr(:ref, :lb, l), QuoteNode(:stop)))))
+    pushpreamble!(ls, Expr(:(=), start, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:(.), Expr(:ref, :lb, l), QuoteNode(:start)))))
+    pushpreamble!(ls, Expr(:(=), stop, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:(.), Expr(:ref, :lb, l), QuoteNode(:stop)))))
     Loop(gensym(:n), 0, 1024, start, stop, false, false)::Loop
 end
 function Loop(ls::LoopSet, l::Int, ::Type{StaticUpperUnitRange{U}}) where {U}
     start = gensym(:loopstart)
-    pushpreamble!(ls, Expr(:(=), start, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:(.), Expr(:ref, :lb, l), QuoteNode(:L)))))
+    pushpreamble!(ls, Expr(:(=), start, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:(.), Expr(:ref, :lb, l), QuoteNode(:L)))))
     Loop(gensym(:n), U - 1024, U, start, Symbol(""), false, true)::Loop
 end
 function Loop(ls::LoopSet, l::Int, ::Type{StaticLowerUnitRange{L}}) where {L}
     stop = gensym(:loopstop)
-    pushpreamble!(ls, Expr(:(=), stop, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:(.), Expr(:ref, :lb, l), QuoteNode(:U)))))
+    pushpreamble!(ls, Expr(:(=), stop, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:(.), Expr(:ref, :lb, l), QuoteNode(:U)))))
     Loop(gensym(:n), L, L + 1024, Symbol(""), stop, true, false)::Loop
 end
 function Loop(ls, l, ::Type{StaticUnitRange{L,U}}) where {L,U}
@@ -55,7 +55,7 @@ function ArrayReferenceMeta(
     )
 end
 
-extract_varg(i) = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:ref, :vargs, i))
+extract_varg(i) = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, :vargs, i))
 pushvarg!(ls::LoopSet, ar::ArrayReferenceMeta, i) = pushpreamble!(ls, Expr(:(=), vptr(ar), extract_varg(i)))
 function pushvarg′!(ls::LoopSet, ar::ArrayReferenceMeta, i)
     reverse!(ar.loopedindex); reverse!(getindices(ar)) # reverse the listed indices here, and transpose it to make it column major
@@ -81,7 +81,7 @@ function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{SparseStr
     pushvarg!(ls, ar, i)
     pushfirst!(getindices(ar), Symbol("##DISCONTIGUOUSSUBARRAY##"))
 end
-function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{MappedStridedPointer{F,T,P}}) where {F,T,P}
+function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{VectorizationBase.MappedStridedPointer{F,T,P}}) where {F,T,P}
     add_mref!(ls, ar, i, P)
 end
 function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{LoopValue})
@@ -113,7 +113,7 @@ function process_metadata!(ls::LoopSet, AM, num_arrays::Int)::Vector{Symbol}
         sii = si::Int
         s = gensym(:symlicm)
         push!(ls.preamble_symsym, (si, s))
-        pushpreamble!(ls, Expr(:(=), s, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,@__FILE__), Expr(:ref, :vargs, num_arrays + i))))
+        pushpreamble!(ls, Expr(:(=), s, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), Expr(:ref, :vargs, num_arrays + i))))
     end
     append!(ls.preamble_symint, AM[4].parameters)
     append!(ls.preamble_symfloat, AM[5].parameters)
@@ -165,7 +165,7 @@ function add_parents_to_ops!(ls::LoopSet, ops::Vector{OperationStruct}, constoff
             instr = instruction(op)
             if instr != LOOPCONSTANT && instr.mod !== :numericconstant
                 constoffset += 1
-                pushpreamble!(ls, Expr(:(=), instr.instr, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:ref, :vargs, constoffset))))
+                pushpreamble!(ls, Expr(:(=), instr.instr, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, :vargs, constoffset))))
             end
         end
     end
@@ -189,7 +189,7 @@ typeeltype(::Type{<:AbstractRange{T}}) where {T} = T
 
 function add_array_symbols!(ls::LoopSet, arraysymbolinds::Vector{Symbol}, offset::Int)
     for (i,as) ∈ enumerate(arraysymbolinds)
-        pushpreamble!(ls, Expr(:(=), as, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:ref, :vargs, i + offset))))
+        pushpreamble!(ls, Expr(:(=), as, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, :vargs, i + offset))))
     end
 end
 function extract_external_functions!(ls::LoopSet, offset::Int)
@@ -198,7 +198,7 @@ function extract_external_functions!(ls::LoopSet, offset::Int)
             instr = instruction(op)
             if instr.mod != :LoopVectorization
                 offset += 1
-                pushpreamble!(ls, Expr(:(=), instr.instr, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, @__FILE__), Expr(:ref, :vargs, offset))))
+                pushpreamble!(ls, Expr(:(=), instr.instr, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, :vargs, offset))))
             end
         end
     end

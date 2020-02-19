@@ -206,7 +206,7 @@ function reduce_expr!(q::Expr, ls::LoopSet, U::Int)
 end
 function gc_preserve(ls::LoopSet, q::Expr)
     length(ls.includedactualarrays) == 0 && return q
-    gcp = Expr(:macrocall, Expr(:(.), :GC, QuoteNode(Symbol("@preserve"))), LineNumberNode(@__LINE__, @__FILE__))
+    gcp = Expr(:macrocall, Expr(:(.), :GC, QuoteNode(Symbol("@preserve"))), LineNumberNode(@__LINE__, Symbol(@__FILE__)))
     for array ∈ ls.includedactualarrays
         push!(gcp.args, array)
     end

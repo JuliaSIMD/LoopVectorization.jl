@@ -52,7 +52,7 @@ function add_broadcast!(
     mB = gensym(:Bₖₙ)
     pushpreamble!(ls, Expr(:(=), mA, Expr(:(.), bcname, QuoteNode(:a))))
     pushpreamble!(ls, Expr(:(=), mB, Expr(:(.), bcname, QuoteNode(:b))))
-    pushpreamble!(ls, Expr(:(=), K, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,@__FILE__), Expr(:ref, Expr(:call, :size, mB), 1))))
+    pushpreamble!(ls, Expr(:(=), K, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), Expr(:ref, Expr(:call, :size, mB), 1))))
     k = gensym(:k)
     add_loop!(ls, Loop(k, 0, K), k)
     m = loopsyms[1];
@@ -182,7 +182,7 @@ function add_broadcast!(
     # reduceddeps = Symbol[]
     for (i,arg) ∈ enumerate(args)
         argname = gensym(:arg)
-        pushpreamble!(ls, Expr(:(=), argname, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,@__FILE__), Expr(:ref, bcargs, i))))
+        pushpreamble!(ls, Expr(:(=), argname, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), Expr(:ref, bcargs, i))))
         # dynamic dispatch
         parent = add_broadcast!(ls, gensym(:temp), argname, loopsyms, arg, elementbytes)::Operation
         push!(parents, parent)
