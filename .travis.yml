@@ -25,4 +25,4 @@ env:
   global:
     - COVERALLS_PARALLEL=true
   notifications:
-    webhooks: https://coveralls.io/webhook
+    webhooks: "https://coveralls.io/webhook"
