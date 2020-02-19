@@ -136,7 +136,7 @@ const COST = Dict{Instruction,InstructionCost}(
     Instruction(:<<) => InstructionCost(1, 0.5),
     Instruction(:max) => InstructionCost(4,0.5),
     Instruction(:min) => InstructionCost(4,0.5),
-    Instruction(:ifelse) => InstructionCost(1, 0.5),
+    # Instruction(:ifelse) => InstructionCost(1, 0.5),
     Instruction(:vifelse) => InstructionCost(1, 0.5),
     Instruction(:inv) => InstructionCost(13,4.0,-2.0,1),
     Instruction(:vinv) => InstructionCost(13,4.0,-2.0,1),
@@ -315,6 +315,8 @@ const FUNCTIONSYMBOLS = Dict{Type{<:Function},Instruction}(
     typeof(min) => :min,
     typeof(<<) => :<<,
     typeof(>>) => :>>,
-    typeof(>>>) => :>>>
+    typeof(>>>) => :>>>,
+    typeof(ifelse) => :vifelse,
+    typeof(vifelse) => :vifelse
 )
 

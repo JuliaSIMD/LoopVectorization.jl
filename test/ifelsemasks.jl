@@ -29,6 +29,26 @@
             c[i] = 1 + (a[i] > b[i] ? a[i] + b[i] : a[i] * b[i])
         end
     end
+    function addifelsemul_avx!(c, a, b)
+        @_avx for i ∈ eachindex(c,a,b)
+            c[i] = ifelse(a[i] > b[i], a[i] + b[i], a[i] * b[i])
+        end
+    end
+    function addifelsemulavx!(c, a, b)
+        @avx for i ∈ eachindex(c,a,b)
+            c[i] = ifelse(a[i] > b[i], a[i] + b[i], a[i] * b[i])
+        end
+    end
+    function addifelsemulp1_avx!(c, a, b)
+        @_avx for i ∈ eachindex(c,a,b)
+            c[i] = 1 + ifelse(a[i] > b[i], a[i] + b[i], a[i] * b[i])
+        end
+    end
+    function addifelsemulp1avx!(c, a, b)
+        @avx for i ∈ eachindex(c,a,b)
+            c[i] = 1 + ifelse(a[i] > b[i], a[i] + b[i], a[i] * b[i])
+        end
+    end
 
 
     function maybewriteand!(c, a, b)
@@ -205,17 +225,25 @@
             a = rand(-T(100):T(100), N); b = rand(-T(100):T(100), N);
         else
             a = rand(T, N); b = rand(T, N);
-        end
+        end;
         c1 = similar(a); c2 = similar(a);
         addormul!(c1, a, b)
         addormul_avx!(c2, a, b)
         @test c1 ≈ c2
         fill!(c2, -999999999); addormulavx!(c2, a, b)
         @test c1 ≈ c2
+        fill!(c2, -999999999); addifelsemul_avx!(c2, a, b)
+        @test c1 ≈ c2
+        fill!(c2, -999999999); addifelsemulavx!(c2, a, b)
+        @test c1 ≈ c2
         addormulp1!(c1, a, b)
         addormulp1_avx!(c2, a, b)
         @test c1 ≈ c2
         fill!(c2, -999999999); addormulp1avx!(c2, a, b)
+        @test c1 ≈ c2
+        fill!(c2, -999999999); addifelsemulp1_avx!(c2, a, b)
+        @test c1 ≈ c2
+        fill!(c2, -999999999); addifelsemulp1avx!(c2, a, b)
         @test c1 ≈ c2
 
         fill!(c1, -999999999); maybewriteand!(c1, a, b)
