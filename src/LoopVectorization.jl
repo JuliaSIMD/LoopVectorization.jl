@@ -7,8 +7,8 @@ using VectorizationBase: REGISTER_SIZE, REGISTER_COUNT, extract_data, num_vector
     Static, StaticUnitRange, StaticLowerUnitRange, StaticUpperUnitRange,
     PackedStridedPointer, SparseStridedPointer, RowMajorStridedPointer, StaticStridedPointer, StaticStridedStruct
 using SIMDPirates: VECTOR_SYMBOLS, evadd, evmul, vrange, reduced_add, reduced_prod, reduce_to_add, reduce_to_prod,
-    sizeequivalentfloat, sizeequivalentint
-#    vmullog2, vmullog10, vdivlog2, vdivlog2add, vdivlog10, vdivlog10add, vfmaddaddone
+    sizeequivalentfloat, sizeequivalentint, vadd!, vsub!, vfmadd!, vfnmadd!,
+    vmullog2, vmullog10, vdivlog2, vdivlog10, vmullog2add!, vmullog10add!, vdivlog2add!, vdivlog10add!, vfmaddaddone
 using Base.Broadcast: Broadcasted, DefaultArrayStyle
 using LinearAlgebra: Adjoint, Transpose
 
