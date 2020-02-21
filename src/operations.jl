@@ -2,7 +2,9 @@
 struct ArrayReference
     array::Symbol
     indices::Vector{Symbol}
+    offsets::Vector{Int8}
 end
+ArrayReference(array, indices) = ArrayReference(array, indices, similar(indices, Int8))
 function Base.isequal(x::ArrayReference, y::ArrayReference)
     x.array === y.array || return false
     xinds = x.indices

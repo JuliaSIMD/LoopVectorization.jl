@@ -7,6 +7,7 @@ Base.:(==)(u::Unsigned, it::IndexType) = (u % UInt8) == UInt8(it)
 struct ArrayRefStruct
     index_types::UInt64
     indices::UInt64
+    offsets::UInt64
 end
 
 function findindoradd!(v::Vector{T}, s::T) where {T}
@@ -18,12 +19,16 @@ end
 function ArrayRefStruct(ls::LoopSet, mref::ArrayReferenceMeta, arraysymbolinds::Vector{Symbol})
     index_types = zero(UInt64)
     indices = zero(UInt64)
+    offsets = zero(UInt64)
     indv = mref.ref.indices
+    offv = mref.ref.offsets
     # we can discard that the array was considered discontiguous, as it should be recovered from type information
     start = 1 + (first(indv) === Symbol("##DISCONTIGUOUSSUBARRAY##"))
     for (n,ind) ∈ enumerate(@view(indv[start:end]))
         index_types <<= 8
         indices <<= 8
+        offsets <<= 8
+        offsets |= offv[n]
         if mref.loopedindex[n]
             index_types |= LoopIndex
             indices |= getloopid(ls, ind)
@@ -38,7 +43,7 @@ function ArrayRefStruct(ls::LoopSet, mref::ArrayReferenceMeta, arraysymbolinds::
             end
         end
     end
-    ArrayRefStruct( index_types, indices )
+    ArrayRefStruct( index_types, indices, offsets )
 end
 
 struct OperationStruct

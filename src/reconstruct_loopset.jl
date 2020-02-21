@@ -30,8 +30,10 @@ function ArrayReferenceMeta(
 )
     index_types = ar.index_types
     indices = ar.indices
+    offsets = ar.offsets
     ni = filled_8byte_chunks(index_types)
     index_vec = Vector{Symbol}(undef, ni)
+    offset_vec = Vector{Int8}(undef, ni)
     loopedindex = fill(false, ni)
     while index_types != zero(UInt64)
         ind = indices % UInt8
@@ -45,12 +47,14 @@ function ArrayReferenceMeta(
             arraysymbolinds[ind] 
         end
         index_vec[ni] = symind
+        offset_vec[ni] = offsets % Int8
         index_types >>>= 8
         indices >>>= 8
+        offsets >>>= 8
         ni -= 1
     end
     ArrayReferenceMeta(
-        ArrayReference(array, index_vec),
+        ArrayReference(array, index_vec, offset_vec),
         loopedindex, vp
     )
 end
