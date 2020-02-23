@@ -1,11 +1,10 @@
-# Documentation: http://docs.travis-ci.com/user/languages/julia/
 language: julia
 os:
   - linux
-  - osx
+  - osx 
+  - windows
 julia:
-  - 1.1
-  - 1.3
+  - "1.1"
+  - "1.2"
+  - "1.3"
   - nightly
-notifications:
-  email: false
