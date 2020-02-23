@@ -28,9 +28,12 @@ function plot(br::BenchmarkResult)
         :line,
         x = :Size,
         y = :GFLOPS,
-        color = :Method,
-        width = 720,
-        height = 480
+        width = 900,
+        height = 600,
+        color={
+            :Method,
+            scale={scheme="category20"}
+        }
     )
 end
 
