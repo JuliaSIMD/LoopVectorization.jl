@@ -2,7 +2,7 @@ function pushvectorload!(q::Expr, op::Operation, var::Symbol, td::UnrollArgs, U:
     @unpack u, unrolled = td
     ptr = refname(op)
     name, mo = name_memoffset(var, op, td, W, vecnotunrolled)
-    instrcall = Expr(:call, lv(:vload), ptr, mo)
+    instrcall = Expr(:call, lv(:load), ptr, mo)
     if mask !== nothing && (vecnotunrolled || u == U - 1)
         push!(instrcall.args, mask)
     end

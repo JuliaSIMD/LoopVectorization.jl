@@ -49,19 +49,15 @@ uuid = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 
 [[SIMDPirates]]
 deps = ["VectorizationBase"]
-git-tree-sha1 = "4a33e07340324e2d3200c72231b5db829b7bad1f"
-repo-rev = "master"
-repo-url = "https://github.com/chriselrod/SIMDPirates.jl.git"
+git-tree-sha1 = "ecacd3f808e559d9e363f2620041c6286c8efaca"
 uuid = "21efa798-c60a-11e8-04d3-e1a92915a26a"
-version = "0.3.16"
+version = "0.4.0"
 
 [[SLEEFPirates]]
 deps = ["Libdl", "SIMDPirates", "VectorizationBase"]
-git-tree-sha1 = "8e4277a226f4ce3b3d7b5a60ab66d8f9f1ffdbab"
-repo-rev = "master"
-repo-url = "https://github.com/chriselrod/SLEEFPirates.jl.git"
+git-tree-sha1 = "bb99e28c0284de9c3233258a93882429752faa55"
 uuid = "476501e8-09a2-5ece-8869-fb82de89a1fa"
-version = "0.3.7"
+version = "0.3.8"
 
 [[Serialization]]
 uuid = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
@@ -75,8 +71,6 @@ uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [[VectorizationBase]]
 deps = ["CpuId", "LinearAlgebra"]
-git-tree-sha1 = "794a8d4ad8c817f1c7b7598b3d858891ab100722"
-repo-rev = "master"
-repo-url = "https://github.com/chriselrod/VectorizationBase.jl.git"
+git-tree-sha1 = "b9b5c8fa55e9b859989e759f405624d16b0b0ca2"
 uuid = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
-version = "0.4.1"
+version = "0.4.2"
