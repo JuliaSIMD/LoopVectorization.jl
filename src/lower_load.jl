@@ -2,7 +2,7 @@ function pushvectorload!(q::Expr, op::Operation, var::Symbol, td::UnrollArgs, U:
     @unpack u, unrolled = td
     ptr = refname(op)
     name, mo = name_memoffset(var, op, td, W, vecnotunrolled)
-    instrcall = Expr(:call, lv(:load), ptr, mo)
+    instrcall = Expr(:call, lv(:vload), ptr, mo)
     if mask !== nothing && (vecnotunrolled || u == U - 1)
         push!(instrcall.args, mask)
     end
@@ -21,7 +21,7 @@ function lower_load_scalar!(
     for u ∈ 0:U-1
         varname = varassignname(var, u, isunrolled)
         td = UnrollArgs(u, unrolled, tiled, suffix)
-        push!(q.args, Expr(:(=), varname, Expr(:call, lv(:load), ptr, mem_offset_u(op, td))))
+        push!(q.args, Expr(:(=), varname, Expr(:call, lv(:vload), ptr, mem_offset_u(op, td))))
     end
     nothing
 end

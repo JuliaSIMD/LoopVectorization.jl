@@ -10,14 +10,14 @@ function vfilter!(f::F, x::Vector{T}, y::AbstractArray{T}) where {F,T <: SUPPORT
         ptr_x = pointer(x)
         ptr_y = pointer(y)
         for _ ∈ 1:Nrep
-            vy = load(Vec{W,T}, ptr_y, i)
+            vy = vload(Vec{W,T}, ptr_y, i)
             mask = f(SVec(vy))
             SIMDPirates.compressstore!(gep(ptr_x, j), vy, mask)
             i += W
             j += count_ones(mask)
         end
         rem_mask = VectorizationBase.mask(T, Nrem)
-        vy = load(Vec{W,T}, gep(ptr_y, i), rem_mask)
+        vy = vload(Vec{W,T}, gep(ptr_y, i), rem_mask)
         mask = rem_mask & f(SVec(vy))
         SIMDPirates.compressstore!(gep(ptr_x, j), vy, mask)
         j += count_ones(mask)

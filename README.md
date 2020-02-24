@@ -21,6 +21,10 @@ It then tries to vectorize the loop to improve runtime performance.
 
 The macro assumes that loop iterations can be reordered. It also currently supports simple nested loops, where loop bounds of inner loops are constant across iterations of the outer loop, and only a single loop at each level of noop lest. These limitations should be removed in a future version.
 
+## Benchmarks
+
+Please see the documentation for benchmarks versus base Julia, Clang-Polly, icc, ifort, gfortran, and Eigen. If you would believe any code or compiler flags can be improved, would like to submit your own benchmarks, or have Julia code using LoopVectorization that you would like to be tested for performance regressions on a semi-regular basis, please feel file an issue or PR with the code sample.
+
 ## Examples
 ### Dot Product
 <details>

@@ -66,7 +66,7 @@ function lower_conditionalstore_scalar!(
         varname = varassignname(var, u, parentisunrolled)
         condvarname = varassignname(condvar, u, condunrolled)
         td = UnrollArgs(u, unrolled, tiled, suffix)
-        push!(q.args, Expr(:&&, condvarname, Expr(:call, lv(:store!), ptr, varname, mem_offset_u(op, td))))
+        push!(q.args, Expr(:&&, condvarname, Expr(:call, lv(:vstore!), ptr, varname, mem_offset_u(op, td))))
     end
     nothing
 end
@@ -103,7 +103,7 @@ function lower_conditionalstore_vectorized!(
         td = UnrollArgs(u, unrolled, tiled, suffix)
         name, mo = name_memoffset(var, op, td, W, vecnotunrolled, parentisunrolled)
         condvarname = varassignname(condvar, u, condunrolled)
-        instrcall = Expr(:call, lv(:store!), ptr, name, mo)
+        instrcall = Expr(:call, lv(:vstore!), ptr, name, mo)
         if mask !== nothing && (vecnotunrolled || u == U - 1)
             push!(instrcall.args, Expr(:call, lv(:combinemasks), condvarname, mask))
         else
@@ -123,7 +123,7 @@ function lower_store_scalar!(
     for u ∈ 0:U-1
         varname = varassignname(var, u, parentisunrolled)
         td = UnrollArgs(u, unrolled, tiled, suffix)
-        push!(q.args, Expr(:call, lv(:store!), ptr, varname, mem_offset_u(op, td)))
+        push!(q.args, Expr(:call, lv(:vstore!), ptr, varname, mem_offset_u(op, td)))
     end
     nothing
 end
@@ -147,7 +147,7 @@ function lower_store_vectorized!(
     for u ∈ 0:U-1
         td = UnrollArgs(u, unrolled, tiled, suffix)
         name, mo = name_memoffset(var, op, td, W, vecnotunrolled, parentisunrolled)
-        instrcall = Expr(:call, lv(:store!), ptr, name, mo)
+        instrcall = Expr(:call, lv(:vstore!), ptr, name, mo)
         if mask !== nothing && (vecnotunrolled || u == U - 1)
             push!(instrcall.args, mask)
         end
