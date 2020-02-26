@@ -232,14 +232,14 @@ function determine_width(ls::LoopSet, vectorized::Symbol)
     if isstaticloop(vloop)
         push!(vwidth_q.args, Expr(:call, Expr(:curly, :Val, length(vloop))))
     end
-    push!(vwidth_q.args, ls.T)
-    # if length(ls.includedactualarrays) < 2
-    #     push!(vwidth_q.args, ls.T)
-    # else
-    #     for array ∈ ls.includedactualarrays
-    #         push!(vwidth_q.args, Expr(:call, :eltype, array))
-    #     end
-    # end
+    # push!(vwidth_q.args, ls.T)
+    if length(ls.includedactualarrays) < 2
+        push!(vwidth_q.args, ls.T)
+    else
+        for array ∈ ls.includedactualarrays
+            push!(vwidth_q.args, Expr(:call, :eltype, array))
+        end
+    end
     vwidth_q
 end
 function lower_unrolled!(
@@ -330,9 +330,9 @@ function lower_unrolled_dynamic!(
     end
     q
 end
-function maskexpr(W::Symbol, looplimit, allon::Bool)
+function maskexpr(W::Symbol, looplimit, all_on::Bool)
     rem = Expr(:call, lv(:valrem), W, looplimit)
-    Expr(:(=), Symbol("##mask##"), Expr(:call, lv(allon ? :masktable : :mask), W, rem))
+    Expr(:(=), Symbol("##mask##"), Expr(:call, lv(all_on ? :masktable : :mask), W, rem))
 end
 function definemask(loop::Loop, W::Symbol, allon::Bool)
     if isstaticloop(loop)

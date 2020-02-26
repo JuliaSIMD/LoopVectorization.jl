@@ -74,7 +74,8 @@ end
 struct LoopValue end
 @inline VectorizationBase.stridedpointer(::LoopValue) = LoopValue()
 @inline VectorizationBase.vload(::LoopValue, i::Tuple{_MM{W}}) where {W} = _MM{W}(@inbounds(i[1].i) + 1)
-@inline VectorizationBase.vload(::LoopValue, i::Tuple{_MM{W}}, ::Unsigned) where {W} = _MM{W}(@inbounds(i[1].i) + 1)
+# @inline VectorizationBase.vload(::LoopValue, i::Tuple{_MM{W}}, ::Unsigned) where {W} = _MM{W}(@inbounds(i[1].i) + 1)
+@inline VectorizationBase.vload(::LoopValue, i::Tuple{_MM{W}}, ::Mask) where {W} = _MM{W}(@inbounds(i[1].i) + 1)
 @inline VectorizationBase.vload(::LoopValue, i::Integer) = i + one(i)
 @inline VectorizationBase.vload(::LoopValue, i::Tuple{I}) where {I<:Integer} = @inbounds(i[1]) + one(I)
 @inline Base.eltype(::LoopValue) = Int8
