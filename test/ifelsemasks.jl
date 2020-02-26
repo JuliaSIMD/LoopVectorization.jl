@@ -1,4 +1,68 @@
 @testset "ifelse (masks)" begin
+
+    function promote_bool_store!(z, x, y)
+        for i ∈ eachindex(x)
+            z[i] = (x[i]*x[i] + y[i]*y[i]) < 1
+        end
+        z
+    end
+    function promote_bool_storeavx!(z, x, y)
+        @avx for i ∈ eachindex(x)
+            z[i] = (x[i]*x[i] + y[i]*y[i]) < 1
+        end
+        z
+    end
+    function promote_bool_store_avx!(z, x, y)
+        @_avx for i ∈ eachindex(x)
+            z[i] = (x[i]*x[i] + y[i]*y[i]) < 1
+        end
+        z
+    end
+    function promote_bool_storeavx2!(z, x, y)
+        @avx for i ∈ eachindex(x)
+            z[i] = (x[i]*x[i] + y[i]*y[i]) < 1 ? 1 : 0
+        end
+        z
+    end
+    function promote_bool_store_avx2!(z, x, y)
+        @_avx for i ∈ eachindex(x)
+            z[i] = (x[i]*x[i] + y[i]*y[i]) < 1 ? 1 : 0
+        end
+        z
+    end
+
+    function Bernoulli_logit(y::BitVector, α::AbstractVector{T}) where {T}
+        t = zero(promote_type(Float32,T))
+        @inbounds for i ∈ eachindex(α)
+            invOmP = 1 + exp(α[i])
+            nlogOmP = log(invOmP)
+            nlogP = nlogOmP - α[i]
+            t -= y[i] ? nlogP : nlogOmP
+        end
+        t
+    end
+    function Bernoulli_logitavx(y::BitVector, α::AbstractVector{T}) where {T}
+        t = zero(promote_type(Float32,T))
+        @avx for i ∈ eachindex(α)
+            invOmP = 1 + exp(α[i])
+            nlogOmP = log(invOmP)
+            nlogP = nlogOmP - α[i]
+            t -= y[i] ? nlogP : nlogOmP
+        end
+        t
+    end
+    function Bernoulli_logit_avx(y::BitVector, α::AbstractVector{T}) where {T}
+        t = zero(promote_type(Float32,T))
+        @_avx for i ∈ eachindex(α)
+            invOmP = 1 + exp(α[i])
+            nlogOmP = log(invOmP)
+            nlogP = nlogOmP - α[i]
+            t -= y[i] ? nlogP : nlogOmP
+        end
+        t
+    end
+
+
     function addormul!(c, a, b)
         for i ∈ eachindex(c,a,b)
             c[i] = a[i] > b[i] ? a[i] + b[i] : a[i] * b[i]
@@ -227,8 +291,19 @@
             a = rand(T, N); b = rand(T, N);
         end;
         c1 = similar(a); c2 = similar(a);
-        addormul!(c1, a, b)
-        addormul_avx!(c2, a, b)
+
+        promote_bool_store!(c1, a, b)
+        promote_bool_storeavx!(c2, a, b)
+        @test c1 == c2
+        fill!(c2, -999999999); promote_bool_store_avx!(c2, a, b)
+        @test c1 == c2
+        fill!(c2, -999999999); promote_bool_storeavx2!(c2, a, b)
+        @test c1 == c2
+        fill!(c2, -999999999); promote_bool_store_avx2!(c2, a, b)
+        @test c1 == c2
+
+        fill!(c2, -999999999); addormul!(c1, a, b)
+        fill!(c2, -999999999); addormul_avx!(c2, a, b)
         @test c1 ≈ c2
         fill!(c2, -999999999); addormulavx!(c2, a, b)
         @test c1 ≈ c2
@@ -296,4 +371,17 @@
         @test C1 ≈ C2
         @test C1 ≈ C3
     end
+    
+    
+    a = rand(-10:10, 43);
+    bit = a .> 0.5;
+    t = Bernoulli_logit(bit, a);
+    @test t ≈ Bernoulli_logitavx(bit, a)
+    @test t ≈ Bernoulli_logit_avx(bit, a)
+    a = rand(43)
+    bit = a .> 0.5;
+    t = Bernoulli_logit(bit, a);
+    @test t ≈ Bernoulli_logitavx(bit, a)
+    @test t ≈ Bernoulli_logit_avx(bit, a)
+
 end

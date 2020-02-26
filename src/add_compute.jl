@@ -137,7 +137,15 @@ function add_reduction_update_parent!(
         reductcombine = Symbol("")
     end
     combineddeps = copy(deps); mergesetv!(combineddeps, reduceddeps)
-    directdependency && pushparent!(vparents, deps, reduceddeps, reductinit)#parent) # deps and reduced deps will not be disjoint
+    # directdependency && pushparent!(vparents, deps, reduceddeps, reductinit)#parent) # deps and reduced deps will not be disjoint
+    if directdependency
+        if instr ∈ (:-, :vsub!, :vsub, :/, :vfdiv!, :vfidiv!)
+            pushfirst!(vparents, reductinit)
+            update_deps!(deps, reduceddeps, reductinit)#parent) # deps and reduced deps will not be disjoint
+        else
+            push!(vparents, reductinit)
+        end
+    end
     update_reduction_status!(vparents, reduceddeps, name(reductinit))
     # this is the op added by add_compute
     op = Operation(length(operations(ls)), reductsym, elementbytes, instr, compute, deps, reduceddeps, vparents)

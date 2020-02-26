@@ -8,14 +8,25 @@ function add_if!(ls::LoopSet, LHS::Symbol, RHS::Expr, elementbytes::Int, positio
     # for now, just simple 1-liners
     @assert length(RHS.args) == 3 "if statements without an else cannot be assigned to a variable."
     condition = first(RHS.args)
-    condop = add_compute!(ls, gensym(:mask), condition, elementbytes, position, mpref)
+    condop = if mpref === nothing
+        add_operation!(ls, gensym(:mask), condition, elementbytes, position)
+    else
+        add_operation!(ls, gensym(:mask), condition, mpref, elementbytes, position)
+    end
     iftrue = RHS.args[2]
-    (iftrue isa Expr && iftrue.head !== :call) && throw("Only calls or constant expressions are currently supported in if/else blocks.")
-    trueop = add_operation!(ls, Symbol(:iftrue), iftrue, elementbytes, position)
+    trueop = if iftrue isa Expr
+        (iftrue isa Expr && iftrue.head !== :call) && throw("Only calls or constant expressions are currently supported in if/else blocks.")
+        add_operation!(ls, Symbol(:iftrue), iftrue, elementbytes, position)
+    else
+        getop(ls, iftrue, elementbytes)
+    end
     iffalse = RHS.args[3]
-    (iffalse isa Expr && iffalse.head !== :call) && throw("Only calls or constant expressions are currently supported in if/else blocks.")
-    falseop = add_operation!(ls, Symbol(:iffalse), iffalse, elementbytes, position)
-
+    falseop = if iffalse isa Expr
+        (iffalse isa Expr && iffalse.head !== :call) && throw("Only calls or constant expressions are currently supported in if/else blocks.")
+        add_operation!(ls, Symbol(:iffalse), iffalse, elementbytes, position)
+    else
+        getop(ls, iffalse, elementbytes)
+    end
     add_compute!(ls, LHS, :vifelse, [condop, trueop, falseop], elementbytes)
 end
 
@@ -38,7 +49,7 @@ function add_andblock!(ls::LoopSet, condop::Operation, LHS, RHS, elementbytes::I
     add_andblock!(ls, condop, LHS, rhsop, elementbytes, position)
 end
 function add_andblock!(ls::LoopSet, condexpr::Expr, condeval::Expr, elementbytes::Int, position::Int)
-    condop = add_compute!(ls, gensym(:mask), condexpr, elementbytes, position)
+    condop = add_operation!(ls, gensym(:mask), condexpr, elementbytes, position)
     if condeval.head === :call
         @assert first(condeval.args) === :setindex!
         array, raw_indices = ref_from_setindex(condeval)
@@ -79,7 +90,7 @@ function add_orblock!(ls::LoopSet, condop::Operation, LHS, RHS, elementbytes::In
     add_orblock!(ls, condop, LHS, rhsop, elementbytes, position)
 end
 function add_orblock!(ls::LoopSet, condexpr::Expr, condeval::Expr, elementbytes::Int, position::Int)
-    condop = add_compute!(ls, gensym(:mask), condexpr, elementbytes, position)
+    condop = add_operation!(ls, gensym(:mask), condexpr, elementbytes, position)
     if condeval.head === :call
         @assert first(condeval.args) === :setindex!
         array, raw_indices = ref_from_setindex(condeval)
