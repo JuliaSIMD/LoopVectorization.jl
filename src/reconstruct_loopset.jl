@@ -216,7 +216,6 @@ function sizeofeltypes(v, num_arrays)::Int
     sizeof(T)
 end
 
-
 function avx_loopset(instr, ops, arf, AM, LB, vargs)
     ls = LoopSet(:LoopVectorization)
     num_arrays = length(arf)
@@ -241,6 +240,7 @@ function avx_body(ls, UT)
 end
 
 function _avx_loopset_debug(::Type{OPS}, ::Type{ARF}, ::Type{AM}, ::Type{LB}, vargs...) where {UT, OPS, ARF, AM, LB}
+    @show OPS ARF AM LB vargs
     _avx_loopset(OPS.parameters, ARF.parameters, AM.parameters, LB.parameters, typeof.(vargs))
 end
 function _avx_loopset(OPSsv, ARFsv, AMsv, LBsv, vargs) where {UT, OPS, ARF, AM, LB}

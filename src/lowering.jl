@@ -154,14 +154,16 @@ function initialize_outer_reductions!(
 )
     reduct_zero = reduction_zero(op.instruction)
     isvectorized = vectorized ∈ reduceddependencies(op)
+    # typeTr = Symbol("##TYPEOF##", name(op))
+    typeTr = Expr(:call, :typeof, mangledvar(op))
     z = if isvectorized
         if reduct_zero === :zero
-            Expr(:call, lv(:vzero), W, typeT)
+            Expr(:call, lv(:vzero), W, typeTr)
         else
-            Expr(:call, lv(:vbroadcast), W, Expr(:call, reduct_zero, typeT))
+            Expr(:call, lv(:vbroadcast), W, Expr(:call, reduct_zero, typeTr))
         end
     else
-        Expr(:call, reduct_zero, typeT)
+        Expr(:call, reduct_zero, typeTr)
     end
     mvar = variable_name(op, suffix)
     for u ∈ Umin:Umax-1

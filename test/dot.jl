@@ -130,6 +130,44 @@
             c_im[i] = b_re[i] * a_im[i + 1] + b_im[i] * a_re[i + 1]
         end
     end
+
+
+    function pi(x, y)
+        acc = 0
+        @inbounds @simd for i ∈ eachindex(x)
+            acc += (x[i]*x[i] + y[i]*y[i]) < 1.0
+        end
+        4acc/length(x)
+    end
+    function piavx(x, y)
+        acc = 0
+        @avx for i ∈ eachindex(x)
+            acc += (x[i]*x[i] + y[i]*y[i]) < 1.0
+        end
+        4acc/length(x)
+    end
+    function piavx_u4(x, y)
+        acc = 0
+        @avx unroll=4 for i ∈ eachindex(x)
+            acc += (x[i]*x[i] + y[i]*y[i]) < 1.0
+        end
+        4acc/length(x)
+    end
+    function pi_avx(x, y)
+        acc = 0
+        @_avx for i ∈ eachindex(x)
+            acc += (x[i]*x[i] + y[i]*y[i]) < 1.0
+        end
+        4acc/length(x)
+    end
+    function pi_avx_u4(x, y)
+        acc = 0
+        @_avx unroll=4 for i ∈ eachindex(x)
+            acc += (x[i]*x[i] + y[i]*y[i]) < 1.0
+        end
+        4acc/length(x)
+    end
+    
     # @macroexpand @_avx for i = 1:length(a_re) - 1
     #     c_re[i] = b_re[i] * a_re[i + 1] - b_im[i] * a_im[i + 1]
     #     c_im[i] = b_re[i] * a_im[i + 1] + b_im[i] * a_re[i + 1]
@@ -154,6 +192,14 @@
         @test myselfdotavx(a) ≈ s
         @test myselfdot_avx(a) ≈ s
         @test myselfdotavx(a) ≈ s
+
+        if T <: Union{Float32,Float64}
+            πest = pi(a, b)
+            @test πest == piavx(a, b)
+            @test πest == piavx_u4(a, b)
+            @test πest == pi_avx(a, b)
+            @test πest == pi_avx_u4(a, b)
+        end
 
         a_re = rand(R, N); a_im = rand(R, N);
         b_re = rand(R, N); b_im = rand(R, N);

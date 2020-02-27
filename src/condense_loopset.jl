@@ -335,6 +335,7 @@ function setup_call_noinline(ls::LoopSet, U = zero(Int8), T = zero(Int8))
             mvar = mangledvar(op)
             out = Symbol(mvar, 0)
             push!(outer_reducts.args, out)
+            # push!(call.args, Symbol("##TYPEOF##", var))
         end
         push!(q.args, outer_reducts)
         retv = loopset_return_value(ls, Val(false))
@@ -356,15 +357,18 @@ end
 function setup_call_inline(ls::LoopSet, U = zero(Int8), T = zero(Int8))
     call = generate_call(ls, (true,U,T))
     hasouterreductions = length(ls.outer_reductions) > 0
-    if hasouterreductions
-        retv = loopset_return_value(ls, Val(false))
-        call = Expr(:(=), retv, call)
+    if !hasouterreductions
+        q = Expr(:block,gc_preserve(ls, call))
+        append!(ls.preamble.args, q.args)
+        return ls.preamble
     end
-    q = Expr(:block,gc_preserve(ls, call))
+    retv = loopset_return_value(ls, Val(false))
     outer_reducts = Expr(:local)
+    q = Expr(:block,gc_preserve(ls, Expr(:(=), retv, call)))
     for or ∈ ls.outer_reductions
         op = ls.operations[or]
         var = name(op)
+        # push!(call.args, Symbol("##TYPEOF##", var))
         mvar = mangledvar(op)
         instr = instruction(op)
         out = Symbol(mvar, 0)
