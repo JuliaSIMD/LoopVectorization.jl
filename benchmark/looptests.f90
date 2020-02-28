@@ -331,6 +331,7 @@ module looptests
          pp = pp + pc
       end do
     end subroutine randomaccess
+    !GCC$ builtin (log) attributes simd (notinbranch) if('x86_64')
     subroutine logdettriangle(ld, T, N) BIND(C, name="logdettriangle")
       integer(C_long), intent(in) :: N
       real(C_double), intent(in) :: T(N,N)
