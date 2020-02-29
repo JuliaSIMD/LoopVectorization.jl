@@ -132,24 +132,24 @@ Note that 14 and 12 nm Ryzen chips can only do 1 full width `fma` per clock cycl
 
 We can also vectorize fancier loops. A likely familiar example to dive into:
 ```julia
-julia> function mygemm!(𝐂, 𝐀, 𝐁)
-           @inbounds @fastmath for m ∈ 1:size(𝐀,1), n ∈ 1:size(𝐁,2)
-               𝐂ₘₙ = zero(eltype(𝐂))
-               for k ∈ 1:size(𝐀,2)
-                   𝐂ₘₙ += 𝐀[m,k] * 𝐁[k,n]
+julia> function mygemm!(C, A, B)
+           @inbounds @fastmath for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+               Cmn = zero(eltype(C))
+               for k ∈ 1:size(A,2)
+                   Cmn += A[m,k] * B[k,n]
                end
-               𝐂[m,n] = 𝐂ₘₙ
+               C[m,n] = Cmn
            end
        end
 mygemm! (generic function with 1 method)
 
-julia> function mygemmavx!(𝐂, 𝐀, 𝐁)
-           @avx for m ∈ 1:size(𝐀,1), n ∈ 1:size(𝐁,2)
-               𝐂ₘₙ = zero(eltype(𝐂))
-               for k ∈ 1:size(𝐀,2)
-                   𝐂ₘₙ += 𝐀[m,k] * 𝐁[k,n]
+julia> function mygemmavx!(C, A, B)
+           @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+               Cmn = zero(eltype(C))
+               for k ∈ 1:size(A,2)
+                   Cmn += A[m,k] * B[k,n]
                end
-               𝐂[m,n] = 𝐂ₘₙ
+               C[m,n] = Cmn
            end
        end
 mygemmavx! (generic function with 1 method)
@@ -276,24 +276,22 @@ BLAS.set_num_threads(1); @show BLAS.vendor()
 const MatrixFInt64 = Union{Matrix{Float64}, Matrix{Int}}
 
 function mul_avx!(C::MatrixFInt64, A::MatrixFInt64, B::MatrixFInt64)
-    z = zero(eltype(C))
-    @avx for i ∈ 1:size(A,1), j ∈ 1:size(B,2)
-        Cᵢⱼ = z
+    @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+        Cmn = zero(eltype(C))
         for k ∈ 1:size(A,2)
-            Cᵢⱼ += A[i,k] * B[k,j]
+            Cmn += A[m,k] * B[k,n]
         end
-        C[i,j] = Cᵢⱼ
+        C[m,n] = Cmn
     end
 end
 
 function mul_add_avx!(C::MatrixFInt64, A::MatrixFInt64, B::MatrixFInt64, factor=1)
-    z = zero(eltype(C))
-    @avx for i ∈ 1:size(A,1), j ∈ 1:size(B,2)
-        ΔCᵢⱼ = z
+    @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+        ΔCmn = zero(eltype(C))
         for k ∈ 1:size(A,2)
-            ΔCᵢⱼ += A[i,k] * B[k,j]
+            ΔCmn += A[m,k] * B[k,n]
         end
-        C[i,j] += factor * ΔCᵢⱼ
+        C[m,n] += factor * ΔCmn
     end
 end
 
