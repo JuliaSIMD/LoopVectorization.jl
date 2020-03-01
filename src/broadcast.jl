@@ -86,7 +86,7 @@ function add_broadcast!(
     setC.reduced_children = kvec
     # compute Cₘₙ += Aₘₖ * Bₖₙ
     reductop = Operation(
-        ls, mC, elementbytes, :vmuladd, compute, reductdeps, kvec, Operation[loadA, loadB, setC]
+        ls, mC, elementbytes, :vfmadd231, compute, reductdeps, kvec, Operation[loadA, loadB, setC]
     )
     reductop = pushop!(ls, reductop, mC)    
     reductfinal = Operation(
