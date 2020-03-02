@@ -34,9 +34,7 @@ end
 
     @time include("map.jl")
 
-    if Base.libllvm_version > v"7"
-        @time include("filter.jl")
-    end
+    @time include("filter.jl")
 
     @time include("gemm.jl")
 

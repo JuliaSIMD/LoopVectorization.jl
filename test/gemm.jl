@@ -524,10 +524,12 @@
         C = Matrix{TC}(undef, M, N);
         A = rand(R, M, K); B = rand(R, K, N);
         At = copy(A');
+        Bt = copy(B');
         C2 = similar(C);
         As = SizedMatrix{M,K}(A);
         Ats = SizedMatrix{K,M}(At);
         Bs = SizedMatrix{K,N}(B);
+        Bts = SizedMatrix{N,K}(Bt);
         Cs = SizedMatrix{M,N}(C);
         @time @testset "avx $T dynamc gemm" begin
             AmulB!(C2, A, B)
@@ -538,6 +540,10 @@
             fill!(C, 999.99); AmulBavx2!(C, A, B)
             @test C ≈ C2
             fill!(C, 999.99); AmulBavx2!(C, At', B)
+            @test C ≈ C2
+            fill!(C, 999.99); AmulBavx2!(C, A, Bt')
+            @test C ≈ C2
+            fill!(C, 999.99); AmulBavx2!(C, At', Bt')
             @test C ≈ C2
             fill!(C, 999.99); AmulBavx3!(C, A, B)
             @test C ≈ C2
@@ -581,6 +587,10 @@
             @test C ≈ C2
             fill!(C, 999.99); AmulB_avx2!(C, At', B)
             @test C ≈ C2
+            fill!(C, 999.99); AmulB_avx2!(C, A, Bt')
+            @test C ≈ C2
+            fill!(C, 999.99); AmulB_avx2!(C, At', Bt')
+            @test C ≈ C2
             fill!(C, 999.99); AmulB_avx3!(C, A, B)
             @test C ≈ C2
             fill!(C, 999.99); AmulB_avx3!(C, At', B)
@@ -618,6 +628,10 @@
             fill!(Cs, 999.99); AmulBavx2!(Cs, As, Bs)
             @test Cs ≈ C2
             fill!(Cs, 999.99); AmulBavx2!(Cs, Ats', Bs)
+            @test Cs ≈ C2
+            fill!(Cs, 999.99); AmulBavx2!(Cs, As, Bts')
+            @test Cs ≈ C2
+            fill!(Cs, 999.99); AmulBavx2!(Cs, Ats', Bts')
             @test Cs ≈ C2
             fill!(Cs, 999.99); AmulBavx3!(Cs, As, Bs)
             @test Cs ≈ C2
@@ -660,6 +674,10 @@
             fill!(Cs, 999.99); AmulB_avx2!(Cs, As, Bs)
             @test Cs ≈ C2
             fill!(Cs, 999.99); AmulB_avx2!(Cs, Ats', Bs)
+            @test Cs ≈ C2
+            fill!(Cs, 999.99); AmulB_avx2!(Cs, As, Bts')
+            @test Cs ≈ C2
+            fill!(Cs, 999.99); AmulB_avx2!(Cs, Ats', Bts')
             @test Cs ≈ C2
             fill!(Cs, 999.99); AmulB_avx3!(Cs, As, Bs)
             @test Cs ≈ C2
