@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Getting Started · LoopVectorization.jl</title><link href="https://cdnjs.cloudflare.com/ajax/libs/normalize/4.2.0/normalize.min.css" rel="stylesheet" type="text/css"/><link href="https://fonts.googleapis.com/css?family=Lato|Roboto+Mono" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.6.3/css/font-awesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/default.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.2.0/require.min.js" data-main="../assets/documenter.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link href="../assets/documenter.css" rel="stylesheet" type="text/css"/></head><body><nav class="toc"><h1>LoopVectorization.jl</h1><select id="version-selector" onChange="window.location.href=this.value" style="visibility: hidden"></select><form class="search" id="search-form" action="../search/"><input id="search-query" name="q" type="text" placeholder="Search docs"/></form><ul><li><a class="toctext" href="../">Home</a></li><li class="current"><a class="toctext" href>Getting Started</a><ul class="internal"><li><a class="toctext" href="#Getting-Started-1">Getting Started</a></li></ul></li><li><span class="toctext">Examples</span><ul><li><a class="toctext" href="../examples/matrix_multiplication/">Matrix Multiplication</a></li><li><a class="toctext" href="../examples/matrix_vector_ops/">Matrix-Vector Operations</a></li><li><a class="toctext" href="../examples/dot_product/">Dot Products</a></li><li><a class="toctext" href="../examples/sum_of_squared_error/">Sum of squared error</a></li></ul></li><li><a class="toctext" href="../vectorized_convenience_functions/">Vectorized Convenience Functions</a></li><li><a class="toctext" href="../future_work/">Future Work</a></li></ul></nav><article id="docs"><header><nav><ul><li><a href>Getting Started</a></li></ul><a class="edit-page" href="https://github.com/chriselrod/LoopVectorization.jl/blob/master/docs/src/getting_started.md"><span class="fa"></span> Edit on GitHub</a></nav><hr/><div id="topbar"><span>Getting Started</span><a class="fa fa-bars" href="#"></a></div></header><h2><a class="nav-anchor" id="Getting-Started-1" href="#Getting-Started-1">Getting Started</a></h2><p>To install <code>LoopVectorization.jl</code>, simply use the package and <code>] add LoopVectorization</code>, or</p><pre><code class="language-julia">using Pkg
+Pkg.add(&quot;LoopVectorization&quot;)</code></pre><p>Currently LoopVectorization only supports rectangular iteration spaces, although I plan on extending it to triangular and ragged iteration spaces in the future. This means that if you nest multiple loops, the number of iterations of the inner loops shouldn&#39;t be a function of the outer loops. For example,</p><pre><code class="language-julia">using LoopVectorization 
+
+function mvp(P, basis, coeffs::Vector{T}) where {T}
+    C = length(coeffs)
+    A = size(P, 1)
+    p = zero(T)
+    @avx for c ∈ 1:C
+        pc = coeffs[c]
+        for a = 1:A
+            pc *= P[a, basis[a, c]]
+        end
+        p += pc
+    end
+	p
+end
+
+maxdeg = 20; nbasis = 1_000; dim = 15;
+r = 1:maxdeg+1
+basis = rand(r, (dim, nbasis));
+coeffs = rand(T, nbasis);
+P = rand(T, dim, maxdeg+1);
+
+mvp(P, basis, coeffs)</code></pre><p>Aside from loops, <code>LoopVectorization.jl</code> also supports broadcasting.</p><div class="admonition danger"><div class="admonition-title">Danger</div><div class="admonition-text"><p>Broadcasting an <code>Array</code> <code>A</code> when <code>size(A,1) == 1</code> is NOT SUPPORTED, unless this is known at compile time (e.g., broadcasting a transposed vector is fine). Otherwise, you will probably crash Julia.</p></div></div><pre><code class="language-julia">julia&gt; using LoopVectorization, BenchmarkTools
+
+julia&gt; M, K, N = 47, 73, 7;
+
+julia&gt; A = rand(M, K);
+
+julia&gt; b = rand(K);
+
+julia&gt; c = rand(M);
+
+julia&gt; d = rand(1,K,N);
+
+julia&gt; #You can use a LowDimArray when you have a leading dimension of size 1.
+       ldad = LowDimArray{(false,true,true)}(d);
+
+julia&gt; E1 = Array{Float64}(undef, M, K, N);
+
+julia&gt; E2 = similar(E1);
+
+julia&gt; @benchmark      @. $E1 = exp($A - $b&#39; +    $d) * $c
+BenchmarkTools.Trial: 
+  memory estimate:  112 bytes
+  allocs estimate:  5
+  --------------
+  minimum time:     224.142 μs (0.00% GC)
+  median time:      225.773 μs (0.00% GC)
+  mean time:        229.146 μs (0.00% GC)
+  maximum time:     289.601 μs (0.00% GC)
+  --------------
+  samples:          10000
+  evals/sample:     1
+
+julia&gt; @benchmark @avx @. $E2 = exp($A - $b&#39; + $ldad) * $c
+BenchmarkTools.Trial: 
+  memory estimate:  0 bytes
+  allocs estimate:  0
+  --------------
+  minimum time:     19.666 μs (0.00% GC)
+  median time:      19.737 μs (0.00% GC)
+  mean time:        19.759 μs (0.00% GC)
+  maximum time:     29.906 μs (0.00% GC)
+  --------------
+  samples:          10000
+  evals/sample:     1
+
+julia&gt; E1 ≈ E2
+true</code></pre><footer><hr/><a class="previous" href="../"><span class="direction">Previous</span><span class="title">Home</span></a><a class="next" href="../examples/matrix_multiplication/"><span class="direction">Next</span><span class="title">Matrix Multiplication</span></a></footer></article></body></html>
