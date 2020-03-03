@@ -68,6 +68,7 @@ function vmapnt!(f::F, y::AbstractVector{T}, args::Vararg{<:Any,A}) where {F,T,A
 end
 function vmapntt!(f::F, y::AbstractVector{T}, args::Vararg{<:Any,A}) where {F,T,A}
     ptry, ptrargs, N = alignstores!(f, y, args...)
+    N > 0 || return y
     W, Wshift = VectorizationBase.pick_vector_width_shift(T)
     V = VectorizationBase.pick_vector_width_val(T)
     Wsh = Wshift + 2

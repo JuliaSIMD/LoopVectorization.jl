@@ -13,12 +13,8 @@ module looptests
       real(C_double), dimension(K, N), intent(in) :: B
       integer(C_long) :: mm, kk, nn
       C = 0.0
-      do concurrent(mm = 1:M)
-         do concurrent(nn = 1:N)
-            do concurrent(kk = 1:K)
-               C(mm,nn) = C(mm,nn) + A(mm,kk) * B(kk,nn)
-            end do
-         end do
+      do concurrent(mm = 1:M, nn = 1:N, kk = 1:K)
+          C(mm,nn) = C(mm,nn) + A(mm,kk) * B(kk,nn)
       end do
     end subroutine gemm_mnk
     subroutine gemm_mkn(C, A, B, M, K, N) BIND(C, name="gemm_mkn")
@@ -28,12 +24,8 @@ module looptests
       real(C_double), dimension(K, N), intent(in) :: B
       integer(C_long) :: mm, kk, nn
       C = 0.0
-      do concurrent(mm = 1:M)
-         do concurrent(kk = 1:K)
-            do concurrent(nn = 1:N)
-               C(mm,nn) = C(mm,nn) + A(mm,kk) * B(kk,nn)
-            end do
-         end do
+      do concurrent(mm = 1:M, kk = 1:K, nn = 1:N)
+          C(mm,nn) = C(mm,nn) + A(mm,kk) * B(kk,nn)
       end do
     end subroutine gemm_mkn
     subroutine gemm_nmk(C, A, B, M, K, N) BIND(C, name="gemm_nmk")
@@ -43,12 +35,8 @@ module looptests
       real(C_double), dimension(K, N), intent(in) :: B
       integer(C_long) :: mm, kk, nn
       C = 0.0
-      do concurrent(nn = 1:N)
-         do concurrent(mm = 1:M)
-            do concurrent(kk = 1:K)
-               C(mm,nn) = C(mm,nn) + A(mm,kk) * B(kk,nn)
-            end do
-         end do
+      do concurrent(nn = 1:N, mm = 1:M, kk = 1:K)
+          C(mm,nn) = C(mm,nn) + A(mm,kk) * B(kk,nn)
       end do
     end subroutine gemm_nmk
     subroutine gemm_nkm(C, A, B, M, K, N) BIND(C, name="gemm_nkm")
@@ -58,12 +46,8 @@ module looptests
       real(C_double), dimension(K, N), intent(in) :: B
       integer(C_long) :: mm, kk, nn
       C = 0.0
-      do concurrent(kk = 1:K)
-         do concurrent(nn = 1:N)
-            do concurrent(mm = 1:M)
-               C(mm,nn) = C(mm,nn) + A(mm,kk) * B(kk,nn)
-            end do
-         end do
+      do concurrent(kk = 1:K, nn = 1:N, mm = 1:M)
+          C(mm,nn) = C(mm,nn) + A(mm,kk) * B(kk,nn)
       end do
     end subroutine gemm_nkm
     subroutine gemm_kmn(C, A, B, M, K, N) BIND(C, name="gemm_kmn")
@@ -73,12 +57,8 @@ module looptests
       real(C_double), dimension(K, N), intent(in) :: B
       integer(C_long) :: mm, kk, nn
       C = 0.0
-      do concurrent(kk = 1:K)
-         do concurrent(mm = 1:M)
-            do concurrent(nn = 1:N)
-               C(mm,nn) = C(mm,nn) + A(mm,kk) * B(kk,nn)
-            end do
-         end do
+      do concurrent(kk = 1:K, mm = 1:M, nn = 1:N)
+          C(mm,nn) = C(mm,nn) + A(mm,kk) * B(kk,nn)
       end do
     end subroutine gemm_kmn
     subroutine gemm_knm(C, A, B, M, K, N) BIND(C, name="gemm_knm")
@@ -88,12 +68,8 @@ module looptests
       real(C_double), dimension(K, N), intent(in) :: B
       integer(C_long) :: mm, kk, nn
       C = 0.0
-      do concurrent(kk = 1:K)
-         do concurrent(nn = 1:N)
-            do concurrent(mm = 1:M)
-               C(mm,nn) = C(mm,nn) + A(mm,kk) * B(kk,nn)
-            end do
-         end do
+      do concurrent(kk = 1:K, nn = 1:N, mm = 1:M)
+         C(mm,nn) = C(mm,nn) + A(mm,kk) * B(kk,nn)
       end do
     end subroutine gemm_knm
     subroutine gemmbuiltin(C, A, B, M, K, N) BIND(C, name="gemmbuiltin")
@@ -110,12 +86,8 @@ module looptests
       real(C_double), dimension(K, N), intent(in) :: B
       integer(C_long) :: mm, kk, nn
       C = 0.0
-      do concurrent(nn = 1:N)
-         do concurrent(mm = 1:M)
-            do concurrent(kk = 1:K)
-               C(mm,nn) = C(mm,nn) + A(kk,mm) * B(kk,nn)
-            end do
-         end do
+      do concurrent(nn = 1:N, mm = 1:M, kk = 1:K)
+          C(mm,nn) = C(mm,nn) + A(kk,mm) * B(kk,nn)
       end do
     end subroutine AtmulB
     subroutine AtmulBbuiltin(C, A, B, M, K, N) BIND(C, name="AtmulBbuiltin")
@@ -132,12 +104,8 @@ module looptests
       real(C_double), dimension(N, K), intent(in) :: B
       integer(C_long) :: mm, kk, nn
       C = 0.0
-      do concurrent(kk = 1:K)
-         do concurrent(nn = 1:N)
-            do concurrent(mm = 1:M)
-               C(mm,nn) = C(mm,nn) + A(mm,kk) * B(nn,kk)
-            end do
-         end do
+      do concurrent(kk = 1:K, nn = 1:N, mm = 1:M)
+         C(mm,nn) = C(mm,nn) + A(mm,kk) * B(nn,kk)
       end do
     end subroutine AmulBt
     subroutine AmulBtbuiltin(C, A, B, M, K, N) BIND(C, name="AmulBtbuiltin")
@@ -154,12 +122,8 @@ module looptests
       real(C_double), dimension(N, K), intent(in) :: B
       integer(C_long) :: mm, kk, nn
       C = 0.0
-      do concurrent(nn = 1:N)
-         do concurrent(kk = 1:K)
-            do concurrent(mm = 1:M)
-               C(mm,nn) = C(mm,nn) + A(kk,mm) * B(nn,kk)
-            end do
-         end do
+      do concurrent(nn = 1:N, kk = 1:K, mm = 1:M)
+         C(mm,nn) = C(mm,nn) + A(kk,mm) * B(nn,kk)
       end do
     end subroutine AtmulBt
     subroutine AtmulBtbuiltin(C, A, B, M, K, N) BIND(C, name="AtmulBtbuiltin")
@@ -194,10 +158,8 @@ module looptests
       real(C_double), intent(in) :: x(M), A(M,N), y(N)
       real(C_double), intent(out) :: s
       integer(C_long) :: mm, nn
-      do concurrent(nn = 1:N)
-         do concurrent(mm = 1:M)
-            s = s + x(mm) * A(mm, nn) * y(nn)
-         end do
+      do concurrent(nn = 1:N, mm = 1:M)
+         s = s + x(mm) * A(mm, nn) * y(nn)
       end do
     end subroutine dot3
     !GCC$ builtin (exp) attributes simd (notinbranch) if('x86_64')
@@ -226,10 +188,8 @@ module looptests
       real(C_double), dimension(M), intent(out) :: y
       integer(C_long) :: mm, kk
       y = 0.0
-      do concurrent(kk = 1:K)
-         do concurrent(mm = 1:M)
-            y(mm) = y(mm) + A(mm,kk) * x(kk)
-         end do
+      do concurrent(kk = 1:K, mm = 1:M)
+         y(mm) = y(mm) + A(mm,kk) * x(kk)
       end do
     end subroutine gemv
     subroutine gemvbuiltin(y, A, x, M, K) BIND(C, name="gemvbuiltin")
@@ -244,12 +204,9 @@ module looptests
       real(C_double), dimension(M), intent(out) :: y
       integer(C_long) :: mm, kk
       real(C_double) :: ymm
-      do concurrent(mm = 1:M)
-         ymm = 0
-         do concurrent(kk = 1:K)
-            ymm = ymm + A(kk,mm) * x(kk)
-         end do
-         y(mm) = ymm
+      y = 0
+      do concurrent(mm = 1:M, kk = 1:K)
+          y(mm) = y(mm) + A(kk,mm) * x(kk)
       end do
     end subroutine Atmulvb
     subroutine Atmulvbbuiltin(y, A, x, M, K) BIND(C, name="Atmulvbbuiltin")
@@ -266,11 +223,9 @@ module looptests
       integer(C_long) :: mm, nn
       real(C_double) :: d
       s = 0.0
-      do concurrent(nn = 1:N)
-         do concurrent(mm = 1:M)
-            d = A(mm,nn) - x(mm)
-            s(mm) = s(mm) + d * d
-         end do
+      do concurrent(nn = 1:N, mm = 1:M)
+         d = A(mm,nn) - x(mm)
+         s(mm) = s(mm) + d * d
       end do
     end subroutine unscaledvar
     subroutine aplusBc(D, a, B, c, M, N) BIND(C, name="aplusBc")
@@ -278,10 +233,8 @@ module looptests
       real(C_double), intent(in) :: a(M), B(M,N), c(N)
       real(C_double), dimension(M,N), intent(out) :: D
       integer(C_long) :: mm, nn
-      do concurrent(nn = 1:N)
-         do concurrent(mm = 1:M)
-            D(mm,nn) = a(mm) + B(mm,nn) * c(nn)
-         end do
+      do concurrent(nn = 1:N, mm = 1:M)
+         D(mm,nn) = a(mm) + B(mm,nn) * c(nn)
       end do
     end subroutine aplusBc
     subroutine OLSlp(lp, y, X, b, N, P) BIND(C, name="OLSlp")
@@ -299,15 +252,25 @@ module looptests
          lp = lp + d*d
       end do
     end subroutine OLSlp
+    subroutine OLSlpsplit(lp, y, X, b, N, P) BIND(C, name="OLSlpsplit")
+      integer(C_long), intent(in) :: N, P
+      real(C_double), intent(in) :: y(N), X(N, P), b(P)
+      real(C_double), intent(out) :: lp
+      integer(C_long) :: nn, pp
+      real(C_double) :: d(N)
+      d = y
+      do concurrent(nn = 1:N, pp = 1:P)
+         d(nn) = d(nn) - X(nn,pp) * b(pp)
+      end do
+      lp = dot_product(d, d)
+    end subroutine OLSlpsplit
     subroutine AplusAt(B, A, N) BIND(C, name="AplusAt")
       integer(C_long), intent(in) :: N
       real(C_double), dimension(N,N), intent(out) :: B
       real(C_double), dimension(N,N), intent(in) :: A
       integer(C_long) :: i, j
-      do concurrent(i = 1:N)
-         do concurrent(j = 1:N)
-            B(j,i) = A(j,i) + A(i,j)
-         end do
+      do concurrent(i = 1:N, j = 1:N)
+         B(j,i) = A(j,i) + A(i,j)
       end do
     end subroutine AplusAt
     subroutine AplusAtbuiltin(B, A, N) BIND(C, name="AplusAtbuiltin")
