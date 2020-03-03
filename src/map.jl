@@ -24,11 +24,6 @@ end
 @generated function vmap!(f::F, dest::AbstractArray{T}, args::Vararg{<:AbstractArray,N}) where {F,T,N}
     vmap_quote(N, T)
 end
-function vmap(f::F, args...) where {F}
-    T = Base._return_type(f, Base.Broadcast.eltypes(args))
-    dest = similar(first(args), T)
-    vmap!(f, dest, args...)
-end
 
 function vmapnt!(f::F, y::AbstractVector{T}, args::Vararg{<:Any,A}) where {F,T,A}
     ptry = pointer(y)
@@ -79,6 +74,16 @@ function vmapntt!(f::F, y::AbstractVector{T}, args::Vararg{<:Any,A}) where {F,T,
     end
     y
 end
+
+function vmap_call(f::F, vm!::V, args::Vararg{<:Any,N}) where {V,F,N}
+    T = Base._return_type(f, Base.Broadcast.eltypes(args))
+    dest = similar(first(args), T)
+    vm!(f, dest, args...)
+end
+vmap(f::F, args::Vararg{<:Any,N}) where {F,N} = vmap_call(f, vmap!, args...)
+vmapnt(f::F, args::Vararg{<:Any,N}) where {F,N} = vmap_call(f, vmapnt!, args...)
+vmapntt(f::F, args::Vararg{<:Any,N}) where {F,N} = vmap_call(f, vmapntt!, args...)
+
 
 # @inline vmap!(f, y, x...) = @avx y .= f.(x...)
 # @inline vmap(f, x...) = @avx f.(x...)

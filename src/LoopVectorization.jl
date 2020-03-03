@@ -17,7 +17,7 @@ const SUPPORTED_TYPES = Union{Float16,Float32,Float64,Integer}
 
 export LowDimArray, stridedpointer, vectorizable,
     @avx, @_avx, *ˡ, _avx_!,
-    vmap, vmap!, vmapnt!, vmapntt!,
+    vmap, vmap!, vmapnt, vmapnt!, vmapntt, vmapntt!,
     vfilter, vfilter!
 
 

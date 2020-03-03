@@ -7,9 +7,9 @@
         c1 = map(foo, a, b);
         c2 = vmap(foo, a, b);
         @test c1 ≈ c2
-        fill!(c2, NaN); vmapnt!(foo, c2, a, b);
+        c2 = vmapnt(foo, a, b);
         @test c1 ≈ c2
-        fill!(c2, NaN); vmapntt!(foo, c2, a, b);
+        c2 = vmapntt(foo, a, b);
         @test c1 ≈ c2
         @test_throws AssertionError @views vmapnt!(c2[2:end], a[2:end], b[2:end])
         @test_throws AssertionError @views vmapntt!(c2[2:end], a[2:end], b[2:end])
