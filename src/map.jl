@@ -25,14 +25,32 @@ end
     vmap_quote(N, T)
 end
 
-function vmapnt!(f::F, y::AbstractVector{T}, args::Vararg{<:Any,A}) where {F,T,A}
-    ptry = pointer(y)
-    @assert reinterpret(UInt, ptry) & (VectorizationBase.REGISTER_SIZE - 1) == 0
-    W, Wshift = VectorizationBase.pick_vector_width_shift(T)
-    ptrargs = pointer.(args)
-    V = VectorizationBase.pick_vector_width_val(T)
+function alignstores!(f::F, y::AbstractVector{T}, args::Vararg{<:Any,A}) where {F,T,A}
     N = length(y)
+    ptry = pointer(y)
+    ptrargs = pointer.(args)
+    W = VectorizationBase.pick_vector_width(T)
+    V = VectorizationBase.pick_vector_width_val(T)
+    @assert iszero(reinterpret(UInt, ptry) & (sizeof(T) - 1)) "The destination vector (`dest`) must be aligned at least to `sizeof(eltype(dest))`."
+    alignment = reinterpret(UInt, ptry) & (VectorizationBase.REGISTER_SIZE - 1)
+    if alignment > 0
+        i = reinterpret(Int, W - (alignment >>> VectorizationBase.intlog2(sizeof(T))))
+        m = mask(T, i)
+        if N < i
+            m &= mask(T, N & (W - 1))
+        end
+        vstore!(ptry, extract_data(f(vload.(V, ptrargs, m)...)), m)
+        gep(ptry, i), gep.(ptrargs, i), N - i
+    else
+        ptry, ptrargs, N
+    end
+end
+
+function vmapnt!(f::F, y::AbstractVector{T}, args::Vararg{<:Any,A}) where {F,T,A}
+    ptry, ptrargs, N = alignstores!(f, y, args...)
     i = 0
+    W = VectorizationBase.pick_vector_width(T)
+    V = VectorizationBase.pick_vector_width_val(T)
     while i < N - ((W << 2) - 1)
         vstorent!(ptry, extract_data(f(vload.(V, ptrargs, i)...)), i); i += W
         vstorent!(ptry, extract_data(f(vload.(V, ptrargs, i)...)), i); i += W
@@ -49,12 +67,9 @@ function vmapnt!(f::F, y::AbstractVector{T}, args::Vararg{<:Any,A}) where {F,T,A
     y
 end
 function vmapntt!(f::F, y::AbstractVector{T}, args::Vararg{<:Any,A}) where {F,T,A}
-    ptry = pointer(y)
-    @assert reinterpret(UInt, ptry) & (VectorizationBase.REGISTER_SIZE - 1) == 0
+    ptry, ptrargs, N = alignstores!(f, y, args...)
     W, Wshift = VectorizationBase.pick_vector_width_shift(T)
-    ptrargs = pointer.(args)
     V = VectorizationBase.pick_vector_width_val(T)
-    N = length(y)
     Wsh = Wshift + 2
     Niter = N >>> Wsh
     Base.Threads.@threads for j ∈ 0:Niter-1
