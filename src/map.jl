@@ -30,6 +30,56 @@ function vmap(f::F, args...) where {F}
     vmap!(f, dest, args...)
 end
 
+function vmapnt!(f::F, y::AbstractVector{T}, args::Vararg{<:Any,A}) where {F,T,A}
+    ptry = pointer(y)
+    @assert reinterpret(UInt, ptry) & (VectorizationBase.REGISTER_SIZE - 1) == 0
+    W, Wshift = VectorizationBase.pick_vector_width_shift(T)
+    ptrargs = pointer.(args)
+    V = VectorizationBase.pick_vector_width_val(T)
+    N = length(y)
+    i = 0
+    while i < N - ((W << 2) - 1)
+        vstorent!(ptry, extract_data(f(vload.(V, ptrargs, i)...)), i); i += W
+        vstorent!(ptry, extract_data(f(vload.(V, ptrargs, i)...)), i); i += W
+        vstorent!(ptry, extract_data(f(vload.(V, ptrargs, i)...)), i); i += W
+        vstorent!(ptry, extract_data(f(vload.(V, ptrargs, i)...)), i); i += W
+    end
+    while i < N - (W - 1) # stops at 16 when 
+        vstorent!(ptry, extract_data(f(vload.(V, ptrargs, i)...)), i); i += W
+    end
+    if i < N
+        m = mask(T, N & (W - 1))
+        vstore!(ptry, extract_data(f(vload.(V, ptrargs, i, m)...)), i, m)
+    end
+    y
+end
+function vmapntt!(f::F, y::AbstractVector{T}, args::Vararg{<:Any,A}) where {F,T,A}
+    ptry = pointer(y)
+    @assert reinterpret(UInt, ptry) & (VectorizationBase.REGISTER_SIZE - 1) == 0
+    W, Wshift = VectorizationBase.pick_vector_width_shift(T)
+    ptrargs = pointer.(args)
+    V = VectorizationBase.pick_vector_width_val(T)
+    N = length(y)
+    Wsh = Wshift + 2
+    Niter = N >>> Wsh
+    Base.Threads.@threads for j ∈ 0:Niter-1
+        i = j << Wsh
+        vstorent!(ptry, extract_data(f(vload.(V, ptrargs, i)...)), i); i += W
+        vstorent!(ptry, extract_data(f(vload.(V, ptrargs, i)...)), i); i += W
+        vstorent!(ptry, extract_data(f(vload.(V, ptrargs, i)...)), i); i += W
+        vstorent!(ptry, extract_data(f(vload.(V, ptrargs, i)...)), i)
+    end
+    ii = Niter << Wsh
+    while ii < N - (W - 1) # stops at 16 when 
+        vstorent!(ptry, extract_data(f(vload.(V, ptrargs, ii)...)), ii); ii += W
+    end
+    if ii < N
+        m = mask(T, N & (W - 1))
+        vstore!(ptry, extract_data(f(vload.(V, ptrargs, ii, m)...)), ii, m)
+    end
+    y
+end
+
 # @inline vmap!(f, y, x...) = @avx y .= f.(x...)
 # @inline vmap(f, x...) = @avx f.(x...)
 
