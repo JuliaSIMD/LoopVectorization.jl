@@ -10,7 +10,7 @@ function jgemm!(𝐂, 𝐀, 𝐁)
         end
     end
 end
-@inline function jgemm!(𝐂, 𝐀ᵀ::Adjoint, 𝐁)
+function jgemm!(𝐂, 𝐀ᵀ::Adjoint, 𝐁)
     𝐀 = parent(𝐀ᵀ)
     @inbounds for n ∈ 1:size(𝐂,2), m ∈ 1:size(𝐂,1)
         𝐂ₘₙ = zero(eltype(𝐂))
@@ -20,7 +20,7 @@ end
         𝐂[m,n] = 𝐂ₘₙ
     end
 end
-@inline function jgemm!(𝐂, 𝐀, 𝐁ᵀ::Adjoint)
+function jgemm!(𝐂, 𝐀, 𝐁ᵀ::Adjoint)
     𝐂 .= 0
     𝐁 = parent(𝐁ᵀ)
     M, N = size(𝐂); K = size(𝐁ᵀ,1)
@@ -30,7 +30,7 @@ end
         end
     end
 end
-@inline function jgemm!(𝐂, 𝐀ᵀ::Adjoint, 𝐁ᵀ::Adjoint)
+function jgemm!(𝐂, 𝐀ᵀ::Adjoint, 𝐁ᵀ::Adjoint)
     𝐂 .= 0
     𝐀 = parent(𝐀ᵀ)
     𝐁 = parent(𝐁ᵀ)
@@ -41,7 +41,7 @@ end
         end
     end
 end
-@inline function gemmavx!(𝐂, 𝐀, 𝐁)
+function gemmavx!(𝐂, 𝐀, 𝐁)
     @avx for m ∈ 1:size(𝐀,1), n ∈ 1:size(𝐁,2)
         𝐂ₘₙ = zero(eltype(𝐂))
         for k ∈ 1:size(𝐀,2)
@@ -128,7 +128,7 @@ function jgemv!(y, 𝐀, x)
         end
     end
 end
-@inline function jgemv!(𝐲, 𝐀ᵀ::Adjoint, 𝐱)
+function jgemv!(𝐲, 𝐀ᵀ::Adjoint, 𝐱)
     𝐀 = parent(𝐀ᵀ)
     @inbounds for i ∈ eachindex(𝐲)
         𝐲ᵢ = zero(eltype(𝐲))
@@ -138,7 +138,7 @@ end
         𝐲[i] = 𝐲ᵢ
     end
 end
-@inline function jgemvavx!(𝐲, 𝐀, 𝐱)
+function jgemvavx!(𝐲, 𝐀, 𝐱)
     @avx for i ∈ eachindex(𝐲)
         𝐲ᵢ = zero(eltype(𝐲))
         for j ∈ eachindex(𝐱)

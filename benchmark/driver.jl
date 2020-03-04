@@ -51,8 +51,8 @@ save(joinpath(PICTURES, "bench_AplusAt_v$v.$filetype"), plot(AplusAt_bench));
 save(joinpath(PICTURES, "bench_Amulvb_v$v.$filetype"), plot(Amulvb_bench));
 save(joinpath(PICTURES, "bench_Atmulvb_v$v.$filetype"), plot(Atmulvb_bench));
 save(joinpath(PICTURES, "bench_exp_v$v.$filetype"), plot(exp_bench));
-save(joinpath(PICTURES, "bench_logdettriangle_v$v.$filetype"), plot(logdettriangle_bench));
 save(joinpath(PICTURES, "bench_random_access_v$v.$filetype"), plot(randomaccess_bench));
+save(joinpath(PICTURES, "bench_logdettriangle_v$v.$filetype"), plot(logdettriangle_bench));
 
 
 

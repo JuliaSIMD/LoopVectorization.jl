@@ -52,7 +52,9 @@ function matmul_bench!(br, C, A, B, i)
     @assert C ≈ Cblas "eigen gemm wrong?"; fill!(C, NaN)
     br[10,i] = n_gflop / @belapsed iegemm!($C, $A, $B)
     @assert C ≈ Cblas "i-eigen gemm wrong?"; fill!(C, NaN)
-    br[11,i] = n_gflop / @belapsed gemmavx!($C, $A, $B)
+    br[11,i] = n_gflop / @belapsed dgemmjit!($C, $A, $B)
+    @assert C ≈ Cblas "MKL JIT gemm wrong?"; fill!(C, NaN)
+    br[12,i] = n_gflop / @belapsed gemmavx!($C, $A, $B)
     @assert C ≈ Cblas "LoopVec gemm wrong?"
 end
 function A_mul_B_bench!(br, s, i)
@@ -97,7 +99,7 @@ const BLASTESTS = [
     "GFortran", "GFort-intrinsic",
     "icc", "ifort", "ifort-intrinsic",
     "Clang++ & Eigen-3", "icpc & Eigen-3",
-    "LoopVectorization"
+    "MKL JIT", "LoopVectorization"
 ]
 
 function benchmark_AmulB(sizes)
@@ -209,7 +211,9 @@ function gemv_bench!(br, x, A, y, i)
     @assert x ≈ xblas "eigen wrong?"; fill!(x, NaN);
     br[10,i] = n_gflop / @belapsed iegemv!($x, $A, $y)
     @assert x ≈ xblas "i-eigen wrong?"; fill!(x, NaN);
-    br[11,i] = n_gflop / @belapsed jgemvavx!($x, $A, $y)
+    br[11,i] = n_gflop / @belapsed dgemmjit!($x, $A, $y)
+    @assert x ≈ xblas "gemmjit wrong?"; fill!(x, NaN);
+    br[12,i] = n_gflop / @belapsed jgemvavx!($x, $A, $y)
     @assert x ≈ xblas "LoopVec wrong?"
 end
 function A_mul_vb_bench!(br, s, i)

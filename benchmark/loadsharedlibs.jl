@@ -1,4 +1,4 @@
-
+using LinearAlgebra
 using LoopVectorization.VectorizationBase: REGISTER_SIZE
 
 pkgdir(pkg::String) = abspath(joinpath(dirname(Base.find_package(pkg)), ".."))
@@ -11,6 +11,7 @@ const LIBICTEST = joinpath(LOOPVECBENCHDIR, "libictests.so")
 const LIBIFTEST = joinpath(LOOPVECBENCHDIR, "libiftests.so")
 const LIBEIGENTEST = joinpath(LOOPVECBENCHDIR, "libetest.so")
 const LIBIEIGENTEST = joinpath(LOOPVECBENCHDIR, "libietest.so")
+const LIBDIRECTCALLJIT = joinpath(LOOPVECBENCHDIR, "libdcjtest.so")
 
 # requires Clang with polly to build
 cfile = joinpath(LOOPVECBENCHDIR, "looptests.c")
@@ -23,7 +24,7 @@ end
 ffile = joinpath(LOOPVECBENCHDIR, "looptests.f90")
 if !isfile(LIBFTEST) || mtime(ffile) > mtime(LIBFTEST)
     # --param max-unroll-times defaults to ≥8, which is generally excessive
-    run(`gfortran -Ofast -march=native -funroll-loops --param max-unroll-times=4 -floop-nest-optimize -mprefer-vector-width=$(8REGISTER_SIZE) -shared -fPIC $ffile -o $LIBFTEST`)
+    run(`gfortran -Ofast -march=native -funroll-loops -floop-nest-optimize -mprefer-vector-width=$(8REGISTER_SIZE) -shared -fPIC $ffile -o $LIBFTEST`)
 end
 if !isfile(LIBIFTEST) || mtime(ffile) > mtime(LIBIFTEST)
     run(`ifort -fast -qopt-zmm-usage=high -qoverride-limits -shared -fPIC $ffile -o $LIBIFTEST`)
@@ -37,6 +38,26 @@ if !isfile(LIBEIGENTEST) || mtime(eigenfile) > mtime(LIBEIGENTEST)
 end
 if !isfile(LIBIEIGENTEST) || mtime(eigenfile) > mtime(LIBIEIGENTEST)
     run(`icpc -fast -qopt-zmm-usage=high -fargument-noalias-global -qoverride-limits -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBIEIGENTEST`)
+end
+
+directcalljitfile = joinpath(LOOPVECBENCHDIR, "directcalljit.f90")
+if !isfile(LIBDIRECTCALLJIT) || mtime(directcalljitfile) > mtime(LIBDIRECTCALLJIT)
+    # run(`ifort -fast -DMKL_DIRECT_CALL_SEQ_JIT -fpp -qopt-zmm-usage=high -shared -fPIC $directcalljitfile -o $LIBDIRECTCALLJIT`)
+    run(`gfortran -Ofast -march=native -DMKL_DIRECT_CALL_SEQ_JIT -cpp -mprefer-vector-width=$(8REGISTER_SIZE) -shared -fPIC $directcalljitfile -o $LIBDIRECTCALLJIT`)
+end
+
+istransposed(x) = false
+istransposed(x::Adjoint) = true
+istransposed(x::Transpose) = true
+function dgemmjit!(C::AbstractVecOrMat{Float64}, A::AbstractVecOrMat{Float64}, B::AbstractVecOrMat{Float64})
+    M, N = size(C); K = size(B, 1)
+    ccall(
+        (:dgemmjit, LIBDIRECTCALLJIT), Cvoid,
+        (Ptr{Float64},Ptr{Float64},Ptr{Float64},Ref{Int},Ref{Int},Ref{Int},Ref{Bool},Ref{Bool}),
+        parent(C), parent(A), parent(B),
+        Ref(M), Ref(K), Ref(N),
+        Ref(istransposed(A)), Ref(istransposed(B))
+    )
 end
 
 for (prefix,Cshared,Fshared,Eshared) ∈ ((Symbol(""),LIBCTEST,LIBFTEST,LIBEIGENTEST), (:i,LIBICTEST,LIBIFTEST,LIBIEIGENTEST))
@@ -59,9 +80,9 @@ for (prefix,Cshared,Fshared,Eshared) ∈ ((Symbol(""),LIBCTEST,LIBFTEST,LIBEIGEN
             )
         end
     end
-    @eval @inline $(Symbol(prefix,:cgemm!))(C, A, B) = $(Symbol(prefix, :cgemm_nkm!))(C, A, B)
-    @eval @inline $(Symbol(prefix,:fgemm!))(C, A, B) = $(Symbol(prefix, :fgemm_nkm!))(C, A, B)
-    @eval @inline function $(Symbol(prefix,:egemm!))(C, A, B)
+    @eval $(Symbol(prefix,:cgemm!))(C, A, B) = $(Symbol(prefix, :cgemm_nkm!))(C, A, B)
+    @eval $(Symbol(prefix,:fgemm!))(C, A, B) = $(Symbol(prefix, :fgemm_nkm!))(C, A, B)
+    @eval function $(Symbol(prefix,:egemm!))(C, A, B)
         M, N = size(C); K = size(B, 1)
         ccall(
             (:AmulB, $Eshared), Cvoid,
@@ -78,7 +99,7 @@ for (prefix,Cshared,Fshared,Eshared) ∈ ((Symbol(""),LIBCTEST,LIBFTEST,LIBEIGEN
         )
     end
 for (p,s) ∈ [(:c,Cshared) (:e,Eshared)]
-    @eval @inline function $(Symbol(prefix,p,:gemm!))(C, A::Adjoint, B)
+    @eval function $(Symbol(prefix,p,:gemm!))(C, A::Adjoint, B)
         M, N = size(C); K = size(B, 1)
         ccall(
             (:AtmulB, $s), Cvoid,
@@ -87,7 +108,7 @@ for (p,s) ∈ [(:c,Cshared) (:e,Eshared)]
         )
     end
 end
-    @eval @inline function $(Symbol(prefix,:fgemm!))(C, A::Adjoint, B)
+    @eval function $(Symbol(prefix,:fgemm!))(C, A::Adjoint, B)
         M, N = size(C); K = size(B, 1)
         ccall(
             (:AtmulB, $Fshared), Cvoid,
@@ -95,7 +116,7 @@ end
             C, parent(A), B, Ref(M), Ref(K), Ref(N)
         )
     end
-    @eval @inline function $(Symbol(prefix,:fgemm_builtin!))(C, A::Adjoint, B)
+    @eval function $(Symbol(prefix,:fgemm_builtin!))(C, A::Adjoint, B)
         M, N = size(C); K = size(B, 1)
         ccall(
             (:AtmulBbuiltin, $Fshared), Cvoid,
@@ -104,7 +125,7 @@ end
         )
     end
 for (p,s) ∈ [(:c,Cshared) (:e,Eshared)]
-    @eval @inline function $(Symbol(prefix,p,:gemm!))(C, A, B::Adjoint)
+    @eval function $(Symbol(prefix,p,:gemm!))(C, A, B::Adjoint)
         M, N = size(C); K = size(B, 1)
         ccall(
             (:AmulBt, $s), Cvoid,
@@ -113,7 +134,7 @@ for (p,s) ∈ [(:c,Cshared) (:e,Eshared)]
         )
     end
 end
-    @eval @inline function $(Symbol(prefix,:fgemm!))(C, A, B::Adjoint)
+    @eval function $(Symbol(prefix,:fgemm!))(C, A, B::Adjoint)
         M, N = size(C); K = size(B, 1)
         ccall(
             (:AmulBt, $Fshared), Cvoid,
@@ -121,7 +142,7 @@ end
             C, A, parent(B), Ref(M), Ref(K), Ref(N)
         )
     end
-    @eval @inline function $(Symbol(prefix,:fgemm_builtin!))(C, A, B::Adjoint)
+    @eval function $(Symbol(prefix,:fgemm_builtin!))(C, A, B::Adjoint)
         M, N = size(C); K = size(B, 1)
         ccall(
             (:AmulBtbuiltin, $Fshared), Cvoid,
@@ -130,7 +151,7 @@ end
         )
     end
 for (p,s) ∈ [(:c,Cshared) (:e,Eshared)]
-    @eval @inline function $(Symbol(prefix,p,:gemm!))(C, A::Adjoint, B::Adjoint)
+    @eval function $(Symbol(prefix,p,:gemm!))(C, A::Adjoint, B::Adjoint)
         M, N = size(C); K = size(B, 1)
         ccall(
             (:AtmulBt, $s), Cvoid,
@@ -139,7 +160,7 @@ for (p,s) ∈ [(:c,Cshared) (:e,Eshared)]
         )
     end
 end
-    @eval @inline function $(Symbol(prefix,:fgemm!))(C, A::Adjoint, B::Adjoint)
+    @eval function $(Symbol(prefix,:fgemm!))(C, A::Adjoint, B::Adjoint)
         M, N = size(C); K = size(B, 1)
         ccall(
             (:AtmulBt, $Fshared), Cvoid,
@@ -147,7 +168,7 @@ end
             C, parent(A), parent(B), Ref(M), Ref(K), Ref(N)
         )
     end
-    @eval @inline function $(Symbol(prefix,:fgemm_builtin!))(C, A::Adjoint, B::Adjoint)
+    @eval function $(Symbol(prefix,:fgemm_builtin!))(C, A::Adjoint, B::Adjoint)
         M, N = size(C); K = size(B, 1)
         ccall(
             (:AtmulBtbuiltin, $Fshared), Cvoid,
@@ -242,7 +263,7 @@ end
         )
     end
 for (p,s) ∈ [(:c,Cshared) (:e,Eshared)]
-    @eval @inline function $(Symbol(prefix,p,:gemv!))(y, A::Adjoint, x)
+    @eval function $(Symbol(prefix,p,:gemv!))(y, A::Adjoint, x)
         M, K = size(A)
         ccall(
             (:Atmulvb, $s), Cvoid,
@@ -251,7 +272,7 @@ for (p,s) ∈ [(:c,Cshared) (:e,Eshared)]
         )
     end
 end
-@eval @inline function $(Symbol(prefix,:fgemv!))(y, A::Adjoint, x)
+@eval function $(Symbol(prefix,:fgemv!))(y, A::Adjoint, x)
         M, K = size(A)
         ccall(
             (:Atmulvb, $Fshared), Cvoid,
