@@ -1,3 +1,6 @@
+using LoopVectorization
+using Test
+
 @testset "dot" begin
     dotq = :(for i ∈ eachindex(a,b)
              s += a[i]*b[i]
@@ -42,6 +45,14 @@
     function myselfdotavx(a)
         s = zero(eltype(a))
         @avx for i ∈ eachindex(a)
+            s += a[i]*a[i]
+        end
+        s
+    end
+    function myselfdotavx_range(a)
+        s = zero(eltype(a))
+        rng = axes(a, 1)
+        @avx for i ∈ rng
             s += a[i]*a[i]
         end
         s
@@ -190,6 +201,7 @@
         @test dot_unroll3avx_inline(a,b) ≈ s
         s = myselfdot(a)
         @test myselfdotavx(a) ≈ s
+        @test myselfdotavx_range(a) ≈ s
         @test myselfdot_avx(a) ≈ s
         @test myselfdotavx(a) ≈ s
 

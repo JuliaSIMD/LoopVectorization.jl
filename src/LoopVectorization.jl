@@ -12,6 +12,7 @@ using SIMDPirates: VECTOR_SYMBOLS, evadd, evmul, vrange, reduced_add, reduced_pr
     vmullog2, vmullog10, vdivlog2, vdivlog10, vmullog2add!, vmullog10add!, vdivlog2add!, vdivlog10add!, vfmaddaddone
 using Base.Broadcast: Broadcasted, DefaultArrayStyle
 using LinearAlgebra: Adjoint, Transpose
+using Base.Meta: isexpr
 
 const SUPPORTED_TYPES = Union{Float16,Float32,Float64,Integer}
 

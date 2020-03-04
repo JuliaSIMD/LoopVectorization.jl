@@ -369,47 +369,55 @@ This function creates a loop, while switching from 1 to 0 based indices
 """
 function register_single_loop!(ls::LoopSet, looprange::Expr)
     itersym = (looprange.args[1])::Symbol
-    r = (looprange.args[2])::Expr
-    @assert r.head === :call
-    f = first(r.args)
-    loop::Loop = if f === :(:)
-        lower = r.args[2]
-        upper = r.args[3]
-        lii::Bool = lower isa Integer
-        liiv::Int = lii ? (convert(Int, lower)-1) : 0
-        uii::Bool = upper isa Integer
-        if lii & uii # both are integers
-            Loop(itersym, liiv, convert(Int, upper))
-        elseif lii # only lower bound is an integer
-            if upper isa Symbol
-                Loop(itersym, liiv, upper)
-            elseif upper isa Expr
-                Loop(itersym, liiv, add_loop_bound!(ls, itersym, upper, true))
-            else
-                Loop(itersym, liiv, add_loop_bound!(ls, itersym, upper, true))
+    r = looprange.args[2]
+    if isexpr(r, :call)
+        f = first(r.args)
+        loop::Loop = if f === :(:)
+            lower = r.args[2]
+            upper = r.args[3]
+            lii::Bool = lower isa Integer
+            liiv::Int = lii ? (convert(Int, lower)-1) : 0
+            uii::Bool = upper isa Integer
+            if lii & uii # both are integers
+                Loop(itersym, liiv, convert(Int, upper))
+            elseif lii # only lower bound is an integer
+                if upper isa Symbol
+                    Loop(itersym, liiv, upper)
+                elseif upper isa Expr
+                    Loop(itersym, liiv, add_loop_bound!(ls, itersym, upper, true))
+                else
+                    Loop(itersym, liiv, add_loop_bound!(ls, itersym, upper, true))
+                end
+            elseif uii # only upper bound is an integer
+                uiiv = convert(Int, upper)
+                Loop(itersym, add_loop_bound!(ls, itersym, lower, false), uiiv)
+            else # neither are integers
+                L = add_loop_bound!(ls, itersym, lower, false)
+                U = add_loop_bound!(ls, itersym, upper, true)
+                Loop(itersym, L, U)
             end
-        elseif uii # only upper bound is an integer
-            uiiv = convert(Int, upper)
-            Loop(itersym, add_loop_bound!(ls, itersym, lower, false), uiiv)
-        else # neither are integers
-            L = add_loop_bound!(ls, itersym, lower, false)
-            U = add_loop_bound!(ls, itersym, upper, true)
-            Loop(itersym, L, U)
-        end
-    elseif f === :eachindex
-        N = gensym(Symbol(:loop, itersym))
-        pushpreamble!(ls, Expr(:(=), N, Expr(:call, lv(:maybestaticlength), r.args[2])))
-        Loop(itersym, 0, N)
-    elseif f === :OneTo || f == Expr(:(.), :Base, QuoteNode(:OneTo))
-        otN = r.args[2]
-        if otN isa Integer
-            Loop(itersym, 0, otN)
-        else
-            otN isa Expr && maybestatic!(otN)
+        elseif f === :eachindex
             N = gensym(Symbol(:loop, itersym))
-            pushpreamble!(ls, Expr(:(=), N, otN))
+            pushpreamble!(ls, Expr(:(=), N, Expr(:call, lv(:maybestaticlength), r.args[2])))
             Loop(itersym, 0, N)
+        elseif f === :OneTo || f == Expr(:(.), :Base, QuoteNode(:OneTo))
+            otN = r.args[2]
+            if otN isa Integer
+                Loop(itersym, 0, otN)
+            else
+                otN isa Expr && maybestatic!(otN)
+                N = gensym(Symbol(:loop, itersym))
+                pushpreamble!(ls, Expr(:(=), N, otN))
+                Loop(itersym, 0, N)
+            end
+        else
+            throw("Unrecognized loop range type: $r.")
         end
+    elseif isa(r, Symbol)
+        # Treat similar to `eachindex`
+        N = gensym(Symbol(:loop, itersym))
+        pushpreamble!(ls, Expr(:(=), N, Expr(:call, lv(:maybestaticlength), r)))
+        loop = Loop(itersym, 0, N)
     else
         throw("Unrecognized loop range type: $r.")
     end
