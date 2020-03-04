@@ -33,7 +33,7 @@
 
 # For passing options like array types and mask
 # struct LoopSetOptions
-    
+
 # end
 
 struct Loop
@@ -84,7 +84,7 @@ function vec_looprange(loop::Loop, isunrolled::Bool, W::Symbol, U::Int)
     else
         Expr(:call, :<, loop.itersymbol, Expr(:call, :-, loop.stopsym, incr))
     end
-end                       
+end
 function looprange(loop::Loop, incr::Int, mangledname::Symbol)
     incr -= 1#one(Int32)
     if iszero(incr)
@@ -554,7 +554,3 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
         throw("Don't know how to handle expression:\n$ex")
     end
 end
-
-
-
-

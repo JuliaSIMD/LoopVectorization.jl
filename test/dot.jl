@@ -178,7 +178,7 @@ using Test
         end
         4acc/length(x)
     end
-    
+
     # @macroexpand @_avx for i = 1:length(a_re) - 1
     #     c_re[i] = b_re[i] * a_re[i + 1] - b_im[i] * a_im[i + 1]
     #     c_im[i] = b_re[i] * a_im[i + 1] + b_im[i] * a_re[i + 1]
@@ -217,7 +217,7 @@ using Test
         b_re = rand(R, N); b_im = rand(R, N);
         ac = Complex.(a_re, a_im);
         bc = Complex.(b_re, b_im);
-        
+
         @test mydot(ac, bc) ≈ complex_dot_soa(a_re, a_im, b_re, b_im)
 
         c_re1 = similar(a_re); c_im1 = similar(a_im);
