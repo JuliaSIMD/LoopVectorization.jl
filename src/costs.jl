@@ -194,8 +194,8 @@ const COST = Dict{Instruction,InstructionCost}(
     Instruction(:sincospi_fast) => InstructionCost(25,22.0,70.0,26),
     Instruction(:identity) => InstructionCost(0,0.0,0.0,0),
     Instruction(:adjoint) => InstructionCost(0,0.0,0.0,0),
-    Instruction(:transpose) => InstructionCost(0,0.0,0.0,0)
-    # Symbol("##CONSTANT##") => InstructionCost(0,0.0)
+    Instruction(:transpose) => InstructionCost(0,0.0,0.0,0),
+    Instruction(:prefetch) => InstructionCost(0,0.0,0.0,0)
 )
 
 # const KNOWNINSTRUCTIONS = keys(COST)
