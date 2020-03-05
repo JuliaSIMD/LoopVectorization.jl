@@ -56,7 +56,14 @@ function lower_compute!(
     # making BitArrays inefficient.
     # parentsyms = [opp.variable for opp ∈ parents(op)]
     Uiter = opunrolled ? U - 1 : 0
-    maskreduct = mask !== nothing && isreduction(op) && vectorized ∈ reduceddependencies(op) #any(opp -> opp.variable === var, parents_op)
+    isreduct = isreduction(op)
+    if !isnothing(suffix) && isreduct
+        instrfid = findfirst(isequal(instr.instr), (:vfmadd_fast, :vfnmadd_fast, :vfmsub_fast, :vfnmsub_fast))
+        if instrfid !== nothing
+            instr = Instruction((:vfmadd231, :vfnmadd231, :vfmsub231, :vfnmsub231)[instrfid])
+        end
+    end
+    maskreduct = mask !== nothing && isreduct && vectorized ∈ reduceddependencies(op) #any(opp -> opp.variable === var, parents_op)
     # if a parent is not unrolled, the compiler should handle broadcasting CSE.
     # because unrolled/tiled parents result in an unrolled/tiled dependendency,
     # we handle both the tiled and untiled case here.
@@ -90,10 +97,15 @@ function lower_compute!(
             push!(instrcall.args, parent)
         end
         if maskreduct && (u == Uiter || unrolled !== vectorized) # only mask last
-            push!(q.args, Expr(:(=), varsym, Expr(:call, lv(:vifelse), mask, instrcall, varsym)))
-        else
-            push!(q.args, Expr(:(=), varsym, instrcall))
+            if last(instrcall.args) == varsym
+                pushfirst!(instrcall.args, lv(:vifelse))
+                insert!(instrcall.args, 3, mask)
+            else
+                push!(q.args, Expr(:(=), varsym, Expr(:call, lv(:vifelse), mask, instrcall, varsym)))
+                continue
+            end
         end
+        push!(q.args, Expr(:(=), varsym, instrcall))
     end
 end
 
