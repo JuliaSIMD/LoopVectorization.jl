@@ -1,3 +1,6 @@
+using LoopVectorization
+using Test
+
 @testset "GEMV" begin
     gemvq = :(for i ∈ eachindex(y)
               yᵢ = 0.0
@@ -22,6 +25,16 @@
         @avx for i ∈ eachindex(y)
             yᵢ = zero(eltype(y))
             for j ∈ eachindex(x)
+                yᵢ += A[i,j] * x[j]
+            end
+            y[i] = yᵢ
+        end
+    end
+    function mygemvavx_range!(y, A, x)
+        rng1, rng2 = axes(A)
+        @avx for i ∈ rng1
+            yᵢ = zero(eltype(y))
+            for j ∈ rng2
                 yᵢ += A[i,j] * x[j]
             end
             y[i] = yᵢ
@@ -149,6 +162,9 @@
         mygemvavx!(y2, A, x)
         @test y1 ≈ y2
         fill!(y2, -999.9); mygemv_avx!(y2, A, x)
+        @test y1 ≈ y2
+        fill!(y2, -999.9)
+        mygemvavx_range!(y2, A, x)
         @test y1 ≈ y2
 
         B = rand(R, N, N);

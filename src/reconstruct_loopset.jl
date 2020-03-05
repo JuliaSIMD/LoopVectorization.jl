@@ -14,6 +14,13 @@ function Loop(ls::LoopSet, l::Int, ::Type{StaticLowerUnitRange{L}}) where {L}
     pushpreamble!(ls, Expr(:(=), stop, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:(.), Expr(:ref, :lb, l), QuoteNode(:U)))))
     Loop(gensym(:n), L, L + 1024, Symbol(""), stop, true, false)::Loop
 end
+# Is there any likely way to generate such a range?
+# function Loop(ls::LoopSet, l::Int, ::Type{StaticLengthUnitRange{N}}) where {N}
+#     start = gensym(:loopstart); stop = gensym(:loopstop)
+#     pushpreamble!(ls, Expr(:(=), start, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:(.), Expr(:ref, :lb, l), QuoteNode(:L)))))
+#     pushpreamble!(ls, Expr(:(=), stop, Expr(:call, :(+), start, N - 1)))
+#     Loop(gensym(:n), 0, N, start, stop, false, false)::Loop
+# end
 function Loop(ls, l, ::Type{StaticUnitRange{L,U}}) where {L,U}
     Loop(gensym(:n), L, U, Symbol(""), Symbol(""), true, true)::Loop
 end
@@ -63,7 +70,7 @@ extract_varg(i) = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__
 pushvarg!(ls::LoopSet, ar::ArrayReferenceMeta, i) = pushpreamble!(ls, Expr(:(=), vptr(ar), extract_varg(i)))
 function pushvarg′!(ls::LoopSet, ar::ArrayReferenceMeta, i)
     reverse!(ar.loopedindex); reverse!(getindices(ar)) # reverse the listed indices here, and transpose it to make it column major
-    pushpreamble!(ls, Expr(:(=), vptr(ar), Expr(:call, lv(:Transpose), extract_varg(i))))
+    pushpreamble!(ls, Expr(:(=), vptr(ar), Expr(:call, lv(:transpose), extract_varg(i))))
 end
 function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{PackedStridedPointer{T, N}}) where {T, N}
     pushvarg!(ls, ar, i)
@@ -71,6 +78,10 @@ end
 function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{RowMajorStridedPointer{T, N}}) where {T, N}
     pushvarg′!(ls, ar, i)
 end
+function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{OffsetStridedPointer{T,N,P}}) where {T,N,P}
+    add_mref!(ls, ar, i, P)
+end
+
 function add_mref!(
     ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}
 ) where {T, X <: Tuple, S <: VectorizationBase.AbstractStaticStridedPointer{T,X}}

@@ -1,3 +1,6 @@
+using LoopVectorization, OffsetArrays
+using Test
+
 @testset "dot" begin
     dotq = :(for i ∈ eachindex(a,b)
              s += a[i]*b[i]
@@ -42,6 +45,14 @@
     function myselfdotavx(a)
         s = zero(eltype(a))
         @avx for i ∈ eachindex(a)
+            s += a[i]*a[i]
+        end
+        s
+    end
+    function myselfdotavx_range(a)
+        s = zero(eltype(a))
+        rng = axes(a, 1)
+        @avx for i ∈ rng
             s += a[i]*a[i]
         end
         s
@@ -167,7 +178,7 @@
         end
         4acc/length(x)
     end
-    
+
     # @macroexpand @_avx for i = 1:length(a_re) - 1
     #     c_re[i] = b_re[i] * a_re[i + 1] - b_im[i] * a_im[i + 1]
     #     c_im[i] = b_re[i] * a_im[i + 1] + b_im[i] * a_re[i + 1]
@@ -179,9 +190,12 @@
         N = 127
         R = T <: Integer ? (T(-100):T(100)) : T
         a = rand(T, N); b = rand(R, N);
+        ao = OffsetArray(a, -60:66); bo = OffsetArray(b, -60:66);
         s = mydot(a, b)
         @test mydotavx(a,b) ≈ s
         @test mydot_avx(a,b) ≈ s
+        @test mydotavx(ao,bo) ≈ s
+        @test mydot_avx(ao,bo) ≈ s
         @test dot_unroll2avx(a,b) ≈ s
         @test dot_unroll3avx(a,b) ≈ s
         @test dot_unroll2_avx(a,b) ≈ s
@@ -190,6 +204,7 @@
         @test dot_unroll3avx_inline(a,b) ≈ s
         s = myselfdot(a)
         @test myselfdotavx(a) ≈ s
+        @test myselfdotavx_range(a) ≈ s
         @test myselfdot_avx(a) ≈ s
         @test myselfdotavx(a) ≈ s
 
@@ -205,7 +220,7 @@
         b_re = rand(R, N); b_im = rand(R, N);
         ac = Complex.(a_re, a_im);
         bc = Complex.(b_re, b_im);
-        
+
         @test mydot(ac, bc) ≈ complex_dot_soa(a_re, a_im, b_re, b_im)
 
         c_re1 = similar(a_re); c_im1 = similar(a_im);
