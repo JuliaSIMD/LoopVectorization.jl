@@ -57,7 +57,7 @@ function lower_compute!(
     # parentsyms = [opp.variable for opp ∈ parents(op)]
     Uiter = opunrolled ? U - 1 : 0
     isreduct = isreduction(op)
-    if !isnothing(suffix) && isreduct
+    if !isnothing(suffix) && isreduct && tiledouterreduction == -1
         instrfid = findfirst(isequal(instr.instr), (:vfmadd_fast, :vfnmadd_fast, :vfmsub_fast, :vfnmsub_fast))
         if instrfid !== nothing
             instr = Instruction((:vfmadd231, :vfnmadd231, :vfmsub231, :vfnmsub231)[instrfid])
@@ -75,7 +75,8 @@ function lower_compute!(
     for u ∈ 0:Uiter
         instrcall = Expr(instr) # Expr(:call, instr)
         varsym = if tiledouterreduction > 0 # then suffix !== nothing
-            modsuffix = ((u + suffix*U) & 3)
+            # modsuffix = ((u + suffix*U) & 3)
+            modsuffix = (suffix & 3)
             Symbol(mvar, modsuffix)
         elseif opunrolled
             Symbol(mvar, u)
