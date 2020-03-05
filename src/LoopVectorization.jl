@@ -4,7 +4,7 @@ using VectorizationBase, SIMDPirates, SLEEFPirates, Parameters
 using VectorizationBase: REGISTER_SIZE, REGISTER_COUNT, extract_data, num_vector_load_expr,
     mask, masktable, pick_vector_width_val, valmul, valrem, valmuladd, valadd, valsub, _MM,
     maybestaticlength, maybestaticsize, staticm1, subsetview, vzero, stridedpointer_for_broadcast,
-    Static, StaticUnitRange, StaticLowerUnitRange, StaticUpperUnitRange,
+    Static, StaticUnitRange, StaticLowerUnitRange, StaticUpperUnitRange, unwrap, maybestaticrange,
     PackedStridedPointer, SparseStridedPointer, RowMajorStridedPointer, StaticStridedPointer, StaticStridedStruct
 using SIMDPirates: VECTOR_SYMBOLS, evadd, evmul, vrange, reduced_add, reduced_prod, reduce_to_add, reduce_to_prod,
     sizeequivalentfloat, sizeequivalentint, vadd!, vsub!, vmul!, vfdiv!, vfmadd!, vfnmadd!, vfmsub!, vfnmsub!,
@@ -22,6 +22,7 @@ export LowDimArray, stridedpointer, vectorizable,
     vfilter, vfilter!
 
 
+include("vectorizationbase_extensions.jl")
 include("map.jl")
 include("filter.jl")
 include("costs.jl")

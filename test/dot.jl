@@ -1,4 +1,4 @@
-using LoopVectorization
+using LoopVectorization, OffsetArrays
 using Test
 
 @testset "dot" begin
@@ -190,9 +190,12 @@ using Test
         N = 127
         R = T <: Integer ? (T(-100):T(100)) : T
         a = rand(T, N); b = rand(R, N);
+        ao = OffsetArray(a, -60:66); bo = OffsetArray(b, -60:66);
         s = mydot(a, b)
         @test mydotavx(a,b) ≈ s
         @test mydot_avx(a,b) ≈ s
+        @test mydotavx(ao,bo) ≈ s
+        @test mydot_avx(ao,bo) ≈ s
         @test dot_unroll2avx(a,b) ≈ s
         @test dot_unroll3avx(a,b) ≈ s
         @test dot_unroll2_avx(a,b) ≈ s

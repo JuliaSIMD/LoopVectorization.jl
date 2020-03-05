@@ -17,6 +17,8 @@ end
 @time @testset "LoopVectorization.jl" begin
 
     @time include("printmethods.jl")
+
+    @time include("offsetarrays.jl")
     
     @time include("map.jl")
 

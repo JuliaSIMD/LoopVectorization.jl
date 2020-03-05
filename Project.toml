@@ -5,6 +5,7 @@ version = "0.6.20"
 
 [deps]
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
 Parameters = "d96e819e-fc66-5662-9728-84c9c7592b0a"
 SIMDPirates = "21efa798-c60a-11e8-04d3-e1a92915a26a"
 SLEEFPirates = "476501e8-09a2-5ece-8869-fb82de89a1fa"

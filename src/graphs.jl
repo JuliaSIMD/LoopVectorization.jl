@@ -70,7 +70,7 @@ function startloop(loop::Loop, isvectorized, W, itersymbol = loop.itersymbol)
     elseif startexact
         Expr(:(=), itersymbol, loop.starthint)
     else
-        Expr(:(=), itersymbol, loop.startsym)
+        Expr(:(=), itersymbol, Expr(:call, lv(:unwrap), loop.startsym))
     end
 end
 function vec_looprange(loop::Loop, isunrolled::Bool, W::Symbol, U::Int)
@@ -397,9 +397,11 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
                 Loop(itersym, L, U)
             end
         elseif f === :eachindex
-            N = gensym(Symbol(:loop, itersym))
-            pushpreamble!(ls, Expr(:(=), N, Expr(:call, lv(:maybestaticlength), r.args[2])))
-            Loop(itersym, 0, N)
+            N = gensym(Symbol(:loopeachindex, itersym))
+            pushpreamble!(ls, Expr(:(=), N, Expr(:call, lv(:maybestaticrange), r)))
+            L = add_loop_bound!(ls, itersym, Expr(:call, :first, N), false)
+            U = add_loop_bound!(ls, itersym, Expr(:call, :last, N), true)
+            Loop(itersym, L, U)
         elseif f === :OneTo || f == Expr(:(.), :Base, QuoteNode(:OneTo))
             otN = r.args[2]
             if otN isa Integer
@@ -416,8 +418,10 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
     elseif isa(r, Symbol)
         # Treat similar to `eachindex`
         N = gensym(Symbol(:loop, itersym))
-        pushpreamble!(ls, Expr(:(=), N, Expr(:call, lv(:maybestaticlength), r)))
-        loop = Loop(itersym, 0, N)
+        pushpreamble!(ls, Expr(:(=), N, Expr(:call, lv(:maybestaticrange), r)))
+        L = add_loop_bound!(ls, itersym, Expr(:call, :first, N), false)
+        U = add_loop_bound!(ls, itersym, Expr(:call, :last, N), true)
+        loop = Loop(itersym, L, U)
     else
         throw("Unrecognized loop range type: $r.")
     end
