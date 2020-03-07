@@ -17,8 +17,10 @@ struct OffsetStridedPointer{T, N, P <: VectorizationBase.AbstractStridedPointer{
     ptr::P
     offsets::NTuple{N,Int}
 end
-# if ndim(A::OffsetArray) ≥ 2, then eachindex(A) isa Base.OneTo, index starting at 1.
-# but multiple indexing is calculated using offsets, so we need a special type to express this.
+# if ndim(A::OffsetArray) ≥ 2 and `IndexStyle(A) == IndexLinear()`, then eachindex(A) isa Base.OneTo,
+# index starting at 1.
+# But any other case (indexing of OffsetVectors, or Cartesian indexing of generic OffsetArrays)
+# is calculated using offsets, so we need a special type to express this.
 @inline function VectorizationBase.stridedpointer(A::OffsetArrays.OffsetArray)
     OffsetStridedPointer(stridedpointer(parent(A)), A.offsets)
 end
@@ -35,4 +37,3 @@ end
 @inline function VectorizationBase.subsetview(ptr::OffsetStridedPointer{<:Any,N}, ::Val{I}, i) where {I,N}
     subsetview(gesp(ptr.ptr, ntuple(n -> 0 - @inbounds(ptr.offsets[n]), Val{N}())), Val{I}(), i)
 end
-
