@@ -331,3 +331,10 @@ Similar approaches can be taken to make kernels working with a variety of numeri
 
 </p>
 </details>
+
+## Packages using LoopVectorization
+
+* [Gaius](https://github.com/MasonProtter/Gaius.jl)
+
+If you're using LoopVectorization, please feel free to file a PR adding yours to the list!
+

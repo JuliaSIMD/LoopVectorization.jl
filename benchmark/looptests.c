@@ -140,6 +140,17 @@ double dot3(double* restrict x, double* restrict A, double* restrict y, long M, 
   }
   return s;
 }
+double dot3v2(double* restrict x, double* restrict A, double* restrict y, long M, long N){
+  double s = 0.0;
+  for (long n = 0; n < N; n++){
+    double t = 0.0;
+    for (long m = 0; m < M; m++){
+      t += x[m] * A[m + n*M];
+    }
+    s += t * y[n];
+  }
+  return s;
+}
 void gemv(double* restrict y, double* restrict  A, double* restrict x, long M, long K){
   for (long m = 0; m < M; m++){
     y[m] = 0.0;

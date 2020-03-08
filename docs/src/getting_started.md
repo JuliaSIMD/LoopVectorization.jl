@@ -60,7 +60,7 @@ julia> E1 = Array{Float64}(undef, M, K, N);
 
 julia> E2 = similar(E1);
 
-julia> @benchmark      @. $E1 = exp($A - $b' +    $d) * $c
+julia> @benchmark @. $E1 = exp($A - $b' +    $d) * $c
 BenchmarkTools.Trial: 
   memory estimate:  112 bytes
   allocs estimate:  5

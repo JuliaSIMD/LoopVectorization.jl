@@ -103,7 +103,7 @@ module looptests
       real(C_double), dimension(M, K), intent(in) :: A
       real(C_double), dimension(N, K), intent(in) :: B
       integer(C_long) :: mm, kk, nn
-      C = 0.0
+      C = 0.0d0
       do concurrent(kk = 1:K, nn = 1:N, mm = 1:M)
          C(mm,nn) = C(mm,nn) + A(mm,kk) * B(nn,kk)
       end do
@@ -121,7 +121,7 @@ module looptests
       real(C_double), dimension(K, M), intent(in) :: A
       real(C_double), dimension(N, K), intent(in) :: B
       integer(C_long) :: mm, kk, nn
-      C = 0.0
+      C = 0.0d0
       do concurrent(nn = 1:N, kk = 1:K, mm = 1:M)
          C(mm,nn) = C(mm,nn) + A(kk,mm) * B(nn,kk)
       end do
@@ -138,7 +138,7 @@ module looptests
       real(C_double), dimension(N), intent(in) :: a, b
       real(C_double), intent(out) :: s
       integer(C_long) :: i
-      s = 0
+      s = 0d0
       do concurrent(i = 1:N)
          s = s + a(i) * b(i)
       end do
@@ -148,7 +148,7 @@ module looptests
       real(C_double), dimension(N), intent(in) :: a
       real(C_double), intent(out) :: s
       integer(C_long) :: i
-      s = 0
+      s = 0d0
       do concurrent(i = 1:N)
          s = s + a(i) * a(i)
       end do
@@ -157,11 +157,34 @@ module looptests
       integer(C_long), intent(in) :: M, N
       real(C_double), intent(in) :: x(M), A(M,N), y(N)
       real(C_double), intent(out) :: s
+      real(C_double) :: t
       integer(C_long) :: mm, nn
+      s = 0.0d0
       do concurrent(nn = 1:N, mm = 1:M)
          s = s + x(mm) * A(mm, nn) * y(nn)
       end do
     end subroutine dot3
+    subroutine dot3v2(s, x, A, y, M, N) BIND(C, name="dot3v2")
+      integer(C_long), intent(in) :: M, N
+      real(C_double), intent(in) :: x(M), A(M,N), y(N)
+      real(C_double), intent(out) :: s
+      real(C_double) :: t
+      integer(C_long) :: mm, nn
+      s = 0.0d0
+      do concurrent(nn = 1:N)
+         t = 0.0d0
+         do concurrent(mm = 1:M)
+            t = t + x(mm) * A(mm, nn)
+         end do
+         s = s + t * y(nn)
+      end do
+    end subroutine dot3v2
+    subroutine dot3builtin(s, x, A, y, M, N) BIND(C, name="dot3builtin")
+      integer(C_long), intent(in) :: M, N
+      real(C_double), intent(in) :: x(M), A(M,N), y(N)
+      real(C_double), intent(out) :: s
+      s = dot_product(x, matmul(A, y))
+    end subroutine dot3builtin
     !GCC$ builtin (exp) attributes simd (notinbranch) if('x86_64')
     subroutine vexp(b, a, N) BIND(C, name="vexp")
       integer(C_long), intent(in) :: N

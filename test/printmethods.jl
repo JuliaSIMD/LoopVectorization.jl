@@ -16,7 +16,7 @@
                    for k ∈ 1:K
                        C[m,n] += A[m,k] * B[k,n]
                    end
-               end)
+               end);
     lsAmulB = LoopVectorization.LoopSet(AmulBq);
     println(io, LoopVectorization.operations(lsAmulB))
     s = String(take!(io))

@@ -4,6 +4,72 @@
 
 This is simply a vectorized `map` function.
 
+## vmapnt and vmapntt
+
+These are like `vmap`, but use non-temporal (streaming) stores into the destination, to avoid polluting the cache. Likely to yield a performance increase if you wont be reading the values soon.
+```julia
+julia> using LoopVectorization, BenchmarkTools
+
+julia> f(x,y) = exp(-0.5abs2(x - y))
+f (generic function with 1 method)
+
+julia> x = rand(10^8); y = rand(10^8); z = similar(x);
+
+julia> @benchmark map!(f, $z, $x, $y)
+BenchmarkTools.Trial:
+  memory estimate:  0 bytes
+  allocs estimate:  0
+  --------------
+  minimum time:     442.614 ms (0.00% GC)
+  median time:      443.750 ms (0.00% GC)
+  mean time:        443.664 ms (0.00% GC)
+  maximum time:     444.730 ms (0.00% GC)
+  --------------
+  samples:          12
+  evals/sample:     1
+
+julia> @benchmark vmap!(f, $z, $x, $y)
+BenchmarkTools.Trial:
+  memory estimate:  0 bytes
+  allocs estimate:  0
+  --------------
+  minimum time:     177.257 ms (0.00% GC)
+  median time:      177.380 ms (0.00% GC)
+  mean time:        177.423 ms (0.00% GC)
+  maximum time:     177.956 ms (0.00% GC)
+  --------------
+  samples:          29
+  evals/sample:     1
+
+julia> @benchmark vmapnt!(f, $z, $x, $y)
+BenchmarkTools.Trial:
+  memory estimate:  0 bytes
+  allocs estimate:  0
+  --------------
+  minimum time:     143.521 ms (0.00% GC)
+  median time:      143.639 ms (0.00% GC)
+  mean time:        143.645 ms (0.00% GC)
+  maximum time:     143.821 ms (0.00% GC)
+  --------------
+  samples:          35
+  evals/sample:     1
+
+julia> Threads.nthreads()
+36
+
+julia> @benchmark vmapntt!(f, $z, $x, $y)
+BenchmarkTools.Trial:
+  memory estimate:  25.69 KiB
+  allocs estimate:  183
+  --------------
+  minimum time:     30.065 ms (0.00% GC)
+  median time:      30.130 ms (0.00% GC)
+  mean time:        30.146 ms (0.00% GC)
+  maximum time:     31.277 ms (0.00% GC)
+  --------------
+  samples:          166
+  evals/sample:     1
+```
 
 ## vfilter
 
