@@ -9,4 +9,12 @@ The cost estimate is based on the costs of individual instructions and the numbe
 - The `reciprocal throughput` is similar to the latency, but it measures the number of cycles per operation when many of the same operation are repeated in sequence.  Continuing our hose analogy, think of it as the inverse of the flow rate at steady-state. It is typically ≤ the `scalar latency`.
 - The `register pressure` measures the register consumption by the operation
 
-Data on individual instructions for specific architectures can be found on [Agner Fog's website](https://agner.org/optimize/instruction_tables.pdf).
+Data on individual instructions for specific architectures can be found on [Agner Fog's website](https://agner.org/optimize/instruction_tables.pdf). Most of the costs used were those for the Skylake-X architecture.
+
+Examples of how these come into play:
+- Vectorizing a loop will result in each instruction evaluating multiple iterations, but the costs of loads and stores will change based on the memory layouts of the accessed arrays.
+- Unrolling can help reduce the number of times an operation must be performed, for example if it can allow us to reuse memory multiple times rather than reloading it every time it is needed.
+- When there is a reduction, such as performing a sum, there is a dependency chain. Each `+` has to wait for the previous `+` to finish executing before it can begin, thus execution time is bounded by latency rather than minimum of the throughput of the `+` and load operations. By unrolling the loop, we can create multiple independent dependency chains.
+
+
+
