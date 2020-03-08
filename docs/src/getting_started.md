@@ -1,5 +1,3 @@
-
-
 ## Getting Started
 
 To install `LoopVectorization.jl`, simply use the package and `] add LoopVectorization`, or

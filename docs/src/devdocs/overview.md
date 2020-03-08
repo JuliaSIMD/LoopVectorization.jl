@@ -1,5 +1,4 @@
-
-## Developer Overview
+# Developer Overview
 
 Here I will try to explain how the library works for the curious or any would-be contributors.
 

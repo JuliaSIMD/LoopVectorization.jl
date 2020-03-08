@@ -1,5 +1,4 @@
-
-## Lowering
+# Lowering
 
 The first step to lowering is picking a strategy for lowering the loops. Then a Julia expression is created following that strategy, converting each of the operations into Julia expressions.
 This task is made simpler via multiple dispatch making the lowering of the components independent of the larger picture. For example, a load will look like

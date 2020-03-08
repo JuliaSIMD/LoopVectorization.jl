@@ -1,3 +1,4 @@
+## Future Plans
 
 Future plans for LoopVectorization:
 1. Support triangular iteration spaces.

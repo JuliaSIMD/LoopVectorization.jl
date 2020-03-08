@@ -1,5 +1,4 @@
-
-## Constructing LoopSets
+# Constructing LoopSets
 
 When applying the `@avx` macro to a broadcast expression, the LoopSet object is constructed by recursively evaluating [add_broadcast!](https://github.com/chriselrod/LoopVectorization.jl/blob/master/src/broadcast.jl#L166) on all the fields. The function and involved operations are their relationships are straightforward to infer from the structure of nested broadcasts.
 ```julia

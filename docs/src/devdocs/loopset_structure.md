@@ -1,5 +1,4 @@
-
-## LoopSet Structure
+# LoopSet Structure
 
 The loopsets define loops as a set of operations that depend on one another, and also on loops. Cycles are not allowed, making it a directed acyclic graph. Currently, only single return values are supported.
 Lets use a set of nested loops performing matrix multiplication as an example. We can create a naive `LoopSet` from an expression (naive due to being created without access to any type information):
