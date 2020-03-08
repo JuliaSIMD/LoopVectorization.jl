@@ -1,7 +1,7 @@
 # LoopSet Structure
 
-The loopsets define loops as a set of operations that depend on one another, and also on loops. Cycles are not allowed, making it a directed acyclic graph. Currently, only single return values are supported.
-Lets use a set of nested loops performing matrix multiplication as an example. We can create a naive `LoopSet` from an expression (naive due to being created without access to any type information):
+The loopsets define loops as a set of operations that depend on one another, and also on loops. Cycles are not allowed, making it a directed acyclic graph.
+Let's use a set of nested loops performing matrix multiplication as an example. We can create a naive `LoopSet` from an expression (naive due to being created without access to any type information):
 ```julia
 julia> using LoopVectorization
 
@@ -50,8 +50,8 @@ julia> LoopVectorization.parents(ans)
  var"##tempload#258" = A[m, k]
  var"##tempload#259" = B[k, n]
  var"##reduction#260" = var"##reductzero#261"
- ```
-References to arrays are represtened with an `ArrayReferenceMeta` data structure:
+```
+References to arrays are represented with an `ArrayReferenceMeta` data structure:
 ```julia
 julia> LoopVectorization.operations(lsAmulB)[3].ref
 LoopVectorization.ArrayReferenceMeta(LoopVectorization.ArrayReference(:A, [:m, :k], Int8[0, 0]), Bool[1, 1], Symbol("##vptr##_A"))
@@ -59,4 +59,5 @@ LoopVectorization.ArrayReferenceMeta(LoopVectorization.ArrayReference(:A, [:m, :
 It contains the name of the parent array (`:A`), the indicies `[:m,:k]`, and a boolean vector (`Bool[1, 1]`) indicating whether these indices are loop iterables. Note that the optimizer assumes arrays are column-major, and thus that it is efficient to read contiguous elements from the first index. In lower level terms, it means that [high-throughput vmov](https://www.felixcloutier.com/x86/movupd) instructions can be used rather than [low-throughput](https://www.felixcloutier.com/x86/vgatherdpd:vgatherqpd) [gathers](https://www.felixcloutier.com/x86/vgatherqps:vgatherqpd). Similar story for storing elements.
 When no axis has unit stride, the first given index will be the dummy `Symbol("##DISCONTIGUOUSSUBARRAY##")`.
 
-
+!!! warning
+    Currently, only single return values are supported (tuple destructuring is not supported in assignments).
