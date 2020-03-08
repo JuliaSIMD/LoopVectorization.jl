@@ -289,7 +289,7 @@ function isreductcombineinstr(instr::Symbol)
 end
 isreductcombineinstr(instr::Instruction) = isreductcombineinstr(instr.instr)
 
-const FUNCTIONSYMBOLS = Dict{Type{<:Function},Instruction}(
+const FUNCTIONSYMBOLS = IdDict{Type{<:Function},Instruction}(
     typeof(+) => :(+),
     typeof(SIMDPirates.vadd) => :(+),
     typeof(SIMDPirates.vadd!) => :(+),
