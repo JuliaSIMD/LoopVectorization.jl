@@ -169,6 +169,110 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
+    "location": "api/#",
+    "page": "API reference",
+    "title": "API reference",
+    "category": "page",
+    "text": ""
+},
+
+{
+    "location": "api/#API-reference-1",
+    "page": "API reference",
+    "title": "API reference",
+    "category": "section",
+    "text": ""
+},
+
+{
+    "location": "api/#LoopVectorization.@avx",
+    "page": "API reference",
+    "title": "LoopVectorization.@avx",
+    "category": "macro",
+    "text": "@avx\n\nAnnotate a for loop, or a set of nested for loops whose bounds are constant across iterations, to optimize the computation. For example:\n\nfunction AmulBavx!(C, A, B)\n    @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)\n        Cₘₙ = zero(eltype(C))\n        for k ∈ 1:size(A,2)\n            Cₘₙ += A[m,k] * B[k,n]\n        end\n        C[m,n] = Cₘₙ\n    end\nend\n\nThe macro models the set of nested loops, and chooses an ordering of the three loops to minimize predicted computation time.\n\nIt may also apply to broadcasts:\n\njulia> using LoopVectorization\n\njulia> a = rand(100);\n\njulia> b = @avx exp.(2 .* a);\n\njulia> c = similar(b);\n\njulia> @avx @. c = exp(2a);\n\njulia> b ≈ c\ntrue\n\n\n\n\n\n"
+},
+
+{
+    "location": "api/#LoopVectorization.@_avx",
+    "page": "API reference",
+    "title": "LoopVectorization.@_avx",
+    "category": "macro",
+    "text": "@_avx\n\nThis macro transforms loops similarly to @avx. While @avx punts to a generated function to enable type-based analysis, _@avx works on just the expressions. This requires that it makes a number of default assumptions.\n\n\n\n\n\n"
+},
+
+{
+    "location": "api/#Macros-1",
+    "page": "API reference",
+    "title": "Macros",
+    "category": "section",
+    "text": "@avx\n@_avx"
+},
+
+{
+    "location": "api/#LoopVectorization.vmap",
+    "page": "API reference",
+    "title": "LoopVectorization.vmap",
+    "category": "function",
+    "text": "vmap(f, a::AbstractArray)\nvmap(f, a::AbstractArray, b::AbstractArray, ...)\n\nSIMD-vectorized map, applying f to each element of a (or paired elements of a, b, ...) and returning a new array.\n\n\n\n\n\n"
+},
+
+{
+    "location": "api/#LoopVectorization.vmap!",
+    "page": "API reference",
+    "title": "LoopVectorization.vmap!",
+    "category": "function",
+    "text": "vmap!(f, destination, a::AbstractArray)\nvmap!(f, destination, a::AbstractArray, b::AbstractArray, ...)\n\nVectorized-map!, applying f to each element of a (or paired elements of a, b, ...) and storing the result in destination.\n\n\n\n\n\n"
+},
+
+{
+    "location": "api/#LoopVectorization.vmapnt",
+    "page": "API reference",
+    "title": "LoopVectorization.vmapnt",
+    "category": "function",
+    "text": "vmapnt(f, a::AbstractArray)\nvmapnt(f, a::AbstractArray, b::AbstractArray, ...)\n\nA \"non-temporal\" variant of vmap. This can improve performance in cases where destination will not be needed soon.\n\n\n\n\n\n"
+},
+
+{
+    "location": "api/#LoopVectorization.vmapnt!",
+    "page": "API reference",
+    "title": "LoopVectorization.vmapnt!",
+    "category": "function",
+    "text": "vmapnt!(::Function, dest, args...)\n\nThis is a vectorized map implementation using nontemporal store operations. This means that the write operations to the destination will not go to the CPU\'s cache. If you will not immediately be reading from these values, this can improve performance because the writes won\'t pollute your cache. This can especially be the case if your arguments are very long.\n\njulia> using LoopVectorization, BenchmarkTools\n\njulia> x = rand(10^8); y = rand(10^8); z = similar(x);\n\njulia> f(x,y) = exp(-0.5abs2(x - y))\nf (generic function with 1 method)\n\njulia> @benchmark map!(f, $z, $x, $y)\nBenchmarkTools.Trial:\n  memory estimate:  0 bytes\n  allocs estimate:  0\n  --------------\n  minimum time:     439.613 ms (0.00% GC)\n  median time:      440.729 ms (0.00% GC)\n  mean time:        440.695 ms (0.00% GC)\n  maximum time:     441.665 ms (0.00% GC)\n  --------------\n  samples:          12\n  evals/sample:     1\n\njulia> @benchmark vmap!(f, $z, $x, $y)\nBenchmarkTools.Trial:\n  memory estimate:  0 bytes\n  allocs estimate:  0\n  --------------\n  minimum time:     178.147 ms (0.00% GC)\n  median time:      178.381 ms (0.00% GC)\n  mean time:        178.430 ms (0.00% GC)\n  maximum time:     179.054 ms (0.00% GC)\n  --------------\n  samples:          29\n  evals/sample:     1\n\njulia> @benchmark vmapnt!(f, $z, $x, $y)\nBenchmarkTools.Trial:\n  memory estimate:  0 bytes\n  allocs estimate:  0\n  --------------\n  minimum time:     144.183 ms (0.00% GC)\n  median time:      144.338 ms (0.00% GC)\n  mean time:        144.349 ms (0.00% GC)\n  maximum time:     144.641 ms (0.00% GC)\n  --------------\n  samples:          35\n  evals/sample:     1\n\n\n\n\n\n"
+},
+
+{
+    "location": "api/#LoopVectorization.vmapntt",
+    "page": "API reference",
+    "title": "LoopVectorization.vmapntt",
+    "category": "function",
+    "text": "vmapntt(f, a::AbstractArray)\nvmapntt(f, a::AbstractArray, b::AbstractArray, ...)\n\nA threaded variant of vmapnt.\n\n\n\n\n\n"
+},
+
+{
+    "location": "api/#LoopVectorization.vmapntt!",
+    "page": "API reference",
+    "title": "LoopVectorization.vmapntt!",
+    "category": "function",
+    "text": "vmapntt!(::Function, dest, args...)\n\nLike vmapnt! (see vmapnt!), but uses Threads.@threads for parallel execution.\n\n\n\n\n\n"
+},
+
+{
+    "location": "api/#map-like-constructs-1",
+    "page": "API reference",
+    "title": "map-like constructs",
+    "category": "section",
+    "text": "vmap\nvmap!\nvmapnt\nvmapnt!\nvmapntt\nvmapntt!"
+},
+
+{
+    "location": "api/#filter-like-constructs-1",
+    "page": "API reference",
+    "title": "filter-like constructs",
+    "category": "section",
+    "text": "vfilter\nvfilter!"
+},
+
+{
     "location": "devdocs/overview/#",
     "page": "Developer Overview",
     "title": "Developer Overview",
