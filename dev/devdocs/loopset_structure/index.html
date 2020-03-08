@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>- · LoopVectorization.jl</title><link href="https://cdnjs.cloudflare.com/ajax/libs/normalize/4.2.0/normalize.min.css" rel="stylesheet" type="text/css"/><link href="https://fonts.googleapis.com/css?family=Lato|Roboto+Mono" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.6.3/css/font-awesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/default.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.2.0/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link href="../../assets/documenter.css" rel="stylesheet" type="text/css"/></head><body><nav class="toc"><h1>LoopVectorization.jl</h1><select id="version-selector" onChange="window.location.href=this.value" style="visibility: hidden"></select><form class="search" id="search-form" action="../../search/"><input id="search-query" name="q" type="text" placeholder="Search docs"/></form><ul><li><a class="toctext" href="../../">Home</a></li><li><a class="toctext" href="../../getting_started/">Getting Started</a></li><li><span class="toctext">Examples</span><ul><li><a class="toctext" href="../../examples/matrix_multiplication/">Matrix Multiplication</a></li><li><a class="toctext" href="../../examples/matrix_vector_ops/">Matrix-Vector Operations</a></li><li><a class="toctext" href="../../examples/dot_product/">Dot Products</a></li><li><a class="toctext" href="../../examples/sum_of_squared_error/">Sum of squared error</a></li></ul></li><li><a class="toctext" href="../../vectorized_convenience_functions/">Vectorized Convenience Functions</a></li><li><a class="toctext" href="../../future_work/">Future Work</a></li><li><span class="toctext">Developer Documentation</span><ul><li><a class="toctext" href="../overview/">-</a></li><li class="current"><a class="toctext" href>-</a><ul class="internal"><li><a class="toctext" href="#LoopSet-Structure-1">LoopSet Structure</a></li></ul></li><li><a class="toctext" href="../constructing_loopsets/">-</a></li><li><a class="toctext" href="../evaluating_loops/">-</a></li><li><a class="toctext" href="../lowering/">-</a></li></ul></li></ul></nav><article id="docs"><header><nav><ul><li>Developer Documentation</li><li><a href>-</a></li></ul><a class="edit-page" href="https://github.com/chriselrod/LoopVectorization.jl/blob/master/docs/src/devdocs/loopset_structure.md"><span class="fa"></span> Edit on GitHub</a></nav><hr/><div id="topbar"><span>-</span><a class="fa fa-bars" href="#"></a></div></header><h2><a class="nav-anchor" id="LoopSet-Structure-1" href="#LoopSet-Structure-1">LoopSet Structure</a></h2><p>The loopsets define loops as a set of operations that depend on one another, and also on loops. Cycles are not allowed, making it a directed acyclic graph. Currently, only single return values are supported. Lets use a set of nested loops performing matrix multiplication as an example. We can create a naive <code>LoopSet</code> from an expression (naive due to being created without access to any type information):</p><pre><code class="language-julia">julia&gt; using LoopVectorization
+
+julia&gt; AmulBq = :(for m ∈ 1:M, n ∈ 1:N
+           C[m,n] = zero(eltype(B))
+           for k ∈ 1:K
+               C[m,n] += A[m,k] * B[k,n]
+           end
+       end);
+
+julia&gt; lsAmulB = LoopVectorization.LoopSet(AmulBq);</code></pre><p>This LoopSet consists of seven operations that define the relationships within the loop:</p><pre><code class="language-julia">julia&gt; LoopVectorization.operations(lsAmulB)
+7-element Array{LoopVectorization.Operation,1}:
+ var&quot;##RHS#256&quot; = var&quot;##zero#257&quot;
+ C[m, n] = var&quot;##RHS#256&quot;
+ var&quot;##tempload#258&quot; = A[m, k]
+ var&quot;##tempload#259&quot; = B[k, n]
+ var&quot;##reduction#260&quot; = var&quot;##reductzero#261&quot;
+ var&quot;##reduction#260&quot; = LoopVectorization.vfmadd_fast(var&quot;##tempload#258&quot;, var&quot;##tempload#259&quot;, var&quot;##reduction#260&quot;)
+ var&quot;##RHS#256&quot; = LoopVectorization.reduce_to_add(var&quot;##reduction#260&quot;, var&quot;##RHS#256&quot;)</code></pre><p>The act of performing a &quot;reduction&quot; across a loop introduces a few extra operations that manage creating a &quot;zero&quot; with respect to the reduction, and then combining with the specified value using <code>reduce_to_add</code>, which performs any necessary type conversions, such as from an <code>SVec</code> vector-type to a scalar, if necessary. This simplifies code generation, by making the functions agnostic with respect to the actual vectorization decisions the library makes.</p><p>Each operation is listed as depending on a set of loop iteration symbols:</p><pre><code class="language-julia">julia&gt; LoopVectorization.loopdependencies.(LoopVectorization.operations(lsAmulB))
+7-element Array{Array{Symbol,1},1}:
+ [:m, :n]
+ [:m, :n]
+ [:m, :k]
+ [:k, :n]
+ [:m, :n]
+ [:m, :k, :n]
+ [:m, :n]</code></pre><p>We can also see which of the operations each of these operations depend on:</p><pre><code class="language-julia">julia&gt; LoopVectorization.operations(lsAmulB)[6]
+var&quot;##reduction#260&quot; = LoopVectorization.vfmadd_fast(var&quot;##tempload#258&quot;, var&quot;##tempload#259&quot;, var&quot;##reduction#260&quot;)
+
+julia&gt; LoopVectorization.parents(ans)
+3-element Array{LoopVectorization.Operation,1}:
+ var&quot;##tempload#258&quot; = A[m, k]
+ var&quot;##tempload#259&quot; = B[k, n]
+ var&quot;##reduction#260&quot; = var&quot;##reductzero#261&quot;
+ ```
+References to arrays are represtened with an `ArrayReferenceMeta` data structure:</code></pre><p>julia julia&gt; LoopVectorization.operations(lsAmulB)[3].ref LoopVectorization.ArrayReferenceMeta(LoopVectorization.ArrayReference(:A, [:m, :k], Int8[0, 0]), Bool[1, 1], Symbol(&quot;##vptr##_A&quot;)) ``<code>It contains the name of the parent array (</code>:A<code>), the indicies</code>[:m,:k]<code>, and a boolean vector (</code>Bool[1, 1]<code>) indicating whether these indices are loop iterables. Note that the optimizer assumes arrays are column-major, and thus that it is efficient to read contiguous elements from the first index. In lower level terms, it means that [high-throughput vmov](https://www.felixcloutier.com/x86/movupd) instructions can be used rather than [low-throughput](https://www.felixcloutier.com/x86/vgatherdpd:vgatherqpd) [gathers](https://www.felixcloutier.com/x86/vgatherqps:vgatherqpd). Similar story for storing elements. When no axis has unit stride, the first given index will be the dummy</code>Symbol(&quot;##DISCONTIGUOUSSUBARRAY##&quot;)`.</p><footer><hr/><a class="previous" href="../overview/"><span class="direction">Previous</span><span class="title">-</span></a><a class="next" href="../constructing_loopsets/"><span class="direction">Next</span><span class="title">-</span></a></footer></article></body></html>

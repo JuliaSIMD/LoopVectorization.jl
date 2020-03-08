@@ -21,7 +21,7 @@ var documenterSearchIndex = {"docs": [
     "page": "Home",
     "title": "Manual Outline",
     "category": "section",
-    "text": "Pages = [\n    \"getting_started.md\",\n    \"examples/matrix_multiplication.md\",\n    \"examples/matrix_vector_ops.md\",\n    \"examples/dot_product.md\",\n    \"examples/sum_of_squared_error.md\",\n    \"vectorized_convenience_functions.md\",\n    \"future_work.md\"\n]\nDepth = 1"
+    "text": "Pages = [\n    \"getting_started.md\",\n    \"examples/matrix_multiplication.md\",\n    \"examples/matrix_vector_ops.md\",\n    \"examples/dot_product.md\",\n    \"examples/sum_of_squared_error.md\",\n    \"vectorized_convenience_functions.md\",\n    \"future_work.md\",\n	\"devdocs/overview.md\",\n	\"devdocs/loopset_structure.md\",\n	\"devdocs/constructing_loopsets.md\",\n	\"devdocs/evaluating_loops.md\",\n	\"devdocs/lowering.md\"\n]\nDepth = 1"
 },
 
 {
@@ -37,7 +37,7 @@ var documenterSearchIndex = {"docs": [
     "page": "Getting Started",
     "title": "Getting Started",
     "category": "section",
-    "text": "To install LoopVectorization.jl, simply use the package and ] add LoopVectorization, orusing Pkg\nPkg.add(\"LoopVectorization\")Currently LoopVectorization only supports rectangular iteration spaces, although I plan on extending it to triangular and ragged iteration spaces in the future. This means that if you nest multiple loops, the number of iterations of the inner loops shouldn\'t be a function of the outer loops. For example,using LoopVectorization \n\nfunction mvp(P, basis, coeffs::Vector{T}) where {T}\n    C = length(coeffs)\n    A = size(P, 1)\n    p = zero(T)\n    @avx for c ∈ 1:C\n        pc = coeffs[c]\n        for a = 1:A\n            pc *= P[a, basis[a, c]]\n        end\n        p += pc\n    end\n	p\nend\n\nmaxdeg = 20; nbasis = 1_000; dim = 15;\nr = 1:maxdeg+1\nbasis = rand(r, (dim, nbasis));\ncoeffs = rand(T, nbasis);\nP = rand(T, dim, maxdeg+1);\n\nmvp(P, basis, coeffs)Aside from loops, LoopVectorization.jl also supports broadcasting.danger: Danger\nBroadcasting an Array A when size(A,1) == 1 is NOT SUPPORTED, unless this is known at compile time (e.g., broadcasting a transposed vector is fine). Otherwise, you will probably crash Julia.julia> using LoopVectorization, BenchmarkTools\n\njulia> M, K, N = 47, 73, 7;\n\njulia> A = rand(M, K);\n\njulia> b = rand(K);\n\njulia> c = rand(M);\n\njulia> d = rand(1,K,N);\n\njulia> #You can use a LowDimArray when you have a leading dimension of size 1.\n       ldad = LowDimArray{(false,true,true)}(d);\n\njulia> E1 = Array{Float64}(undef, M, K, N);\n\njulia> E2 = similar(E1);\n\njulia> @benchmark      @. $E1 = exp($A - $b\' +    $d) * $c\nBenchmarkTools.Trial: \n  memory estimate:  112 bytes\n  allocs estimate:  5\n  --------------\n  minimum time:     224.142 μs (0.00% GC)\n  median time:      225.773 μs (0.00% GC)\n  mean time:        229.146 μs (0.00% GC)\n  maximum time:     289.601 μs (0.00% GC)\n  --------------\n  samples:          10000\n  evals/sample:     1\n\njulia> @benchmark @avx @. $E2 = exp($A - $b\' + $ldad) * $c\nBenchmarkTools.Trial: \n  memory estimate:  0 bytes\n  allocs estimate:  0\n  --------------\n  minimum time:     19.666 μs (0.00% GC)\n  median time:      19.737 μs (0.00% GC)\n  mean time:        19.759 μs (0.00% GC)\n  maximum time:     29.906 μs (0.00% GC)\n  --------------\n  samples:          10000\n  evals/sample:     1\n\njulia> E1 ≈ E2\ntrue"
+    "text": "To install LoopVectorization.jl, simply use the package and ] add LoopVectorization, orusing Pkg\nPkg.add(\"LoopVectorization\")Currently LoopVectorization only supports rectangular iteration spaces, although I plan on extending it to triangular and ragged iteration spaces in the future. This means that if you nest multiple loops, the number of iterations of the inner loops shouldn\'t be a function of the outer loops. For example,using LoopVectorization \n\nfunction mvp(P, basis, coeffs::Vector{T}) where {T}\n    C = length(coeffs)\n    A = size(P, 1)\n    p = zero(T)\n    @avx for c ∈ 1:C\n        pc = coeffs[c]\n        for a = 1:A\n            pc *= P[a, basis[a, c]]\n        end\n        p += pc\n    end\n	p\nend\n\nmaxdeg = 20; nbasis = 1_000; dim = 15;\nr = 1:maxdeg+1\nbasis = rand(r, (dim, nbasis));\ncoeffs = rand(T, nbasis);\nP = rand(T, dim, maxdeg+1);\n\nmvp(P, basis, coeffs)Aside from loops, LoopVectorization.jl also supports broadcasting.danger: Danger\nBroadcasting an Array A when size(A,1) == 1 is NOT SUPPORTED, unless this is known at compile time (e.g., broadcasting a transposed vector is fine). Otherwise, you will probably crash Julia.julia> using LoopVectorization, BenchmarkTools\n\njulia> M, K, N = 47, 73, 7;\n\njulia> A = rand(M, K);\n\njulia> b = rand(K);\n\njulia> c = rand(M);\n\njulia> d = rand(1,K,N);\n\njulia> #You can use a LowDimArray when you have a leading dimension of size 1.\n       ldad = LowDimArray{(false,true,true)}(d);\n\njulia> E1 = Array{Float64}(undef, M, K, N);\n\njulia> E2 = similar(E1);\n\njulia> @benchmark @. $E1 = exp($A - $b\' +    $d) * $c\nBenchmarkTools.Trial: \n  memory estimate:  112 bytes\n  allocs estimate:  5\n  --------------\n  minimum time:     224.142 μs (0.00% GC)\n  median time:      225.773 μs (0.00% GC)\n  mean time:        229.146 μs (0.00% GC)\n  maximum time:     289.601 μs (0.00% GC)\n  --------------\n  samples:          10000\n  evals/sample:     1\n\njulia> @benchmark @avx @. $E2 = exp($A - $b\' + $ldad) * $c\nBenchmarkTools.Trial: \n  memory estimate:  0 bytes\n  allocs estimate:  0\n  --------------\n  minimum time:     19.666 μs (0.00% GC)\n  median time:      19.737 μs (0.00% GC)\n  mean time:        19.759 μs (0.00% GC)\n  maximum time:     29.906 μs (0.00% GC)\n  --------------\n  samples:          10000\n  evals/sample:     1\n\njulia> E1 ≈ E2\ntrue"
 },
 
 {
@@ -137,6 +137,14 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
+    "location": "vectorized_convenience_functions/#vmapnt-and-vmapntt-1",
+    "page": "Vectorized Convenience Functions",
+    "title": "vmapnt and vmapntt",
+    "category": "section",
+    "text": "These are like vmap, but use non-temporal (streaming) stores into the destination, to avoid polluting the cache. Likely to yield a performance increase if you wont be reading the values soon.julia> using LoopVectorization, BenchmarkTools\n\njulia> f(x,y) = exp(-0.5abs2(x - y))\nf (generic function with 1 method)\n\njulia> x = rand(10^8); y = rand(10^8); z = similar(x);\n\njulia> @benchmark map!(f, $z, $x, $y)\nBenchmarkTools.Trial:\n  memory estimate:  0 bytes\n  allocs estimate:  0\n  --------------\n  minimum time:     442.614 ms (0.00% GC)\n  median time:      443.750 ms (0.00% GC)\n  mean time:        443.664 ms (0.00% GC)\n  maximum time:     444.730 ms (0.00% GC)\n  --------------\n  samples:          12\n  evals/sample:     1\n\njulia> @benchmark vmap!(f, $z, $x, $y)\nBenchmarkTools.Trial:\n  memory estimate:  0 bytes\n  allocs estimate:  0\n  --------------\n  minimum time:     177.257 ms (0.00% GC)\n  median time:      177.380 ms (0.00% GC)\n  mean time:        177.423 ms (0.00% GC)\n  maximum time:     177.956 ms (0.00% GC)\n  --------------\n  samples:          29\n  evals/sample:     1\n\njulia> @benchmark vmapnt!(f, $z, $x, $y)\nBenchmarkTools.Trial:\n  memory estimate:  0 bytes\n  allocs estimate:  0\n  --------------\n  minimum time:     143.521 ms (0.00% GC)\n  median time:      143.639 ms (0.00% GC)\n  mean time:        143.645 ms (0.00% GC)\n  maximum time:     143.821 ms (0.00% GC)\n  --------------\n  samples:          35\n  evals/sample:     1\n\njulia> Threads.nthreads()\n36\n\njulia> @benchmark vmapntt!(f, $z, $x, $y)\nBenchmarkTools.Trial:\n  memory estimate:  25.69 KiB\n  allocs estimate:  183\n  --------------\n  minimum time:     30.065 ms (0.00% GC)\n  median time:      30.130 ms (0.00% GC)\n  mean time:        30.146 ms (0.00% GC)\n  maximum time:     31.277 ms (0.00% GC)\n  --------------\n  samples:          166\n  evals/sample:     1"
+},
+
+{
     "location": "vectorized_convenience_functions/#vfilter-1",
     "page": "Vectorized Convenience Functions",
     "title": "vfilter",
@@ -150,6 +158,86 @@ var documenterSearchIndex = {"docs": [
     "title": "Future Work",
     "category": "page",
     "text": "Future plans for LoopVectorization:Support triangular iteration spaces.\nIdentify obvious loop-carried dependencies like A[j] and A[j-1].\nBe able to generate optimized kernels from simple loop-based implementations of operations like Cholesky decompositions or solving triangular systems of equations.\nModel memory and CPU-cache to possibly insert extra loops and packing of data when deemed profitable.\nTrack types of individual operations in the loops. Currently, multiple types in loops aren\'t really handled, so this is a bit brittle at the moment.\nHandle loops where arrays contain non-primitive types (e.g., Complex numbers) well.Contributions are more than welcome, and I would be happy to assist if anyone would like to take a stab at any of these. Otherwise, while LoopVectorization is a core component to much of my work, so that I will continue developing it, I have many other projects that require active development, so it will be a long time before I am able to address these myself."
+},
+
+{
+    "location": "devdocs/overview/#",
+    "page": "-",
+    "title": "-",
+    "category": "page",
+    "text": ""
+},
+
+{
+    "location": "devdocs/overview/#Developer-Overview-1",
+    "page": "-",
+    "title": "Developer Overview",
+    "category": "section",
+    "text": "Here I will try to explain how the library works for the curious or any would-be contributors.The library uses a LoopSet object to model loops. The key components of the library can be divided into:Defining the LoopSet objects.\nConstructing the LoopSet objects.\nDetermining the strategy of how to evaluate loops.\nLowering the loopset object into a Julia Expr following a strategy."
+},
+
+{
+    "location": "devdocs/loopset_structure/#",
+    "page": "-",
+    "title": "-",
+    "category": "page",
+    "text": ""
+},
+
+{
+    "location": "devdocs/loopset_structure/#LoopSet-Structure-1",
+    "page": "-",
+    "title": "LoopSet Structure",
+    "category": "section",
+    "text": "The loopsets define loops as a set of operations that depend on one another, and also on loops. Cycles are not allowed, making it a directed acyclic graph. Currently, only single return values are supported. Lets use a set of nested loops performing matrix multiplication as an example. We can create a naive LoopSet from an expression (naive due to being created without access to any type information):julia> using LoopVectorization\n\njulia> AmulBq = :(for m ∈ 1:M, n ∈ 1:N\n           C[m,n] = zero(eltype(B))\n           for k ∈ 1:K\n               C[m,n] += A[m,k] * B[k,n]\n           end\n       end);\n\njulia> lsAmulB = LoopVectorization.LoopSet(AmulBq);This LoopSet consists of seven operations that define the relationships within the loop:julia> LoopVectorization.operations(lsAmulB)\n7-element Array{LoopVectorization.Operation,1}:\n var\"##RHS#256\" = var\"##zero#257\"\n C[m, n] = var\"##RHS#256\"\n var\"##tempload#258\" = A[m, k]\n var\"##tempload#259\" = B[k, n]\n var\"##reduction#260\" = var\"##reductzero#261\"\n var\"##reduction#260\" = LoopVectorization.vfmadd_fast(var\"##tempload#258\", var\"##tempload#259\", var\"##reduction#260\")\n var\"##RHS#256\" = LoopVectorization.reduce_to_add(var\"##reduction#260\", var\"##RHS#256\")The act of performing a \"reduction\" across a loop introduces a few extra operations that manage creating a \"zero\" with respect to the reduction, and then combining with the specified value using reduce_to_add, which performs any necessary type conversions, such as from an SVec vector-type to a scalar, if necessary. This simplifies code generation, by making the functions agnostic with respect to the actual vectorization decisions the library makes.Each operation is listed as depending on a set of loop iteration symbols:julia> LoopVectorization.loopdependencies.(LoopVectorization.operations(lsAmulB))\n7-element Array{Array{Symbol,1},1}:\n [:m, :n]\n [:m, :n]\n [:m, :k]\n [:k, :n]\n [:m, :n]\n [:m, :k, :n]\n [:m, :n]We can also see which of the operations each of these operations depend on:julia> LoopVectorization.operations(lsAmulB)[6]\nvar\"##reduction#260\" = LoopVectorization.vfmadd_fast(var\"##tempload#258\", var\"##tempload#259\", var\"##reduction#260\")\n\njulia> LoopVectorization.parents(ans)\n3-element Array{LoopVectorization.Operation,1}:\n var\"##tempload#258\" = A[m, k]\n var\"##tempload#259\" = B[k, n]\n var\"##reduction#260\" = var\"##reductzero#261\"\n ```\nReferences to arrays are represtened with an `ArrayReferenceMeta` data structure:julia julia> LoopVectorization.operations(lsAmulB)[3].ref LoopVectorization.ArrayReferenceMeta(LoopVectorization.ArrayReference(:A, [:m, :k], Int8[0, 0]), Bool[1, 1], Symbol(\"##vptr##_A\")) ``It contains the name of the parent array (:A), the indicies[:m,:k], and a boolean vector (Bool[1, 1]) indicating whether these indices are loop iterables. Note that the optimizer assumes arrays are column-major, and thus that it is efficient to read contiguous elements from the first index. In lower level terms, it means that [high-throughput vmov](https://www.felixcloutier.com/x86/movupd) instructions can be used rather than [low-throughput](https://www.felixcloutier.com/x86/vgatherdpd:vgatherqpd) [gathers](https://www.felixcloutier.com/x86/vgatherqps:vgatherqpd). Similar story for storing elements. When no axis has unit stride, the first given index will be the dummySymbol(\"##DISCONTIGUOUSSUBARRAY##\")`."
+},
+
+{
+    "location": "devdocs/constructing_loopsets/#",
+    "page": "-",
+    "title": "-",
+    "category": "page",
+    "text": ""
+},
+
+{
+    "location": "devdocs/constructing_loopsets/#Constructing-LoopSets-1",
+    "page": "-",
+    "title": "Constructing LoopSets",
+    "category": "section",
+    "text": "When applying the @avx macro to a broadcast expression, the LoopSet object is constructed by recursively evaluating add_broadcast! on all the fields. The function and involved operations are their relationships are straightforward to infer from the structure of nested broadcasts.julia> Meta.@lower @. f(g(a,b) + c) / d\n:($(Expr(:thunk, CodeInfo(\n    @ none within `top-level scope\'\n1 ─ %1 = Base.broadcasted(g, a, b)\n│   %2 = Base.broadcasted(+, %1, c)\n│   %3 = Base.broadcasted(f, %2)\n│   %4 = Base.broadcasted(/, %3, d)\n│   %5 = Base.materialize(%4)\n└──      return %5\n))))\n\njulia> @macroexpand @avx @. f(g(a,b) + c) / d\nquote\n    var\"##262\" = Base.broadcasted(g, a, b)\n    var\"##263\" = Base.broadcasted(+, var\"##262\", c)\n    var\"##264\" = Base.broadcasted(f, var\"##263\")\n    var\"##265\" = Base.broadcasted(/, var\"##264\", d)\n    var\"##266\" = LoopVectorization.vmaterialize(var\"##265\", Val{:Main}())\nendThese nested broadcasted objects already express information very similar to what the LoopSet objects hold. The dimensionality of the objects provides the information on the associated loop dependencies.When applying @avx to a loop expression, it creates a LoopSet without awareness to type information, and then condenses the information into a summary which is passed as type information to a generated function.julia> @macroexpand @avx for m ∈ 1:M, n ∈ 1:N\n           C[m,n] = zero(eltype(B))\n           for k ∈ 1:K\n               C[m,n] += A[m,k] * B[k,n]\n           end\n       end\nquote\n    var\"##vptr##_C\" = LoopVectorization.stridedpointer(C)\n    var\"##vptr##_A\" = LoopVectorization.stridedpointer(A)\n    var\"##vptr##_B\" = LoopVectorization.stridedpointer(B)\n    begin\n        $(Expr(:gc_preserve, :(LoopVectorization._avx_!(Val{(0, 0)}(), Tuple{:numericconstant, Symbol(\"##zero#270\"), LoopVectorization.OperationStruct(0x0000000000000012, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, LoopVectorization.constant, 0x00, 0x01), :LoopVectorization, :setindex!, LoopVectorization.OperationStruct(0x0000000000000012, 0x0000000000000000, 0x0000000000000000, 0x0000000000000007, LoopVectorization.memstore, 0x01, 0x02), :LoopVectorization, :getindex, LoopVectorization.OperationStruct(0x0000000000000013, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, LoopVectorization.memload, 0x02, 0x03), :LoopVectorization, :getindex, LoopVectorization.OperationStruct(0x0000000000000032, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, LoopVectorization.memload, 0x03, 0x04), :numericconstant, Symbol(\"##reductzero#274\"), LoopVectorization.OperationStruct(0x0000000000000012, 0x0000000000000000, 0x0000000000000003, 0x0000000000000000, LoopVectorization.constant, 0x00, 0x05), :LoopVectorization, :vfmadd_fast, LoopVectorization.OperationStruct(0x0000000000000132, 0x0000000000000003, 0x0000000000000000, 0x0000000000030405, LoopVectorization.compute, 0x00, 0x05), :LoopVectorization, :reduce_to_add, LoopVectorization.OperationStruct(0x0000000000000012, 0x0000000000000003, 0x0000000000000000, 0x0000000000000601, LoopVectorization.compute, 0x00, 0x01)}, Tuple{LoopVectorization.ArrayRefStruct(0x0000000000000101, 0x0000000000000102, 0xffffffffffffe03b), LoopVectorization.ArrayRefStruct(0x0000000000000101, 0x0000000000000103, 0xffffffffffffffd6), LoopVectorization.ArrayRefStruct(0x0000000000000101, 0x0000000000000302, 0xffffffffffffe056), LoopVectorization.ArrayRefStruct(0x0000000000000101, 0x0000000000000102, 0xffffffffffffffd6)}, Tuple{0, Tuple{}, Tuple{}, Tuple{}, Tuple{}, Tuple{(1, LoopVectorization.IntOrFloat), (5, LoopVectorization.IntOrFloat)}, Tuple{}}, (LoopVectorization.StaticLowerUnitRange{0}(M), LoopVectorization.StaticLowerUnitRange{0}(N), LoopVectorization.StaticLowerUnitRange{0}(K)), var\"##vptr##_C\", var\"##vptr##_A\", var\"##vptr##_B\", var\"##vptr##_C\")), :C, :A, :B))\n    end\nendThis summary is then reconstruced using the available type information. This type information can be used, for example, to realize an array has been tranposed, and thus correctly identify which axis contains contiguous elements that are efficient to load from. This is why  The three chief components of the summaries are the definitions of operations, e.g.::LoopVectorization, :getindex, LoopVectorization.OperationStruct(0x0000000000000013, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, LoopVectorization.memload, 0x02, 0x03)the referenced array objects:LoopVectorization.ArrayRefStruct(0x0000000000000101, 0x0000000000000102, 0xffffffffffffe03b)and the set of loop bounds:(LoopVectorization.StaticLowerUnitRange{0}(M), LoopVectorization.StaticLowerUnitRange{0}(N), LoopVectorization.StaticLowerUnitRange{0}(K))"
+},
+
+{
+    "location": "devdocs/evaluating_loops/#",
+    "page": "-",
+    "title": "-",
+    "category": "page",
+    "text": ""
+},
+
+{
+    "location": "devdocs/evaluating_loops/#Determining-the-strategy-for-evaluating-loops-1",
+    "page": "-",
+    "title": "Determining the strategy for evaluating loops",
+    "category": "section",
+    "text": "The heart of the optimizatizations performed by LoopVectorization are given in the determinestrategy.jl file utilizing instruction costs specified in costs.jl. Essentially, it estimates the cost of different means of evaluating the loops. It iterates through the different possible loop orders, as well as considering which loops to unroll, and which to vectorize. It will consider unrolling 1 or 2 loops (but it could settle on unrolling by a factor of 1, i.e. not unrolling), and vectorizing 1."
+},
+
+{
+    "location": "devdocs/lowering/#",
+    "page": "-",
+    "title": "-",
+    "category": "page",
+    "text": ""
+},
+
+{
+    "location": "devdocs/lowering/#Lowering-1",
+    "page": "-",
+    "title": "Lowering",
+    "category": "section",
+    "text": "The first step to lowering is picking a strategy for lowering the loops. Then a Julia expression is created following that strategy, converting each of the operations into Julia expressions. This task is made simpler via multiple dispatch making the lowering of the components independent of the larger picture. For example, a load will look likevload(vptr_A, (i,j,k))with the behavior of this load determined by the types of the arguments. Vectorization is expressed by making an index a _MM{W} type, rather than an integer, and operations with it will either produce another _MM{W} when it will still correspond to contiguous loads, or an SVec{W,<:Integer} if the resulting loads will be discontiguous, so that a gather or scatter! will be used. If all indexes are simply integers, then this produces a scalar load or store."
 },
 
 ]}

@@ -1,5 +1,65 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Vectorized Convenience Functions · LoopVectorization.jl</title><link href="https://cdnjs.cloudflare.com/ajax/libs/normalize/4.2.0/normalize.min.css" rel="stylesheet" type="text/css"/><link href="https://fonts.googleapis.com/css?family=Lato|Roboto+Mono" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.6.3/css/font-awesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/default.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.2.0/require.min.js" data-main="../assets/documenter.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link href="../assets/documenter.css" rel="stylesheet" type="text/css"/></head><body><nav class="toc"><h1>LoopVectorization.jl</h1><select id="version-selector" onChange="window.location.href=this.value" style="visibility: hidden"></select><form class="search" id="search-form" action="../search/"><input id="search-query" name="q" type="text" placeholder="Search docs"/></form><ul><li><a class="toctext" href="../">Home</a></li><li><a class="toctext" href="../getting_started/">Getting Started</a></li><li><span class="toctext">Examples</span><ul><li><a class="toctext" href="../examples/matrix_multiplication/">Matrix Multiplication</a></li><li><a class="toctext" href="../examples/matrix_vector_ops/">Matrix-Vector Operations</a></li><li><a class="toctext" href="../examples/dot_product/">Dot Products</a></li><li><a class="toctext" href="../examples/sum_of_squared_error/">Sum of squared error</a></li></ul></li><li class="current"><a class="toctext" href>Vectorized Convenience Functions</a><ul class="internal"><li><a class="toctext" href="#vmap-1">vmap</a></li><li><a class="toctext" href="#vfilter-1">vfilter</a></li></ul></li><li><a class="toctext" href="../future_work/">Future Work</a></li></ul></nav><article id="docs"><header><nav><ul><li><a href>Vectorized Convenience Functions</a></li></ul><a class="edit-page" href="https://github.com/chriselrod/LoopVectorization.jl/blob/master/docs/src/vectorized_convenience_functions.md"><span class="fa"></span> Edit on GitHub</a></nav><hr/><div id="topbar"><span>Vectorized Convenience Functions</span><a class="fa fa-bars" href="#"></a></div></header><h1><a class="nav-anchor" id="Convenient-Vectorized-Functions-1" href="#Convenient-Vectorized-Functions-1">Convenient Vectorized Functions</a></h1><h2><a class="nav-anchor" id="vmap-1" href="#vmap-1">vmap</a></h2><p>This is simply a vectorized <code>map</code> function.</p><h2><a class="nav-anchor" id="vfilter-1" href="#vfilter-1">vfilter</a></h2><p>This function requires LLVM 7 or greater, and is only likly to give better performance if your CPU has AVX512. This is because it uses the compressed store intrinsic, which was added in LLVM 7. AVX512 provides a corresponding instruction, making the operation fast, while other instruction sets must emulate it, and thus are likely to get similar performance with <code>LoopVectorization.vfilter</code> as they do from <code>Base.filter</code>.</p><pre><code class="language-julia">julia&gt; using LoopVectorization, BenchmarkTools
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Vectorized Convenience Functions · LoopVectorization.jl</title><link href="https://cdnjs.cloudflare.com/ajax/libs/normalize/4.2.0/normalize.min.css" rel="stylesheet" type="text/css"/><link href="https://fonts.googleapis.com/css?family=Lato|Roboto+Mono" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.6.3/css/font-awesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/default.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.2.0/require.min.js" data-main="../assets/documenter.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link href="../assets/documenter.css" rel="stylesheet" type="text/css"/></head><body><nav class="toc"><h1>LoopVectorization.jl</h1><select id="version-selector" onChange="window.location.href=this.value" style="visibility: hidden"></select><form class="search" id="search-form" action="../search/"><input id="search-query" name="q" type="text" placeholder="Search docs"/></form><ul><li><a class="toctext" href="../">Home</a></li><li><a class="toctext" href="../getting_started/">Getting Started</a></li><li><span class="toctext">Examples</span><ul><li><a class="toctext" href="../examples/matrix_multiplication/">Matrix Multiplication</a></li><li><a class="toctext" href="../examples/matrix_vector_ops/">Matrix-Vector Operations</a></li><li><a class="toctext" href="../examples/dot_product/">Dot Products</a></li><li><a class="toctext" href="../examples/sum_of_squared_error/">Sum of squared error</a></li></ul></li><li class="current"><a class="toctext" href>Vectorized Convenience Functions</a><ul class="internal"><li><a class="toctext" href="#vmap-1">vmap</a></li><li><a class="toctext" href="#vmapnt-and-vmapntt-1">vmapnt and vmapntt</a></li><li><a class="toctext" href="#vfilter-1">vfilter</a></li></ul></li><li><a class="toctext" href="../future_work/">Future Work</a></li><li><span class="toctext">Developer Documentation</span><ul><li><a class="toctext" href="../devdocs/overview/">-</a></li><li><a class="toctext" href="../devdocs/loopset_structure/">-</a></li><li><a class="toctext" href="../devdocs/constructing_loopsets/">-</a></li><li><a class="toctext" href="../devdocs/evaluating_loops/">-</a></li><li><a class="toctext" href="../devdocs/lowering/">-</a></li></ul></li></ul></nav><article id="docs"><header><nav><ul><li><a href>Vectorized Convenience Functions</a></li></ul><a class="edit-page" href="https://github.com/chriselrod/LoopVectorization.jl/blob/master/docs/src/vectorized_convenience_functions.md"><span class="fa"></span> Edit on GitHub</a></nav><hr/><div id="topbar"><span>Vectorized Convenience Functions</span><a class="fa fa-bars" href="#"></a></div></header><h1><a class="nav-anchor" id="Convenient-Vectorized-Functions-1" href="#Convenient-Vectorized-Functions-1">Convenient Vectorized Functions</a></h1><h2><a class="nav-anchor" id="vmap-1" href="#vmap-1">vmap</a></h2><p>This is simply a vectorized <code>map</code> function.</p><h2><a class="nav-anchor" id="vmapnt-and-vmapntt-1" href="#vmapnt-and-vmapntt-1">vmapnt and vmapntt</a></h2><p>These are like <code>vmap</code>, but use non-temporal (streaming) stores into the destination, to avoid polluting the cache. Likely to yield a performance increase if you wont be reading the values soon.</p><pre><code class="language-julia">julia&gt; using LoopVectorization, BenchmarkTools
+
+julia&gt; f(x,y) = exp(-0.5abs2(x - y))
+f (generic function with 1 method)
+
+julia&gt; x = rand(10^8); y = rand(10^8); z = similar(x);
+
+julia&gt; @benchmark map!(f, $z, $x, $y)
+BenchmarkTools.Trial:
+  memory estimate:  0 bytes
+  allocs estimate:  0
+  --------------
+  minimum time:     442.614 ms (0.00% GC)
+  median time:      443.750 ms (0.00% GC)
+  mean time:        443.664 ms (0.00% GC)
+  maximum time:     444.730 ms (0.00% GC)
+  --------------
+  samples:          12
+  evals/sample:     1
+
+julia&gt; @benchmark vmap!(f, $z, $x, $y)
+BenchmarkTools.Trial:
+  memory estimate:  0 bytes
+  allocs estimate:  0
+  --------------
+  minimum time:     177.257 ms (0.00% GC)
+  median time:      177.380 ms (0.00% GC)
+  mean time:        177.423 ms (0.00% GC)
+  maximum time:     177.956 ms (0.00% GC)
+  --------------
+  samples:          29
+  evals/sample:     1
+
+julia&gt; @benchmark vmapnt!(f, $z, $x, $y)
+BenchmarkTools.Trial:
+  memory estimate:  0 bytes
+  allocs estimate:  0
+  --------------
+  minimum time:     143.521 ms (0.00% GC)
+  median time:      143.639 ms (0.00% GC)
+  mean time:        143.645 ms (0.00% GC)
+  maximum time:     143.821 ms (0.00% GC)
+  --------------
+  samples:          35
+  evals/sample:     1
+
+julia&gt; Threads.nthreads()
+36
+
+julia&gt; @benchmark vmapntt!(f, $z, $x, $y)
+BenchmarkTools.Trial:
+  memory estimate:  25.69 KiB
+  allocs estimate:  183
+  --------------
+  minimum time:     30.065 ms (0.00% GC)
+  median time:      30.130 ms (0.00% GC)
+  mean time:        30.146 ms (0.00% GC)
+  maximum time:     31.277 ms (0.00% GC)
+  --------------
+  samples:          166
+  evals/sample:     1</code></pre><h2><a class="nav-anchor" id="vfilter-1" href="#vfilter-1">vfilter</a></h2><p>This function requires LLVM 7 or greater, and is only likly to give better performance if your CPU has AVX512. This is because it uses the compressed store intrinsic, which was added in LLVM 7. AVX512 provides a corresponding instruction, making the operation fast, while other instruction sets must emulate it, and thus are likely to get similar performance with <code>LoopVectorization.vfilter</code> as they do from <code>Base.filter</code>.</p><pre><code class="language-julia">julia&gt; using LoopVectorization, BenchmarkTools
 
 julia&gt; x = rand(997);
 
