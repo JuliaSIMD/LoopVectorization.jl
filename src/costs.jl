@@ -35,21 +35,21 @@ Base.isequal(ins1::Instruction, ins2::Instruction) = (ins1.instr === ins2.instr)
 const LOOPCONSTANT = Instruction(gensym())
 
 struct InstructionCost
-    scaling::Float64 # sentinel values: -3 == no scaling; -2 == offset_scaling, -1 == linear scaling, >0 ->  == latency == reciprical throughput
-    scalar_reciprical_throughput::Float64
+    scaling::Float64 # sentinel values: -3 == no scaling; -2 == offset_scaling, -1 == linear scaling, >0 ->  == latency == reciprocal throughput
+    scalar_reciprocal_throughput::Float64
     scalar_latency::Int
     register_pressure::Int
 end
 InstructionCost(sl::Int, srt::Float64, scaling::Float64 = -3.0) = InstructionCost(scaling, srt, sl, 0)
 
-nocost(c::InstructionCost) = c.scalar_reciprical_throughput == 0.0
+nocost(c::InstructionCost) = c.scalar_reciprocal_throughput == 0.0
 flatcost(c::InstructionCost) = c.scaling == -3.0
 offsetscaling(c::InstructionCost) = c.scaling == -2.0
 linearscaling(c::InstructionCost) = c.scaling == -1.0
 
 function scalar_cost(ic::InstructionCost)#, ::Type{T} = Float64) where {T}
-    @unpack scalar_reciprical_throughput, scalar_latency, register_pressure = ic
-    scalar_reciprical_throughput, scalar_latency, register_pressure
+    @unpack scalar_reciprocal_throughput, scalar_latency, register_pressure = ic
+    scalar_reciprocal_throughput, scalar_latency, register_pressure
 end
 function vector_cost(ic::InstructionCost, Wshift, sizeof_T)
     srt, sl, srp = scalar_cost(ic)
@@ -68,7 +68,7 @@ function vector_cost(ic::InstructionCost, Wshift, sizeof_T)
     else # we assume custom cost, and that latency == recip_throughput
         scaling = ic.scaling
         sl, srt = round(Int,scaling), scaling
-    end    
+    end
     srt, sl, srp
 end
 # instruction_cost(instruction::Symbol) = get(COST, instruction, OPAQUE_INSTRUCTION)
@@ -278,7 +278,7 @@ function reduction_combine_to(x::Float64)
     x == 1.0 ? :reduce_to_add : x == 2.0 ? :reduce_to_prod : x == 5.0 ? :reduce_to_max : x == 6.0 ? :reduce_to_min : throw("Reduction not found.")
 end
 reduction_combine_to(x) = reduction_combine_to(reduction_instruction_class(x))
-function reduction_zero(x::Float64) 
+function reduction_zero(x::Float64)
     # x == 1.0 ? :zero : x == 2.0 ? :one : x == 3.0 ? :false : x == 4.0 ? :true : x == 5.0 ? :typemin : x == 6.0 ? :typemax : throw("Reduction not found.")
     x == 1.0 ? :zero : x == 2.0 ? :one : x == 5.0 ? :typemin : x == 6.0 ? :typemax : throw("Reduction not found.")
 end
@@ -373,4 +373,3 @@ const FUNCTIONSYMBOLS = Dict{Type{<:Function},Instruction}(
     typeof(ifelse) => :vifelse,
     typeof(vifelse) => :vifelse
 )
-
