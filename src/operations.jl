@@ -20,10 +20,11 @@ struct ArrayReferenceMeta
     ref::ArrayReference
     loopedindex::Vector{Bool}
     ptr::Symbol
+    indexlookup::Vector{Int}
 end
-function ArrayReferenceMeta(ref::ArrayReference, loopedindex, ptr = vptr(ref))
+function ArrayReferenceMeta(ref::ArrayReference, loopedindex, ptr = vptr(ref), indexlookup = [i for i in 1:length(loopedindex)])
     ArrayReferenceMeta(
-        ref, loopedindex, ptr
+        ref, loopedindex, ptr, indexlookup
     )
 end
 # function Base.hash(x::ArrayReference, h::UInt)
@@ -174,7 +175,7 @@ These names will be further processed if op is tiled and/or unrolled.
     if tiled ∈ loopdependencies(op) # `suffix` is tilenumber
         mvar = Symbol(op, suffix, :_)
     end
-    if unrolled ∈ loopdependencies(op) # `u` is unroll number 
+    if unrolled ∈ loopdependencies(op) # `u` is unroll number
         mvar = Symbol(op, u)
     end
 ```
@@ -240,6 +241,3 @@ getindices(op::Operation) = op.ref.ref.indices
     # # access stride info?
     # op.numerical_metadata[symposition(op,sym)]
 # end
-
-
-

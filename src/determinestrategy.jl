@@ -21,7 +21,7 @@ function findparent(ls::LoopSet, s::Symbol)#opdict isn't filled when reconstruct
 end
 function unitstride(ls::LoopSet, op::Operation, s::Symbol)
     inds = getindices(op)
-    li = op.ref.loopedindex
+    li, lookup = op.ref.loopedindex, op.ref.indexlookup
     # The first index is allowed to be indexed by `s`
     fi = first(inds)
     if fi === Symbol("##DISCONTIGUOUSSUBARRAY##")
@@ -32,7 +32,7 @@ function unitstride(ls::LoopSet, op::Operation, s::Symbol)
         indexappearences(parent, s) > 1 && return false
     end
     for i ∈ 2:length(inds)
-        if li[i]
+        if li[lookup[i]]
             s === inds[i] && return false
         else
             parent = findparent(ls, inds[i])
@@ -348,7 +348,7 @@ function maybedemotesize(T::Int, N::Int, U::Int, Uloop::Loop, maxTbase::Int)
 end
 function solve_tilesize(
     ls::LoopSet, unrolled::Symbol, tiled::Symbol,
-    cost_vec::AbstractVector{Float64}, 
+    cost_vec::AbstractVector{Float64},
     reg_pressure::AbstractVector{Int},
     W::Int, vectorized::Symbol
 )
@@ -440,7 +440,7 @@ function evaluate_cost_tile(
     # Need to check if fusion is possible
     size_T = biggest_type_size(ls)
     W, Wshift = VectorizationBase.pick_vector_width_shift(length(ls, vectorized), size_T)::Tuple{Int,Int}
-    # costs = 
+    # costs =
     # cost_mat[1] / ( unrolled * tiled)
     # cost_mat[2] / ( tiled)
     # cost_mat[3] / ( unrolled)
@@ -574,7 +574,7 @@ function choose_unroll_order(ls::LoopSet, lowest_cost::Float64 = Inf)
         iter = iterate(lo, state)
         iter === nothing && return best_order, best_vec, lowest_cost
         new_order, state = iter
-    end    
+    end
 end
 function choose_tile(ls::LoopSet)
     lo = LoopOrders(ls)
@@ -632,4 +632,3 @@ function register_pressure(ls::LoopSet)
         tU * tT * rp[1] + tU * rp[2] + rp[3] + rp[4]
     end
 end
-

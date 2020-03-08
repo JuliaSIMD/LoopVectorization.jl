@@ -25,11 +25,32 @@ function Loop(ls, l, sym::Symbol, ::Type{StaticUnitRange{L,U}}) where {L,U}
     Loop(sym, L, U, Symbol(""), Symbol(""), true, true)::Loop
 end
 
+function Loop(ls::LoopSet, l::Int, k::Int, sym::Symbol, ::Type{<:CartesianIndices{N}}) where N
+    str = String(sym)*'#'*string(k)*'#'
+    start = gensym(str*"_loopstart"); stop = gensym(str*"_loopstop")
+    axisexpr = Expr(:ref, Expr(:., Expr(:ref, :lb, l), QuoteNode(:indices)), k)
+    pushpreamble!(ls, Expr(:(=), start, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:(.), axisexpr, QuoteNode(:start)))))
+    pushpreamble!(ls, Expr(:(=), stop, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:(.), axisexpr, QuoteNode(:stop)))))
+    Loop(Symbol(str), 0, 1024, start, stop, false, false)::Loop
+end
+
 function add_loops!(ls::LoopSet, LPSYM, LB)
     n = max(length(LPSYM), length(LB))
     for i = 1:n
-        add_loop!(ls, Loop(ls, i, LPSYM[i], LB[i])::Loop)
+        sym, l = LPSYM[i], LB[i]
+        if l<:CartesianIndices
+            add_loops!(ls, i, sym, l)
+        else
+            add_loop!(ls, Loop(ls, i, sym, l)::Loop)
+            push!(ls.loopsymbol_offsets, ls.loopsymbol_offsets[end]+1)
+        end
     end
+end
+function add_loops!(ls, i, sym, l::Type{<:CartesianIndices{N}}) where N
+    for k = N:-1:1
+        add_loop!(ls, Loop(ls, i, k, sym, l)::Loop)
+    end
+    push!(ls.loopsymbol_offsets, ls.loopsymbol_offsets[end]+N)
 end
 
 function ArrayReferenceMeta(
@@ -39,21 +60,28 @@ function ArrayReferenceMeta(
     indices = ar.indices
     offsets = ar.offsets
     ni = filled_8byte_chunks(index_types)
-    index_vec = Vector{Symbol}(undef, ni)
+    index_vec = Symbol[]
     offset_vec = Vector{Int8}(undef, ni)
     loopedindex = fill(false, ni)
+    indexlookup = Int[]
     while index_types != zero(UInt64)
         ind = indices % UInt8
-        symind = if index_types == LoopIndex
+        if index_types == LoopIndex
+            for inda in ls.loopsymbol_offsets[ind]+1:ls.loopsymbol_offsets[ind+1]
+                pushfirst!(index_vec, ls.loopsymbols[inda])
+                pushfirst!(indexlookup, ni)
+            end
             loopedindex[ni] = true
-            ls.loopsymbols[ind]
-        elseif index_types == ComputedIndex
-            opsymbols[ind]
         else
-            @assert index_types == SymbolicIndex
-            arraysymbolinds[ind] 
+            symind = if index_types == ComputedIndex
+                opsymbols[ind]
+            else
+                @assert index_types == SymbolicIndex
+                arraysymbolinds[ind]
+            end
+            pushfirst!(index_vec, symind)
+            pushfirst!(indexlookup, ni)
         end
-        index_vec[ni] = symind
         offset_vec[ni] = offsets % Int8
         index_types >>>= 8
         indices >>>= 8
@@ -62,7 +90,7 @@ function ArrayReferenceMeta(
     end
     ArrayReferenceMeta(
         ArrayReference(array(ar), index_vec, offset_vec),
-        loopedindex, ptr(ar)
+        loopedindex, ptr(ar), indexlookup
     )
 end
 
@@ -134,14 +162,16 @@ function process_metadata!(ls::LoopSet, AM, num_arrays::Int)::Vector{Symbol}
     arraysymbolinds
 end
 function parents_symvec(ls::LoopSet, u::Unsigned)
-    i = filled_4byte_chunks(u)
-    loops = Vector{Symbol}(undef, i)
+    loops = Symbol[]
+    offsets = ls.loopsymbol_offsets
     while u != zero(u)
-        loops[i] = getloopsym(ls, ( u % UInt8 ) & 0x0f )
-        i -= 1
+        idx = ( u % UInt8 ) & 0x0f
+        for j = offsets[idx]+1:offsets[idx+1]
+            push!(loops, getloopsym(ls, j))
+        end
         u >>= 4
     end
-    loops
+    return reverse!(loops)
 end
 loopdependencies(ls::LoopSet, os::OperationStruct) = parents_symvec(ls, os.loopdeps)
 reduceddependencies(ls::LoopSet, os::OperationStruct) = parents_symvec(ls, os.reduceddeps)
@@ -227,7 +257,7 @@ function avx_loopset(instr, ops, arf, AM, LPSYM, LB, vargs)
     num_arrays = length(arf)
     elementbytes = sizeofeltypes(vargs, num_arrays)
     add_loops!(ls, LPSYM, LB)
-    resize!(ls.loop_order, length(LB))
+    resize!(ls.loop_order, ls.loopsymbol_offsets[end])
     arraysymbolinds = process_metadata!(ls, AM, length(arf))
     opsymbols = [gensym(:op) for _ ∈ eachindex(ops)]
     mrefs = create_mrefs!(ls, arf, arraysymbolinds, opsymbols, vargs)
