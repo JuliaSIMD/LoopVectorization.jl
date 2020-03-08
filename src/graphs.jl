@@ -110,7 +110,7 @@ function terminatecondition(
     looprange(loop, 1, mangledname)
 end
 
-# load/compute/store × isunroled × istiled × pre/post loop × Loop number
+# load/compute/store × isunrolled × istiled × pre/post loop × Loop number
 struct LoopOrder <: AbstractArray{Vector{Operation},5}
     oporder::Vector{Vector{Operation}}
     loopnames::Vector{Symbol}
@@ -402,7 +402,7 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
             L = add_loop_bound!(ls, itersym, Expr(:call, :first, N), false)
             U = add_loop_bound!(ls, itersym, Expr(:call, :last, N), true)
             Loop(itersym, L, U)
-        elseif f === :OneTo || f == Expr(:(.), :Base, QuoteNode(:OneTo))
+        elseif f === :OneTo || isscopedname(f, :Base, :OneTo)
             otN = r.args[2]
             if otN isa Integer
                 Loop(itersym, 0, otN)

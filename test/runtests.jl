@@ -18,8 +18,10 @@ end
 
     @time include("printmethods.jl")
 
+    @time include("utils.jl")
+
     @time include("offsetarrays.jl")
-    
+
     @time include("map.jl")
 
     @time include("filter.jl")
