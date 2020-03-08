@@ -40,6 +40,21 @@ end
 #     recursive_eltype(ARGS)
 # end
 
+"""
+    A *ˡ B
+
+A lazy product of `A` and `B`. While functionally identical to `A * B`, this may avoid the
+need for intermediate storage for any computations in `A` or `B`.  Example:
+
+    @avx @. a + B *ˡ (c + d')
+
+which is equivalent to
+
+     a .+ B * (c .+ d')
+
+It should only be used inside an `@avx` block, and to materialize the result it cannot be
+the final operation.
+"""
 @inline *ˡ(a::A, b::B) where {A,B} = Product{A,B}(a, b)
 @inline Base.Broadcast.broadcasted(::typeof(*ˡ), a::A, b::B) where {A, B} = Product{A,B}(a, b)
 # TODO: Need to make this handle A or B being (1 or 2)-D broadcast objects.
@@ -88,7 +103,7 @@ function add_broadcast!(
     reductop = Operation(
         ls, mC, elementbytes, :vfmadd231, compute, reductdeps, kvec, Operation[loadA, loadB, setC]
     )
-    reductop = pushop!(ls, reductop, mC)    
+    reductop = pushop!(ls, reductop, mC)
     reductfinal = Operation(
         ls, mCt, elementbytes, :reduce_to_add, compute, cloopsyms, kvec, Operation[reductop, targetC]
     )
@@ -123,7 +138,7 @@ function add_broadcast_adjoint_array!(
     parent = gensym(:parent)
     pushpreamble!(ls, Expr(:(=), parent, Expr(:call, :parent, bcname)))
     ref = ArrayReference(parent, Symbol[loopsyms[N + 1 - n] for n ∈ 1:N])
-    add_simple_load!( ls, destname, ref, elementbytes, true, true )::Operation    
+    add_simple_load!( ls, destname, ref, elementbytes, true, true )::Operation
 end
 function add_broadcast_adjoint_array!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{<:AbstractVector}, elementbytes::Int

@@ -14,12 +14,13 @@ makedocs(;
         ],
         "Vectorized Convenience Functions" => "vectorized_convenience_functions.md",
         "Future Work" => "future_work.md",
+        "API reference" => "api.md",
         "Developer Documentation" => [
             "devdocs/overview.md",
             "devdocs/loopset_structure.md",
-	    "devdocs/constructing_loopsets.md",
-	    "devdocs/evaluating_loops.md",
-	    "devdocs/lowering.md"
+            "devdocs/constructing_loopsets.md",
+            "devdocs/evaluating_loops.md",
+            "devdocs/lowering.md"
         ]
     ],
     # repo="https://github.com/chriselrod/LoopVectorization.jl/blob/{commit}{path}#L{line}",

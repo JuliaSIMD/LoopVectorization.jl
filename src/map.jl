@@ -1,5 +1,4 @@
-
-
+# Expression-generator for vmap!
 function vmap_quote(N, ::Type{T}) where {T}
     W, Wshift = VectorizationBase.pick_vector_width_shift(T)
     val = Expr(:call, Expr(:curly, :Val, W))
@@ -21,7 +20,15 @@ function vmap_quote(N, ::Type{T}) where {T}
     push!(q.args, :dest)
     q
 end
+"""
+    vmap!(f, destination, a::AbstractArray)
+    vmap!(f, destination, a::AbstractArray, b::AbstractArray, ...)
+
+Vectorized-`map!`, applying `f` to each element of `a` (or paired elements of `a`, `b`, ...)
+and storing the result in `destination`.
+"""
 @generated function vmap!(f::F, dest::AbstractArray{T}, args::Vararg{<:AbstractArray,N}) where {F,T,N}
+    # do not change argnames here without compensatory changes in vmap_quote
     vmap_quote(N, T)
 end
 
@@ -112,7 +119,7 @@ function vmapnt!(f::F, y::AbstractVector{T}, args::Vararg{<:Any,A}) where {F,T,A
         vstorent!(ptry, extract_data(f(vload.(V, ptrargs, i)...)), i); i += W
         vstorent!(ptry, extract_data(f(vload.(V, ptrargs, i)...)), i); i += W
     end
-    while i < N - (W - 1) # stops at 16 when 
+    while i < N - (W - 1) # stops at 16 when
         vstorent!(ptry, extract_data(f(vload.(V, ptrargs, i)...)), i); i += W
     end
     if i < N
@@ -125,7 +132,7 @@ end
 """
     vmapntt!(::Function, dest, args...)
 
-Like `vmapnt!` (see `vmapnt!`), but but uses `Threads.@threads` for parallel execution.
+Like `vmapnt!` (see `vmapnt!`), but uses `Threads.@threads` for parallel execution.
 """
 function vmapntt!(f::F, y::AbstractVector{T}, args::Vararg{<:Any,A}) where {F,T,A}
     ptry, ptrargs, N = alignstores!(f, y, args...)
@@ -142,7 +149,7 @@ function vmapntt!(f::F, y::AbstractVector{T}, args::Vararg{<:Any,A}) where {F,T,
         vstorent!(ptry, extract_data(f(vload.(V, ptrargs, i)...)), i)
     end
     ii = Niter << Wsh
-    while ii < N - (W - 1) # stops at 16 when 
+    while ii < N - (W - 1) # stops at 16 when
         vstorent!(ptry, extract_data(f(vload.(V, ptrargs, ii)...)), ii); ii += W
     end
     if ii < N
@@ -157,12 +164,33 @@ function vmap_call(f::F, vm!::V, args::Vararg{<:Any,N}) where {V,F,N}
     dest = similar(first(args), T)
     vm!(f, dest, args...)
 end
+
+"""
+    vmap(f, a::AbstractArray)
+    vmap(f, a::AbstractArray, b::AbstractArray, ...)
+
+SIMD-vectorized `map`, applying `f` to each element of `a` (or paired elements of `a`, `b`, ...)
+and returning a new array.
+"""
 vmap(f::F, args::Vararg{<:Any,N}) where {F,N} = vmap_call(f, vmap!, args...)
+
+"""
+    vmapnt(f, a::AbstractArray)
+    vmapnt(f, a::AbstractArray, b::AbstractArray, ...)
+
+A "non-temporal" variant of [`vmap`](@ref). This can improve performance in cases where
+`destination` will not be needed soon.
+"""
 vmapnt(f::F, args::Vararg{<:Any,N}) where {F,N} = vmap_call(f, vmapnt!, args...)
+
+"""
+    vmapntt(f, a::AbstractArray)
+    vmapntt(f, a::AbstractArray, b::AbstractArray, ...)
+
+A threaded variant of [`vmapnt`](@ref).
+"""
 vmapntt(f::F, args::Vararg{<:Any,N}) where {F,N} = vmap_call(f, vmapntt!, args...)
 
 
 # @inline vmap!(f, y, x...) = @avx y .= f.(x...)
 # @inline vmap(f, x...) = @avx f.(x...)
-
-

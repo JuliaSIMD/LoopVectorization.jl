@@ -30,3 +30,16 @@ if (Base.libllvm_version ≥ v"7" && VectorizationBase.AVX512F) || Base.libllvm_
 end
 vfilter(f, y) = filter(f, y)
 
+"""
+    vfilter(f, a::AbstractArray)
+
+SIMD-vectorized `filter`, returning an array containing the elements of `a` for which `f` return `true`.
+"""
+vfilter
+
+"""
+    vfilter!(f, a::AbstractArray)
+
+SIMD-vectorized `filter!`, removing the element of `a` for which `f` is false.
+"""
+vfilter!
