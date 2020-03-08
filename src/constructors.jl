@@ -66,7 +66,8 @@ Annotate a `for` loop, or a set of nested `for` loops whose bounds are constant 
         end
     end
 
-The macro models the set of nested loops, and chooses a 
+The macro models the set of nested loops, and chooses an ordering of the three loops to
+minimize predicted computation time.
 
 It may also apply to broadcasts:
 
@@ -81,7 +82,7 @@ julia> c = similar(b);
 
 julia> @avx @. c = exp(2a);
 
-julia> b ≈ c 
+julia> b ≈ c
 true
 ```
 
@@ -148,8 +149,9 @@ end
 """
     @_avx
 
-This macro transforms loops, making default assumptions rather than punting to a generated
-function that is often capable of using type information in place of some assumptions.
+This macro transforms loops similarly to [`@avx`](@ref).
+While `@avx` punts to a generated function to enable type-based analysis, `_@avx`
+works on just the expressions. This requires that it makes a number of default assumptions.
 """
 macro _avx(q)
     esc(lower(LoopSet(q, __module__)))
@@ -164,4 +166,3 @@ end
 macro avx_debug(q)
     esc(LoopVectorization.setup_call_debug(LoopSet(q, __module__)))
 end
-

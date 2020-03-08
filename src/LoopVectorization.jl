@@ -47,6 +47,18 @@ include("condense_loopset.jl")
 include("reconstruct_loopset.jl")
 include("constructors.jl")
 
+"""
+LoopVectorization provides macros and functions that combine SIMD vectorization and
+loop-reordering so as to improve performance:
+
+- [`@avx`](@ref): transform `for`-loops and broadcasting
+- [`@_avx`](@ref): similar to `@avx` but does not use type information
+- [`vmap`](@ref) and `vmap!`: vectorized version of `map` and `map!`
+- [`vmapnt`](@ref) and `vmapnt!`: non-temporal variants of `vmap` and `vmap!`
+- [`vmapntt`](@ref) and `vmapntt!`: threaded variants of `vmapnt` and `vmapnt!`
+- [`vfilter`](@ref) and `vfilter!`: vectorized versions of `filter` and `filter!`
+"""
+LoopVectorization
 
 include("precompile.jl")
 _precompile_()

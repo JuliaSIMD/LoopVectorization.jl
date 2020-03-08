@@ -68,7 +68,7 @@ function vector_cost(ic::InstructionCost, Wshift, sizeof_T)
     else # we assume custom cost, and that latency == recip_throughput
         scaling = ic.scaling
         sl, srt = round(Int,scaling), scaling
-    end    
+    end
     srt, sl, srp
 end
 # instruction_cost(instruction::Symbol) = get(COST, instruction, OPAQUE_INSTRUCTION)
@@ -278,7 +278,7 @@ function reduction_combine_to(x::Float64)
     x == 1.0 ? :reduce_to_add : x == 2.0 ? :reduce_to_prod : x == 5.0 ? :reduce_to_max : x == 6.0 ? :reduce_to_min : throw("Reduction not found.")
 end
 reduction_combine_to(x) = reduction_combine_to(reduction_instruction_class(x))
-function reduction_zero(x::Float64) 
+function reduction_zero(x::Float64)
     # x == 1.0 ? :zero : x == 2.0 ? :one : x == 3.0 ? :false : x == 4.0 ? :true : x == 5.0 ? :typemin : x == 6.0 ? :typemax : throw("Reduction not found.")
     x == 1.0 ? :zero : x == 2.0 ? :one : x == 5.0 ? :typemin : x == 6.0 ? :typemax : throw("Reduction not found.")
 end
@@ -373,4 +373,3 @@ const FUNCTIONSYMBOLS = Dict{Type{<:Function},Instruction}(
     typeof(ifelse) => :vifelse,
     typeof(vifelse) => :vifelse
 )
-
