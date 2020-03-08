@@ -174,6 +174,7 @@ Base.@propagate_inbounds Base.getindex(lo::LoopOrder, i...) = lo.oporder[LinearI
 # O(N) search is faster at small sizes
 struct LoopSet
     loopsymbols::Vector{Symbol}
+    loopsymbol_offsets::Vector{Int}  # symbol loopsymbols[i] corresponds to loops[lso[i]+1:lso[i+1]] (CartesianIndex handling)
     loops::Vector{Loop}
     opdict::Dict{Symbol,Operation}
     operations::Vector{Operation} # Split them to make it easier to iterate over just a subset
@@ -281,7 +282,7 @@ includesarray(ls::LoopSet, array::Symbol) = array ∈ ls.includedarrays
 
 function LoopSet(mod::Symbol)# = :LoopVectorization)
     LoopSet(
-        Symbol[], Loop[],
+        Symbol[], [0], Loop[],
         Dict{Symbol,Operation}(),
         Operation[],
         Int[],

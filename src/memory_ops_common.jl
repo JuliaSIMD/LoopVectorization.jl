@@ -64,7 +64,7 @@ function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementby
             else
                 indop = get(ls.opdict, ind, nothing)
                 if indop !== nothing  && !isconstant(indop)
-                    pushparent!(parents, loopdependencies, reduceddeps, parent)
+                    pushparent!(parents, loopdependencies, reduceddeps, parent)   # FIXME where does `parent` come from?
                     # var = get(ls.opdict, ind, nothing)
                     push!(indices, name(parent)); ninds += 1
                     push!(loopedindex, false)

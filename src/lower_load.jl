@@ -8,7 +8,7 @@ function pushvectorload!(q::Expr, op::Operation, var::Symbol, td::UnrollArgs, U:
     end
     push!(q.args, Expr(:(=), name, instrcall))
 end
-function lower_load_scalar!( 
+function lower_load_scalar!(
     q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol, tiled::Symbol, U::Int,
     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
 )
@@ -60,6 +60,3 @@ function lower_load!(
         lower_load_scalar!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask)
     end
 end
-
-
-
