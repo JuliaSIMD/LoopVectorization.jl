@@ -35,21 +35,21 @@ Base.isequal(ins1::Instruction, ins2::Instruction) = (ins1.instr === ins2.instr)
 const LOOPCONSTANT = Instruction(gensym())
 
 struct InstructionCost
-    scaling::Float64 # sentinel values: -3 == no scaling; -2 == offset_scaling, -1 == linear scaling, >0 ->  == latency == reciprical throughput
-    scalar_reciprical_throughput::Float64
+    scaling::Float64 # sentinel values: -3 == no scaling; -2 == offset_scaling, -1 == linear scaling, >0 ->  == latency == reciprocal throughput
+    scalar_reciprocal_throughput::Float64
     scalar_latency::Int
     register_pressure::Int
 end
 InstructionCost(sl::Int, srt::Float64, scaling::Float64 = -3.0) = InstructionCost(scaling, srt, sl, 0)
 
-nocost(c::InstructionCost) = c.scalar_reciprical_throughput == 0.0
+nocost(c::InstructionCost) = c.scalar_reciprocal_throughput == 0.0
 flatcost(c::InstructionCost) = c.scaling == -3.0
 offsetscaling(c::InstructionCost) = c.scaling == -2.0
 linearscaling(c::InstructionCost) = c.scaling == -1.0
 
 function scalar_cost(ic::InstructionCost)#, ::Type{T} = Float64) where {T}
-    @unpack scalar_reciprical_throughput, scalar_latency, register_pressure = ic
-    scalar_reciprical_throughput, scalar_latency, register_pressure
+    @unpack scalar_reciprocal_throughput, scalar_latency, register_pressure = ic
+    scalar_reciprocal_throughput, scalar_latency, register_pressure
 end
 function vector_cost(ic::InstructionCost, Wshift, sizeof_T)
     srt, sl, srp = scalar_cost(ic)
