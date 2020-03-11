@@ -1,7 +1,7 @@
 @testset "Print Methods" begin
     @show @__LINE__
     selfdotq = :(for i ∈ eachindex(a)
-                 s += a[i]*a[i]
+                 s += a[i]*a[i] + i
                  end)
     lsselfdot = LoopVectorization.LoopSet(selfdotq);
     io = IOBuffer();

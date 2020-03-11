@@ -99,9 +99,6 @@ end
 function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{VectorizationBase.MappedStridedPointer{F,T,P}}) where {F,T,P}
     add_mref!(ls, ar, i, P)
 end
-function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{LoopValue})
-    pushpreamble!(ls, Expr(:(=), vptr(ar), LoopValue()))
-end
 function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{<:AbstractRange{T}}) where {T}
     pushvarg!(ls, ar, i)
 end
@@ -155,11 +152,10 @@ childdependencies(ls::LoopSet, os::OperationStruct) = parents_symvec(ls, os.chil
 function add_op!(
     ls::LoopSet, instr::Instruction, os::OperationStruct, mrefs::Vector{ArrayReferenceMeta}, opsymbol, elementbytes::Int
 )
-    optype = os.node_type
     # opsymbol = (isconstant(os) && instr != LOOPCONSTANT) ? instr.instr : opsymbol
     op = Operation(
         length(operations(ls)), opsymbol, elementbytes, instr,
-        optype, loopdependencies(ls, os), reduceddependencies(ls, os),
+        optype(os), loopdependencies(ls, os), reduceddependencies(ls, os),
         Operation[], (isload(os) | isstore(os)) ? mrefs[os.array] : NOTAREFERENCE,
         childdependencies(ls, os)
     )
@@ -199,7 +195,6 @@ end
 
 # elbytes(::VectorizationBase.AbstractPointer{T}) where {T} = sizeof(T)::Int
 typeeltype(::Type{P}) where {T,P<:VectorizationBase.AbstractPointer{T}} = T
-typeeltype(::Type{LoopValue}) = Int8
 typeeltype(::Type{<:AbstractRange{T}}) where {T} = T
 
 function add_array_symbols!(ls::LoopSet, arraysymbolinds::Vector{Symbol}, offset::Int)

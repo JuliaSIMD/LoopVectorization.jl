@@ -77,7 +77,7 @@ function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementby
             throw("Unrecognized loop index: $ind.")
         end
     end
-    (length(parents) != 0 && first(indices) !== Symbol("##DISCONTIGUOUSSUBARRAY##")) && pushfirst!(indices, Symbol("##DISCONTIGUOUSSUBARRAY##"))
+    # (length(parents) != 0 && first(indices) !== Symbol("##DISCONTIGUOUSSUBARRAY##")) && pushfirst!(indices, Symbol("##DISCONTIGUOUSSUBARRAY##"))
     mref = ArrayReferenceMeta(ArrayReference( array, indices ), loopedindex, vptrarray)
     ArrayReferenceMetaPosition(mref, parents, loopdependencies, reduceddeps)
 end

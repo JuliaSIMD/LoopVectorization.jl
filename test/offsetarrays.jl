@@ -1,5 +1,6 @@
 using LoopVectorization, OffsetArrays
 using Test
+T = Float32
 
 @testset "OffsetArrays" begin
 
@@ -19,12 +20,10 @@ using Test
         rng1k, rng2k = axes(kern)
         rng1,  rng2  = R.indices
         # Manually unpack the OffsetArray
-        kernA = parent(kern)
-        o1, o2 = kern.offsets
         for j in rng2, i in rng1
             tmp = z
             @avx for jk in rng2k, ik in rng1k
-                tmp += A[i+ik,j+jk]*kernA[ik-o1,jk-o2]
+                tmp += A[i+ik,j+jk]*kern[ik,jk]
             end
             out[i,j] = tmp
         end
@@ -34,13 +33,10 @@ using Test
         rng1k, rng2k = axes(kern)
         rng1,  rng2  = R.indices
         # Manually unpack the OffsetArray
-        kernA = parent(kern)
-        o1, o2 = kern.offsets
         @avx for j in rng2, i in rng1
             tmp = z
             for jk in rng2k, ik in rng1k
-                tmp += A[i+ik,j+jk]*kernA[ik-o1,jk-o2]
-                1
+                tmp += A[i+ik,j+jk]*kern[ik,jk]
             end
             out[i,j] = tmp
         end
@@ -56,6 +52,7 @@ using Test
 
         old2d!(out1, A, kern);
         avx2d!(out2, A, kern);
+
         @test out1 ≈ out2
         avx2douter!(out3, A, kern);
         @test out1 ≈ out3

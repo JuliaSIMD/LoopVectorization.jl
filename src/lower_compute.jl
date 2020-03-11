@@ -84,18 +84,31 @@ function lower_compute!(
             mvar
         end
         for n ∈ 1:nparents
-            parent = mangledvar(parents_op[n])
-            if n == tiledouterreduction
-                parent = Symbol(parent, modsuffix)
+            if isloopvalue(parents_op[n])
+                loopvalue = first(loopdependencies(parents_op[n]))
+                if u > 0 && loopvalue === unrolled #parentsunrolled[n]
+                    if loopvalue === vectorized
+                        push!(instrcall.args, Expr(:call, :+, loopvalue, Expr(:call, lv(:valmul), W, u)))
+                    else
+                        push!(instrcall.args, Expr(:call, :+, loopvalue, u))
+                    end
+                else
+                    push!(instrcall.args, loopvalue)
+                end
             else
-                if parentstiled[n]
-                    parent = Symbol(parent, suffix_)
+                parent = mangledvar(parents_op[n])
+                if n == tiledouterreduction
+                    parent = Symbol(parent, modsuffix)
+                else
+                    if parentstiled[n]
+                        parent = Symbol(parent, suffix_)
+                    end
+                    if parentsunrolled[n]
+                        parent = Symbol(parent, u)
+                    end
                 end
-                if parentsunrolled[n]
-                    parent = Symbol(parent, u)
-                end
+                push!(instrcall.args, parent)
             end
-            push!(instrcall.args, parent)
         end
         if maskreduct && (u == Uiter || unrolled !== vectorized) # only mask last
             if last(instrcall.args) == varsym

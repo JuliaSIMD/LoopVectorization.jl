@@ -1,3 +1,6 @@
+using LoopVectorization, Test
+
+
 @testset "copy" begin
 
     function copyavx1!(x, y)

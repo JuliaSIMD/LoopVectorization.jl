@@ -23,8 +23,9 @@ function lower!(
         lower_load!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask)
     elseif iscompute(op)
         lower_compute!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask)
-    else#if isstore(op)
+    elseif isstore(op)
         lower_store!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask)
+    # elseif isloopvalue(op)
     end
 end
 function lower!(
@@ -184,14 +185,14 @@ function add_upper_outer_reductions(ls::LoopSet, loopq::Expr, Ulow::Int, Uhigh::
     reduce_range!(ifq, ls, Ulow, Uhigh)
     comparison = if isstaticloop(unrolledloop)
         Expr(:call, :<, length(unrolledloop), Expr(:call, lv(:valmul), W, Uhigh))
-    elseif unrolledloop.starthint == 0
+    elseif unrolledloop.starthint == 1
         Expr(:call, :<, unrolledloop.stopsym, Expr(:call, lv(:valmul), W, Uhigh))
     elseif unrolledloop.startexact
-        Expr(:call, :<, Expr(:call, :-, unrolledloop.stopsym, unrolledloop.starthint), Expr(:call, lv(:valmul), W, Uhigh))
+        Expr(:call, :<, Expr(:call, :-, unrolledloop.stopsym, unrolledloop.starthint-1), Expr(:call, lv(:valmul), W, Uhigh))
     elseif unrolledloop.stopexact
-        Expr(:call, :<, Expr(:call, :-, unrolledloop.stophint, unrolledloop.sartsym), Expr(:call, lv(:valmul), W, Uhigh))
+        Expr(:call, :<, Expr(:call, :-, unrolledloop.stophint+1, unrolledloop.sartsym), Expr(:call, lv(:valmul), W, Uhigh))
     else# both are given by symbols
-        Expr(:call, :<, Expr(:call, :-, unrolledloop.stopsym, unrolledloop.startsym), Expr(:call, lv(:valmul), W, Uhigh))
+        Expr(:call, :<, Expr(:call, :-, unrolledloop.stopsym, Expr(:call,:-,unrolledloop.startsym)), Expr(:call, lv(:valmul), W, Uhigh))
     end
     ncomparison = Expr(:call, :!, comparison)
     Expr(:if, ncomparison, ifq)
@@ -258,9 +259,9 @@ function lower_unrolled!(
 end
 function init_remblock(unrolledloop::Loop, unrolled::Symbol = unrolledloop.itersymbol, unrolled_stopsym::Symbol = unrolledloop.stopsym)
     condition = if isstaticloop(unrolledloop)
-        Expr(:call, :(==), length(unrolledloop), unrolled)
+        Expr(:call, :(<), length(unrolledloop), unrolled)
     else
-        Expr(:call, :(==), unrolled_stopsym, unrolled)
+        Expr(:call, :(<), unrolled_stopsym, unrolled)
     end
     Expr(:if, condition, nothing)
 end
@@ -304,18 +305,18 @@ function lower_unrolled_dynamic!(
         else
             remblocknew = if vecisunrolled
                 itercount = if isstaticloop(unrolledloop)
-                    Expr(:call, :-, length(unrolledloop), Expr(:call, lv(:valmuladd), W, Ut, 1))
+                    Expr(:call, :-, length(unrolledloop), Expr(:call, lv(:valmul), W, Ut))
                 else
-                    Expr(:call, :-, unrolled_stopsym, Expr(:call, lv(:valmuladd), W, Ut, 1))
+                    Expr(:call, :-, unrolled_stopsym, Expr(:call, lv(:valmul), W, Ut))
                 end
                 comparison = Expr(:call, :>, unrolled, itercount)
                 # Expr(Ut == 1 ? :if : :elseif, comparison, lower_set(ls, vectorized, Ut, T, W, Symbol("##mask##"), :block))
                 Expr(:elseif, comparison, lower_set(ls, vectorized, Ut, T, W, Symbol("##mask##"), :block))
             else
                 comparison = if isstaticloop(unrolledloop)
-                    Expr(:call, :>, unrolled, length(unrolledloop) - (Ut + 1))
+                    Expr(:call, :>, unrolled, length(unrolledloop) - Ut)
                 else
-                    Expr(:call, :>, unrolled, Expr(:call, :-, unrolled_stopsym, Ut + 1))
+                    Expr(:call, :>, unrolled, Expr(:call, :-, unrolled_stopsym, Ut))
                 end
                 # Expr(Ut == 1 ? :if : :elseif, comparison, lower_set(ls, vectorized, Ut, T, W, nothing, :block))
                 Expr(:elseif, comparison, lower_set(ls, vectorized, Ut, T, W, nothing, :block))
@@ -339,15 +340,15 @@ end
 function definemask(loop::Loop, W::Symbol, allon::Bool)
     if isstaticloop(loop)
         maskexpr(W, length(loop), allon)
-    elseif loop.startexact && loop.starthint == 0
+    elseif loop.startexact && loop.starthint == 1
         maskexpr(W, loop.stopsym, allon)
     else
         lexpr = if loop.startexact
-            Expr(:call, :-, loop.stopsym, loop.starthint)
+            Expr(:call, :-, loop.stopsym, loop.starthint - 1)
         elseif loop.stopexact
-            Expr(:call, :-, loop.stophint, loop.startsym)
+            Expr(:call, :-, loop.stophint + 1, loop.startsym)
         else
-            Expr(:call, :-, loop.stopsym, loop.startsym)
+            Expr(:call, :-, Expr(:call, :+, loop.stopsym, 1), loop.startsym)
         end
         maskexpr(W, lexpr, allon)
     end
@@ -399,7 +400,7 @@ function lower_tiled(ls::LoopSet, vectorized::Symbol, U::Int, T::Int)
         elseif static_tile
             push!(q.args, tiledloopbody)
         else # not static, not firstiter
-            comparison = Expr(:call, :(==), mangledtiled, Expr(:call, :-, tiledloop.stopsym, Tt))
+            comparison = Expr(:call, :(==), mangledtiled, Expr(:call, :-, tiledloop.stopsym, Tt-1))
             qifelsenew = Expr(:elseif, comparison, tiledloopbody)
             push!(qifelse.args, qifelsenew)
             qifelse = qifelsenew
@@ -417,9 +418,9 @@ function lower_tiled(ls::LoopSet, vectorized::Symbol, U::Int, T::Int)
         else
             if firstiter
                 comparison = if tiledloop.stopexact
-                    Expr(:call, :(==), mangledtiled, tiledloop.stophint)
+                    Expr(:call, :(>), mangledtiled, tiledloop.stophint)
                 else
-                    Expr(:call, :(==), mangledtiled, tiledloop.stopsym)
+                    Expr(:call, :(>), mangledtiled, tiledloop.stopsym)
                 end
                 qifelse = Expr(:if, comparison, Expr(:block)) # do nothing
                 push!(q.args, qifelse)

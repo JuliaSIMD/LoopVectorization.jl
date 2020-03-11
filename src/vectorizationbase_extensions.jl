@@ -1,12 +1,5 @@
 
-struct LoopValue end
-@inline VectorizationBase.stridedpointer(::LoopValue) = LoopValue()
-@inline VectorizationBase.vload(::LoopValue, i::Tuple{_MM{W}}) where {W} = _MM{W}(@inbounds(i[1].i) + 1)
-# @inline VectorizationBase.vload(::LoopValue, i::Tuple{_MM{W}}, ::Unsigned) where {W} = _MM{W}(@inbounds(i[1].i) + 1)
-@inline VectorizationBase.vload(::LoopValue, i::Tuple{_MM{W}}, ::Mask) where {W} = _MM{W}(@inbounds(i[1].i) + 1)
-@inline VectorizationBase.vload(::LoopValue, i::Integer) = i + one(i)
-@inline VectorizationBase.vload(::LoopValue, i::Tuple{I}) where {I<:Integer} = @inbounds(i[1]) + one(I)
-@inline Base.eltype(::LoopValue) = Int8
+# Rename file to offsetarrays?
 
 import OffsetArrays
 
@@ -20,7 +13,7 @@ end
 # if ndim(A::OffsetArray) ≥ 2, then eachindex(A) isa Base.OneTo, index starting at 1.
 # but multiple indexing is calculated using offsets, so we need a special type to express this.
 @inline function VectorizationBase.stridedpointer(A::OffsetArrays.OffsetArray)
-    OffsetStridedPointer(stridedpointer(parent(A)), A.offsets)
+    OffsetStridedPointer(stridedpointer(parent(A)), VectorizationBase.staticm1(A.offsets))
 end
 # Tuple of length == 1, use ind directly.
 # @inline VectorizationBase.offset(ptr::OffsetStridedPointer, ind::Tuple{I}) where {I} = VectorizationBase.offset(ptr.ptr, ind)

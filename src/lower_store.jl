@@ -128,7 +128,7 @@ function lower_store_vectorized!(
     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned}, isunrolled::Bool
 )
     loopdeps = loopdependencies(op)
-    @assert unrolled ∈ loopdeps
+    @assert vectorized ∈ loopdeps
     var = pvariable_name(op, suffix, tiled)
     parentisunrolled = unrolled ∈ loopdependencies(first(parents(op)))
     if isunrolled
@@ -140,7 +140,7 @@ function lower_store_vectorized!(
     end
     ptr = refname(op)
     vecnotunrolled = vectorized !== unrolled
-    for u ∈ 0:U-1
+    for u ∈ umin:U-1
         td = UnrollArgs(u, unrolled, tiled, suffix)
         name, mo = name_memoffset(var, op, td, W, vecnotunrolled, parentisunrolled)
         instrcall = Expr(:call, lv(:vstore!), ptr, name, mo)

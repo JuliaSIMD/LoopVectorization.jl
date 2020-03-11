@@ -56,17 +56,13 @@ end
 
 function add_loopvalue!(ls::LoopSet, arg::Symbol, elementbytes::Int)
     # check for CSE opportunity
-    loopsym = Symbol("##LOOPSYMBOL##", arg)
-    ar = ArrayReference(loopsym, [arg])
-    for op ∈ operations(ls)
-        if isload(op) && op.ref.ref == ar
-            return op
-        end
+    instr = Instruction(arg, arg)
+    for op ∈ operations(ls)#check to CSE
+        (op.variable === arg && instr == instruction(op)) && return op
     end
-    pushpreamble!(ls, Expr(:(=), loopsym, LoopValue()))
-    loopsymop = add_simple_load!(ls, gensym(loopsym), ar, elementbytes, false)
-    push!(ls.syms_aliasing_refs, name(loopsymop))
-    push!(ls.refs_aliasing_syms, loopsymop.ref)
-    loopsymop
+    op = Operation(
+        length(operations(ls)), arg, elementbytes, instr, loopvalue, [arg]
+    )
+    pushop!(ls, op, arg)
 end
 

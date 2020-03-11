@@ -13,7 +13,7 @@ function parentind(ind::Symbol, op::Operation)
 end
 function symbolind(ind::Symbol, op::Operation, td::UnrollArgs)
     id = parentind(ind, op)
-    id == -1 && return Expr(:call, :-, ind, 1)
+    id == -1 && return ind
     @unpack u, unrolled, tiled, suffix = td
     parent = parents(op)[id]
     pvar = if tiled ∈ loopdependencies(parent)
@@ -21,8 +21,7 @@ function symbolind(ind::Symbol, op::Operation, td::UnrollArgs)
     else
         mangledvar(parent)
     end
-    pvar = unrolled ∈ loopdependencies(parent) ? Symbol(pvar, u) : pvar
-    Expr(:call, :-, pvar, 1)
+    unrolled ∈ loopdependencies(parent) ? Symbol(pvar, u) : pvar
 end
 function mem_offset(op::Operation, td::UnrollArgs)
     # @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."

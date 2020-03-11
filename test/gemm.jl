@@ -565,9 +565,9 @@
             @test C ≈ C2
             fill!(C, 9999.999); AtmulBavx1!(C, A', B)
             @test C ≈ C2
-            fill!(C, 9999.999); AtmulBavx2!(C, At, B)
+            fill!(C, 9999.999); AtmulBavx2!(C, At, B);
             @test C ≈ C2
-            fill!(C, 9999.999); AtmulBavx2!(C, A', B)
+            fill!(C, 9999.999); AtmulBavx2!(C, A', B);
             @test C ≈ C2
             fill!(C, 9999.999); mulCAtB_2x2blockavx!(C, At, B);
             @test C ≈ C2

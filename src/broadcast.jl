@@ -69,7 +69,7 @@ function add_broadcast!(
     pushpreamble!(ls, Expr(:(=), mB, Expr(:(.), bcname, QuoteNode(:b))))
     pushpreamble!(ls, Expr(:(=), K, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), Expr(:ref, Expr(:call, :size, mB), 1))))
     k = gensym(:k)
-    add_loop!(ls, Loop(k, 0, K), k)
+    add_loop!(ls, Loop(k, 1, K), k)
     m = loopsyms[1];
     if numdims(B) == 1
         bloopsyms = Symbol[k]
@@ -226,7 +226,7 @@ end
     sizes = Expr(:tuple)
     for (n,itersym) ∈ enumerate(loopsyms)
         Nsym = gensym(:N)
-        add_loop!(ls, Loop(itersym, 0, Nsym), itersym)
+        add_loop!(ls, Loop(itersym, 1, Nsym), itersym)
         push!(sizes.args, Nsym)
     end
     pushpreamble!(ls, Expr(:(=), sizes, Expr(:call, :size, :dest)))
@@ -251,7 +251,7 @@ end
     sizes = Expr(:tuple)
     for (n,itersym) ∈ enumerate(loopsyms)
         Nsym = gensym(:N)
-        add_loop!(ls, Loop(itersym, 0, Nsym), itersym)
+        add_loop!(ls, Loop(itersym, 1, Nsym), itersym)
         push!(sizes.args, Nsym)
     end
     pushpreamble!(ls, Expr(:(=), sizes, Expr(:call, :size, :dest′)))

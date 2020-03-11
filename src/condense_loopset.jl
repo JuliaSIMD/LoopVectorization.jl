@@ -46,7 +46,7 @@ function ArrayRefStruct(ls::LoopSet, mref::ArrayReferenceMeta, arraysymbolinds::
     ArrayRefStruct( index_types, indices, offsets )
 end
 
-struct OperationStruct
+struct OperationStruct <: AbstractLoopOperation
     # instruction::Instruction
     loopdeps::UInt64
     reduceddeps::UInt64
@@ -56,10 +56,8 @@ struct OperationStruct
     array::UInt8
     symid::UInt8
 end
-isload(os::OperationStruct) = os.node_type == memload
-isstore(os::OperationStruct) = os.node_type == memstore
-iscompute(os::OperationStruct) = os.node_type == compute
-isconstant(os::OperationStruct) = os.node_type == constant
+optype(os) = os.node_type
+
 function findmatchingarray(ls::LoopSet, mref::ArrayReferenceMeta)
     id = 0x01
     for r ∈ ls.refs_aliasing_syms
@@ -213,12 +211,8 @@ end
         assigned_names[i] = LHS
         d = (D[i])::Union{Nothing,Int}
         if d === nothing # stridedpointer
-            if ari == -1
-                RHS = Expr(:call, :LoopValue)
-            else
-                num_arrays += 1
-                RHS = Expr(:call, lv(:stridedpointer), Expr(:ref, :vargs, ari), Expr(:ref, :arraydescript, ari))
-            end
+            num_arrays += 1
+            RHS = Expr(:call, lv(:stridedpointer), Expr(:ref, :vargs, ari), Expr(:ref, :arraydescript, ari))
         else #subsetview
             j += 1
             RHS = Expr(:call, :subsetview, assigned_names[ari], Expr(:call, Expr(:curly, :Val, d)), Expr(:ref, :subsetvals, j))
@@ -317,8 +311,6 @@ function setup_call_noinline(ls::LoopSet, U = zero(Int8), T = zero(Int8))
                     push!(stridedpointerLHS, vp)
                     push!(vptrindices.args, findfirst(a -> vptr(a) == vp, ls.refs_aliasing_syms))
                 end
-            elseif ex.args[2] == LoopValue()
-                push!(loopvalueLHS, first(ex.args))
             end
         end
         push!(q.args, ex)

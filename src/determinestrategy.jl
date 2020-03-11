@@ -1,7 +1,46 @@
 
-# TODO: FIXME for general case
-# wrong for transposed matrices, and certain views/SubArrays.
-unitstride(op::Operation, s) = first(getindices(op)) === s
+function indexappearences(op::Operation, s::Symbol)
+    s ∉ loopdependencies(op) && return 0
+    appearences = 0
+    if isloopvalue(op)
+        return s === first(loopdependencies(op)) ? 1 : 0
+    elseif isload(op)
+        return 100
+    end
+    newapp = 0
+    for opp ∈ parents(op)
+        newapp += indexappearences(opp, s)
+    end
+    factor = instruction(op).instr ∈ (:+, :vadd, :add_fast, :evadd) ? 1 : 10
+    newapp * factor
+end
+function findparent(ls::LoopSet, s::Symbol)#opdict isn't filled when reconstructing
+    id = findfirst(op -> name(op) === s, operations(ls))
+    id === nothing && throw("$s not found")
+    operations(ls)[id]
+end
+function unitstride(ls::LoopSet, op::Operation, s::Symbol)
+    inds = getindices(op)
+    li = op.ref.loopedindex
+    # The first index is allowed to be indexed by `s`
+    fi = first(inds)
+    if fi === Symbol("##DISCONTIGUOUSSUBARRAY##")
+        return false
+    elseif !first(li)
+        # We must check if this
+        parent = findparent(ls, fi)
+        indexappearences(parent, s) > 1 && return false
+    end
+    for i ∈ 2:length(inds)
+        if li[i]
+            s === inds[i] && return false
+        else
+            parent = findparent(ls, inds[i])
+            s ∈ loopdependencies(parent) && return false
+        end
+    end
+    true
+end
 
 function register_pressure(op::Operation)
     if isconstant(op)
@@ -10,7 +49,7 @@ function register_pressure(op::Operation)
         instruction_cost(instruction(op)).register_pressure
     end
 end
-function cost(op::Operation, unrolled::Symbol, Wshift::Int, size_T::Int = op.elementbytes)
+function cost(ls::LoopSet, op::Operation, unrolled::Symbol, Wshift::Int, size_T::Int = op.elementbytes)
     isconstant(op) && return 0.0, 0, 1
     # Wshift == dependson(op, unrolled) ? Wshift : 0
     # c = first(cost(instruction(op), Wshift, size_T))::Int
@@ -27,7 +66,7 @@ function cost(op::Operation, unrolled::Symbol, Wshift::Int, size_T::Int = op.ele
         # either vbroadcast/reductionstore, vmov(a/u)pd, or gather/scatter
         # @show instr, unrolled, loopdependencies(op), unitstride(op, unrolled)
         if opisunrolled
-            if !unitstride(op, unrolled)# || !isdense(op) # need gather/scatter
+            if !unitstride(ls, op, unrolled)# || !isdense(op) # need gather/scatter
                 r = (1 << Wshift)
                 srt *= r
                 sl *= r
@@ -93,7 +132,7 @@ function evaluate_cost_unroll(
             hasintersection(rd, nested_loop_syms[1:end-length(rd)]) && return Inf
             included_vars[id] = true
             # @show op first(cost(op, vectorized, Wshift, size_T)), iter
-            total_cost += iter * first(cost(op, vectorized, Wshift, size_T))
+            total_cost += iter * first(cost(ls, op, vectorized, Wshift, size_T))
             total_cost > max_cost && return total_cost # abort if more expensive; we only want to know the cheapest
         end
     end
@@ -102,18 +141,18 @@ end
 
 # only covers vectorized ops; everything else considered lifted?
 function depchain_cost!(
-    skip::Vector{Bool}, op::Operation, vectorized::Symbol, Wshift::Int, size_T::Int, rt::Float64 = 0.0, sl::Int = 0
+    ls::LoopSet, skip::Vector{Bool}, op::Operation, vectorized::Symbol, Wshift::Int, size_T::Int, rt::Float64 = 0.0, sl::Int = 0
 )
     skip[identifier(op)] = true
     # depth first search
     for opp ∈ parents(op)
         skip[identifier(opp)] && continue
-        rt, sl = depchain_cost!(skip, opp, vectorized, Wshift, size_T, rt, sl)
+        rt, sl = depchain_cost!(ls, skip, opp, vectorized, Wshift, size_T, rt, sl)
     end
     # Basically assuming memory and compute don't conflict, but everything else does
     # Ie, ignoring the fact that integer and floating point operations likely don't either
     if iscompute(op)
-        rtᵢ, slᵢ = cost(op, vectorized, Wshift, size_T)
+        rtᵢ, slᵢ = cost(ls, op, vectorized, Wshift, size_T)
         rt += rtᵢ; sl += slᵢ
     end
     rt, sl
@@ -139,9 +178,9 @@ function unroll_no_reductions(ls, order, vectorized, Wshift, size_T)
     for op ∈ operations(ls)
         dependson(op, innermost) || continue
         if iscompute(op)
-            compute_rt += first(cost(op, vectorized, Wshift, size_T))
+            compute_rt += first(cost(ls, op, vectorized, Wshift, size_T))
         elseif isload(op)
-            load_rt += first(cost(op, vectorized, Wshift, size_T))
+            load_rt += first(cost(ls, op, vectorized, Wshift, size_T))
         end
     end
     # heuristic guess
@@ -181,13 +220,13 @@ function determine_unroll_factor(
     for op ∈ operations(ls)
         dependson(op, unrolled) || continue
         if isreduction(op)
-            rt, sl = depchain_cost!(visited_nodes, op, vectorized, Wshift, size_T)
+            rt, sl = depchain_cost!(ls, visited_nodes, op, vectorized, Wshift, size_T)
             latency = max(sl, latency)
             compute_recip_throughput += rt
         elseif isload(op)
-            load_recip_throughput += first(cost(op, vectorized, Wshift, size_T))
+            load_recip_throughput += first(cost(ls, op, vectorized, Wshift, size_T))
         elseif isstore(op)
-            store_recip_throughput += first(cost(op, vectorized, Wshift, size_T))
+            store_recip_throughput += first(cost(ls, op, vectorized, Wshift, size_T))
         end
     end
     recip_throughput = max(
@@ -424,7 +463,7 @@ function evaluate_cost_tile(
         opisininnerloop = descendentsininnerloop[id]
         isunrolled = unrolledtiled[1,id]
         istiled = unrolledtiled[2,id]
-        rt, lat, rp = cost(op, vectorized, Wshift, size_T)
+        rt, lat, rp = cost(ls, op, vectorized, Wshift, size_T)
         rp = opisininnerloop ? rp : 0 # we only care about register pressure within the inner most loop
         rt *= iters[id]
         if isunrolled && istiled # no cost decrease; cost must be repeated

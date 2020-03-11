@@ -43,17 +43,20 @@ Base.:(==)(x::ArrayReferenceMeta, y::ArrayReference) = x.ref == y
 Base.:(==)(x::ArrayReference, y) = false
 Base.:(==)(x::ArrayReferenceMeta, y) = false
 
+abstract type AbstractLoopOperation end
+
 @enum OperationType begin
     constant
     memload
     compute
     memstore
+    loopvalue
 end
 
 # TODO: can some computations be cached in the operations?
 """
 """
-mutable struct Operation
+mutable struct Operation <: AbstractLoopOperation
     identifier::Int
     variable::Symbol
     elementbytes::Int
@@ -115,6 +118,7 @@ const NOPARENTS = Operation[]
 function Base.show(io::IO, op::Operation)
     if isconstant(op)
         if op.instruction === LOOPCONSTANT
+            
             print(io, Expr(:(=), op.variable, 0))
         else
             print(io, Expr(:(=), op.variable, op.instruction.instr))
@@ -125,6 +129,8 @@ function Base.show(io::IO, op::Operation)
         print(io, Expr(:(=), op.variable, Expr(op.instruction, name.(parents(op))...)))
     elseif isstore(op)
         print(io, Expr(:(=), Expr(:ref, name(op.ref), getindices(op)...), name(first(parents(op)))))
+    elseif isloopvalue(op)
+        print(io, Expr(:(=), op.variable, op.variable))
     end
 end
 
@@ -132,11 +138,13 @@ function isreduction(op::Operation)
     ((op.node_type == compute) || (op.node_type == memstore)) && length(op.reduced_deps) > 0
     # (op.node_type == memstore) && (length(op.symbolic_metadata) < length(op.dependencies))# && issubset(op.symbolic_metadata, op.dependencies)
 end
-isload(op::Operation) = op.node_type == memload
-iscompute(op::Operation) = op.node_type == compute
-isstore(op::Operation) = op.node_type == memstore
-isconstant(op::Operation) = op.node_type == constant
-accesses_memory(op::Operation) = isload(op) | isstore(op)
+optype(op::Operation) = op.node_type
+isload(op::AbstractLoopOperation) = optype(op) == memload
+iscompute(op::AbstractLoopOperation) = optype(op) == compute
+isstore(op::AbstractLoopOperation) = optype(op) == memstore
+isconstant(op::AbstractLoopOperation) = optype(op) == constant
+isloopvalue(op::AbstractLoopOperation) = optype(op) == loopvalue
+accesses_memory(op::AbstractLoopOperation) = isload(op) | isstore(op)
 elsize(op::Operation) = op.elementbytes
 dependson(op::Operation, sym::Symbol) = sym ∈ op.dependencies
 parents(op::Operation) = op.parents

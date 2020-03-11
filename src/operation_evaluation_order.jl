@@ -43,7 +43,7 @@ function addoptoorder!(
     istiled = (loopistiled ? (tiled ∈ loopdependencies(op)) : false) + 1
     # optype = Int(op.node_type) + 1
     after_loop = place_after_loop[id] + 1
-    push!(lo[isunrolled,istiled,after_loop,_n], op)
+    isloopvalue(op) || push!(lo[isunrolled,istiled,after_loop,_n], op)
     set_upstream_family!(place_after_loop, op, false, loopdependencies(op), identifier(op)) # parents that have already been included are not moved, so no need to check included_vars to filter
     nothing
 end
