@@ -1,7 +1,5 @@
 function _precompile_()
     ccall(:jl_generating_output, Cint, ()) == 1 || return nothing
-    precompile(Tuple{LoopVectorization.var"#19#threadsfor_fun#6"{Main.var"#foo#11",Core.Ptr{Core.Float32},Core.Tuple{Core.Ptr{Core.Float32},Core.Ptr{Core.Float32}},Core.Int64,Base.Val{16},Core.Int64,Base.UnitRange{Core.Int64}}})
-    precompile(Tuple{LoopVectorization.var"#19#threadsfor_fun#6"{Main.var"#foo#11",Core.Ptr{Core.Float64},Core.Tuple{Core.Ptr{Core.Float64},Core.Ptr{Core.Float64}},Core.Int64,Base.Val{8},Core.Int64,Base.UnitRange{Core.Int64}}})
     precompile(Tuple{Type{Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{1},Axes,F,Args} where Args<:Tuple where F where Axes},typeof(+),Tuple{Array{Float64,1},LoopVectorization.Product{Array{Float64,2},Array{Float64,1}}}})
     precompile(Tuple{Type{Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{1},Axes,F,Args} where Args<:Tuple where F where Axes},typeof(+),Tuple{Array{Int32,1},LoopVectorization.Product{Array{Int32,2},Array{Int32,1}}}})
     precompile(Tuple{Type{Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{1},Axes,F,Args} where Args<:Tuple where F where Axes},typeof(+),Tuple{Array{Int64,1},LoopVectorization.Product{Array{Int64,2},Array{Int64,1}}}})
