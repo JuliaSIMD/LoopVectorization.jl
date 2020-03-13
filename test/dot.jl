@@ -6,7 +6,7 @@ using Test
              s += a[i]*b[i]
              end)
     lsdot = LoopVectorization.LoopSet(dotq);
-    @test LoopVectorization.choose_order(lsdot) == (Symbol[:i], :i, 4, -1)
+    @test LoopVectorization.choose_order(lsdot) == (Symbol[:i], :i, Symbol("##undefined##"), :i, 4, -1)
     function mydot(a, b)
         s = zero(eltype(a))
         @inbounds @simd for i ∈ eachindex(a,b)
@@ -33,7 +33,7 @@ using Test
                  s += a[i]*a[i]
                  end)
     lsselfdot = LoopVectorization.LoopSet(selfdotq);
-    @test LoopVectorization.choose_order(lsselfdot) == (Symbol[:i], :i, 8, -1)
+    @test LoopVectorization.choose_order(lsselfdot) == (Symbol[:i], :i, Symbol("##undefined##"), :i, 8, -1)
 
     function myselfdot(a)
         s = zero(eltype(a))
@@ -187,10 +187,10 @@ using Test
     # a = rand(400);
     for T ∈ (Float32, Float64, Int32, Int64)
         @show T, @__LINE__
-        N = 127
+        N = 143
         R = T <: Integer ? (T(-100):T(100)) : T
         a = rand(T, N); b = rand(R, N);
-        ao = OffsetArray(a, -60:66); bo = OffsetArray(b, -60:66);
+        ao = OffsetArray(a, -60:N-61); bo = OffsetArray(b, -60:N-61);
         s = mydot(a, b)
         @test mydotavx(a,b) ≈ s
         @test mydot_avx(a,b) ≈ s

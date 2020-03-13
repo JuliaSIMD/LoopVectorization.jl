@@ -88,6 +88,7 @@ true
 
 """
 macro avx(q)
+    q = macroexpand(__module__, q)
     q2 = if q.head === :for
         setup_call(LoopSet(q, __module__))
     else# assume broadcast
@@ -134,12 +135,14 @@ end
 macro avx(arg, q)
     @assert q.head === :for
     @assert arg.head === :(=)
+    q = macroexpand(__module__, q)
     inline, U, T = check_macro_kwarg(arg)
     ls = LoopSet(q, __module__)
     esc(setup_call(ls, inline, U, T))
 end
 macro avx(arg1, arg2, q)
     @assert q.head === :for
+    q = macroexpand(__module__, q)
     inline, U, T = check_macro_kwarg(arg1)
     inline, U, T = check_macro_kwarg(arg2, inline, U, T)
     esc(setup_call(LoopSet(q, __module__), inline, U, T))
@@ -154,15 +157,18 @@ While `@avx` punts to a generated function to enable type-based analysis, `_@avx
 works on just the expressions. This requires that it makes a number of default assumptions.
 """
 macro _avx(q)
+    q = macroexpand(__module__, q)
     esc(lower(LoopSet(q, __module__)))
 end
 macro _avx(arg, q)
     @assert q.head === :for
+    q = macroexpand(__module__, q)
     inline, U, T = check_macro_kwarg(arg)
     esc(lower(LoopSet(q, __module__), U, T))
 end
 
 
 macro avx_debug(q)
+    q = macroexpand(__module__, q)
     esc(LoopVectorization.setup_call_debug(LoopSet(q, __module__)))
 end

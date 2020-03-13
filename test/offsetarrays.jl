@@ -1,14 +1,15 @@
 using LoopVectorization, OffsetArrays
+using LoopVectorization.VectorizationBase: StaticUnitRange
 using Test
 T = Float32
 
 @testset "OffsetArrays" begin
 
-    function old2d!(out::AbstractMatrix, A::AbstractMatrix, kern, R=CartesianIndices(out), z=zero(eltype(out)))
+    function old2d!(out::AbstractMatrix, A::AbstractMatrix, kern)
         rng1k, rng2k = axes(kern)
-        rng1,  rng2  = R.indices
+        rng1,  rng2  = axes(out)
         for j in rng2, i in rng1
-            tmp = z
+            tmp = zero(eltype(out))
             @inbounds for jk in rng2k, ik in rng1k
                 tmp += oftype(tmp, A[i+ik,j+jk])*kern[ik,jk]
             end
@@ -16,12 +17,51 @@ T = Float32
         end
         out
     end
-    function avx2d!(out::AbstractMatrix, A::AbstractMatrix, kern::OffsetArray, R=CartesianIndices(out), z=zero(eltype(out)))
+
+    # out = out1;
+    # R=CartesianIndices(out);
+    # z=zero(eltype(out));
+    # rng1k, rng2k = axes(skern);
+    # rng1,  rng2  = R.indices;
+    # tmp = z; i = 2; j = 2;
+    # ls1 = LoopVectorization.@avx_debug for jk in rng2k, ik in rng1k
+    #     tmp += A[i+ik,j+jk]*skern[ik,jk]
+    # end;
+    # ls1
+    # ls2 = LoopVectorization.@avx_debug for j in rng2, i in rng1
+    #         tmp = zero(eltype(out))
+    #         for jk in rng2k, ik in rng1k
+    #             tmp += A[i+ik,j+jk]*kern[ik,jk]
+    #         end
+    #         out[i,j] = tmp
+    # end;
+    # ls2
+    # oq = :(for j in rng2, i in rng1
+    #         tmp = zero(eltype(out))
+    #         for jk in rng2k, ik in rng1k
+    #             tmp += A[i+ik,j+jk]*kern[ik,jk]
+    #         end
+    #         out[i,j] = tmp
+    #        end);
+    # lsoq = LoopVectorization.LoopSet(oq);
+    # LoopVectorization.choose_order(lsoq)
+
+    # oq2 = :(for j in rng2, i in rng1
+    #         tmp = zero(eltype(out))
+    #         for jk in -1:1, ik in -1:1
+    #             tmp += A[i+ik,j+jk]*kern[ik,jk]
+    #         end
+    #         out[i,j] = tmp
+    #        end);
+    # lsoq = LoopVectorization.LoopSet(oq2);
+    # LoopVectorization.choose_order(lsoq)
+
+    function avx2d!(out::AbstractMatrix, A::AbstractMatrix, kern)
         rng1k, rng2k = axes(kern)
-        rng1,  rng2  = R.indices
+        rng1,  rng2  = axes(out)
         # Manually unpack the OffsetArray
         for j in rng2, i in rng1
-            tmp = z
+            tmp = zero(eltype(out))
             @avx for jk in rng2k, ik in rng1k
                 tmp += A[i+ik,j+jk]*kern[ik,jk]
             end
@@ -29,12 +69,12 @@ T = Float32
         end
         out
     end
-    function avx2douter!(out::AbstractMatrix, A::AbstractMatrix, kern::OffsetArray, R=CartesianIndices(out), z=zero(eltype(out)))
+    function avx2douter!(out::AbstractMatrix, A::AbstractMatrix, kern)
         rng1k, rng2k = axes(kern)
-        rng1,  rng2  = R.indices
+        rng1,  rng2  = axes(out)
         # Manually unpack the OffsetArray
         @avx for j in rng2, i in rng1
-            tmp = z
+            tmp = zero(eltype(out))
             for jk in rng2k, ik in rng1k
                 tmp += A[i+ik,j+jk]*kern[ik,jk]
             end
@@ -42,19 +82,42 @@ T = Float32
         end
         out
     end
+    struct SizedOffsetMatrix{T,LR,UR,LC,RC} <: AbstractMatrix{T}
+        data::Matrix{T}
+    end
+    Base.axes(::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (StaticUnitRange{LR,UR}(),StaticUnitRange{LC,UC}())
+    @generated function LoopVectorization.stridedpointer(A::SizedOffsetMatrix{T,LR,UR,LC,RC}) where {T,LR,UR,LC,RC}
+        quote
+            $(Expr(:meta,:inline))
+            LoopVectorization.OffsetStridedPointer(
+                LoopVectorization.StaticStridedPointer{$T,Tuple{1,$(UR-LR+1)}}(pointer(A.data)),
+                ($(LR-2), $(LC-2))
+            )
+        end
+    end
+    # Base.size(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (1 + UR-LR, 1 + UC-LC)
+    # Base.CartesianIndices(::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = CartesianIndices((LR:UR,LC:UC))
+    # Base.getindex(A::SizedOffsetMatrix, i, j) = LoopVectorization.vload(LoopVectorization.stridedpointer(A), (i,j)) # only needed to print
     
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
         A = rand(T, 100, 100);
         kern = OffsetArray(rand(T, 3, 3), -1:1, -1:1);
+        skern = SizedOffsetMatrix{T,-1,1,-1,1}(parent(kern));
         out1 = OffsetArray(similar(A, size(A).-2), 1, 1);   # stay away from the edges of A
         out2 = similar(out1); out3 = similar(out1);
 
         old2d!(out1, A, kern);
         avx2d!(out2, A, kern);
-
         @test out1 ≈ out2
+        
         avx2douter!(out3, A, kern);
+        @test out1 ≈ out3
+
+        fill!(out2, NaN); avx2d!(out2, A, skern);
+        @test out1 ≈ out2
+        
+        fill!(out3, NaN); avx2douter!(out3, A, skern);
         @test out1 ≈ out3
     end
 

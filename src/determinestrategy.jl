@@ -43,7 +43,7 @@ function unitstride(ls::LoopSet, op::Operation, s::Symbol)
 end
 
 function register_pressure(op::Operation)
-    if isconstant(op)
+    if isconstant(op) || isloopvalue(op)
         0
     else
         instruction_cost(instruction(op)).register_pressure
@@ -51,6 +51,7 @@ function register_pressure(op::Operation)
 end
 function cost(ls::LoopSet, op::Operation, unrolled::Symbol, Wshift::Int, size_T::Int = op.elementbytes)
     isconstant(op) && return 0.0, 0, 1
+    isloopvalue(op) && return 0.0, 0, 1
     # Wshift == dependson(op, unrolled) ? Wshift : 0
     # c = first(cost(instruction(op), Wshift, size_T))::Int
     instr = Instruction(:LoopVectorization, instruction(op).instr)
@@ -73,8 +74,8 @@ function cost(ls::LoopSet, op::Operation, unrolled::Symbol, Wshift::Int, size_T:
             # else # vmov(a/u)pd
             end
         elseif instr === :setindex! # broadcast or reductionstore; if store we want to penalize reduction
-            srt *= 2
-            sl *= 2
+            srt *= 3
+            sl *= 3
         end
     end
     srt, sl, srp
@@ -400,16 +401,30 @@ function stride_penalty(ls::LoopSet, order::Vector{Symbol})
     end
     stridepenalty * 1e-9
 end
+function convolution_cost_factor(ls::LoopSet, op::Operation, u1::Symbol, u2::Symbol, v::Symbol)
+    (u1 ∈ loopdependencies(op) && u2 ∈ loopdependencies(op)) || return 1.0
+    istranslation = false
+    inds = getindices(op); li = op.ref.loopedindex
+    for i ∈ eachindex(li)
+        if !li[i]
+            opp = findparent(ls, inds[i + (first(inds) === Symbol("##DISCONTIGUOUSSUBARRAY##"))])
+            if instruction(opp).instr ∈ (:+, :-) && u1 ∈ loopdependencies(opp) && u2 ∈ loopdependencies(opp)
+                istranslation = true
+            end
+        end
+    end
+    istranslation ? 0.25 : 1.0
+end
 # Just tile outer two loops?
 # But optimal order within tile must still be determined
 # as well as size of the tiles.
 function evaluate_cost_tile(
-    ls::LoopSet, order::Vector{Symbol}, vectorized::Symbol
+    ls::LoopSet, order::Vector{Symbol}, unrolled::Symbol, tiled::Symbol, vectorized::Symbol
 )
     N = length(order)
     @assert N ≥ 2 "Cannot tile merely $N loops!"
-    tiled = order[1]
-    unrolled = order[2]
+    # tiled = order[1]
+    # unrolled = order[2]
     ops = operations(ls)
     nops = length(ops)
     included_vars = fill!(resize!(ls.included_vars, nops), false)
@@ -464,6 +479,10 @@ function evaluate_cost_tile(
         isunrolled = unrolledtiled[1,id]
         istiled = unrolledtiled[2,id]
         rt, lat, rp = cost(ls, op, vectorized, Wshift, size_T)
+        if isload(op)
+            factor = convolution_cost_factor(ls, op, unrolled, tiled, vectorized)
+            rt *= factor#; rp *= factor;
+        end
         rp = opisininnerloop ? rp : 0 # we only care about register pressure within the inner most loop
         rt *= iters[id]
         if isunrolled && istiled # no cost decrease; cost must be repeated
@@ -556,54 +575,56 @@ function choose_tile(ls::LoopSet)
     lo = LoopOrders(ls)
     # @show lo.syms ls.loop_order.bestorder
     best_order = copyto!(ls.loop_order.bestorder, lo.syms)
-    best_vec = first(best_order) # filler
+    best_unrolled = best_tiled = best_vec = first(best_order) # filler
     new_order, state = iterate(lo) # right now, new_order === best_order
     U, T, lowest_cost = 0, 0, Inf
+    nloops = length(new_order)
     while true
-        for new_vec ∈ @view(new_order[2:end]) # view to skip first
-            U_temp, T_temp, cost_temp = evaluate_cost_tile(ls, new_order, new_vec)
-            if cost_temp < lowest_cost
-                lowest_cost = cost_temp
-                U, T = U_temp, T_temp
-                best_vec = new_vec
-                copyto!(best_order, new_order)
-                save_tilecost!(ls)
+        for new_vec ∈ new_order # view to skip first
+            for nt ∈ 1:nloops-1
+                new_tiled = new_order[nt]
+                for new_unrolled ∈ @view(new_order[nt+1:end])
+                    U_temp, T_temp, cost_temp = evaluate_cost_tile(ls, new_order, new_unrolled, new_tiled, new_vec)
+                    if cost_temp < lowest_cost
+                        lowest_cost = cost_temp
+                        U, T = U_temp, T_temp
+                        best_vec = new_vec
+                        best_tiled = new_tiled
+                        best_unrolled = new_unrolled
+                        copyto!(best_order, new_order)
+                        save_tilecost!(ls)
+                    end
+                end
             end
         end
         iter = iterate(lo, state)
-        iter === nothing && return best_order, best_vec, U, T, lowest_cost
+        iter === nothing && return best_order, best_unrolled, best_tiled, best_vec, U, T, lowest_cost
         new_order, state = iter
     end
 end
 # Last in order is the inner most loop
 function choose_order(ls::LoopSet)
     if num_loops(ls) > 1
-        torder, tvec, tU, tT, tc = choose_tile(ls)
+        torder, tunroll, ttile, tvec, tU, tT, tc = choose_tile(ls)
     else
         tc = Inf
     end
     uorder, uvec, uc = choose_unroll_order(ls, tc)
     if num_loops(ls) > 1 && tc ≤ uc
-        return torder, tvec, min(tU, tT), tT
+        return torder, tunroll, ttile, tvec, min(tU, tT), tT
         # return torder, tvec, 4, 4#5, 5
     else
-        return uorder, uvec, determine_unroll_factor(ls, uorder, first(uorder), uvec), -1
+        return uorder, first(uorder), Symbol("##undefined##"), uvec, determine_unroll_factor(ls, uorder, first(uorder), uvec), -1
     end
 end
 
 function register_pressure(ls::LoopSet)
-    # uses unroll of 1 if not tiling
-    if num_loops(ls) > 1
-        torder, tvec, tU, tT, tc = choose_tile(ls)
+    order, unroll, vec, U, T = choose_order(ls)
+    if T == -1
+        sum(register_pressure, operations(ls))
     else
-        tc = Inf
-    end
-    uorder, uvec, uc = choose_unroll_order(ls, tc)
-    if num_loops(ls) > 1 && tc ≤ uc # tile
         rp = @view ls.reg_pressure[:,1]
         tU * tT * rp[1] + tU * rp[2] + rp[3] + rp[4]
-    else
-        sum(register_pressure, operations(ls))
-    end    
+    end
 end
 

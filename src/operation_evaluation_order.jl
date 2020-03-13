@@ -48,17 +48,10 @@ function addoptoorder!(
     nothing
 end
 
-function fillorder!(ls::LoopSet, order::Vector{Symbol}, loopistiled::Bool)
+function fillorder!(ls::LoopSet, order::Vector{Symbol}, unrolled::Symbol, tiled::Symbol, loopistiled::Bool)
     lo = ls.loop_order
     ro = lo.loopnames # reverse order; will have same order as lo
     nloops = length(order)
-    if loopistiled
-        tiled    = order[1]
-        unrolled = order[2]
-    else
-        tiled = Symbol("##UNDEFINED##")
-        unrolled = first(order)
-    end
     ops = operations(ls)
     nops = length(ops)
     included_vars = fill!(resize!(ls.included_vars, nops), false)        

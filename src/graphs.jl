@@ -36,6 +36,30 @@
 
 # end
 
+struct UnrollSpecification
+    unrolledloopnum::Int
+    tiledloopnum::Int
+    vectorizedloopnum::Int
+    U::Int
+    T::Int
+end
+# UnrollSpecification(ls::LoopSet, unrolled::Loop, vectorized::Symbol, U, T) = UnrollSpecification(ls, unrolled.itersymbol, vectorized, U, T)
+function UnrollSpecification(us::UnrollSpecification, U, T)
+    @unpack unrolledloopnum, tiledloopnum, vectorizedloopnum = us
+    UnrollSpecification(unrolledloopnum, tiledloopnum, vectorizedloopnum, U, T)
+end
+function UnrollSpecification(us::UnrollSpecification; U = us.U, T = us.T)
+    @unpack unrolledloopnum, tiledloopnum, vectorizedloopnum = us
+    UnrollSpecification(unrolledloopnum, tiledloopnum, vectorizedloopnum, U, T)
+end
+isunrolled(us::UnrollSpecification, n::Int) = us.unrolledloopnum == n
+istiled(us::UnrollSpecification, n::Int) = !isunrolled(us, n) && us.tiledloopnum == n
+isvectorized(us::UnrollSpecification, n::Int) = us.vectorizedloopnum == n
+function unrollfactor(us::UnrollSpecification, n::Int)
+    @unpack unrolledloopnum, tiledloopnum, U, T = us
+    (unrolledloopnum == n) ? U : ((tiledloopnum == n) ? T : 1)
+end
+
 struct Loop
     itersymbol::Symbol
     starthint::Int
@@ -57,7 +81,7 @@ function Loop(itersymbol::Symbol, start::Union{Int,Symbol}, stop::Union{Int,Symb
 end
 Base.length(loop::Loop) = 1 + loop.stophint - loop.starthint
 isstaticloop(loop::Loop) = loop.startexact & loop.stopexact
-function startloop(loop::Loop, isvectorized, W, itersymbol = loop.itersymbol)
+function startloop(loop::Loop, isvectorized, W, itersymbol)
     startexact = loop.startexact
     if isvectorized
         if startexact
@@ -71,41 +95,48 @@ function startloop(loop::Loop, isvectorized, W, itersymbol = loop.itersymbol)
         Expr(:(=), itersymbol, Expr(:call, lv(:unwrap), loop.startsym))
     end
 end
-function vec_looprange(loop::Loop, isunrolled::Bool, W::Symbol, U::Int)
+function vec_looprange(loop::Loop, W::Symbol, UF::Int, mangledname::Symbol)
+    isunrolled = UF > 1
     incr = if isunrolled
-        Expr(:call, lv(:valmuladd), W, U, -2)
+        Expr(:call, lv(:valmuladd), W, UF, -2)
     else
         Expr(:call, lv(:valsub), W, 2)
     end
     if loop.stopexact # split for type stability
-        Expr(:call, :<, loop.itersymbol, Expr(:call, :-, loop.stophint, incr))
+        Expr(:call, :<, mangledname, Expr(:call, :-, loop.stophint, incr))
     else
-        Expr(:call, :<, loop.itersymbol, Expr(:call, :-, loop.stopsym, incr))
+        Expr(:call, :<, mangledname, Expr(:call, :-, loop.stopsym, incr))
     end
 end
 function looprange(loop::Loop, incr::Int, mangledname::Symbol)
-    incr -= 2
+    incr = 2 - incr
     if iszero(incr)
         Expr(:call, :<, mangledname, loop.stopexact ? loop.stophint : loop.stopsym)
     else
-        Expr(:call, :<, mangledname, loop.stopexact ? loop.stophint - incr : Expr(:call, :-, loop.stopsym, incr))
+        Expr(:call, :<, mangledname, loop.stopexact ? loop.stophint + incr : Expr(:call, :+, loop.stopsym, incr))
     end
 end
 function terminatecondition(
-    loop::Loop, W::Symbol, U::Int, T::Int, isvectorized::Bool, isunrolled::Bool, istiled::Bool,
-    mangledname::Symbol = loop.itersymbol, mask::Nothing = nothing
+    loop::Loop, us::UnrollSpecification, n::Int, W::Symbol, mangledname::Symbol, inclmask::Bool, UF::Int = unrollfactor(us, n)
 )
-    if isvectorized
-        vec_looprange(loop, isunrolled, W, U) # may not be tiled
+    if !isvectorized(us, n)
+        looprange(loop, UF, mangledname)
+    elseif inclmask
+        looprange(loop, 1, mangledname)
     else
-        looprange(loop, isunrolled ? U : (istiled ? T : 1), mangledname)
+        vec_looprange(loop, W, UF, mangledname) # may not be tiled
     end
 end
-function terminatecondition(
-    loop::Loop, W::Symbol, U::Int, T::Int, isvectorized::Bool, isunrolled::Bool, istiled::Bool,
-    mangledname::Symbol, mask::Symbol
-)
-    looprange(loop, 1, mangledname)
+function incrementloopcounter(us::UnrollSpecification, n::Int, W::Symbol, mangledname::Symbol, UF::Int = unrollfactor(us, n))
+    if isvectorized(us, n)
+        if UF == 1
+            Expr(:(=), mangledname, Expr(:call, lv(:valadd), W, mangledname))
+        else
+            Expr(:+=, mangledname, Expr(:call, lv(:valmul), W, UF))
+        end
+    else
+        Expr(:+=, mangledname, UF)
+    end
 end
 
 # load/compute/store × isunrolled × istiled × pre/post loop × Loop number
@@ -555,4 +586,12 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
     else
         throw("Don't know how to handle expression:\n$ex")
     end
+end
+
+function UnrollSpecification(ls::LoopSet, unrolled::Symbol, tiled::Symbol, vectorized::Symbol, U, T)
+    order = names(ls)
+    nu = findfirst(isequal(unrolled), order)::Int
+    nt = T == -1 ? nu : findfirst(isequal(tiled), order)::Int
+    nv = findfirst(isequal(vectorized), order)::Int
+    UnrollSpecification(nu, nt, nv, U, T)
 end

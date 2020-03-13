@@ -58,7 +58,7 @@ function lower_compute!(
     Uiter = opunrolled ? U - 1 : 0
     isreduct = isreduction(op)
     if !isnothing(suffix) && isreduct && tiledouterreduction == -1
-        instrfid = findfirst(isequal(instr.instr), (:vfmadd_fast, :vfnmadd_fast, :vfmsub_fast, :vfnmsub_fast))
+        instrfid = findfirst(isequal(instr.instr), (:vfmadd, :vfnmadd, :vfmsub, :vfnmsub))
         if instrfid !== nothing
             instr = Instruction((:vfmadd231, :vfnmadd231, :vfmsub231, :vfnmsub231)[instrfid])
         end

@@ -1,5 +1,5 @@
 @testset "GEMM" begin
-    # using LoopVectorization, Test; T = Float64
+    # using LoopVectorization, LinearAlgebra, Test; T = Float64
     Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 4)
     AmulBtq1 = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
                  C[m,n] = zeroB
@@ -8,7 +8,7 @@
                  end
                  end);
     lsAmulBt1 = LoopVectorization.LoopSet(AmulBtq1);
-    @test LoopVectorization.choose_order(lsAmulBt1) == (Symbol[:n,:m,:k], :m, Unum, Tnum)
+    @test LoopVectorization.choose_order(lsAmulBt1) == (Symbol[:n,:m,:k], :m, :n, :m, Unum, Tnum)
 
     AmulBq1 = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
                 C[m,n] = zeroB
@@ -17,7 +17,7 @@
                 end
                 end)
     lsAmulB1 = LoopVectorization.LoopSet(AmulBq1);
-    @test LoopVectorization.choose_order(lsAmulB1) == (Symbol[:n,:m,:k], :m, Unum, Tnum)
+    @test LoopVectorization.choose_order(lsAmulB1) == (Symbol[:n,:m,:k], :m, :n, :m, Unum, Tnum)
     AmulBq2 = :(for m ∈ 1:M, n ∈ 1:N
                 C[m,n] = zero(eltype(B))
                 for k ∈ 1:K
@@ -25,7 +25,7 @@
                 end
                 end)
     lsAmulB2 = LoopVectorization.LoopSet(AmulBq2);
-    @test LoopVectorization.choose_order(lsAmulB2) == (Symbol[:n,:m,:k], :m, Unum, Tnum)
+    @test LoopVectorization.choose_order(lsAmulB2) == (Symbol[:n,:m,:k], :m, :n, :m, Unum, Tnum)
     AmulBq3 = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
                 ΔCₘₙ = zero(eltype(C))
                 for k ∈ 1:size(A,2)
@@ -34,7 +34,7 @@
                 C[m,n] += ΔCₘₙ
                 end)
     lsAmulB3 = LoopVectorization.LoopSet(AmulBq3);
-    @test LoopVectorization.choose_order(lsAmulB3) == (Symbol[:n,:m,:k], :m, Unum, Tnum)
+    @test LoopVectorization.choose_order(lsAmulB3) == (Symbol[:n,:m,:k], :m, :n, :m, Unum, Tnum)
 
     function AmulB!(C, A, B)
         C .= 0
@@ -99,7 +99,7 @@
     # lsAmuladd.operations
     # LoopVectorization.loopdependencies.(lsAmuladd.operations)
     # LoopVectorization.reduceddependencies.(lsAmuladd.operations)
-    @test LoopVectorization.choose_order(lsAmuladd) == (Symbol[:n,:m,:k], :m, Unum, Tnum)
+    @test LoopVectorization.choose_order(lsAmuladd) == (Symbol[:n,:m,:k], :m, :n, :m, Unum, Tnum)
 
     function AmulB_avx1!(C, A, B)
         @_avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
@@ -116,7 +116,7 @@
            Cₘₙ += A[m,k] * B[k,n]
            end
            C[m,n] = Cₘₙ
-           end)
+           end);
     # exit()
     #         using LoopVectorization, Test
     #         T = Float64
@@ -211,7 +211,7 @@
                 end)
     lsAtmulB = LoopVectorization.LoopSet(AtmulBq);
     # LoopVectorization.choose_order(lsAtmulB)
-    @test LoopVectorization.choose_order(lsAtmulB) == (Symbol[:n,:m,:k], :k, Unum, Tnum)
+    @test LoopVectorization.choose_order(lsAtmulB) == (Symbol[:n,:m,:k], :m, :n, :k, Unum, Tnum)
     
     function AtmulBavx1!(C, A, B)
         @avx for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
@@ -228,8 +228,8 @@
             Cₘₙ += A[k,m] * B[k,n]
             end
             C[m,n] += Cₘₙ * factor
-            end)
-    atls = LoopVectorization.LoopSet(Atq)
+            end);
+    atls = LoopVectorization.LoopSet(Atq);
     # LoopVectorization.operations(atls)
     # LoopVectorization.loopdependencies.(operations(atls))
     # LoopVectorization.reduceddependencies.(operations(atls))
@@ -290,7 +290,8 @@
                end
                C[m,n] = Cₘₙ
                end)
-    lsr2amb = LoopVectorization.LoopSet(r2ambq)
+    lsr2amb = LoopVectorization.LoopSet(r2ambq);
+    @test LoopVectorization.choose_order(lsr2amb) == ([:m, :n, :k], :k, :n, :m, Unum, Tnum)
     function rank2AmulBavx!(C, Aₘ, Aₖ, B)
         @avx for m ∈ 1:size(C,1), n ∈ 1:size(C,2)
             Cₘₙ = zero(eltype(C))
@@ -518,6 +519,7 @@
     
     for T ∈ (Float32, Float64, Int32, Int64)
         @show T, @__LINE__
+        # M, K, N = 128, 128, 128;
         M, K, N = 73, 75, 69;
         TC = sizeof(T) == 4 ? Float32 : Float64
         R = T <: Integer ? (T(-1000):T(1000)) : T
@@ -607,13 +609,13 @@
             @test C ≈ C2
             fill!(C, 9999.999); AmulB2x2_avx!(C, At', B);
             @test C ≈ C2
-            fill!(C, 9999.999); AtmulB_avx1!(C, At, B)
+            fill!(C, 9999.999); AtmulB_avx1!(C, At, B);
             @test C ≈ C2
-            fill!(C, 9999.999); AtmulB_avx1!(C, A', B)
+            fill!(C, 9999.999); AtmulB_avx1!(C, A', B);
             @test C ≈ C2
-            fill!(C, 9999.999); AtmulB_avx2!(C, At, B)
+            fill!(C, 9999.999); AtmulB_avx2!(C, At, B);
             @test C ≈ C2
-            fill!(C, 9999.999); AtmulB_avx2!(C, A', B)
+            fill!(C, 9999.999); AtmulB_avx2!(C, A', B);
             @test C ≈ C2
             fill!(C, 9999.999); mulCAtB_2x2block_avx!(C, At, B);
             @test C ≈ C2
@@ -649,13 +651,13 @@
             @test Cs ≈ C2
             fill!(Cs, 9999.999); AmulB2x2avx!(Cs, Ats', Bs)
             @test Cs ≈ C2
-            fill!(Cs, 9999.999); AtmulBavx1!(Cs, Ats, Bs)
+            fill!(Cs, 9999.999); AtmulBavx1!(Cs, Ats, Bs);
             @test Cs ≈ C2
-            fill!(Cs, 9999.999); AtmulBavx1!(Cs, As', Bs)
+            fill!(Cs, 9999.999); AtmulBavx1!(Cs, As', Bs);
             @test Cs ≈ C2
-            fill!(Cs, 9999.999); AtmulBavx2!(Cs, Ats, Bs)
+            fill!(Cs, 9999.999); AtmulBavx2!(Cs, Ats, Bs);
             @test Cs ≈ C2
-            fill!(Cs, 9999.999); AtmulBavx2!(Cs, As', Bs)
+            fill!(Cs, 9999.999); AtmulBavx2!(Cs, As', Bs);
             @test Cs ≈ C2
             fill!(Cs, 9999.999); mulCAtB_2x2blockavx!(Cs, Ats, Bs);
             @test Cs ≈ C2
@@ -699,9 +701,9 @@
             @test Cs ≈ C2
             fill!(Cs, 9999.999); AtmulB_avx1!(Cs, As', Bs)
             @test Cs ≈ C2
-            fill!(Cs, 9999.999); AtmulB_avx2!(Cs, Ats, Bs)
+            fill!(Cs, 9999.999); AtmulB_avx2!(Cs, Ats, Bs);
             @test Cs ≈ C2
-            fill!(Cs, 9999.999); AtmulB_avx2!(Cs, As', Bs)
+            fill!(Cs, 9999.999); AtmulB_avx2!(Cs, As', Bs);
             @test Cs ≈ C2
             fill!(Cs, 9999.999); mulCAtB_2x2block_avx!(Cs, Ats, Bs);
             @test Cs ≈ C2
@@ -711,7 +713,7 @@
 
         @time @testset "$T rank2mul" begin
             Aₘ= rand(R, M, 2); Aₖ = rand(R, 2, K);
-            Aₖ′ = copy(Aₖ')
+            Aₖ′ = copy(Aₖ');
             rank2AmulB!(C2, Aₘ, Aₖ, B)
             rank2AmulBavx!(C, Aₘ, Aₖ, B)
             @test C ≈ C2

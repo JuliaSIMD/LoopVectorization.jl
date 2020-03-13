@@ -3,7 +3,7 @@
               b[i] = exp(a[i])
               end)
     lsvexp = LoopVectorization.LoopSet(vexpq);
-    @test LoopVectorization.choose_order(lsvexp) == (Symbol[:i], :i, 1, -1)
+    @test LoopVectorization.choose_order(lsvexp) == (Symbol[:i], :i, Symbol("##undefined##"), :i, 1, -1)
 
     function myvexp!(b, a)
         @inbounds for i ∈ eachindex(a)
@@ -40,7 +40,7 @@
                s += exp(a[i])
                end)
     lsvexps = LoopVectorization.LoopSet(vexpsq);
-    @test LoopVectorization.choose_order(lsvexps) == (Symbol[:i], :i, 1, -1)
+    @test LoopVectorization.choose_order(lsvexps) == (Symbol[:i], :i, Symbol("##undefined##"), :i, 1, -1)
 
     function myvexp(a)
         s = zero(eltype(a))
@@ -81,8 +81,8 @@
     ldq = :(for i ∈ 1:size(L,1)
             ld += log(L[i,i])
             end)
-    lsld = LoopVectorization.LoopSet(ldq)
-    @test LoopVectorization.choose_order(lsld) == (Symbol[:i], :i, 1, -1)
+    lsld = LoopVectorization.LoopSet(ldq);
+    @test LoopVectorization.choose_order(lsld) == (Symbol[:i], :i, Symbol("##undefined##"), :i, 1, -1)
 
     function calc_sins!(res::AbstractArray{T}) where {T}
         code_phase_delta = T(0.01)
