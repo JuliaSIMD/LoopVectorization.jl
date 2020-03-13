@@ -1,7 +1,7 @@
 using LoopVectorization, OffsetArrays
 using LoopVectorization.VectorizationBase: StaticUnitRange
 using Test
-T = Float32
+# T = Float32
 
 @testset "OffsetArrays" begin
 
@@ -28,23 +28,24 @@ T = Float32
     #     tmp += A[i+ik,j+jk]*skern[ik,jk]
     # end;
     # ls1
-    # ls2 = LoopVectorization.@avx_debug for j in rng2, i in rng1
+    # rng1,  rng2  = CartesianIndices(out1).indices;
+    # rng1k, rng2k = axes(skern);
+    # ls2dstatic = LoopVectorization.@avx_debug for j in rng2, i in rng1
     #         tmp = zero(eltype(out))
     #         for jk in rng2k, ik in rng1k
-    #             tmp += A[i+ik,j+jk]*kern[ik,jk]
+    #             tmp += A[i+ik,j+jk]*skern[ik,jk]
     #         end
-    #         out[i,j] = tmp
+    #         out1[i,j] = tmp
     # end;
-    # ls2
-    # oq = :(for j in rng2, i in rng1
+    # LoopVectorization.choose_order(ls2dstatic)
+    # q2d = :(for j in rng2, i in rng1
     #         tmp = zero(eltype(out))
     #         for jk in rng2k, ik in rng1k
     #             tmp += A[i+ik,j+jk]*kern[ik,jk]
     #         end
     #         out[i,j] = tmp
     #        end);
-    # lsoq = LoopVectorization.LoopSet(oq);
-    # LoopVectorization.choose_order(lsoq)
+    # lsq2d = LoopVectorization.LoopSet(q2d); LoopVectorization.choose_order(lsq2d)
 
     # oq2 = :(for j in rng2, i in rng1
     #         tmp = zero(eltype(out))
@@ -82,6 +83,8 @@ T = Float32
         end
         out
     end
+
+    
     struct SizedOffsetMatrix{T,LR,UR,LC,RC} <: AbstractMatrix{T}
         data::Matrix{T}
     end
@@ -97,7 +100,48 @@ T = Float32
     end
     # Base.size(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (1 + UR-LR, 1 + UC-LC)
     # Base.CartesianIndices(::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = CartesianIndices((LR:UR,LC:UC))
-    # Base.getindex(A::SizedOffsetMatrix, i, j) = LoopVectorization.vload(LoopVectorization.stridedpointer(A), (i,j)) # only needed to print
+    Base.getindex(A::SizedOffsetMatrix, i, j) = LoopVectorization.vload(LoopVectorization.stridedpointer(A), (i,j)) # only needed to print
+    function avx2dunrolled!(out::AbstractMatrix, A::AbstractMatrix, kern::SizedOffsetMatrix{T,-1,1,-1,1}) where {T}
+        rng1,  rng2  = axes(out)
+        Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> kern_ik_jk = kern[ik-2,jk-2]
+        # Manually unpack the OffsetArray
+        @avx for j in rng2, i in rng1
+            tmp_0 = zero(eltype(out))
+            Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> tmp_{ik+(jk-1)*3} = A[i+(ik-2),j+(jk-2)] * kern_ik_jk + tmp_{ik+(jk-1)*3-1}
+            out[i,j] = tmp_9
+        end
+        out
+    end
+    function avx2dunrolled2x2!(out::AbstractMatrix, A::AbstractMatrix, kern::SizedOffsetMatrix{T,-1,1,-1,1}) where {T}
+        rng1,  rng2  = axes(out)
+        Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> kern_ik_jk = kern[ik-2,jk-2]
+        # Manually unpack the OffsetArray
+        @avx tile=(2,2) for j in rng2, i in rng1
+            tmp_0 = zero(eltype(out))
+            Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> tmp_{ik+(jk-1)*3} = A[i+(ik-2),j+(jk-2)] * kern_ik_jk + tmp_{ik+(jk-1)*3-1}
+            out[i,j] = tmp_9
+        end
+        out
+    end
+    function avx2dunrolled3x3!(out::AbstractMatrix, A::AbstractMatrix, kern::SizedOffsetMatrix{T,-1,1,-1,1}) where {T}
+        rng1,  rng2  = axes(out)
+        Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> kern_ik_jk = kern[ik-2,jk-2]
+        # Manually unpack the OffsetArray
+        @avx tile=(3,3) for j in rng2, i in rng1
+            tmp_0 = zero(eltype(out))
+            Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> tmp_{ik+(jk-1)*3} = A[i+(ik-2),j+(jk-2)] * kern_ik_jk + tmp_{ik+(jk-1)*3-1}
+            out[i,j] = tmp_9
+        end
+        out
+    end
+    # uq = :(for j in rng2, i in rng1
+    #         tmp_0 = zero(eltype(out))
+    #         Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> tmp_{ik+(jk-1)*3} = A[i+(ik-2),j+(jk-2)] * kern_ik_jk + tmp_{ik+(jk-1)*3-1}
+    #         out[i,j] = tmp_9
+    #        end);
+    # lsuq = LoopVectorization.LoopSet(macroexpand(Base, uq));
+    # LoopVectorization.choose_order(lsuq)
+
     
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
@@ -119,7 +163,16 @@ T = Float32
         
         fill!(out3, NaN); avx2douter!(out3, A, skern);
         @test out1 ≈ out3
-    end
+
+        fill!(out3, NaN); avx2dunrolled!(out3, A, skern);
+        @test out1 ≈ out3
+
+        fill!(out3, NaN); avx2dunrolled2x2!(out3, A, skern);
+        @test out1 ≈ out3
+        
+        fill!(out3, NaN); avx2dunrolled3x3!(out3, A, skern);
+        @test out1 ≈ out3
+end
 
     
 end
