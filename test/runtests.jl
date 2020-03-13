@@ -14,6 +14,8 @@ function clenshaw(x,coeff)
     return ret
 end
 
+@show LoopVectorization.VectorizationBase.REGISTER_COUNT
+
 @time @testset "LoopVectorization.jl" begin
 
     @time include("printmethods.jl")

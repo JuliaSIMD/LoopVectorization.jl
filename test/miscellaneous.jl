@@ -5,7 +5,7 @@
               s += x[m] * A[m,n] * y[n]
               end)
     lsdot3 = LoopVectorization.LoopSet(dot3q);
-    @test LoopVectorization.choose_order(lsdot3) == ([:m,:n], :n, :m, :m, Unum, Tnum)
+    @test LoopVectorization.choose_order(lsdot3) == ([:m,:n], :n, :m, :m, Unum & -2, Tnum)
 
     @static if VERSION < v"1.4"
         dot3(x, A, y) = dot(x, A * y)
