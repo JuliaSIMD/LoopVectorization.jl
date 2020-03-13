@@ -499,11 +499,11 @@ function evaluate_cost_tile(
             reg_pressure[4] += rp
         end
     end
-    sum(reg_pressure) > VectorizationBase.REGISTER_COUNT && return 0, 0, Inf
+    costpenalty = (sum(reg_pressure) > VectorizationBase.REGISTER_COUNT) ? 2 : 1
     # @show order, vectorized cost_vec reg_pressure
     # @show solve_tilesize(ls, unrolled, tiled, cost_vec, reg_pressure)
     U, T, tcost = solve_tilesize(ls, unrolled, tiled, cost_vec, reg_pressure, W, vectorized)
-    U, T, tcost + stride_penalty(ls, order)
+    U, T, costpenalty * tcost + stride_penalty(ls, order)
 end
 
 

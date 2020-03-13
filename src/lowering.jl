@@ -353,7 +353,12 @@ function lower(ls::LoopSet)#, prependinlineORorUnroll = 0)
 end
 function lower(ls::LoopSet, U, T)#, prependinlineORorUnroll = 0)
     num_loops(ls) == 1 && @assert T == -1
-    order, unrolled, tiled, vectorized, _U, _T = choose_order(ls)
+    if T == -1
+        order, vectorized, c = choose_unroll_order(ls, Inf)
+        unrolled = first(order); tiled = Symbol("##undefined##")
+    else
+        order, unrolled, tiled, vectorized, _U, _T, c = choose_tile(ls)
+    end
     lower(ls, order, unrolled, tiled, vectorized, U, T)
 end
 

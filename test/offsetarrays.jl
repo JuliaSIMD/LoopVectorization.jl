@@ -60,7 +60,6 @@ using Test
     function avx2d!(out::AbstractMatrix, A::AbstractMatrix, kern)
         rng1k, rng2k = axes(kern)
         rng1,  rng2  = axes(out)
-        # Manually unpack the OffsetArray
         for j in rng2, i in rng1
             tmp = zero(eltype(out))
             @avx for jk in rng2k, ik in rng1k
@@ -73,7 +72,6 @@ using Test
     function avx2douter!(out::AbstractMatrix, A::AbstractMatrix, kern)
         rng1k, rng2k = axes(kern)
         rng1,  rng2  = axes(out)
-        # Manually unpack the OffsetArray
         @avx for j in rng2, i in rng1
             tmp = zero(eltype(out))
             for jk in rng2k, ik in rng1k
@@ -83,6 +81,7 @@ using Test
         end
         out
     end
+
 
     
     struct SizedOffsetMatrix{T,LR,UR,LC,RC} <: AbstractMatrix{T}
