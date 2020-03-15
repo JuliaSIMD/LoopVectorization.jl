@@ -171,7 +171,8 @@ using Test
         
         fill!(out3, NaN); avx2dunrolled3x3!(out3, A, skern);
         @test out1 ≈ out3
-end
+
+    end
 
     
 end

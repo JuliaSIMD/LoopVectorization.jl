@@ -11,6 +11,7 @@ Pages = [
     "examples/matrix_multiplication.md",
     "examples/matrix_vector_ops.md",
     "examples/dot_product.md",
+    "examples/filtering.md",
     "examples/sum_of_squared_error.md",
     "vectorized_convenience_functions.md",
     "future_work.md",

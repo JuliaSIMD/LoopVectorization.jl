@@ -5,7 +5,7 @@ One of the friendliest problems for vectorization is matrix multiplication. Give
 LoopVectorization currently doesn't do any memory-modeling or memory-based optimizations, so it will still run into problems as the size of matrices increases. But at smaller sizes, it's capable of achieving a healthy percent of potential GFLOPS.
 We can write a single function:
 ```julia
-@inline function A_mul_B!(𝐂, 𝐀, 𝐁)
+function A_mul_B!(𝐂, 𝐀, 𝐁)
     @avx for m ∈ 1:size(𝐀,1), n ∈ 1:size(𝐁,2)
         𝐂ₘₙ = zero(eltype(𝐂))
         for k ∈ 1:size(𝐀,2)
