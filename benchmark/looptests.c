@@ -244,3 +244,47 @@ double logdettriangle(double* T, long N){
   return ld;
 }
 
+void filter2d(double* restrict B, double* restrict A, double* restrict K, long M, long N, long offset){
+  for (long na = offset; na < N-offset; na++){
+    for (long ma = offset; ma < M-offset; ma++){
+      double tmp = 0.0;
+      for (long nk = -offset; nk < offset + 1; nk++){
+	for (long mk = -offset; mk < offset + 1; mk++){
+	  tmp += A[(ma+mk) + (na+nk)*M] * K[(mk+offset) + (nk+offset)*(2*offset+1)];
+	}
+      }
+      B[(ma-offset) + (na-offset) * (M-2*offset)] = tmp;
+    }
+  }
+}
+void filter2d3x3(double* restrict B, double* restrict A, double* restrict K, long M, long N){
+  const long offset = 1;
+  for (long na = offset; na < N-offset; na++){
+    for (long ma = offset; ma < M-offset; ma++){
+      double tmp = 0.0;
+      for (long nk = -offset; nk < offset + 1; nk++){
+	for (long mk = -offset; mk < offset + 1; mk++){
+	  tmp += A[(ma+mk) + (na+nk)*M] * K[(mk+offset) + (nk+offset)*(2*offset+1)];
+	}
+      }
+      B[(ma-offset) + (na-offset) * (M-2*offset)] = tmp;
+    }
+  }
+}
+void filter2d3x3unrolled(double* restrict B, double* restrict A, double* restrict K, long M, long N){
+  for (long na = 1; na < N-1; na++){
+    for (long ma = 1; ma < M-1; ma++){
+      double tmp = A[(ma-1) + (na-1)*M] * K[0];
+      tmp += A[(ma  ) + (na-1)*M] * K[1];
+      tmp += A[(ma+1) + (na-1)*M] * K[2];
+      tmp += A[(ma-1) + (na  )*M] * K[3];
+      tmp += A[(ma  ) + (na  )*M] * K[4];
+      tmp += A[(ma+1) + (na  )*M] * K[5];
+      tmp += A[(ma-1) + (na+1)*M] * K[6];
+      tmp += A[(ma  ) + (na+1)*M] * K[7];
+      tmp += A[(ma+1) + (na+1)*M] * K[8];
+      B[(ma-1) + (na-1) * (M-2)] = tmp;
+    }
+  }
+}
+

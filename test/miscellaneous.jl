@@ -3,9 +3,9 @@
     Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 4)
     dot3q = :(for m ∈ 1:M, n ∈ 1:N
               s += x[m] * A[m,n] * y[n]
-              end)
+              end);
     lsdot3 = LoopVectorization.LoopSet(dot3q);
-    @test LoopVectorization.choose_order(lsdot3) == ([:m,:n], :n, :m, :m, Unum & -2, Tnum)
+    @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :m, :n, :m, Unum & -2, Tnum)
 
     @static if VERSION < v"1.4"
         dot3(x, A, y) = dot(x, A * y)

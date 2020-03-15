@@ -52,9 +52,10 @@ function matmul_bench!(br, C, A, B, i)
     @assert C ≈ Cblas "eigen gemm wrong?"; fill!(C, NaN)
     br[10,i] = n_gflop / @belapsed iegemm!($C, $A, $B)
     @assert C ≈ Cblas "i-eigen gemm wrong?"; fill!(C, NaN)
-    br[11,i] = n_gflop / @belapsed dgemmjit!($C, $A, $B)
-    @assert C ≈ Cblas "MKL JIT gemm wrong?"; fill!(C, NaN)
-    br[12,i] = n_gflop / @belapsed gemmavx!($C, $A, $B)
+    # br[11,i] = n_gflop / @belapsed dgemmjit!($C, $A, $B)
+    # @assert C ≈ Cblas "MKL JIT gemm wrong?"; fill!(C, NaN)
+    # br[12,i] = n_gflop / @belapsed gemmavx!($C, $A, $B)
+    br[end,i] = n_gflop / @belapsed gemmavx!($C, $A, $B)
     @assert C ≈ Cblas "LoopVec gemm wrong?"
 end
 function A_mul_B_bench!(br, s, i)
@@ -93,35 +94,36 @@ function At_mul_Bt_bench!(br, s, i)
     matmul_bench!(br, C, A, B, i)
 end
 
-const BLASTESTS = [
+blastests() = [
     BLAS.vendor() === :mkl ? "IntelMKL" : "OpenBLAS",
     "Julia", "Clang-Polly",
     "GFortran", "GFort-intrinsic",
     "icc", "ifort", "ifort-intrinsic",
-    "Clang++ & Eigen-3", "icpc & Eigen-3",
-    "MKL JIT", "LoopVectorization"
+    "g++ & Eigen-3", "icpc & Eigen-3",
+    "LoopVectorization"
+    # "MKL JIT", "LoopVectorization"
 ]
 
 function benchmark_AmulB(sizes)
-    br = BenchmarkResult(BLASTESTS, sizes)
+    br = BenchmarkResult(blastests(), sizes)
     sm = br.sizedresults.results
     pmap(is -> A_mul_B_bench!(sm, is[2], is[1]), enumerate(sizes))
     br
 end
 function benchmark_AmulBt(sizes)
-    br = BenchmarkResult(BLASTESTS, sizes)
+    br = BenchmarkResult(blastests(), sizes)
     sm = br.sizedresults.results
     pmap(is -> A_mul_Bt_bench!(sm, is[2], is[1]), enumerate(sizes))
     br
 end
 function benchmark_AtmulB(sizes)
-    br = BenchmarkResult(BLASTESTS, sizes)
+    br = BenchmarkResult(blastests(), sizes)
     sm = br.sizedresults.results
     pmap(is -> At_mul_B_bench!(sm, is[2], is[1]), enumerate(sizes))
     br
 end
 function benchmark_AtmulBt(sizes)
-    br = BenchmarkResult(BLASTESTS, sizes)
+    br = BenchmarkResult(blastests(), sizes)
     sm = br.sizedresults.results
     pmap(is -> At_mul_Bt_bench!(sm, is[2], is[1]), enumerate(sizes))
     br
@@ -150,7 +152,7 @@ function dot_bench!(br, s, i)
     @assert jdotavx(a,b) ≈ dotblas "LoopVec dot wrong?"
 end
 function benchmark_dot(sizes)
-    tests = [BLAS.vendor() === :mkl ? "IntelMKL" : "OpenBLAS", "Julia", "Clang-Polly", "GFortran", "icc", "ifort", "Clang++ & Eigen-3", "icpc & Eigen-3", "LoopVectorization"]
+    tests = [BLAS.vendor() === :mkl ? "IntelMKL" : "OpenBLAS", "Julia", "Clang-Polly", "GFortran", "icc", "ifort", "g++ & Eigen-3", "icpc & Eigen-3", "LoopVectorization"]
     br = BenchmarkResult(tests, sizes)
     sm = br.sizedresults.results
     pmap(is -> dot_bench!(sm, is[2], is[1]), enumerate(sizes))
@@ -179,7 +181,7 @@ function selfdot_bench!(br, s, i)
     @assert jselfdotavx(a) ≈ dotblas "LoopVec dot wrong?"
 end
 function benchmark_selfdot(sizes)
-    tests = [BLAS.vendor() === :mkl ? "IntelMKL" : "OpenBLAS", "Julia", "Clang-Polly", "GFortran", "icc", "ifort", "Clang++ & Eigen-3", "icpc & Eigen-3", "LoopVectorization"]
+    tests = [BLAS.vendor() === :mkl ? "IntelMKL" : "OpenBLAS", "Julia", "Clang-Polly", "GFortran", "icc", "ifort", "g++ & Eigen-3", "icpc & Eigen-3", "LoopVectorization"]
     br = BenchmarkResult(tests, sizes)
     sm = br.sizedresults.results
     pmap(is -> selfdot_bench!(sm, is[2], is[1]), enumerate(sizes))
@@ -211,9 +213,9 @@ function gemv_bench!(br, x, A, y, i)
     @assert x ≈ xblas "eigen wrong?"; fill!(x, NaN);
     br[10,i] = n_gflop / @belapsed iegemv!($x, $A, $y)
     @assert x ≈ xblas "i-eigen wrong?"; fill!(x, NaN);
-    br[11,i] = n_gflop / @belapsed dgemmjit!($x, $A, $y)
-    @assert x ≈ xblas "gemmjit wrong?"; fill!(x, NaN);
-    br[12,i] = n_gflop / @belapsed jgemvavx!($x, $A, $y)
+    # br[11,i] = n_gflop / @belapsed dgemmjit!($x, $A, $y)
+    # @assert x ≈ xblas "gemmjit wrong?"; fill!(x, NaN);
+    br[end,i] = n_gflop / @belapsed jgemvavx!($x, $A, $y)
     @assert x ≈ xblas "LoopVec wrong?"
 end
 function A_mul_vb_bench!(br, s, i)
@@ -231,13 +233,13 @@ function At_mul_vb_bench!(br, s, i)
     gemv_bench!(br, x, A, y, i)
 end
 function benchmark_Amulvb(sizes)
-    br = BenchmarkResult(BLASTESTS, sizes)
+    br = BenchmarkResult(blastests(), sizes)
     sm = br.sizedresults.results
     pmap(is -> A_mul_vb_bench!(sm, is[2], is[1]), enumerate(sizes))
     br
 end
 function benchmark_Atmulvb(sizes)
-    br = BenchmarkResult(BLASTESTS, sizes)
+    br = BenchmarkResult(blastests(), sizes)
     sm = br.sizedresults.results
     pmap(is -> At_mul_vb_bench!(sm, is[2], is[1]), enumerate(sizes))
     br
@@ -267,7 +269,7 @@ function dot3_bench!(br, s, i)
     @assert jdot3avx(x, A, y) ≈ dotblas "LoopVec dot wrong?"
 end
 function benchmark_dot3(sizes)
-    tests = [BLAS.vendor() === :mkl ? "IntelMKL" : "OpenBLAS", "Julia", "Clang-Polly", "GFortran", "icc", "ifort", "Clang++ & Eigen-3", "icpc & Eigen-3", "LoopVectorization"]
+    tests = [BLAS.vendor() === :mkl ? "IntelMKL" : "OpenBLAS", "Julia", "Clang-Polly", "GFortran", "icc", "ifort", "g++ & Eigen-3", "icpc & Eigen-3", "LoopVectorization"]
     br = BenchmarkResult(tests, sizes)
     sm = br.sizedresults.results
     pmap(is -> dot3_bench!(sm, is[2], is[1]), enumerate(sizes))
@@ -306,7 +308,7 @@ function sse_bench!(br, s, i)
     @assert jOLSlp_avx(y, X, β) ≈ lpblas "LoopVec wrong?"
 end
 function benchmark_sse(sizes)
-    tests = [BLAS.vendor() === :mkl ? "IntelMKL" : "OpenBLAS", "Julia", "Clang-Polly", "GFortran", "icc", "ifort", "Clang++ & Eigen-3", "icpc & Eigen-3", "LoopVectorization"]
+    tests = [BLAS.vendor() === :mkl ? "IntelMKL" : "OpenBLAS", "Julia", "Clang-Polly", "GFortran", "icc", "ifort", "g++ & Eigen-3", "icpc & Eigen-3", "LoopVectorization"]
     br = BenchmarkResult(tests, sizes)
     sm = br.sizedresults.results
     pmap(is -> sse_bench!(sm, is[2], is[1]), enumerate(sizes))
@@ -360,7 +362,7 @@ function aplusBc_bench!(br, s, i)
     @assert D ≈ Dcopy "LoopVec wrong?"
 end
 function benchmark_aplusBc(sizes)
-    tests = ["Julia", "Clang-Polly", "GFortran", "icc", "ifort", "Clang++ & Eigen-3", "icpc & Eigen-3", "LoopVectorization"]
+    tests = ["Julia", "Clang-Polly", "GFortran", "icc", "ifort", "g++ & Eigen-3", "icpc & Eigen-3", "LoopVectorization"]
     br = BenchmarkResult(tests, sizes)
     sm = br.sizedresults.results
     pmap(is -> aplusBc_bench!(sm, is[2], is[1]), enumerate(sizes))
@@ -392,7 +394,7 @@ function AplusAt_bench!(br, s, i)
     @assert B ≈ baseB "LoopVec wrong?"
 end
 function benchmark_AplusAt(sizes)
-    tests = ["Julia", "Clang-Polly", "GFortran", "GFortran-builtin", "icc", "ifort", "ifort-builtin", "Clang++ & Eigen-3", "icpc & Eigen-3", "LoopVectorization"]
+    tests = ["Julia", "Clang-Polly", "GFortran", "GFortran-builtin", "icc", "ifort", "ifort-builtin", "g++ & Eigen-3", "icpc & Eigen-3", "LoopVectorization"]
     br = BenchmarkResult(tests, sizes)
     sm = br.sizedresults.results
     pmap(is -> AplusAt_bench!(sm, is[2], is[1]), enumerate(sizes))
@@ -453,3 +455,65 @@ function benchmark_logdettriangle(sizes)
     br
 end
 
+
+function filter2d_bench_run!(br, s, i, K)
+    A = rand(s + 2, s + 2)
+    B = OffsetArray(similar(A, (s,s)), 1, 1)
+    Mk, Nk = size(K)
+    n_gflop = 1e-9 * (2Mk * Nk - 1) * s^2
+    br[1,i] = n_gflop / @belapsed filter2d!($B, $A, $K)
+    Bcopy = copy(B); fill!(B, NaN);
+    br[2,i] = n_gflop / @belapsed cfilter2d!($B, $A, $K)
+    @assert B ≈ Bcopy "Clang wrong?"
+    br[3,i] = n_gflop / @belapsed ffilter2d!($B, $A, $K)
+    @assert B ≈ Bcopy "Fort wrong?"
+    br[4,i] = n_gflop / @belapsed icfilter2d!($B, $A, $K)
+    @assert B ≈ Bcopy "icc wrong?"
+    br[5,i] = n_gflop / @belapsed iffilter2d!($B, $A, $K)
+    @assert B ≈ Bcopy "ifort wrong?"
+    br[6,i] = n_gflop / @belapsed filter2davx!($B, $A, $K)
+    @assert B ≈ Bcopy "LoopVec wrong?"
+end
+function benchmark_filter2d(sizes, K)
+    tests = ["Julia", "Clang-Polly", "GFortran", "icc", "ifort", "LoopVectorization"]
+    br = BenchmarkResult(tests, sizes)
+    sm = br.sizedresults.results
+    pmap(is -> filter2d_bench_run!(sm, is[2], is[1], K), enumerate(sizes))
+    br
+end
+
+function benchmark_filter2ddynamic(sizes)
+    K = OffsetArray(rand(Float64, 3, 3), -1:1, -1:1)
+    benchmark_filter2d(sizes, K)
+end
+function benchmark_filter2d3x3(sizes)
+    K = SizedOffsetMatrix{Float64,-1,1,-1,1}(rand(3,3))
+    benchmark_filter2d(sizes, K)
+end
+
+function filter2dunrolled_bench_run!(br, s, i, K)
+    A = rand(s + 2, s + 2)
+    B = OffsetArray(similar(A, (s,s)), 1, 1)
+    Mk, Nk = size(K)
+    n_gflop = 1e-9 * (2Mk * Nk - 1) * s^2
+    br[1,i] = n_gflop / @belapsed filter2dunrolled!($B, $A, $K)
+    Bcopy = copy(B); fill!(B, NaN);
+    br[2,i] = n_gflop / @belapsed cfilter2dunrolled!($B, $A, $K)
+    @assert B ≈ Bcopy "Clang wrong?"
+    br[3,i] = n_gflop / @belapsed ffilter2dunrolled!($B, $A, $K)
+    @assert B ≈ Bcopy "Fort wrong?"
+    br[4,i] = n_gflop / @belapsed icfilter2dunrolled!($B, $A, $K)
+    @assert B ≈ Bcopy "icc wrong?"
+    br[5,i] = n_gflop / @belapsed iffilter2dunrolled!($B, $A, $K)
+    @assert B ≈ Bcopy "ifort wrong?"
+    br[6,i] = n_gflop / @belapsed filter2dunrolledavx!($B, $A, $K)
+    @assert B ≈ Bcopy "LoopVec wrong?"
+end
+function benchmark_filter2dunrolled(sizes)
+    tests = ["Julia", "Clang-Polly", "GFortran", "icc", "ifort", "LoopVectorization"]
+    br = BenchmarkResult(tests, sizes)
+    sm = br.sizedresults.results
+    K = SizedOffsetMatrix{Float64,-1,1,-1,1}(rand(3,3))
+    pmap(is -> filter2dunrolled_bench_run!(sm, is[2], is[1], K), enumerate(sizes))
+    br
+end

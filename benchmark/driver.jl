@@ -2,13 +2,13 @@
 # const LOOPVECBENCHDIR = joinpath(pkgdir("LoopVectorization"), "benchmarks")
 # includet(joinpath(LOOPVECBENCHDIR, "driver.jl"))
 
+using Distributed
+
 pkgdir(pkg::String) = abspath(joinpath(dirname(Base.find_package(pkg)), ".."))
 const LOOPVECBENCHDIR = joinpath(pkgdir("LoopVectorization"), "benchmark")
 include(joinpath(LOOPVECBENCHDIR, "benchmarkflops.jl"))
 include(joinpath(LOOPVECBENCHDIR, "plotbenchmarks.jl"))
 
-
-using Distributed
 
 addprocs((Sys.CPU_THREADS >> 1)-1); nprocs()
 
@@ -19,25 +19,36 @@ addprocs((Sys.CPU_THREADS >> 1)-1); nprocs()
     # BenchmarkTools.DEFAULT_PARAMETERS.seconds = 1
 end
 
-AmulB_bench = benchmark_AmulB(2:256)
-AmulBt_bench = benchmark_AmulBt(2:256)
-AtmulB_bench = benchmark_AtmulB(2:256)
-AtmulBt_bench = benchmark_AtmulBt(2:256)
-dot_bench = benchmark_dot(2:256)
-selfdot_bench = benchmark_selfdot(2:256)
-Amulvb_bench = benchmark_Amulvb(2:256)
-Atmulvb_bench = benchmark_Atmulvb(2:256)
-dot3_bench = benchmark_dot3(2:256)
-sse_bench = benchmark_sse(2:256)
-aplusBc_bench = benchmark_aplusBc(2:256)
-AplusAt_bench = benchmark_AplusAt(2:256)
-exp_bench = benchmark_exp(2:256)
-randomaccess_bench = benchmark_random_access(2:256)
-logdettriangle_bench = benchmark_logdettriangle(2:256)
+
+# sizes = 23:23
+sizes = 256:-1:2
+
+filter2d_dynamic_bench = benchmark_filter2ddynamic(sizes)
+filter2d_3x3_bench = benchmark_filter2d3x3(sizes)
+filter2d_unrolled_bench = benchmark_filter2dunrolled(sizes)
+
+AmulB_bench = benchmark_AmulB(sizes)
+AmulBt_bench = benchmark_AmulBt(sizes)
+AtmulB_bench = benchmark_AtmulB(sizes)
+AtmulBt_bench = benchmark_AtmulBt(sizes)
+dot_bench = benchmark_dot(sizes)
+selfdot_bench = benchmark_selfdot(sizes)
+Amulvb_bench = benchmark_Amulvb(sizes)
+Atmulvb_bench = benchmark_Atmulvb(sizes)
+dot3_bench = benchmark_dot3(sizes)
+sse_bench = benchmark_sse(sizes)
+aplusBc_bench = benchmark_aplusBc(sizes)
+AplusAt_bench = benchmark_AplusAt(sizes)
+exp_bench = benchmark_exp(sizes)
+randomaccess_bench = benchmark_random_access(sizes)
+logdettriangle_bench = benchmark_logdettriangle(sizes)
 
 v = 1
 filetype = "svg"
 const PICTURES = joinpath(pkgdir("LoopVectorization"), "docs", "src", "assets")
+save(joinpath(PICTURES, "bench_filter2d_dynamic_v$v.$filetype"), plot(filter2d_dynamic_bench));
+save(joinpath(PICTURES, "bench_filter2d_3x3_v$v.$filetype"), plot(filter2d_3x3_bench));
+save(joinpath(PICTURES, "bench_filter2d_unrolled_v$v.$filetype"), plot(filter2d_unrolled_bench));
 save(joinpath(PICTURES, "bench_AmulB_v$v.$filetype"), plot(AmulB_bench));
 save(joinpath(PICTURES, "bench_AmulBt_v$v.$filetype"), plot(AmulBt_bench));
 save(joinpath(PICTURES, "bench_AtmulB_v$v.$filetype"), plot(AtmulB_bench));

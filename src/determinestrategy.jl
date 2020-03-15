@@ -49,10 +49,10 @@ function register_pressure(op::Operation)
         instruction_cost(instruction(op)).register_pressure
     end
 end
-function cost(ls::LoopSet, op::Operation, unrolled::Symbol, Wshift::Int, size_T::Int = op.elementbytes)
+function cost(ls::LoopSet, op::Operation, vectorized::Symbol, Wshift::Int, size_T::Int = op.elementbytes)
     isconstant(op) && return 0.0, 0, 1
     isloopvalue(op) && return 0.0, 0, 1
-    # Wshift == dependson(op, unrolled) ? Wshift : 0
+    # Wshift == dependson(op, vectorized) ? Wshift : 0
     # c = first(cost(instruction(op), Wshift, size_T))::Int
     instr = Instruction(:LoopVectorization, instruction(op).instr)
     # instr = instruction(op)
@@ -61,13 +61,13 @@ function cost(ls::LoopSet, op::Operation, unrolled::Symbol, Wshift::Int, size_T:
             return 0.0, 0, 1
         end
     end
-    opisunrolled = dependson(op, unrolled)
-    srt, sl, srp = opisunrolled ? vector_cost(instr, Wshift, size_T) : scalar_cost(instr)
+    opisvectorized = dependson(op, vectorized)
+    srt, sl, srp = opisvectorized ? vector_cost(instr, Wshift, size_T) : scalar_cost(instr)
     if accesses_memory(op)
         # either vbroadcast/reductionstore, vmov(a/u)pd, or gather/scatter
-        # @show instr, unrolled, loopdependencies(op), unitstride(op, unrolled)
-        if opisunrolled
-            if !unitstride(ls, op, unrolled)# || !isdense(op) # need gather/scatter
+        # @show instr, vectorized, loopdependencies(op), unitstride(op, vectorized)
+        if opisvectorized
+            if !unitstride(ls, op, vectorized)# || !isdense(op) # need gather/scatter
                 r = (1 << Wshift)
                 srt *= r
                 sl *= r
@@ -106,7 +106,7 @@ end
 # evaluates cost of evaluating loop in given order
 # heuristically, could simplify analysis by just unrolling outer loop?
 function evaluate_cost_unroll(
-    ls::LoopSet, order::Vector{Symbol}, max_cost = typemax(Float64), vectorized::Symbol = first(order)
+    ls::LoopSet, order::Vector{Symbol}, vectorized::Symbol, max_cost = typemax(Float64)
 )
     included_vars = fill!(resize!(ls.included_vars, length(operations(ls))), false)
     nested_loop_syms = Symbol[]#Set{Symbol}()
@@ -171,13 +171,12 @@ function roundpow2(i::Integer)
     ld = i - l
     ud > ld ? l : u
 end
-function unroll_no_reductions(ls, order, vectorized, Wshift, size_T)
-    innermost = last(order)
+function unroll_no_reductions(ls, order, unrolled, vectorized, Wshift, size_T)
     compute_rt = 0.0
     load_rt = 0.0
     # latency not a concern, because no depchains
     for op ∈ operations(ls)
-        dependson(op, innermost) || continue
+        dependson(op, unrolled) || continue
         if iscompute(op)
             compute_rt += first(cost(ls, op, vectorized, Wshift, size_T))
         elseif isload(op)
@@ -208,7 +207,7 @@ function determine_unroll_factor(
     if iszero(num_reductions)
         # if only 1 loop, no need to unroll
         # if more than 1 loop, there is some cost. Picking 2 here as a heuristic.
-        return unroll_no_reductions(ls, order, vectorized, Wshift, size_T)
+        return unroll_no_reductions(ls, order, unrolled, vectorized, Wshift, size_T)
     end
     # So if num_reductions > 0, we set the unroll factor to be high enough so that the CPU can be kept busy
     # if there are, U = max(1, round(Int, max(latency) * throughput / num_reductions)) = max(1, round(Int, latency / (recip_throughput * num_reductions)))
@@ -399,7 +398,7 @@ function stride_penalty(ls::LoopSet, order::Vector{Symbol})
             stridepenalty += stride_penalty(ls, op, order)
         end
     end
-    stridepenalty * 1e-9
+    stridepenalty# * 1e-9
 end
 function convolution_cost_factor(ls::LoopSet, op::Operation, u1::Symbol, u2::Symbol, v::Symbol)
     (u1 ∈ loopdependencies(op) && u2 ∈ loopdependencies(op)) || return 1.0
@@ -559,7 +558,7 @@ function choose_unroll_order(ls::LoopSet, lowest_cost::Float64 = Inf)
     best_vec = first(new_order)
     while true
         for new_vec ∈ new_order
-            cost_temp = evaluate_cost_unroll(ls, new_order, lowest_cost, new_vec)
+            cost_temp = evaluate_cost_unroll(ls, new_order, new_vec, lowest_cost)
             if cost_temp < lowest_cost
                 lowest_cost = cost_temp
                 best_order = new_order
