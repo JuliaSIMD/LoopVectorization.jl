@@ -1,18 +1,18 @@
-function Loop(ls::LoopSet, l::Int, ::Type{UnitRange{Int}})
-    start = gensym(:loopstart); stop = gensym(:loopstop)
+function Loop(ls::LoopSet, l::Int, sym::Symbol, ::Type{UnitRange{Int}})
+    start = gensym(String(sym)*"_loopstart"); stop = gensym(String(sym)*"_loopstop")
     pushpreamble!(ls, Expr(:(=), start, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:(.), Expr(:ref, :lb, l), QuoteNode(:start)))))
     pushpreamble!(ls, Expr(:(=), stop, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:(.), Expr(:ref, :lb, l), QuoteNode(:stop)))))
-    Loop(gensym(:n), 0, 1024, start, stop, false, false)::Loop
+    Loop(sym, 0, 1024, start, stop, false, false)::Loop
 end
-function Loop(ls::LoopSet, l::Int, ::Type{StaticUpperUnitRange{U}}) where {U}
-    start = gensym(:loopstart)
+function Loop(ls::LoopSet, l::Int, sym::Symbol, ::Type{StaticUpperUnitRange{U}}) where {U}
+    start = gensym(String(sym)*"_loopstart")
     pushpreamble!(ls, Expr(:(=), start, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:(.), Expr(:ref, :lb, l), QuoteNode(:L)))))
-    Loop(gensym(:n), U - 1024, U, start, Symbol(""), false, true)::Loop
+    Loop(sym, U - 1024, U, start, Symbol(""), false, true)::Loop
 end
-function Loop(ls::LoopSet, l::Int, ::Type{StaticLowerUnitRange{L}}) where {L}
-    stop = gensym(:loopstop)
+function Loop(ls::LoopSet, l::Int, sym::Symbol, ::Type{StaticLowerUnitRange{L}}) where {L}
+    stop = gensym(String(sym)*"_loopstop")
     pushpreamble!(ls, Expr(:(=), stop, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:(.), Expr(:ref, :lb, l), QuoteNode(:U)))))
-    Loop(gensym(:n), L, L + 1024, Symbol(""), stop, true, false)::Loop
+    Loop(sym, L, L + 1024, Symbol(""), stop, true, false)::Loop
 end
 # Is there any likely way to generate such a range?
 # function Loop(ls::LoopSet, l::Int, ::Type{StaticLengthUnitRange{N}}) where {N}
@@ -21,19 +21,19 @@ end
 #     pushpreamble!(ls, Expr(:(=), stop, Expr(:call, :(+), start, N - 1)))
 #     Loop(gensym(:n), 0, N, start, stop, false, false)::Loop
 # end
-function Loop(ls, l, ::Type{StaticUnitRange{L,U}}) where {L,U}
-    Loop(gensym(:n), L, U, Symbol(""), Symbol(""), true, true)::Loop
+function Loop(ls, l, sym::Symbol, ::Type{StaticUnitRange{L,U}}) where {L,U}
+    Loop(sym, L, U, Symbol(""), Symbol(""), true, true)::Loop
 end
 
-function add_loops!(ls::LoopSet, LB)
-    loopsyms = [gensym(:n) for _ ∈ eachindex(LB)]
-    for (i,l) ∈ enumerate(LB)
-        add_loop!(ls, Loop(ls, i, l)::Loop)
+function add_loops!(ls::LoopSet, LPSYM, LB)
+    n = max(length(LPSYM), length(LB))
+    for i = 1:n
+        add_loop!(ls, Loop(ls, i, LPSYM[i], LB[i])::Loop)
     end
 end
+
 function ArrayReferenceMeta(
-    ls::LoopSet, ar::ArrayRefStruct, arraysymbolinds::Vector{Symbol}, opsymbols::Vector{Symbol},
-    array::Symbol, vp::Symbol
+    ls::LoopSet, @nospecialize(ar::ArrayRefStruct), arraysymbolinds::Vector{Symbol}, opsymbols::Vector{Symbol}
 )
     index_types = ar.index_types
     indices = ar.indices
@@ -61,8 +61,8 @@ function ArrayReferenceMeta(
         ni -= 1
     end
     ArrayReferenceMeta(
-        ArrayReference(array, index_vec, offset_vec),
-        loopedindex, vp
+        ArrayReference(array(ar), index_vec, offset_vec),
+        loopedindex, ptr(ar)
     )
 end
 
@@ -105,7 +105,7 @@ end
 function create_mrefs!(ls::LoopSet, arf::Vector{ArrayRefStruct}, as::Vector{Symbol}, os::Vector{Symbol}, vargs)
     mrefs = Vector{ArrayReferenceMeta}(undef, length(arf))
     for i ∈ eachindex(arf)
-        ar = ArrayReferenceMeta(ls, arf[i], as, os, Symbol(""), gensym())
+        ar = ArrayReferenceMeta(ls, arf[i], as, os)
         add_mref!(ls, ar, i, vargs[i])
         mrefs[i] = ar
     end
@@ -222,11 +222,11 @@ function sizeofeltypes(v, num_arrays)::Int
     sizeof(T)
 end
 
-function avx_loopset(instr, ops, arf, AM, LB, vargs)
+function avx_loopset(instr, ops, arf, AM, LPSYM, LB, vargs)
     ls = LoopSet(:LoopVectorization)
     num_arrays = length(arf)
     elementbytes = sizeofeltypes(vargs, num_arrays)
-    add_loops!(ls, LB)
+    add_loops!(ls, LPSYM, LB)
     resize!(ls.loop_order, length(LB))
     arraysymbolinds = process_metadata!(ls, AM, length(arf))
     opsymbols = [gensym(:op) for _ ∈ eachindex(ops)]
@@ -245,22 +245,22 @@ function avx_body(ls, UT)
     q
 end
 
-function _avx_loopset_debug(::Type{OPS}, ::Type{ARF}, ::Type{AM}, ::Type{LB}, vargs...) where {UT, OPS, ARF, AM, LB}
-    @show OPS ARF AM LB vargs
-    _avx_loopset(OPS.parameters, ARF.parameters, AM.parameters, LB.parameters, typeof.(vargs))
+function _avx_loopset_debug(::Type{OPS}, ::Type{ARF}, ::Type{AM}, ::Type{LPSYM}, ::Type{LB}, vargs...) where {UT, OPS, ARF, AM, LPSYM, LB}
+    @show OPS ARF AM LPSYM LB vargs
+    _avx_loopset(OPS.parameters, ARF.parameters, AM.parameters, LPSYM.parameters, LB.parameters, typeof.(vargs))
 end
-function _avx_loopset(OPSsv, ARFsv, AMsv, LBsv, vargs) where {UT, OPS, ARF, AM, LB}
+function _avx_loopset(OPSsv, ARFsv, AMsv, LPSYMsv, LBsv, vargs)
     nops = length(OPSsv) ÷ 3
     instr = Instruction[Instruction(OPSsv[3i+1], OPSsv[3i+2]) for i ∈ 0:nops-1]
     ops = OperationStruct[ OPSsv[3i] for i ∈ 1:nops ]
     avx_loopset(
         instr, ops,
         ArrayRefStruct[ARFsv...],
-        AMsv, LBsv, vargs
+        AMsv, LPSYMsv, LBsv, vargs
     )
 end
-@generated function _avx_!(::Val{UT}, ::Type{OPS}, ::Type{ARF}, ::Type{AM}, lb::LB, vargs...) where {UT, OPS, ARF, AM, LB}
-    ls = _avx_loopset(OPS.parameters, ARF.parameters, AM.parameters, LB.parameters, vargs)
+@generated function _avx_!(::Val{UT}, ::Type{OPS}, ::Type{ARF}, ::Type{AM}, ::Type{LPSYM}, lb::LB, vargs...) where {UT, OPS, ARF, AM, LPSYM, LB}
+    ls = _avx_loopset(OPS.parameters, ARF.parameters, AM.parameters, LPSYM.parameters, LB.parameters, vargs)
     avx_body(ls, UT)
 end
 
