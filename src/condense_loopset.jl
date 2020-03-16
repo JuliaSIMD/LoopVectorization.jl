@@ -210,7 +210,7 @@ end
         LHS = ind === nothing ? gensym() : vptrs[ind]
         assigned_names[i] = LHS
         d = (D[i])::Union{Nothing,Int}
-        if d === nothing # stridedpointer
+        if d === nothing # stridedpointer instead of noaliasstridedpointer, because alias info will be lost across function boundary...
             num_arrays += 1
             RHS = Expr(:call, lv(:stridedpointer), Expr(:ref, :vargs, ari), Expr(:ref, :arraydescript, ari))
         else #subsetview
@@ -284,7 +284,7 @@ function setup_call_noinline(ls::LoopSet, U = zero(Int8), T = zero(Int8))
         if ex isa Expr && ex.head === :(=) && length(ex.args) == 2
             if ex.args[2] isa Expr && ex.args[2].head === :call
                 gr = first(ex.args[2].args)
-                if gr == lv(:stridedpointer)
+                if gr == lv(:noaliasstridedpointer)
                     array = ex.args[2].args[2]
                     arrayid = findfirst(a -> a === array, ls.includedactualarrays)
                     if arrayid isa Int

@@ -23,6 +23,7 @@ end
 # Tuple of length > 1, subtract offsets.
 @inline VectorizationBase.offset(ptr::OffsetStridedPointer{<:Any,N}, ind::Tuple) where {N} = ntuple(n -> ind[n] - ptr.offsets[n], Val{N}())
 @inline Base.similar(p::OffsetStridedPointer, ptr::Ptr) = OffsetStridedPointer(similar(p.ptr, ptr), p.offsets)
+@inline Base.pointer(p::OffsetStridedPointer) = pointer(p.ptr)
 
 # If an OffsetArray is getting indexed by a (loop-)constant value, then this particular vptr object cannot also be eachindexed, so we can safely return a stridedpointer
 @inline function VectorizationBase.subsetview(ptr::OffsetStridedPointer{<:Any,N}, ::Val{I}, i) where {I,N}
