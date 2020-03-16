@@ -83,8 +83,9 @@ function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{OffsetStr
 end
 
 function add_mref!(
-    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}
-) where {T, X <: Tuple, S <: VectorizationBase.AbstractStaticStridedPointer{T,X}}
+    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, @nospecialize(S::Type{<:VectorizationBase.AbstractStaticStridedPointer})
+)
+    T, X = abstractparameters(S, VectorizationBase.AbstractStaticStridedPointer)
     if last(X.parameters)::Int == 1
         pushvarg′!(ls, ar, i)
     else

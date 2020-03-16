@@ -1,3 +1,5 @@
+using LoopVectorization, LinearAlgebra, Test
+
 @testset "broadcast" begin
     M, N = 37, 47
     # M = 77;

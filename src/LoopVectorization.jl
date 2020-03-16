@@ -25,6 +25,7 @@ export LowDimArray, stridedpointer, vectorizable,
 
 include("vectorizationbase_extensions.jl")
 include("predicates.jl")
+include("typeutils.jl")
 include("map.jl")
 include("filter.jl")
 include("costs.jl")
