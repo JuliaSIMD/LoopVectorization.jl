@@ -51,7 +51,7 @@ function register_pressure(op::Operation)
 end
 function cost(ls::LoopSet, op::Operation, vectorized::Symbol, Wshift::Int, size_T::Int = op.elementbytes)
     isconstant(op) && return 0.0, 0, 1
-    isloopvalue(op) && return 0.0, 0, 1
+    isloopvalue(op) && return 0.0, 0, 0
     # Wshift == dependson(op, vectorized) ? Wshift : 0
     # c = first(cost(instruction(op), Wshift, size_T))::Int
     instr = Instruction(:LoopVectorization, instruction(op).instr)
@@ -60,6 +60,8 @@ function cost(ls::LoopSet, op::Operation, vectorized::Symbol, Wshift::Int, size_
         if instr == Instruction(:-) || instr === Instruction(:vsub) || instr == Instruction(:+) || instr == Instruction(:vadd)
             return 0.0, 0, 1
         end
+    elseif iscompute(op) && all(isloopvalue, parents(op))
+        return 0.0, 0, 1
     end
     opisvectorized = dependson(op, vectorized)
     srt, sl, srp = opisvectorized ? vector_cost(instr, Wshift, size_T) : scalar_cost(instr)
@@ -244,7 +246,8 @@ function tile_cost(X, U, T, UL, TL)
     X[1] + X[4] + X[2] * Tfactor + X[3] * Ufactor
 end
 function solve_tilesize(X, R, UL, TL)
-    @inbounds any(iszero, (R[1],R[2],R[3])) && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
+    # @inbounds any(iszero, (R[1],R[2],R[3])) && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
+    first(iszero(R)) && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
     # @inbounds any(iszero, (R[1],R[2],R[3])) && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
     # We use a lagrange multiplier to find floating point values for U and T
     # first solving for U via quadratic formula
@@ -256,7 +259,9 @@ function solve_tilesize(X, R, UL, TL)
     Ufloat = (sqrt(b^2 - 4a*c) - b) / (2a)
     Tfloat = (RR - Ufloat*R[2])/(Ufloat*R[1])
     # @show Ufloat, Tfloat
-    (isfinite(Tfloat) && isfinite(Ufloat)) || return -1,-1,Inf
+    if !(isfinite(Tfloat) && isfinite(Ufloat))
+        return 4, 4, tile_cost(X, 4, 4, UL, TL)
+    end
     Ulow = max(1, floor(Int, Ufloat)) # must be at least 1
     Tlow = max(1, floor(Int, Tfloat)) # must be at least 1
     Uhigh = Ulow + 1 #ceil(Int, Ufloat)
@@ -301,7 +306,7 @@ function solve_tilesize_constT(ls, T)
 end
 # Tiling here is about alleviating register pressure for the UxT
 function solve_tilesize(X, R, Umax, Tmax, UL, TL)
-    first(R) == 0 && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
+    iszero(first(R)) && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
     U, T, cost = solve_tilesize(X, R, UL, TL)
     # T -= T & 1
     # U = min(U, T)
@@ -482,6 +487,7 @@ function evaluate_cost_tile(
             factor = convolution_cost_factor(ls, op, unrolled, tiled, vectorized)
             rt *= factor#; rp *= factor;
         end
+        # @show op rt, lat, rp
         rp = opisininnerloop ? rp : 0 # we only care about register pressure within the inner most loop
         rt *= iters[id]
         if isunrolled && istiled # no cost decrease; cost must be repeated

@@ -75,7 +75,7 @@ function lower_conditionalstore_vectorized!(
     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned}, isunrolled::Bool
 )
     loopdeps = loopdependencies(op)
-    @assert unrolled ∈ loopdeps
+    @assert vectorized ∈ loopdeps
     var = pvariable_name(op, suffix, tiled)
     parentisunrolled = unrolled ∈ loopdependencies(first(parents(op)))
     if isunrolled

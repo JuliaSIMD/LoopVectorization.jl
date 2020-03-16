@@ -23,9 +23,9 @@ end
 # sizes = 23:23
 sizes = 256:-1:2
 
-filter2d_dynamic_bench = benchmark_filter2ddynamic(sizes)
-filter2d_3x3_bench = benchmark_filter2d3x3(sizes)
-filter2d_unrolled_bench = benchmark_filter2dunrolled(sizes)
+filter2d_dynamic_bench = benchmark_filter2ddynamic(512:-1:2)
+filter2d_3x3_bench = benchmark_filter2d3x3(512:-1:2)
+filter2d_unrolled_bench = benchmark_filter2dunrolled(512:-1:2)
 
 AmulB_bench = benchmark_AmulB(sizes)
 AmulBt_bench = benchmark_AmulBt(sizes)

@@ -33,7 +33,7 @@
                 B[j,i] = A[j,i] - x[j]
                 end)
     lssubcol = LoopVectorization.LoopSet(subcolq);
-    @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, Symbol("##undefined##"), :j, 4, -1)
+    @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :i, :j, :j, Unum, Tnum)
     ## @avx is SLOWER!!!!
     ## need to fix!
     function mysubcol!(B, A, x)
@@ -58,7 +58,7 @@
                 x[j] += A[j,i] - 0.25
                 end)
     lscolsum = LoopVectorization.LoopSet(colsumq);
-    @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, Symbol("##undefined##"), :j, 4, -1)
+    @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :i, :j, :j, Unum, Tnum)
 
     # my colsum is wrong (by 0.25), but slightly more interesting
     function mycolsum!(x, A)
@@ -95,7 +95,7 @@
     lsvar = LoopVectorization.LoopSet(varq);
     # LoopVectorization.choose_order(lsvar)
     # @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, Symbol("##undefined##"), :j, 4, -1)
-    @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, Symbol("##undefined##"), :j, 4, -1)
+    @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :i, :j, :j, Unum, Tnum)
 
     function myvar!(s², A, x̄)
         @. s² = 0

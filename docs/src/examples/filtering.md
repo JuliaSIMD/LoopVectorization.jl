@@ -21,12 +21,11 @@ These are four nested loops. For all the benchmarks, `kern` was only 3 by 3, mak
 LoopVectorization achieved much better performance than all the alternatives, which tended to prefer vectorizing the inner loops.
 By making the compilers aware that the `ik` loop is too short to be worth vectorizing, we can get them to vectorize something else instead. By defining the size of `kern` as constant in `C` and `Fortran`, and using size parameters in Julia, we can inform the compilers:
 ![staticsizefilter](../assets/bench_filter2d_3x3_v1.svg)
-Now all are doing much better than they were before, although still well shy of the 131.2 GFLOPS theoretical limit for the host CPU cores. While they all improved, three are lagging behind the main group:
+Now all are doing much better than they were before, although still well shy of the 131.2 GFLOPS theoretical limit for the host CPU cores. While they all improved, two are lagging behind the main group:
 - `ifort` lags behind all the others except base Julia. I'd need to do more investigating to find out why.
-- Providing static size information was enough for all to realize vectorizing the inner loops was not worth it. However, all but base Julia decided to vectorize a different loop instead, while the base Julia version I tested just didn't vectorize at all.
-- LoopVectorization currently only unrolls up to 2 loops. To get optimal performance in this problem, if you know the size of the inner loops, you should completely unroll them, and then also partially unroll the outer loops. I'll have to lift that restriction ([tracking issue](https://github.com/chriselrod/LoopVectorization.jl/issues/73)), and also make it aware that unrolling the outer loops is cheap, thanks to the ability to reuse neighboring `A` entries.
+- Providing static size information was enough for all to realize vectorizing the inner loops was not worth it. However, all but base Julia decided to vectorize a different loop instead, while the base Julia version I tested just didn't vectorize at all. 
 
-Trying to provide hints by manually unrolling produces:
+Helping Base Julia out by manually unrolling the inner loops:
 ![unrolledfilter](../assets/bench_filter2d_unrolled_v1.svg)
-This manual unrolling helped both Julia versions, while there was no change in any of the others.
+This manual unrolling helped Julia, but had no real impact on any of the others.
 

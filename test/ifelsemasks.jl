@@ -21,9 +21,9 @@ T = Float32
         end
         z
     end
-    @macroexpand @_avx for i ∈ eachindex(x)
-            z[i] = (x[i]*x[i] + y[i]*y[i]) < 1
-        end
+    # @macroexpand @_avx for i ∈ eachindex(x)
+            # z[i] = (x[i]*x[i] + y[i]*y[i]) < 1
+        # end
     function promote_bool_storeavx2!(z, x, y)
         @avx for i ∈ eachindex(x)
             z[i] = (x[i]*x[i] + y[i]*y[i]) < 1 ? 1 : 0
@@ -301,14 +301,14 @@ T = Float32
         promote_bool_store!(c1, a, b);
         promote_bool_storeavx!(c2, a, b);
         @test c1 == c2
-        fill!(c2, -999999999); promote_bool_store_avx!(c2, a, b)
+        fill!(c2, -999999999); promote_bool_store_avx!(c2, a, b);
         @test c1 == c2
-        fill!(c2, -999999999); promote_bool_storeavx2!(c2, a, b)
+        fill!(c2, -999999999); promote_bool_storeavx2!(c2, a, b);
         @test c1 == c2
-        fill!(c2, -999999999); promote_bool_store_avx2!(c2, a, b)
+        fill!(c2, -999999999); promote_bool_store_avx2!(c2, a, b);
         @test c1 == c2
 
-        fill!(c2, -999999999); addormul!(c1, a, b)
+        fill!(c1,  999999999); addormul!(c1, a, b)
         fill!(c2, -999999999); addormul_avx!(c2, a, b)
         @test c1 ≈ c2
         fill!(c2, -999999999); addormulavx!(c2, a, b)
@@ -369,7 +369,7 @@ T = Float32
             A = randn(T, K, M);
             B = randn(T, K, N);
             C1 = randn(T, M, N);
-        end
+        end;
         C2 = copy(C1); C3 = copy(C1);
         AtmulBpos!(C1, A, B)
         AtmulBposavx!(C2, A, B)

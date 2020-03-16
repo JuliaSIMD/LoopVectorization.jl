@@ -25,7 +25,15 @@ function Base.getindex(br::SizedResults, row, col)
     col == 1 ? string(br.sizes[row]) : string(br.results[col - 1, row])
 end
 Base.setindex!(br::BenchmarkResult, v, i...) = br.sizedresults.results[i...] = v
-
+function Base.vcat(br1::BenchmarkResult, br2::BenchmarkResult)
+    BenchmarkResult(
+        br1.tests,
+        SizedResults(
+            SharedMatrix(hcat(br1.sizedresults.results, br2.sizedresults.results)),
+            vcat(br1.sizedresults.sizes, br2.sizedresults.sizes)
+        )
+    )
+end
 
 tothreetuple(i::Int) = (i,i,i)
 tothreetuple(i::NTuple{3,Int}) = i
