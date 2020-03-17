@@ -178,6 +178,7 @@ struct LoopSet
     loops::Vector{Loop}
     opdict::Dict{Symbol,Operation}
     operations::Vector{Operation} # Split them to make it easier to iterate over just a subset
+    operation_offsets::Vector{Int}
     outer_reductions::Vector{Int} # IDs of reduction operations that need to be reduced at end.
     loop_order::LoopOrder
     preamble::Expr
@@ -284,7 +285,7 @@ function LoopSet(mod::Symbol)# = :LoopVectorization)
     LoopSet(
         Symbol[], [0], Loop[],
         Dict{Symbol,Operation}(),
-        Operation[],
+        Operation[], [0],
         Int[],
         LoopOrder(),
         Expr(:block),

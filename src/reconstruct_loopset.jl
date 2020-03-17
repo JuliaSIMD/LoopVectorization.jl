@@ -161,19 +161,19 @@ function process_metadata!(ls::LoopSet, AM, num_arrays::Int)::Vector{Symbol}
     append!(ls.preamble_ones, AM[7].parameters)
     arraysymbolinds
 end
-function parents_symvec(ls::LoopSet, u::Unsigned)
-    loops = Symbol[]
-    offsets = ls.loopsymbol_offsets
+function loopindex(ls::LoopSet, u::Unsigned, shift::Unsigned)
+    idxs = Int[]
     while u != zero(u)
-        idx = ( u % UInt8 ) & 0x0f
-        for j = offsets[idx]+1:offsets[idx+1]
-            push!(loops, getloopsym(ls, j))
-        end
-        u >>= 4
+        push!(idxs, ( u % UInt8 ) & 0x0f)
+        u >>= shift
     end
-    return reverse!(loops)
+    return reverse!(idxs)
 end
-loopdependencies(ls::LoopSet, os::OperationStruct) = parents_symvec(ls, os.loopdeps)
+function parents_symvec(ls::LoopSet, u::Unsigned, offset=0)
+    idxs = loopindex(ls, u, 0x04)   # FIXME DRY  (undesirable that this gets hard-coded in multiple places)
+    return Symbol[getloopsym(ls, i + offset) for i in idxs]
+end
+loopdependencies(ls::LoopSet, os::OperationStruct, offset=0) = parents_symvec(ls, os.loopdeps, offset)
 reduceddependencies(ls::LoopSet, os::OperationStruct) = parents_symvec(ls, os.reduceddeps)
 childdependencies(ls::LoopSet, os::OperationStruct) = parents_symvec(ls, os.childdeps)
 
@@ -183,30 +183,47 @@ function add_op!(
     ls::LoopSet, instr::Instruction, os::OperationStruct, mrefs::Vector{ArrayReferenceMeta}, opsymbol, elementbytes::Int
 )
     # opsymbol = (isconstant(os) && instr != LOOPCONSTANT) ? instr.instr : opsymbol
-    op = Operation(
-        length(operations(ls)), opsymbol, elementbytes, instr,
-        optype(os), loopdependencies(ls, os), reduceddependencies(ls, os),
-        Operation[], (isload(os) | isstore(os)) ? mrefs[os.array] : NOTAREFERENCE,
-        childdependencies(ls, os)
-    )
-    push!(ls.operations, op)
-    op
+    # If it's a CartesianIndex add or subtract, we may have to add multiple operations
+    offsets = ls.loopsymbol_offsets
+    idxs = loopindex(ls, os.loopdeps, 0x04)  # FIXME DRY
+    Δidxs = map(i->offsets[i+1]-offsets[i], idxs)
+    nops = first(Δidxs)
+    @assert all(isequal(nops), Δidxs)
+    ops = Vector{Operation}(undef, nops)
+    for offset = 0:nops-1
+        sym = nops == 1 ? opsymbol : Symbol(String(opsymbol)*'#'*string(offset+1)*'#')
+        ops[offset+1] = op = Operation(
+            length(operations(ls)), sym, elementbytes, instr,
+            optype(os), loopdependencies(ls, os, offset), reduceddependencies(ls, os),
+            Operation[], (isload(os) | isstore(os)) ? mrefs[os.array] : NOTAREFERENCE,
+            childdependencies(ls, os)
+        )
+        # @show op
+        push!(ls.operations, op)
+    end
+    push!(ls.operation_offsets, ls.operation_offsets[end]+nops)
+    ops
 end
-function add_parents_to_op!(ls::LoopSet, parents::Vector{Operation}, up::Unsigned)
+function add_parents_to_op!(ls::LoopSet, parents::Vector{Operation}, up::Unsigned, k::Int)
     ops = operations(ls)
-    while up != zero(up)
-        pushfirst!(parents, ops[ up % UInt8 ])
-        up >>>= 8
+    offsets = ls.operation_offsets
+    for i ∈ loopindex(ls, up, 0x08)  # FIXME DRY
+        pushfirst!(parents, ops[offsets[i]+k])
     end
 end
 function add_parents_to_ops!(ls::LoopSet, ops::Vector{OperationStruct}, constoffset)
-    for (i,op) ∈ enumerate(operations(ls))
-        add_parents_to_op!(ls, parents(op), ops[i].parents)
-        if isconstant(op)
-            instr = instruction(op)
-            if instr != LOOPCONSTANT && instr.mod !== :numericconstant
-                constoffset += 1
-                pushpreamble!(ls, Expr(:(=), instr.instr, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, :vargs, constoffset))))
+    offsets = ls.operation_offsets
+    for i = 1:length(offsets)-1
+        pos = offsets[i]
+        for k = 1:offsets[i+1]-pos
+            op = ls.operations[pos+k]
+            add_parents_to_op!(ls, parents(op), ops[i].parents, k)
+            if isconstant(op)
+                instr = instruction(op)
+                if instr != LOOPCONSTANT && instr.mod !== :numericconstant
+                    constoffset += 1
+                    pushpreamble!(ls, Expr(:(=), instr.instr, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, :vargs, constoffset))))
+                end
             end
         end
     end
@@ -215,12 +232,16 @@ end
 function add_ops!(
     ls::LoopSet, instr::Vector{Instruction}, ops::Vector{OperationStruct}, mrefs::Vector{ArrayReferenceMeta}, opsymbols::Vector{Symbol}, constoffset::Int, elementbytes::Int
 )
+    # @show ls.loopsymbols ls.loopsymbol_offsets
     for i ∈ eachindex(ops)
         os = ops[i]
         opsymbol = opsymbols[os.symid]
         add_op!(ls, instr[i], os, mrefs, opsymbol, elementbytes)
     end
     add_parents_to_ops!(ls, ops, constoffset)
+    for op in operations(ls)
+        @show op
+    end
 end
 
 # elbytes(::VectorizationBase.AbstractPointer{T}) where {T} = sizeof(T)::Int
@@ -272,6 +293,7 @@ function avx_body(ls, UT)
     U, T = UT
     q = iszero(U) ? lower(ls) : lower(ls, U, T)
     length(ls.outer_reductions) == 0 ? push!(q.args, nothing) : push!(q.args, loopset_return_value(ls, Val(true)))
+    @show q
     q
 end
 
