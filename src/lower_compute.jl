@@ -57,12 +57,18 @@ function lower_compute!(
     # parentsyms = [opp.variable for opp ∈ parents(op)]
     Uiter = opunrolled ? U - 1 : 0
     isreduct = isreduction(op)
-    if !isnothing(suffix) && isreduct && tiledouterreduction == -1
-        instrfid = findfirst(isequal(instr.instr), (:vfmadd, :vfnmadd, :vfmsub, :vfnmsub))
-        if instrfid !== nothing
+    # if instr.instr === :vfmadd_fast
+        # diffdeps = !any(opp -> isload(opp) && all(in(loopdependencies(opp)), loopdependencies(op)), parents(op)) # want to instcombine when parent load's deps are superset
+        # @show suffix, !isnothing(suffix), isreduct, diffdeps
+    # end
+    if !isnothing(suffix) && isreduct
+        # instrfid = findfirst(isequal(instr.instr), (:vfmadd, :vfnmadd, :vfmsub, :vfnmsub))
+        instrfid = findfirst(isequal(instr.instr), (:vfmadd_fast, :vfnmadd_fast, :vfmsub_fast, :vfnmsub_fast))
+        if instrfid !== nothing && !any(opp -> isload(opp) && all(in(loopdependencies(opp)), loopdependencies(op)), parents(op)) # want to instcombine when parent load's deps are superset
             instr = Instruction((:vfmadd231, :vfnmadd231, :vfmsub231, :vfnmsub231)[instrfid])
         end
     end
+    # @show instr.instr
     maskreduct = mask !== nothing && isreduct && vectorized ∈ reduceddependencies(op) #any(opp -> opp.variable === var, parents_op)
     # if a parent is not unrolled, the compiler should handle broadcasting CSE.
     # because unrolled/tiled parents result in an unrolled/tiled dependendency,

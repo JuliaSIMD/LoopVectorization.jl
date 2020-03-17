@@ -69,42 +69,46 @@ using Test
         @avx unroll=2 for i ∈ 1:length(x)
             z += x[i]*y[i]
         end
-        return z
+        z
     end
     function dot_unroll3avx(x::Vector{T}, y::Vector{T}) where {T<:Number}
         z = zero(T)
         @avx unroll=3 for i ∈ 1:length(x)
             z += x[i]*y[i]
         end
-        return z
+        z
     end
-    function dot_unroll2avx_noinline(x::Vector{T}, y::Vector{T}) where {T<:Number}
-        z = zero(T)
-        @avx inline=false unroll=2 for i ∈ 1:length(x)
+    @macroexpand @avx inline=false unroll=2 for i ∈ 1:length(x)
             z += x[i]*y[i]
         end
-        return z
+
+    function dot_unroll2avx_noinline(x::Vector{T}, y::Vector{T}) where {T<:Number}
+        z = zero(T)
+        @avx inline=true unroll=2 for i ∈ 1:length(x)
+            z += x[i]*y[i]
+        end
+        z
     end
     function dot_unroll3avx_inline(x::Vector{T}, y::Vector{T}) where {T<:Number}
         z = zero(T)
         @avx unroll=3 inline=true for i ∈ 1:length(x)
             z += x[i]*y[i]
         end
-        return z
+        z
     end
     function dot_unroll2_avx(x::Vector{T}, y::Vector{T}) where {T<:Number}
         z = zero(T)
         @_avx unroll=2 for i ∈ 1:length(x)
             z += x[i]*y[i]
         end
-        return z
+        z
     end
     function dot_unroll3_avx(x::Vector{T}, y::Vector{T}) where {T<:Number}
         z = zero(T)
         @_avx unroll=3 for i ∈ 1:length(x)
             z += x[i]*y[i]
         end
-        return z
+        z
     end
     function complex_dot_soa(
         xre::AbstractVector{T}, xim::AbstractVector{T},
@@ -116,13 +120,13 @@ using Test
             zre += xre[i]*yre[i] - xim[i]*yim[i]
             zim += xre[i]*yim[i] + xim[i]*yre[i]
         end
-        return Complex{T}(zre,zim)
+        Complex{T}(zre,zim)
     end
     qc = :(for i ∈ 1:length(xre)
            zre += xre[i]*yre[i] - xim[i]*yim[i]
            zim += xre[i]*yim[i] + xim[i]*yre[i]
            end);
-    lsc = LoopVectorization.LoopSet(qc)
+    lsc = LoopVectorization.LoopSet(qc);
     function complex_mul_with_index_offset!(c_re, c_im, a_re, a_im, b_re, b_im)
         @inbounds @simd ivdep for i = 1:length(a_re) - 1
             c_re[i] = b_re[i] * a_re[i + 1] - b_im[i] * a_im[i + 1]
