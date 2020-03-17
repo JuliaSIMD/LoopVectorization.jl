@@ -14,9 +14,9 @@ VectorizationBase = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
 [compat]
 OffsetArrays = "1"
 Parameters = "0"
-SIMDPirates = "0.7"
+SIMDPirates = "0.7.1"
 SLEEFPirates = "0.4"
-VectorizationBase = "0.8.5"
+VectorizationBase = "0.9"
 julia = "1.1"
 
 [extras]
