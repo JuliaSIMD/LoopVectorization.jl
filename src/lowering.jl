@@ -156,6 +156,7 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     vectorized = order[vectorizedloopnum]
     nisunrolled = isunrolled(us, n)
     nisvectorized = isvectorized(us, n)
+    loopisstatic = isstaticloop(loop) & (!nisvectorized)
 
     remmask = inclmask | nisvectorized
     Ureduct = (n == num_loops(ls)) ? calc_Ureduct(ls, us) : -1
@@ -178,8 +179,12 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     end
     remblock = init_remblock(loop, loopsym)
     push!(q.args, remblock)
-    UFt = 1
-    while true
+    UFt = if loopisstatic
+        length(loop) % UF
+    else
+        1
+    end
+    while !iszero(UFt)
         comparison = if nisvectorized
             itercount = if loop.stopexact
                 Expr(:call, :-, loop.stophint, Expr(:call, lv(:valmul), ls.W, UFt))
@@ -196,7 +201,7 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
         remblocknew = Expr(:elseif, comparison, lower_block(ls, ust, n, remmask, UFt))
         push!(remblock.args, remblocknew)
         remblock = remblocknew
-        if !(UFt < UF - 1 + nisvectorized) || UFt == Ureduct
+        if !(UFt < UF - 1 + nisvectorized) || UFt == Ureduct || loopisstatic
             break
         else
             UFt += 1

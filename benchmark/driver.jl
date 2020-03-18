@@ -10,7 +10,7 @@ include(joinpath(LOOPVECBENCHDIR, "benchmarkflops.jl"))
 include(joinpath(LOOPVECBENCHDIR, "plotbenchmarks.jl"))
 
 
-addprocs((Sys.CPU_THREADS >> 1)-1); nprocs()
+addprocs((Sys.CPU_THREADS >> 1)-1); nworkers()
 
 @everywhere begin
     pkgdir(pkg::String) = abspath(joinpath(dirname(Base.find_package(pkg)), ".."))

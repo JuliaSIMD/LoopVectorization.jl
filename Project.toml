@@ -6,16 +6,16 @@ version = "0.6.22"
 [deps]
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
-Parameters = "d96e819e-fc66-5662-9728-84c9c7592b0a"
 SIMDPirates = "21efa798-c60a-11e8-04d3-e1a92915a26a"
 SLEEFPirates = "476501e8-09a2-5ece-8869-fb82de89a1fa"
+UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 VectorizationBase = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
 
 [compat]
 OffsetArrays = "1"
-Parameters = "0"
 SIMDPirates = "0.7.1"
 SLEEFPirates = "0.4"
+UnPack = "0"
 VectorizationBase = "0.9"
 julia = "1.1"
 
