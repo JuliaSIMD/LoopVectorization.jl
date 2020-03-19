@@ -120,8 +120,6 @@ julia> @btime myselfdotavx($b)
 For this reason, the `@avx` version is roughly twice as fast. The `@inbounds @simd` version, however, is not, because it runs into the problem of loop carried dependencies: to add `a[i]*b[i]` to `s_new = s_old + a[i-j]*b[i-j]`, we must have first finished calculating `s_new`, but -- while two `fma` instructions can be initiated per cycle -- they each take several clock cycles to complete.
 For this reason, we need to unroll the operation to run several independent instances concurrently. The `@avx` macro models this cost to try and pick an optimal unroll factor.
 
-Note that 14 and 12 nm Ryzen chips can only do 1 full width `fma` per clock cycle (and 2 loads), so they should see similar performance with the dot and selfdot. I haven't verified this, but would like to hear from anyone who can.
-
 </p>
 </details>
 
