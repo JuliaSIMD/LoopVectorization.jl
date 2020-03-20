@@ -16,7 +16,7 @@ const LIBDIRECTCALLJIT = joinpath(LOOPVECBENCHDIR, "libdcjtest.so")
 # requires Clang with polly to build
 cfile = joinpath(LOOPVECBENCHDIR, "looptests.c")
 if !isfile(LIBCTEST) || mtime(cfile) > mtime(LIBCTEST)    
-    run(`clang -Ofast -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -lm -mllvm -polly -mllvm -polly-vectorizer=stripmine -shared -fPIC $cfile -o $LIBCTEST`)
+    run(`/usr/local/bin/clang -Ofast -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -lm -mllvm -polly -mllvm -polly-vectorizer=stripmine -shared -fPIC $cfile -o $LIBCTEST`)
 end
 if !isfile(LIBICTEST) || mtime(cfile) > mtime(LIBICTEST)
     run(`icc -fast -qopt-zmm-usage=high -fargument-noalias-global -qoverride-limits -shared -fPIC $cfile -o $LIBICTEST`)
@@ -24,7 +24,8 @@ end
 ffile = joinpath(LOOPVECBENCHDIR, "looptests.f90")
 if !isfile(LIBFTEST) || mtime(ffile) > mtime(LIBFTEST)
     # --param max-unroll-times defaults to ≥8, which is generally excessive
-    run(`gfortran -Ofast -march=native -funroll-loops -floop-nest-optimize -mprefer-vector-width=$(8REGISTER_SIZE) -shared -fPIC $ffile -o $LIBFTEST`)
+    run(`gfortran -Ofast -march=native -funroll-loops -mprefer-vector-width=$(8REGISTER_SIZE) -shared -fPIC $ffile -o $LIBFTEST`)
+    # run(`gfortran -Ofast -march=native -funroll-loops -floop-nest-optimize -mprefer-vector-width=$(8REGISTER_SIZE) -shared -fPIC $ffile -o $LIBFTEST`)
 end
 if !isfile(LIBIFTEST) || mtime(ffile) > mtime(LIBIFTEST)
     run(`ifort -fast -qopt-zmm-usage=high -qoverride-limits -shared -fPIC $ffile -o $LIBIFTEST`)
@@ -34,31 +35,32 @@ end
 eigenfile = joinpath(LOOPVECBENCHDIR, "looptestseigen.cpp")
 if !isfile(LIBEIGENTEST) || mtime(eigenfile) > mtime(LIBEIGENTEST)
     # Clang seems to have trouble finding includes
-    run(`clang++ -Ofast -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -I/usr/include/c++/9 -I/usr/include/c++/9/x86_64-generic-linux -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBEIGENTEST`)
+    run(`g++ -O3 -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBEIGENTEST`)
+    # run(`clang++ -Ofast -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -I/usr/include/c++/9 -I/usr/include/c++/9/x86_64-generic-linux -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBEIGENTEST`)
 end
 if !isfile(LIBIEIGENTEST) || mtime(eigenfile) > mtime(LIBIEIGENTEST)
     run(`icpc -fast -qopt-zmm-usage=high -fargument-noalias-global -qoverride-limits -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBIEIGENTEST`)
 end
 
-directcalljitfile = joinpath(LOOPVECBENCHDIR, "directcalljit.f90")
-if !isfile(LIBDIRECTCALLJIT) || mtime(directcalljitfile) > mtime(LIBDIRECTCALLJIT)
-    # run(`ifort -fast -DMKL_DIRECT_CALL_SEQ_JIT -fpp -qopt-zmm-usage=high -shared -fPIC $directcalljitfile -o $LIBDIRECTCALLJIT`)
-    run(`gfortran -Ofast -march=native -DMKL_DIRECT_CALL_SEQ_JIT -cpp -mprefer-vector-width=$(8REGISTER_SIZE) -shared -fPIC $directcalljitfile -o $LIBDIRECTCALLJIT`)
-end
+# directcalljitfile = joinpath(LOOPVECBENCHDIR, "directcalljit.f90")
+# if !isfile(LIBDIRECTCALLJIT) || mtime(directcalljitfile) > mtime(LIBDIRECTCALLJIT)
+#     # run(`ifort -fast -DMKL_DIRECT_CALL_SEQ_JIT -fpp -qopt-zmm-usage=high -shared -fPIC $directcalljitfile -o $LIBDIRECTCALLJIT`)
+#     run(`gfortran -Ofast -march=native -DMKL_DIRECT_CALL_SEQ_JIT -cpp -mprefer-vector-width=$(8REGISTER_SIZE) -shared -fPIC $directcalljitfile -o $LIBDIRECTCALLJIT`)
+# end
 
-istransposed(x) = false
-istransposed(x::Adjoint) = true
-istransposed(x::Transpose) = true
-function dgemmjit!(C::AbstractVecOrMat{Float64}, A::AbstractVecOrMat{Float64}, B::AbstractVecOrMat{Float64})
-    M, N = size(C); K = size(B, 1)
-    ccall(
-        (:dgemmjit, LIBDIRECTCALLJIT), Cvoid,
-        (Ptr{Float64},Ptr{Float64},Ptr{Float64},Ref{Int},Ref{Int},Ref{Int},Ref{Bool},Ref{Bool}),
-        parent(C), parent(A), parent(B),
-        Ref(M), Ref(K), Ref(N),
-        Ref(istransposed(A)), Ref(istransposed(B))
-    )
-end
+# istransposed(x) = false
+# istransposed(x::Adjoint) = true
+# istransposed(x::Transpose) = true
+# function dgemmjit!(C::AbstractVecOrMat{Float64}, A::AbstractVecOrMat{Float64}, B::AbstractVecOrMat{Float64})
+#     M, N = size(C); K = size(B, 1)
+#     ccall(
+#         (:dgemmjit, LIBDIRECTCALLJIT), Cvoid,
+#         (Ptr{Float64},Ptr{Float64},Ptr{Float64},Ref{Int},Ref{Int},Ref{Int},Ref{Bool},Ref{Bool}),
+#         parent(C), parent(A), parent(B),
+#         Ref(M), Ref(K), Ref(N),
+#         Ref(istransposed(A)), Ref(istransposed(B))
+#     )
+# end
 
 for (prefix,Cshared,Fshared,Eshared) ∈ ((Symbol(""),LIBCTEST,LIBFTEST,LIBEIGENTEST), (:i,LIBICTEST,LIBIFTEST,LIBIEIGENTEST))
     for order ∈ (:kmn, :knm, :mkn, :mnk, :nkm, :nmk)
@@ -188,13 +190,11 @@ for (p,s) ∈ [(:c,Cshared) (:e,Eshared)]
 end
     @eval function $(Symbol(prefix,:fdot))(a, b)
         N = length(a)
-        d = Ref{Float64}()
         ccall(
-            (:dot, $Fshared), Cvoid,
-            (Ref{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}),
-            d, a, b, Ref(N)
+            (:dot, $Fshared), Float64,
+            (Ptr{Float64}, Ptr{Float64}, Ref{Clong}),
+            a, b, Ref(N)
         )
-        d[]
     end
 for (p,s) ∈ [(:c,Cshared) (:e,Eshared)]
     @eval function $(Symbol(prefix,p,:selfdot))(a)
@@ -208,13 +208,11 @@ for (p,s) ∈ [(:c,Cshared) (:e,Eshared)]
 end
 @eval function $(Symbol(prefix,:fselfdot))(a)
         N = length(a)
-        d = Ref{Float64}()
         ccall(
-            (:selfdot, $Fshared), Cvoid,
-            (Ref{Float64}, Ptr{Float64}, Ref{Clong}),
-            d, a, Ref(N)
+            (:selfdot, $Fshared), Float64,
+            (Ptr{Float64}, Ref{Clong}),
+            a, Ref(N)
         )
-        d[]
 end
 for (p,s) ∈ [(:c,Cshared) (:e,Eshared)]
     @eval function $(Symbol(prefix,p,:dot3))(x, A, y)
@@ -228,13 +226,11 @@ for (p,s) ∈ [(:c,Cshared) (:e,Eshared)]
 end
     @eval function $(Symbol(prefix,:fdot3))(x, A, y)
         M, N = size(A)
-        d = Ref{Float64}()
         ccall(
-            (:dot3, $Fshared), Cvoid,
-            (Ref{Float64}, Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}, Ref{Clong}),
-            d, x, A, y, Ref(M), Ref(N)
+            (:dot3, $Fshared), Float64,
+            (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}, Ref{Clong}),
+            x, A, y, Ref(M), Ref(N)
         )
-        d[]
     end
 for (p,s) ∈ [(:c,Cshared) (:e,Eshared)]
     @eval function $(Symbol(prefix,p,:gemv!))(y, A, x)
@@ -318,13 +314,11 @@ for (p,s) ∈ [(:c,Cshared) (:e,Eshared)]
 end
     @eval function $(Symbol(prefix,:fOLSlp))(y, X, β)
         N, P = size(X)
-        lp = Ref{Float64}()
         ccall(
-            (:OLSlp, $Fshared), Cvoid,
-            (Ref{Float64}, Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}, Ref{Clong}),
-            lp, y, X, β, Ref(N), Ref(P)
+            (:OLSlp, $Fshared), Float64,
+            (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}, Ref{Clong}),
+            y, X, β, Ref(N), Ref(P)
         )
-        lp[]
     end
     @eval function $(Symbol(prefix,:cvexp!))(b, a)
         N = length(b)
@@ -388,13 +382,11 @@ end
     end
     @eval function $(Symbol(prefix,:frandomaccess))(P, basis, coefs)
         A, C = size(P)
-        p = Ref{Float64}()
         ccall(
-            (:randomaccess, $Fshared), Cvoid,
-            (Ref{Float64}, Ptr{Float64}, Ptr{Clong}, Ptr{Float64}, Ref{Clong}, Ref{Clong}),
-            p, P, basis, coefs, Ref(A), Ref(C)
+            (:randomaccess, $Fshared), Float64,
+            (Ptr{Float64}, Ptr{Clong}, Ptr{Float64}, Ref{Clong}, Ref{Clong}),
+            P, basis, coefs, Ref(A), Ref(C)
         )
-        p[]
     end
     @eval function $(Symbol(prefix,:clogdettriangle))(T::Union{LowerTriangular,UpperTriangular})
         N = size(T,1)
@@ -408,12 +400,61 @@ end
     @eval function $(Symbol(prefix,:flogdettriangle))(T::Union{LowerTriangular,UpperTriangular})
         N = size(T,1)
         Tp = parent(T)
-        ld = Ref{Float64}()
         ccall(
-            (:logdettriangle, $Fshared), Cvoid,
-            (Ref{Float64}, Ptr{Float64}, Ref{Clong}),
-            ld, Tp, Ref(N)
+            (:logdettriangle, $Fshared), Float64,
+            (Ptr{Float64}, Ref{Clong}),
+            Tp, Ref(N)
         )
-        ld[]
     end
+    @eval function $(Symbol(prefix,:cfilter2d!))(B::OffsetArray, A::AbstractArray, K::OffsetArray)
+        Ma, Na = size(A)
+        offset = first(B.offsets)
+        ccall(
+            (:filter2d, $Cshared), Cvoid,
+            (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Clong, Clong, Clong),
+            parent(B), A, parent(K), Ma, Na, offset
+        )
+    end
+    @eval function $(Symbol(prefix,:ffilter2d!))(B::OffsetArray, A::AbstractArray, K::OffsetArray)
+        Ma, Na = size(A)
+        offset = first(B.offsets)
+        ccall(
+            (:filter2d, $Fshared), Cvoid,
+            (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}, Ref{Clong}, Ref{Clong}),
+            parent(B), A, parent(K), Ref(Ma), Ref(Na), Ref(offset)
+        )
+    end
+    @eval function $(Symbol(prefix,:cfilter2d!))(B::OffsetArray, A::AbstractArray, K::SizedOffsetMatrix{Float64,-1,1,-1,1})
+        Ma, Na = size(A)
+        ccall(
+            (:filter2d3x3, $Cshared), Cvoid,
+            (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Clong, Clong),
+            parent(B), A, K, Ma, Na
+        )
+    end
+    @eval function $(Symbol(prefix,:ffilter2d!))(B::OffsetArray, A::AbstractArray, K::SizedOffsetMatrix{Float64,-1,1,-1,1})
+        Ma, Na = size(A)
+        ccall(
+            (:filter2d3x3, $Fshared), Cvoid,
+            (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}, Ref{Clong}),
+            parent(B), A, K, Ref(Ma), Ref(Na)
+        )
+    end
+    @eval function $(Symbol(prefix,:cfilter2dunrolled!))(B::OffsetArray, A::AbstractArray, K::SizedOffsetMatrix{Float64,-1,1,-1,1})
+        Ma, Na = size(A)
+        ccall(
+            (:filter2d3x3unrolled, $Cshared), Cvoid,
+            (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Clong, Clong),
+            parent(B), A, K, Ma, Na
+        )
+    end
+    @eval function $(Symbol(prefix,:ffilter2dunrolled!))(B::OffsetArray, A::AbstractArray, K::SizedOffsetMatrix{Float64,-1,1,-1,1})
+        Ma, Na = size(A)
+        ccall(
+            (:filter2d3x3unrolled, $Fshared), Cvoid,
+            (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}, Ref{Clong}),
+            parent(B), A, K, Ref(Ma), Ref(Na)
+        )
+    end
+    
 end

@@ -9,11 +9,13 @@ Base.:(==)(u::Unsigned, it::IndexType) = (u % UInt8) == UInt8(it)
 It supports array-references with up to 8 indexes, where the data for each consecutive index is packed into corresponding 8-bit fields
 of `index_types` (storing the enum `IndexType`), `indices` (the `id` for each index symbol), and `offsets` (currently unused).
 """
-struct ArrayRefStruct
+struct ArrayRefStruct{array,ptr}
     index_types::UInt64
     indices::UInt64
     offsets::UInt64
 end
+array(ar::ArrayRefStruct{a,p}) where {a,p} = a
+ptr(ar::ArrayRefStruct{a,p}) where {a,p}   = p
 
 function findindoradd!(v::Vector{T}, s::T) where {T}
     ind = findfirst(sᵢ -> sᵢ == s, v)
@@ -48,7 +50,7 @@ function ArrayRefStruct(ls::LoopSet, mref::ArrayReferenceMeta, arraysymbolinds::
             end
         end
     end
-    ArrayRefStruct( index_types, indices, offsets )
+    ArrayRefStruct{mref.ref.array,mref.ptr}( index_types, indices, offsets )
 end
 
 struct OperationStruct <: AbstractLoopOperation
@@ -194,14 +196,15 @@ end
 @inline array_wrapper(A::SubArray) = A.indices
 
 
-
+# If you change the number of arguments here, make commensurate changes
+# to the `insert!` locations in `setup_call_noinline`.
 @generated function __avx__!(
-    ::Val{UT}, ::Type{OPS}, ::Type{ARF}, ::Type{AM}, lb::LB,
+    ::Val{UT}, ::Type{OPS}, ::Type{ARF}, ::Type{AM}, ::Type{LPSYM}, lb::LB,
     ::Val{AR}, ::Val{D}, ::Val{IND}, subsetvals, arraydescript, vargs::Vararg{<:Any,N}
-) where {UT, OPS, ARF, AM, LB, N, AR, D, IND}
+) where {UT, OPS, ARF, AM, LPSYM, LB, N, AR, D, IND}
     num_vptrs = length(ARF.parameters)::Int
     vptrs = [gensym(:vptr) for _ ∈ 1:num_vptrs]
-    call = Expr(:call, lv(:_avx_!), Val{UT}(), OPS, ARF, AM, :lb)
+    call = Expr(:call, lv(:_avx_!), Val{UT}(), OPS, ARF, AM, LPSYM, :lb)
     for n ∈ 1:num_vptrs
         push!(call.args, vptrs[n])
     end
@@ -215,7 +218,7 @@ end
         LHS = ind === nothing ? gensym() : vptrs[ind]
         assigned_names[i] = LHS
         d = (D[i])::Union{Nothing,Int}
-        if d === nothing # stridedpointer
+        if d === nothing # stridedpointer instead of noaliasstridedpointer, because alias info will be lost across function boundary...
             num_arrays += 1
             RHS = Expr(:call, lv(:stridedpointer), Expr(:ref, :vargs, ari), Expr(:ref, :arraydescript, ari))
         else #subsetview
@@ -246,13 +249,14 @@ function generate_call(ls::LoopSet, IUT, debug::Bool = false)
     foreach(ref -> push!(arrayref_descriptions.args, ArrayRefStruct(ls, ref, arraysymbolinds)), ls.refs_aliasing_syms)
     argmeta = argmeta_and_consts_description(ls, arraysymbolinds)
     loop_bounds = loop_boundaries(ls)
+    loop_syms = Expr(:curly, :Tuple, map(QuoteNode, ls.loopsymbols)...)
     inline, U, T = IUT
     if inline | debug
         func = debug ? lv(:_avx_loopset_debug) : lv(:_avx_!)
         lbarg = debug ? Expr(:call, :typeof, loop_bounds) : loop_bounds
         q = Expr(
             :call, func, Expr(:call, Expr(:curly, :Val, (U,T))),
-            operation_descriptions, arrayref_descriptions, argmeta, lbarg
+            operation_descriptions, arrayref_descriptions, argmeta, loop_syms, lbarg
         )
         debug && deleteat!(q.args, 2)
         foreach(ref -> push!(q.args, vptr(ref)), ls.refs_aliasing_syms)
@@ -260,7 +264,7 @@ function generate_call(ls::LoopSet, IUT, debug::Bool = false)
         arraydescript = Expr(:tuple)
         q = Expr(
             :call, lv(:__avx__!), Expr(:call, Expr(:curly, :Val, (U,T))),
-            operation_descriptions, arrayref_descriptions, argmeta, loop_bounds, arraydescript
+            operation_descriptions, arrayref_descriptions, argmeta, loop_syms, loop_bounds, arraydescript
         )
         for array ∈ ls.includedactualarrays
             push!(q.args, Expr(:call, lv(:unwrap_array), array))
@@ -289,7 +293,7 @@ function setup_call_noinline(ls::LoopSet, U = zero(Int8), T = zero(Int8))
         if ex isa Expr && ex.head === :(=) && length(ex.args) == 2
             if ex.args[2] isa Expr && ex.args[2].head === :call
                 gr = first(ex.args[2].args)
-                if gr == lv(:stridedpointer)
+                if gr == lv(:noaliasstridedpointer)
                     array = ex.args[2].args[2]
                     arrayid = findfirst(a -> a === array, ls.includedactualarrays)
                     if arrayid isa Int
@@ -320,10 +324,10 @@ function setup_call_noinline(ls::LoopSet, U = zero(Int8), T = zero(Int8))
         end
         push!(q.args, ex)
     end
-    insert!(call.args, 7, Expr(:call, Expr(:curly, :Val, vptrarrays)))
-    insert!(call.args, 8, Expr(:call, Expr(:curly, :Val, vptrsubsetdims)))
-    insert!(call.args, 9, Expr(:call, Expr(:curly, :Val, vptrindices)))
-    insert!(call.args, 10, vptrsubsetvals)
+    insert!(call.args, 8, Expr(:call, Expr(:curly, :Val, vptrarrays)))
+    insert!(call.args, 9, Expr(:call, Expr(:curly, :Val, vptrsubsetdims)))
+    insert!(call.args, 10, Expr(:call, Expr(:curly, :Val, vptrindices)))
+    insert!(call.args, 11, vptrsubsetvals)
     if hasouterreductions
         outer_reducts = Expr(:local)
         for or ∈ ls.outer_reductions

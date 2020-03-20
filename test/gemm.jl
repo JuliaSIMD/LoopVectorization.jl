@@ -291,7 +291,7 @@
                C[m,n] = Cₘₙ
                end)
     lsr2amb = LoopVectorization.LoopSet(r2ambq);
-    @test LoopVectorization.choose_order(lsr2amb) == ([:m, :n, :k], :k, :n, :m, Unum & -2, Tnum)
+    @test LoopVectorization.choose_order(lsr2amb) == ([:n, :m, :k], :k, :n, :m, Unum & -2, Tnum)
     function rank2AmulBavx!(C, Aₘ, Aₖ, B)
         @avx for m ∈ 1:size(C,1), n ∈ 1:size(C,2)
             Cₘₙ = zero(eltype(C))

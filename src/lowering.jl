@@ -275,15 +275,15 @@ function init_remblock(unrolledloop::Loop, unrolled::Symbol = unrolledloop.iters
     Expr(:if, condition, nothing)
 end
 
-function maskexpr(W::Symbol, looplimit, all_on::Bool)
+function maskexpr(W::Symbol, looplimit)
     rem = Expr(:call, lv(:valrem), W, looplimit)
-    Expr(:(=), Symbol("##mask##"), Expr(:call, lv(all_on ? :masktable : :mask), W, rem))
+    Expr(:(=), Symbol("##mask##"), Expr(:call, lv(:masktable), W, rem))
 end
-function definemask(loop::Loop, W::Symbol, allon::Bool)
+function definemask(loop::Loop, W::Symbol)
     if isstaticloop(loop)
-        maskexpr(W, length(loop), allon)
+        maskexpr(W, length(loop))
     elseif loop.startexact && loop.starthint == 1
-        maskexpr(W, loop.stopsym, allon)
+        maskexpr(W, loop.stopsym)
     else
         lexpr = if loop.startexact
             Expr(:call, :-, loop.stopsym, loop.starthint - 1)
@@ -292,7 +292,7 @@ function definemask(loop::Loop, W::Symbol, allon::Bool)
         else
             Expr(:call, :-, Expr(:call, :+, loop.stopsym, 1), loop.startsym)
         end
-        maskexpr(W, lexpr, allon)
+        maskexpr(W, lexpr)
     end
 end
 
@@ -307,7 +307,7 @@ function setup_preamble!(ls::LoopSet, us::UnrollSpecification)
     length(ls.includedarrays) == 0 || push!(ls.preamble.args, Expr(:(=), typeT, determine_eltype(ls)))
     push!(ls.preamble.args, Expr(:(=), W, determine_width(ls, vectorized)))
     lower_licm_constants!(ls)
-    pushpreamble!(ls, definemask(getloop(ls, vectorized), W, U > 1 && unrolledloopnum == vectorizedloopnum))
+    pushpreamble!(ls, definemask(getloop(ls, vectorized), W))#, U > 1 && unrolledloopnum == vectorizedloopnum))
     for op ∈ operations(ls)
         (iszero(length(loopdependencies(op))) && iscompute(op)) && lower_compute!(ls.preamble, op, vectorized, ls.W, unrolled, tiled, U, nothing, nothing)
     end
@@ -352,12 +352,13 @@ function lower(ls::LoopSet)#, prependinlineORorUnroll = 0)
     lower(ls, order, unrolled, tiled, vectorized, U, T)
 end
 function lower(ls::LoopSet, U, T)#, prependinlineORorUnroll = 0)
-    num_loops(ls) == 1 && @assert T == -1
-    if T == -1
+    if T > 1
+        @assert num_loops(ls) > 1 "There is only $(num_loops(ls)) loop, but specified blocking parameter T is $T."
+        order, unrolled, tiled, vectorized, _U, _T, c = choose_tile(ls)
+    else
+        T = -1
         order, vectorized, c = choose_unroll_order(ls, Inf)
         unrolled = first(order); tiled = Symbol("##undefined##")
-    else
-        order, unrolled, tiled, vectorized, _U, _T, c = choose_tile(ls)
     end
     lower(ls, order, unrolled, tiled, vectorized, U, T)
 end

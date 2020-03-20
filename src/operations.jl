@@ -20,11 +20,10 @@ struct ArrayReferenceMeta
     ref::ArrayReference
     loopedindex::Vector{Bool}
     ptr::Symbol
-    indexlookup::Vector{Int}
 end
-function ArrayReferenceMeta(ref::ArrayReference, loopedindex, ptr = vptr(ref), indexlookup = [i for i in 1:length(loopedindex)])
+function ArrayReferenceMeta(ref::ArrayReference, loopedindex, ptr = vptr(ref))
     ArrayReferenceMeta(
-        ref, loopedindex, ptr, indexlookup
+        ref, loopedindex, ptr
     )
 end
 # function Base.hash(x::ArrayReference, h::UInt)

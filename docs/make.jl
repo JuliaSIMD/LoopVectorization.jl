@@ -10,7 +10,8 @@ makedocs(;
             "examples/matrix_multiplication.md",
             "examples/matrix_vector_ops.md",
             "examples/dot_product.md",
-            "examples/sum_of_squared_error.md"
+            "examples/sum_of_squared_error.md",
+            "examples/filtering.md"
         ],
         "Vectorized Convenience Functions" => "vectorized_convenience_functions.md",
         "Future Work" => "future_work.md",

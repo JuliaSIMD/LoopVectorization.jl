@@ -3,9 +3,9 @@
     Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 4)
     dot3q = :(for m ∈ 1:M, n ∈ 1:N
               s += x[m] * A[m,n] * y[n]
-              end)
+              end);
     lsdot3 = LoopVectorization.LoopSet(dot3q);
-    @test LoopVectorization.choose_order(lsdot3) == ([:m,:n], :n, :m, :m, Unum & -2, Tnum)
+    @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :m, :n, :m, Unum & -2, Tnum)
 
     @static if VERSION < v"1.4"
         dot3(x, A, y) = dot(x, A * y)
@@ -33,7 +33,7 @@
                 B[j,i] = A[j,i] - x[j]
                 end)
     lssubcol = LoopVectorization.LoopSet(subcolq);
-    @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, Symbol("##undefined##"), :j, 4, -1)
+    @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :i, :j, :j, 4, 4)
     ## @avx is SLOWER!!!!
     ## need to fix!
     function mysubcol!(B, A, x)
@@ -58,7 +58,7 @@
                 x[j] += A[j,i] - 0.25
                 end)
     lscolsum = LoopVectorization.LoopSet(colsumq);
-    @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, Symbol("##undefined##"), :j, 4, -1)
+    @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :i, :j, :j, 4, 4)
 
     # my colsum is wrong (by 0.25), but slightly more interesting
     function mycolsum!(x, A)
@@ -95,7 +95,7 @@
     lsvar = LoopVectorization.LoopSet(varq);
     # LoopVectorization.choose_order(lsvar)
     # @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, Symbol("##undefined##"), :j, 4, -1)
-    @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, Symbol("##undefined##"), :j, 4, -1)
+    @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :i, :j, :j, 4, 4)
 
     function myvar!(s², A, x̄)
         @. s² = 0

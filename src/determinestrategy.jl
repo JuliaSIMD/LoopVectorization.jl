@@ -21,7 +21,7 @@ function findparent(ls::LoopSet, s::Symbol)#opdict isn't filled when reconstruct
 end
 function unitstride(ls::LoopSet, op::Operation, s::Symbol)
     inds = getindices(op)
-    li, lookup = op.ref.loopedindex, op.ref.indexlookup
+    li = op.ref.loopedindex
     # The first index is allowed to be indexed by `s`
     fi = first(inds)
     if fi === Symbol("##DISCONTIGUOUSSUBARRAY##")
@@ -32,7 +32,7 @@ function unitstride(ls::LoopSet, op::Operation, s::Symbol)
         indexappearences(parent, s) > 1 && return false
     end
     for i ∈ 2:length(inds)
-        if li[lookup[i]]
+        if li[i]
             s === inds[i] && return false
         else
             parent = findparent(ls, inds[i])
@@ -49,10 +49,10 @@ function register_pressure(op::Operation)
         instruction_cost(instruction(op)).register_pressure
     end
 end
-function cost(ls::LoopSet, op::Operation, unrolled::Symbol, Wshift::Int, size_T::Int = op.elementbytes)
+function cost(ls::LoopSet, op::Operation, vectorized::Symbol, Wshift::Int, size_T::Int = op.elementbytes)
     isconstant(op) && return 0.0, 0, 1
-    isloopvalue(op) && return 0.0, 0, 1
-    # Wshift == dependson(op, unrolled) ? Wshift : 0
+    isloopvalue(op) && return 0.0, 0, 0
+    # Wshift == dependson(op, vectorized) ? Wshift : 0
     # c = first(cost(instruction(op), Wshift, size_T))::Int
     instr = Instruction(:LoopVectorization, instruction(op).instr)
     # instr = instruction(op)
@@ -60,14 +60,16 @@ function cost(ls::LoopSet, op::Operation, unrolled::Symbol, Wshift::Int, size_T:
         if instr == Instruction(:-) || instr === Instruction(:vsub) || instr == Instruction(:+) || instr == Instruction(:vadd)
             return 0.0, 0, 1
         end
+    elseif iscompute(op) && all(isloopvalue, parents(op))
+        return 0.0, 0, 1
     end
-    opisunrolled = dependson(op, unrolled)
-    srt, sl, srp = opisunrolled ? vector_cost(instr, Wshift, size_T) : scalar_cost(instr)
+    opisvectorized = dependson(op, vectorized)
+    srt, sl, srp = opisvectorized ? vector_cost(instr, Wshift, size_T) : scalar_cost(instr)
     if accesses_memory(op)
         # either vbroadcast/reductionstore, vmov(a/u)pd, or gather/scatter
-        # @show instr, unrolled, loopdependencies(op), unitstride(op, unrolled)
-        if opisunrolled
-            if !unitstride(ls, op, unrolled)# || !isdense(op) # need gather/scatter
+        # @show instr, vectorized, loopdependencies(op), unitstride(op, vectorized)
+        if opisvectorized
+            if !unitstride(ls, op, vectorized)# || !isdense(op) # need gather/scatter
                 r = (1 << Wshift)
                 srt *= r
                 sl *= r
@@ -106,7 +108,7 @@ end
 # evaluates cost of evaluating loop in given order
 # heuristically, could simplify analysis by just unrolling outer loop?
 function evaluate_cost_unroll(
-    ls::LoopSet, order::Vector{Symbol}, max_cost = typemax(Float64), vectorized::Symbol = first(order)
+    ls::LoopSet, order::Vector{Symbol}, vectorized::Symbol, max_cost = typemax(Float64)
 )
     included_vars = fill!(resize!(ls.included_vars, length(operations(ls))), false)
     nested_loop_syms = Symbol[]#Set{Symbol}()
@@ -171,13 +173,12 @@ function roundpow2(i::Integer)
     ld = i - l
     ud > ld ? l : u
 end
-function unroll_no_reductions(ls, order, vectorized, Wshift, size_T)
-    innermost = last(order)
+function unroll_no_reductions(ls, order, unrolled, vectorized, Wshift, size_T)
     compute_rt = 0.0
     load_rt = 0.0
     # latency not a concern, because no depchains
     for op ∈ operations(ls)
-        dependson(op, innermost) || continue
+        dependson(op, unrolled) || continue
         if iscompute(op)
             compute_rt += first(cost(ls, op, vectorized, Wshift, size_T))
         elseif isload(op)
@@ -208,7 +209,7 @@ function determine_unroll_factor(
     if iszero(num_reductions)
         # if only 1 loop, no need to unroll
         # if more than 1 loop, there is some cost. Picking 2 here as a heuristic.
-        return unroll_no_reductions(ls, order, vectorized, Wshift, size_T)
+        return unroll_no_reductions(ls, order, unrolled, vectorized, Wshift, size_T)
     end
     # So if num_reductions > 0, we set the unroll factor to be high enough so that the CPU can be kept busy
     # if there are, U = max(1, round(Int, max(latency) * throughput / num_reductions)) = max(1, round(Int, latency / (recip_throughput * num_reductions)))
@@ -245,7 +246,8 @@ function tile_cost(X, U, T, UL, TL)
     X[1] + X[4] + X[2] * Tfactor + X[3] * Ufactor
 end
 function solve_tilesize(X, R, UL, TL)
-    @inbounds any(iszero, (R[1],R[2],R[3])) && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
+    # @inbounds any(iszero, (R[1],R[2],R[3])) && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
+    first(iszero(R)) && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
     # @inbounds any(iszero, (R[1],R[2],R[3])) && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
     # We use a lagrange multiplier to find floating point values for U and T
     # first solving for U via quadratic formula
@@ -257,7 +259,9 @@ function solve_tilesize(X, R, UL, TL)
     Ufloat = (sqrt(b^2 - 4a*c) - b) / (2a)
     Tfloat = (RR - Ufloat*R[2])/(Ufloat*R[1])
     # @show Ufloat, Tfloat
-    (isfinite(Tfloat) && isfinite(Ufloat)) || return -1,-1,Inf
+    if !(isfinite(Tfloat) && isfinite(Ufloat))
+        return 4, 4, tile_cost(X, 4, 4, UL, TL)
+    end
     Ulow = max(1, floor(Int, Ufloat)) # must be at least 1
     Tlow = max(1, floor(Int, Tfloat)) # must be at least 1
     Uhigh = Ulow + 1 #ceil(Int, Ufloat)
@@ -302,7 +306,7 @@ function solve_tilesize_constT(ls, T)
 end
 # Tiling here is about alleviating register pressure for the UxT
 function solve_tilesize(X, R, Umax, Tmax, UL, TL)
-    first(R) == 0 && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
+    iszero(first(R)) && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
     U, T, cost = solve_tilesize(X, R, UL, TL)
     # T -= T & 1
     # U = min(U, T)
@@ -399,7 +403,7 @@ function stride_penalty(ls::LoopSet, order::Vector{Symbol})
             stridepenalty += stride_penalty(ls, op, order)
         end
     end
-    stridepenalty * 1e-9
+    stridepenalty# * 1e-9
 end
 function convolution_cost_factor(ls::LoopSet, op::Operation, u1::Symbol, u2::Symbol, v::Symbol)
     (u1 ∈ loopdependencies(op) && u2 ∈ loopdependencies(op)) || return 1.0
@@ -483,6 +487,7 @@ function evaluate_cost_tile(
             factor = convolution_cost_factor(ls, op, unrolled, tiled, vectorized)
             rt *= factor#; rp *= factor;
         end
+        # @show op rt, lat, rp
         rp = opisininnerloop ? rp : 0 # we only care about register pressure within the inner most loop
         rt *= iters[id]
         if isunrolled && istiled # no cost decrease; cost must be repeated
@@ -559,7 +564,7 @@ function choose_unroll_order(ls::LoopSet, lowest_cost::Float64 = Inf)
     best_vec = first(new_order)
     while true
         for new_vec ∈ new_order
-            cost_temp = evaluate_cost_unroll(ls, new_order, lowest_cost, new_vec)
+            cost_temp = evaluate_cost_unroll(ls, new_order, new_vec, lowest_cost)
             if cost_temp < lowest_cost
                 lowest_cost = cost_temp
                 best_order = new_order

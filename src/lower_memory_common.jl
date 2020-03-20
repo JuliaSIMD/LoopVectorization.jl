@@ -27,12 +27,12 @@ function mem_offset(op::Operation, td::UnrollArgs)
     # @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
     ret = Expr(:tuple)
     indices = getindices(op)
-    loopedindex, indexlookup = op.ref.loopedindex, op.ref.indexlookup
+    loopedindex = op.ref.loopedindex
     start = (first(indices) === Symbol("##DISCONTIGUOUSSUBARRAY##")) + 1
     for (n,ind) ∈ enumerate(@view(indices[start:end]))
         if ind isa Int
             push!(ret.args, ind)
-        elseif loopedindex[indexlookup[n]]
+        elseif loopedindex[n]
             push!(ret.args, ind)
         else
             push!(ret.args, symbolind(ind, op, td))
@@ -46,7 +46,7 @@ function mem_offset_u(op::Operation, td::UnrollArgs)
     incr = u
     ret = Expr(:tuple)
     indices = getindices(op)
-    loopedindex, indexlookup = op.ref.loopedindex, op.ref.indexlookup
+    loopedindex = op.ref.loopedindex
     if incr == 0
         return mem_offset(op, td)
         # append_inds!(ret, indices, loopedindex)
@@ -57,7 +57,7 @@ function mem_offset_u(op::Operation, td::UnrollArgs)
                 push!(ret.args, ind)
             elseif ind === unrolled
                 push!(ret.args, Expr(:call, :+, ind, incr))
-            elseif loopedindex[indexlookup[n]]
+            elseif loopedindex[n]
                 push!(ret.args, ind)
             else
                 push!(ret.args, symbolind(ind, op, td))

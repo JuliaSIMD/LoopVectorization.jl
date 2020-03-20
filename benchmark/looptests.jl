@@ -1,5 +1,24 @@
-using LoopVectorization, LinearAlgebra
+using LoopVectorization, LinearAlgebra, OffsetArrays
 BLAS.set_num_threads(1)
+
+struct SizedOffsetMatrix{T,LR,UR,LC,RC} <: AbstractMatrix{T}
+    data::Matrix{T}
+end
+using LoopVectorization.VectorizationBase: StaticUnitRange
+Base.axes(::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (StaticUnitRange{LR,UR}(),StaticUnitRange{LC,UC}())
+@generated function LoopVectorization.stridedpointer(A::SizedOffsetMatrix{T,LR,UR,LC,RC}) where {T,LR,UR,LC,RC}
+    quote
+        $(Expr(:meta,:inline))
+        LoopVectorization.OffsetStridedPointer(
+            LoopVectorization.StaticStridedPointer{$T,Tuple{1,$(UR-LR+1)}}(pointer(A.data)),
+            ($(LR-2), $(LC-2))
+        )
+    end
+end
+Base.size(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (1 + UR-LR, 1 + UC-LC)
+Base.getindex(A::SizedOffsetMatrix, i, j) = LoopVectorization.vload(LoopVectorization.stridedpointer(A), (i,j)) # only needed to print
+Base.unsafe_convert(::Type{Ptr{Float64}}, A::SizedOffsetMatrix) = Base.unsafe_convert(Ptr{Float64}, A.data)
+
 
 function jgemm!(𝐂, 𝐀, 𝐁)
     𝐂 .= 0
@@ -225,7 +244,7 @@ function randomaccess(P, basis, coeffs::Vector{T}) where {T}
         end
         p += pc
     end
-    return p
+   return p
 end
 function randomaccessavx(P, basis, coeffs::Vector{T}) where {T}
     C = length(coeffs)
@@ -256,3 +275,52 @@ function jlogdettriangleavx(T::Union{LowerTriangular,UpperTriangular})
 end
 
 
+
+
+function filter2d!(out::AbstractMatrix, A::AbstractMatrix, kern)
+    rng1k, rng2k = axes(kern)
+    rng1,  rng2  = axes(out)
+    @inbounds @fastmath for j in rng2, i in rng1
+        tmp = zero(eltype(out))
+        for jk in rng2k, ik in rng1k
+            tmp += A[i+ik,j+jk]*kern[ik,jk]
+        end
+        out[i,j] = tmp
+    end
+    out
+end
+function filter2davx!(out::AbstractMatrix, A::AbstractMatrix, kern)
+    rng1k, rng2k = axes(kern)
+    rng1,  rng2  = axes(out)
+    @avx for j in rng2, i in rng1
+        tmp = zero(eltype(out))
+        for jk in rng2k, ik in rng1k
+            tmp += A[i+ik,j+jk]*kern[ik,jk]
+        end
+        out[i,j] = tmp
+    end
+    out
+end
+
+function filter2dunrolled!(out::AbstractMatrix, A::AbstractMatrix, kern::SizedOffsetMatrix{T,-1,1,-1,1}) where {T}
+    rng1,  rng2  = axes(out)
+    Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> kern_ik_jk = kern[ik-2,jk-2]
+    @inbounds for j in rng2
+        @simd ivdep for i in rng1
+            tmp_0 = zero(eltype(out))
+            Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> tmp_{ik+(jk-1)*3} =  Base.FastMath.add_fast(Base.FastMath.mul_fast(A[i+(ik-2),j+(jk-2)], kern_ik_jk), tmp_{ik+(jk-1)*3-1})
+            out[i,j] = tmp_9
+        end
+    end
+    out
+end
+function filter2dunrolledavx!(out::AbstractMatrix, A::AbstractMatrix, kern::SizedOffsetMatrix{T,-1,1,-1,1}) where {T}
+    rng1,  rng2  = axes(out)
+    Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> kern_ik_jk = kern[ik-2,jk-2]
+    @avx for j in rng2, i in rng1
+        tmp_0 = zero(eltype(out))
+        Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> tmp_{ik+(jk-1)*3} = A[i+(ik-2),j+(jk-2)] * kern_ik_jk + tmp_{ik+(jk-1)*3-1}
+        out[i,j] = tmp_9
+    end
+    out
+end
