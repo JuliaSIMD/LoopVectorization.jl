@@ -1,7 +1,7 @@
 using LoopVectorization, OffsetArrays
 using LoopVectorization.VectorizationBase: StaticUnitRange
 using Test
-T = Float32
+# T = Float32
 
 @testset "OffsetArrays" begin
 
@@ -18,44 +18,44 @@ T = Float32
         out
     end
 
-    out = out1;
-    R=CartesianIndices(out);
-    z=zero(eltype(out));
-    rng1k, rng2k = axes(skern);
-    rng1,  rng2  = R.indices;
-    tmp = z; i = 2; j = 2;
-    ls1 = LoopVectorization.@avx_debug for jk in rng2k, ik in rng1k
-        tmp += A[i+ik,j+jk]*skern[ik,jk]
-    end;
-    ls1
-    rng1,  rng2  = CartesianIndices(out1).indices;
-    rng1k, rng2k = axes(skern);
-    ls2dstatic = LoopVectorization.@avx_debug for j in rng2, i in rng1
-            tmp = zero(eltype(out))
-            for jk in rng2k, ik in rng1k
-                tmp += A[i+ik,j+jk]*skern[ik,jk]
-            end
-            out1[i,j] = tmp
-    end;
-    LoopVectorization.choose_order(ls2dstatic)
-    q2d = :(for j in rng2, i in rng1
-            tmp = zero(eltype(out))
-            for jk in rng2k, ik in rng1k
-                tmp += A[i+ik,j+jk]*kern[ik,jk]
-            end
-            out[i,j] = tmp
-           end);
-    lsq2d = LoopVectorization.LoopSet(q2d); LoopVectorization.choose_order(lsq2d)
+    # out = out1;
+    # R=CartesianIndices(out);
+    # z=zero(eltype(out));
+    # rng1k, rng2k = axes(skern);
+    # rng1,  rng2  = R.indices;
+    # tmp = z; i = 2; j = 2;
+    # ls1 = LoopVectorization.@avx_debug for jk in rng2k, ik in rng1k
+    #     tmp += A[i+ik,j+jk]*skern[ik,jk]
+    # end;
+    # ls1
+    # rng1,  rng2  = CartesianIndices(out1).indices;
+    # rng1k, rng2k = axes(skern);
+    # ls2dstatic = LoopVectorization.@avx_debug for j in rng2, i in rng1
+    #         tmp = zero(eltype(out))
+    #         for jk in rng2k, ik in rng1k
+    #             tmp += A[i+ik,j+jk]*skern[ik,jk]
+    #         end
+    #         out1[i,j] = tmp
+    # end;
+    # LoopVectorization.choose_order(ls2dstatic)
+    # q2d = :(for j in rng2, i in rng1
+    #         tmp = zero(eltype(out))
+    #         for jk in rng2k, ik in rng1k
+    #             tmp += A[i+ik,j+jk]*kern[ik,jk]
+    #         end
+    #         out[i,j] = tmp
+    #        end);
+    # lsq2d = LoopVectorization.LoopSet(q2d); LoopVectorization.choose_order(lsq2d)
 
-    oq2 = :(for j in rng2, i in rng1
-            tmp = zero(eltype(out))
-            for jk in -1:1, ik in -1:1
-                tmp += A[i+ik,j+jk]*kern[ik,jk]
-            end
-            out[i,j] = tmp
-           end);
-    lsoq = LoopVectorization.LoopSet(oq2);
-    LoopVectorization.choose_order(lsoq)
+    # oq2 = :(for j in rng2, i in rng1
+    #         tmp = zero(eltype(out))
+    #         for jk in -1:1, ik in -1:1
+    #             tmp += A[i+ik,j+jk]*kern[ik,jk]
+    #         end
+    #         out[i,j] = tmp
+    #        end);
+    # lsoq = LoopVectorization.LoopSet(oq2);
+    # LoopVectorization.choose_order(lsoq)
 
     function avx2d!(out::AbstractMatrix, A::AbstractMatrix, kern)
         rng1k, rng2k = axes(kern)
@@ -141,18 +141,18 @@ T = Float32
     # lsuq = LoopVectorization.LoopSet(macroexpand(Base, uq));
     # LoopVectorization.choose_order(lsuq)
 
-    out = out1;
-    z = zero(eltype(out));
-    R=CartesianIndices(out);
-    Rk = CartesianIndices(kern);
-    lsgeneric = LoopVectorization.@avx_debug for I in R
-           tmp = z
-           for J in Rk
-               tmp += A[I+J]*kern[J]
-           end
-           out[I] = tmp
-       end;
-    lsgeneric
+    # out = out1;
+    # z = zero(eltype(out));
+    # R=CartesianIndices(out);
+    # Rk = CartesianIndices(kern);
+    # lsgeneric = LoopVectorization.@avx_debug for I in R
+    #        tmp = z
+    #        for J in Rk
+    #            tmp += A[I+J]*kern[J]
+    #        end
+    #        out[I] = tmp
+    #    end;
+    # lsgeneric
 
     function avxgeneric!(out, A, kern, R=CartesianIndices(out), z=zero(eltype(out)))
        Rk = CartesianIndices(kern)
@@ -197,6 +197,8 @@ T = Float32
         @test out1 ≈ out3
 
         @test avxgeneric!(out4, A, kern) ≈ out1
+        fill!(out4, NaN);
+        @test avxgeneric!(out4, A, skern) ≈ out1
     end
 
 

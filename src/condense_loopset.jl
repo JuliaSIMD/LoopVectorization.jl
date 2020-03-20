@@ -218,7 +218,7 @@ end
         LHS = ind === nothing ? gensym() : vptrs[ind]
         assigned_names[i] = LHS
         d = (D[i])::Union{Nothing,Int}
-        if d === nothing # stridedpointer instead of noaliasstridedpointer, because alias info will be lost across function boundary...
+        if d === nothing
             num_arrays += 1
             RHS = Expr(:call, lv(:stridedpointer), Expr(:ref, :vargs, ari), Expr(:ref, :arraydescript, ari))
         else #subsetview
@@ -260,7 +260,7 @@ function generate_call(ls::LoopSet, IUT, debug::Bool = false)
         )
         debug && deleteat!(q.args, 2)
         foreach(ref -> push!(q.args, vptr(ref)), ls.refs_aliasing_syms)
-    else
+    else# not forcing inline; calling __avx__! which calls an inlined _avx_!
         arraydescript = Expr(:tuple)
         q = Expr(
             :call, lv(:__avx__!), Expr(:call, Expr(:curly, :Val, (U,T))),
@@ -293,7 +293,7 @@ function setup_call_noinline(ls::LoopSet, U = zero(Int8), T = zero(Int8))
         if ex isa Expr && ex.head === :(=) && length(ex.args) == 2
             if ex.args[2] isa Expr && ex.args[2].head === :call
                 gr = first(ex.args[2].args)
-                if gr == lv(:noaliasstridedpointer)
+                if gr == lv(:stridedpointer)
                     array = ex.args[2].args[2]
                     arrayid = findfirst(a -> a === array, ls.includedactualarrays)
                     if arrayid isa Int

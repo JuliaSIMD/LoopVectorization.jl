@@ -28,9 +28,9 @@ end
 function Loop(ls::LoopSet, l::Int, k::Int, sym::Symbol, ::Type{<:CartesianIndices{N}}) where N
     str = String(sym)*'#'*string(k)*'#'
     start = gensym(str*"_loopstart"); stop = gensym(str*"_loopstop")
-    axisexpr = Expr(:ref, Expr(:., Expr(:ref, :lb, l), QuoteNode(:indices)), k)
-    pushpreamble!(ls, Expr(:(=), start, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:(.), axisexpr, QuoteNode(:start)))))
-    pushpreamble!(ls, Expr(:(=), stop, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:(.), axisexpr, QuoteNode(:stop)))))
+    axisexpr = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, Expr(:., Expr(:ref, :lb, l), QuoteNode(:indices)), k))
+    pushpreamble!(ls, Expr(:(=), start, Expr(:call, :first, axisexpr)))
+    pushpreamble!(ls, Expr(:(=), stop, Expr(:call, :last, axisexpr)))
     Loop(Symbol(str), 0, 1024, start, stop, false, false)::Loop
 end
 
@@ -153,22 +153,35 @@ function num_parameters(AM)
     num_param += length(AM[2].parameters)
     num_param + length(AM[3].parameters)
 end
-function process_metadata!(ls::LoopSet, AM, num_arrays::Int)::Vector{Symbol}
-    num_asi = (AM[1])::Int
-    arraysymbolinds = [gensym(:asi) for _ ∈ 1:num_asi]
-    append!(ls.outer_reductions, AM[2].parameters)
+function gen_array_syminds(AM)
+    Symbol[Symbol("##arraysymbolind##"*i*'#') for i ∈ 1:(AM[1])::Int]
+end
+function process_metadata!(ls::LoopSet, AM, num_arrays::Int)
+    opoffsets = ls.operation_offsets
+    expandbyoffset!(ls.outer_reductions, AM[2].parameters, opoffsets)
     for (i,si) ∈ enumerate(AM[3].parameters)
         sii = si::Int
         s = gensym(:symlicm)
         push!(ls.preamble_symsym, (si, s))
         pushpreamble!(ls, Expr(:(=), s, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), Expr(:ref, :vargs, num_arrays + i))))
     end
-    append!(ls.preamble_symint, AM[4].parameters)
-    append!(ls.preamble_symfloat, AM[5].parameters)
-    append!(ls.preamble_zeros, AM[6].parameters)
-    append!(ls.preamble_ones, AM[7].parameters)
-    arraysymbolinds
+    expandbyoffset!(ls.preamble_symint, AM[4].parameters, opoffsets)
+    expandbyoffset!(ls.preamble_symfloat, AM[5].parameters, opoffsets)
+    expandbyoffset!(ls.preamble_zeros, AM[6].parameters, opoffsets)
+    expandbyoffset!(ls.preamble_ones, AM[7].parameters, opoffsets)
+    nothing
 end
+function expandbyoffset!(indexpand::Vector{T}, inds, offsets::Vector{Int}, expand::Bool = true) where {T <: Union{Int,Tuple{Int,<:Any}}}
+    for _ind ∈ inds
+        ind = T === Int ? _ind : first(_ind)
+        base = offsets[ind] + 1
+        for inda ∈ base:(expand ? offsets[ind+1] : base)
+            T === Int ? push!(indexpand, inda) : push!(indexpand, (inda,last(_ind)))
+        end
+    end
+    indexpand
+end
+expandbyoffset(inds::Vector{Int}, offsets::Vector{Int}, expand::Bool) = expandbyoffset!(Int[], inds, offsets, expand)
 function loopindex(ls::LoopSet, u::Unsigned, shift::Unsigned)
     mask = (one(shift) << shift) - one(shift) # mask to zero out all but shift-bits
     idxs = Int[]
@@ -187,19 +200,11 @@ function loopindexoffset(ls::LoopSet, u::Unsigned, li::Bool, expand::Bool = fals
         offsets = ls.operation_offsets
     end
     idxs = loopindex(ls, u, shift)
-    idxos = Int[]
-    @show idxs offsets
-    for ind ∈ idxs
-        base = offsets[ind] + 1
-        for inda in base:(expand ? offsets[ind+1] : base)
-            push!(idxos, inda)
-        end
-    end
-    idxos
+    expandbyoffset(idxs, offsets, expand)
 end
 function parents_symvec(ls::LoopSet, u::Unsigned, expand, offset)
     idxs = loopindexoffset(ls, u, true, expand)   # FIXME DRY  (undesirable that this gets hard-coded in multiple places)
-    return Symbol[getloopsym(ls, i + offset) for i in idxs]
+    return Symbol[getloopsym(ls, i + offset) for i ∈ idxs]
 end
 loopdependencies(ls::LoopSet, os::OperationStruct, expand = false, offset = 0) = parents_symvec(ls, os.loopdeps, expand, offset)
 reduceddependencies(ls::LoopSet, os::OperationStruct, expand = false, offset = 0) = parents_symvec(ls, os.reduceddeps, expand, offset)
@@ -322,9 +327,9 @@ function add_ops!(
         add_op!(ls, instr[i], ops, nopsv, expandedv, i, mrefs, opsymbol, elementbytes)
     end
     num_params = add_parents_to_ops!(ls, ops, constoffset)
-    for op in operations(ls)
-        @show op
-    end
+    # for op in operations(ls)
+        # @show op
+    # end
     num_params
 end
 
@@ -363,7 +368,7 @@ function avx_loopset(instr, ops, arf, AM, LPSYM, LB, vargs)
     elementbytes = sizeofeltypes(vargs, num_arrays)
     add_loops!(ls, LPSYM, LB)
     resize!(ls.loop_order, ls.loopsymbol_offsets[end])
-    arraysymbolinds = process_metadata!(ls, AM, length(arf))
+    arraysymbolinds = gen_array_syminds(AM)
     opsymbols = [gensym(:op) for _ ∈ eachindex(ops)]
     nopsv = calcnops.(Ref(ls), ops)
     expandedv = [isexpanded(ls, ops, nopsv, i) for i ∈ eachindex(ops)]
@@ -371,6 +376,7 @@ function avx_loopset(instr, ops, arf, AM, LPSYM, LB, vargs)
     pushpreamble!(ls, Expr(:(=), ls.T, Expr(:call, :promote_type, [Expr(:call, :eltype, vptr(mref)) for mref ∈ mrefs]...)))
     num_params = num_arrays + num_parameters(AM)
     num_params = add_ops!(ls, instr, ops, mrefs, opsymbols, num_params, nopsv, expandedv, elementbytes)
+    process_metadata!(ls, AM, length(arf))
     add_array_symbols!(ls, arraysymbolinds, num_arrays + length(ls.preamble_symsym))
     num_params = extract_external_functions!(ls, num_params)
     ls
@@ -379,7 +385,7 @@ function avx_body(ls, UT)
     U, T = UT
     q = iszero(U) ? lower(ls) : lower(ls, U, T)
     length(ls.outer_reductions) == 0 ? push!(q.args, nothing) : push!(q.args, loopset_return_value(ls, Val(true)))
-    @show q
+    # @show q
     q
 end
 

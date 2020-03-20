@@ -10,7 +10,7 @@
 
 function lower!(
     q::Expr, op::Operation, vectorized::Symbol, ls::LoopSet, unrolled::Symbol, tiled::Symbol, U::Int,
-    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned}
+    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned}, ::Nothing
 )
     W = ls.W
     if isconstant(op)
@@ -30,10 +30,34 @@ function lower!(
     end
 end
 function lower!(
-    q::Expr, ops::AbstractVector{Operation}, vectorized::Symbol, ls::LoopSet, unrolled::Symbol, tiled::Symbol, U::Int,
-    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned}
+    q::Expr, op::Operation, vectorized::Symbol, ls::LoopSet, unrolled::Symbol, tiled::Symbol, U::Int,
+    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned}, filterstore::Bool
 )
-    foreach(op -> lower!(q, op, vectorized, ls, unrolled, tiled, U, suffix, mask), ops)
+    W = ls.W
+    if filterstore
+        if isstore(op)
+            lower_store!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask)
+        end
+    else
+        if isconstant(op)
+            zerotyp = zerotype(ls, op)
+            if zerotyp == INVALID
+                lower_constant!(q, op, vectorized, ls, unrolled, U, suffix)
+            else
+                lower_zero!(q, op, vectorized, ls, unrolled, U, suffix, zerotyp)
+            end
+        elseif isload(op)
+            lower_load!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask)
+        elseif iscompute(op)
+            lower_compute!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask)
+        end
+    end
+end
+function lower!(
+    q::Expr, ops::AbstractVector{Operation}, vectorized::Symbol, ls::LoopSet, unrolled::Symbol, tiled::Symbol, U::Int,
+    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned}, filterstore = nothing
+)
+    foreach(op -> lower!(q, op, vectorized, ls, unrolled, tiled, U, suffix, mask, filterstore), ops)
 end
 
 function lower_block(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask::Bool, UF)
@@ -62,26 +86,36 @@ function lower_block(
         lower!(blockq, ops[2,1,prepost,n], vectorized, ls, unrolled, tiled, U, nothing, mask)
         # end
         if length(ops[1,2,prepost,n]) + length(ops[2,2,prepost,n]) > 0
-            for t ∈ 0:T-1
-                if t == 0
-                    push!(blockq.args, Expr(:(=), tiled, tiledsym(tiled)))
-                elseif tiledloopnum == vectorizedloopnum
-                    push!(blockq.args, Expr(:(=), tiled, Expr(:call, lv(:valadd), ls.W, tiled)))
-                else
-                    push!(blockq.args, Expr(:+=, tiled, 1))
+            for store ∈ (false,true)
+                # let store = nothing
+                nstores = 0
+                opsv1 = ops[1,2,prepost,n]
+                opsv2 = ops[2,2,prepost,n]
+                iszero(length(opsv1) + length(opsv2)) && continue
+                iszero(length(opsv1)) || (nstores += sum(isstore, opsv1))
+                iszero(length(opsv2)) || (nstores += sum(isstore, opsv2))
+                for t ∈ 0:T-1
+                    if t == 0
+                        push!(blockq.args, Expr(:(=), tiled, tiledsym(tiled)))
+                    elseif tiledloopnum == vectorizedloopnum
+                        push!(blockq.args, Expr(:(=), tiled, Expr(:call, lv(:valadd), ls.W, tiled)))
+                    else
+                        push!(blockq.args, Expr(:+=, tiled, 1))
+                    end
+                    # !U &&  T
+                    if dontmaskfirsttiles && t < T - 1
+                        lower!(blockq, opsv1, vectorized, ls, unrolled, tiled, U, t, nothing, store)
+                        # for u ∈ 0:U-1 #  U &&  T
+                        lower!(blockq, opsv2, vectorized, ls, unrolled, tiled, U, t, nothing, store)
+                        # end
+                    else
+                        lower!(blockq, opsv1, vectorized, ls, unrolled, tiled, U, t, mask, store)
+                        # for u ∈ 0:U-1 #  U &&  T
+                        lower!(blockq, opsv2, vectorized, ls, unrolled, tiled, U, t, mask, store)
+                        # end
+                    end
                 end
-                # !U &&  T
-                if dontmaskfirsttiles && t < T - 1
-                    lower!(blockq, ops[1,2,prepost,n], vectorized, ls, unrolled, tiled, U, t, nothing)
-                    # for u ∈ 0:U-1 #  U &&  T
-                    lower!(blockq, ops[2,2,prepost,n], vectorized, ls, unrolled, tiled, U, t, nothing)
-                    # end
-                else
-                    lower!(blockq, ops[1,2,prepost,n], vectorized, ls, unrolled, tiled, U, t, mask)
-                    # for u ∈ 0:U-1 #  U &&  T
-                    lower!(blockq, ops[2,2,prepost,n], vectorized, ls, unrolled, tiled, U, t, mask)
-                    # end
-                end
+                nstores == 0 && break
             end
         end
         if n > 1 && prepost == 1
@@ -122,6 +156,7 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     vectorized = order[vectorizedloopnum]
     nisunrolled = isunrolled(us, n)
     nisvectorized = isvectorized(us, n)
+    loopisstatic = isstaticloop(loop) & (!nisvectorized)
 
     remmask = inclmask | nisvectorized
     Ureduct = (n == num_loops(ls)) ? calc_Ureduct(ls, us) : -1
@@ -144,8 +179,12 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     end
     remblock = init_remblock(loop, loopsym)
     push!(q.args, remblock)
-    UFt = 1
-    while true
+    UFt = if loopisstatic
+        length(loop) % UF
+    else
+        1
+    end
+    while !iszero(UFt)
         comparison = if nisvectorized
             itercount = if loop.stopexact
                 Expr(:call, :-, loop.stophint, Expr(:call, lv(:valmul), ls.W, UFt))
@@ -162,7 +201,7 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
         remblocknew = Expr(:elseif, comparison, lower_block(ls, ust, n, remmask, UFt))
         push!(remblock.args, remblocknew)
         remblock = remblocknew
-        if !(UFt < UF - 1 + nisvectorized) || UFt == Ureduct
+        if !(UFt < UF - 1 + nisvectorized) || UFt == Ureduct || loopisstatic
             break
         else
             UFt += 1
@@ -276,8 +315,9 @@ function init_remblock(unrolledloop::Loop, unrolled::Symbol = unrolledloop.iters
 end
 
 function maskexpr(W::Symbol, looplimit)
-    rem = Expr(:call, lv(:valrem), W, looplimit)
-    Expr(:(=), Symbol("##mask##"), Expr(:call, lv(:masktable), W, rem))
+    Expr(:(=), Symbol("##mask##"), Expr(:call, lv(:mask), W, looplimit))
+    # rem = Expr(:call, lv(:valrem), W, looplimit)
+    # Expr(:(=), Symbol("##mask##"), Expr(:call, lv(:masktable), W, rem))
 end
 function definemask(loop::Loop, W::Symbol)
     if isstaticloop(loop)
