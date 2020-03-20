@@ -68,7 +68,6 @@ T = Float32
         t
     end
 
-
     function addormul!(c, a, b)
         for i ∈ eachindex(c,a,b)
             c[i] = a[i] > b[i] ? a[i] + b[i] : a[i] * b[i]
