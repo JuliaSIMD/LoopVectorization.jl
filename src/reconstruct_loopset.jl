@@ -105,19 +105,25 @@ function pushvarg′!(ls::LoopSet, ar::ArrayReferenceMeta, i)
     reverse!(ar.loopedindex); reverse!(getindices(ar)) # reverse the listed indices here, and transpose it to make it column major
     pushpreamble!(ls, Expr(:(=), vptr(ar), Expr(:call, lv(:transpose), extract_varg(i))))
 end
-function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{PackedStridedPointer{T, N}}) where {T, N}
+function add_mref!(
+    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}
+) where {T, N, S <: AbstractColumnMajorStridedPointer{T,N}}
     pushvarg!(ls, ar, i)
 end
-function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{RowMajorStridedPointer{T, N}}) where {T, N}
+function add_mref!(
+    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}
+) where {T, N, S <: AbstractRowMajorStridedPointer{T, N}}
     pushvarg′!(ls, ar, i)
 end
-function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{OffsetStridedPointer{T,N,P}}) where {T,N,P}
+function add_mref!(
+    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{OffsetStridedPointer{T,N,P}}
+) where {T,N,P}
     add_mref!(ls, ar, i, P)
 end
 
 function add_mref!(
     ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}
-) where {T, X <: Tuple, S <: VectorizationBase.AbstractStaticStridedPointer{T,X}}
+) where {T, X <: Tuple, S <: AbstractStaticStridedPointer{T,X}}
     if last(X.parameters)::Int == 1
         pushvarg′!(ls, ar, i)
     else
@@ -125,7 +131,9 @@ function add_mref!(
         first(X.parameters)::Int == 1 || pushfirst!(getindices(ar), Symbol("##DISCONTIGUOUSSUBARRAY##"))
     end
 end
-function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{SparseStridedPointer{T, N}}) where {T, N}
+function add_mref!(
+    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}
+) where {T, N, S <: AbstractSparseStridedPointer{T, N}}
     pushvarg!(ls, ar, i)
     pushfirst!(getindices(ar), Symbol("##DISCONTIGUOUSSUBARRAY##"))
 end
@@ -222,6 +230,7 @@ function calcnops(ls::LoopSet, os::OperationStruct)
     end
     offsets = ls.loopsymbol_offsets
     idxs = loopindex(ls, os.loopdeps, 0x04)  # FIXME DRY
+    iszero(length(idxs)) && return 1
     Δidxs = map(i->offsets[i+1]-offsets[i], idxs)
     nops = first(Δidxs)
     @assert all(isequal(nops), Δidxs)

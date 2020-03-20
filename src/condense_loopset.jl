@@ -392,11 +392,7 @@ function setup_call(ls::LoopSet, inline = Int8(2), U = zero(Int8), T = zero(Int8
     # Creating an anonymous function and calling it also achieves the outlining, while still
     # inlining the generated function into the loop preamble.
     if inline == Int8(2)
-        if num_loops(ls) == 1
-            iszero(U) ? lower(ls) : lower(ls, U, -one(U))
-        else
-            setup_call_inline(ls, U, T)
-        end
+        setup_call_inline(ls, U, T)
     else
         setup_call_noinline(ls, U, T)
     end
