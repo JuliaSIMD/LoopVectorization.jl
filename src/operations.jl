@@ -174,7 +174,7 @@ These names will be further processed if op is tiled and/or unrolled.
     if tiled ∈ loopdependencies(op) # `suffix` is tilenumber
         mvar = Symbol(op, suffix, :_)
     end
-    if unrolled ∈ loopdependencies(op) # `u` is unroll number 
+    if unrolled ∈ loopdependencies(op) # `u` is unroll number
         mvar = Symbol(op, u)
     end
 ```
@@ -240,6 +240,3 @@ getindices(op::Operation) = op.ref.ref.indices
     # # access stride info?
     # op.numerical_metadata[symposition(op,sym)]
 # end
-
-
-

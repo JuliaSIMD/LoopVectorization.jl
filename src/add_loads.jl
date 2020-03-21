@@ -24,7 +24,6 @@ function add_load!(
     ls::LoopSet, var::Symbol, mpref::ArrayReferenceMetaPosition, elementbytes::Int
 )
     length(mpref.loopdependencies) == 0 && return add_constant!(ls, var, mpref, elementbytes)
-    ref = mpref.mref
     op = Operation( ls, var, elementbytes, :getindex, memload, mpref )
     add_load!(ls, op, true, false)
 end

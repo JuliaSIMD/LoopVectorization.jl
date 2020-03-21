@@ -68,7 +68,6 @@ T = Float32
         t
     end
 
-
     function addormul!(c, a, b)
         for i ∈ eachindex(c,a,b)
             c[i] = a[i] > b[i] ? a[i] + b[i] : a[i] * b[i]
@@ -339,15 +338,15 @@ T = Float32
         fill!(c2, -999999999); maybewriteoravx!(c2, a, b)
         @test c1 ≈ c2
 
-        andorassignment!(c1, a, b)
-        andorassignmentavx!(c2, a, b)
+        andorassignment!(c1, a, b);
+        andorassignmentavx!(c2, a, b);
         @test c1 ≈ c2
-        fill!(c2, -999999999); andorassignment_avx!(c2, a, b)
+        fill!(c2, -999999999); andorassignment_avx!(c2, a, b);
         @test c1 ≈ c2
         
         if T <: Union{Float32,Float64}
             a .*= 100;
-        end
+        end;
         b1 = copy(a);
         b2 = copy(a);
         condstore!(b1)
@@ -384,7 +383,7 @@ T = Float32
     t = Bernoulli_logit(bit, a);
     @test t ≈ Bernoulli_logitavx(bit, a)
     @test t ≈ Bernoulli_logit_avx(bit, a)
-    a = rand(43)
+    a = rand(43);
     bit = a .> 0.5;
     t = Bernoulli_logit(bit, a);
     @test t ≈ Bernoulli_logitavx(bit, a)

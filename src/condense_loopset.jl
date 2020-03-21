@@ -4,6 +4,11 @@
 Base.:|(u::Unsigned, it::IndexType) = u | UInt8(it)
 Base.:(==)(u::Unsigned, it::IndexType) = (u % UInt8) == UInt8(it)
 
+"""
+`ArrayRefStruct` stores a representation of an array-reference expression such as `A[i,j]`.
+It supports array-references with up to 8 indexes, where the data for each consecutive index is packed into corresponding 8-bit fields
+of `index_types` (storing the enum `IndexType`), `indices` (the `id` for each index symbol), and `offsets` (currently unused).
+"""
 struct ArrayRefStruct{array,ptr}
     index_types::UInt64
     indices::UInt64
@@ -387,13 +392,8 @@ function setup_call(ls::LoopSet, inline = Int8(2), U = zero(Int8), T = zero(Int8
     # Creating an anonymous function and calling it also achieves the outlining, while still
     # inlining the generated function into the loop preamble.
     if inline == Int8(2)
-        if num_loops(ls) == 1
-            iszero(U) ? lower(ls) : lower(ls, U, -one(U))
-        else
-            setup_call_inline(ls, U, T)
-        end
+        setup_call_inline(ls, U, T)
     else
         setup_call_noinline(ls, U, T)
     end
 end
-
