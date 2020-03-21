@@ -193,7 +193,7 @@ using Test
         @show T, @__LINE__
         N = 143
         R = T <: Integer ? (T(-100):T(100)) : T
-        a = rand(T, N); b = rand(R, N);
+        a = rand(R, N); b = rand(R, N);
         ao = OffsetArray(a, -60:N-61); bo = OffsetArray(b, -60:N-61);
         s = mydot(a, b)
         @test mydotavx(a,b) ≈ s
@@ -239,5 +239,18 @@ using Test
         complex_mul_with_index_offset_avx!(c_re2, c_im2, a_re, a_im, b_re, b_im)
         @test c_re1v ≈ c_re2v
         @test c_im1v ≈ c_im2v
+
+        # Float32 is not accurate enough
+        # Alternatively, loosen approx requirement?
+        R == Float32 && continue
+        A = rand(R, N, N, N);
+        B = rand(R, N, N, N);
+        @test mydot(A, B) ≈ mydotavx(A, B)
+        # test CartesianIndices
+        for i ∈ [3, :, 1:N-1], j ∈ [5, :, 1:N-2], k ∈ [:, 1:N-3]
+            Av = view(A, i, j, k);
+            Bv = view(B, i, j, k);
+            @test mydot(Av, Bv) ≈ mydotavx(Av, Bv)            
+        end
     end
 end

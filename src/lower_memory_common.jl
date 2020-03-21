@@ -117,4 +117,3 @@ function name_memoffset(var::Symbol, op::Operation, td::UnrollArgs, W::Symbol, v
     end
     name, mo
 end
-

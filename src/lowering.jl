@@ -344,8 +344,10 @@ function setup_preamble!(ls::LoopSet, us::UnrollSpecification)
     vectorized = order[vectorizedloopnum]
     # println("Setup preamble")
     W = ls.W; typeT = ls.T
-    length(ls.includedarrays) == 0 || push!(ls.preamble.args, Expr(:(=), typeT, determine_eltype(ls)))
-    push!(ls.preamble.args, Expr(:(=), W, determine_width(ls, vectorized)))
+    if length(ls.includedarrays) > 0
+        push!(ls.preamble.args, Expr(:(=), typeT, determine_eltype(ls)))
+        push!(ls.preamble.args, Expr(:(=), W, determine_width(ls, vectorized)))
+    end
     lower_licm_constants!(ls)
     pushpreamble!(ls, definemask(getloop(ls, vectorized), W))#, U > 1 && unrolledloopnum == vectorizedloopnum))
     for op ∈ operations(ls)

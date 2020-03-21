@@ -83,7 +83,7 @@ using Test
     end
 
 
-    
+
     struct SizedOffsetMatrix{T,LR,UR,LC,RC} <: AbstractMatrix{T}
         data::Matrix{T}
     end
@@ -141,25 +141,49 @@ using Test
     # lsuq = LoopVectorization.LoopSet(macroexpand(Base, uq));
     # LoopVectorization.choose_order(lsuq)
 
-    
+    # out = out1;
+    # z = zero(eltype(out));
+    # R=CartesianIndices(out);
+    # Rk = CartesianIndices(kern);
+    # lsgeneric = LoopVectorization.@avx_debug for I in R
+    #        tmp = z
+    #        for J in Rk
+    #            tmp += A[I+J]*kern[J]
+    #        end
+    #        out[I] = tmp
+    #    end;
+    # lsgeneric
+
+    function avxgeneric!(out, A, kern, R=CartesianIndices(out), z=zero(eltype(out)))
+       Rk = CartesianIndices(kern)
+       @avx for I in R
+           tmp = z
+           for J in Rk
+               tmp += A[I+J]*kern[J]
+           end
+           out[I] = tmp
+       end
+       out
+   end
+
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
         A = rand(T, 100, 100);
         kern = OffsetArray(rand(T, 3, 3), -1:1, -1:1);
         skern = SizedOffsetMatrix{T,-1,1,-1,1}(parent(kern));
         out1 = OffsetArray(similar(A, size(A).-2), 1, 1);   # stay away from the edges of A
-        out2 = similar(out1); out3 = similar(out1);
+        out2 = similar(out1); out3 = similar(out1); out4 = similar(out1);
 
         old2d!(out1, A, kern);
         avx2d!(out2, A, kern);
         @test out1 ≈ out2
-        
+
         avx2douter!(out3, A, kern);
         @test out1 ≈ out3
 
         fill!(out2, NaN); avx2d!(out2, A, skern);
         @test out1 ≈ out2
-        
+
         fill!(out3, NaN); avx2douter!(out3, A, skern);
         @test out1 ≈ out3
 
@@ -168,12 +192,14 @@ using Test
 
         fill!(out3, NaN); avx2dunrolled2x2!(out3, A, skern);
         @test out1 ≈ out3
-        
+
         fill!(out3, NaN); avx2dunrolled3x3!(out3, A, skern);
         @test out1 ≈ out3
 
+        @test avxgeneric!(out4, A, kern) ≈ out1
+        fill!(out4, NaN);
+        @test avxgeneric!(out4, A, skern) ≈ out1
     end
 
-    
-end
 
+end
