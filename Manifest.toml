@@ -69,6 +69,6 @@ version = "0.1.0"
 
 [[VectorizationBase]]
 deps = ["CpuId", "LinearAlgebra"]
-git-tree-sha1 = "a0fd2b18bccacb9874f9d7e95932c16998f399d8"
+git-tree-sha1 = "76e8817f7732d9a127191f5bcd5fe3a5eed0fb3e"
 uuid = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
-version = "0.9.1"
+version = "0.9.2"
