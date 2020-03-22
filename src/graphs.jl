@@ -192,7 +192,7 @@ struct LoopSet
     syms_aliasing_refs::Vector{Symbol}
     refs_aliasing_syms::Vector{ArrayReferenceMeta}
     cost_vec::Matrix{Float64}
-    reg_pres::Matrix{Int}
+    reg_pres::Matrix{Float64}
     included_vars::Vector{Bool}
     place_after_loop::Vector{Bool}
     W::Symbol
@@ -296,7 +296,7 @@ function LoopSet(mod::Symbol)# = :LoopVectorization)
         Symbol[], Symbol[], Symbol[],
         ArrayReferenceMeta[],
         Matrix{Float64}(undef, 4, 2),
-        Matrix{Int}(undef, 4, 2),
+        Matrix{Float64}(undef, 4, 2),
         Bool[], Bool[],
         gensym(:W), gensym(:T), mod
     )
@@ -427,12 +427,6 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
                 U = add_loop_bound!(ls, itersym, upper, true)
                 Loop(itersym, L, U)
             end
-        elseif f === :eachindex
-            N = gensym(Symbol(:loopeachindex, itersym))
-            pushpreamble!(ls, Expr(:(=), N, Expr(:call, lv(:maybestaticrange), r)))
-            L = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticfirst), N), false)
-            U = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticlast), N), true)
-            Loop(itersym, L, U)
         elseif f === :OneTo || isscopedname(f, :Base, :OneTo)
             otN = r.args[2]
             if otN isa Integer
@@ -444,7 +438,11 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
                 Loop(itersym, 1, N)
             end
         else
-            throw("Unrecognized loop range type: $r.")
+            N = gensym(Symbol(:loop, itersym))
+            pushpreamble!(ls, Expr(:(=), N, Expr(:call, lv(:maybestaticrange), r)))
+            L = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticfirst), N), false)
+            U = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticlast), N), true)
+            Loop(itersym, L, U)
         end
     elseif isa(r, Symbol)
         # Treat similar to `eachindex`

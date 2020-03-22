@@ -349,10 +349,10 @@ end
 function solve_tilesize(
     ls::LoopSet, unrolled::Symbol, tiled::Symbol,
     cost_vec::AbstractVector{Float64},
-    reg_pressure::AbstractVector{Int},
+    reg_pressure::AbstractVector{Float64},
     W::Int, vectorized::Symbol
 )
-    maxTbase = maxUbase = 4
+    maxTbase = maxUbase = 4#8
     maxT = maxTbase#8
     maxU = maxUbase#8
     tiledloop = getloop(ls, tiled)
@@ -405,8 +405,8 @@ function stride_penalty(ls::LoopSet, order::Vector{Symbol})
     end
     stridepenalty# * 1e-9
 end
-function convolution_cost_factor(ls::LoopSet, op::Operation, u1::Symbol, u2::Symbol, v::Symbol)
-    (u1 ∈ loopdependencies(op) && u2 ∈ loopdependencies(op)) || return 1.0
+function convolution_cost_factor(ls::LoopSet, op::Operation, u1::Symbol, u2::Symbol)
+    (u1 ∈ loopdependencies(op) && u2 ∈ loopdependencies(op)) || return 1.0, 1.0
     istranslation = false
     inds = getindices(op); li = op.ref.loopedindex
     for i ∈ eachindex(li)
@@ -417,7 +417,7 @@ function convolution_cost_factor(ls::LoopSet, op::Operation, u1::Symbol, u2::Sym
             end
         end
     end
-    istranslation ? 0.25 : 1.0
+    istranslation ? (0.25, 1.0) : (1.0, 1.0)
 end
 # Just tile outer two loops?
 # But optimal order within tile must still be determined
@@ -484,8 +484,8 @@ function evaluate_cost_tile(
         istiled = unrolledtiled[2,id]
         rt, lat, rp = cost(ls, op, vectorized, Wshift, size_T)
         if isload(op)
-            factor = convolution_cost_factor(ls, op, unrolled, tiled, vectorized)
-            rt *= factor#; rp *= factor;
+            factor1, factor2 = convolution_cost_factor(ls, op, unrolled, tiled)
+            rt *= factor1; rp *= factor2;
         end
         # @show op rt, lat, rp
         rp = opisininnerloop ? rp : 0 # we only care about register pressure within the inner most loop

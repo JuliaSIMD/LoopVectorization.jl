@@ -18,6 +18,8 @@ Base.convert(::Type{Expr}, instr::Instruction) = Expr(:(.), instr.mod, QuoteNode
 function Base.Expr(instr::Instruction, args...)
     if instr.mod === :LoopVectorization
         Expr(:call, lv(instr.instr), args...)::Expr
+    elseif instr.mod === :Main
+        Expr(:call, instr.instr, args...)::Expr
     else
         Expr(:call, convert(Expr, instr), args...)::Expr
     end

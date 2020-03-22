@@ -158,7 +158,7 @@ end
 
 function num_parameters(AM)
     num_param::Int = AM[1]
-    num_param += length(AM[2].parameters)
+    # num_param += length(AM[2].parameters)
     num_param + length(AM[3].parameters)
 end
 function gen_array_syminds(AM)
@@ -335,11 +335,10 @@ function add_ops!(
         opsymbol = opsymbols[os.symid]
         add_op!(ls, instr[i], ops, nopsv, expandedv, i, mrefs, opsymbol, elementbytes)
     end
-    num_params = add_parents_to_ops!(ls, ops, constoffset)
+    add_parents_to_ops!(ls, ops, constoffset)
     # for op in operations(ls)
         # @show op
     # end
-    num_params
 end
 
 # elbytes(::VectorizationBase.AbstractPointer{T}) where {T} = sizeof(T)::Int
@@ -385,7 +384,7 @@ function avx_loopset(instr, ops, arf, AM, LPSYM, LB, vargs)
     pushpreamble!(ls, Expr(:(=), ls.T, Expr(:call, :promote_type, [Expr(:call, :eltype, vptr(mref)) for mref ∈ mrefs]...)))
     pushpreamble!(ls, Expr(:(=), ls.W, Expr(:call, lv(:pick_vector_width_val), [Expr(:call, :eltype, vptr(mref)) for mref ∈ mrefs]...)))
     num_params = num_arrays + num_parameters(AM)
-    num_params = add_ops!(ls, instr, ops, mrefs, opsymbols, num_params, nopsv, expandedv, elementbytes)
+    add_ops!(ls, instr, ops, mrefs, opsymbols, num_params, nopsv, expandedv, elementbytes)
     process_metadata!(ls, AM, length(arf))
     add_array_symbols!(ls, arraysymbolinds, num_arrays + length(ls.preamble_symsym))
     num_params = extract_external_functions!(ls, num_params)

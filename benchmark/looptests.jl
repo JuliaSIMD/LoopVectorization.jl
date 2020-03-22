@@ -278,26 +278,22 @@ end
 
 
 function filter2d!(out::AbstractMatrix, A::AbstractMatrix, kern)
-    rng1k, rng2k = axes(kern)
-    rng1,  rng2  = axes(out)
-    @inbounds @fastmath for j in rng2, i in rng1
+    @inbounds @fastmath for J in CartesianIndices(out)
         tmp = zero(eltype(out))
-        for jk in rng2k, ik in rng1k
-            tmp += A[i+ik,j+jk]*kern[ik,jk]
+        for I ∈ CartesianIndices(kern)
+            tmp += A[I + J] * kern[I]
         end
-        out[i,j] = tmp
+        out[J] = tmp
     end
     out
 end
 function filter2davx!(out::AbstractMatrix, A::AbstractMatrix, kern)
-    rng1k, rng2k = axes(kern)
-    rng1,  rng2  = axes(out)
-    @avx for j in rng2, i in rng1
+    @avx for J in CartesianIndices(out)
         tmp = zero(eltype(out))
-        for jk in rng2k, ik in rng1k
-            tmp += A[i+ik,j+jk]*kern[ik,jk]
+        for I ∈ CartesianIndices(kern)
+            tmp += A[I + J] * kern[I]
         end
-        out[i,j] = tmp
+        out[J] = tmp
     end
     out
 end

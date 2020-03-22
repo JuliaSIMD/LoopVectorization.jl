@@ -193,7 +193,17 @@
             ret[j] = clenshaw(x[j], coeff)
         end
     end
-
+# ret = y2; coeff = c;
+#     LoopVectorization.@avx_debug for j in 1:length(ret)
+#             ret[j] = clenshaw(x[j], coeff)
+#     end
+#     t = β₁ = β₂ = ρ = s = 0.0; weights = rand(1); nodes = rand(1); lomnibus(args...) = +(args...)
+# LoopVectorization.@avx_debug for i ∈ eachindex(weights, nodes)
+#         s += weights[i] * lomnibus(nodes[i], t, β₁, β₂, ρ)
+#     end    
+# @macroexpand @avx for i ∈ eachindex(weights, nodes)
+#         s += weights[i] * lomnibus(nodes[i], t, β₁, β₂, ρ)
+#     end    
     function softmax3_core!(lse, qq, xx, tmpmax, maxk, nk)
         for k in Base.OneTo(maxk)
             @inbounds for i in eachindex(lse)

@@ -181,7 +181,9 @@ function add_external_functions!(q::Expr, ls::LoopSet)
     for op ∈ operations(ls)
         if iscompute(op)
             instr = instruction(op)
-            if instr.mod !== :LoopVectorization
+            if instr.mod === :Main
+                push!(q.args, instr.instr)
+            elseif instr.mod !== :LoopVectorization
                 push!(q.args, Expr(:(.), instr.mod, QuoteNode(instr.instr)))
             end
         end
