@@ -352,7 +352,7 @@ function solve_tilesize(
     reg_pressure::AbstractVector{Float64},
     W::Int, vectorized::Symbol
 )
-    maxTbase = maxUbase = 6#8
+    maxTbase = maxUbase = VectorizationBase.REGISTER_COUNT == 32 ? 6 : 4#8
     maxT = maxTbase#8
     maxU = maxUbase#8
     tiledloop = getloop(ls, tiled)

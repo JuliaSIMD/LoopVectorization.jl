@@ -2,7 +2,7 @@ using LoopVectorization
 using Test
 
 @testset "GEMV" begin
-    Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (2, 6) : (4, 6)
+    Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 6)
     gemvq = :(for i ∈ eachindex(y)
               yᵢ = 0.0
               for j ∈ eachindex(x)
