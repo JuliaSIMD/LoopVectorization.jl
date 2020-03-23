@@ -21,7 +21,7 @@ function lower!(
             lower_zero!(q, op, vectorized, ls, unrolled, U, suffix, zerotyp)
         end
     elseif isload(op)
-        lower_load!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask)
+        lower_load!(q, op, vectorized, ls, unrolled, tiled, U, suffix, mask)
     elseif iscompute(op)
         lower_compute!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask)
     elseif isstore(op)
@@ -47,7 +47,7 @@ function lower!(
                 lower_zero!(q, op, vectorized, ls, unrolled, U, suffix, zerotyp)
             end
         elseif isload(op)
-            lower_load!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask)
+            lower_load!(q, op, vectorized, ls, unrolled, tiled, U, suffix, mask)
         elseif iscompute(op)
             lower_compute!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask)
         end

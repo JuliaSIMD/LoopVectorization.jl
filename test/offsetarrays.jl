@@ -1,6 +1,7 @@
 using LoopVectorization, OffsetArrays
 using LoopVectorization.VectorizationBase: StaticUnitRange
 using Test
+# T = Float64
 # T = Float32
 
 @testset "OffsetArrays" begin
@@ -83,7 +84,6 @@ using Test
     end
 
 
-
     struct SizedOffsetMatrix{T,LR,UR,LC,RC} <: AbstractMatrix{T}
         data::Matrix{T}
     end
@@ -141,24 +141,50 @@ using Test
     # lsuq = LoopVectorization.LoopSet(macroexpand(Base, uq));
     # LoopVectorization.choose_order(lsuq)
 
-    # out = out1;
-    # z = zero(eltype(out));
-    # R=CartesianIndices(out);
-    # Rk = CartesianIndices(kern);
-    # lsgeneric = LoopVectorization.@avx_debug for I in R
-    #        tmp = z
-    #        for J in Rk
-    #            tmp += A[I+J]*kern[J]
-    #        end
-    #        out[I] = tmp
-    #    end;
-    # lsgeneric
+#     out = out1;
+#     z = zero(eltype(out));
+#     R=CartesianIndices(out);
+#     Rk = CartesianIndices(kern);
+#     lsgeneric = LoopVectorization.@avx_debug for I in R
+#            tmp = z
+#            for J in Rk
+#                tmp += A[I+J]*kern[J]
+#            end
+#            out[I] = tmp
+#        end;
+#     LoopVectorization.choose_order(lsgeneric)
+#     out = out1;
+#     lsgenerics = LoopVectorization.@avx_debug for I in CartesianIndices(out)
+#            tmp = zero(eltype(out))
+#            for J in CartesianIndices(skern)
+#                tmp += A[I+J]*kern[J]
+#            end
+#            out[I] = tmp
+#        end;
+#     LoopVectorization.choose_order(lsgenerics)
+# @macroexpand @avx for I in R
+#            tmp = z
+#            for J in Rk
+#                tmp += A[I+J]*kern[J]
+#            end
+#            out[I] = tmp
+#        end
 
     function avxgeneric!(out, A, kern, R=CartesianIndices(out), z=zero(eltype(out)))
        Rk = CartesianIndices(kern)
        @avx for I in R
            tmp = z
            for J in Rk
+               tmp += A[I+J]*kern[J]
+           end
+           out[I] = tmp
+       end
+       out
+   end
+    function avxgeneric2!(out, A, kern)
+       @avx for I in CartesianIndices(out)
+           tmp = zero(eltype(out))
+           for J in CartesianIndices(kern)
                tmp += A[I+J]*kern[J]
            end
            out[I] = tmp
@@ -199,6 +225,9 @@ using Test
         @test avxgeneric!(out4, A, kern) ≈ out1
         fill!(out4, NaN);
         @test avxgeneric!(out4, A, skern) ≈ out1
+        
+        fill!(out4, NaN); @test avxgeneric2!(out4, A, kern) ≈ out1
+        fill!(out4, NaN); @test avxgeneric2!(out4, A, skern) ≈ out1
     end
 
 

@@ -1,6 +1,6 @@
 @testset "GEMM" begin
     # using LoopVectorization, LinearAlgebra, Test; T = Float64
-    Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 4)
+    Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (5, 5)
     AmulBtq1 = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
                  C[m,n] = zeroB
                  for k ∈ 1:size(A,2)
@@ -291,7 +291,11 @@
                C[m,n] = Cₘₙ
                end)
     lsr2amb = LoopVectorization.LoopSet(r2ambq);
-    @test LoopVectorization.choose_order(lsr2amb) == ([:n, :m, :k], :k, :n, :m, Unum & -2, Tnum)
+    if LoopVectorization.VectorizationBase.REGISTER_COUNT == 32
+        @test LoopVectorization.choose_order(lsr2amb) == ([:n, :m, :k], :k, :n, :m, 3, 6)
+    else
+        @test LoopVectorization.choose_order(lsr2amb) == ([:n, :m, :k], :k, :n, :m, 2, 4)
+    end
     function rank2AmulBavx!(C, Aₘ, Aₖ, B)
         @avx for m ∈ 1:size(C,1), n ∈ 1:size(C,2)
             Cₘₙ = zero(eltype(C))

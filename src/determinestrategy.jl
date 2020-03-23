@@ -352,16 +352,25 @@ function solve_tilesize(
     reg_pressure::AbstractVector{Float64},
     W::Int, vectorized::Symbol
 )
-    maxTbase = maxUbase = 4#8
+    maxTbase = maxUbase = 6#8
     maxT = maxTbase#8
     maxU = maxUbase#8
     tiledloop = getloop(ls, tiled)
     unrolledloop = getloop(ls, unrolled)
     if isstaticloop(tiledloop)
+        if length(tiledloop) ≤ 4
+            T = length(tiledloop)
+            U = max(1, solve_tilesize_constT(cost_vec, reg_pressure, T))
+            return U, T, tile_cost(cost_vec, U, T, length(unrolledloop), T)
+        end
         maxT = min(4maxT, length(tiledloop))
     end
     if isstaticloop(unrolledloop)
         UL = length(unrolledloop)
+        if unrolled !== vectorized && UL ≤ 4
+            T = max(1, solve_tilesize_constU(cost_vec, reg_pressure, UL))
+            return UL, T, tile_cost(cost_vec, UL, T, UL, length(tiledloop))
+        end
         UL = unrolled === vectorized ? cld(UL,W) : UL
         maxU = min(4maxU, UL)
     end
@@ -383,11 +392,22 @@ function set_upstream_family!(adal::Vector{T}, op::Operation, val::T) where {T}
         set_upstream_family!(adal, opp, val)
     end
 end
-
+function stride_penalty_opdependent(ls::LoopSet, op::Operation, order::Vector{Symbol}, contigsym::Symbol)
+    num_loops = length(order)
+    firstloopdeps = loopdependencies(findparent(ls, contigsym))
+    iter = 1
+    for i ∈ 0:num_loops - 1
+        loopsym = order[num_loops - i]
+        loopsym ∈ firstloopdeps && return iter
+        iter *= length(getloop(ls, loopsym))
+    end
+    iter
+end
 function stride_penalty(ls::LoopSet, op::Operation, order::Vector{Symbol})
     num_loops = length(order)
-    contigsym = first(loopdependencies(op))
+    contigsym = first(loopdependencies(op.ref))
     contigsym == Symbol("##DISCONTIGUOUSSUBARRAY##") && return 0
+    first(op.ref.loopedindex) || return stride_penalty_opdependent(ls, op, order, contigsym)
     iter = 1
     for i ∈ 0:num_loops - 1
         loopsym = order[num_loops - i]
@@ -405,19 +425,40 @@ function stride_penalty(ls::LoopSet, order::Vector{Symbol})
     end
     stridepenalty# * 1e-9
 end
-function convolution_cost_factor(ls::LoopSet, op::Operation, u1::Symbol, u2::Symbol)
-    (u1 ∈ loopdependencies(op) && u2 ∈ loopdependencies(op)) || return 1.0, 1.0
+function isoptranslation(ls::LoopSet, op::Operation, u1::Symbol, u2::Symbol, vectorized::Symbol)
+    (vectorized == u1 || vectorized == u2) && return false, false
+    (u1 ∈ loopdependencies(op) && u2 ∈ loopdependencies(op)) || return false, false
     istranslation = false
     inds = getindices(op); li = op.ref.loopedindex
+    translationplus = false
     for i ∈ eachindex(li)
         if !li[i]
             opp = findparent(ls, inds[i + (first(inds) === Symbol("##DISCONTIGUOUSSUBARRAY##"))])
             if instruction(opp).instr ∈ (:+, :-) && u1 ∈ loopdependencies(opp) && u2 ∈ loopdependencies(opp)
                 istranslation = true
+                translationplus = instruction(opp).instr === :+
             end
         end
     end
-    istranslation ? (0.25, 1.0) : (1.0, 1.0)
+    istranslation, translationplus
+end
+function convolution_cost_factor(ls::LoopSet, op::Operation, u1::Symbol, u2::Symbol, v::Symbol)
+    if first(isoptranslation(ls, op, u1, u2, v))
+        for loop ∈ ls.loops
+            # If another loop is short, assume that LLVM will unroll it, in which case
+            # we want to be a little more conservative in terms of register pressure.
+            #FIXME: heuristic hack to get some desired behavior.
+            if isstaticloop(loop) && length(loop) ≤ 4
+                itersym = loop.itersymbol
+                if itersym !== u1 && itersym !== u2
+                    return (0.25, 1.0)
+                end
+            end
+        end
+        (0.25, 0.5)
+    else
+        (1.0, 1.0)
+    end
 end
 # Just tile outer two loops?
 # But optimal order within tile must still be determined
@@ -484,7 +525,7 @@ function evaluate_cost_tile(
         istiled = unrolledtiled[2,id]
         rt, lat, rp = cost(ls, op, vectorized, Wshift, size_T)
         if isload(op)
-            factor1, factor2 = convolution_cost_factor(ls, op, unrolled, tiled)
+            factor1, factor2 = convolution_cost_factor(ls, op, unrolled, tiled, vectorized)
             rt *= factor1; rp *= factor2;
         end
         # @show op rt, lat, rp

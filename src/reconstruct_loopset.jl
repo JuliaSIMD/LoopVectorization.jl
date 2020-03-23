@@ -1,17 +1,19 @@
-function Loop(ls::LoopSet, l::Int, sym::Symbol, ::Type{UnitRange{Int}})
-    start = gensym(String(sym)*"_loopstart"); stop = gensym(String(sym)*"_loopstop")
-    pushpreamble!(ls, Expr(:(=), start, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:(.), Expr(:ref, :lb, l), QuoteNode(:start)))))
-    pushpreamble!(ls, Expr(:(=), stop, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:(.), Expr(:ref, :lb, l), QuoteNode(:stop)))))
+function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{<:AbstractUnitRange})
+    ssym = String(sym)
+    start = gensym(ssym*"_loopstart"); stop = gensym(ssym*"_loopstop"); loopsym = gensym(ssym * "_loop")
+    pushpreamble!(ls, Expr(:(=), loopsym, ex))
+    pushpreamble!(ls, Expr(:(=), start, Expr(:call, :first, loopsym)))
+    pushpreamble!(ls, Expr(:(=), stop, Expr(:call, :last, loopsym)))
     Loop(sym, 0, 1024, start, stop, false, false)::Loop
 end
-function Loop(ls::LoopSet, l::Int, sym::Symbol, ::Type{StaticUpperUnitRange{U}}) where {U}
+function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{StaticUpperUnitRange{U}}) where {U}
     start = gensym(String(sym)*"_loopstart")
-    pushpreamble!(ls, Expr(:(=), start, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:(.), Expr(:ref, :lb, l), QuoteNode(:L)))))
+    pushpreamble!(ls, Expr(:(=), start, Expr(:(.), ex, QuoteNode(:L))))
     Loop(sym, U - 1024, U, start, Symbol(""), false, true)::Loop
 end
-function Loop(ls::LoopSet, l::Int, sym::Symbol, ::Type{StaticLowerUnitRange{L}}) where {L}
+function Loop(ls::LoopSet, ex::Expr, sym::String, ::Type{StaticLowerUnitRange{L}}) where {L}
     stop = gensym(String(sym)*"_loopstop")
-    pushpreamble!(ls, Expr(:(=), stop, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:(.), Expr(:ref, :lb, l), QuoteNode(:U)))))
+    pushpreamble!(ls, Expr(:(=), stop, Expr(:(.), ex, QuoteNode(:U))))
     Loop(sym, L, L + 1024, Symbol(""), stop, true, false)::Loop
 end
 # Is there any likely way to generate such a range?
@@ -21,17 +23,12 @@ end
 #     pushpreamble!(ls, Expr(:(=), stop, Expr(:call, :(+), start, N - 1)))
 #     Loop(gensym(:n), 0, N, start, stop, false, false)::Loop
 # end
-function Loop(ls, l, sym::Symbol, ::Type{StaticUnitRange{L,U}}) where {L,U}
+function Loop(::LoopSet, ::Expr, sym::Symbol, ::Type{StaticUnitRange{L,U}}) where {L,U}
     Loop(sym, L, U, Symbol(""), Symbol(""), true, true)::Loop
 end
 
-function Loop(ls::LoopSet, l::Int, k::Int, sym::Symbol, ::Type{<:CartesianIndices{N}}) where N
-    str = String(sym)*'#'*string(k)*'#'
-    start = gensym(str*"_loopstart"); stop = gensym(str*"_loopstop")
-    axisexpr = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, Expr(:., Expr(:ref, :lb, l), QuoteNode(:indices)), k))
-    pushpreamble!(ls, Expr(:(=), start, Expr(:call, :first, axisexpr)))
-    pushpreamble!(ls, Expr(:(=), stop, Expr(:call, :last, axisexpr)))
-    Loop(Symbol(str), 0, 1024, start, stop, false, false)::Loop
+function extract_loop(l)
+    Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, :lb, l))
 end
 
 function add_loops!(ls::LoopSet, LPSYM, LB)
@@ -41,14 +38,16 @@ function add_loops!(ls::LoopSet, LPSYM, LB)
         if l<:CartesianIndices
             add_loops!(ls, i, sym, l)
         else
-            add_loop!(ls, Loop(ls, i, sym, l)::Loop)
+            add_loop!(ls, Loop(ls, extract_loop(i), sym, l)::Loop)
             push!(ls.loopsymbol_offsets, ls.loopsymbol_offsets[end]+1)
         end
     end
 end
-function add_loops!(ls, i, sym, l::Type{<:CartesianIndices{N}}) where N
+function add_loops!(ls::LoopSet, i::Int, sym::Symbol, l::Type{CartesianIndices{N,T}}) where {N,T}
+    ssym = String(sym)
     for k = N:-1:1
-        add_loop!(ls, Loop(ls, i, k, sym, l)::Loop)
+        axisexpr = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, Expr(:., Expr(:ref, :lb, i), QuoteNode(:indices)), k))
+        add_loop!(ls, Loop(ls, axisexpr, Symbol(ssym*'#'*string(k)*'#'), T.parameters[k])::Loop)
     end
     push!(ls.loopsymbol_offsets, ls.loopsymbol_offsets[end]+N)
 end
