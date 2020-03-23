@@ -18,10 +18,10 @@ Base.convert(::Type{Expr}, instr::Instruction) = Expr(:(.), instr.mod, QuoteNode
 function Base.Expr(instr::Instruction, args...)
     if instr.mod === :LoopVectorization
         Expr(:call, lv(instr.instr), args...)::Expr
-    elseif instr.mod === :Main
+    else#if instr.mod === :Main
         Expr(:call, instr.instr, args...)::Expr
-    else
-        Expr(:call, convert(Expr, instr), args...)::Expr
+    # else
+        # Expr(:call, convert(Expr, instr), args...)::Expr
     end
 end
 Base.hash(instr::Instruction, h::UInt64) = hash(instr.instr, hash(instr.mod, h))
@@ -373,5 +373,6 @@ const FUNCTIONSYMBOLS = IdDict{Type{<:Function},Instruction}(
     typeof(>>) => :>>,
     typeof(>>>) => :>>>,
     typeof(ifelse) => :vifelse,
-    typeof(vifelse) => :vifelse
+    typeof(vifelse) => :vifelse,
+    typeof(identity) => :identity
 )

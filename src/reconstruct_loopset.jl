@@ -4,7 +4,7 @@ function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{<:AbstractUnitRange})
     pushpreamble!(ls, Expr(:(=), loopsym, ex))
     pushpreamble!(ls, Expr(:(=), start, Expr(:call, :first, loopsym)))
     pushpreamble!(ls, Expr(:(=), stop, Expr(:call, :last, loopsym)))
-    Loop(sym, 0, 1024, start, stop, false, false)::Loop
+    Loop(sym, 1, 1024, start, stop, false, false)::Loop
 end
 function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{StaticUpperUnitRange{U}}) where {U}
     start = gensym(String(sym)*"_loopstart")
