@@ -50,7 +50,7 @@ function register_pressure(op::Operation)
     end
 end
 function cost(ls::LoopSet, op::Operation, vectorized::Symbol, Wshift::Int, size_T::Int = op.elementbytes)
-    isconstant(op) && return 0.0, 0, 1
+    isconstant(op) && return 0.0, 0, Int(length(loopdependencies(op)) > 0)
     isloopvalue(op) && return 0.0, 0, 0
     # Wshift == dependson(op, vectorized) ? Wshift : 0
     # c = first(cost(instruction(op), Wshift, size_T))::Int
@@ -58,10 +58,10 @@ function cost(ls::LoopSet, op::Operation, vectorized::Symbol, Wshift::Int, size_
     # instr = instruction(op)
     if length(parents(op)) == 1
         if instr == Instruction(:-) || instr === Instruction(:vsub) || instr == Instruction(:+) || instr == Instruction(:vadd)
-            return 0.0, 0, 1
+            return 0.0, 0, 0
         end
-    elseif iscompute(op) && all(isloopvalue, parents(op))
-        return 0.0, 0, 1
+    elseif iscompute(op) && all(opp -> (isloopvalue(opp) | isconstant(opp)), parents(op))
+        return 0.0, 0, 0
     end
     opisvectorized = dependson(op, vectorized)
     srt, sl, srp = opisvectorized ? vector_cost(instr, Wshift, size_T) : scalar_cost(instr)
@@ -524,6 +524,7 @@ function evaluate_cost_tile(
         isunrolled = unrolledtiled[1,id]
         istiled = unrolledtiled[2,id]
         rt, lat, rp = cost(ls, op, vectorized, Wshift, size_T)
+        # @show op rt, lat, rp
         if isload(op)
             factor1, factor2 = convolution_cost_factor(ls, op, unrolled, tiled, vectorized)
             rt *= factor1; rp *= factor2;

@@ -197,8 +197,20 @@ const COST = Dict{Instruction,InstructionCost}(
     Instruction(:identity) => InstructionCost(0,0.0,0.0,0),
     Instruction(:adjoint) => InstructionCost(0,0.0,0.0,0),
     Instruction(:transpose) => InstructionCost(0,0.0,0.0,0),
-    Instruction(:prefetch) => InstructionCost(0,0.0,0.0,0)
+    Instruction(:prefetch) => InstructionCost(0,0.0,0.0,0),
+    Instruction(:prefetch1) => InstructionCost(0,0.0,0.0,0),
+    Instruction(:prefetch2) => InstructionCost(0,0.0,0.0,0),
+    Instruction(:prefetch3) => InstructionCost(0,0.0,0.0,0)
 )
+@inline prefetch0(x, i) = SIMDPirates.prefetch(gep(stridedpointer(x), (extract_data(i) - 1,)), Val{3}(), Val{0}())
+@inline prefetch0(x, i, j) = SIMDPirates.prefetch(gep(stridedpointer(x), (extract_data(i) - 1, extract_data(j) - 1)), Val{3}(), Val{0}())
+# @inline prefetch0(x, i, j, oi, oj) = SIMDPirates.prefetch(gep(stridedpointer(x), (extract_data(i) + extract_data(oi) - 1, extract_data(j) + extract_data(oj) - 1)), Val{3}(), Val{0}())
+@inline prefetch1(x, i) = SIMDPirates.prefetch(gep(stridedpointer(x), (extract_data(i) - 1,)), Val{2}(), Val{0}())
+@inline prefetch1(x, i, j) = SIMDPirates.prefetch(gep(stridedpointer(x), (extract_data(i) - 1, VectorizationBase.extract_data(j) - 1)), Val{2}(), Val{0}())
+# @inline prefetch1(x, i, j, oi, oj) = SIMDPirates.prefetch(gep(stridedpointer(x), (extract_data(i) + extract_data(oi) - 1, extract_data(j) + extract_data(oj) - 1)), Val{2}(), Val{0}())
+@inline prefetch2(x, i) = SIMDPirates.prefetch(gep(stridedpointer(x), (extract_data(i) - 1,)), Val{1}(), Val{0}())
+@inline prefetch2(x, i, j) = SIMDPirates.prefetch(gep(stridedpointer(x), (VectorizationBase.extract_data(i) - 1, VectorizationBase.extract_data(j) - 1)), Val{1}(), Val{0}())
+# @inline prefetch2(x, i, j, oi, oj) = SIMDPirates.prefetch(gep(stridedpointer(x), (extract_data(i) + extract_data(oi) - 1, extract_data(j) + extract_data(oj) - 1)), Val{1}(), Val{0}())
 
 # const KNOWNINSTRUCTIONS = keys(COST)
 # instruction(f, m) = f ∈ KNOWNINSTRUCTIONS ? Instruction(:LoopVectorization, f) : Instruction(m, f)
