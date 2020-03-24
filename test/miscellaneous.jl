@@ -5,7 +5,7 @@
               s += x[m] * A[m,n] * y[n]
               end);
     lsdot3 = LoopVectorization.LoopSet(dot3q);
-    @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :m, :n, :m, Unum & -2, Tnum)
+    @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :m, :n, :m, Unum, Tnum)#&-2
 
     @static if VERSION < v"1.4"
         dot3(x, A, y) = dot(x, A * y)
@@ -16,6 +16,14 @@
         M, N = size(A)
         s = zero(promote_type(eltype(x), eltype(A), eltype(y)))
         @avx for m ∈ 1:M, n ∈ 1:N
+            s += x[m] * A[m,n] * y[n]
+        end
+        s
+    end
+    function dot3avx24(x, A, y)
+        M, N = size(A)
+        s = zero(promote_type(eltype(x), eltype(A), eltype(y)))
+        @avx tile=(2,4) for m ∈ 1:M, n ∈ 1:N
             s += x[m] * A[m,n] * y[n]
         end
         s
