@@ -184,7 +184,7 @@
            end
            p += pn
            end)
-    # lsb = LoopVectorization.LoopSet(bq);
+    lsb = LoopVectorization.LoopSet(bq);
 
     function clenshaw!(ret,x,coeff)
         @inbounds for j in 1:length(ret)

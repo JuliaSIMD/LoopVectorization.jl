@@ -79,6 +79,14 @@
     #         end
     #     end
     # end
+    # C = Cs; A = Ats'; B = Bs; factor = 1;
+    # ls = LoopVectorization.@avx_debug for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+    #         ΔCₘₙ = zero(eltype(C))
+    #         for k ∈ 1:size(A,2)
+    #             ΔCₘₙ += A[m,k] * B[k,n]
+    #         end
+    #         C[m,n] += ΔCₘₙ * factor
+    #     end;
     function AmuladdBavx!(C, A, B, factor = 1)
         @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
             ΔCₘₙ = zero(eltype(C))
@@ -486,6 +494,33 @@
         end
         return C
     end
+
+    function gemm_accurate!(C, A, B)
+        @avx for n in 1:size(C,2), m in 1:size(C,1)
+            Cmn_hi = zero(eltype(C))
+            Cmn_lo = zero(eltype(C))
+            for k in 1:size(B,1)
+                hiprod = evmul(A[m,k], B[k,n])
+                loprod = vfmsub(A[m,k], B[k,n], hiprod)
+                hi_ts = evadd(hiprod, Cmn_hi)
+                a1_ts = evsub(hi_ts, Cmn_hi)
+                b1_ts = evsub(hi_ts, a1_ts)
+                lo_ts = evadd(evsub(hiprod, a1_ts), evsub(Cmn_hi, b1_ts))
+                thi = evadd(loprod, Cmn_lo)
+                a1_t = evsub(thi, Cmn_lo)
+                b1_t = evsub(thi, a1_t)
+                tlo = evadd(evsub(loprod, a1_t), evsub(Cmn_lo, b1_t))
+                c1 = evadd(lo_ts, thi)
+                hi_ths = evadd(hi_ts, c1)
+                lo_ths = evsub(c1, evsub(hi_ths, hi_ts))
+                c2 = evadd(tlo, lo_ths)
+                Cmn_hi = evadd(hi_ths, c2)
+                Cmn_lo = evsub(c2, evsub(Cmn_hi, hi_ths))
+            end
+            C[m,n] = Cmn_hi
+        end
+    end
+
     # M = 77;
     # A = rand(M,M); B = rand(M,M); C = similar(A);
     # mulCAtB_2x2block_avx!(C,A,B)
@@ -582,6 +617,14 @@
             fill!(C, 9999.999); mulCAtB_2x2blockavx_noinline!(C, At, B);
             @test C ≈ C2
             fill!(C, 9999.999); mulCAtB_2x2blockavx_noinline!(C, A', B);
+            @test C ≈ C2
+            fill!(C, 9999.999); gemm_accurate!(C, A, B);
+            @test C ≈ C2
+            fill!(C, 9999.999); gemm_accurate!(C, At', B);
+            @test C ≈ C2
+            fill!(C, 9999.999); gemm_accurate!(C, A, Bt');
+            @test C ≈ C2
+            fill!(C, 9999.999); gemm_accurate!(C, At', Bt');
             @test C ≈ C2
         end
         @time @testset "_avx $T dynamic gemm" begin

@@ -1,41 +1,4 @@
 
-# """
-# ShortVector{T} simply wraps a Vector{T}, but uses a different hash function that is faster for short vectors to support using it as the keys of a Dict.
-# This hash function scales O(N) with length of the vectors, so it is slow for long vectors.
-# """
-# struct ShortVector{T} <: DenseVector{T}
-#     data::Vector{T}
-# end
-# Base.@propagate_inbounds Base.getindex(x::ShortVector, I...) = x.data[I...]
-# Base.@propagate_inbounds Base.setindex!(x::ShortVector, v, I...) = x.data[I...] = v
-# ShortVector{T}(::UndefInitializer, N::Integer) where {T} = ShortVector{T}(Vector{T}(undef, N))
-# @inbounds Base.length(x::ShortVector) = length(x.data)
-# @inbounds Base.size(x::ShortVector) = size(x.data)
-# @inbounds Base.strides(x::ShortVector) = strides(x.data)
-# @inbounds Base.push!(x::ShortVector, v) = push!(x.data, v)
-# @inbounds Base.append!(x::ShortVector, v) = append!(x.data, v)
-# function Base.hash(x::ShortVector, h::UInt)
-#     @inbounds for n ∈ eachindex(x)
-#         h = hash(x[n], h)
-#     end
-#     h
-# end
-# function Base.isequal(a::ShortVector{T}, b::ShortVector{T}) where {T}
-#     length(a) == length(b) || return false
-#     @inbounds for i ∈ 1:length(a)
-#         a[i] === b[i] || return false
-#     end
-#     true
-# end
-# Base.convert(::Type{Vector}, sv::ShortVector) = sv.data
-# Base.convert(::Type{Vector{T}}, sv::ShortVector{T}) where {T} = sv.data
-
-
-# For passing options like array types and mask
-# struct LoopSetOptions
-
-# end
-
 struct UnrollSpecification
     unrolledloopnum::Int
     tiledloopnum::Int

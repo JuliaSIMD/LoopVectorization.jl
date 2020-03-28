@@ -198,9 +198,9 @@ const COST = Dict{Instruction,InstructionCost}(
     Instruction(:adjoint) => InstructionCost(0,0.0,0.0,0),
     Instruction(:transpose) => InstructionCost(0,0.0,0.0,0),
     Instruction(:prefetch) => InstructionCost(0,0.0,0.0,0),
+    Instruction(:prefetch0) => InstructionCost(0,0.0,0.0,0),
     Instruction(:prefetch1) => InstructionCost(0,0.0,0.0,0),
-    Instruction(:prefetch2) => InstructionCost(0,0.0,0.0,0),
-    Instruction(:prefetch3) => InstructionCost(0,0.0,0.0,0)
+    Instruction(:prefetch2) => InstructionCost(0,0.0,0.0,0)
 )
 @inline prefetch0(x, i) = SIMDPirates.prefetch(gep(stridedpointer(x), (extract_data(i) - 1,)), Val{3}(), Val{0}())
 @inline prefetch0(x, i, j) = SIMDPirates.prefetch(gep(stridedpointer(x), (extract_data(i) - 1, extract_data(j) - 1)), Val{3}(), Val{0}())
@@ -274,7 +274,7 @@ reduction_instruction_class(instr::Symbol) = get(REDUCTION_CLASS, instr, NaN)
 reduction_instruction_class(instr::Instruction) = reduction_instruction_class(instr.instr)
 function reduction_to_single_vector(x::Float64)
     # x == 1.0 ? :evadd : x == 2.0 ? :evmul : x == 3.0 ? :vor : x == 4.0 ? :vand : x == 5.0 ? :max : x == 6.0 ? :min : throw("Reduction not found.")
-    x == 1.0 ? :evadd : x == 2.0 ? :evmul : x == 5.0 ? :max : x == 6.0 ? :min : throw("Reduction not found.")
+    x == ADDITIVE_IN_REDUCTIONS ? :evadd : x == MULTIPLICATIVE_IN_REDUCTIONS ? :evmul : x == MAX ? :max : x == MIN ? :min : throw("Reduction not found.")
 end
 reduction_to_single_vector(x) = reduction_to_single_vector(reduction_instruction_class(x))
 # function reduction_to_scalar(x::Float64)
@@ -284,17 +284,17 @@ reduction_to_single_vector(x) = reduction_to_single_vector(reduction_instruction
 # reduction_to_scalar(x) = reduction_to_scalar(reduction_instruction_class(x))
 function reduction_scalar_combine(x::Float64)
     # x == 1.0 ? :reduced_add : x == 2.0 ? :reduced_prod : x == 3.0 ? :reduced_any : x == 4.0 ? :reduced_all : x == 5.0 ? :reduced_max : x == 6.0 ? :reduced_min : throw("Reduction not found.")
-    x == 1.0 ? :reduced_add : x == 2.0 ? :reduced_prod : x == 5.0 ? :reduced_max : x == 6.0 ? :reduced_min : throw("Reduction not found.")
+    x == ADDITIVE_IN_REDUCTIONS ? :reduced_add : x == MULTIPLICATIVE_IN_REDUCTIONS ? :reduced_prod : x == MAX ? :reduced_max : x == MIN ? :reduced_min : throw("Reduction not found.")
 end
 reduction_scalar_combine(x) = reduction_scalar_combine(reduction_instruction_class(x))
 function reduction_combine_to(x::Float64)
     # x == 1.0 ? :reduce_to_add : x == 2.0 ? :reduce_to_prod : x == 3.0 ? :reduce_to_any : x == 4.0 ? :reduce_to_all : x == 5.0 ? :reduce_to_max : x == 6.0 ? :reduce_to_min : throw("Reduction not found.")
-    x == 1.0 ? :reduce_to_add : x == 2.0 ? :reduce_to_prod : x == 5.0 ? :reduce_to_max : x == 6.0 ? :reduce_to_min : throw("Reduction not found.")
+    x == ADDITIVE_IN_REDUCTIONS ? :reduce_to_add : x == MULTIPLICATIVE_IN_REDUCTIONS ? :reduce_to_prod : x == MAX ? :reduce_to_max : x == MIN ? :reduce_to_min : throw("Reduction not found.")
 end
 reduction_combine_to(x) = reduction_combine_to(reduction_instruction_class(x))
 function reduction_zero(x::Float64)
     # x == 1.0 ? :zero : x == 2.0 ? :one : x == 3.0 ? :false : x == 4.0 ? :true : x == 5.0 ? :typemin : x == 6.0 ? :typemax : throw("Reduction not found.")
-    x == 1.0 ? :zero : x == 2.0 ? :one : x == 5.0 ? :typemin : x == 6.0 ? :typemax : throw("Reduction not found.")
+    x == ADDITIVE_IN_REDUCTIONS ? :zero : x == MULTIPLICATIVE_IN_REDUCTIONS ? :one : x == MAX ? :typemin : x == MIN ? :typemax : throw("Reduction not found.")
 end
 reduction_zero(x) = reduction_zero(reduction_instruction_class(x))
 

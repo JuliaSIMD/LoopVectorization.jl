@@ -1,12 +1,12 @@
 using LoopVectorization, OffsetArrays
 using LoopVectorization.VectorizationBase: StaticUnitRange
 using Test
-# T = Float64
+T = Float64
 # T = Float32
 
 @testset "OffsetArrays" begin
 
-    function old2d!(out::AbstractMatrix, A::AbstractMatrix, kern)
+     function old2d!(out::AbstractMatrix, A::AbstractMatrix, kern)
         rng1k, rng2k = axes(kern)
         rng1,  rng2  = axes(out)
         for j in rng2, i in rng1
@@ -48,15 +48,15 @@ using Test
     #        end);
     # lsq2d = LoopVectorization.LoopSet(q2d); LoopVectorization.choose_order(lsq2d)
 
-    # oq2 = :(for j in rng2, i in rng1
-    #         tmp = zero(eltype(out))
-    #         for jk in -1:1, ik in -1:1
-    #             tmp += A[i+ik,j+jk]*kern[ik,jk]
-    #         end
-    #         out[i,j] = tmp
-    #        end);
-    # lsoq = LoopVectorization.LoopSet(oq2);
-    # LoopVectorization.choose_order(lsoq)
+    oq2 = :(for j in rng2, i in rng1
+            tmp = zero(eltype(out))
+            for jk in -1:1, ik in -1:1
+                tmp += A[i+ik,j+jk]*kern[ik,jk]
+            end
+            out[i,j] = tmp
+           end);
+    lsoq = LoopVectorization.LoopSet(oq2);
+    LoopVectorization.choose_order(lsoq)
 
     function avx2d!(out::AbstractMatrix, A::AbstractMatrix, kern)
         rng1k, rng2k = axes(kern)

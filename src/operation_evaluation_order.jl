@@ -18,7 +18,7 @@
 
 function set_upstream_family!(adal::Vector{T}, op::Operation, val::T, ld::Vector{Symbol}, id::Int) where {T}
     adal[identifier(op)] == val && return # must already have been set
-    # ld != loopdependencies(op) &&
+    # @show op
     if ld != loopdependencies(op) || id == identifier(op)
         (adal[identifier(op)] = val)
     end
@@ -43,7 +43,9 @@ function addoptoorder!(
     istiled = (loopistiled ? (tiled ∈ loopdependencies(op)) : false) + 1
     # optype = Int(op.node_type) + 1
     after_loop = place_after_loop[id] + 1
+    # @show place_after_loop[id], op
     isloopvalue(op) || push!(lo[isunrolled,istiled,after_loop,_n], op)
+    # all(opp -> iszero(length(reduceddependencies(opp))), parents(op)) &&
     set_upstream_family!(place_after_loop, op, false, loopdependencies(op), identifier(op)) # parents that have already been included are not moved, so no need to check included_vars to filter
     nothing
 end
@@ -54,7 +56,7 @@ function fillorder!(ls::LoopSet, order::Vector{Symbol}, unrolled::Symbol, tiled:
     nloops = length(order)
     ops = operations(ls)
     nops = length(ops)
-    included_vars = fill!(resize!(ls.included_vars, nops), false)        
+    included_vars = fill!(resize!(ls.included_vars, nops), false)
     place_after_loop = fill!(resize!(ls.place_after_loop, nops), true)
     # to go inside out, we just have to include all those not-yet included depending on the current sym
     empty!(lo)

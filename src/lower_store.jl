@@ -1,5 +1,41 @@
 using VectorizationBase: vnoaliasstore!
-const STOREOP = :vnoaliasstore!
+# const STOREOP = :vnoaliasstore!
+
+@inline vstoreadditivereduce!(args...) = vnoaliasstore!(args...)
+@inline vstoremultiplicativevereduce!(args...) = vnoaliasstore!(args...)
+@inline function vstoreadditivereduce!(ptr::VectorizationBase.AbstractStridedPointer, v::VectorizationBase.SVec, i::NTuple{N,<:Integer}) where {N}
+    vnoaliasstore!(ptr, SIMDPirates.vsum(v), i)
+end
+@inline function vstoreadditivereduce!(ptr::VectorizationBase.AbstractStridedPointer, v::VectorizationBase.SVec, i::NTuple{N,<:Integer}, m::VectorizationBase.Mask) where {N}
+    vnoaliasstore!(ptr, SIMDPirates.vsum(v), i, m)
+end
+@inline function vstoremultiplicativevereduce!(ptr::VectorizationBase.AbstractStridedPointer, v::VectorizationBase.SVec, i::NTuple{N,<:Integer}) where {N}
+    vnoaliasstore!(ptr, SIMDPirates.vprod(v), i)
+end
+@inline function vstoremultiplicativevereduce!(ptr::VectorizationBase.AbstractStridedPointer, v::VectorizationBase.SVec, i::NTuple{N,<:Integer}, m::VectorizationBase.Mask) where {N}
+    vnoaliasstore!(ptr, SIMDPirates.vprod(v), i, m)
+end
+
+function storeinstr(op::Operation)
+    opp = first(parents(op))
+    if instruction(opp).instr === :identity
+        opp = first(parents(opp))
+    end
+    instr = if iszero(length(reduceddependencies(opp)))
+        :vnoaliasstore!
+    else
+        instr_class = reduction_instruction_class(instruction(opp))
+        if instr_class === ADDITIVE_IN_REDUCTIONS
+            :vstoreadditivereduce!
+        elseif instr_class === MULTIPLICATIVE_IN_REDUCTIONS
+            :vstoremultiplicativevereduce!
+        else #FIXME
+            :vnoaliasstore!
+        end
+    end
+    lv(instr)
+end
+
 # const STOREOP = :vstore!
 variable_name(op::Operation, ::Nothing) = mangledvar(op)
 variable_name(op::Operation, suffix) = Symbol(mangledvar(op), suffix, :_)
@@ -69,7 +105,7 @@ function lower_conditionalstore_scalar!(
         varname = varassignname(var, u, parentisunrolled)
         condvarname = varassignname(condvar, u, condunrolled)
         td = UnrollArgs(u, unrolled, tiled, suffix)
-        push!(q.args, Expr(:&&, condvarname, Expr(:call, lv(STOREOP), ptr, varname, mem_offset_u(op, td))))
+        push!(q.args, Expr(:&&, condvarname, Expr(:call, storeinstr(op), ptr, varname, mem_offset_u(op, td))))
     end
     nothing
 end
@@ -102,7 +138,7 @@ function lower_conditionalstore_vectorized!(
         td = UnrollArgs(u, unrolled, tiled, suffix)
         name, mo = name_memoffset(var, op, td, W, vecnotunrolled, parentisunrolled)
         condvarname = varassignname(condvar, u, condunrolled)
-        instrcall = Expr(:call, lv(STOREOP), ptr, name, mo)
+        instrcall = Expr(:call, storeinstr(op), ptr, name, mo)
         if mask !== nothing && (vecnotunrolled || u == U - 1)
             push!(instrcall.args, Expr(:call, :&, condvarname, mask))
         else
@@ -122,7 +158,7 @@ function lower_store_scalar!(
     for u ∈ 0:U-1
         varname = varassignname(var, u, parentisunrolled)
         td = UnrollArgs(u, unrolled, tiled, suffix)
-        push!(q.args, Expr(:call, lv(STOREOP), ptr, varname, mem_offset_u(op, td)))
+        push!(q.args, Expr(:call, storeinstr(op), ptr, varname, mem_offset_u(op, td)))
     end
     nothing
 end
@@ -146,7 +182,7 @@ function lower_store_vectorized!(
     for u ∈ umin:U-1
         td = UnrollArgs(u, unrolled, tiled, suffix)
         name, mo = name_memoffset(var, op, td, W, vecnotunrolled, parentisunrolled)
-        instrcall = Expr(:call, lv(STOREOP), ptr, name, mo)
+        instrcall = Expr(:call, storeinstr(op), ptr, name, mo)
         if mask !== nothing && (vecnotunrolled || u == U - 1)
             push!(instrcall.args, mask)
         end

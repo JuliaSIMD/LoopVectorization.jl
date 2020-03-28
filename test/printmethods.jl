@@ -25,5 +25,5 @@
     @test occursin(" = A[m, k]", s)
     @test occursin(" = B[k, n]", s)
     @test occursin(" = LoopVectorization.vfmadd", s)
-    @test occursin(" = LoopVectorization.reduce_to_add", s)
+    # @test occursin(" = LoopVectorization.reduce_to_add", s)
 end

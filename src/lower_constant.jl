@@ -24,14 +24,26 @@ function lower_zero!(
     else
         call = Expr(:call, :zero, typeT)
     end
-    if unrolled ∈ loopdependencies(op) || unrolled ∈ reducedchildren(op) || unrolled ∈ reduceddependencies(op)
+    if isunrolled_sym(op, unrolled, suffix)
+        broadcastsym = Symbol(mvar, "_#init#")
+        push!(q.args, Expr(:(=), broadcastsym, call))
         for u ∈ 0:U-1
-            push!(q.args, Expr(:(=), Symbol(mvar, u), call))
+            push!(q.args, Expr(:(=), Symbol(mvar, u), broadcastsym))
         end
     else
         push!(q.args, Expr(:(=), mvar, call))
     end
     nothing    
+end
+# Have to awkwardly search through `operations(ls)` to try and find op's child
+function getparentsreductzero(ls::LoopSet, op::Operation)::Float64
+    opname = name(op)
+    for opp ∈ operations(ls)
+        if name(opp) === opname && opp !== op && iscompute(opp) && search_tree(parents(opp), opname) && length(reduceddependencies(opp)) > 0
+            return reduction_instruction_class(instruction(opp))
+        end
+    end
+    throw("Reduct zero not found.")
 end
 function lower_constant!(
     q::Expr, op::Operation, vectorized::Symbol, ls::LoopSet, unrolled::Symbol, U::Int, suffix::Union{Nothing,Int}
@@ -40,24 +52,37 @@ function lower_constant!(
     instruction = op.instruction
     mvar = variable_name(op, suffix)
     constsym = instruction.instr
-    if vectorized ∈ loopdependencies(op) || vectorized ∈ reducedchildren(op) || vectorized ∈ reduceddependencies(op)
+    reducedchildvectorized = vectorized ∈ reducedchildren(op)
+    unroll = isunrolled_sym(op, unrolled, suffix)
+    if reducedchildvectorized || vectorized ∈ loopdependencies(op)  || vectorized ∈ reduceddependencies(op)
         # call = Expr(:call, lv(:vbroadcast), W, Expr(:call, lv(:maybeconvert), typeT, constsym))
-        call = Expr(:call, lv(:vbroadcast), W, constsym)
-        if unrolled ∈ loopdependencies(op) || unrolled ∈ reducedchildren(op) || unrolled ∈ reduceddependencies(op)
+        call = if reducedchildvectorized && vectorized ∉ loopdependencies(op)
+            instrclass = getparentsreductzero(ls, op)
+            if instrclass == ADDITIVE_IN_REDUCTIONS
+                Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:SIMDPirates)), QuoteNode(:addscalar)), Expr(:call, lv(:vzero), W, typeT), constsym)
+            elseif instrclass == MULTIPLICATIVE_IN_REDUCTIONS
+                Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:SIMDPirates)), QuoteNode(:mulscalar)), Expr(:call, lv(:vbroadcast), W, Expr(:call, :one, typeT)), constsym)
+            else
+                throw("Reductions of type $(reduction_zero(reinstrclass)) not yet supported; please file an issue as a reminder to take care of this.")
+            end
+        else
+            Expr(:call, lv(:vbroadcast), W, constsym)
+        end
+        if unroll
+            broadcastsym = Symbol(mvar, "_#init#")
+            push!(q.args, Expr(:(=), broadcastsym, call))
             for u ∈ 0:U-1
-                push!(q.args, Expr(:(=), Symbol(mvar, u), call))
+                push!(q.args, Expr(:(=), Symbol(mvar, u), broadcastsym))
             end
         else
             push!(q.args, Expr(:(=), mvar, call))
         end
-    else
-        if unrolled ∈ loopdependencies(op) || unrolled ∈ reducedchildren(op) || unrolled ∈ reduceddependencies(op)
-            for u ∈ 0:U-1
-                push!(q.args, Expr(:(=), Symbol(mvar, u), constsym))
-            end
-        else
-            push!(q.args, Expr(:(=), mvar, constsym))
+    elseif unroll
+        for u ∈ 0:U-1
+            push!(q.args, Expr(:(=), Symbol(mvar, u), constsym))
         end
+    else
+        push!(q.args, Expr(:(=), mvar, constsym))
     end
     nothing
 end

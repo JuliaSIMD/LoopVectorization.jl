@@ -50,18 +50,18 @@ function register_pressure(op::Operation)
     end
 end
 function cost(ls::LoopSet, op::Operation, vectorized::Symbol, Wshift::Int, size_T::Int = op.elementbytes)
-    isconstant(op) && return 0.0, 0, Int(length(loopdependencies(op)) > 0)
-    isloopvalue(op) && return 0.0, 0, 0
+    isconstant(op) && return 0.0, 0, Float64(length(loopdependencies(op)) > 0)
+    isloopvalue(op) && return 0.0, 0, 0.0
     # Wshift == dependson(op, vectorized) ? Wshift : 0
     # c = first(cost(instruction(op), Wshift, size_T))::Int
     instr = Instruction(:LoopVectorization, instruction(op).instr)
     # instr = instruction(op)
     if length(parents(op)) == 1
         if instr == Instruction(:-) || instr === Instruction(:vsub) || instr == Instruction(:+) || instr == Instruction(:vadd)
-            return 0.0, 0, 0
+            return 0.0, 0, 0.0
         end
     elseif iscompute(op) && all(opp -> (isloopvalue(opp) | isconstant(opp)), parents(op))
-        return 0.0, 0, 0
+        return 0.0, 0, 0.0
     end
     opisvectorized = dependson(op, vectorized)
     srt, sl, srp = opisvectorized ? vector_cost(instr, Wshift, size_T) : scalar_cost(instr)
@@ -80,7 +80,7 @@ function cost(ls::LoopSet, op::Operation, vectorized::Symbol, Wshift::Int, size_
             sl *= 3
         end
     end
-    srt, sl, srp
+    srt, sl, Float64(srp)
 end
 
     # Base._return_type()
@@ -336,7 +336,7 @@ function maybedemotesize(U::Int, N::Int)
     um1rep > urep ? U : Um1
 end
 function maybedemotesize(T::Int, N::Int, U::Int, Uloop::Loop, maxTbase::Int)
-    T > 1 || return T
+    T > 1 || return 1
     T == N && return T
     T = maybedemotesize(T, N)
     if !(isstaticloop(Uloop) && length(Uloop) == U)
@@ -451,11 +451,11 @@ function convolution_cost_factor(ls::LoopSet, op::Operation, u1::Symbol, u2::Sym
             if isstaticloop(loop) && length(loop) ≤ 4
                 itersym = loop.itersymbol
                 if itersym !== u1 && itersym !== u2
-                    return (0.25, 1.0)
+                    return (0.25, VectorizationBase.REGISTER_COUNT == 32 ? 2.0 : 1.0)
                 end
             end
         end
-        (0.25, 0.5)
+        (0.25, VectorizationBase.REGISTER_COUNT == 32 ? 1.2 : 1.0)
     else
         (1.0, 1.0)
     end
@@ -529,7 +529,7 @@ function evaluate_cost_tile(
             factor1, factor2 = convolution_cost_factor(ls, op, unrolled, tiled, vectorized)
             rt *= factor1; rp *= factor2;
         end
-        # @show op rt, lat, rp
+        # @show isunrolled, istiled, op rt, lat, rp
         rp = opisininnerloop ? rp : 0 # we only care about register pressure within the inner most loop
         rt *= iters[id]
         if isunrolled && istiled # no cost decrease; cost must be repeated
@@ -546,6 +546,7 @@ function evaluate_cost_tile(
             reg_pressure[4] += rp
         end
     end
+    # @show reg_pressure
     costpenalty = (sum(reg_pressure) > VectorizationBase.REGISTER_COUNT) ? 2 : 1
     # @show order, vectorized cost_vec reg_pressure
     # @show solve_tilesize(ls, unrolled, tiled, cost_vec, reg_pressure)
@@ -665,12 +666,15 @@ function choose_order(ls::LoopSet)
     end
 end
 
-function register_pressure(ls::LoopSet)
-    order, unroll, vec, U, T = choose_order(ls)
+function register_pressure(ls::LoopSet, U, T)
     if T == -1
         sum(register_pressure, operations(ls))
     else
-        rp = @view ls.reg_pressure[:,1]
-        tU * tT * rp[1] + tU * rp[2] + rp[3] + rp[4]
+        rp = @view ls.reg_pres[:,1]
+        U * T * rp[1] + U * rp[2] + rp[3] + rp[4]
     end
+end
+function register_pressure(ls::LoopSet)
+    order, unroll, tile, vec, U, T = choose_order(ls)
+    register_pressure(ls, U, T)
 end

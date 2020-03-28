@@ -8,9 +8,10 @@ function lower_compute!(
     opunrolled = unrolled ∈ loopdependencies(op)
 )
 
-    var = op.variable
-    mvar = mangledvar(op)
+    var = name(op)
+    instr = instruction(op)
     parents_op = parents(op)
+    mvar = mangledvar(op)
     nparents = length(parents_op)
     parentstiled = if suffix === nothing
         optiled = false
@@ -25,13 +26,20 @@ function lower_compute!(
         optiled = true
         [tiled ∈ loopdependencies(opp) for opp ∈ parents_op]
     end
-    parentsunrolled = [unrolled ∈ loopdependencies(opp) || unrolled ∈ reducedchildren(opp) for opp ∈ parents_op]
+    parentsunrolled = isunrolled_sym.(parents_op, unrolled, tiled)
+    if instr.instr === :identity && name(first(parents_op)) === var && isone(length(parents_op))
+        if (opunrolled == first(parentsunrolled)) && ((!isnothing(suffix)) == first(parentstiled))
+            return
+        end
+    end
+    unrollsym = isunrolled_sym(op, unrolled, suffix)
     if !opunrolled && any(parentsunrolled)
         parents_op = copy(parents_op)
         for i ∈ eachindex(parentsunrolled)
             parentsunrolled[i] || continue
             parentsunrolled[i] = false
             parentop = parents_op[i]
+            # @show op, parentop
             newparentop = Operation(
                 parentop.identifier, gensym(parentop.variable), parentop.elementbytes, parentop.instruction, parentop.node_type,
                 parentop.dependencies, parentop.reduced_deps, parentop.parents, parentop.ref, parentop.reduced_children
@@ -43,14 +51,18 @@ function lower_compute!(
                 parentname = Symbol(parentname, suffix_)
                 newparentname = Symbol(newparentname, suffix_)
             end
-            for u ∈ 0:U-1
-                push!(q.args, Expr(:(=), Symbol(newparentname, u), Symbol(parentname, u)))
+            if isconstant(newparentop)
+                push!(q.args, Expr(:(=), newparentname, Symbol(parentname, 0)))
+                continue
+            else
+                for u ∈ 0:U-1
+                    push!(q.args, Expr(:(=), Symbol(newparentname, u), Symbol(parentname, u)))
+                end
+                reduce_expr!(q, newparentname, Instruction(reduction_to_single_vector(instruction(newparentop))), U)
+                push!(q.args, Expr(:(=), newparentname, Symbol(newparentname, 0)))
             end
-            reduce_expr!(q, newparentname, Instruction(reduction_to_single_vector(instruction(newparentop))), U)
-            push!(q.args, Expr(:(=), newparentname, Symbol(newparentname, 0)))
         end
     end
-    instr = op.instruction
     # cache unroll and tiling check of parents
     # not broadcasted, because we use frequent checks of individual bools
     # making BitArrays inefficient.
@@ -84,7 +96,7 @@ function lower_compute!(
             # modsuffix = ((u + suffix*U) & 3)
             modsuffix = (suffix & 3)
             Symbol(mvar, modsuffix)
-        elseif opunrolled
+        elseif unrollsym
             Symbol(mvar, u)
         else
             mvar
@@ -125,7 +137,11 @@ function lower_compute!(
                 continue
             end
         end
-        push!(q.args, Expr(:(=), varsym, instrcall))
+        if instr.instr === :identity && isone(length(parents_op))
+            push!(q.args, Expr(:(=), varsym, instrcall.args[2]))
+        else
+            push!(q.args, Expr(:(=), varsym, instrcall))
+        end
     end
 end
 

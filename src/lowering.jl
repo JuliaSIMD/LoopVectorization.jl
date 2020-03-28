@@ -408,3 +408,15 @@ end
 Base.convert(::Type{Expr}, ls::LoopSet) = lower(ls)
 Base.show(io::IO, ls::LoopSet) = println(io, lower(ls))
 
+function isunrolled_sym(op::Operation, unrolled::Symbol, ::Nothing)
+    unrolled ∈ loopdependencies(op) || (isconstant(op) && (unrolled ∈ reducedchildren(op)))
+end
+function isunrolled_sym(op::Operation, unrolled::Symbol, ::Int)
+    uild = unrolled ∈ loopdependencies(op)
+    (isconstant(op) & uild) && return true # ignore reduced children if unrolled
+    uild && unrolled ∉ reduceddependencies(op)
+end
+
+isunrolled_sym(op::Operation, unrolled::Symbol, istiled::Bool) = istiled ? isunrolled_sym(op, unrolled, 0) : isunrolled_sym(op, unrolled, nothing)
+isunrolled_sym(op::Operation, unrolled::Symbol, tiled::Symbol) = isunrolled_sym(op, unrolled, tiled ∈ loopdependencies(op))
+
