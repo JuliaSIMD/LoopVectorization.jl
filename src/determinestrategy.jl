@@ -659,10 +659,10 @@ function choose_order(ls::LoopSet)
     end
     uorder, uvec, uc = choose_unroll_order(ls, tc)
     if num_loops(ls) > 1 && tc ≤ uc
-        return torder, tunroll, ttile, tvec, min(tU, tT), tT
+        return torder, tunroll, ttile, tvec, min(tU, tT), tT, tc
         # return torder, tvec, 4, 4#5, 5
     else
-        return uorder, first(uorder), Symbol("##undefined##"), uvec, determine_unroll_factor(ls, uorder, first(uorder), uvec), -1
+        return uorder, first(uorder), Symbol("##undefined##"), uvec, determine_unroll_factor(ls, uorder, first(uorder), uvec), -1, uc
     end
 end
 

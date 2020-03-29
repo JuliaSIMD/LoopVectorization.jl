@@ -391,7 +391,7 @@ function avx_loopset(instr, ops, arf, AM, LPSYM, LB, vargs)
 end
 function avx_body(ls, UT)
     U, T = UT
-    q = iszero(U) ? lower(ls) : lower(ls, U, T)
+    q = iszero(U) ? lower_and_split_loops(ls) : lower(ls, U, T)
     length(ls.outer_reductions) == 0 ? push!(q.args, nothing) : push!(q.args, loopset_return_value(ls, Val(true)))
     # @show q
     q
