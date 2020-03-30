@@ -52,6 +52,7 @@ end
 
 function fillorder!(ls::LoopSet, order::Vector{Symbol}, unrolled::Symbol, tiled::Symbol, loopistiled::Bool)
     lo = ls.loop_order
+    resize!(lo, length(ls.loopsymbols))
     ro = lo.loopnames # reverse order; will have same order as lo
     nloops = length(order)
     ops = operations(ls)

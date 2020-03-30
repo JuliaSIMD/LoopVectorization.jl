@@ -621,7 +621,6 @@ function choose_unroll_order(ls::LoopSet, lowest_cost::Float64 = Inf)
 end
 function choose_tile(ls::LoopSet)
     lo = LoopOrders(ls)
-    # @show lo.syms ls.loop_order.bestorder
     best_order = copyto!(ls.loop_order.bestorder, lo.syms)
     best_unrolled = best_tiled = best_vec = first(best_order) # filler
     new_order, state = iterate(lo) # right now, new_order === best_order
@@ -651,7 +650,8 @@ function choose_tile(ls::LoopSet)
     end
 end
 # Last in order is the inner most loop
-function choose_order(ls::LoopSet)
+function choose_order_cost(ls::LoopSet)
+    resize!(ls.loop_order, length(ls.loopsymbols))
     if num_loops(ls) > 1
         torder, tunroll, ttile, tvec, tU, tT, tc = choose_tile(ls)
     else
@@ -664,6 +664,10 @@ function choose_order(ls::LoopSet)
     else
         return uorder, first(uorder), Symbol("##undefined##"), uvec, determine_unroll_factor(ls, uorder, first(uorder), uvec), -1, uc
     end
+end
+function choose_order(ls::LoopSet)
+    order, unroll, tile, vec, U, T, c = choose_order_cost(ls)
+    order, unroll, tile, vec, U, T
 end
 
 function register_pressure(ls::LoopSet, U, T)
