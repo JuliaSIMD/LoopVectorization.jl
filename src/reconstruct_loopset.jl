@@ -169,7 +169,7 @@ function process_metadata!(ls::LoopSet, AM, num_arrays::Int)
     for (i,si) ∈ enumerate(AM[3].parameters)
         sii = si::Int
         s = gensym(:symlicm)
-        push!(ls.preamble_symsym, (si, s))
+        push!(ls.preamble_symsym, (opoffsets[sii] + 1, s))
         pushpreamble!(ls, Expr(:(=), s, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), Expr(:ref, :vargs, num_arrays + i))))
     end
     expandbyoffset!(ls.preamble_symint, AM[4].parameters, opoffsets)
@@ -343,6 +343,7 @@ end
 # elbytes(::VectorizationBase.AbstractPointer{T}) where {T} = sizeof(T)::Int
 typeeltype(::Type{P}) where {T,P<:VectorizationBase.AbstractPointer{T}} = T
 typeeltype(::Type{<:AbstractRange{T}}) where {T} = T
+# typeeltype(::Any) = Int8
 
 function add_array_symbols!(ls::LoopSet, arraysymbolinds::Vector{Symbol}, offset::Int)
     for (i,as) ∈ enumerate(arraysymbolinds)

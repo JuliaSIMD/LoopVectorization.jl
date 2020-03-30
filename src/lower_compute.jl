@@ -28,7 +28,7 @@ function lower_compute!(
     end
     parentsunrolled = isunrolled_sym.(parents_op, unrolled, tiled)
     if instr.instr === :identity && name(first(parents_op)) === var && isone(length(parents_op))
-        if (opunrolled == first(parentsunrolled)) && ((!isnothing(suffix)) == first(parentstiled))
+        if (opunrolled == first(parentsunrolled)) && ((!isnothing(suffix)) == parentstiled[1])
             return
         end
     end
@@ -58,6 +58,7 @@ function lower_compute!(
                 for u ∈ 0:U-1
                     push!(q.args, Expr(:(=), Symbol(newparentname, u), Symbol(parentname, u)))
                 end
+                @show parentop
                 reduce_expr!(q, newparentname, Instruction(reduction_to_single_vector(instruction(newparentop))), U)
                 push!(q.args, Expr(:(=), newparentname, Symbol(newparentname, 0)))
             end

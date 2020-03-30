@@ -245,6 +245,19 @@ function tile_cost(X, U, T, UL, TL)
     # X[1]*Tfactor*Ufactor + X[4] + X[2] * Tfactor + X[3] * Ufactor
     X[1] + X[4] + X[2] * Tfactor + X[3] * Ufactor
 end
+# function itertilesize(X, UL, TL)
+#     cb = Inf
+#     Ub = 1; Tb = 1
+#     for U ∈ 1:4, T ∈ 1:4
+#         c = tile_cost(X, U, T, UL, TL)
+#         @show U, T, c
+#         if cb > c
+#             cb = c
+#             Ub = U; Tb = T
+#         end
+#     end
+#     Ub, Tb, cb
+# end
 function solve_tilesize(X, R, UL, TL)
     # @inbounds any(iszero, (R[1],R[2],R[3])) && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
     first(iszero(R)) && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
@@ -253,14 +266,17 @@ function solve_tilesize(X, R, UL, TL)
     # first solving for U via quadratic formula
     # X is vector of costs, and R is of register pressures
     RR = REGISTER_COUNT - R[3] - R[4] # RR ≡ RemainingRegisters
+    R[1] + R[2] > 0.5RR && return 1,1, tile_cost(X, 1, 1, UL, TL)
     a = (R[1])^2*X[2] - (R[2])^2*R[1]*X[3]/RR
     b = 2*R[1]*R[2]*X[3]
     c = -RR*R[1]*X[3]
-    Ufloat = (sqrt(b^2 - 4a*c) - b) / (2a)
-    Tfloat = (RR - Ufloat*R[2])/(Ufloat*R[1])
-    # @show Ufloat, Tfloat
+    discriminant = b^2 - 4a*c
+    discriminant < 0 && return -1,-1,Inf
+    Ufloat = (sqrt(discriminant) - b) / (2a)
+    Tfloat = (RR - max(1.0,Ufloat)*R[2])/(max(1.0,Ufloat)*R[1])
     if !(isfinite(Tfloat) && isfinite(Ufloat))
         return 4, 4, tile_cost(X, 4, 4, UL, TL)
+        # return itertilesize(X, UL, TL)
     end
     Ulow = max(1, floor(Int, Ufloat)) # must be at least 1
     Tlow = max(1, floor(Int, Tfloat)) # must be at least 1

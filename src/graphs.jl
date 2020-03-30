@@ -469,7 +469,7 @@ function add_operation!(
     elseif RHS.head === :if
         add_if!(ls, LHS, RHS, elementbytes, position)
     else
-        throw("Expression not recognized:\n$x")
+        throw("Expression not recognized:\n$RHS")
     end
 end
 add_operation!(ls::LoopSet, RHS::Expr, elementbytes::Int, position::Int) = add_operation!(ls, gensym(:LHS), RHS, elementbytes, position)

@@ -32,9 +32,9 @@ deps = ["Base64"]
 uuid = "d6f4376e-aef5-505a-96c1-9c027394607a"
 
 [[OffsetArrays]]
-git-tree-sha1 = "6a35d9446b40ae5004cd7bd0f1ae3505528c7fd6"
+git-tree-sha1 = "930db8ef90483570107f2396b1ffc6680f08e8b7"
 uuid = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
-version = "1.0.3"
+version = "1.0.4"
 
 [[Random]]
 deps = ["Serialization"]
@@ -42,9 +42,9 @@ uuid = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 
 [[SIMDPirates]]
 deps = ["VectorizationBase"]
-git-tree-sha1 = "8f89aa38f5e4e89f2a474ffdc850fc21d6ab9ed4"
+git-tree-sha1 = "53c43af0172c24b0783bd93650bd8b78afb3e57b"
 uuid = "21efa798-c60a-11e8-04d3-e1a92915a26a"
-version = "0.7.4"
+version = "0.7.5"
 
 [[SLEEFPirates]]
 deps = ["Libdl", "SIMDPirates", "VectorizationBase"]
