@@ -150,7 +150,7 @@ using Test
     for T ∈ (Float32, Float64, Int32, Int64)
         @show T, @__LINE__
         TC = sizeof(T) == 4 ? Float32 : Float64
-        R = T <: Integer ? (T(1):T(1000)) : T
+        R = T <: Integer ? (T(-1000):T(1000)) : T
 
         A = rand(R, M, K);
         x = rand(R, K);
@@ -163,6 +163,13 @@ using Test
         fill!(y2, -999.9);
         mygemvavx_range!(y2, A, x)
         @test y1 ≈ y2
+
+        Abit = A .> 0.5
+        fill!(y2, -999.9); mygemv_avx!(y2, Abit, x)
+        @test y2 ≈ Abit * x
+        xbit = x .> 0.5
+        fill!(y2, -999.9); mygemv_avx!(y2, A, xbit)
+        @test y2 ≈ A * xbit
 
         B = rand(R, N, N);
         G1 = Matrix{TC}(undef, N, 1);

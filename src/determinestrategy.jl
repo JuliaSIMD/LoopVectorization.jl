@@ -272,13 +272,13 @@ function solve_tilesize(X, R, UL, TL)
     c = -RR*R[1]*X[3]
     discriminant = b^2 - 4a*c
     discriminant < 0 && return -1,-1,Inf
-    Ufloat = (sqrt(discriminant) - b) / (2a)
-    Tfloat = (RR - max(1.0,Ufloat)*R[2])/(max(1.0,Ufloat)*R[1])
+    Ufloat = max(1.0, (sqrt(discriminant) - b) / (2a)) # must be at least 1
+    Tfloat = (RR - Ufloat*R[2])/(Ufloat*R[1])
     if !(isfinite(Tfloat) && isfinite(Ufloat))
         return 4, 4, tile_cost(X, 4, 4, UL, TL)
         # return itertilesize(X, UL, TL)
     end
-    Ulow = max(1, floor(Int, Ufloat)) # must be at least 1
+    Ulow = floor(Int, Ufloat)
     Tlow = max(1, floor(Int, Tfloat)) # must be at least 1
     Uhigh = Ulow + 1 #ceil(Int, Ufloat)
     Thigh = Tlow + 1 #ceil(Int, Tfloat)

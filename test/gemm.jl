@@ -626,6 +626,12 @@
             @test C ≈ C2
             fill!(C, 9999.999); gemm_accurate!(C, At', Bt');
             @test C ≈ C2
+            Abit = A .> 0.5
+            fill!(C, 9999.999); AmulBavx1!(C, Abit, B)
+            @test C ≈ Abit * B
+            Bbit = B .> 0.5
+            fill!(C, 9999.999); AmulBavx1!(C, A, Bbit)
+            @test C ≈ A * Bbit
         end
         @time @testset "_avx $T dynamic gemm" begin
             AmulB_avx1!(C, A, B)
