@@ -115,7 +115,7 @@ end
 
 function add_reduction_update_parent!(
     vparents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet,
-    parent::Operation, instr::Symbol, directdependency::Bool, elementbytes::Int
+    parent::Operation, instr::Symbol, reduction_ind::Int, elementbytes::Int
 )
     var = name(parent)
     isouterreduction = parent.instruction === LOOPCONSTANT
@@ -153,12 +153,10 @@ function add_reduction_update_parent!(
     end
     combineddeps = copy(deps); mergesetv!(combineddeps, reduceddeps)
     # directdependency && pushparent!(vparents, deps, reduceddeps, reductinit)#parent) # deps and reduced deps will not be disjoint
-    if directdependency
+    if reduction_ind > 0 # if is directdependency
+        insert!(vparents, reduction_ind, reductinit)
         if instr ∈ (:-, :vsub!, :vsub, :/, :vfdiv!, :vfidiv!)
-            pushfirst!(vparents, reductinit)
             update_deps!(deps, reduceddeps, reductinit)#parent) # deps and reduced deps will not be disjoint
-        else
-            push!(vparents, reductinit)
         end
     # elseif !isouterreduction
         # substitute_op_in_parents!(vparents, reductinit, parent)
@@ -192,16 +190,16 @@ function add_compute!(
     parents = Operation[]
     deps = Symbol[]
     reduceddeps = Symbol[]
-    reduction = false
-    for arg ∈ args
+    reduction_ind = 0
+    for (ind,arg) ∈ enumerate(args)
         if var === arg
-            reduction = true
+            reduction_ind = ind
             add_reduction!(parents, deps, reduceddeps, ls, arg, elementbytes)
         elseif arg isa Expr
             isref, argref = tryrefconvert(ls, arg, elementbytes)
             if isref
                 if mpref == argref
-                    reduction = true
+                    reduction_ind = ind
                     add_load!(ls, var, argref, elementbytes)
                 else
                     pushparent!(parents, deps, reduceddeps, add_load!(ls, gensym(:tempload), argref, elementbytes))
@@ -216,6 +214,7 @@ function add_compute!(
             add_parent!(parents, deps, reduceddeps, ls, arg, elementbytes, position)
         end
     end
+    reduction = reduction_ind > 0
     if iszero(length(deps)) && reduction
         loopnestview = view(ls.loopsymbols, 1:position) 
         append!(deps, loopnestview)
@@ -231,11 +230,11 @@ function add_compute!(
         parent = getop(ls, var, elementbytes)
         setdiffv!(reduceddeps, deps, loopdependencies(parent))
         if length(reduceddeps) == 0
-            push!(parents, parent)
+            insert!(parents, reduction_ind, parent)
             op = Operation(length(operations(ls)), var, elementbytes, instruction(ls,instr), compute, deps, reduceddeps, parents)
             pushop!(ls, op, var)
         else
-            add_reduction_update_parent!(parents, deps, reduceddeps, ls, parent, instr, reduction, elementbytes)
+            add_reduction_update_parent!(parents, deps, reduceddeps, ls, parent, instr, reduction_ind, elementbytes)
         end
     else
         op = Operation(length(operations(ls)), var, elementbytes, instruction(ls,instr), compute, deps, reduceddeps, parents)
