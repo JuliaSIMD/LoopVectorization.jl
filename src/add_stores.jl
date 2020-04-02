@@ -35,16 +35,18 @@ function add_store!(
     pvar = name(parent)
     id = length(ls.operations)
     # try to cse store, by replacing the previous one
-    ref = mpref.mref.ref
+    mref = mpref.mref
     add_pvar = true
     for opp ∈ operations(ls)
         isstore(opp) || continue
-        if ref == opp.ref.ref
+        if mref == opp.ref
             id = opp.identifier
+            add_pvar = false
             break
         end
-        add_pvar &= (name(first(parents(opp))) != pvar)
+        # add_pvar &= (name(first(parents(opp))) != pvar)
     end
+    # @show add_pvar
     pushfirst!(vparents, parent)
     update_deps!(ldref, reduceddeps, parent)
     op = Operation( id, name(mpref), elementbytes, :setindex!, memstore, mpref )

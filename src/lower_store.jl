@@ -1,5 +1,5 @@
 using VectorizationBase: vnoaliasstore!
-# const STOREOP = :vnoaliasstore!
+
 
 @inline vstoreadditivereduce!(args...) = vnoaliasstore!(args...)
 @inline vstoremultiplicativevereduce!(args...) = vnoaliasstore!(args...)
@@ -21,8 +21,10 @@ function storeinstr(op::Operation)
     if instruction(opp).instr === :identity
         opp = first(parents(opp))
     end
+    defaultstoreop = :vnoaliasstore!
+    # defaultstoreop = :vstore!
     instr = if iszero(length(reduceddependencies(opp)))
-        :vnoaliasstore!
+        defaultstoreop
     else
         instr_class = reduction_instruction_class(instruction(opp))
         if instr_class === ADDITIVE_IN_REDUCTIONS
@@ -30,7 +32,7 @@ function storeinstr(op::Operation)
         elseif instr_class === MULTIPLICATIVE_IN_REDUCTIONS
             :vstoremultiplicativevereduce!
         else #FIXME
-            :vnoaliasstore!
+            defaultstoreop
         end
     end
     lv(instr)

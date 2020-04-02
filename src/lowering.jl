@@ -191,11 +191,11 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
             else
                 Expr(:call, :-, loop.stopsym, Expr(:call, lv(:valmul), ls.W, UFt))
             end
-            Expr(:call, :>, loopsym, itercount)
+            Expr(:call, lv(:scalar_greater), loopsym, itercount)
         elseif loop.stopexact
-            Expr(:call, :>, loopsym, loop.stophint - UFt)
+            Expr(:call, lv(:scalar_greater), loopsym, loop.stophint - UFt)
         else
-            Expr(:call, :>, loopsym, Expr(:call, :-, loop.stopsym, UFt))
+            Expr(:call, lv(:scalar_greater), loopsym, Expr(:call, :-, loop.stopsym, UFt))
         end
         ust = nisunrolled ? UnrollSpecification(us, UFt, T) : UnrollSpecification(us, U, UFt)
         remblocknew = Expr(:elseif, comparison, lower_block(ls, ust, n, remmask, UFt))
@@ -244,15 +244,15 @@ function add_upper_outer_reductions(ls::LoopSet, loopq::Expr, Ulow::Int, Uhigh::
     push!(ifq.args, loopq)
     reduce_range!(ifq, ls, Ulow, Uhigh)
     comparison = if isstaticloop(unrolledloop)
-        Expr(:call, :<, length(unrolledloop), Expr(:call, lv(:valmul), ls.W, Uhigh))
+        Expr(:call, lv(:scalar_less), length(unrolledloop), Expr(:call, lv(:valmul), ls.W, Uhigh))
     elseif unrolledloop.starthint == 1
-        Expr(:call, :<, unrolledloop.stopsym, Expr(:call, lv(:valmul), ls.W, Uhigh))
+        Expr(:call, lv(:scalar_less), unrolledloop.stopsym, Expr(:call, lv(:valmul), ls.W, Uhigh))
     elseif unrolledloop.startexact
-        Expr(:call, :<, Expr(:call, :-, unrolledloop.stopsym, unrolledloop.starthint-1), Expr(:call, lv(:valmul), ls.W, Uhigh))
+        Expr(:call, lv(:scalar_less), Expr(:call, :-, unrolledloop.stopsym, unrolledloop.starthint-1), Expr(:call, lv(:valmul), ls.W, Uhigh))
     elseif unrolledloop.stopexact
-        Expr(:call, :<, Expr(:call, :-, unrolledloop.stophint+1, unrolledloop.sartsym), Expr(:call, lv(:valmul), ls.W, Uhigh))
+        Expr(:call, lv(:scalar_less), Expr(:call, :-, unrolledloop.stophint+1, unrolledloop.sartsym), Expr(:call, lv(:valmul), ls.W, Uhigh))
     else# both are given by symbols
-        Expr(:call, :<, Expr(:call, :-, unrolledloop.stopsym, Expr(:call,:-,unrolledloop.startsym)), Expr(:call, lv(:valmul), ls.W, Uhigh))
+        Expr(:call, lv(:scalar_less), Expr(:call, :-, unrolledloop.stopsym, Expr(:call,:-,unrolledloop.startsym)), Expr(:call, lv(:valmul), ls.W, Uhigh))
     end
     ncomparison = Expr(:call, :!, comparison)
     Expr(:if, ncomparison, ifq)
@@ -307,9 +307,9 @@ function determine_width(ls::LoopSet, vectorized::Symbol)
 end
 function init_remblock(unrolledloop::Loop, unrolled::Symbol = unrolledloop.itersymbol)
     condition = if unrolledloop.stopexact
-        Expr(:call, :(>), unrolled, unrolledloop.stophint)
+        Expr(:call, lv(:scalar_greater), unrolled, unrolledloop.stophint)
     else
-        Expr(:call, :(>), unrolled, unrolledloop.stopsym)
+        Expr(:call, lv(:scalar_greater), unrolled, unrolledloop.stopsym)
     end
     Expr(:if, condition, nothing)
 end

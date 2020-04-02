@@ -66,17 +66,17 @@ function vec_looprange(loop::Loop, W::Symbol, UF::Int, mangledname::Symbol)
         Expr(:call, lv(:valsub), W, 2)
     end
     if loop.stopexact # split for type stability
-        Expr(:call, :<, mangledname, Expr(:call, :-, loop.stophint, incr))
+        Expr(:call, lv(:scalar_less), mangledname, Expr(:call, :-, loop.stophint, incr))
     else
-        Expr(:call, :<, mangledname, Expr(:call, :-, loop.stopsym, incr))
+        Expr(:call, lv(:scalar_less), mangledname, Expr(:call, :-, loop.stopsym, incr))
     end
 end
 function looprange(loop::Loop, incr::Int, mangledname::Symbol)
     incr = 2 - incr
     if iszero(incr)
-        Expr(:call, :<, mangledname, loop.stopexact ? loop.stophint : loop.stopsym)
+        Expr(:call, lv(:scalar_less), mangledname, loop.stopexact ? loop.stophint : loop.stopsym)
     else
-        Expr(:call, :<, mangledname, loop.stopexact ? loop.stophint + incr : Expr(:call, :+, loop.stopsym, incr))
+        Expr(:call, lv(:scalar_less), mangledname, loop.stopexact ? loop.stophint + incr : Expr(:call, :+, loop.stopsym, incr))
     end
 end
 function terminatecondition(
