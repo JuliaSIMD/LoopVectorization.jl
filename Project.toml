@@ -13,7 +13,7 @@ VectorizationBase = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
 
 [compat]
 OffsetArrays = "1"
-SIMDPirates = "0.7.7"
+SIMDPirates = "0.7.8"
 SLEEFPirates = "0.4.4"
 UnPack = "0"
 VectorizationBase = "0.10"

@@ -20,6 +20,18 @@
         end
         s
     end
+    function dot3v2avx(x, A, y)
+        M, N = size(A)
+        s = zero(promote_type(eltype(x), eltype(A), eltype(y)))
+        @avx for n ∈ 1:N
+            t = zero(s)
+            for m ∈ 1:M
+                t += x[m] * A[m,n]
+            end
+            s += t * y[n]
+        end
+        s
+    end
     function dot3avx24(x, A, y)
         M, N = size(A)
         s = zero(promote_type(eltype(x), eltype(A), eltype(y)))
@@ -450,6 +462,30 @@
             c[i] = b[i] * a[i]
         end
     end
+    function rshift_i!(out)
+        n = length(out)
+        @inbounds for i in 1:n
+            out[i] = out[i] << i
+        end
+    end
+    function rshift_i_avx!(out)
+        n = length(out)
+        @avx for i in 1:n
+            out[i] = out[i] << i
+        end
+    end
+    function one_plus_i!(out)
+        n = length(out)
+        @inbounds for i in 1:n
+            out[i] = 1 + i
+        end
+    end
+    function one_plus_i_avx!(out)
+        n = length(out)
+        @avx for i in 1:n
+            out[i] = 1 + i
+        end
+    end
     
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
@@ -481,6 +517,7 @@
         x = rand(T, M); A = rand(T, M, N); y = rand(T, N);
         d3 = dot3(x, A, y)
         @test dot3avx(x, A, y) ≈ d3
+        @test dot3v2avx(x, A, y) ≈ d3
         @test dot3_avx(x, A, y) ≈ d3
 
         maxdeg = 20; nbasis = 1_000; dim = 15;
@@ -599,5 +636,17 @@
         s1, p1 = sumprod_avx(r)
         @test s ≈ s1
         @test p ≈ p1
+    end
+    n = 511
+    for T ∈ [Int16, Int32, Int64]
+
+        out1 = rand(T(1):T(1_000), n);
+        out2 = copy(out1);
+        rshift_i!(out1)
+        rshift_i_avx!(out2)
+        @test out1 == out2
+        one_plus_i!(out1)
+        one_plus_i_avx!(out2)
+        @test out1 == out2
     end
 end
