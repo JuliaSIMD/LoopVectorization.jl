@@ -170,6 +170,82 @@
             end)
     lsfeq = LoopVectorization.LoopSet(feq);
     # lsfeq.operations
+
+    function vpow0!(y, x)
+        @avx for i ∈ eachindex(y, x)
+            y[i] = x[i] ^ 0
+        end; y
+    end
+    function vpown1!(y, x)
+        @avx for i ∈ eachindex(y, x)
+            y[i] = x[i] ^ -1
+        end; y
+    end
+    function vpow1!(y, x)
+        @avx for i ∈ eachindex(y, x)
+            y[i] = x[i] ^ 1
+        end; y
+    end
+    function vpown2!(y, x)
+        @avx for i ∈ eachindex(y, x)
+            y[i] = x[i] ^ -2
+        end; y
+    end
+    function vpow2!(y, x)
+        @avx for i ∈ eachindex(y, x)
+            y[i] = x[i] ^ 2
+        end; y
+    end
+    function vpown3!(y, x)
+        @avx for i ∈ eachindex(y, x)
+            y[i] = x[i] ^ -3
+        end; y
+    end
+    function vpow3!(y, x)
+        @avx for i ∈ eachindex(y, x)
+            y[i] = x[i] ^ 3
+        end; y
+    end
+    function vpown4!(y, x)
+        @avx for i ∈ eachindex(y, x)
+            y[i] = x[i] ^ -4
+        end; y
+    end
+    function vpow4!(y, x)
+        @avx for i ∈ eachindex(y, x)
+            y[i] = x[i] ^ 4
+        end; y
+    end
+    function vpown5!(y, x)
+        @avx for i ∈ eachindex(y, x)
+            y[i] = x[i] ^ -5
+        end; y
+    end
+    q = :(for i ∈ eachindex(y, x)
+            y[i] = x[i] ^ -5
+          end);
+    ls = LoopVectorization.LoopSet(q);
+    
+    function vpow5!(y, x)
+        @avx for i ∈ eachindex(y, x)
+            y[i] = x[i] ^ 5
+        end; y
+    end
+    function vpowf!(y, x)
+        @avx for i ∈ eachindex(y, x)
+            y[i] = x[i] ^ 2.3
+        end; y
+    end
+    function vpowf!(y, x, p::Number)
+        @avx for i ∈ eachindex(y, x)
+            y[i] = x[i] ^ p
+        end; y
+    end
+    function vpowf!(y, x, p::AbstractArray)
+        @avx for i ∈ eachindex(y, x)
+            y[i] = x[i] ^ p[i]
+        end; y
+    end
     
     
     for T ∈ (Float32, Float64)
@@ -193,7 +269,7 @@
         @test ld ≈ trianglelogdetavx(A)
         @test ld ≈ trianglelogdet_avx(A)
 
-        x = rand(T, 1000);
+        x = rand(T, 999);
         r1 = similar(x);
         r2 = similar(x);
         lse = logsumexp!(r1, x);
@@ -218,5 +294,21 @@
         @test A1 ≈ A2
         fill!(A2, 0); offset_exp_avx!(A2, B)
         @test A1 ≈ A2
+
+        @test all(isone, vpow0!(r1, x))
+        @test vpown1!(r1, x) ≈ map!(inv, r2, x)
+        @test vpow1!(r1, x) == x
+        @test vpown2!(r1, x) ≈ map!(abs2 ∘ inv, r2, x)
+        @test vpow2!(r1, x) ≈ map!(abs2, r2, x)
+        @test vpown3!(r1, x) ≈ (r2 .= x .^ -3)
+        @test vpow3!(r1, x) ≈ (r2 .= x .^ 3)
+        @test vpown4!(r1, x) ≈ (r2 .= x .^ -4)
+        @test vpow4!(r1, x) ≈ (r2 .= x .^ 4)
+        @test vpown5!(r1, x) ≈ (r2 .= x .^ -5)
+        @test vpow5!(r1, x) ≈ (r2 .= x .^ 5)
+        @test vpowf!(r1, x) ≈ (r2 .= x .^ 2.3)
+        @test vpowf!(r1, x, -1.7) ≈ (r2 .= x .^ -1.7)
+        p = randn(length(x));
+        @test vpowf!(r1, x, x) ≈ (r2 .= x .^ x)
     end
 end

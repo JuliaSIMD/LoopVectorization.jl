@@ -244,7 +244,7 @@ end
 
 includesarray(ls::LoopSet, array::Symbol) = array ∈ ls.includedarrays
 
-function LoopSet(mod::Symbol)# = :LoopVectorization)
+function LoopSet(mod::Symbol, W = Symbol("##Wvecwidth##"), T = Symbol("Tloopeltype"))# = :LoopVectorization)
     LoopSet(
         Symbol[], [0], Loop[],
         Dict{Symbol,Operation}(),
@@ -261,7 +261,7 @@ function LoopSet(mod::Symbol)# = :LoopVectorization)
         Matrix{Float64}(undef, 4, 2),
         Matrix{Float64}(undef, 4, 2),
         Bool[], Bool[],
-        gensym(:W), gensym(:T), mod
+        W, T, mod
     )
 end
 

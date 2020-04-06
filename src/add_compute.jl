@@ -180,6 +180,8 @@ function add_reduction_update_parent!(
     pushop!(ls, child, name(parent))
     opout
 end
+
+
 function add_compute!(
     ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int, position::Int,
     mpref::Union{Nothing,ArrayReferenceMetaPosition} = nothing
@@ -187,6 +189,7 @@ function add_compute!(
     @assert ex.head === :call
     instr = instruction(first(ex.args))::Symbol
     args = @view(ex.args[2:end])
+    (instr === :(^) && length(args) == 2 && (args[2] isa Number)) && return add_pow!(ls, var, args[1], args[2], elementbytes, position)
     parents = Operation[]
     deps = Symbol[]
     reduceddeps = Symbol[]
@@ -215,12 +218,11 @@ function add_compute!(
         end
     end
     reduction = reduction_ind > 0
+    loopnestview = view(ls.loopsymbols, 1:position)
     if iszero(length(deps)) && reduction
-        loopnestview = view(ls.loopsymbols, 1:position) 
         append!(deps, loopnestview)
         append!(reduceddeps, loopnestview)
     else
-        loopnestview = view(ls.loopsymbols, 1:position) 
         newloopdeps = Symbol[]; newreduceddeps = Symbol[];
         setdiffv!(newloopdeps, newreduceddeps, deps, loopnestview)
         mergesetv!(newreduceddeps, reduceddeps)
@@ -250,5 +252,62 @@ function add_compute!(
     foreach(parent -> update_deps!(deps, reduceddeps, parent), parents)
     op = Operation(length(operations(ls)), LHS, elementbytes, instr, compute, deps, reduceddeps, parents)
     pushop!(ls, op, LHS)
+end
+
+# adds x ^ (p::Real)
+function add_pow!(
+    ls::LoopSet, var::Symbol, x, p::Real, elementbytes::Int, position::Int
+)
+    xop = if x isa Expr
+        add_operation!(ls, gensym(:xpow), x, elementbytes, position)
+    elseif x isa Symbol
+        xo = get(ls.opdict, x, nothing)
+        if isnothing(xo)
+            pushpreamble!(ls, Expr(:(=), var, Expr(:call, :(^), x, p)))
+            return add_constant!(ls, var, elementbytes)
+        end
+        xo
+    elseif x isa Number
+        pushpreamble!(ls, Expr(:(=), var, x ^ p))
+        return add_constant!(ls, var, elementbytes)
+    end
+    pint = round(Int, p)
+    if p != pint
+        pop = add_constant!(ls, p, elementbytes)
+        return add_compute!(ls, var, :^, [xop, pop], elementbytes)
+    end
+    if pint == -1
+        return add_compute!(ls, var, :vinv, [xop], elementbytes)
+    elseif pint < 0
+        xop = add_compute!(ls, gensym(:inverse), :vinv, [xop], elementbytes)
+        pint = - pint
+    end
+    if pint == 0
+        op = Operation(length(operations(ls)), var, elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS)
+        push!(ls.preamble_ones, (identifier(op),IntOrFloat))
+        return pushop!(ls, op)
+    elseif pint == 1
+        return add_compute!(ls, var, :identity, [xop], elementbytes)
+    elseif pint == 2
+        return add_compute!(ls, var, :vabs2, [xop], elementbytes)
+    end
+
+    # Implementation from https://github.com/JuliaLang/julia/blob/a965580ba7fd0e8314001521df254e30d686afbf/base/intfuncs.jl#L216
+    t = trailing_zeros(pint) + 1
+    pint >>= t
+    while (t -= 1) > 0
+        varname = (iszero(pint) && isone(t)) ? var : gensym(:pbs)
+        xop = add_compute!(ls, varname, :vabs2, [xop], elementbytes)
+    end
+    yop = xop
+    while pint > 0
+        t = trailing_zeros(pint) + 1
+        pint >>= t
+        while (t -= 1) >= 0
+            xop = add_compute!(ls, gensym(:pbs), :vabs2, [xop], elementbytes)
+        end
+        yop = add_compute!(ls, iszero(pint) ? var : gensym(:pbs), :vmul, [xop, yop], elementbytes)
+    end
+    yop
 end
 

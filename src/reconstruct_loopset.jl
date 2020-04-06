@@ -413,7 +413,10 @@ function _avx_loopset(OPSsv, ARFsv, AMsv, LPSYMsv, LBsv, vargs)
     )
 end
 @generated function _avx_!(::Val{UT}, ::Type{OPS}, ::Type{ARF}, ::Type{AM}, ::Type{LPSYM}, lb::LB, vargs...) where {UT, OPS, ARF, AM, LPSYM, LB}
+    1 + 1
     ls = _avx_loopset(OPS.parameters, ARF.parameters, AM.parameters, LPSYM.parameters, LB.parameters, vargs)
     avx_body(ls, UT)
 end
 
+
+    

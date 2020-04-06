@@ -70,16 +70,17 @@ function lower_and_split_loops(ls::LoopSet)
         remaining_ops[1:ind-1] .= @view(split_candidates[1:ind-1]); remaining_ops[ind:end] .= @view(split_candidates[ind+1:end])
         ls_2 = split_loopset(ls, remaining_ops)
         order_2, unrolled_2, tiled_2, vectorized_2, U_2, T_2, cost_2 = choose_order_cost(ls_2)
+        # U_1 = T_1 = U_2 = T_2 = 2
         if cost_1 + cost_2 < cost_fused
             ls_2_lowered = if length(remaining_ops) > 1
                 lower_and_split_loops(ls_2)
             else
-                lower(ls_2, unrolled_2, tiled_2, vectorized_2, U_2, T_2)
+                lower(ls_2, order_2, unrolled_2, tiled_2, vectorized_2, U_2, T_2)
             end
             return Expr(
                 :block,
                 ls.preamble,
-                lower(ls_1, unrolled_1, tiled_1, vectorized_1, U_1, T_1),
+                lower(ls_1, order_1, unrolled_1, tiled_1, vectorized_1, U_1, T_1),
                 ls_2_lowered
             )
         end

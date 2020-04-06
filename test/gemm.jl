@@ -521,6 +521,13 @@
         end
     end
 
+    function twogemms!(Ab, Bb, Cb, A, B)
+        M, N = size(C); K = size(B,1)
+        @avx for m in 1:M, k in 1:K, n in 1:N
+            Ab[m,k] += Cb[m,n] * B[k,n]
+            Bb[k,n] += A[m,k] * Cb[m,n]
+        end
+    end
     # M = 77;
     # A = rand(M,M); B = rand(M,M); C = similar(A);
     # mulCAtB_2x2block_avx!(C,A,B)
@@ -632,6 +639,10 @@
             Bbit = B .> 0.5
             fill!(C, 9999.999); AmulBavx1!(C, A, Bbit)
             @test C ≈ A * Bbit
+            Ab = zero(A); Bb = zero(B);
+            twogemms!(Ab, Bb, C, A, B)
+            @test Ab ≈ C * B'
+            @test Bb ≈ A' * C
         end
         @time @testset "_avx $T dynamic gemm" begin
             AmulB_avx1!(C, A, B)
