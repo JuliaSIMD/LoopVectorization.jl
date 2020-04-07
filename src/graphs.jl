@@ -244,7 +244,7 @@ end
 
 includesarray(ls::LoopSet, array::Symbol) = array ∈ ls.includedarrays
 
-function LoopSet(mod::Symbol, W = Symbol("##Wvecwidth##"), T = Symbol("Tloopeltype"))# = :LoopVectorization)
+function LoopSet(mod::Symbol, W = Symbol("##Wvecwidth##"), T = Symbol("##Tloopeltype##"))# = :LoopVectorization)
     LoopSet(
         Symbol[], [0], Loop[],
         Dict{Symbol,Operation}(),
@@ -332,6 +332,7 @@ end
 function add_block!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
     for x ∈ ex.args
         x isa Expr || continue # be that general?
+        x.head === :inbounds && continue
         push!(ls, x, elementbytes, position)
     end
 end
@@ -546,6 +547,18 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
         add_andblock!(ls, ex, elementbytes, position)
     elseif ex.head === :||
         add_orblock!(ls, ex, elementbytes, position)
+    elseif ex.head === :local # Handle locals introduced by `@inbounds`; using `local` with `@avx` is not recomended (nor is `@inbounds`; which applies automatically regardless)
+        @assert length(ex.args) == 1 # TODO replace assert + first with "only" once support for Julia < 1.4 is dropped
+        localbody = first(ex.args)
+        @assert localbody.head === :(=)
+        @assert length(localbody.args) == 2
+        LHS = (localbody.args[1])::Symbol
+        RHS = push!(ls, (localbody.args[2]), elementbytes, position)
+        if isstore(RHS)
+            RHS
+        else
+            add_compute!(ls, LHS, :identity, [RHS], elementbytes)
+        end
     else
         throw("Don't know how to handle expression:\n$ex")
     end

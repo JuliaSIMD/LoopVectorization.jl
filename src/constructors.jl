@@ -7,7 +7,11 @@ function Base.copyto!(ls::LoopSet, q::Expr)
 end
 
 function add_ci_call!(q::Expr, f, args, syms, i, mod = nothing)
-    call = Expr(:call, f)
+    call = if f isa Core.SSAValue
+        Expr(:call, syms[f.id])
+    else
+        Expr(:call, f)
+    end
     for arg ∈ @view(args[2:end])
         if arg isa Core.SSAValue
             push!(call.args, syms[arg.id])

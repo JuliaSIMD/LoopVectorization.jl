@@ -163,13 +163,13 @@
 
         return log1p(s-1) + u
     end
-    feq = :(for i = 1:n
-            tmp = exp(x[i] - u)
-            r[i] = tmp
-            s += tmp
-            end)
-    lsfeq = LoopVectorization.LoopSet(feq);
-    # lsfeq.operations
+    # feq = :(for i = 1:n
+    #         tmp = exp(x[i] - u)
+    #         r[i] = tmp
+    #         s += tmp
+    #         end)
+    # lsfeq = LoopVectorization.LoopSet(feq);
+    # # lsfeq.operations
 
     function vpow0!(y, x)
         @avx for i ∈ eachindex(y, x)
@@ -225,6 +225,10 @@
             y[i] = x[i] ^ -5
           end);
     ls = LoopVectorization.LoopSet(q);
+    q2 = :(for i ∈ eachindex(y, x)
+            y[i] = x[i] ^ 5
+          end);
+    ls2 = LoopVectorization.LoopSet(q2);
     
     function vpow5!(y, x)
         @avx for i ∈ eachindex(y, x)

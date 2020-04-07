@@ -170,6 +170,13 @@ function add_broadcast!(
     add_constant!(ls, bcname, elementbytes) # or replace elementbytes with sizeof(T) ? u
 end
 function add_broadcast!(
+    ls::LoopSet, ::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{Base.RefValue{T}}, elementbytes::Int
+) where {T}
+    refextract = gensym(bcname)
+    pushpreamble!(ls, Expr(:(=), refextract, Expr(:ref, bcname)))
+    add_constant!(ls, refextract, elementbytes) # or replace elementbytes with sizeof(T) ? u
+end
+function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
     ::Type{SubArray{T,N,A,S,B}}, elementbytes::Int
 ) where {T,N,N2,A<:AbstractArray{T,N2},B,N3,S <: Tuple{Int,Vararg{Any,N3}}}

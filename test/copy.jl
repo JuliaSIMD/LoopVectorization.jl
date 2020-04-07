@@ -37,7 +37,7 @@ using LoopVectorization, Test
     end
     function offset_copy_avx1!(A, B)
         @_avx for i=1:size(A,1), j=1:size(B,2)
-	    A[i,j+2] = B[i,j]
+	    @inbounds A[i,j+2] = B[i,j]
         end
     end
     function offset_copyavx2!(A, B)
@@ -64,7 +64,7 @@ using LoopVectorization, Test
     end
     function make23avx!(x)
         @avx for i ∈ eachindex(x)
-            x[i] = 23
+            @inbounds x[i] = 23
         end
     end
     function make23_avx!(x)
@@ -82,6 +82,7 @@ using LoopVectorization, Test
             x[i] = a
         end
     end
+    
 
     for T ∈ (Float32, Float64, Int32, Int64)
         @show T, @__LINE__
@@ -129,6 +130,11 @@ using LoopVectorization, Test
         myfillavx!(x, a);
         fill!(q2, a);
         @test x == q2
+        q2 .= 23;
+        fill!(q1, -99999); make23_avx!(q1);
+        @test q2 == q1
+        fill!(q1, -99999); make23avx!(q1);
+        @test q2 == q1
         if T <: Union{Float32,Float64}
             make2point3avx!(x)
             fill!(q2, 2.3)

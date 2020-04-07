@@ -521,11 +521,12 @@
         end
     end
 
-    function twogemms!(Ab, Bb, Cb, A, B)
+    function threegemms!(Ab, Bb, Cb, A, B, C)
         M, N = size(Cb); K = size(B,1)
         @avx for m in 1:M, k in 1:K, n in 1:N
-            Ab[m,k] += Cb[m,n] * B[k,n]
-            Bb[k,n] += A[m,k] * Cb[m,n]
+            Ab[m,k] += C[m,n] * B[k,n]
+            Bb[k,n] += A[m,k] * C[m,n]
+            Cb[m,n] += A[m,k] * B[k,n]
         end
     end
     # M = 77;
@@ -639,10 +640,11 @@
             Bbit = B .> 0.5
             fill!(C, 9999.999); AmulBavx1!(C, A, Bbit)
             @test C ≈ A * Bbit
-            Ab = zero(A); Bb = zero(B);
-            twogemms!(Ab, Bb, C, A, B)
+            Ab = zero(A); Bb = zero(B); Cb = zero(C);
+            threegemms!(Ab, Bb, Cb, A, B, C)
             @test Ab ≈ C * B'
             @test Bb ≈ A' * C
+            @test Cb ≈ A * B
         end
         @time @testset "_avx $T dynamic gemm" begin
             AmulB_avx1!(C, A, B)
