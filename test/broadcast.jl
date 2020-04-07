@@ -108,6 +108,9 @@
             D1 = C .^ 0.3;
             D2 = @avx C .^ 0.3;
             @test D1 ≈ D2
+            @. D1 = C ^ 2;
+            @avx @. D2 = C ^ 2;
+            @test D1 ≈ D2
         end
     end
 end
