@@ -66,7 +66,7 @@ function subset_vptr!(ls::LoopSet, vptr::Symbol, indnum::Int, ind, previndices, 
     subsetvptr
 end
 const DISCONTIGUOUS = Symbol("##DISCONTIGUOUSSUBARRAY##")
-function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementbytes::Int)
+function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementbytes::Int, var::Union{Nothing,Symbol} = nothing)
     vptrarray = vptr(array)
     add_vptr!(ls, array, vptrarray) # now, subset
     indices = Symbol[]
@@ -109,9 +109,9 @@ function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementby
     end
     # (length(parents) != 0 && first(indices) !== Symbol("##DISCONTIGUOUSSUBARRAY##")) && pushfirst!(indices, Symbol("##DISCONTIGUOUSSUBARRAY##"))
     mref = ArrayReferenceMeta(ArrayReference( array, indices ), loopedindex, vptrarray)
-    ArrayReferenceMetaPosition(mref, parents, loopdependencies, reduceddeps)
+    ArrayReferenceMetaPosition(mref, parents, loopdependencies, reduceddeps, isnothing(var) ? Symbol("") : var )
 end
-function tryrefconvert(ls::LoopSet, ex::Expr, elementbytes::Int)::Tuple{Bool,ArrayReferenceMetaPosition}
+function tryrefconvert(ls::LoopSet, ex::Expr, elementbytes::Int, var::Union{Nothing,Symbol} = nothing)::Tuple{Bool,ArrayReferenceMetaPosition}
     ya, yinds = if ex.head === :ref
         ref_from_ref(ex)
     elseif ex.head === :call
@@ -126,6 +126,6 @@ function tryrefconvert(ls::LoopSet, ex::Expr, elementbytes::Int)::Tuple{Bool,Arr
     else
         return false, NOTAREFERENCEMP
     end
-    true, array_reference_meta!(ls, ya, yinds, elementbytes)
+    true, array_reference_meta!(ls, ya, yinds, elementbytes, var)
 end
 

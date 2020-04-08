@@ -200,14 +200,15 @@ function isouterreduction(op::Operation)
     end
 end
 
-struct ArrayReferenceMetaPosition
+mutable struct ArrayReferenceMetaPosition
     mref::ArrayReferenceMeta
     parents::Vector{Operation}
     loopdependencies::Vector{Symbol}
     reduceddeps::Vector{Symbol}
+    varname::Symbol
 end
-function ArrayReferenceMetaPosition(parents::Vector{Operation}, ldref::Vector{Symbol}, reduceddeps::Vector{Symbol})
-    ArrayReferenceMetaPosition( NOTAREFERENCE, parents, ldref, reduceddeps )
+function ArrayReferenceMetaPosition(parents::Vector{Operation}, ldref::Vector{Symbol}, reduceddeps::Vector{Symbol}, varname::Symbol)
+    ArrayReferenceMetaPosition( NOTAREFERENCE, parents, ldref, reduceddeps, varname )
 end
 function Operation(id::Int, var::Symbol, elementbytes::Int, instr, optype::OperationType, mpref::ArrayReferenceMetaPosition)
     Operation( id, var, elementbytes, instr, optype, mpref.loopdependencies, mpref.reduceddeps, mpref.parents, mpref.mref )
@@ -215,7 +216,9 @@ end
 Base.:(==)(x::ArrayReferenceMetaPosition, y::ArrayReferenceMetaPosition) = x.mref.ref == y.mref.ref
 # Avoid memory allocations by using this for ops that aren't references
 const NOTAREFERENCE = ArrayReferenceMeta(ArrayReference(Symbol(""), Union{Symbol,Int}[]),Bool[],Symbol(""))
-const NOTAREFERENCEMP = ArrayReferenceMetaPosition(NOTAREFERENCE, NOPARENTS, Symbol[], Symbol[])
+const NOTAREFERENCEMP = ArrayReferenceMetaPosition(NOTAREFERENCE, NOPARENTS, Symbol[], Symbol[],Symbol(""))
+varname(::Nothing) = nothing
+varname(mpref::ArrayReferenceMetaPosition) = mpref.varname
 name(mpref::ArrayReferenceMetaPosition) = name(mpref.mref.ref)
 loopdependencies(ref::ArrayReferenceMetaPosition) = ref.loopdependencies
 reduceddependencies(ref::ArrayReferenceMetaPosition) = ref.reduceddeps

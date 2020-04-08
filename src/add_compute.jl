@@ -190,31 +190,36 @@ function add_compute!(
     instr = instruction(first(ex.args))::Symbol
     args = @view(ex.args[2:end])
     (instr === :(^) && length(args) == 2 && (args[2] isa Number)) && return add_pow!(ls, var, args[1], args[2], elementbytes, position)
-    parents = Operation[]
+    vparents = Operation[]
     deps = Symbol[]
     reduceddeps = Symbol[]
     reduction_ind = 0
     for (ind,arg) ∈ enumerate(args)
         if var === arg
             reduction_ind = ind
-            add_reduction!(parents, deps, reduceddeps, ls, arg, elementbytes)
+            add_reduction!(vparents, deps, reduceddeps, ls, arg, elementbytes)
         elseif arg isa Expr
-            isref, argref = tryrefconvert(ls, arg, elementbytes)
+            isref, argref = tryrefconvert(ls, arg, elementbytes, varname(mpref))
             if isref
                 if mpref == argref
-                    reduction_ind = ind
-                    add_load!(ls, var, argref, elementbytes)
+                    if varname(mpref) === var
+                        reduction_ind = ind
+                        add_load!(ls, argref, elementbytes)
+                    else
+                        pushparent!(vparents, deps, reduceddeps, add_load!(ls, argref, elementbytes))
+                    end
                 else
-                    pushparent!(parents, deps, reduceddeps, add_load!(ls, gensym(:tempload), argref, elementbytes))
+                    argref.varname = gensym(:tempload)
+                    pushparent!(vparents, deps, reduceddeps, add_load!(ls, argref, elementbytes))
                 end
             else
-                add_parent!(parents, deps, reduceddeps, ls, arg, elementbytes, position)
+                add_parent!(vparents, deps, reduceddeps, ls, arg, elementbytes, position)
             end
         elseif arg ∈ ls.loopsymbols
             loopsymop = add_loopvalue!(ls, arg, elementbytes)
-            pushparent!(parents, deps, reduceddeps, loopsymop)
+            pushparent!(vparents, deps, reduceddeps, loopsymop)
         else
-            add_parent!(parents, deps, reduceddeps, ls, arg, elementbytes, position)
+            add_parent!(vparents, deps, reduceddeps, ls, arg, elementbytes, position)
         end
     end
     reduction = reduction_ind > 0
@@ -228,29 +233,30 @@ function add_compute!(
         mergesetv!(newreduceddeps, reduceddeps)
         deps = newloopdeps; reduceddeps = newreduceddeps
     end
-    if reduction || search_tree(parents, var)
-        parent = getop(ls, var, elementbytes)
+    if reduction || search_tree(vparents, var)
+        parent = ls.opdict[var]
         setdiffv!(reduceddeps, deps, loopdependencies(parent))
+        # parent = getop(ls, var, elementbytes)
         if length(reduceddeps) == 0
-            insert!(parents, reduction_ind, parent)
-            op = Operation(length(operations(ls)), var, elementbytes, instruction(ls,instr), compute, deps, reduceddeps, parents)
+            insert!(vparents, reduction_ind, parent)
+            op = Operation(length(operations(ls)), var, elementbytes, instruction(ls,instr), compute, deps, reduceddeps, vparents)
             pushop!(ls, op, var)
         else
-            add_reduction_update_parent!(parents, deps, reduceddeps, ls, parent, instr, reduction_ind, elementbytes)
+            add_reduction_update_parent!(vparents, deps, reduceddeps, ls, parent, instr, reduction_ind, elementbytes)
         end
     else
-        op = Operation(length(operations(ls)), var, elementbytes, instruction(ls,instr), compute, deps, reduceddeps, parents)
+        op = Operation(length(operations(ls)), var, elementbytes, instruction(ls,instr), compute, deps, reduceddeps, vparents)
         pushop!(ls, op, var)
     end
 end
 
 function add_compute!(
-    ls::LoopSet, LHS::Symbol, instr, parents::Vector{Operation}, elementbytes
+    ls::LoopSet, LHS::Symbol, instr, vparents::Vector{Operation}, elementbytes
 )
     deps = Symbol[]
     reduceddeps = Symbol[]
-    foreach(parent -> update_deps!(deps, reduceddeps, parent), parents)
-    op = Operation(length(operations(ls)), LHS, elementbytes, instr, compute, deps, reduceddeps, parents)
+    foreach(parent -> update_deps!(deps, reduceddeps, parent), vparents)
+    op = Operation(length(operations(ls)), LHS, elementbytes, instr, compute, deps, reduceddeps, vparents)
     pushop!(ls, op, LHS)
 end
 

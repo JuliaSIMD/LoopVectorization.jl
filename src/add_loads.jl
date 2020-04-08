@@ -17,14 +17,14 @@ end
 function add_load!(
     ls::LoopSet, var::Symbol, array::Symbol, rawindices, elementbytes::Int
 )
-    mpref = array_reference_meta!(ls, array, rawindices, elementbytes)
-    add_load!(ls, var, mpref, elementbytes)
+    mpref = array_reference_meta!(ls, array, rawindices, elementbytes, var)
+    add_load!(ls, mpref, elementbytes)
 end
 function add_load!(
-    ls::LoopSet, var::Symbol, mpref::ArrayReferenceMetaPosition, elementbytes::Int
+    ls::LoopSet, mpref::ArrayReferenceMetaPosition, elementbytes::Int
 )
-    length(mpref.loopdependencies) == 0 && return add_constant!(ls, var, mpref, elementbytes)
-    op = Operation( ls, var, elementbytes, :getindex, memload, mpref )
+    length(mpref.loopdependencies) == 0 && return add_constant!(ls, mpref, elementbytes)
+    op = Operation( ls, varname(mpref), elementbytes, :getindex, memload, mpref )
     add_load!(ls, op, true, false)
 end
 
