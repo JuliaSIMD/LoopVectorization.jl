@@ -680,30 +680,46 @@ using Test
         function smoothdim_avx!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
             ifirst, ilast = first(irng), last(irng)
             ifirst > ilast && return s
-            @avx for Ipost in Rpost
-                # Initialize the first value along the filtered dimension
+            @avx tile=(1,1) for Ipost in Rpost
+                # Handle all other entries
                 for Ipre in Rpre
                     s[Ipre, ifirst, Ipost] = x[Ipre, ifirst, Ipost]
-                end
-                # Handle all other entries
-                for i = ifirst+1:ilast
-                    for Ipre in Rpre
+                    for i = ifirst+1:ilast
                         s[Ipre, i, Ipost] = α*x[Ipre, i, Ipost] + (1-α)*x[Ipre, i-1, Ipost]
                     end
                 end
             end
             s
         end
+        function smoothdim_ifelse_avx!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
+            ifirst, ilast = first(irng), last(irng)
+            ifirst > ilast && return s
+            @avx tile=(1,1) for Ipost in Rpost
+                # Handle all other entries
+                for i = ifirst:ilast
+                    for Ipre in Rpre
+                        xi = x[Ipre, i, Ipost]
+                        xim = ifelse(i == ifirst, xi, x[Ipre, i-1, Ipost])
+                        s[Ipre, i, Ipost] = α*xi + (1-α)*xim
+                    end
+                end
+            end
+            s
+        end
 
-        x = rand(11,11,11) # ,11,11)
-        dest1, dest2 = similar(x), similar(x)
+        x = rand(11,11,11,11,11);
+        dest1, dest2 = similar(x), similar(x);
         α = 0.3
         for d = 1:ndims(x)
-            Rpre  = CartesianIndices(axes(x)[1:d-1])
-            Rpost = CartesianIndices(axes(x)[d+1:end])
+            # @show d
+            Rpre  = CartesianIndices(axes(x)[1:d-1]);
+            Rpost = CartesianIndices(axes(x)[d+1:end]);
             smoothdim!(dest1, x, α, Rpre, axes(x, d), Rpost)
             smoothdim_avx!(dest2, x, α, Rpre, axes(x, d), Rpost)
+            @test dest1 ≈ dest2
+            fill!(dest2, NaN); smoothdim_ifelse_avx!(dest2, x, α, Rpre, axes(x, d), Rpost)
             @test dest1 ≈ dest2
         end
     end
 end
+

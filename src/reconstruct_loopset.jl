@@ -1,4 +1,4 @@
-const NOpsType = Union{Int,Vector{Int}}
+const NOpsType = Int#Union{Int,Vector{Int}}
 
 function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{<:AbstractUnitRange})
     ssym = String(sym)
@@ -239,11 +239,12 @@ function calcnops(ls::LoopSet, os::OperationStruct)
     offsets = ls.loopsymbol_offsets
     idxs = loopindex(ls, os.loopdeps, 0x04)  # FIXME DRY
     iszero(length(idxs)) && return 1
-    return map(i->offsets[i+1]-offsets[i], idxs)
+    return maximum(i->offsets[i+1]-offsets[i], idxs)
 end
 function isexpanded(ls::LoopSet, ops::Vector{OperationStruct}, nopsv::Vector{NOpsType}, i::Int)
     nops = nopsv[i]
-    (nops === 1 || nops == [1]) && return false
+    # nops isa Vector{Int} only if accesses_memory(os), which means isexpanded must be false
+    (nops === 1 || isa(nops, Vector{Int})) && return false
     os = ops[i]
     optyp = optype(os)
     if optyp == compute
@@ -260,7 +261,6 @@ function add_op!(
     mrefs::Vector{ArrayReferenceMeta}, opsymbol, elementbytes::Int
 )
     os = ops[i]
-    nops = nopsv[i]
     # opsymbol = (isconstant(os) && instr != LOOPCONSTANT) ? instr.instr : opsymbol
     # If it's a CartesianIndex add or subtract, we may have to add multiple operations
     expanded = expandedv[i]# isexpanded(ls, ops, nopsv, i)
@@ -278,12 +278,7 @@ function add_op!(
         push!(opoffsets, opoffsets[end] + 1)
         return
     end
-    if isa(nops, Vector)
-        n = first(nops)
-        if all(isequal(n), nops)
-            nops = n
-        end
-    end
+    nops = (nopsv[i])::Int # if it were a vector, it would have to have been expanded
     # if expanded, optyp must be either loopvalue, or compute (with loopvalues in its ancestry, not cutoff by loads)
     for offset = 0:nops-1
         sym = nops === 1 ? opsymbol : expandedopname(opsymbol, offset)
