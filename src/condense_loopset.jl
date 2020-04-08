@@ -113,23 +113,23 @@ function OperationStruct!(varnames::Vector{Symbol}, ls::LoopSet, op::Operation)
 end
 ## turn a LoopSet into a type object which can be used to reconstruct the LoopSet.
 
+function loop_boundary(loop::Loop)
+    startexact = loop.startexact
+    stopexact = loop.stopexact
+    if startexact & stopexact
+        Expr(:call, Expr(:curly, lv(:StaticUnitRange), loop.starthint, loop.stophint))
+    elseif startexact
+        Expr(:call, Expr(:curly, lv(:StaticLowerUnitRange), loop.starthint), loop.stopsym)
+    elseif stopexact
+        Expr(:call, Expr(:curly, lv(:StaticUpperUnitRange), loop.stophint), loop.startsym)
+    else
+        Expr(:call, :(:), loop.startsym, loop.stopsym)
+    end
+end
 
 function loop_boundaries(ls::LoopSet)
     lbd = Expr(:tuple)
-    for loop ∈ ls.loops
-        startexact = loop.startexact
-        stopexact = loop.stopexact
-        lexpr = if startexact & stopexact
-            Expr(:call, Expr(:curly, lv(:StaticUnitRange), loop.starthint, loop.stophint))
-        elseif startexact
-            Expr(:call, Expr(:curly, lv(:StaticLowerUnitRange), loop.starthint), loop.stopsym)
-        elseif stopexact
-            Expr(:call, Expr(:curly, lv(:StaticUpperUnitRange), loop.stophint), loop.startsym)
-        else
-            Expr(:call, :(:), loop.startsym, loop.stopsym)
-        end
-        push!(lbd.args, lexpr)
-    end
+    foreach(loop -> push!(lbd.args, loop_boundary(loop)), ls.loops)
     lbd
 end
 
@@ -204,6 +204,7 @@ end
     ::Val{UT}, ::Type{OPS}, ::Type{ARF}, ::Type{AM}, ::Type{LPSYM}, lb::LB,
     ::Val{AR}, ::Val{D}, ::Val{IND}, subsetvals, arraydescript, vargs::Vararg{<:Any,N}
 ) where {UT, OPS, ARF, AM, LPSYM, LB, N, AR, D, IND}
+    1 + 1
     num_vptrs = length(ARF.parameters)::Int
     vptrs = [gensym(:vptr) for _ ∈ 1:num_vptrs]
     call = Expr(:call, lv(:_avx_!), Val{UT}(), OPS, ARF, AM, LPSYM, :lb)
@@ -279,14 +280,23 @@ function generate_call(ls::LoopSet, IUT, debug::Bool = false)
     add_external_functions!(q, ls)
     q
 end
-
+concat_vals() = Val{()}()
+# @generated concat_vals(::Val{N}) where {N} = Val{(N,)}()
+# @generated concat_vals(::Val{M}, ::Val{N}) where {M, N} = Val{(M,N)}()
+@generated function concat_vals(args...)
+    tup = Expr(:tuple)
+    for n in eachindex(args)
+        push!(tup.args, args[n].parameters[1])
+    end
+    Expr(:call, Expr(:curly, :Val, tup))
+end
 function setup_call_noinline(ls::LoopSet, U = zero(Int8), T = zero(Int8))
     call = generate_call(ls, (false,U,T))
     hasouterreductions = length(ls.outer_reductions) > 0
     q = Expr(:block)
     vptrarrays = Expr(:tuple)
     vptrsubsetvals = Expr(:tuple)
-    vptrsubsetdims = Expr(:tuple)
+    vptrsubsetdims = Expr(:call, lv(:concat_vals))
     vptrindices = Expr(:tuple)
     stridedpointerLHS = Symbol[]
     loopvalueLHS = Symbol[]
@@ -304,7 +314,7 @@ function setup_call_noinline(ls::LoopSet, U = zero(Int8), T = zero(Int8))
                         @assert array ∈ loopvalueLHS
                         push!(vptrarrays.args, -1)
                     end
-                    push!(vptrsubsetdims.args, nothing)
+                    push!(vptrsubsetdims.args, Expr(:call, Expr(:curly, :Val, nothing)))
                     vp = first(ex.args)::Symbol
                     push!(stridedpointerLHS, vp)
                     push!(vptrindices.args, findfirst(a -> vptr(a) == vp, ls.refs_aliasing_syms))
@@ -316,7 +326,7 @@ function setup_call_noinline(ls::LoopSet, U = zero(Int8), T = zero(Int8))
                         @assert vptrarrayid isa Int
                     end
                     push!(vptrarrays.args, vptrarrayid::Int)
-                    push!(vptrsubsetdims.args, ex.args[2].args[3].args[1].args[2])
+                    push!(vptrsubsetdims.args, ex.args[2].args[3])#.args[1].args[2])
                     push!(vptrsubsetvals.args, ex.args[2].args[4])
                     vp = first(ex.args)::Symbol
                     push!(stridedpointerLHS, vp)
@@ -327,7 +337,8 @@ function setup_call_noinline(ls::LoopSet, U = zero(Int8), T = zero(Int8))
         push!(q.args, ex)
     end
     insert!(call.args, 8, Expr(:call, Expr(:curly, :Val, vptrarrays)))
-    insert!(call.args, 9, Expr(:call, Expr(:curly, :Val, vptrsubsetdims)))
+    # insert!(call.args, 9, Expr(:call, Expr(:curly, :Val, vptrsubsetdims)))
+    insert!(call.args, 9, vptrsubsetdims)
     insert!(call.args, 10, Expr(:call, Expr(:curly, :Val, vptrindices)))
     insert!(call.args, 11, vptrsubsetvals)
     if hasouterreductions

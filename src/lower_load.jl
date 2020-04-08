@@ -1,6 +1,6 @@
 function lower_load_scalar!(
-    q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol, tiled::Symbol, U::Int,
-    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing, umin::Int = 0
+    q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol,
+    tiled::Symbol, U::Int, suffix::Union{Nothing,Int}, umin::Int = 0
 )
     loopdeps = loopdependencies(op)
     @assert vectorized ∉ loopdeps
@@ -8,19 +8,56 @@ function lower_load_scalar!(
     ptr = refname(op)
     isunrolled = unrolled ∈ loopdeps
     U = isunrolled ? U : 1
-    for u ∈ umin:U-1
-        varname = varassignname(var, u, isunrolled)
-        td = UnrollArgs(u, unrolled, tiled, suffix)
-        push!(q.args, Expr(:(=), varname, Expr(:call, lv(:vload), ptr, mem_offset_u(op, td))))
+    if instruction(op).instr !== :conditionalload
+        for u ∈ umin:U-1
+            varname = varassignname(var, u, isunrolled)
+            td = UnrollArgs(u, unrolled, tiled, suffix)
+            push!(q.args, Expr(:(=), varname, Expr(:call, lv(:vload), ptr, mem_offset_u(op, td))))
+        end
+    else
+        condop = last(parents(op))
+        condvar = variable_name(condop, suffix)
+        condunrolled = any(isequal(unrolled), loopdependencies(condop))
+        for u ∈ umin:U-1
+            condsym = condunrolled ? Symbol(condvar, u) : condvar
+            varname = varassignname(var, u, isunrolled)
+            td = UnrollArgs(u, unrolled, tiled, suffix)
+            load = Expr(:call, lv(:vload), ptr, mem_offset_u(op, td))
+            cload = Expr(:if, condsym, load, Expr(:call, :zero, Expr(:call, :eltype, ptr)))
+            push!(q.args, Expr(:(=), varname, cload))
+        end
     end
     nothing
 end
-function pushvectorload!(q::Expr, op::Operation, var::Symbol, td::UnrollArgs, U::Int, W::Symbol, mask, vecnotunrolled::Bool)
-    @unpack u, unrolled = td
+function pushvectorload!(
+    q::Expr, op::Operation, var::Symbol, td::UnrollArgs, U::Int, W::Symbol, vectorized::Symbol, mask
+)
+    @unpack u, unrolled, suffix = td
     ptr = refname(op)
+    vecnotunrolled = vectorized !== unrolled
     name, mo = name_memoffset(var, op, td, W, vecnotunrolled)
     instrcall = Expr(:call, lv(:vload), ptr, mo)
-    if mask !== nothing && (vecnotunrolled || u == U - 1)
+
+    iscondstore = instruction(op).instr === :conditionalload
+    maskend = mask !== nothing && (vecnotunrolled || u == U - 1)
+    if iscondstore
+        condop = last(parents(op))
+        # @show condop
+        condsym = variable_name(condop, suffix)
+        condsym = any(isequal(unrolled), loopdependencies(condop)) ? Symbol(condsym, u) : condsym        
+        if vectorized ∈ loopdependencies(condop)
+            if maskend
+                push!(instrcall.args, Expr(:call, :&, condsym, mask))
+            else
+                push!(instrcall.args, condsym)
+            end
+        else
+            if maskend
+                push!(instrcall.args, mask)
+            end
+            instrcall = Expr(:if, condsym, instrcall, Expr(:call, lv(:vzero), W, Expr(:call, :eltype, ptr)))
+        end
+    elseif maskend
         push!(instrcall.args, mask)
     end
     push!(q.args, Expr(:(=), name, instrcall))
@@ -40,10 +77,9 @@ function lower_load_vectorized!(
     end
     # Urange = unrolled ∈ loopdeps ? 0:U-1 : 0
     var = variable_name(op, suffix)
-    vecnotunrolled = vectorized !== unrolled
     for u ∈ umin:U-1
         td = UnrollArgs(u, unrolled, tiled, suffix)
-        pushvectorload!(q, op, var, td, U, W, mask, vecnotunrolled)
+        pushvectorload!(q, op, var, td, U, W, vectorized, mask)
     end
     nothing
 end
@@ -73,6 +109,6 @@ function lower_load!(
     if vectorized ∈ loopdependencies(op)
         lower_load_vectorized!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask, umin)
     else
-        lower_load_scalar!(q, op, vectorized, W, unrolled, tiled, U, suffix, mask, umin)
+        lower_load_scalar!(q, op, vectorized, W, unrolled, tiled, U, suffix, umin)
     end
 end

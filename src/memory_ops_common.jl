@@ -29,17 +29,46 @@ function add_vptr!(ls::LoopSet, array::Symbol, vptrarray::Symbol = vptr(array), 
     end
     nothing
 end
-function subset_vptr!(ls::LoopSet, vptr::Symbol, indnum::Int, ind::Union{Symbol,Int})
+
+@inline valsum() = Val{0}()
+@inline valsum(::Val{M}) where {M} = Val{M}()
+@generated valsum(::Val{M}, ::Val{N}) where {M,N} = Val{M+N}()
+@inline valsum(::Val{M}, ::Val{N}, ::Val{K}, args...) where {M,N,K} = valsum(valsum(Val{M}(), Val{N}()), Val{K}(), args...)
+@inline valdims(::Any) = Val{1}()
+@inline valdims(::CartesianIndices{N}) where {N} = Val{N}()
+
+function append_loop_valdims!(valcall::Expr, loop::Loop)
+    if isstaticloop(loop)
+        push!(valcall.args, :(Val{1}()))
+    else
+        push!(valcall.args, Expr(:call, lv(:valdims), loop_boundary(loop)))
+    end
+    nothing
+end
+function subset_vptr!(ls::LoopSet, vptr::Symbol, indnum::Int, ind, previndices, loopindex)
     subsetvptr = Symbol(vptr, "_subset_$(indnum)_with_$(ind)##")
-    inde = ind isa Symbol ? Expr(:call, :-, ind, 1) : ind - 1
-    pushpreamble!(ls, Expr(:(=), subsetvptr, Expr(:call, lv(:subsetview), vptr, Expr(:call, Expr(:curly, :Val, indnum)), inde)))
+    valcall = Expr(:call, Expr(:curly, :Val, 1))
+    if indnum > 1
+        valcall = Expr(:call, lv(:valsum), valcall)
+        for i ∈ 1:indnum-1
+            if loopindex[i]
+                append_loop_valdims!(valcall, getloop(ls, previndices[i]))
+            else
+                for loopdep ∈ loopdependencies(ls.opdict[previndices[i]])
+                    append_loop_valdims!(valcall, getloop(ls, loopdep))
+                end
+            end
+        end
+    end
+    # @show valcall
+    indm1 = ind isa Integer ? ind - 1 : Expr(:call, :-, ind, 1)
+    pushpreamble!(ls, Expr(:(=), subsetvptr, Expr(:call, lv(:subsetview), vptr, valcall, indm1)))
     subsetvptr
 end
 const DISCONTIGUOUS = Symbol("##DISCONTIGUOUSSUBARRAY##")
 function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementbytes::Int, var::Union{Nothing,Symbol} = nothing)
     vptrarray = vptr(array)
     add_vptr!(ls, array, vptrarray) # now, subset
-    
     indices = Symbol[]
     loopedindex = Bool[]
     parents = Operation[]
@@ -49,7 +78,7 @@ function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementby
     ninds = 1
     for ind ∈ rawindices        
         if ind isa Integer # subset
-            vptrarray = subset_vptr!(ls, vptrarray, ninds, ind)
+            vptrarray = subset_vptr!(ls, vptrarray, ninds, ind, indices, loopedindex)
             length(indices) == 0 && push!(indices, DISCONTIGUOUS)
         elseif ind isa Expr
             #FIXME: position (in loopnest) wont be length(ls.loopsymbols) in general
@@ -66,12 +95,11 @@ function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementby
             else
                 indop = get(ls.opdict, ind, nothing)
                 if indop !== nothing  && !isconstant(indop)
-                    pushparent!(parents, loopdependencies, reduceddeps, parent)   # FIXME where does `parent` come from?
-                    # var = get(ls.opdict, ind, nothing)
-                    push!(indices, name(parent)); ninds += 1
+                    pushparent!(parents, loopdependencies, reduceddeps, indop)
+                    push!(indices, name(indop)); ninds += 1
                     push!(loopedindex, false)
                 else
-                    vptrarray = subset_vptr!(ls, vptrarray, ninds, ind)
+                    vptrarray = subset_vptr!(ls, vptrarray, ninds, ind, indices, loopedindex)
                     length(indices) == 0 && push!(indices, DISCONTIGUOUS)
                 end
             end

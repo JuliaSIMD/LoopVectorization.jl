@@ -1,3 +1,5 @@
+const NOpsType = Int#Union{Int,Vector{Int}}
+
 function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{<:AbstractUnitRange})
     ssym = String(sym)
     start = gensym(ssym*"_loopstart"); stop = gensym(ssym*"_loopstop"); loopsym = gensym(ssym * "_loop")
@@ -54,7 +56,7 @@ end
 
 function ArrayReferenceMeta(
     ls::LoopSet, @nospecialize(ar::ArrayRefStruct), arraysymbolinds::Vector{Symbol},
-    opsymbols::Vector{Symbol}, nopsv::Vector{Int}, expandedv::Vector{Bool}
+    opsymbols::Vector{Symbol}, nopsv::Vector{NOpsType}, expandedv::Vector{Bool}
 )
     index_types = ar.index_types
     indices = ar.indices
@@ -73,7 +75,8 @@ function ArrayReferenceMeta(
         elseif index_types == ComputedIndex
             opsym = opsymbols[ind]
             if expandedv[ind]
-                for j ∈ 0:nopsv[ind]-1
+                nops = nopsv[ind]
+                for j ∈ 0:nops-1
                     pushfirst!(index_vec, expandedopname(opsym, j))
                     pushfirst!(loopedindex, false)
                 end
@@ -144,7 +147,7 @@ function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{<:Abstrac
 end
 function create_mrefs!(
     ls::LoopSet, arf::Vector{ArrayRefStruct}, as::Vector{Symbol}, os::Vector{Symbol},
-    nopsv::Vector{Int}, expanded::Vector{Bool}, vargs
+    nopsv::Vector{NOpsType}, expanded::Vector{Bool}, vargs
 )
     mrefs = Vector{ArrayReferenceMeta}(undef, length(arf))
     for i ∈ eachindex(arf)
@@ -230,14 +233,12 @@ function calcnops(ls::LoopSet, os::OperationStruct)
     offsets = ls.loopsymbol_offsets
     idxs = loopindex(ls, os.loopdeps, 0x04)  # FIXME DRY
     iszero(length(idxs)) && return 1
-    Δidxs = map(i->offsets[i+1]-offsets[i], idxs)
-    nops = first(Δidxs)
-    @assert all(isequal(nops), Δidxs)
-    nops
+    return maximum(i->offsets[i+1]-offsets[i], idxs)
 end
-function isexpanded(ls::LoopSet, ops::Vector{OperationStruct}, nopsv::Vector{Int}, i::Int)
+function isexpanded(ls::LoopSet, ops::Vector{OperationStruct}, nopsv::Vector{NOpsType}, i::Int)
     nops = nopsv[i]
-    isone(nops) && return false
+    # nops isa Vector{Int} only if accesses_memory(os), which means isexpanded must be false
+    (nops === 1 || isa(nops, Vector{Int})) && return false
     os = ops[i]
     optyp = optype(os)
     if optyp == compute
@@ -250,11 +251,10 @@ function isexpanded(ls::LoopSet, ops::Vector{OperationStruct}, nopsv::Vector{Int
 end
 
 function add_op!(
-    ls::LoopSet, instr::Instruction, ops::Vector{OperationStruct}, nopsv::Vector{Int}, expandedv::Vector{Bool}, i::Int,
+    ls::LoopSet, instr::Instruction, ops::Vector{OperationStruct}, nopsv::Vector{NOpsType}, expandedv::Vector{Bool}, i::Int,
     mrefs::Vector{ArrayReferenceMeta}, opsymbol, elementbytes::Int
 )
     os = ops[i]
-    nops = nopsv[i]
     # opsymbol = (isconstant(os) && instr != LOOPCONSTANT) ? instr.instr : opsymbol
     # If it's a CartesianIndex add or subtract, we may have to add multiple operations
     expanded = expandedv[i]# isexpanded(ls, ops, nopsv, i)
@@ -272,9 +272,10 @@ function add_op!(
         push!(opoffsets, opoffsets[end] + 1)
         return
     end
+    nops = (nopsv[i])::Int # if it were a vector, it would have to have been expanded
     # if expanded, optyp must be either loopvalue, or compute (with loopvalues in its ancestry, not cutoff by loads)
     for offset = 0:nops-1
-        sym = nops == 1 ? opsymbol : expandedopname(opsymbol, offset)
+        sym = nops === 1 ? opsymbol : expandedopname(opsymbol, offset)
         op = Operation(
             length(operations(ls)), sym, elementbytes, instr,
             optyp, loopdependencies(ls, os, false, offset), reduceddependencies(ls, os, false, offset),
@@ -295,7 +296,7 @@ function add_parents_to_op!(ls::LoopSet, vparents::Vector{Operation}, up::Unsign
             for j ∈ offsets[i]+1:offsets[i+1] # if parents are expanded, add them all
                 pushfirst!(vparents, ops[j])
             end
-        end        
+        end
     else#if isexpanded
         # Do we want to require that all Δidxs are equal?
         # Because `CartesianIndex((2,3)) - 1` results in a methoderorr, I think this is reasonable for now
@@ -318,7 +319,7 @@ function add_parents_to_ops!(ls::LoopSet, ops::Vector{OperationStruct}, constoff
                     pushpreamble!(ls, Expr(:(=), instr.instr, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, :vargs, constoffset))))
                 end
             elseif !isloopvalue(op)
-                add_parents_to_op!(ls, parents(op), ops[i].parents, k, Δ)                
+                add_parents_to_op!(ls, parents(op), ops[i].parents, k, Δ)
             end
         end
     end
@@ -326,7 +327,7 @@ function add_parents_to_ops!(ls::LoopSet, ops::Vector{OperationStruct}, constoff
 end
 function add_ops!(
     ls::LoopSet, instr::Vector{Instruction}, ops::Vector{OperationStruct}, mrefs::Vector{ArrayReferenceMeta},
-    opsymbols::Vector{Symbol}, constoffset::Int, nopsv::Vector{Int}, expandedv::Vector{Bool}, elementbytes::Int
+    opsymbols::Vector{Symbol}, constoffset::Int, nopsv::Vector{NOpsType}, expandedv::Vector{Bool}, elementbytes::Int
 )
     # @show ls.loopsymbols ls.loopsymbol_offsets
     for i ∈ eachindex(ops)
@@ -378,7 +379,7 @@ function avx_loopset(instr, ops, arf, AM, LPSYM, LB, vargs)
     resize!(ls.loop_order, ls.loopsymbol_offsets[end])
     arraysymbolinds = gen_array_syminds(AM)
     opsymbols = [gensym(:op) for _ ∈ eachindex(ops)]
-    nopsv = calcnops.(Ref(ls), ops)
+    nopsv = NOpsType[calcnops(ls, op) for op in ops]
     expandedv = [isexpanded(ls, ops, nopsv, i) for i ∈ eachindex(ops)]
     mrefs = create_mrefs!(ls, arf, arraysymbolinds, opsymbols, nopsv, expandedv, vargs)
     pushpreamble!(ls, Expr(:(=), ls.T, Expr(:call, :promote_type, [Expr(:call, :eltype, vptr(mref)) for mref ∈ mrefs]...)))
@@ -417,6 +418,3 @@ end
     ls = _avx_loopset(OPS.parameters, ARF.parameters, AM.parameters, LPSYM.parameters, LB.parameters, vargs)
     avx_body(ls, UT)
 end
-
-
-    

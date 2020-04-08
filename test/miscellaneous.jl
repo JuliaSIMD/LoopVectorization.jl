@@ -1,5 +1,9 @@
+using LoopVectorization
+using LinearAlgebra
+using Test
 
 @testset "Miscellaneous" begin
+
     Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 6)
     dot3q = :(for m ∈ 1:M, n ∈ 1:N
               s += x[m] * A[m,n] * y[n]
@@ -48,7 +52,7 @@
         end
         s
     end
-    
+
     subcolq = :(for i ∈ 1:size(A,2), j ∈ eachindex(x)
                 B[j,i] = A[j,i] - x[j]
                 end)
@@ -220,10 +224,10 @@
 #     t = β₁ = β₂ = ρ = s = 0.0; weights = rand(1); nodes = rand(1); lomnibus(args...) = +(args...)
 # LoopVectorization.@avx_debug for i ∈ eachindex(weights, nodes)
 #         s += weights[i] * lomnibus(nodes[i], t, β₁, β₂, ρ)
-#     end    
+#     end
 # @macroexpand @avx for i ∈ eachindex(weights, nodes)
 #         s += weights[i] * lomnibus(nodes[i], t, β₁, β₂, ρ)
-#     end    
+#     end
     function softmax3_core!(lse, qq, xx, tmpmax, maxk, nk)
         for k in Base.OneTo(maxk)
             @inbounds for i in eachindex(lse)
@@ -486,7 +490,7 @@
             out[i] = 1 + i
         end
     end
-    
+
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
         A = randn(T, 199, 498);
@@ -550,7 +554,7 @@
         @test view(vec(B1), r) == view(vec(B2), r)
         fill!(B2, NaN); test_for_with_different_index_avx!(B2, A, C, start_sample, num_samples)
         @test view(vec(B1), r) == view(vec(B2), r)
-        
+
         ni, nj, nk = (127, 113, 13)
         x = rand(T, ni, nj, nk);
         q1 = similar(x);
@@ -652,4 +656,64 @@
         one_plus_i_avx!(out2)
         @test out1 == out2
     end
+
+    @testset "Mixed CartesianIndex/Int indexing" begin
+        # A demo similar to the exponential filtering demo from https://julialang.org/blog/2016/02/iteration/,
+        # but with no loop-carried dependency.
+        function smoothdim!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
+            ifirst, ilast = first(irng), last(irng)
+            ifirst > ilast && return s
+            for Ipost in Rpost
+                # Initialize the first value along the filtered dimension
+                for Ipre in Rpre
+                    s[Ipre, ifirst, Ipost] = x[Ipre, ifirst, Ipost]
+                end
+                # Handle all other entries
+                for i = ifirst+1:ilast
+                    for Ipre in Rpre
+                        s[Ipre, i, Ipost] = α*x[Ipre, i, Ipost] + (1-α)*x[Ipre, i-1, Ipost]
+                    end
+                end
+            end
+            s
+        end
+        function smoothdim_avx!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
+            ifirst, ilast = first(irng), last(irng)
+            ifirst > ilast && return s
+            @avx tile=(1,1) for Ipost in Rpost
+                for Ipre in Rpre
+                    s[Ipre, ifirst, Ipost] = x[Ipre, ifirst, Ipost]
+                    for i = ifirst+1:ilast
+                        s[Ipre, i, Ipost] = α*x[Ipre, i, Ipost] + (1-α)*x[Ipre, i-1, Ipost]
+                    end
+                end
+            end
+            s
+        end
+        function smoothdim_ifelse_avx!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
+            ifirst, ilast = first(irng), last(irng)
+            ifirst > ilast && return s
+            @avx tile=(1,1) for Ipost in Rpost, i = ifirst:ilast, Ipre in Rpre
+                xi = x[Ipre, i, Ipost]
+                xim = i > ifirst ? x[Ipre, i-1, Ipost] : xi
+                s[Ipre, i, Ipost] = α*xi + (1-α)*xim
+            end
+            s
+        end
+
+        x = rand(11,11,11,11,11);
+        dest1, dest2 = similar(x), similar(x);
+        α = 0.3
+        for d = 1:ndims(x)
+            # @show d
+            Rpre  = CartesianIndices(axes(x)[1:d-1]);
+            Rpost = CartesianIndices(axes(x)[d+1:end]);
+            smoothdim!(dest1, x, α, Rpre, axes(x, d), Rpost);
+            smoothdim_avx!(dest2, x, α, Rpre, axes(x, d), Rpost);
+            @test dest1 ≈ dest2
+            fill!(dest2, NaN); smoothdim_ifelse_avx!(dest2, x, α, Rpre, axes(x, d), Rpost);
+            @test dest1 ≈ dest2
+        end
+    end
 end
+
