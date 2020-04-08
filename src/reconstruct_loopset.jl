@@ -76,12 +76,6 @@ function ArrayReferenceMeta(
             opsym = opsymbols[ind]
             if expandedv[ind]
                 nops = nopsv[ind]
-                if isa(nops, Vector)
-                    n = first(nops)
-                    if all(isequal(n), nops)
-                        nops = n
-                    end
-                end
                 for j ∈ 0:nops-1
                     pushfirst!(index_vec, expandedopname(opsym, j))
                     pushfirst!(loopedindex, false)
