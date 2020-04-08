@@ -2,7 +2,7 @@
 ## Currently, if/else will create its own local scope
 ## Assignments will not register in the loop's main scope
 ## although stores and return values will.
-
+negateop!(ls::LoopSet, condop::Operation, elementbytes::Int) = add_compute!(ls, gensym(:negated_mask), :~, [condop], elementbytes)
 
 function add_if!(ls::LoopSet, LHS::Symbol, RHS::Expr, elementbytes::Int, position::Int, mpref::Union{Nothing,ArrayReferenceMetaPosition} = nothing)
     # for now, just simple 1-liners
@@ -14,18 +14,24 @@ function add_if!(ls::LoopSet, LHS::Symbol, RHS::Expr, elementbytes::Int, positio
         add_operation!(ls, gensym(:mask), condition, mpref, elementbytes, position)
     end
     iftrue = RHS.args[2]
-    trueop = if iftrue isa Expr
-        (iftrue isa Expr && iftrue.head !== :call) && throw("Only calls or constant expressions are currently supported in if/else blocks.")
-        add_operation!(ls, Symbol(:iftrue), iftrue, elementbytes, position)
+    if iftrue isa Expr
+        trueop = add_operation!(ls, Symbol(:iftrue), iftrue, elementbytes, position)
+        if iftrue.head === :ref && all(ld -> ld ∈ loopdependencies(trueop), loopdependencies(condop))
+            trueop.instruction = Instruction(:conditionalload)
+            push!(parents(trueop), condop)
+        end
     else
-        getop(ls, iftrue, elementbytes)
+        trueop = getop(ls, iftrue, elementbytes)
     end
     iffalse = RHS.args[3]
-    falseop = if iffalse isa Expr
-        (iffalse isa Expr && iffalse.head !== :call) && throw("Only calls or constant expressions are currently supported in if/else blocks.")
-        add_operation!(ls, Symbol(:iffalse), iffalse, elementbytes, position)
+    if iffalse isa Expr
+        falseop = add_operation!(ls, Symbol(:iffalse), iffalse, elementbytes, position)
+        if iffalse.head === :ref && all(ld -> ld ∈ loopdependencies(falseop), loopdependencies(condop))
+            falseop.instruction = Instruction(:conditionalload)
+            push!(parents(falseop), negateop!(ls, condop, elementbytes))
+        end
     else
-        getop(ls, iffalse, elementbytes)
+        falseop = getop(ls, iffalse, elementbytes)
     end
     add_compute!(ls, LHS, :vifelse, [condop, trueop, falseop], elementbytes)
 end
@@ -67,7 +73,7 @@ function add_andblock!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
 end
 
 function add_orblock!(ls::LoopSet, condop::Operation, LHS, rhsop::Operation, elementbytes::Int, position::Int)
-    negatedcondop = add_compute!(ls, gensym(:negated_mask), :~, [condop], elementbytes)
+    negatedcondop = negateop!(ls, condop, elementbytes)
     if LHS isa Symbol
         altop = getop(ls, LHS, elementbytes)
         # return add_compute!(ls, LHS, :vifelse, [condop, altop, rhsop], elementbytes)

@@ -681,7 +681,6 @@ using Test
             ifirst, ilast = first(irng), last(irng)
             ifirst > ilast && return s
             @avx tile=(1,1) for Ipost in Rpost
-                # Handle all other entries
                 for Ipre in Rpre
                     s[Ipre, ifirst, Ipost] = x[Ipre, ifirst, Ipost]
                     for i = ifirst+1:ilast
@@ -694,15 +693,10 @@ using Test
         function smoothdim_ifelse_avx!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
             ifirst, ilast = first(irng), last(irng)
             ifirst > ilast && return s
-            @avx tile=(1,1) for Ipost in Rpost
-                # Handle all other entries
-                for i = ifirst:ilast
-                    for Ipre in Rpre
-                        xi = x[Ipre, i, Ipost]
-                        xim = ifelse(i == ifirst, xi, x[Ipre, i-1, Ipost])
-                        s[Ipre, i, Ipost] = α*xi + (1-α)*xim
-                    end
-                end
+            @avx tile=(1,1) for Ipost in Rpost, i = ifirst:ilast, Ipre in Rpre
+                xi = x[Ipre, i, Ipost]
+                xim = i > ifirst ? x[Ipre, i-1, Ipost] : xi
+                s[Ipre, i, Ipost] = α*xi + (1-α)*xim
             end
             s
         end
@@ -714,10 +708,10 @@ using Test
             # @show d
             Rpre  = CartesianIndices(axes(x)[1:d-1]);
             Rpost = CartesianIndices(axes(x)[d+1:end]);
-            smoothdim!(dest1, x, α, Rpre, axes(x, d), Rpost)
-            smoothdim_avx!(dest2, x, α, Rpre, axes(x, d), Rpost)
+            smoothdim!(dest1, x, α, Rpre, axes(x, d), Rpost);
+            smoothdim_avx!(dest2, x, α, Rpre, axes(x, d), Rpost);
             @test dest1 ≈ dest2
-            fill!(dest2, NaN); smoothdim_ifelse_avx!(dest2, x, α, Rpre, axes(x, d), Rpost)
+            fill!(dest2, NaN); smoothdim_ifelse_avx!(dest2, x, α, Rpre, axes(x, d), Rpost);
             @test dest1 ≈ dest2
         end
     end
