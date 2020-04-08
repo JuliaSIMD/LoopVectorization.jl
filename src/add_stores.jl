@@ -21,12 +21,12 @@ function add_copystore!(
 )
     op = add_compute!(ls, gensym(), :identity, [parent], elementbytes)
     # pushfirst!(mpref.parents, parent)
-    add_store!(ls, name(op), mpref, elementbytes, op)
+    add_store!(ls, mpref, elementbytes, op)
 end
 
 
 function add_store!(
-    ls::LoopSet, var::Symbol, mpref::ArrayReferenceMetaPosition, elementbytes::Int, parent = getop(ls, var, mpref.loopdependencies, elementbytes)
+    ls::LoopSet, mpref::ArrayReferenceMetaPosition, elementbytes::Int, parent = getop(ls, varname(mpref), mpref.loopdependencies, elementbytes)
 )
     isload(parent) && return add_copystore!(ls, parent, mpref, elementbytes)
     vparents = mpref.parents
@@ -56,8 +56,8 @@ end
 function add_store!(
     ls::LoopSet, var::Symbol, array::Symbol, rawindices, elementbytes::Int
 )
-    mpref = array_reference_meta!(ls, array, rawindices, elementbytes)
-    add_store!(ls, var, mpref, elementbytes)
+    mpref = array_reference_meta!(ls, array, rawindices, elementbytes, var)
+    add_store!(ls, mpref, elementbytes)
 end
 function add_simple_store!(ls::LoopSet, parent::Operation, ref::ArrayReference, elementbytes::Int)
     mref = ArrayReferenceMeta(

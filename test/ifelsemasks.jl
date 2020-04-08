@@ -118,6 +118,17 @@ T = Float32
             c[i] = 1 + ifelse(a[i] > b[i], a[i] + b[i], a[i] * b[i])
         end
     end
+    function ifelseoverwrite!(p)
+        for i ∈ eachindex(p)
+            p[i] = p[i] < 0.5 ? p[i]^2 : p[i]^3
+        end
+    end
+    function ifelseoverwriteavx!(p)
+        @avx for i ∈ eachindex(p)
+            p[i] = p[i] < 0.5 ? p[i]^2 : p[i]^3
+        end
+    end
+    
 
 
     function maybewriteand!(c, a, b)
@@ -286,7 +297,6 @@ T = Float32
             x[i] = yᵢ * zᵢ
         end
     end
-    
     N = 117
     for T ∈ (Float32, Float64, Int32, Int64)
         @show T, @__LINE__
@@ -343,6 +353,11 @@ T = Float32
         @test c1 ≈ c2
         fill!(c2, -999999999); andorassignment_avx!(c2, a, b);
         @test c1 ≈ c2
+
+        a1 = copy(a); a2 = copy(a);
+        ifelseoverwrite!(a1)
+        ifelseoverwriteavx!(a2)
+        @test a1 ≈ a2
         
         if T <: Union{Float32,Float64}
             a .*= 100;

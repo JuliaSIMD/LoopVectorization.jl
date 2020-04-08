@@ -306,8 +306,8 @@ function Operation(
         node_type, dependencies, reduced_deps, parents, ref
     )
 end
-function Operation(ls::LoopSet, var, elementbytes, instr, optype, mpref::ArrayReferenceMetaPosition)
-    Operation(length(operations(ls)), var, elementbytes, instr, optype, mpref)
+function Operation(ls::LoopSet, variable, elementbytes, instr, optype, mpref::ArrayReferenceMetaPosition)
+    Operation(length(operations(ls)), variable, elementbytes, instr, optype, mpref)
 end
 
 # load_operations(ls::LoopSet) = ls.loadops
@@ -479,8 +479,8 @@ function add_operation!(
 )
     if RHS.head === :ref# || (RHS.head === :call && first(RHS.args) === :getindex)
         array, rawindices = ref_from_expr(RHS)
-        RHS_ref = array_reference_meta!(ls, array, rawindices, elementbytes)
-        op = add_load!(ls, gensym(LHS_sym), RHS_ref, elementbytes)
+        RHS_ref = array_reference_meta!(ls, array, rawindices, elementbytes, gensym(LHS_sym))
+        op = add_load!(ls, RHS_ref, elementbytes)
         iop = add_compute!(ls, LHS_sym, :identity, [op], elementbytes)
         # pushfirst!(LHS_ref.parents, iop)
     elseif RHS.head === :call
@@ -528,11 +528,14 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
                 # assign RHS to lrhs
                 array, rawindices = ref_from_expr(LHS)
                 mpref = array_reference_meta!(ls, array, rawindices, elementbytes)
+                cachedparents = copy(mpref.parents)
                 ref = mpref.mref.ref
                 id = findfirst(r -> r == ref, ls.refs_aliasing_syms)
                 lrhs = id === nothing ? gensym(:RHS) : ls.syms_aliasing_refs[id]
+                mpref.varname = lrhs
                 add_operation!(ls, lrhs, RHS, mpref, elementbytes, position)
-                add_store!( ls, lrhs, mpref, elementbytes)
+                mpref.parents = cachedparents
+                add_store!(ls, mpref, elementbytes)
             else
                 add_store_ref!(ls, RHS, LHS, elementbytes)
             end

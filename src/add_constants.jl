@@ -35,8 +35,8 @@ function add_constant!(ls::LoopSet, var::Number, elementbytes::Int = 8)
     end
     pushop!(ls, op)
 end
-function add_constant!(ls::LoopSet, var::Symbol, mpref::ArrayReferenceMetaPosition, elementbytes::Int)
-    op = Operation(length(operations(ls)), var, elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS, mpref.mref)
+function add_constant!(ls::LoopSet, mpref::ArrayReferenceMetaPosition, elementbytes::Int)
+    op = Operation(length(operations(ls)), varname(mpref), elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS, mpref.mref)
     add_vptr!(ls, op)
     temp = gensym(:intermediateconstref)
     pushpreamble!(ls, Expr(:(=), temp, Expr(:call, lv(:vload), mpref.mref.ptr, mem_offset(op, UnrollArgs(0, Symbol(""), Symbol(""), nothing)))))
