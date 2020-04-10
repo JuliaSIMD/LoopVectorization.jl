@@ -204,7 +204,7 @@ function add_compute!(
                 if mpref == argref
                     if varname(mpref) === var
                         reduction_ind = ind
-                        add_load!(ls, argref, elementbytes)
+                        mergesetv!(deps, loopdependencies(add_load!(ls, argref, elementbytes)))
                     else
                         pushparent!(vparents, deps, reduceddeps, add_load!(ls, argref, elementbytes))
                     end
