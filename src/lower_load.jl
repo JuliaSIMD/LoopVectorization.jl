@@ -16,8 +16,8 @@ function lower_load_scalar!(
         end
     else
         condop = last(parents(op))
-        condvar = variable_name(condop, suffix)
-        condunrolled = any(isequal(unrolled), loopdependencies(condop))
+        condvar = tiled ∈ loopdependencies(condop) ? variable_name(condop, suffix) : variable_name(condop, nothing)
+        condunrolled = unrolled ∈ loopdependencies(condop)
         for u ∈ umin:U-1
             condsym = condunrolled ? Symbol(condvar, u) : condvar
             varname = varassignname(var, u, isunrolled)
@@ -32,7 +32,7 @@ end
 function pushvectorload!(
     q::Expr, op::Operation, var::Symbol, td::UnrollArgs, U::Int, W::Symbol, vectorized::Symbol, mask
 )
-    @unpack u, unrolled, suffix = td
+    @unpack u, unrolled, tiled, suffix = td
     ptr = refname(op)
     vecnotunrolled = vectorized !== unrolled
     name, mo = name_memoffset(var, op, td, W, vecnotunrolled)
@@ -43,8 +43,8 @@ function pushvectorload!(
     if iscondstore
         condop = last(parents(op))
         # @show condop
-        condsym = variable_name(condop, suffix)
-        condsym = any(isequal(unrolled), loopdependencies(condop)) ? Symbol(condsym, u) : condsym        
+        condsym = tiled ∈ loopdependencies(condop) ? variable_name(condop, suffix) : variable_name(condop, nothing)
+        condsym = unrolled ∈ loopdependencies(condop) ? Symbol(condsym, u) : condsym        
         if vectorized ∈ loopdependencies(condop)
             if maskend
                 push!(instrcall.args, Expr(:call, :&, condsym, mask))
@@ -99,6 +99,23 @@ function lower_load!(
                 push!(q.args, Expr(:(=), Symbol(varnew, u), Symbol(varold, u + 1)))
             end
             umin = U - 1
+        elseif tiled !== vectorized
+            mno, id = maxnegativeoffset(ls, op, tiled)
+            if -suffix < mno < 0
+                varnew = variable_name(op, suffix)
+                varold = variable_name(operations(ls)[id], suffix + mno)
+                opold = operations(ls)[id]
+                if unrolled ∈ loopdependencies(op)
+                    for u ∈ 0:U-1
+                        push!(q.args, Expr(:(=), Symbol(varnew, u), Symbol(varold, u)))
+                    end
+                else
+                    push!(q.args, Expr(:(=), varnew, varold))
+                end
+                return
+            else
+                umin = 0
+            end
         else
             umin = 0
         end

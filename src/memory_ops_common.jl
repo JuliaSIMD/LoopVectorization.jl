@@ -65,11 +65,51 @@ function subset_vptr!(ls::LoopSet, vptr::Symbol, indnum::Int, ind, previndices, 
     pushpreamble!(ls, Expr(:(=), subsetvptr, Expr(:call, lv(:subsetview), vptr, valcall, indm1)))
     subsetvptr
 end
+
+function addoffset!(ls, indices, offsets, loopedindex, loopdependencies, ind, offset)
+    if typemin(Int8) ≤ offset ≤ typemax(Int8)
+        push!(indices, ind);
+        push!(offsets, offset % Int8)
+        push!(loopedindex, true)
+        push!(loopdependencies, ind)
+        true
+    else
+        false
+    end
+end
+
+function checkforoffset!(
+    ls::LoopSet, indices::Vector{Symbol}, offsets::Vector{Int8}, loopedindex::Vector{Bool}, loopdependencies::Vector{Symbol}, ind::Expr
+)
+    ind.head === :call || return false
+    f = first(ind.args)
+    (((f === :+) || (f === :-)) && (length(ind.args) == 3)) || return false
+    factor = f === :+ ? 1 : -1
+    arg1 = ind.args[2]
+    arg2 = ind.args[3]
+    if arg1 isa Integer
+        if arg2 isa Symbol && arg2 ∈ ls.loopsymbols
+            addoffset!(ls, indices, offsets, loopedindex, loopdependencies, arg2, arg1 * factor)
+        else
+            false
+        end
+    elseif arg2 isa Integer
+        if arg1 isa Symbol && arg1 ∈ ls.loopsymbols
+            addoffset!(ls, indices, offsets, loopedindex, loopdependencies, arg1, arg2 * factor)
+        else
+            false
+        end
+    else
+        false
+    end        
+end
+
 const DISCONTIGUOUS = Symbol("##DISCONTIGUOUSSUBARRAY##")
 function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementbytes::Int, var::Union{Nothing,Symbol} = nothing)
     vptrarray = vptr(array)
     add_vptr!(ls, array, vptrarray) # now, subset
     indices = Symbol[]
+    offsets = Int8[]
     loopedindex = Bool[]
     parents = Operation[]
     loopdependencies = Symbol[]
@@ -82,14 +122,18 @@ function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementby
             length(indices) == 0 && push!(indices, DISCONTIGUOUS)
         elseif ind isa Expr
             #FIXME: position (in loopnest) wont be length(ls.loopsymbols) in general
-            parent = add_operation!(ls, gensym(:indexpr), ind, elementbytes, length(ls.loopsymbols))
-            pushparent!(parents, loopdependencies, reduceddeps, parent)
-            # var = get(ls.opdict, ind, nothing)
-            push!(indices, name(parent)); ninds += 1
-            push!(loopedindex, false)
+            if !checkforoffset!(ls, indices, offsets, loopedindex, loopdependencies, ind)
+                parent = add_operation!(ls, gensym(:indexpr), ind, elementbytes, length(ls.loopsymbols))
+                pushparent!(parents, loopdependencies, reduceddeps, parent)
+                push!(indices, name(parent)); 
+                push!(offsets, zero(Int8))
+                push!(loopedindex, false)
+            end
+            ninds += 1
         elseif ind isa Symbol
             if ind ∈ loopset
                 push!(indices, ind); ninds += 1
+                push!(offsets, zero(Int8))
                 push!(loopedindex, true)
                 push!(loopdependencies, ind)
             else
@@ -97,6 +141,7 @@ function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementby
                 if indop !== nothing  && !isconstant(indop)
                     pushparent!(parents, loopdependencies, reduceddeps, indop)
                     push!(indices, name(indop)); ninds += 1
+                    push!(offsets, zero(Int8))
                     push!(loopedindex, false)
                 else
                     vptrarray = subset_vptr!(ls, vptrarray, ninds, ind, indices, loopedindex)
@@ -108,7 +153,7 @@ function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementby
         end
     end
     # (length(parents) != 0 && first(indices) !== Symbol("##DISCONTIGUOUSSUBARRAY##")) && pushfirst!(indices, Symbol("##DISCONTIGUOUSSUBARRAY##"))
-    mref = ArrayReferenceMeta(ArrayReference( array, indices ), loopedindex, vptrarray)
+    mref = ArrayReferenceMeta(ArrayReference( array, indices, offsets ), loopedindex, vptrarray)
     ArrayReferenceMetaPosition(mref, parents, loopdependencies, reduceddeps, isnothing(var) ? Symbol("") : var )
 end
 function tryrefconvert(ls::LoopSet, ex::Expr, elementbytes::Int, var::Union{Nothing,Symbol} = nothing)::Tuple{Bool,ArrayReferenceMetaPosition}

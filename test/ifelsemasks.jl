@@ -1,4 +1,4 @@
-using LoopVectorization, Test
+using LoopVectorization, Random, Test
 T = Float32
 
 @testset "ifelse (masks)" begin
@@ -404,4 +404,14 @@ T = Float32
     @test t ≈ Bernoulli_logitavx(bit, a)
     @test t ≈ Bernoulli_logit_avx(bit, a)
 
+    ai = [rand(Bool) for _ in 1:71];
+    bi = [rand(Bool) for _ in 1:71];
+    @test (ai .& bi) == (@avx ai .& bi)
+    @test (ai .| bi) == (@avx ai .| bi)
+    @test (ai .⊻ bi) == (@avx ai .⊻ bi)
+    a = bitrand(127); b = bitrand(127);
+    @test (a .& b) == (@avx a .& b)
+    @test (a .| b) == (@avx a .| b)
+    @test (a .⊻ b) == (@avx a .⊻ b)
+    
 end

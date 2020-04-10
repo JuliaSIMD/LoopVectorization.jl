@@ -35,7 +35,7 @@ function ArrayRefStruct(ls::LoopSet, mref::ArrayReferenceMeta, arraysymbolinds::
         index_types <<= 8
         indices <<= 8
         offsets <<= 8
-        offsets |= offv[n]
+        offsets |= (offv[n] % UInt8)
         if mref.loopedindex[n]
             index_types |= LoopIndex
             indices |= getloopid(ls, ind)

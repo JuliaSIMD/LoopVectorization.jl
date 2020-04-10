@@ -458,7 +458,53 @@ function isoptranslation(ls::LoopSet, op::Operation, u1::Symbol, u2::Symbol, vec
     end
     istranslation, translationplus
 end
-function convolution_cost_factor(ls::LoopSet, op::Operation, u1::Symbol, u2::Symbol, v::Symbol)
+function maxnegativeoffset(ls::LoopSet, op::Operation, u::Symbol)
+    opmref = op.ref
+    opref = opmref.ref
+    mno = typemin(Int)
+    id = 0
+    for opp ∈ operations(ls)
+        opp === op && continue
+        oppmref = opp.ref
+        oppref = oppmref.ref
+        sameref(opref, oppref) || continue
+        opinds = getindicesonly(op)
+        oppinds = getindicesonly(opp)
+        opoffs = opref.offsets
+        oppoffs = oppref.offsets
+        # oploopi = opmref.loopedindex
+        # opploopi = oppmref.loopedindex
+        mnonew = typemin(Int)
+        for i ∈ eachindex(opinds)
+            if opinds[i] !== oppinds[i]
+                mnonew = 1
+                break
+            end
+            if opinds[i] === u
+                mnonew = (opoffs[i] - oppoffs[i])
+            elseif opoffs[i] != oppoffs[i]
+                mnonew = 1
+                break
+            end
+        end
+        if mno < mnonew < 0
+            mno = mnonew
+            id = identifier(opp)
+        end
+    end
+    mno, id
+end
+function maxnegativeoffset(ls::LoopSet, op::Operation, u1::Symbol, u2::Symbol, v::Symbol)
+    mno = typemin(Int)
+    if u1 !== v
+        mno = first(maxnegativeoffset(ls, op, u1))
+    end
+    if u2 !== v
+        mno = max(mno, first(maxnegativeoffset(ls, op, u2)))
+    end
+    mno
+end
+function loadelimination_cost_factor(ls::LoopSet, op::Operation, u1::Symbol, u2::Symbol, v::Symbol)
     if first(isoptranslation(ls, op, u1, u2, v))
         for loop ∈ ls.loops
             # If another loop is short, assume that LLVM will unroll it, in which case
@@ -473,7 +519,12 @@ function convolution_cost_factor(ls::LoopSet, op::Operation, u1::Symbol, u2::Sym
         end
         (0.25, VectorizationBase.REGISTER_COUNT == 32 ? 1.2 : 1.0)
     else
-        (1.0, 1.0)
+        offset = maxnegativeoffset(ls, op, u1, u2, v)
+        if -5 < offset < 0
+            (-0.25offset, 1.0)
+        else
+            (1.0, 1.0)
+        end
     end
 end
 # Just tile outer two loops?
@@ -542,7 +593,7 @@ function evaluate_cost_tile(
         rt, lat, rp = cost(ls, op, vectorized, Wshift, size_T)
         # @show op rt, lat, rp
         if isload(op)
-            factor1, factor2 = convolution_cost_factor(ls, op, unrolled, tiled, vectorized)
+            factor1, factor2 = loadelimination_cost_factor(ls, op, unrolled, tiled, vectorized)
             rt *= factor1; rp *= factor2;
         end
         # @show isunrolled, istiled, op rt, lat, rp

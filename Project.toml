@@ -13,14 +13,15 @@ VectorizationBase = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
 
 [compat]
 OffsetArrays = "1"
-SIMDPirates = "0.7.11"
+SIMDPirates = "0.7.12"
 SLEEFPirates = "0.4.4"
 UnPack = "0"
-VectorizationBase = "0.10"
+VectorizationBase = "0.10.1"
 julia = "1.1"
 
 [extras]
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test"]
+test = ["Random", "Test"]

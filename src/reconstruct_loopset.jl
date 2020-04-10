@@ -63,13 +63,15 @@ function ArrayReferenceMeta(
     offsets = ar.offsets
     ni = filled_8byte_chunks(index_types)
     index_vec = Symbol[]
-    offset_vec = Vector{Int8}(undef, ni)
+    offset_vec = Int8[]
     loopedindex = Bool[]
     while index_types != zero(UInt64)
         ind = indices % UInt8
+        offset = offsets % Int8
         if index_types == LoopIndex
             for inda in ls.loopsymbol_offsets[ind]+1:ls.loopsymbol_offsets[ind+1]
                 pushfirst!(index_vec, ls.loopsymbols[inda])
+                pushfirst!(offset_vec, offset)
                 pushfirst!(loopedindex, true)
             end
         elseif index_types == ComputedIndex
@@ -78,18 +80,20 @@ function ArrayReferenceMeta(
                 nops = nopsv[ind]
                 for j ∈ 0:nops-1
                     pushfirst!(index_vec, expandedopname(opsym, j))
+                    pushfirst!(offset_vec, offset)
                     pushfirst!(loopedindex, false)
                 end
             else
                 pushfirst!(index_vec, opsym)
+                pushfirst!(offset_vec, offset)
                 pushfirst!(loopedindex, false)
             end
         else
             @assert index_types == SymbolicIndex
             pushfirst!(index_vec, arraysymbolinds[ind])
+            pushfirst!(offset_vec, offset)
             pushfirst!(loopedindex, false)
         end
-        offset_vec[ni] = offsets % Int8
         index_types >>>= 8
         indices >>>= 8
         offsets >>>= 8
@@ -414,7 +418,7 @@ function _avx_loopset(OPSsv, ARFsv, AMsv, LPSYMsv, LBsv, vargs)
     )
 end
 @generated function _avx_!(::Val{UT}, ::Type{OPS}, ::Type{ARF}, ::Type{AM}, ::Type{LPSYM}, lb::LB, vargs...) where {UT, OPS, ARF, AM, LPSYM, LB}
-    # 1 + 1 # Irrelevant line you can comment out/in to force recompilation...
+    1 + 1 # Irrelevant line you can comment out/in to force recompilation...
     ls = _avx_loopset(OPS.parameters, ARF.parameters, AM.parameters, LPSYM.parameters, LB.parameters, vargs)
     avx_body(ls, UT)
 end

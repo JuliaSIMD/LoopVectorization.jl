@@ -244,6 +244,7 @@ end
     q = lower(ls)
     push!(q.args, :dest)
     pushfirst!(q.args, Expr(:meta,:inline))
+    # @show q
     q
     # ls
 end

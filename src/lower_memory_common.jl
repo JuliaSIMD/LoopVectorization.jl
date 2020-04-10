@@ -23,19 +23,23 @@ function symbolind(ind::Symbol, op::Operation, td::UnrollArgs)
     end
     unrolled ∈ loopdependencies(parent) ? Symbol(pvar, u) : pvar
 end
+
+addoffset(ex, offset::Integer) = iszero(offset) ? ex : Expr(:call, :+, ex, convert(Int, offset))
+
 function mem_offset(op::Operation, td::UnrollArgs)
     # @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
     ret = Expr(:tuple)
-    indices = getindices(op)
+    indices = getindicesonly(op)
+    offsets = getoffsets(op)
     loopedindex = op.ref.loopedindex
-    start = (first(indices) === Symbol("##DISCONTIGUOUSSUBARRAY##")) + 1
-    for (n,ind) ∈ enumerate(@view(indices[start:end]))
-        if ind isa Int
-            push!(ret.args, ind)
+    for (n,ind) ∈ enumerate(indices)
+        offset = offsets[n]
+        if ind isa Int # impossible
+            push!(ret.args, ind + offset)
         elseif loopedindex[n]
-            push!(ret.args, ind)
+            push!(ret.args, addoffset(ind, offset))
         else
-            push!(ret.args, symbolind(ind, op, td))
+            push!(ret.args, addoffset(symbolind(ind, op, td), offset))
         end
     end
     ret
@@ -45,22 +49,23 @@ function mem_offset_u(op::Operation, td::UnrollArgs)
     @unpack unrolled, u = td
     incr = u
     ret = Expr(:tuple)
-    indices = getindices(op)
+    indices = getindicesonly(op)
+    offsets = getoffsets(op)
     loopedindex = op.ref.loopedindex
     if incr == 0
         return mem_offset(op, td)
         # append_inds!(ret, indices, loopedindex)
     else
-        start = (first(indices) === Symbol("##DISCONTIGUOUSSUBARRAY##")) + 1
-        for (n,ind) ∈ enumerate(@view(indices[start:end]))
+        for (n,ind) ∈ enumerate(indices)
+            offset = offsets[n]
             if ind isa Int
                 push!(ret.args, ind)
             elseif ind === unrolled
-                push!(ret.args, Expr(:call, :+, ind, incr))
+                push!(ret.args, Expr(:call, :+, ind, incr + offset))
             elseif loopedindex[n]
-                push!(ret.args, ind)
+                push!(ret.args, addoffset(ind, offset))
             else
-                push!(ret.args, symbolind(ind, op, td))
+                push!(ret.args, addoffset(symbolind(ind, op, td), offset))
             end
         end
     end
@@ -71,22 +76,35 @@ function mem_offset_u(op::Operation, td::UnrollArgs, mul::Symbol)
     @unpack unrolled, u = td
     incr = u
     ret = Expr(:tuple)
-    indices = getindices(op)
+    indices = getindicesonly(op)
+    offsets = getoffsets(op)
     loopedindex = op.ref.loopedindex
     if incr == 0
         return mem_offset(op, td)
         # append_inds!(ret, indices, loopedindex)
     else
-        start = (first(indices) === Symbol("##DISCONTIGUOUSSUBARRAY##")) + 1
-        for (n,ind) ∈ enumerate(@view(indices[start:end]))
-            if ind isa Int
-                push!(ret.args, ind)
+        for (n,ind) ∈ enumerate(indices)
+            offset = offsets[n]
+            if ind isa Int # impossible
+                push!(ret.args, ind + offset)
             elseif ind === unrolled
-                push!(ret.args, Expr(:call, :+, ind, Expr(:call, lv(:valmul), mul, incr)))
+                if isone(incr)
+                    if iszero(offset)
+                        push!(ret.args, Expr(:call, lv(:valadd), mul, ind))
+                    else
+                        push!(ret.args, Expr(:call, :+, ind, Expr(:call, lv(:valadd), mul, convert(Int, offset))))
+                    end
+                else
+                    if iszero(offset)
+                        push!(ret.args, Expr(:call, lv(:valmuladd), mul, incr, ind))
+                    else
+                        push!(ret.args, Expr(:call, :+, ind, Expr(:call, lv(:valmuladd), mul, incr, convert(Int, offset))))
+                    end
+                end
             elseif loopedindex[n]
-                push!(ret.args, ind)
+                push!(ret.args, addoffset(ind, offset))
             else
-                push!(ret.args, symbolind(ind, op, td))
+                push!(ret.args, addoffset(symbolind(ind, op, td), offset))
             end
         end
     end

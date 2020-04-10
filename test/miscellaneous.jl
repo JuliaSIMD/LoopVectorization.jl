@@ -491,6 +491,39 @@ using Test
         end
     end
 
+    function addsumtoeach!(y, z)
+        @inbounds @fastmath for i in axes(z, 1)
+            @simd ivdep for j in axes(y, 1)
+                y[j] = y[j] + z[i]
+            end
+        end
+    end
+    function addsumtoeachavx!(y, z)
+        @avx for i in axes(z, 1)
+            for j in axes(y, 1)
+                y[j] = y[j] + z[i]
+            end
+        end
+    end
+    function crossedsumavx!(x, y, z)
+        @avx for i in axes(x, 1)
+            for j in axes(x, 2)
+                x[i, j] = x[i, j] + z[i]
+                y[j, i] = y[j, i] + z[i]
+            end
+        end
+    end
+    function crossedsum!(x, y, z)
+        @inbounds @fastmath for i in axes(x, 1)
+            for j in axes(x, 2)
+                x[i, j] = x[i, j] + z[i]
+                y[j, i] = y[j, i] + z[i]
+            end
+        end
+    end
+    
+
+    
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
         A = randn(T, 199, 498);
@@ -644,6 +677,18 @@ using Test
         s1, p1 = sumprod_avx(r)
         @test s ≈ s1
         @test p ≈ p1
+
+        x1 = rand(47); x2 = copy(x1);
+        z = rand(83);
+        addsumtoeach!(x1, z)
+        addsumtoeachavx!(x2, z)
+        @test x1 ≈ x2
+        X1 = rand(83, 47); X2 = copy(X1);
+        Y1 = rand(47, 83); Y2 = copy(Y1);
+        crossedsum!(X1, Y1, z)
+        crossedsumavx!(X2, Y2, z)
+        @test X1 ≈ X2
+        @test Y1 ≈ Y2
     end
     for T ∈ [Int16, Int32, Int64]
         n = 8sizeof(T) - 1
@@ -680,7 +725,7 @@ using Test
         function smoothdim_avx!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
             ifirst, ilast = first(irng), last(irng)
             ifirst > ilast && return s
-            @avx tile=(1,1) for Ipost in Rpost
+            @avx for Ipost in Rpost
                 for Ipre in Rpre
                     s[Ipre, ifirst, Ipost] = x[Ipre, ifirst, Ipost]
                     for i = ifirst+1:ilast
@@ -693,7 +738,7 @@ using Test
         function smoothdim_ifelse_avx!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
             ifirst, ilast = first(irng), last(irng)
             ifirst > ilast && return s
-            @avx tile=(1,1) for Ipost in Rpost, i = ifirst:ilast, Ipre in Rpre
+            @avx for Ipost in Rpost, i = ifirst:ilast, Ipre in Rpre
                 xi = x[Ipre, i, Ipost]
                 xim = i > ifirst ? x[Ipre, i-1, Ipost] : xi
                 s[Ipre, i, Ipost] = α*xi + (1-α)*xim
@@ -701,7 +746,17 @@ using Test
             s
         end
 
-        x = rand(11,11,11,11,11);
+        # s = dest1; 
+        # ifirst, ilast = first(axes(x, d)), last(axes(x, d))
+        # ls = LoopVectorization.@avx_debug for Ipost in Rpost, i = ifirst:ilast, Ipre in Rpre
+        #     xi = x[Ipre, i, Ipost]
+        #     xim = i > ifirst ? x[Ipre, i-1, Ipost] : xi
+        #     s[Ipre, i, Ipost] = α*xi + (1-α)*xim
+        # end
+        # LoopVectorization.choose_order(ls);
+
+        M = 11;
+        x = rand(M,M,M,M,M);
         dest1, dest2 = similar(x), similar(x);
         α = 0.3
         for d = 1:ndims(x)

@@ -4,15 +4,25 @@ struct ArrayReference
     indices::Vector{Symbol}
     offsets::Vector{Int8}
 end
-ArrayReference(array, indices) = ArrayReference(array, indices, similar(indices, Int8))
-function Base.isequal(x::ArrayReference, y::ArrayReference)
+ArrayReference(array, indices) = ArrayReference(array, indices, zeros(Int8, length(indices)))
+function sameref(x::ArrayReference, y::ArrayReference)
     x.array === y.array || return false
     xinds = x.indices
     yinds = y.indices
     nrefs = length(xinds)
     nrefs == length(yinds) || return false
+    xoffs = x.offsets; yoffs = y.offsets
     for n ∈ 1:nrefs
         xinds[n] === yinds[n] || return false
+    end
+    true
+end
+function Base.isequal(x::ArrayReference, y::ArrayReference)
+    sameref(x, y) || return false
+    xoffs = x.offsets; yoffs = y.offsets
+    length(xoffs) == length(yoffs) || return false
+    for n ∈ eachindex(xoffs)
+        xoffs[n] == yoffs[n] || return false
     end
     true
 end
@@ -26,6 +36,7 @@ function ArrayReferenceMeta(ref::ArrayReference, loopedindex, ptr = vptr(ref))
         ref, loopedindex, ptr
     )
 end
+
 # function Base.hash(x::ArrayReference, h::UInt)
     # @inbounds for n ∈ eachindex(x)
         # h = hash(x.ref[n], h)
@@ -226,8 +237,13 @@ getindices(ref::ArrayReference) = ref.indices
 getindices(mref::ArrayReferenceMeta) = mref.ref.indices
 getindices(mpref::ArrayReferenceMetaPosition) = mpref.ref.ref.indices
 getindices(op::Operation) = op.ref.ref.indices
+getoffsets(op::Operation) = op.ref.ref.offsets
 
-
+function getindicesonly(ref)
+    indices = getindices(ref)
+    start = (first(indices) === Symbol("##DISCONTIGUOUSSUBARRAY##")) + 1
+    @view(indices[start:end])
+end
 # function hasintersection(s1::Set{T}, s2::Set{T}) where {T}
     # for x ∈ s1
         # x ∈ s2 && return true

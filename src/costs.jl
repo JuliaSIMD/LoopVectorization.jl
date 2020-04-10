@@ -100,6 +100,7 @@ const OPAQUE_INSTRUCTION = InstructionCost(50, 50.0, -1.0, VectorizationBase.REG
 #    hand, should indicate how many registers we're keeping live for the sake of eventually storing.
 const COST = Dict{Instruction,InstructionCost}(
     Instruction(:getindex) => InstructionCost(-3.0,0.5,3,1),
+    Instruction(:conditionalload) => InstructionCost(-3.0,0.5,3,1),
     Instruction(:setindex!) => InstructionCost(-3.0,1.0,3,0),
     Instruction(:conditionalstore!) => InstructionCost(-3.0,1.0,3,0),
     Instruction(:zero) => InstructionCost(1,0.5),

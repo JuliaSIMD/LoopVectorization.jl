@@ -98,6 +98,7 @@ using Test
             end
         end
     end
+    
     function AtmulvB_avx1!(G, B,κ)
         d = size(G,1)
         z = zero(eltype(G))
@@ -146,6 +147,26 @@ using Test
     @test LoopVectorization.choose_order(lsp) == ([:d1, :d2], :d2, :d1, :d2, Unum, Tnum)
     # lsp.preamble_symsym
 
+    function hhavx!(A, B, C, D)
+        @avx for i in axes(A, 1)
+            A[i] = A[i] + D[i] * length(axes(B,2));
+            for j = axes(B, 2)
+                B[i, j] = B[i, j] + D[i]
+                C[j] = C[j] + D[i] 
+            end
+        end
+    end
+    function hh!(A, B, C, D)
+        @inbounds @fastmath for i in axes(A, 1)
+            A[i] = A[i] + D[i] * length(axes(B,2));
+            for j = axes(B, 2)
+                B[i, j] = B[i, j] + D[i]
+                C[j] = C[j] + D[i] 
+            end
+        end
+    end
+    
+
     M, K, N = 51, 49, 61
     for T ∈ (Float32, Float64, Int32, Int64)
         @show T, @__LINE__
@@ -189,5 +210,17 @@ using Test
         @test G1 ≈ G2
         fill!(G2, TC(NaN)); AtmulvB_avx3!(G2,B,1);
         @test G1 ≈ G2
+
+        D = rand(M);
+        B1 = rand(M,N); B2 = copy(B1);
+        C1 = rand(N); C2 = copy(C1);
+        A1 = similar(D); A2 = similar(A1);
+        hh!(A1, B1, C1, D)
+        hhavx!(A2, B2, C2, D)
+        @test B1 ≈ B2
+        @test C1 ≈ C2
+        @test A1 ≈ A2
+
+        
     end
 end
