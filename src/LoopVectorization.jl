@@ -16,6 +16,7 @@ using SLEEFPirates: pow
 using Base.Broadcast: Broadcasted, DefaultArrayStyle
 using LinearAlgebra: Adjoint, Transpose
 using Base.Meta: isexpr
+using DocStringExtensions
 
 
 const SUPPORTED_TYPES = Union{Float16,Float32,Float64,Integer}

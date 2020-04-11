@@ -21,7 +21,8 @@ makedocs(;
             "devdocs/loopset_structure.md",
             "devdocs/constructing_loopsets.md",
             "devdocs/evaluating_loops.md",
-            "devdocs/lowering.md"
+            "devdocs/lowering.md",
+            "devdocs/reference.md"
         ]
     ],
     # repo="https://github.com/chriselrod/LoopVectorization.jl/blob/{commit}{path}#L{line}",
