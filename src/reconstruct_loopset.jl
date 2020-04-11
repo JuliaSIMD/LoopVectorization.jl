@@ -418,12 +418,13 @@ function _avx_loopset(OPSsv, ARFsv, AMsv, LPSYMsv, LBsv, @nospecialize(vargs))
         AMsv, LPSYMsv, LBsv, vargs
     )
 end
-const _body_ = Ref{Any}(nothing)
 """
-    _avx_!(ut, ops, arf, am, lpsym, lb, vargs...)
+    _avx_!(unroll, ops, arf, am, lpsym, lb, vargs...)
 
 Execute an `@avx` block. The block's code is represented via the arguments:
-- `ut` is `Val((U,T))`, where `U` is the unrolling factor and `T` ?has something to do with tiling?
+- `unroll` is `Val((u₁,u₂))` and specifies the loop unrolling factor(s).
+  These values may be supplied manually via the `unroll` keyword
+  of [`@avx`](@ref).
 - `ops` is `Tuple{mod1, sym1, op1, mod2, sym2, op2...}` encoding the operations of the loop.
   `mod` and `sym` encode the module and symbol of the called function; `op` is an [`OperationStruct`](@ref)
   encoding the details of the operation.
@@ -436,8 +437,8 @@ Execute an `@avx` block. The block's code is represented via the arguments:
   `StaticLowerUnitRange(1)` because the lower bound of the iterator can be determined to be 1.
 - `vargs...` holds the encoded pointers of all the arrays (see `VectorizationBase`'s various pointer types).
 """
-@generated function _avx_!(::Val{UT}, ::Type{OPS}, ::Type{ARF}, ::Type{AM}, ::Type{LPSYM}, lb::LB, vargs...) where {UT, OPS, ARF, AM, LPSYM, LB}
+@generated function _avx_!(::Val{UNROLL}, ::Type{OPS}, ::Type{ARF}, ::Type{AM}, ::Type{LPSYM}, lb::LB, vargs...) where {UNROLL, OPS, ARF, AM, LPSYM, LB}
     1 + 1 # Irrelevant line you can comment out/in to force recompilation...
     ls = _avx_loopset(OPS.parameters, ARF.parameters, AM.parameters, LPSYM.parameters, LB.parameters, vargs)
-    return _body_[] = copy(avx_body(ls, UT))
+    avx_body(ls, UNROLL)
 end

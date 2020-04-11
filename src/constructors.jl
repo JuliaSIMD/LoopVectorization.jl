@@ -111,8 +111,12 @@ One can find some circumstances where `inline=true` is faster, and other circums
 where `inline=false` is faster, so the best setting may require experimentation.
 
 `unroll` is an integer that specifies the loop unrolling factor, or a
-tuple `(4, 2)` signaling that the generated code should unroll more than
-one loop.
+tuple `(u₁, u₂) = (4, 2)` signaling that the generated code should unroll more than
+one loop. `u₁` is the unrolling factor for the innermost loop and `u₂` for the next-innermost loop,
+but it applies to the loop ordering that will be chosen by LoopVectorization,
+*not* the order in `body`.
+`uᵢ=0` (the default) indicates that LoopVectorization should pick its own value,
+and `uᵢ=-1` disables unrolling for the correspond loop.
 """
 macro avx(q)
     q = macroexpand(__module__, q)
