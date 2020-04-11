@@ -132,7 +132,7 @@ function evaluate_cost_unroll(
             loopdependencies(op) ⊆ nested_loop_syms || continue
             # hasintersection(reduceddependencies(op), nested_loop_syms) && return Inf
             rd = reduceddependencies(op)
-            hasintersection(rd, nested_loop_syms[1:end-length(rd)]) && return Inf
+            hasintersection(rd, @view(nested_loop_syms[1:end-length(rd)])) && return Inf
             included_vars[id] = true
             # @show op first(cost(op, vectorized, Wshift, size_T)), iter
             total_cost += iter * first(cost(ls, op, vectorized, Wshift, size_T))
@@ -576,7 +576,7 @@ function evaluate_cost_tile(
             # # @show nested_loop_syms
             # # @show reduceddependencies(op)
             rd = reduceddependencies(op)
-            hasintersection(rd, nested_loop_syms[1:end-length(rd)]) && return 0,0,Inf
+            hasintersection(rd, @view(nested_loop_syms[1:end-length(rd)])) && return 0,0,Inf
             included_vars[id] = true
             unrolledtiled[1,id] = unrolled ∈ loopdependencies(op)
             unrolledtiled[2,id] = tiled ∈ loopdependencies(op)
