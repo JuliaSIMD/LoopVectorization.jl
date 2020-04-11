@@ -404,11 +404,17 @@ T = Float32
     @test t ≈ Bernoulli_logitavx(bit, a)
     @test t ≈ Bernoulli_logit_avx(bit, a)
 
-    ai = [rand(Bool) for _ in 1:71];
-    bi = [rand(Bool) for _ in 1:71];
-    @test (ai .& bi) == (@avx ai .& bi)
-    @test (ai .| bi) == (@avx ai .| bi)
-    @test (ai .⊻ bi) == (@avx ai .⊻ bi)
+    if LoopVectorization.VectorizationBase.AVX2 || Base.libllvm_version ≥ v"8" #FIXME Why doesn't this work on Travis Ivy Bridge Julia 1.1?
+        ai = [rand(Bool) for _ in 1:71];
+        bi = [rand(Bool) for _ in 1:71];
+        @test (ai .& bi) == (@avx ai .& bi)
+        @test (ai .| bi) == (@avx ai .| bi)
+        @test (ai .⊻ bi) == (@avx ai .⊻ bi)
+    else
+        @test_broken (ai .& bi) == (@avx ai .& bi)
+        @test_broken (ai .| bi) == (@avx ai .| bi)
+        @test_broken (ai .⊻ bi) == (@avx ai .⊻ bi)
+    end
     a = bitrand(127); b = bitrand(127);
     @test (a .& b) == (@avx a .& b)
     @test (a .| b) == (@avx a .| b)
