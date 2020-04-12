@@ -115,7 +115,7 @@ T = Float64
         rng1,  rng2  = axes(out)
         Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> kern_ik_jk = kern[ik-2,jk-2]
         # Manually unpack the OffsetArray
-        @avx tile=(2,2) for j in rng2, i in rng1
+        @avx unroll=(2,2) for j in rng2, i in rng1
             tmp_0 = zero(eltype(out))
             Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> tmp_{ik+(jk-1)*3} = A[i+(ik-2),j+(jk-2)] * kern_ik_jk + tmp_{ik+(jk-1)*3-1}
             out[i,j] = tmp_9
@@ -126,7 +126,7 @@ T = Float64
         rng1,  rng2  = axes(out)
         Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> kern_ik_jk = kern[ik-2,jk-2]
         # Manually unpack the OffsetArray
-        @avx tile=(3,3) for j in rng2, i in rng1
+        @avx unroll=(3,3) for j in rng2, i in rng1
             tmp_0 = zero(eltype(out))
             Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> tmp_{ik+(jk-1)*3} = A[i+(ik-2),j+(jk-2)] * kern_ik_jk + tmp_{ik+(jk-1)*3-1}
             out[i,j] = tmp_9

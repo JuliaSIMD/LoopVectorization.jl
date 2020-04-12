@@ -354,7 +354,7 @@ end
 function add_loop_bound!(ls::LoopSet, itersym::Symbol, bound, upper::Bool = true)
     (bound isa Symbol && upper) && return bound
     bound isa Expr && maybestatic!(bound)
-    N = gensym(Symbol(itersym, upper ? :_loop_upper_bound : :_loop_lower_bound))
+    N = gensym(string(itersym) * (upper ? "_loop_upper_bound" : "_loop_lower_bound"))
     pushpreamble!(ls, Expr(:(=), N, bound))
     N
 end
@@ -397,12 +397,12 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
                 Loop(itersym, 1, otN)
             else
                 otN isa Expr && maybestatic!(otN)
-                N = gensym(Symbol(:loop, itersym))
+                N = gensym("loop" * string(itersym))
                 pushpreamble!(ls, Expr(:(=), N, otN))
                 Loop(itersym, 1, N)
             end
         else
-            N = gensym(Symbol(:loop, itersym))
+            N = gensym("loop" * string(itersym))
             pushpreamble!(ls, Expr(:(=), N, Expr(:call, lv(:maybestaticrange), r)))
             L = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticfirst), N), false)
             U = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticlast), N), true)
@@ -410,7 +410,7 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
         end
     elseif isa(r, Symbol)
         # Treat similar to `eachindex`
-        N = gensym(Symbol(:loop, itersym))
+        N = gensym("loop" * string(itersym))
         pushpreamble!(ls, Expr(:(=), N, Expr(:call, lv(:maybestaticrange), r)))
         L = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticfirst), N), false)
         U = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticlast), N), true)

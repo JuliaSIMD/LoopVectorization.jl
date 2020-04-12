@@ -406,18 +406,18 @@ T = Float32
 
     ai = [rand(Bool) for _ in 1:71];
     bi = [rand(Bool) for _ in 1:71];
-    # if LoopVectorization.VectorizationBase.AVX2 || Base.libllvm_version ≥ v"8" #FIXME Why doesn't this work on Travis Ivy Bridge Julia 1.1?
+    if LoopVectorization.VectorizationBase.AVX2 || Base.libllvm_version ≥ v"8" #FIXME Why doesn't this work on Travis Ivy Bridge Julia 1.1?
         @test (ai .& bi) == (@avx ai .& bi)
         @test (ai .| bi) == (@avx ai .| bi)
         @test (ai .⊻ bi) == (@avx ai .⊻ bi)
-    # else
-    #     @test_broken (ai .& bi) == (@avx ai .& bi)
-    #     @test_broken (ai .| bi) == (@avx ai .| bi)
-    #     @test_broken (ai .⊻ bi) == (@avx ai .⊻ bi)
+    else
+        @test_broken (ai .& bi) == (@avx ai .& bi)
+        @test_broken (ai .| bi) == (@avx ai .| bi)
+        @test_broken (ai .⊻ bi) == (@avx ai .⊻ bi)
     #     @test_broken (Ai .& bi) == (@avx Ai .& bi)
     #     @test_broken (ai .| Bi) == (@avx ai .| Bi)
     #     @test_broken (Ai .⊻ Bi) == (@avx Ai .⊻ Bi)
-    # end
+    end
     a = bitrand(127); b = bitrand(127);
     @test (a .& b) == (@avx a .& b)
     @test (a .| b) == (@avx a .| b)

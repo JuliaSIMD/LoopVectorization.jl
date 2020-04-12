@@ -72,7 +72,7 @@ end
 function add_constant!(
     ls::LoopSet, value::Number, deps::Vector{Symbol}, assignedsym::Symbol, elementbytes::Int
 )
-    op = add_constant!(ls, gensym(Symbol(value)), deps, assignedsym, elementbytes, :numericconstant)
+    op = add_constant!(ls, gensym(string(value)), deps, assignedsym, elementbytes, :numericconstant)
     pushpreamble!(ls, op, value)
     op
 end

@@ -91,7 +91,7 @@ using Test
     end
     function AtmulvBavx3!(G, B,κ)
         d = size(G,1)
-        @avx tile=(2,2) for d1=1:d
+        @avx unroll=(2,2) for d1=1:d
             G[d1,κ] = B[1,d1]*B[1,κ]
             for d2=2:d
                 G[d1,κ] += B[d2,d1]*B[d2,κ]

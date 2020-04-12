@@ -34,7 +34,7 @@ Base.hash(instr::Instruction, h::UInt64) = hash(instr.instr, hash(instr.mod, h))
 # end
 Base.isequal(ins1::Instruction, ins2::Instruction) = (ins1.instr === ins2.instr) && (ins1.mod === ins2.mod)
 
-const LOOPCONSTANT = Instruction(gensym())
+const LOOPCONSTANT = Instruction(Symbol("LOOPCONSTANTINSTRUCTION"))
 
 struct InstructionCost
     scaling::Float64 # sentinel values: -3 == no scaling; -2 == offset_scaling, -1 == linear scaling, >0 ->  == latency == reciprocal throughput

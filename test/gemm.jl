@@ -183,7 +183,7 @@
     end
 
     function AmulB2x2avx!(C, A, B)
-        @avx tile=(2,2) for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+        @avx unroll=(2,2) for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
             ΔCₘₙ = zero(eltype(C))
             for k ∈ 1:size(A,2)
                 ΔCₘₙ += A[m,k] * B[k,n]
@@ -192,7 +192,7 @@
         end
     end
     function AmulB2x2_avx!(C, A, B)
-        @_avx tile=(2,2) for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+        @_avx unroll=(2,2) for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
             ΔCₘₙ = zero(eltype(C))
             for k ∈ 1:size(A,2)
                 ΔCₘₙ += A[m,k] * B[k,n]

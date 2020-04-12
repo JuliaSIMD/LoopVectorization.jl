@@ -106,32 +106,36 @@ function check_inline(arg)
     a1 === :inline || return nothing
     (arg.args[2])::Bool
 end
-function check_tile(arg)
-    a1 = (arg.args[1])::Symbol
-    a1 === :tile || return nothing
-    tup = arg.args[2]
-    @assert length(tup.args) == 2
-    U = convert(Int8, tup.args[1])
-    T = convert(Int8, tup.args[2])
-    U, T
-end
 function check_unroll(arg)
     a1 = (arg.args[1])::Symbol
     a1 === :unroll || return nothing
-    convert(Int8, arg.args[2])
+    tup = arg.args[2]
+    T = Int8(-1)
+    if tup isa Integer
+        U = convert(Int8, tup)
+    elseif isa(tup, Expr)
+        if length(tup.args) == 1
+            U = convert(Int8, tup.args[1])
+        elseif length(tup.args) == 2
+            U = convert(Int8, tup.args[1])
+            T = convert(Int8, tup.args[2])
+        else
+            return nothing
+        end    
+    else
+        return nothing
+    end
+    U, T
 end
-function check_macro_kwarg(arg, inline::Int8 = Int8(2), U::Int8 = zero(Int8), T::Int8 = zero(Int8))
+function check_macro_kwarg(arg, inline::Bool = true, U::Int8 = zero(Int8), T::Int8 = zero(Int8))
     @assert arg.head === :(=)
     i = check_inline(arg)
     if i !== nothing
-        inline = i ? Int8(2) : Int8(-1)
+        inline = i
     else
         u = check_unroll(arg)
         if u !== nothing
-            U = u
-            T = Int8(-1)
-        else
-            U, T = check_tile(arg)
+            U, T = u
         end
     end
     inline, U, T
@@ -171,8 +175,8 @@ macro _avx(arg, q)
     esc(lower(LoopSet(q, __module__), U, T))
 end
 
-
 macro avx_debug(q)
     q = macroexpand(__module__, q)
     esc(LoopVectorization.setup_call_debug(LoopSet(q, __module__)))
 end
+

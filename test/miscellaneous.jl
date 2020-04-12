@@ -39,7 +39,7 @@ using Test
     function dot3avx24(x, A, y)
         M, N = size(A)
         s = zero(promote_type(eltype(x), eltype(A), eltype(y)))
-        @avx tile=(2,4) for m ∈ 1:M, n ∈ 1:N
+        @avx unroll=(2,4) for m ∈ 1:M, n ∈ 1:N
             s += x[m] * A[m,n] * y[n]
         end
         s

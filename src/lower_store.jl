@@ -56,7 +56,6 @@ function reduce_range!(q::Expr, ls::LoopSet, Ulow::Int, Uhigh::Int)
     for or ∈ ls.outer_reductions
         op = ls.operations[or]
         var = mangledvar(op)
-        temp = gensym(var)
         instr = Instruction(reduction_to_single_vector(op.instruction))
         reduce_range!(q, var, instr, Ulow, Uhigh)
     end

@@ -398,13 +398,13 @@ function setup_call_debug(ls::LoopSet)
     pushpreamble!(ls, generate_call(ls, (true,zero(Int8),zero(Int8)), true))
     ls.preamble
 end
-function setup_call(ls::LoopSet, inline = Int8(2), U = zero(Int8), T = zero(Int8))
+function setup_call(ls::LoopSet, inline::Bool = true, U = zero(Int8), T = zero(Int8))
     # We outline/inline at the macro level by creating/not creating an anonymous function.
     # The old API instead was based on inlining or not inline the generated function, but
     # the generated function must be inlined into the initial loop preamble for performance reasons.
     # Creating an anonymous function and calling it also achieves the outlining, while still
     # inlining the generated function into the loop preamble.
-    if inline == Int8(2)
+    if inline
         setup_call_inline(ls, U, T)
     else
         setup_call_noinline(ls, U, T)

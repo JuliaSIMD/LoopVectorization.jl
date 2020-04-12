@@ -16,7 +16,8 @@ const LIBDIRECTCALLJIT = joinpath(LOOPVECBENCHDIR, "libdcjtest.so")
 # requires Clang with polly to build
 cfile = joinpath(LOOPVECBENCHDIR, "looptests.c")
 if !isfile(LIBCTEST) || mtime(cfile) > mtime(LIBCTEST)    
-    run(`/usr/local/bin/clang -Ofast -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -lm -mllvm -polly -mllvm -polly-vectorizer=stripmine -shared -fPIC $cfile -o $LIBCTEST`)
+    run(`clang -Ofast -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -lm -shared -fPIC $cfile -o $LIBCTEST`)
+    # run(`/usr/local/bin/clang -Ofast -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -lm -mllvm -polly -mllvm -polly-vectorizer=stripmine -shared -fPIC $cfile -o $LIBCTEST`)
 end
 if !isfile(LIBICTEST) || mtime(cfile) > mtime(LIBICTEST)
     run(`icc -fast -qopt-zmm-usage=high -fargument-noalias-global -qoverride-limits -shared -fPIC $cfile -o $LIBICTEST`)
@@ -42,25 +43,45 @@ if !isfile(LIBIEIGENTEST) || mtime(eigenfile) > mtime(LIBIEIGENTEST)
     run(`icpc -fast -qopt-zmm-usage=high -fargument-noalias-global -qoverride-limits -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBIEIGENTEST`)
 end
 
-# directcalljitfile = joinpath(LOOPVECBENCHDIR, "directcalljit.f90")
-# if !isfile(LIBDIRECTCALLJIT) || mtime(directcalljitfile) > mtime(LIBDIRECTCALLJIT)
-#     # run(`ifort -fast -DMKL_DIRECT_CALL_SEQ_JIT -fpp -qopt-zmm-usage=high -shared -fPIC $directcalljitfile -o $LIBDIRECTCALLJIT`)
-#     run(`gfortran -Ofast -march=native -DMKL_DIRECT_CALL_SEQ_JIT -cpp -mprefer-vector-width=$(8REGISTER_SIZE) -shared -fPIC $directcalljitfile -o $LIBDIRECTCALLJIT`)
-# end
+MKL_ROOT = "/home/chriselrod/intel"
+directcalljitfile = joinpath(LOOPVECBENCHDIR, "directcalljit.f90")
+if !isfile(LIBDIRECTCALLJIT) || mtime(directcalljitfile) > mtime(LIBDIRECTCALLJIT)
+    run(`ifort -fast -DMKL_DIRECT_CALL_SEQ_JIT -fpp -qopt-zmm-usage=high -Wl,--start-group $(joinpath(MKL_ROOT,"mkl/lib/intel64/libmkl_intel_lp64.a")) $(joinpath(MKL_ROOT,"mkl/lib/intel64/libmkl_sequential.a")) $(joinpath(MKL_ROOT,"mkl/lib/intel64/libmkl_core.a")) -Wl,--end-group -I$(joinpath(MKL_ROOT, "mkl/include")) -I$(joinpath(MKL_ROOT, "compilers_and_libraries_2020.1.217/linux/mkl/include/intel64/lp64")) -shared -fPIC $directcalljitfile -o $LIBDIRECTCALLJIT`)
+    # run(`gfortran -Ofast -march=native -DMKL_DIRECT_CALL_SEQ_JIT -cpp -mprefer-vector-width=$(8REGISTER_SIZE) -Wl,--start-group $(joinpath(MKL_ROOT,"mkl/lib/intel64/libmkl_intel_lp64.a")) $(joinpath(MKL_ROOT,"mkl/lib/intel64/libmkl_sequential.a")) $(joinpath(MKL_ROOT,"mkl/lib/intel64/libmkl_core.a")) -Wl,--end-group -I$(joinpath(MKL_ROOT, "mkl/include")) -I$(joinpath(MKL_ROOT, "compilers_and_libraries_2020.1.217/linux/mkl/include/intel64/lp64")) -shared -fPIC $directcalljitfile -o $LIBDIRECTCALLJIT`)
+    
+    # run(`gfortran -Ofast -march=native -DMKL_DIRECT_CALL_SEQ_JIT -cpp -mprefer-vector-width=$(8REGISTER_SIZE) -shared -fPIC $directcalljitfile -o $LIBDIRECTCALLJIT`)
+end
 
-# istransposed(x) = false
-# istransposed(x::Adjoint) = true
-# istransposed(x::Transpose) = true
-# function dgemmjit!(C::AbstractVecOrMat{Float64}, A::AbstractVecOrMat{Float64}, B::AbstractVecOrMat{Float64})
-#     M, N = size(C); K = size(B, 1)
-#     ccall(
-#         (:dgemmjit, LIBDIRECTCALLJIT), Cvoid,
-#         (Ptr{Float64},Ptr{Float64},Ptr{Float64},Ref{Int},Ref{Int},Ref{Int},Ref{Bool},Ref{Bool}),
-#         parent(C), parent(A), parent(B),
-#         Ref(M), Ref(K), Ref(N),
-#         Ref(istransposed(A)), Ref(istransposed(B))
-#     )
-# end
+istransposed(x) = false
+istransposed(x::Adjoint) = true
+istransposed(x::Transpose) = true
+"""
+If transposed, requires them to be square
+"""
+function dgemmmkl!(C::AbstractMatrix{Float64}, A::AbstractMatrix{Float64}, B::AbstractMatrix{Float64})
+    M, N = size(C); K = size(B, 1)
+    ccall(
+        (:dgemmjit, LIBDIRECTCALLJIT), Cvoid,
+        (Ptr{Float64},Ptr{Float64},Ptr{Float64},Ref{Int},Ref{Int},Ref{Int},Ref{Bool},Ref{Bool}),
+        parent(C), parent(A), parent(B),
+        Ref(M), Ref(K), Ref(N),
+        Ref(istransposed(A)), Ref(istransposed(B))
+    )
+end
+mkl_set_num_threads(N::Integer) = ccall((:set_num_threads, LIBDIRECTCALLJIT), Cvoid, (Ref{UInt32},), Ref(N % UInt32))
+mkl_set_num_threads(1)
+"""
+If transposed, requires them to be square
+"""
+function dgemvmkl!(y::AbstractVector{Float64}, A::AbstractMatrix{Float64}, x::AbstractVector{Float64})
+    M, N = size(A);
+    ccall(
+        (:dgemvjit, LIBDIRECTCALLJIT), Cvoid,
+        (Ptr{Float64},Ptr{Float64},Ptr{Float64},Ref{Int},Ref{Int},Ref{Bool}),
+        parent(y), parent(A), parent(x),
+        Ref(M), Ref(N), Ref(istransposed(A))
+    )
+end
 
 for (prefix,Cshared,Fshared,Eshared) ∈ ((Symbol(""),LIBCTEST,LIBFTEST,LIBEIGENTEST), (:i,LIBICTEST,LIBIFTEST,LIBIEIGENTEST))
     for order ∈ (:kmn, :knm, :mkn, :mnk, :nkm, :nmk)

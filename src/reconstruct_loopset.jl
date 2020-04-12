@@ -13,7 +13,7 @@ function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{StaticUpperUnitRange{U}
     pushpreamble!(ls, Expr(:(=), start, Expr(:(.), ex, QuoteNode(:L))))
     Loop(sym, U - 1024, U, start, Symbol(""), false, true)::Loop
 end
-function Loop(ls::LoopSet, ex::Expr, sym::String, ::Type{StaticLowerUnitRange{L}}) where {L}
+function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{StaticLowerUnitRange{L}}) where {L}
     stop = gensym(String(sym)*"_loopstop")
     pushpreamble!(ls, Expr(:(=), stop, Expr(:(.), ex, QuoteNode(:U))))
     Loop(sym, L, L + 1024, Symbol(""), stop, true, false)::Loop
@@ -382,7 +382,7 @@ function avx_loopset(instr, ops, arf, AM, LPSYM, LB, vargs)
     add_loops!(ls, LPSYM, LB)
     resize!(ls.loop_order, ls.loopsymbol_offsets[end])
     arraysymbolinds = gen_array_syminds(AM)
-    opsymbols = [gensym(:op) for _ ∈ eachindex(ops)]
+    opsymbols = [gensym("op") for _ ∈ eachindex(ops)]
     nopsv = NOpsType[calcnops(ls, op) for op in ops]
     expandedv = [isexpanded(ls, ops, nopsv, i) for i ∈ eachindex(ops)]
     mrefs = create_mrefs!(ls, arf, arraysymbolinds, opsymbols, nopsv, expandedv, vargs)
