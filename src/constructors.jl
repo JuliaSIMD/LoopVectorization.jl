@@ -90,6 +90,29 @@ julia> b ≈ c
 true
 ```
 
+# Extended help
+
+Advanced users can customize the implementation of the `@avx`-annotated block
+using keyword arguments:
+
+```
+@avx inline=false unroll=2 body
+```
+
+where `body` is the code of the block (e.g., `for ... end`).
+
+`inline` is a Boolean. When `true` (the default), `body` will be directly inlined
+into the function (via a forced-inlining call to `_avx_!`).
+When `false`, it will call `__avx__!` instead, letting Julia's own inlining engine
+determine whether the call to `__avx__!` should be inlined. (Typically, it won't.)
+In priniciple, first calling `__avx__!` (which itself calls `_avx_!`) can sometimes
+allow better code generation.
+One can find some circumstances where `inline=true` is faster, and other circumstances
+where `inline=false` is faster, so the best setting may require experimentation.
+
+`unroll` is an integer that specifies the loop unrolling factor, or a
+tuple `(4, 2)` signaling that the generated code should unroll more than
+one loop.
 """
 macro avx(q)
     q = macroexpand(__module__, q)
@@ -121,7 +144,7 @@ function check_unroll(arg)
             T = convert(Int8, tup.args[2])
         else
             return nothing
-        end    
+        end
     else
         return nothing
     end
@@ -179,4 +202,3 @@ macro avx_debug(q)
     q = macroexpand(__module__, q)
     esc(LoopVectorization.setup_call_debug(LoopSet(q, __module__)))
 end
-

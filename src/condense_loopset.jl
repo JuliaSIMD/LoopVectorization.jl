@@ -5,7 +5,9 @@ Base.:|(u::Unsigned, it::IndexType) = u | UInt8(it)
 Base.:(==)(u::Unsigned, it::IndexType) = (u % UInt8) == UInt8(it)
 
 """
-`ArrayRefStruct` stores a representation of an array-reference expression such as `A[i,j]`.
+    ArrayRefStruct
+
+A condensed representation of an [`ArrayReference`](@ref).
 It supports array-references with up to 8 indexes, where the data for each consecutive index is packed into corresponding 8-bit fields
 of `index_types` (storing the enum `IndexType`), `indices` (the `id` for each index symbol), and `offsets` (currently unused).
 """
@@ -53,6 +55,11 @@ function ArrayRefStruct(ls::LoopSet, mref::ArrayReferenceMeta, arraysymbolinds::
     ArrayRefStruct{mref.ref.array,mref.ptr}( index_types, indices, offsets )
 end
 
+"""
+    OperationStruct
+
+A condensed representation of an [`Operation`](@ref).
+"""
 struct OperationStruct <: AbstractLoopOperation
     # instruction::Instruction
     loopdeps::UInt64

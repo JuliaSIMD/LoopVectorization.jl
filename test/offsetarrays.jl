@@ -180,7 +180,7 @@ T = Float64
            out[I] = tmp
        end
        out
-   end
+    end
     function avxgeneric2!(out, A, kern)
        @avx for I in CartesianIndices(out)
            tmp = zero(eltype(out))
@@ -225,7 +225,7 @@ T = Float64
         @test avxgeneric!(out4, A, kern) ≈ out1
         fill!(out4, NaN);
         @test avxgeneric!(out4, A, skern) ≈ out1
-        
+
         fill!(out4, NaN); @test avxgeneric2!(out4, A, kern) ≈ out1
         fill!(out4, NaN); @test avxgeneric2!(out4, A, skern) ≈ out1
     end

@@ -22,5 +22,5 @@ vmapntt!
 
 ```@docs
 vfilter
-vfilter!
+LoopVectorization.vfilter!
 ```

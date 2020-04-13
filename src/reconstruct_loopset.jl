@@ -417,8 +417,26 @@ function _avx_loopset(OPSsv, ARFsv, AMsv, LPSYMsv, LBsv, vargs)
         AMsv, LPSYMsv, LBsv, vargs
     )
 end
+const _body_ = Ref{Any}(nothing)
+"""
+    _avx_!(ut, ops, arf, am, lpsym, lb, vargs...)
+
+Execute an `@avx` block. The block's code is represented via the arguments:
+- `ut` is `Val((U,T))`, where `U` is the unrolling factor and `T` ?has something to do with tiling?
+- `ops` is `Tuple{mod1, sym1, op1, mod2, sym2, op2...}` encoding the operations of the loop.
+  `mod` and `sym` encode the module and symbol of the called function; `op` is an [`OperationStruct`](@ref)
+  encoding the details of the operation.
+- `arf` is `Tuple{arf1, arf2...}`, where each `arfi` is an [`ArrayRefStruct`](@ref) encoding
+  an array reference.
+- `am` contains miscellaneous data about the LoopSet (see `process_metadata!`)
+- `lpsym` is `Tuple{:i,:j,...}`, a Tuple of the "loop symbols", i.e. the item variable `i` in `for i ∈ iter`
+- `lb` is `Tuple{RngTypei,RngTypej,...}`, a Tuple encoding syntactically-knowable information about
+  the iterators corresponding to `lpsym`. For example, in `for i ∈ 1:n`, the `1:n` would be encoded with
+  `StaticLowerUnitRange(1)` because the lower bound of the iterator can be determined to be 1.
+- `vargs...` holds the encoded pointers of all the arrays (see `VectorizationBase`'s various pointer types).
+"""
 @generated function _avx_!(::Val{UT}, ::Type{OPS}, ::Type{ARF}, ::Type{AM}, ::Type{LPSYM}, lb::LB, vargs...) where {UT, OPS, ARF, AM, LPSYM, LB}
     1 + 1 # Irrelevant line you can comment out/in to force recompilation...
     ls = _avx_loopset(OPS.parameters, ARF.parameters, AM.parameters, LPSYM.parameters, LB.parameters, vargs)
-    avx_body(ls, UT)
+    return _body_[] = copy(avx_body(ls, UT))
 end

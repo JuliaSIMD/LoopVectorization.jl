@@ -1,7 +1,21 @@
+"""
+    ArrayReference
 
+A type for encoding an array reference `A[i,j]` occurring inside an `@avx` block.
+
+# Fields
+
+$(TYPEDFIELDS)
+"""
 struct ArrayReference
+    "The array variable"
     array::Symbol
+    "The list of indices (e.g., `[:i, :j]`), or `name(op)` for computed indices."
     indices::Vector{Symbol}
+    """Index offset, e.g., `a[i+7]` would store the `7`. `offsets` is also used
+    to help identify opportunities for avoiding reloads, for example in `y[i] = x[i] - x[i-1]`,
+    the previous load `x[i-1]` can be "carried over" to the next iteration.
+    Only used for small (`Int8`) offsets."""    
     offsets::Vector{Int8}
 end
 ArrayReference(array, indices) = ArrayReference(array, indices, zeros(Int8, length(indices)))
@@ -26,9 +40,21 @@ function Base.isequal(x::ArrayReference, y::ArrayReference)
     end
     true
 end
+"""
+    ArrayReferenceMeta
+
+A type similar to [`ArrayReference`](@ref) but holding additional information.
+
+# Fields
+
+$(TYPEDFIELDS)
+"""
 struct ArrayReferenceMeta
+    "The `ArrayReference`"
     ref::ArrayReference
+    "A vector of Bools indicating whether each index is a loop variable (`false` for operation-computed indices)"
     loopedindex::Vector{Bool}
+    "Variable holding the pointer to the array's underlying storage"
     ptr::Symbol
 end
 function ArrayReferenceMeta(ref::ArrayReference, loopedindex, ptr = vptr(ref))
@@ -56,6 +82,10 @@ Base.:(==)(x::ArrayReferenceMeta, y) = false
 
 abstract type AbstractLoopOperation end
 
+"""
+`OperationType` is an `@enum` for classifying supported operations that can appear in
+`@avx` blocks. Type `LoopVectorization.OperationType` to see the different types.
+"""
 @enum OperationType begin
     constant
     memload
@@ -63,22 +93,78 @@ abstract type AbstractLoopOperation end
     memstore
     loopvalue
 end
+"An operation setting a variable to a constant value (e.g., `a = 0.0`)" constant
+"An operation setting a variable from a memory location (e.g., `a = A[i,j]`)" memload
+"An operation computing a new value from one or more variables (e.g., `a = b + c`)" compute
+"An operation storing a value to a memory location (e.g., `A[i,j] = a`)" memstore
+"""
+`loopvalue` indicates an loop variable (`i` in `for i in ...`). These are the "parents" of `compute`
+operations that involve the loop variables.
+"""
+loopvalue
 
 # TODO: can some computations be cached in the operations?
 """
+    Operation
+
+A structure to encode a particular action occuring inside an `@avx` block.
+
+# Fields
+
+$(TYPEDFIELDS)
+
+# Example
+
+```jldoctest Operation; filter = r"\\"##.*\\""
+julia> using LoopVectorization
+
+julia> AmulBq = :(for m ∈ 1:M, n ∈ 1:N
+           C[m,n] = zero(eltype(B))
+           for k ∈ 1:K
+               C[m,n] += A[m,k] * B[k,n]
+           end
+       end);
+
+julia> lsAmulB = LoopVectorization.LoopSet(AmulBq);
+
+julia> LoopVectorization.operations(lsAmulB)
+6-element Array{LoopVectorization.Operation,1}:
+ var"##RHS#253" = var"##zero#254"
+ C[m, n] = var"##RHS#253"
+ var"##tempload#255" = A[m, k]
+ var"##tempload#256" = B[k, n]
+ var"##RHS#253" = LoopVectorization.vfmadd_fast(var"##tempload#255", var"##tempload#256", var"##RHS#253")
+ var"##RHS#253" = LoopVectorization.identity(var"##RHS#253")
+```
+Each one of these lines is a pretty-printed `Operation`.
 """
 mutable struct Operation <: AbstractLoopOperation
+    """A unique identifier for this operation.
+    `identifer(op::Operation)` returns the index of this operation within `operations(ls::LoopSet)`."""
     identifier::Int
+    """The name of the variable storing the result of this operation.
+    For `a = val` this would be `:a`. For array assignments `A[i,j] = val` this would be `:A`."""
     variable::Symbol
+    "Intended to be the size of the result, in bytes. Often inaccurate, not to be relied on."
     elementbytes::Int
+    "The specific operator, e.g., `identity` or `+`"
     instruction::Instruction
+    "The [`OperationType`](@ref) associated with this operation"
     node_type::OperationType
+    "The loop variables this operation depends on"
     dependencies::Vector{Symbol}
+    "Additional loop dependencies that must execute before this operation can be performed successfully (often needed in reductions)"
     reduced_deps::Vector{Symbol}
+    "Operations whose result this operation depends on"
     parents::Vector{Operation}
+    "For `memload` or `memstore`, encodes the array location"
     ref::ArrayReferenceMeta
+    "`gensymmed` name of result."
     mangledvariable::Symbol
+    """Loop variables that *consumers* of this operation depend on.
+    Often used in reductions to replicate assignment of initializers when unrolling."""
     reduced_children::Vector{Symbol}
+
     function Operation(
         identifier::Int,
         variable,
@@ -129,7 +215,7 @@ const NOPARENTS = Operation[]
 function Base.show(io::IO, op::Operation)
     if isconstant(op)
         if op.instruction === LOOPCONSTANT
-            
+
             print(io, Expr(:(=), op.variable, 0))
         else
             print(io, Expr(:(=), op.variable, op.instruction.instr))

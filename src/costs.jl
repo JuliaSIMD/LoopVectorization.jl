@@ -6,7 +6,12 @@ else
 end
 
 
+"""
+    Instruction
 
+`Instruction` represents a function via its module and symbol. It is
+similar to a `GlobalRef` and may someday be replaced by `GlobalRef`.
+"""
 struct Instruction
     mod::Symbol
     instr::Symbol
@@ -36,10 +41,24 @@ Base.isequal(ins1::Instruction, ins2::Instruction) = (ins1.instr === ins2.instr)
 
 const LOOPCONSTANT = Instruction(Symbol("LOOPCONSTANTINSTRUCTION"))
 
+"""
+    InstructionCost
+
+Store parameters related to performance for individual CPU instructions.
+
+$(TYPEDFIELDS)
+"""
 struct InstructionCost
+    "A flag indicating how instruction cost scales with vector width (128, 256, or 512 bits)"
     scaling::Float64 # sentinel values: -3 == no scaling; -2 == offset_scaling, -1 == linear scaling, >0 ->  == latency == reciprocal throughput
+    """The number of clock cycles per operation when many of the same operation are repeated in sequence.
+    Think of it as the inverse of the flow rate at steady-state. It is typically ≤ the `scalar_latency`."""
     scalar_reciprocal_throughput::Float64
+    """The minimum delay, in clock cycles, associated with the instruction.
+    Think of it as the delay from turning on a faucet to when water starts coming out the end of the pipe.
+    See also `scalar_reciprocal_throughput`."""
     scalar_latency::Int
+    "Number of floating-point registered used"
     register_pressure::Int
 end
 InstructionCost(sl::Int, srt::Float64, scaling::Float64 = -3.0) = InstructionCost(scaling, srt, sl, 0)
