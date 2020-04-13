@@ -1,26 +1,26 @@
 
 struct UnrollSpecification
-    unrolledloopnum::Int
-    tiledloopnum::Int
+    u₁loopnum::Int
+    u₂loopnum::Int
     vectorizedloopnum::Int
-    U::Int
-    T::Int
+    u₁::Int
+    u₂::Int
 end
-# UnrollSpecification(ls::LoopSet, unrolled::Loop, vectorized::Symbol, U, T) = UnrollSpecification(ls, unrolled.itersymbol, vectorized, U, T)
-function UnrollSpecification(us::UnrollSpecification, U, T)
-    @unpack unrolledloopnum, tiledloopnum, vectorizedloopnum = us
-    UnrollSpecification(unrolledloopnum, tiledloopnum, vectorizedloopnum, U, T)
+# UnrollSpecification(ls::LoopSet, u₁loop::Loop, vectorized::Symbol, u₁, u₂) = UnrollSpecification(ls, u₁loop.itersymbol, vectorized, u₁, u₂)
+function UnrollSpecification(us::UnrollSpecification, u₁, u₂)
+    @unpack u₁loopnum, u₂loopnum, vectorizedloopnum = us
+    UnrollSpecification(u₁loopnum, u₂loopnum, vectorizedloopnum, u₁, u₂)
 end
-function UnrollSpecification(us::UnrollSpecification; U = us.U, T = us.T)
-    @unpack unrolledloopnum, tiledloopnum, vectorizedloopnum = us
-    UnrollSpecification(unrolledloopnum, tiledloopnum, vectorizedloopnum, U, T)
+function UnrollSpecification(us::UnrollSpecification; u₁ = us.u₁, u₂ = us.u₂)
+    @unpack u₁loopnum, u₂loopnum, vectorizedloopnum = us
+    UnrollSpecification(u₁loopnum, u₂loopnum, vectorizedloopnum, u₁, u₂)
 end
-isunrolled(us::UnrollSpecification, n::Int) = us.unrolledloopnum == n
-istiled(us::UnrollSpecification, n::Int) = !isunrolled(us, n) && us.tiledloopnum == n
+isunrolled1(us::UnrollSpecification, n::Int) = us.u₁loopnum == n
+isunrolled2(us::UnrollSpecification, n::Int) = !isunrolled1(us, n) && us.u₂loopnum == n
 isvectorized(us::UnrollSpecification, n::Int) = us.vectorizedloopnum == n
 function unrollfactor(us::UnrollSpecification, n::Int)
-    @unpack unrolledloopnum, tiledloopnum, U, T = us
-    (unrolledloopnum == n) ? U : ((tiledloopnum == n) ? T : 1)
+    @unpack u₁loopnum, u₂loopnum, u₁, u₂ = us
+    (u₁loopnum == n) ? u₁ : ((u₂loopnum == n) ? u₂ : 1)
 end
 
 struct Loop
@@ -87,7 +87,7 @@ function terminatecondition(
     elseif inclmask
         looprange(loop, 1, mangledname)
     else
-        vec_looprange(loop, W, UF, mangledname) # may not be tiled
+        vec_looprange(loop, W, UF, mangledname) # may not be u₂loop
     end
 end
 function incrementloopcounter(us::UnrollSpecification, n::Int, W::Symbol, mangledname::Symbol, UF::Int = unrollfactor(us, n))
@@ -576,10 +576,10 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
     end
 end
 
-function UnrollSpecification(ls::LoopSet, unrolled::Symbol, tiled::Symbol, vectorized::Symbol, U, T)
+function UnrollSpecification(ls::LoopSet, u₁loop::Symbol, u₂loop::Symbol, vectorized::Symbol, u₁, u₂)
     order = names(ls)
-    nu = findfirst(isequal(unrolled), order)::Int
-    nt = T == -1 ? nu : findfirst(isequal(tiled), order)::Int
+    nu₁ = findfirst(isequal(u₁loop), order)::Int
+    nu₂ = u₂ == -1 ? nu₁ : findfirst(isequal(u₂loop), order)::Int
     nv = findfirst(isequal(vectorized), order)::Int
-    UnrollSpecification(nu, nt, nv, U, T)
+    UnrollSpecification(nu₁, nu₂, nv, u₁, u₂)
 end

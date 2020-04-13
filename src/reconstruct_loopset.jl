@@ -396,15 +396,15 @@ function avx_loopset(instr, ops, arf, AM, LPSYM, LB, @nospecialize(vargs))
     num_params = extract_external_functions!(ls, num_params)
     ls
 end
-function avx_body(ls, UT)
-    U, T = UT
-    q = iszero(U) ? lower_and_split_loops(ls) : lower(ls, U, T)
+function avx_body(ls, UNROLL)
+    u₁, u₂ = UNROLL
+    q = iszero(u₁) ? lower_and_split_loops(ls) : lower(ls, u₁, u₂)
     length(ls.outer_reductions) == 0 ? push!(q.args, nothing) : push!(q.args, loopset_return_value(ls, Val(true)))
     # @show q
     q
 end
 
-function _avx_loopset_debug(::Type{OPS}, ::Type{ARF}, ::Type{AM}, ::Type{LPSYM}, ::Type{LB}, vargs...) where {UT, OPS, ARF, AM, LPSYM, LB}
+function _avx_loopset_debug(::Type{OPS}, ::Type{ARF}, ::Type{AM}, ::Type{LPSYM}, ::Type{LB}, vargs...) where {UNROLL, OPS, ARF, AM, LPSYM, LB}
     @show OPS ARF AM LPSYM LB vargs
     _avx_loopset(OPS.parameters, ARF.parameters, AM.parameters, LPSYM.parameters, LB.parameters, typeof.(vargs))
 end

@@ -112,8 +112,8 @@ where `inline=false` is faster, so the best setting may require experimentation.
 
 `unroll` is an integer that specifies the loop unrolling factor, or a
 tuple `(u₁, u₂) = (4, 2)` signaling that the generated code should unroll more than
-one loop. `u₁` is the unrolling factor for the innermost loop and `u₂` for the next-innermost loop,
-but it applies to the loop ordering that will be chosen by LoopVectorization,
+one loop. `u₁` is the unrolling factor for the first unrolled loop and `u₂` for the next (if present),
+but it applies to the loop ordering and unrolling that will be chosen by LoopVectorization,
 *not* the order in `body`.
 `uᵢ=0` (the default) indicates that LoopVectorization should pick its own value,
 and `uᵢ=-1` disables unrolling for the correspond loop.
@@ -137,24 +137,24 @@ function check_unroll(arg)
     a1 = (arg.args[1])::Symbol
     a1 === :unroll || return nothing
     tup = arg.args[2]
-    T = Int8(-1)
+    u₂ = Int8(-1)
     if tup isa Integer
-        U = convert(Int8, tup)
+        u₁ = convert(Int8, tup)
     elseif isa(tup, Expr)
         if length(tup.args) == 1
-            U = convert(Int8, tup.args[1])
+            u₁ = convert(Int8, tup.args[1])
         elseif length(tup.args) == 2
-            U = convert(Int8, tup.args[1])
-            T = convert(Int8, tup.args[2])
+            u₁ = convert(Int8, tup.args[1])
+            u₂ = convert(Int8, tup.args[2])
         else
             return nothing
         end
     else
         return nothing
     end
-    U, T
+    u₁, u₂
 end
-function check_macro_kwarg(arg, inline::Bool = true, U::Int8 = zero(Int8), T::Int8 = zero(Int8))
+function check_macro_kwarg(arg, inline::Bool = true, u₁::Int8 = zero(Int8), u₂::Int8 = zero(Int8))
     @assert arg.head === :(=)
     i = check_inline(arg)
     if i !== nothing
@@ -162,25 +162,25 @@ function check_macro_kwarg(arg, inline::Bool = true, U::Int8 = zero(Int8), T::In
     else
         u = check_unroll(arg)
         if u !== nothing
-            U, T = u
+            u₁, u₂ = u
         end
     end
-    inline, U, T
+    inline, u₁, u₂
 end
 macro avx(arg, q)
     @assert q.head === :for
     @assert arg.head === :(=)
     q = macroexpand(__module__, q)
-    inline, U, T = check_macro_kwarg(arg)
+    inline, u₁, u₂ = check_macro_kwarg(arg)
     ls = LoopSet(q, __module__)
-    esc(setup_call(ls, inline, U, T))
+    esc(setup_call(ls, inline, u₁, u₂))
 end
 macro avx(arg1, arg2, q)
     @assert q.head === :for
     q = macroexpand(__module__, q)
-    inline, U, T = check_macro_kwarg(arg1)
-    inline, U, T = check_macro_kwarg(arg2, inline, U, T)
-    esc(setup_call(LoopSet(q, __module__), inline, U, T))
+    inline, u₁, u₂ = check_macro_kwarg(arg1)
+    inline, u₁, u₂ = check_macro_kwarg(arg2, inline, u₁, u₂)
+    esc(setup_call(LoopSet(q, __module__), inline, u₁, u₂))
 end
 
 
@@ -198,8 +198,8 @@ end
 macro _avx(arg, q)
     @assert q.head === :for
     q = macroexpand(__module__, q)
-    inline, U, T = check_macro_kwarg(arg)
-    esc(lower(LoopSet(q, __module__), U, T))
+    inline, u₁, u₂ = check_macro_kwarg(arg)
+    esc(lower(LoopSet(q, __module__), u₁, u₂))
 end
 
 macro avx_debug(q)

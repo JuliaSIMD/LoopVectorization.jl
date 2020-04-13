@@ -208,13 +208,13 @@ end
 # If you change the number of arguments here, make commensurate changes
 # to the `insert!` locations in `setup_call_noinline`.
 @generated function __avx__!(
-    ::Val{UT}, ::Type{OPS}, ::Type{ARF}, ::Type{AM}, ::Type{LPSYM}, lb::LB,
+    ::Val{UNROLL}, ::Type{OPS}, ::Type{ARF}, ::Type{AM}, ::Type{LPSYM}, lb::LB,
     ::Val{AR}, ::Val{D}, ::Val{IND}, subsetvals, arraydescript, vargs::Vararg{<:Any,N}
-) where {UT, OPS, ARF, AM, LPSYM, LB, N, AR, D, IND}
+) where {UNROLL, OPS, ARF, AM, LPSYM, LB, N, AR, D, IND}
     1 + 1
     num_vptrs = length(ARF.parameters)::Int
     vptrs = [gensym(:vptr) for _ ∈ 1:num_vptrs]
-    call = Expr(:call, lv(:_avx_!), Val{UT}(), OPS, ARF, AM, LPSYM, :lb)
+    call = Expr(:call, lv(:_avx_!), Val{UNROLL}(), OPS, ARF, AM, LPSYM, :lb)
     for n ∈ 1:num_vptrs
         push!(call.args, vptrs[n])
     end
@@ -245,7 +245,7 @@ end
 end
 
 # Try to condense in type stable manner
-function generate_call(ls::LoopSet, IUT, debug::Bool = false)
+function generate_call(ls::LoopSet, inline_unroll, debug::Bool = false)
     operation_descriptions = Expr(:curly, :Tuple)
     varnames = Symbol[]
     for op ∈ operations(ls)
@@ -260,12 +260,12 @@ function generate_call(ls::LoopSet, IUT, debug::Bool = false)
     argmeta = argmeta_and_consts_description(ls, arraysymbolinds)
     loop_bounds = loop_boundaries(ls)
     loop_syms = Expr(:curly, :Tuple, map(QuoteNode, ls.loopsymbols)...)
-    inline, U, T = IUT
+    inline, u₁, u₂ = inline_unroll
     if inline | debug
         func = debug ? lv(:_avx_loopset_debug) : lv(:_avx_!)
         lbarg = debug ? Expr(:call, :typeof, loop_bounds) : loop_bounds
         q = Expr(
-            :call, func, Expr(:call, Expr(:curly, :Val, (U,T))),
+            :call, func, Expr(:call, Expr(:curly, :Val, (u₁, u₂))),
             operation_descriptions, arrayref_descriptions, argmeta, loop_syms, lbarg
         )
         debug && deleteat!(q.args, 2)
@@ -273,7 +273,7 @@ function generate_call(ls::LoopSet, IUT, debug::Bool = false)
     else# not forcing inline; calling __avx__! which calls an inlined _avx_!
         arraydescript = Expr(:tuple)
         q = Expr(
-            :call, lv(:__avx__!), Expr(:call, Expr(:curly, :Val, (U,T))),
+            :call, lv(:__avx__!), Expr(:call, Expr(:curly, :Val, (u₁, u₂))),
             operation_descriptions, arrayref_descriptions, argmeta, loop_syms, loop_bounds, arraydescript
         )
         for array ∈ ls.includedactualarrays
@@ -405,15 +405,15 @@ function setup_call_debug(ls::LoopSet)
     pushpreamble!(ls, generate_call(ls, (true,zero(Int8),zero(Int8)), true))
     ls.preamble
 end
-function setup_call(ls::LoopSet, inline::Bool = true, U = zero(Int8), T = zero(Int8))
+function setup_call(ls::LoopSet, inline::Bool = true, u₁ = zero(Int8), u₂ = zero(Int8))
     # We outline/inline at the macro level by creating/not creating an anonymous function.
     # The old API instead was based on inlining or not inline the generated function, but
     # the generated function must be inlined into the initial loop preamble for performance reasons.
     # Creating an anonymous function and calling it also achieves the outlining, while still
     # inlining the generated function into the loop preamble.
     if inline
-        setup_call_inline(ls, U, T)
+        setup_call_inline(ls, u₁, u₂)
     else
-        setup_call_noinline(ls, U, T)
+        setup_call_noinline(ls, u₁, u₂)
     end
 end
