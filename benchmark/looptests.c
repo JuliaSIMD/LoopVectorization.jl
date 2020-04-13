@@ -236,7 +236,7 @@ double randomaccess(double* restrict P, long* restrict basis, double* restrict c
   }
   return p;
 }
-double logdettriangle(double* T, long N){
+double logdettriangle(double* restrict T, long N){
   double ld = 0;
   for (long n = 0; n < N; n++){
     ld += log(T[n + n*N]);

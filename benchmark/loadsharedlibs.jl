@@ -16,7 +16,7 @@ const LIBDIRECTCALLJIT = joinpath(LOOPVECBENCHDIR, "libdcjtest.so")
 # requires Clang with polly to build
 cfile = joinpath(LOOPVECBENCHDIR, "looptests.c")
 if !isfile(LIBCTEST) || mtime(cfile) > mtime(LIBCTEST)    
-    run(`clang -Ofast -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -lm -shared -fPIC $cfile -o $LIBCTEST`)
+    run(`/usr/bin/clang -Ofast -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -lm -shared -fPIC $cfile -o $LIBCTEST`)
     # run(`/usr/local/bin/clang -Ofast -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -lm -mllvm -polly -mllvm -polly-vectorizer=stripmine -shared -fPIC $cfile -o $LIBCTEST`)
 end
 if !isfile(LIBICTEST) || mtime(cfile) > mtime(LIBICTEST)

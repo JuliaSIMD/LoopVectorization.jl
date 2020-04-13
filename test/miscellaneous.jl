@@ -708,6 +708,7 @@ using Test
         function smoothdim!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
             ifirst, ilast = first(irng), last(irng)
             ifirst > ilast && return s
+            # @inbounds @fastmath for Ipost in Rpost
             for Ipost in Rpost
                 # Initialize the first value along the filtered dimension
                 for Ipre in Rpre
@@ -771,4 +772,5 @@ using Test
         end
     end
 end
+
 
