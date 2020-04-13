@@ -82,16 +82,12 @@ function lower_block(
     for prepost ∈ 1:2
         # !U && !T
         lower!(blockq, ops[1,1,prepost,n], vectorized, ls, unrolled, tiled, U, nothing, mask)
-        # for u ∈ 0:U-1     #  U && !T
-        lower!(blockq, ops[2,1,prepost,n], vectorized, ls, unrolled, tiled, U, nothing, mask)
-        # end
-        if length(ops[1,2,prepost,n]) + length(ops[2,2,prepost,n]) > 0
+        opsv1 = ops[1,2,prepost,n]
+        opsv2 = ops[2,2,prepost,n]
+        if length(opsv1) + length(opsv2) > 0
             for store ∈ (false,true)
                 # let store = nothing
                 nstores = 0
-                opsv1 = ops[1,2,prepost,n]
-                opsv2 = ops[2,2,prepost,n]
-                iszero(length(opsv1) + length(opsv2)) && continue
                 iszero(length(opsv1)) || (nstores += sum(isstore, opsv1))
                 iszero(length(opsv2)) || (nstores += sum(isstore, opsv2))
                 for t ∈ 0:T-1
@@ -102,21 +98,32 @@ function lower_block(
                     else
                         push!(blockq.args, Expr(:+=, tiled, 1))
                     end
-                    # !U &&  T
-                    if dontmaskfirsttiles && t < T - 1
+                    if dontmaskfirsttiles && t < T - 1 # !U &&  T
                         lower!(blockq, opsv1, vectorized, ls, unrolled, tiled, U, t, nothing, store)
-                        # for u ∈ 0:U-1 #  U &&  T
+                    else # !U &&  T
+                        lower!(blockq, opsv1, vectorized, ls, unrolled, tiled, U, t, mask, store)
+                    end
+                    if iszero(t) && !store #  U && !T
+                        # for u ∈ 0:U-1     
+                        lower!(blockq, ops[2,1,prepost,n], vectorized, ls, unrolled, tiled, U, nothing, mask)
+                        # end
+                    end
+                    if dontmaskfirsttiles && t < T - 1 #  U && T
+                        # for u ∈ 0:U-1
                         lower!(blockq, opsv2, vectorized, ls, unrolled, tiled, U, t, nothing, store)
                         # end
-                    else
-                        lower!(blockq, opsv1, vectorized, ls, unrolled, tiled, U, t, mask, store)
-                        # for u ∈ 0:U-1 #  U &&  T
+                    else #  U && T
+                        # for u ∈ 0:U-1 
                         lower!(blockq, opsv2, vectorized, ls, unrolled, tiled, U, t, mask, store)
                         # end
                     end
                 end
                 nstores == 0 && break
             end
+        else
+            # for u ∈ 0:U-1     #  U && !T
+            lower!(blockq, ops[2,1,prepost,n], vectorized, ls, unrolled, tiled, U, nothing, mask)
+            # end
         end
         if n > 1 && prepost == 1
             push!(blockq.args, lower_unrolled_dynamic(ls, us, n-1, !isnothing(mask)))
