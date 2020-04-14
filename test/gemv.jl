@@ -211,10 +211,10 @@ using Test
         fill!(G2, TC(NaN)); AtmulvB_avx3!(G2,B,1);
         @test G1 ≈ G2
 
-        D = rand(M);
-        B1 = rand(M,N); B2 = copy(B1);
-        C1 = rand(N); C2 = copy(C1);
-        A1 = similar(D); A2 = similar(A1);
+        D = rand(T, M);
+        B1 = rand(T, M,N); B2 = copy(B1);
+        C1 = rand(T, N); C2 = copy(C1);
+        A1 = rand(T, size(D)...); A2 = copy(A1);
         hh!(A1, B1, C1, D)
         hhavx!(A2, B2, C2, D)
         @test B1 ≈ B2
