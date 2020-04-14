@@ -147,18 +147,20 @@ using Test
     @test LoopVectorization.choose_order(lsp) == ([:d1, :d2], :d2, :d1, :d2, Unum, Tnum)
     # lsp.preamble_symsym
 
-    function hhavx!(A, B, C, D)
+    function hhavx!(A::AbstractVector{T}, B, C, D) where {T}
+        L = T(length(axes(B,2)));
         @avx for i in axes(A, 1)
-            A[i] = A[i] + D[i] * length(axes(B,2));
+            A[i] = A[i] + D[i] * L
             for j = axes(B, 2)
                 B[i, j] = B[i, j] + D[i]
                 C[j] = C[j] + D[i] 
             end
         end
     end
-    function hh!(A, B, C, D)
+    function hh!(A::AbstractVector{T}, B, C, D) where {T}
+        L = T(length(axes(B,2)));
         @inbounds @fastmath for i in axes(A, 1)
-            A[i] = A[i] + D[i] * length(axes(B,2));
+            A[i] = A[i] + D[i] * L
             for j = axes(B, 2)
                 B[i, j] = B[i, j] + D[i]
                 C[j] = C[j] + D[i] 
@@ -211,10 +213,10 @@ using Test
         fill!(G2, TC(NaN)); AtmulvB_avx3!(G2,B,1);
         @test G1 ≈ G2
 
-        D = rand(T, M);
-        B1 = rand(T, M,N); B2 = copy(B1);
-        C1 = rand(T, N); C2 = copy(C1);
-        A1 = rand(T, size(D)...); A2 = copy(A1);
+        D = rand(R, M);
+        B1 = rand(R, M,N); B2 = copy(B1);
+        C1 = rand(R, N); C2 = copy(C1);
+        A1 = rand(R, size(D)...); A2 = copy(A1);
         hh!(A1, B1, C1, D)
         hhavx!(A2, B2, C2, D)
         @test B1 ≈ B2
