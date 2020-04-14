@@ -60,8 +60,9 @@ the final operation.
 # TODO: Need to make this handle A or B being (1 or 2)-D broadcast objects.
 function add_broadcast!(
     ls::LoopSet, mC::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
-    ::Type{Product{A,B}}, elementbytes::Int
-) where {A, B}
+    @nospecialize(prod::Type{<:Product}), elementbytes::Int
+)
+    A, B = prod.parameters
     K = gensym(:K)
     mA = gensym(:Aₘₖ)
     mB = gensym(:Bₖₙ)
@@ -126,9 +127,10 @@ function LowDimArray{D}(data::A) where {D,T,N,A <: AbstractArray{T,N}}
 end
 function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
-    ::Type{<:LowDimArray{D,T,N}}, elementbytes::Int
-) where {D,T,N}
-    fulldims = Symbol[loopsyms[n] for n ∈ 1:N if D[n]]
+    @nospecialize(LDA::Type{<:LowDimArray}), elementbytes::Int
+)
+    D,T,N::Int,_ = LDA.parameters
+    fulldims = Symbol[loopsyms[n] for n ∈ 1:N if D[n]::Bool]
     ref = ArrayReference(bcname, fulldims)
     add_simple_load!(ls, destname, ref, elementbytes, true, false )::Operation
 end
@@ -185,11 +187,13 @@ function add_broadcast!(
     inds[2:end] .= @view(loopsyms[1:N])
     add_simple_load!(ls, destname, ArrayReference(bcname, inds), elementbytes, true, true)
 end
+BroadcastedArray{S<:Broadcast.AbstractArrayStyle,F,A} = Broadcasted{S,Nothing,F,A}
 function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
-    ::Type{Broadcasted{S,Nothing,F,A}},
+    @nospecialize(B::Type{<:BroadcastedArray}),
     elementbytes::Int
-) where {N,S<:Base.Broadcast.AbstractArrayStyle{N},F,A}
+)
+    S,_,F,A = B.parameters
     instr = get(FUNCTIONSYMBOLS, F) do
         f = gensym(:func)
         pushpreamble!(ls, Expr(:(=), f, Expr(:(.), bcname, QuoteNode(:f))))
