@@ -6,7 +6,7 @@ function Base.copyto!(ls::LoopSet, q::Expr)
     add_loop!(ls, q, 8)
 end
 
-function add_ci_call!(q::Expr, f, args, syms, i, mod = nothing)
+function add_ci_call!(q::Expr, @nospecialize(f), args, syms, i, mod = nothing)
     call = if f isa Core.SSAValue
         Expr(:call, syms[f.id])
     else

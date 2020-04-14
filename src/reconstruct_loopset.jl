@@ -45,7 +45,8 @@ function add_loops!(ls::LoopSet, LPSYM, LB)
         end
     end
 end
-function add_loops!(ls::LoopSet, i::Int, sym::Symbol, l::Type{CartesianIndices{N,T}}) where {N,T}
+function add_loops!(ls::LoopSet, i::Int, sym::Symbol, @nospecialize(l::Type{<:CartesianIndices}))
+    N, T = l.parameters
     ssym = String(sym)
     for k = N:-1:1
         axisexpr = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, Expr(:., Expr(:ref, :lb, i), QuoteNode(:indices)), k))
@@ -375,7 +376,7 @@ function sizeofeltypes(v, num_arrays)::Int
     sizeof(T)
 end
 
-function avx_loopset(instr, ops, arf, AM, LPSYM, LB, vargs)
+function avx_loopset(instr, ops, arf, AM, LPSYM, LB, @nospecialize(vargs))
     ls = LoopSet(:LoopVectorization)
     num_arrays = length(arf)
     elementbytes = sizeofeltypes(vargs, num_arrays)
@@ -407,7 +408,7 @@ function _avx_loopset_debug(::Type{OPS}, ::Type{ARF}, ::Type{AM}, ::Type{LPSYM},
     @show OPS ARF AM LPSYM LB vargs
     _avx_loopset(OPS.parameters, ARF.parameters, AM.parameters, LPSYM.parameters, LB.parameters, typeof.(vargs))
 end
-function _avx_loopset(OPSsv, ARFsv, AMsv, LPSYMsv, LBsv, vargs)
+function _avx_loopset(OPSsv, ARFsv, AMsv, LPSYMsv, LBsv, @nospecialize(vargs))
     nops = length(OPSsv) ÷ 3
     instr = Instruction[Instruction(OPSsv[3i+1], OPSsv[3i+2]) for i ∈ 0:nops-1]
     ops = OperationStruct[ OPSsv[3i] for i ∈ 1:nops ]
