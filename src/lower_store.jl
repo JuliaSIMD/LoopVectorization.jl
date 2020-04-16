@@ -86,7 +86,7 @@ function pvariable_name(op::Operation, suffix, tiled::Symbol)
 end
 
 function lowered_variable_name(op::Operation, unrolled::Symbol, tiled::Symbol, u::Int, ::Nothing)
-    varassignname(var, u, isunrolled)
+    varassignname(var, u, isunrolled1)
 end
 
 function lower_conditionalstore_scalar!(

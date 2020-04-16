@@ -100,10 +100,7 @@ function hasintersection(a, b)
     end
     false
 end
-function num_iterations(N, step)
-    iter, rem = divrem(N, step)
-    iter + (rem != 0)
-end
+const num_iterations = cld
 
 # evaluates cost of evaluating loop in given order
 # heuristically, could simplify analysis by just unrolling outer loop?
@@ -239,110 +236,110 @@ function determine_unroll_factor(
     roundpow2(max(1, round(Int, latency / (recip_throughput * num_reductions) ) ))
 end
 
-function tile_cost(X, U, T, UL, TL)
-    Tfactor = (num_iterations(TL, T)/TL)
-    Ufactor = (num_iterations(UL, U)/UL)
-    # X[1]*Tfactor*Ufactor + X[4] + X[2] * Tfactor + X[3] * Ufactor
-    X[1] + X[4] + X[2] * Tfactor + X[3] * Ufactor
+function unroll_cost(X, u₁, u₂, u₁L, u₂L)
+    u₂factor = (num_iterations(u₂L, u₂)/u₂L)
+    u₁factor = (num_iterations(u₁L, u₁)/u₁L)
+    # X[1]*u₂factor*u₁factor + X[4] + X[2] * u₂factor + X[3] * u₁factor
+    X[1] + X[4] + X[2] * u₂factor + X[3] * u₁factor
 end
-# function itertilesize(X, UL, TL)
+# function itertilesize(X, u₁L, u₂L)
 #     cb = Inf
-#     Ub = 1; Tb = 1
-#     for U ∈ 1:4, T ∈ 1:4
-#         c = tile_cost(X, U, T, UL, TL)
-#         @show U, T, c
+#     u₁b = 1; u₂b = 1
+#     for u₁ ∈ 1:4, u₂ ∈ 1:4
+#         c = unroll_cost(X, u₁, u₂, u₁L, u₂L)
+#         @show u₁, u₂, c
 #         if cb > c
 #             cb = c
-#             Ub = U; Tb = T
+#             u₁b = u₁; u₂b = u₂
 #         end
 #     end
-#     Ub, Tb, cb
+#     u₁b, u₂b, cb
 # end
-function solve_tilesize(X, R, UL, TL)
-    # @inbounds any(iszero, (R[1],R[2],R[3])) && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
-    first(iszero(R)) && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
-    # @inbounds any(iszero, (R[1],R[2],R[3])) && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
-    # We use a lagrange multiplier to find floating point values for U and T
-    # first solving for U via quadratic formula
+function solve_unroll(X, R, u₁L, u₂L)
+    # @inbounds any(iszero, (R[1],R[2],R[3])) && return -1,-1,Inf #solve_smalltilesize(X, R, u₁max, u₂max)
+    first(iszero(R)) && return -1,-1,Inf #solve_smalltilesize(X, R, u₁max, u₂max)
+    # @inbounds any(iszero, (R[1],R[2],R[3])) && return -1,-1,Inf #solve_smalltilesize(X, R, u₁max, u₂max)
+    # We use a lagrange multiplier to find floating point values for u₁ and u₂
+    # first solving for u₁ via quadratic formula
     # X is vector of costs, and R is of register pressures
     RR = REGISTER_COUNT - R[3] - R[4] # RR ≡ RemainingRegisters
-    R[1] + R[2] > 0.5RR && return 1,1, tile_cost(X, 1, 1, UL, TL)
+    R[1] + R[2] > 0.5RR && return 1,1, unroll_cost(X, 1, 1, u₁L, u₂L)
     a = (R[1])^2*X[2] - (R[2])^2*R[1]*X[3]/RR
     b = 2*R[1]*R[2]*X[3]
     c = -RR*R[1]*X[3]
     discriminant = b^2 - 4a*c
     discriminant < 0 && return -1,-1,Inf
-    Ufloat = max(1.0, (sqrt(discriminant) - b) / (2a)) # must be at least 1
-    Tfloat = (RR - Ufloat*R[2])/(Ufloat*R[1])
-    if !(isfinite(Tfloat) && isfinite(Ufloat))
-        return 4, 4, tile_cost(X, 4, 4, UL, TL)
-        # return itertilesize(X, UL, TL)
+    u₁float = max(1.0, (sqrt(discriminant) - b) / (2a)) # must be at least 1
+    u₂float = (RR - u₁float*R[2])/(u₁float*R[1])
+    if !(isfinite(u₂float) && isfinite(u₁float))
+        return 4, 4, unroll_cost(X, 4, 4, u₁L, u₂L)
+        # return itertilesize(X, u₁L, u₂L)
     end
-    Ulow = floor(Int, Ufloat)
-    Tlow = max(1, floor(Int, Tfloat)) # must be at least 1
-    Uhigh = Ulow + 1 #ceil(Int, Ufloat)
-    Thigh = Tlow + 1 #ceil(Int, Tfloat)
+    u₁low = floor(Int, u₁float)
+    u₂low = max(1, floor(Int, u₂float)) # must be at least 1
+    u₁high = u₁low + 1 #ceil(Int, u₁float)
+    u₂high = u₂low + 1 #ceil(Int, u₂float)
 
     # RR = REGISTER_COUNT - R[3] - R[4]
-    U, T = Ulow, Tlow
-    tcost = tile_cost(X, Ulow, Tlow, UL, TL)
-    # @show Ulow*Thigh*R[1] + Ulow*R[2]
-    if RR ≥ Ulow*Thigh*R[1] + Ulow*R[2]
-        tcost_temp = tile_cost(X, Ulow, Thigh, UL, TL)
-        # @show tcost_temp, tcost
-        if tcost_temp < tcost
-            tcost = tcost_temp
-            U, T = Ulow, Thigh
+    u₁, u₂ = u₁low, u₂low
+    ucost = unroll_cost(X, u₁low, u₂low, u₁L, u₂L)
+    # @show u₁low*u₂high*R[1] + u₁low*R[2]
+    if RR ≥ u₁low*u₂high*R[1] + u₁low*R[2]
+        ucost_temp = unroll_cost(X, u₁low, u₂high, u₁L, u₂L)
+        # @show ucost_temp, ucost
+        if ucost_temp < ucost
+            ucost = ucost_temp
+            u₁, u₂ = u₁low, u₂high
         end
     end
-    # The RR + 1 is a hack to get it to favor Uhigh in more scenarios
-    Tl = Tlow
-    while RR < Uhigh*Tl*R[1] + Uhigh*R[2] && Tl > 1
-        Tl -= 1
+    # The RR + 1 is a hack to get it to favor u₁high in more scenarios
+    u₂l = u₂low
+    while RR < u₁high*u₂l*R[1] + u₁high*R[2] && u₂l > 1
+        u₂l -= 1
     end
-    tcost_temp = tile_cost(X, Uhigh, Tl, UL, TL)
-    if tcost_temp < tcost
-        tcost = tcost_temp
-        U, T = Uhigh, Tl
+    ucost_temp = unroll_cost(X, u₁high, u₂l, u₁L, u₂L)
+    if ucost_temp < ucost
+        ucost = ucost_temp
+        u₁, u₂ = u₁high, u₂l
     end
-    if RR > Uhigh*Thigh*R[1] + Uhigh*R[2]
-        throw("Something went wrong when solving for Tfloat and Ufloat.")
+    if RR > u₁high*u₂high*R[1] + u₁high*R[2]
+        throw("Something went wrong when solving for u₂float and u₁float.")
     end
-    U, T, tcost
+    u₁, u₂, ucost
 end
-function solve_tilesize_constU(X, R, U)
+function solve_unroll_constU(X, R, U)
     floor(Int, (REGISTER_COUNT - R[3] - R[4] - U*R[2]) / (U * R[1]))
 end
-function solve_tilesize_constT(X, R, T)
-    floor(Int, (REGISTER_COUNT - R[3] - R[4]) / (T * R[1] + R[2]))
+function solve_unroll_constT(X, R, u₂)
+    floor(Int, (REGISTER_COUNT - R[3] - R[4]) / (u₂ * R[1] + R[2]))
 end
-function solve_tilesize_constT(ls, T)
+function solve_unroll_constT(ls, u₂)
     R = @view ls.reg_pres[:,1]
-    floor(Int, (REGISTER_COUNT - R[3] - R[4]) / (T * R[1] + R[2]))
+    floor(Int, (REGISTER_COUNT - R[3] - R[4]) / (u₂ * R[1] + R[2]))
 end
 # Tiling here is about alleviating register pressure for the UxT
-function solve_tilesize(X, R, Umax, Tmax, UL, TL)
-    iszero(first(R)) && return -1,-1,Inf #solve_smalltilesize(X, R, Umax, Tmax)
-    U, T, cost = solve_tilesize(X, R, UL, TL)
-    # T -= T & 1
-    # U = min(U, T)
-    U_too_large = U > Umax
-    T_too_large = T > Tmax
-    if U_too_large
-        if T_too_large
-            U = Umax
-            T = Tmax
-        else # U too large, resolve T
-            U = Umax
-            T = min(Tmax, max(1,solve_tilesize_constU(X, R, U)))
+function solve_unroll(X, R, u₁max, u₂max, u₁L, u₂L)
+    iszero(first(R)) && return -1,-1,Inf #solve_smalltilesize(X, R, u₁max, u₂max)
+    u₁, u₂, cost = solve_unroll(X, R, u₁L, u₂L)
+    # u₂ -= u₂ & 1
+    # u₁ = min(u₁, u₂)
+    u₁_too_large = u₁ > u₁max
+    u₂_too_large = u₂ > u₂max
+    if u₁_too_large
+        if u₂_too_large
+            u₁ = u₁max
+            u₂ = u₂max
+        else # u₁ too large, resolve u₂
+            u₁ = u₁max
+            u₂ = min(u₂max, max(1,solve_unroll_constU(X, R, u₁)))
         end
-        cost = tile_cost(X, U, T, UL, TL)
-    elseif T_too_large
-        T = Tmax
-        U = min(Umax, max(1,solve_tilesize_constT(X, R, T)))
-        cost = tile_cost(X, U, T, UL, TL)
+        cost = unroll_cost(X, u₁, u₂, u₁L, u₂L)
+    elseif u₂_too_large
+        u₂ = u₂max
+        u₁ = min(u₁max, max(1,solve_unroll_constT(X, R, u₂)))
+        cost = unroll_cost(X, u₁, u₂, u₁L, u₂L)
     end
-    U, T, cost
+    u₁, u₂, cost
 end
 function maybedemotesize(U::Int, N::Int)
     # U > 1 || return 1
@@ -351,54 +348,54 @@ function maybedemotesize(U::Int, N::Int)
     um1rep = num_iterations(N, Um1)
     um1rep > urep ? U : Um1
 end
-function maybedemotesize(T::Int, N::Int, U::Int, Uloop::Loop, maxTbase::Int)
-    T > 1 || return 1
-    T == N && return T
-    T = maybedemotesize(T, N)
+function maybedemotesize(u₂::Int, N::Int, U::Int, Uloop::Loop, maxu₂base::Int)
+    u₂ > 1 || return 1
+    u₂ == N && return u₂
+    u₂ = maybedemotesize(u₂, N)
     if !(isstaticloop(Uloop) && length(Uloop) == U)
-        if N % T != 0
-            T = min(T, maxTbase)
+        if N % u₂ != 0
+            u₂ = min(u₂, maxu₂base)
         end
     end
-    T
+    u₂
 end
-function solve_tilesize(
-    ls::LoopSet, unrolled::Symbol, tiled::Symbol,
+function solve_unroll(
+    ls::LoopSet, u₁loopsym::Symbol, tiled::Symbol,
     cost_vec::AbstractVector{Float64},
     reg_pressure::AbstractVector{Float64},
     W::Int, vectorized::Symbol
 )
-    maxTbase = maxUbase = VectorizationBase.REGISTER_COUNT == 32 ? 6 : 4#8
-    maxT = maxTbase#8
-    maxU = maxUbase#8
+    maxu₂base = maxu₁base = VectorizationBase.REGISTER_COUNT == 32 ? 6 : 4#8
+    maxu₂ = maxu₂base#8
+    maxu₁ = maxu₁base#8
     tiledloop = getloop(ls, tiled)
-    unrolledloop = getloop(ls, unrolled)
+    unrolledloop = getloop(ls, u₁loopsym)
     if isstaticloop(tiledloop)
         if length(tiledloop) ≤ 4
-            T = length(tiledloop)
-            U = max(1, solve_tilesize_constT(cost_vec, reg_pressure, T))
-            return U, T, tile_cost(cost_vec, U, T, length(unrolledloop), T)
+            u₂ = length(tiledloop)
+            u₁ = max(1, solve_unroll_constT(cost_vec, reg_pressure, u₂))
+            return u₁, u₂, unroll_cost(cost_vec, u₁, u₂, length(unrolledloop), u₂)
         end
-        maxT = min(4maxT, length(tiledloop))
+        maxu₂ = min(4maxu₂, length(tiledloop))
     end
     if isstaticloop(unrolledloop)
-        UL = length(unrolledloop)
-        if unrolled !== vectorized && UL ≤ 4
-            T = max(1, solve_tilesize_constU(cost_vec, reg_pressure, UL))
-            return UL, T, tile_cost(cost_vec, UL, T, UL, length(tiledloop))
+        u₁L = length(unrolledloop)
+        if u₁loopsym !== vectorized && u₁L ≤ 4
+            u₂ = max(1, solve_unroll_constU(cost_vec, reg_pressure, u₁L))
+            return u₁L, u₂, unroll_cost(cost_vec, u₁L, u₂, u₁L, length(tiledloop))
         end
-        UL = unrolled === vectorized ? cld(UL,W) : UL
-        maxU = min(4maxU, UL)
+        u₁L = u₁loopsym === vectorized ? cld(u₁L,W) : u₁L
+        maxu₁ = min(4maxu₁, u₁L)
     end
-    U, T, cost = solve_tilesize(cost_vec, reg_pressure, maxU, maxT, length(unrolledloop), length(tiledloop))
+    u₁, u₂, cost = solve_unroll(cost_vec, reg_pressure, maxu₁, maxu₂, length(unrolledloop), length(tiledloop))
     # heuristic to more evenly divide small numbers of iterations
     if isstaticloop(tiledloop)
-        T = maybedemotesize(T, length(tiledloop), U, unrolledloop, maxTbase)
+        u₂ = maybedemotesize(u₂, length(tiledloop), u₁, unrolledloop, maxu₂base)
     end
     if isstaticloop(unrolledloop)
-        U = maybedemotesize(U, length(unrolledloop), T, tiledloop, maxUbase)
+        u₁ = maybedemotesize(u₁, length(unrolledloop), u₂, tiledloop, maxu₁base)
     end
-    U, T, cost
+    u₁, u₂, cost
 end
 
 function set_upstream_family!(adal::Vector{T}, op::Operation, val::T) where {T}
@@ -531,12 +528,12 @@ end
 # But optimal order within tile must still be determined
 # as well as size of the tiles.
 function evaluate_cost_tile(
-    ls::LoopSet, order::Vector{Symbol}, unrolled::Symbol, tiled::Symbol, vectorized::Symbol
+    ls::LoopSet, order::Vector{Symbol}, u₁loopsym::Symbol, u₂loopsym::Symbol, vectorized::Symbol
 )
     N = length(order)
     @assert N ≥ 2 "Cannot tile merely $N loops!"
-    # tiled = order[1]
-    # unrolled = order[2]
+    # u₂loopsym = order[1]
+    # u₁loopsym = order[2]
     ops = operations(ls)
     nops = length(ops)
     included_vars = fill!(resize!(ls.included_vars, nops), false)
@@ -578,8 +575,8 @@ function evaluate_cost_tile(
             rd = reduceddependencies(op)
             hasintersection(rd, @view(nested_loop_syms[1:end-length(rd)])) && return 0,0,Inf
             included_vars[id] = true
-            unrolledtiled[1,id] = unrolled ∈ loopdependencies(op)
-            unrolledtiled[2,id] = tiled ∈ loopdependencies(op)
+            unrolledtiled[1,id] = u₁loopsym ∈ loopdependencies(op)
+            unrolledtiled[2,id] = u₂loopsym ∈ loopdependencies(op)
             # @show op iter, unrolledtiled[:,id]
             iters[id] = iter
             innerloop ∈ loopdependencies(op) && set_upstream_family!(descendentsininnerloop, op, true)
@@ -588,27 +585,26 @@ function evaluate_cost_tile(
     for (id, op) ∈ enumerate(ops)
         iters[id] == -99.9 && continue
         opisininnerloop = descendentsininnerloop[id]
-        isunrolled = unrolledtiled[1,id]
-        istiled = unrolledtiled[2,id]
+        isunrolled₁, isunrolled₂ = unrolledtiled[1,id], unrolledtiled[2,id]
         rt, lat, rp = cost(ls, op, vectorized, Wshift, size_T)
         # @show op rt, lat, rp
         if isload(op)
-            factor1, factor2 = loadelimination_cost_factor(ls, op, unrolled, tiled, vectorized)
+            factor1, factor2 = loadelimination_cost_factor(ls, op, u₁loopsym, u₂loopsym, vectorized)
             rt *= factor1; rp *= factor2;
         end
-        # @show isunrolled, istiled, op rt, lat, rp
+        # @show isunrolled₁, isunrolled₂, op rt, lat, rp
         rp = opisininnerloop ? rp : 0 # we only care about register pressure within the inner most loop
         rt *= iters[id]
-        if isunrolled && istiled # no cost decrease; cost must be repeated
+        if isunrolled₁ && isunrolled₂ # no cost decrease; cost must be repeated
             cost_vec[1] += rt
             reg_pressure[1] += rp
-        elseif isunrolled # cost decreased by tiling
+        elseif isunrolled₁ # cost decreased by unrolling u₂loop
             cost_vec[2] += rt
             reg_pressure[2] += rp
-        elseif istiled # cost decreased by unrolling
+        elseif isunrolled₂ # cost decreased by unrolling u₁loop
             cost_vec[3] += rt
             reg_pressure[3] += rp
-        else# neither unrolled or tiled
+        else# no unrolling
             cost_vec[4] += rt
             reg_pressure[4] += rp
         end
@@ -616,9 +612,9 @@ function evaluate_cost_tile(
     # @show reg_pressure
     costpenalty = (sum(reg_pressure) > VectorizationBase.REGISTER_COUNT) ? 2 : 1
     # @show order, vectorized cost_vec reg_pressure
-    # @show solve_tilesize(ls, unrolled, tiled, cost_vec, reg_pressure)
-    U, T, tcost = solve_tilesize(ls, unrolled, tiled, cost_vec, reg_pressure, W, vectorized)
-    U, T, costpenalty * tcost + stride_penalty(ls, order)
+    # @show solve_unroll(ls, u₁loopsym, u₂loopsym, cost_vec, reg_pressure)
+    u₁, u₂, ucost = solve_unroll(ls, u₁loopsym, u₂loopsym, cost_vec, reg_pressure, W, vectorized)
+    u₁, u₂, costpenalty * ucost + stride_penalty(ls, order)
 end
 
 
@@ -689,22 +685,22 @@ end
 function choose_tile(ls::LoopSet)
     lo = LoopOrders(ls)
     best_order = copyto!(ls.loop_order.bestorder, lo.syms)
-    best_unrolled = best_tiled = best_vec = first(best_order) # filler
+    bestu₁ = bestu₂ = best_vec = first(best_order) # filler
     new_order, state = iterate(lo) # right now, new_order === best_order
-    U, T, lowest_cost = 0, 0, Inf
+    u₁, u₂, lowest_cost = 0, 0, Inf
     nloops = length(new_order)
     while true
         for new_vec ∈ new_order # view to skip first
             for nt ∈ 1:nloops-1
-                new_tiled = new_order[nt]
-                for new_unrolled ∈ @view(new_order[nt+1:end])
-                    U_temp, T_temp, cost_temp = evaluate_cost_tile(ls, new_order, new_unrolled, new_tiled, new_vec)
+                newu₂ = new_order[nt]
+                for newu₁ ∈ @view(new_order[nt+1:end])
+                    u₁temp, u₂temp, cost_temp = evaluate_cost_tile(ls, new_order, newu₁, newu₂, new_vec)
                     if cost_temp < lowest_cost
                         lowest_cost = cost_temp
-                        U, T = U_temp, T_temp
+                        u₁, u₂ = u₁temp, u₂temp
                         best_vec = new_vec
-                        best_tiled = new_tiled
-                        best_unrolled = new_unrolled
+                        bestu₂ = newu₂
+                        bestu₁ = newu₁
                         copyto!(best_order, new_order)
                         save_tilecost!(ls)
                     end
@@ -712,7 +708,7 @@ function choose_tile(ls::LoopSet)
             end
         end
         iter = iterate(lo, state)
-        iter === nothing && return best_order, best_unrolled, best_tiled, best_vec, U, T, lowest_cost
+        iter === nothing && return best_order, bestu₁, bestu₂, best_vec, u₁, u₂, lowest_cost
         new_order, state = iter
     end
 end
@@ -733,19 +729,19 @@ function choose_order_cost(ls::LoopSet)
     end
 end
 function choose_order(ls::LoopSet)
-    order, unroll, tile, vec, U, T, c = choose_order_cost(ls)
-    order, unroll, tile, vec, U, T
+    order, unroll, tile, vec, u₁, u₂, c = choose_order_cost(ls)
+    order, unroll, tile, vec, u₁, u₂
 end
 
-function register_pressure(ls::LoopSet, U, T)
-    if T == -1
+function register_pressure(ls::LoopSet, u₁, u₂)
+    if u₂ == -1
         sum(register_pressure, operations(ls))
     else
         rp = @view ls.reg_pres[:,1]
-        U * T * rp[1] + U * rp[2] + rp[3] + rp[4]
+        u₁ * u₂ * rp[1] + u₁ * rp[2] + rp[3] + rp[4]
     end
 end
 function register_pressure(ls::LoopSet)
-    order, unroll, tile, vec, U, T = choose_order(ls)
-    register_pressure(ls, U, T)
+    order, unroll, tile, vec, u₁, u₂ = choose_order(ls)
+    register_pressure(ls, u₁, u₂)
 end
