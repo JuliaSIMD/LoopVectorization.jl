@@ -450,6 +450,15 @@ end
 function instruction(x)
     x isa Symbol ? x : last(x.args).value
 end
+function instruction!(ls::LoopSet, x)
+    x isa Symbol && return x
+    instr = last(x.args).value
+    if Instruction(instr) ∉ keys(COST)
+        instr = gensym(:f)
+        pushpreamble!(ls, Expr(:(=), instr, x))
+    end
+    instr
+end
 function add_operation!(
     ls::LoopSet, LHS::Symbol, RHS::Expr, elementbytes::Int, position::Int
 )

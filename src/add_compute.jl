@@ -187,7 +187,8 @@ function add_compute!(
     mpref::Union{Nothing,ArrayReferenceMetaPosition} = nothing
 )
     @assert ex.head === :call
-    instr = instruction(first(ex.args))::Symbol
+    # instr = instruction(first(ex.args))::Symbol
+    instr = instruction!(ls, first(ex.args))::Symbol
     args = @view(ex.args[2:end])
     (instr === :(^) && length(args) == 2 && (args[2] isa Number)) && return add_pow!(ls, var, args[1], args[2], elementbytes, position)
     vparents = Operation[]

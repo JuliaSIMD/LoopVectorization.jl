@@ -2,6 +2,8 @@
 
 Here, we convolve a small matrix `kern` with a larger matrix `A`, storing the results in `out`, using Julia's generic [Cartesian Indexing](https://julialang.org/blog/2016/02/iteration/):
 ```julia
+using LoopVectorization, OffsetArrays, Images
+kern = Images.Kernel.gaussian((1, 1), (3, 3))
 function filter2davx!(out::AbstractMatrix, A::AbstractMatrix, kern)
     @avx for J in CartesianIndices(out)
         tmp = zero(eltype(out))
