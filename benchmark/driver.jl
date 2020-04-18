@@ -2,10 +2,9 @@
 # const LOOPVECBENCHDIR = joinpath(pkgdir("LoopVectorization"), "benchmarks")
 # includet(joinpath(LOOPVECBENCHDIR, "driver.jl"))
 
-using Distributed
+using Distributed, LoopVectorization
 
-pkgdir(pkg::String) = abspath(joinpath(dirname(Base.find_package(pkg)), ".."))
-const LOOPVECBENCHDIR = joinpath(pkgdir("LoopVectorization"), "benchmark")
+const LOOPVECBENCHDIR = joinpath(pkgdir(LoopVectorization), "benchmark")
 include(joinpath(LOOPVECBENCHDIR, "benchmarkflops.jl"))
 include(joinpath(LOOPVECBENCHDIR, "plotbenchmarks.jl"))
 
@@ -13,8 +12,8 @@ include(joinpath(LOOPVECBENCHDIR, "plotbenchmarks.jl"))
 addprocs((Sys.CPU_THREADS >> 1)-1); nworkers()
 
 @everywhere begin
-    pkgdir(pkg::String) = abspath(joinpath(dirname(Base.find_package(pkg)), ".."))
-    const LOOPVECBENCHDIR = joinpath(pkgdir("LoopVectorization"), "benchmark")
+    using LoopVectorization
+    const LOOPVECBENCHDIR = joinpath(pkgdir(LoopVectorization), "benchmark")
     include(joinpath(LOOPVECBENCHDIR, "benchmarkflops.jl"))
     # BenchmarkTools.DEFAULT_PARAMETERS.seconds = 1
 end

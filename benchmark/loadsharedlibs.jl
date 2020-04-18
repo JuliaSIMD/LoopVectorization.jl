@@ -1,8 +1,7 @@
-using LinearAlgebra
+using LinearAlgebra, LoopVectorization
 using LoopVectorization.VectorizationBase: REGISTER_SIZE
 
-pkgdir(pkg::String) = abspath(joinpath(dirname(Base.find_package(pkg)), ".."))
-const LOOPVECBENCHDIR = joinpath(pkgdir("LoopVectorization"), "benchmark")
+# const LOOPVECBENCHDIR = joinpath(pkgdir(LoopVectorization), "benchmark")
 include(joinpath(LOOPVECBENCHDIR, "looptests.jl"))
 
 const LIBCTEST = joinpath(LOOPVECBENCHDIR, "libctests.so")
