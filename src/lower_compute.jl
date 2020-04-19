@@ -39,6 +39,7 @@ function lower_compute!(
             parentsunrolled[i] || continue
             parentsunrolled[i] = false
             parentop = parents_op[i]
+            i == tiledouterreduction && isconstant(parentop) && continue
             newparentop = Operation(
                 parentop.identifier, gensym(parentop.variable), parentop.elementbytes, parentop.instruction, parentop.node_type,
                 parentop.dependencies, parentop.reduced_deps, parentop.parents, parentop.ref, parentop.reduced_children
@@ -46,23 +47,19 @@ function lower_compute!(
             parentname = mangledvar(parentop)
             newparentname = mangledvar(newparentop)
             parents_op[i] = newparentop
-            if i == tiledouterreduction && isconstant(newparentop)
-                push!(q.args, Expr(:(=), Symbol(newparentname, suffix), Symbol(parentname, suffix)))
+            if parentstiled[i]
+                parentname = Symbol(parentname, suffix_)
+                newparentname = Symbol(newparentname, suffix_)
+            end
+            if isconstant(newparentop)
+                # @show i, parentstiled[i], newparentname, parentname
+                push!(q.args, Expr(:(=), newparentname, Symbol(parentname, 0)))
             else
-                if parentstiled[i]
-                    parentname = Symbol(parentname, suffix_)
-                    newparentname = Symbol(newparentname, suffix_)
+                for u ∈ 0:U-1
+                    push!(q.args, Expr(:(=), Symbol(newparentname, u), Symbol(parentname, u)))
                 end
-                if isconstant(newparentop)
-                    # @show i, parentstiled[i], newparentname, parentname
-                    push!(q.args, Expr(:(=), newparentname, Symbol(parentname, 0)))
-                else
-                    for u ∈ 0:U-1
-                        push!(q.args, Expr(:(=), Symbol(newparentname, u), Symbol(parentname, u)))
-                    end
-                    reduce_expr!(q, newparentname, Instruction(reduction_to_single_vector(instruction(newparentop))), U)
-                    push!(q.args, Expr(:(=), newparentname, Symbol(newparentname, 0)))
-                end
+                reduce_expr!(q, newparentname, Instruction(reduction_to_single_vector(instruction(newparentop))), U)
+                push!(q.args, Expr(:(=), newparentname, Symbol(newparentname, 0)))
             end
         end
     end
@@ -96,8 +93,8 @@ function lower_compute!(
     for u ∈ 0:Uiter
         instrcall = Expr(instr) # Expr(:call, instr)
         varsym = if tiledouterreduction > 0 # then suffix !== nothing
-            # modsuffix = ((u + suffix*U) & 3)
-            modsuffix = suffix # (suffix & 3)
+            modsuffix = ((u + suffix*U) & 3)
+            # modsuffix = suffix # (suffix & 3)
             Symbol(mvar, modsuffix)
         elseif unrollsym
             Symbol(mvar, u)

@@ -166,7 +166,7 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     loopisstatic = isstaticloop(loop) & (!nisvectorized)
 
     remmask = inclmask | nisvectorized
-    Ureduct = (n == num_loops(ls)) ? calc_Ureduct(ls, us) : -1
+    Ureduct = (n == num_loops(ls) && (u₂ == -1)) ? calc_Ureduct(ls, us) : -1
     sl = startloop(loop, nisvectorized, ls.W, loopsym)
     tc = terminatecondition(loop, us, n, ls.W, loopsym, inclmask, UF)
     body = lower_block(ls, us, n, inclmask, UF)
@@ -373,7 +373,7 @@ function calc_Ureduct(ls::LoopSet, us::UnrollSpecification)
     elseif num_loops(ls) == u₁loopnum
         min(u₁, 4)
     else
-        u₂ == -1 ? u₁ : u₂
+        u₂ == -1 ? u₁ : 4#u₂
     end
 end
 function lower(ls::LoopSet, us::UnrollSpecification)

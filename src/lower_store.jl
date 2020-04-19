@@ -43,9 +43,9 @@ variable_name(op::Operation, ::Nothing) = mangledvar(op)
 variable_name(op::Operation, suffix) = Symbol(mangledvar(op), suffix, :_)
 # variable_name(op::Operation, suffix, u::Int) = (n = variable_name(op, suffix); u < 0 ? n : Symbol(n, u))
 function reduce_range!(q::Expr, toreduct::Symbol, instr::Instruction, Uh::Int, Uh2::Int)
-    for u ∈ 0:Uh-1
-        tru = Symbol(toreduct, u)
-        push!(q.args, Expr(:(=), tru, Expr(instr, tru, Symbol(toreduct, u + Uh))))
+    for u ∈ Uh:Uh2-1
+        tru = Symbol(toreduct, u - Uh)
+        push!(q.args, Expr(:(=), tru, Expr(instr, tru, Symbol(toreduct, u))))
     end
     for u ∈ 2Uh:Uh2-1
         tru = Symbol(toreduct, u - 2Uh)
