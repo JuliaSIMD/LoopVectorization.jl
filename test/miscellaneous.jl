@@ -153,6 +153,20 @@ using Test
         end
     end
 
+    function setcolumstovectorplus100!(Z::AbstractArray{T}, A) where {T}
+        for i = axes(A,1), j = axes(Z,2)
+            acc = zero(T)
+            acc = acc + A[i] + 100
+            Z[i, j] = acc
+        end
+    end
+    function setcolumstovectorplus100avx!(Z::AbstractArray{T}, A) where {T} 
+        @avx for i = axes(A,1), j = axes(Z,2)
+            acc = zero(T)
+            acc = acc + A[i] + 100
+            Z[i, j] = acc
+        end
+    end
 
     function mvp(P, basis, coeffs::Vector{T}) where {T}
         len_c = length(coeffs)
@@ -557,6 +571,11 @@ using Test
         @test dot3v2avx(x, A, y) ≈ d3
         @test dot3_avx(x, A, y) ≈ d3
 
+        A2 = similar(A);
+        setcolumstovectorplus100!(A, x)
+        setcolumstovectorplus100avx!(A2, x)
+        @test A == A2
+        
         maxdeg = 20; nbasis = 1_000; dim = 15;
         r = T == Float32 ? (Int32(1):Int32(maxdeg+1)) : (1:maxdeg+1)
         basis = rand(r, (dim, nbasis));

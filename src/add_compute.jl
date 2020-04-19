@@ -240,6 +240,7 @@ function add_compute!(
         # parent = getop(ls, var, elementbytes)
         if length(reduceddeps) == 0
             insert!(vparents, reduction_ind, parent)
+            mergesetv!(deps, loopdependencies(parent))
             op = Operation(length(operations(ls)), var, elementbytes, instruction(ls,instr), compute, deps, reduceddeps, vparents)
             pushop!(ls, op, var)
         else

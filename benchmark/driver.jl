@@ -45,7 +45,7 @@ logdettriangle_bench = benchmark_logdettriangle(sizes)
 
 v = 1
 filetype = "svg"
-const PICTURES = joinpath(pkgdir("LoopVectorization"), "docs", "src", "assets")
+const PICTURES = joinpath(pkgdir(LoopVectorization), "docs", "src", "assets")
 save(joinpath(PICTURES, "bench_filter2d_dynamic_v$v.$filetype"), plot(filter2d_dynamic_bench));
 save(joinpath(PICTURES, "bench_filter2d_3x3_v$v.$filetype"), plot(filter2d_3x3_bench));
 save(joinpath(PICTURES, "bench_filter2d_unrolled_v$v.$filetype"), plot(filter2d_unrolled_bench));
