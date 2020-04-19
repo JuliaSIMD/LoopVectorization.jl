@@ -46,7 +46,7 @@ function substitute_broadcast(q::Expr, mod::Symbol)
 end
 
 
-function LoopSet(q::Expr, mod::Symbol = :LoopVectorization)
+function LoopSet(q::Expr, mod::Symbol = :Main)
     SIMDPirates.contract_pass!(q)
     ls = LoopSet(mod)
     copyto!(ls, q)

@@ -54,7 +54,7 @@ function cost(ls::LoopSet, op::Operation, vectorized::Symbol, Wshift::Int, size_
     isloopvalue(op) && return 0.0, 0, 0.0
     # Wshift == dependson(op, vectorized) ? Wshift : 0
     # c = first(cost(instruction(op), Wshift, size_T))::Int
-    instr = Instruction(:LoopVectorization, instruction(op).instr)
+    instr = instruction(op)
     # instr = instruction(op)
     if length(parents(op)) == 1
         if instr == Instruction(:-) || instr === Instruction(:vsub) || instr == Instruction(:+) || instr == Instruction(:vadd)

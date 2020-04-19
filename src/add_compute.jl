@@ -115,12 +115,11 @@ end
 
 function add_reduction_update_parent!(
     vparents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet,
-    parent::Operation, instr::Symbol, reduction_ind::Int, elementbytes::Int
+    parent::Operation, instr::Instruction, reduction_ind::Int, elementbytes::Int
 )
     var = name(parent)
     isouterreduction = parent.instruction === LOOPCONSTANT
-    Instr = instruction(ls, instr)
-    instrclass = reduction_instruction_class(Instr) # key allows for faster lookups
+    instrclass = reduction_instruction_class(instr) # key allows for faster lookups
     reduct_zero = reduction_zero(instrclass)
     # if parent is not an outer reduction...
     # if !isouterreduction && !isreductzero(parent, ls, reduct_zero)
@@ -155,7 +154,7 @@ function add_reduction_update_parent!(
     # directdependency && pushparent!(vparents, deps, reduceddeps, reductinit)#parent) # deps and reduced deps will not be disjoint
     if reduction_ind > 0 # if is directdependency
         insert!(vparents, reduction_ind, reductinit)
-        if instr ∈ (:-, :vsub!, :vsub, :/, :vfdiv!, :vfidiv!)
+        if instr.instr ∈ (:-, :vsub!, :vsub, :/, :vfdiv!, :vfidiv!)
             update_deps!(deps, reduceddeps, reductinit)#parent) # deps and reduced deps will not be disjoint
         end
     # elseif !isouterreduction
@@ -188,9 +187,9 @@ function add_compute!(
 )
     @assert ex.head === :call
     # instr = instruction(first(ex.args))::Symbol
-    instr = instruction!(ls, first(ex.args))::Symbol
+    instr = instruction!(ls, first(ex.args))::Instruction
     args = @view(ex.args[2:end])
-    (instr === :(^) && length(args) == 2 && (args[2] isa Number)) && return add_pow!(ls, var, args[1], args[2], elementbytes, position)
+    (instr.instr === :(^) && length(args) == 2 && (args[2] isa Number)) && return add_pow!(ls, var, args[1], args[2], elementbytes, position)
     vparents = Operation[]
     deps = Symbol[]
     reduceddeps = Symbol[]
@@ -241,13 +240,13 @@ function add_compute!(
         if length(reduceddeps) == 0
             insert!(vparents, reduction_ind, parent)
             mergesetv!(deps, loopdependencies(parent))
-            op = Operation(length(operations(ls)), var, elementbytes, instruction(ls,instr), compute, deps, reduceddeps, vparents)
+            op = Operation(length(operations(ls)), var, elementbytes, instr, compute, deps, reduceddeps, vparents)
             pushop!(ls, op, var)
         else
             add_reduction_update_parent!(vparents, deps, reduceddeps, ls, parent, instr, reduction_ind, elementbytes)
         end
     else
-        op = Operation(length(operations(ls)), var, elementbytes, instruction(ls,instr), compute, deps, reduceddeps, vparents)
+        op = Operation(length(operations(ls)), var, elementbytes, instr, compute, deps, reduceddeps, vparents)
         pushop!(ls, op, var)
     end
 end

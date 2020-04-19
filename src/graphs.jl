@@ -163,7 +163,6 @@ struct LoopSet
     mod::Symbol
 end
 
-instruction(ls::LoopSet, f::Symbol) = instruction(f, ls.mod)
 
 function cost_vec_buf(ls::LoopSet)
     cv = @view(ls.cost_vec[:,2])
@@ -450,15 +449,18 @@ end
 function instruction(x)
     x isa Symbol ? x : last(x.args).value
 end
-function instruction!(ls::LoopSet, x)
+# instruction(ls::LoopSet, f::Symbol) = instruction!(ls, f)
+function instruction!(ls::LoopSet, x::Expr)
     x isa Symbol && return x
     instr = last(x.args).value
-    if Instruction(instr) ∉ keys(COST)
+    if instr ∉ keys(COST)
         instr = gensym(:f)
         pushpreamble!(ls, Expr(:(=), instr, x))
     end
-    instr
+    Instruction(Symbol(""), instr)
 end
+instruction!(ls::LoopSet, x::Symbol) = instruction(x)
+
 function add_operation!(
     ls::LoopSet, LHS::Symbol, RHS::Expr, elementbytes::Int, position::Int
 )
