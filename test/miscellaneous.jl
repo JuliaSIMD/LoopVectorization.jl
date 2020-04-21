@@ -535,7 +535,30 @@ using Test
             end
         end
     end
-    
+    function instruct_x_avx!(r::AbstractVector, loc::Int)
+        @avx for lhs in 0:(length(r) >> 1) - (1 << (loc - 1))
+            # mask locations before
+            p = lhs + lhs & ~(1 << (loc - 1) - 1)
+            q = lhs + lhs & ~(1 << (loc - 1) - 1) + 1 << (loc - 1)
+            # swap rows
+            tmp = r[p + 1]
+            r[p + 1] = r[q + 1]
+            r[q + 1] = tmp
+        end
+        return r
+    end
+    function instruct_x!(r::AbstractVector, loc::Int)
+        for lhs in 0:(length(r) >> 1) - (1 << (loc - 1))
+            # mask locations before
+            p = lhs + lhs & ~(1 << (loc - 1) - 1)
+            q = lhs + lhs & ~(1 << (loc - 1) - 1) + 1 << (loc - 1)
+            # swap rows
+            tmp = r[p + 1]
+            r[p + 1] = r[q + 1]
+            r[q + 1] = tmp
+        end
+        return r
+    end    
 
     
     for T ∈ (Float32, Float64)
@@ -563,6 +586,10 @@ using Test
         @test x1 ≈ x2
         fill!(x2, T(NaN)); myvar_avx!(x2, A, x̄)
         @test x1 ≈ x2
+
+        @test instruct_x!(x1, 2) ≈ instruct_x_avx!(x2, 2)
+        @test instruct_x!(x1, 3) ≈ instruct_x_avx!(x2, 3)
+        @test instruct_x!(x1, 4) ≈ instruct_x_avx!(x2, 4)
 
         M, N = 47, 73;
         x = rand(T, M); A = rand(T, M, N); y = rand(T, N);

@@ -203,6 +203,8 @@ function add_compute!(
             if isref
                 if mpref == argref
                     if varname(mpref) === var
+                        id = findfirst(r -> r == mpref.mref, ls.refs_aliasing_syms)
+                        mpref.varname = var = isnothing(id) ? var : ls.syms_aliasing_refs[id]
                         reduction_ind = ind
                         mergesetv!(deps, loopdependencies(add_load!(ls, argref, elementbytes)))
                     else

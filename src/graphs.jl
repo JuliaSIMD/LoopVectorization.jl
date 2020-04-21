@@ -541,8 +541,9 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
                 mpref = array_reference_meta!(ls, array, rawindices, elementbytes)
                 cachedparents = copy(mpref.parents)
                 ref = mpref.mref.ref
-                id = findfirst(r -> r == ref, ls.refs_aliasing_syms)
-                lrhs = id === nothing ? gensym(:RHS) : ls.syms_aliasing_refs[id]
+                # id = findfirst(r -> r == ref, ls.refs_aliasing_syms)
+                # lrhs = id === nothing ? gensym(:RHS) : ls.syms_aliasing_refs[id]
+                lrhs = gensym(:RHS)
                 mpref.varname = lrhs
                 add_operation!(ls, lrhs, RHS, mpref, elementbytes, position)
                 mpref.parents = cachedparents
