@@ -178,28 +178,28 @@ using Test
         A = rand(R, M, K);
         x = rand(R, K);
         y1 = Vector{TC}(undef, M); y2 = similar(y1);
-        mygemv!(y1, A, x)
-        mygemvavx!(y2, A, x)
+        mygemv!(y1, A, x);
+        mygemvavx!(y2, A, x);
         @test y1 ≈ y2
-        fill!(y2, -999.9); mygemv_avx!(y2, A, x)
+        fill!(y2, -999.9); mygemv_avx!(y2, A, x);
         @test y1 ≈ y2
         fill!(y2, -999.9);
         mygemvavx_range!(y2, A, x)
         @test y1 ≈ y2
 
-        Abit = A .> 0.5
-        fill!(y2, -999.9); mygemv_avx!(y2, Abit, x)
+        Abit = A .> 0.5;
+        fill!(y2, -999.9); mygemv_avx!(y2, Abit, x);
         @test y2 ≈ Abit * x
-        xbit = x .> 0.5
-        fill!(y2, -999.9); mygemv_avx!(y2, A, xbit)
+        xbit = x .> 0.5;
+        fill!(y2, -999.9); mygemv_avx!(y2, A, xbit);
         @test y2 ≈ A * xbit
 
         B = rand(R, N, N);
         G1 = Matrix{TC}(undef, N, 1);
         G2 = similar(G1);
         # G3 = similar(G1);
-        AtmulvB!(G1,B,1)
-        AtmulvBavx1!(G2,B,1)
+        AtmulvB!(G1,B,1);
+        AtmulvBavx1!(G2,B,1);
         @test G1 ≈ G2
         fill!(G2, TC(NaN)); AtmulvBavx2!(G2,B,1);
 

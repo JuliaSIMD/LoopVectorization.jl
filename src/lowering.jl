@@ -303,20 +303,22 @@ function determine_eltype(ls::LoopSet)
     end
     promote_q
 end
-function determine_width(ls::LoopSet, vectorized::Symbol)
+function determine_width(
+    ls::LoopSet, vectorized::Symbol
+)
     vloop = getloop(ls, vectorized)
     vwidth_q = Expr(:call, lv(:pick_vector_width_val))
     if isstaticloop(vloop)
         push!(vwidth_q.args, Expr(:call, Expr(:curly, :Val, length(vloop))))
     end
     # push!(vwidth_q.args, ls.T)
-    # if length(ls.includedactualarrays) < 2
-    push!(vwidth_q.args, ls.T)
-    # else
-    #     for array ∈ ls.includedactualarrays
-    #         push!(vwidth_q.args, Expr(:call, :eltype, array))
-    #     end
-    # end
+    if length(ls.includedactualarrays) < 2
+        push!(vwidth_q.args, ls.T)
+    else
+        for array ∈ ls.includedactualarrays
+            push!(vwidth_q.args, Expr(:call, :eltype, array))
+        end
+    end
     vwidth_q
 end
 function init_remblock(unrolledloop::Loop, u₁loop::Symbol = unrolledloop.itersymbol)
@@ -358,10 +360,10 @@ function setup_preamble!(ls::LoopSet, us::UnrollSpecification)
     vectorized = order[vectorizedloopnum]
     # println("Setup preamble")
     W = ls.W; typeT = ls.T
-    if length(ls.includedarrays) > 0
+    if length(ls.includedactualarrays) > 0
         push!(ls.preamble.args, Expr(:(=), typeT, determine_eltype(ls)))
+        push!(ls.preamble.args, Expr(:(=), W, determine_width(ls, vectorized)))
     end
-    push!(ls.preamble.args, Expr(:(=), W, determine_width(ls, vectorized)))
     lower_licm_constants!(ls)
     pushpreamble!(ls, definemask(getloop(ls, vectorized), W))#, u₁ > 1 && u₁loopnum == vectorizedloopnum))
     for op ∈ operations(ls)

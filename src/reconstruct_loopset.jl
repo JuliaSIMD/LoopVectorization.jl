@@ -387,8 +387,11 @@ function avx_loopset(instr, ops, arf, AM, LPSYM, LB, @nospecialize(vargs))
     nopsv = NOpsType[calcnops(ls, op) for op in ops]
     expandedv = [isexpanded(ls, ops, nopsv, i) for i ∈ eachindex(ops)]
     mrefs = create_mrefs!(ls, arf, arraysymbolinds, opsymbols, nopsv, expandedv, vargs)
-    pushpreamble!(ls, Expr(:(=), ls.T, Expr(:call, :promote_type, [Expr(:call, :eltype, vptr(mref)) for mref ∈ mrefs]...)))
-    # pushpreamble!(ls, Expr(:(=), ls.W, Expr(:call, lv(:pick_vector_width_val), [Expr(:call, :eltype, vptr(mref)) for mref ∈ mrefs]...)))
+    append!(ls.includedactualarrays, (vptr(mref) for mref ∈ mrefs))
+    # eltypes = [Expr(:call, :eltype, vptr(mref)) for mref ∈ mrefs]
+    # pushpreamble!(ls, Expr(:(=), ls.T, Expr(:call, :promote_type, eltypes...)))
+    # pushpreamble!(ls, Expr(:(=), ls.W, determine_width))
+                           # Expr(:call, lv(:pick_vector_width_val), [Expr(:call, :eltype, vptr(mref)) for mref ∈ mrefs]...)))
     num_params = num_arrays + num_parameters(AM)
     add_ops!(ls, instr, ops, mrefs, opsymbols, num_params, nopsv, expandedv, elementbytes)
     process_metadata!(ls, AM, length(arf))

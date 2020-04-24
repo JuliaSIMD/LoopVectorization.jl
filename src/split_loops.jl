@@ -11,6 +11,7 @@ function add_operation!(ls_new::LoopSet, included::Vector{Int}, ls::LoopSet, op:
         length(operations(ls_new)), name(op), op.elementbytes, instruction(op), op.node_type,
         loopdependencies(op), reduceddependencies(op), vparents, op.ref, reducedchildren(op)
     )
+    accesses_memory(op) && addsetv!(ls_new.includedactualarrays, vptr(op.ref))
     push!(operations(ls_new), opnew)
     included[identifier(op)] = identifier(opnew)
     opnew

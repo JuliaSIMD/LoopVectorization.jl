@@ -30,12 +30,19 @@ end
 
 # for use with broadcasting
 function add_simple_load!(
-    ls::LoopSet, var::Symbol, ref::ArrayReference, elementbytes::Int, actualarray::Bool = true, broadcast::Bool = false
+    ls::LoopSet, var::Symbol, ref::ArrayReference, elementbytes::Int,
+    actualarray::Bool = true, broadcast::Bool = false
 )
     loopdeps = Symbol[s for s ∈ ref.indices]
     mref = ArrayReferenceMeta(
         ref, fill(true, length(loopdeps))
     )
+    add_simple_load!(ls, var, mref, loopdeps, elementbytes, actualarray, broadcast)
+end
+function add_simple_load!(
+    ls::LoopSet, var::Symbol, mref::ArrayReferenceMeta, loopdeps::Vector{Symbol},
+    elementbytes::Int, actualarray::Bool = true, broadcast::Bool = false
+)
     op = Operation(
         length(operations(ls)), var, elementbytes,
         :getindex, memload, loopdeps,
