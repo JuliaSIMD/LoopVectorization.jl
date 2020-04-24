@@ -1,4 +1,4 @@
-using LoopVectorization, Test
+using LoopVectorization, OffsetArrays, Test
 
 
 @testset "copy" begin
@@ -82,7 +82,31 @@ using LoopVectorization, Test
             x[i] = a
         end
     end
-    
+    function reversecopy1!(B, A)
+        for i in eachindex(A)
+            B[i] = A[11-i]
+        end
+        B
+    end
+    function reversecopy1avx!(B, A)
+        @avx for i in eachindex(A)
+            B[i] = A[11-i]
+        end
+        B
+    end
+    function reversecopy2!(B, A)
+        for i in eachindex(B)
+            B[i] = A[-i]
+        end
+        B
+    end
+    function reversecopy2avx!(B, A)
+        @avx for i in eachindex(B)
+            B[i] = A[-i]
+        end
+        B
+    end
+
 
     for T ∈ (Float32, Float64, Int32, Int64)
         @show T, @__LINE__
@@ -150,6 +174,8 @@ using LoopVectorization, Test
         @avx x .= a;
         fill!(q2, a);
         @test x == q2
-        
+
+        @test reversecopy1!(zeros(T, 10), collect(1:10)) == reversecopy1avx!(zeros(T, 10), collect(1:10))
+        @test reversecopy2!(zeros(T, 10), OffsetArray(collect(1:10), -10:-1)) == reversecopy2avx!(zeros(T, 10), OffsetArray(collect(1:10), -10:-1))
     end
 end
