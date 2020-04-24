@@ -267,15 +267,19 @@ end
 function add_pow!(
     ls::LoopSet, var::Symbol, x, p::Real, elementbytes::Int, position::Int
 )
-    xop = if x isa Expr
+    xop::Operation = if x isa Expr
         add_operation!(ls, gensym(:xpow), x, elementbytes, position)
     elseif x isa Symbol
-        xo = get(ls.opdict, x, nothing)
-        if isnothing(xo)
-            pushpreamble!(ls, Expr(:(=), var, Expr(:call, :(^), x, p)))
-            return add_constant!(ls, var, elementbytes)
+        if x ∈ ls.loopsymbols
+            add_loopvalue!(ls, x, elementbytes)
+        else
+            xo = get(ls.opdict, x, nothing)
+            if isnothing(xo)
+                pushpreamble!(ls, Expr(:(=), var, Expr(:call, :(^), x, p)))
+                return add_constant!(ls, var, elementbytes)
+            end
+            xo
         end
-        xo
     elseif x isa Number
         pushpreamble!(ls, Expr(:(=), var, x ^ p))
         return add_constant!(ls, var, elementbytes)

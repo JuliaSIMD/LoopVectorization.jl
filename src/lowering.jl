@@ -82,14 +82,21 @@ function lower_block(
     for prepost ∈ 1:2
         # !u₁ && !u₂
         lower!(blockq, ops[1,1,prepost,n], vectorized, ls, u₁loop, u₂loop, u₁, nothing, mask)
+        if u₁ == 4
+            lower!(blockq, ops[2,1,prepost,n], vectorized, ls, u₁loop, u₂loop, u₁, nothing, mask)
+        end
         opsv1 = ops[1,2,prepost,n]
         opsv2 = ops[2,2,prepost,n]
         if length(opsv1) + length(opsv2) > 0
+            # if u₁ == 3
+                # lower!(blockq, ops[2,1,prepost,n], vectorized, ls, u₁loop, u₂loop, u₁, nothing, mask)
+            # end
             for store ∈ (false,true)
                 # let store = nothing
                 nstores = 0
                 iszero(length(opsv1)) || (nstores += sum(isstore, opsv1))
                 iszero(length(opsv2)) || (nstores += sum(isstore, opsv2))
+                
                 for t ∈ 0:u₂-1
                     if t == 0
                         push!(blockq.args, Expr(:(=), u₂loop, tiledsym(u₂loop)))
@@ -103,7 +110,7 @@ function lower_block(
                     else # !u₁ &&  u₂
                         lower!(blockq, opsv1, vectorized, ls, u₁loop, u₂loop, u₁, t, mask, store)
                     end
-                    if iszero(t) && !store #  u₁ && !u₂
+                    if iszero(t) && !store && u₁ != 4 #  u₁ && !u₂
                         # for u ∈ 0:u₁-1     
                         lower!(blockq, ops[2,1,prepost,n], vectorized, ls, u₁loop, u₂loop, u₁, nothing, mask)
                         # end
@@ -120,7 +127,7 @@ function lower_block(
                 end
                 nstores == 0 && break
             end
-        else
+        elseif u₁ != 4
             # for u ∈ 0:u₁-1     #  u₁ && !u₂
             lower!(blockq, ops[2,1,prepost,n], vectorized, ls, u₁loop, u₂loop, u₁, nothing, mask)
             # end
@@ -303,13 +310,13 @@ function determine_width(ls::LoopSet, vectorized::Symbol)
         push!(vwidth_q.args, Expr(:call, Expr(:curly, :Val, length(vloop))))
     end
     # push!(vwidth_q.args, ls.T)
-    if length(ls.includedactualarrays) < 2
-        push!(vwidth_q.args, ls.T)
-    else
-        for array ∈ ls.includedactualarrays
-            push!(vwidth_q.args, Expr(:call, :eltype, array))
-        end
-    end
+    # if length(ls.includedactualarrays) < 2
+    push!(vwidth_q.args, ls.T)
+    # else
+    #     for array ∈ ls.includedactualarrays
+    #         push!(vwidth_q.args, Expr(:call, :eltype, array))
+    #     end
+    # end
     vwidth_q
 end
 function init_remblock(unrolledloop::Loop, u₁loop::Symbol = unrolledloop.itersymbol)
@@ -353,8 +360,8 @@ function setup_preamble!(ls::LoopSet, us::UnrollSpecification)
     W = ls.W; typeT = ls.T
     if length(ls.includedarrays) > 0
         push!(ls.preamble.args, Expr(:(=), typeT, determine_eltype(ls)))
-        push!(ls.preamble.args, Expr(:(=), W, determine_width(ls, vectorized)))
     end
+    push!(ls.preamble.args, Expr(:(=), W, determine_width(ls, vectorized)))
     lower_licm_constants!(ls)
     pushpreamble!(ls, definemask(getloop(ls, vectorized), W))#, u₁ > 1 && u₁loopnum == vectorizedloopnum))
     for op ∈ operations(ls)

@@ -87,7 +87,7 @@ function checkforoffset!(
     factor = f === :+ ? 1 : -1
     arg1 = ind.args[2]
     arg2 = ind.args[3]
-    if arg1 isa Integer
+    if arg1 isa Integer && isone(factor)
         if arg2 isa Symbol && arg2 ∈ ls.loopsymbols
             addoffset!(ls, indices, offsets, loopedindex, loopdependencies, arg2, arg1 * factor)
         else
