@@ -24,6 +24,8 @@ end
 
     @time include("offsetarrays.jl")
 
+    @time include("tensors.jl")
+
     @time include("map.jl")
 
     @time include("filter.jl")
