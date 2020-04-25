@@ -172,13 +172,25 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     nisvectorized = isvectorized(us, n)
     loopisstatic = isstaticloop(loop) & (!nisvectorized)
 
+
     remmask = inclmask | nisvectorized
     Ureduct = (n == num_loops(ls) && (u₂ == -1)) ? calc_Ureduct(ls, us) : -1
     sl = startloop(loop, nisvectorized, ls.W, loopsym)
-    tc = terminatecondition(loop, us, n, ls.W, loopsym, inclmask, UF)
-    body = lower_block(ls, us, n, inclmask, UF)
 
+    remfirst = loopisstatic & !(unsigned(Ureduct) < unsigned(UF))
+    if remfirst
+        tc = Expr(:call, lv(:scalar_less), loopsym, loop.stophint + 1)
+    else
+        tc = terminatecondition(loop, us, n, ls.W, loopsym, inclmask, UF)
+    end
+    body = lower_block(ls, us, n, inclmask, UF)
     q = Expr(:while, tc, body)
+    remblock = init_remblock(loop, loopsym)
+    UFt = if loopisstatic
+        length(loop) % UF
+    else
+        1
+    end
     q = if unsigned(Ureduct) < unsigned(UF) # unsigned(-1) == typemax(UInt); is logic relying on twos-complement bad?
         Expr(
             :block, sl,
@@ -186,13 +198,23 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
             Expr(
                 :if, terminatecondition(loop, us, n, ls.W, loopsym, inclmask, UF - Ureduct),
                 lower_block(ls, us, n, inclmask, UF - Ureduct)
-            )
+            ),
+            remblock
         )
+    elseif remfirst
+        numiters = length(loop) ÷ UF
+        if numiters > 2
+            Expr( :block, sl, remblock, q )
+        else
+            q = Expr(:block, sl, remblock)
+            for i ∈ 1:numiters
+                push!(q.args, body)
+            end
+            q
+        end
     else
-        Expr( :block, sl, q )
+        Expr( :block, sl, q, remblock )
     end
-    remblock = init_remblock(loop, loopsym)
-    push!(q.args, remblock)
     UFt = if loopisstatic
         length(loop) % UF
     else
@@ -206,6 +228,8 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
                 Expr(:call, :-, loop.stopsym, Expr(:call, lv(:valmul), ls.W, UFt))
             end
             Expr(:call, lv(:scalar_greater), loopsym, itercount)
+        elseif remfirst
+            Expr(:call, lv(:scalar_less), loopsym, loop.starthint + UFt)
         elseif loop.stopexact
             Expr(:call, lv(:scalar_greater), loopsym, loop.stophint - UFt)
         else

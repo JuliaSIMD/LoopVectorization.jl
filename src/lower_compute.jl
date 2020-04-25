@@ -1,5 +1,12 @@
 # A compute op needs to know the unrolling and tiling status of each of its parents.
 
+function promote_to_231(op, unrolled, tiled)
+    unrolleddeps = Symbol[]
+    unrolled ∈ loopdependencies(op) && push!(unrolleddeps, unrolled)
+    tiled ∈ loopdependencies(op) && push!(unrolleddeps, tiled)
+    !any(opp -> isload(opp) && all(in(loopdependencies(opp)), unrolleddeps), parents(op))
+end
+
 struct FalseCollection end
 Base.getindex(::FalseCollection, i...) = false
 function lower_compute!(
@@ -76,7 +83,9 @@ function lower_compute!(
     if !isnothing(suffix) && isreduct
         # instrfid = findfirst(isequal(instr.instr), (:vfmadd, :vfnmadd, :vfmsub, :vfnmsub))
         instrfid = findfirst(isequal(instr.instr), (:vfmadd_fast, :vfnmadd_fast, :vfmsub_fast, :vfnmsub_fast))
-        if instrfid !== nothing && !any(opp -> isload(opp) && all(in(loopdependencies(opp)), loopdependencies(op)), parents(op)) # want to instcombine when parent load's deps are superset
+        # want to instcombine when parent load's deps are superset
+        # also make sure opp is unrolled
+        if instrfid !== nothing && (opunrolled && U > 1) && promote_to_231(op, unrolled, tiled)            
             instr = Instruction((:vfmadd231, :vfnmadd231, :vfmsub231, :vfnmsub231)[instrfid])
         end
     end

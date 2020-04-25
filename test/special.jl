@@ -251,6 +251,26 @@
         end; y
     end
     
+    function csetanh!(y, z, x)
+        for j in axes(x, 2)
+            for i = axes(x, 1)
+                t2 = inv(tanh(x[i, j]))
+                t1 = tanh(x[i, j])
+                y[i, j] = z[i, j] * (-(1 - t1 ^ 2) * t2)
+            end
+        end
+        y
+    end    
+    function csetanhavx!(y, z, x)
+        @avx for j in axes(x, 2)
+            for i = axes(x, 1)
+                t2 = inv(tanh(x[i, j]))
+                t1 = tanh(x[i, j])
+                y[i, j] = z[i, j] * (-(1 - t1 ^ 2) * t2)
+            end
+        end
+        y
+    end    
     
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
@@ -314,5 +334,9 @@
         @test vpowf!(r1, x, -1.7) ≈ (r2 .= x .^ -1.7)
         p = randn(length(x));
         @test vpowf!(r1, x, x) ≈ (r2 .= x .^ x)
+
+        X = rand(T, N, M); Z = rand(T, N, M);
+        Y1 = similar(X); Y2 = similar(Y1);
+        @test csetanh!(Y1, X, Z) ≈ csetanhavx!(Y2, X, Z)
     end
 end

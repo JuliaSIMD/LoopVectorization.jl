@@ -322,7 +322,10 @@ end
 operations(ls::LoopSet) = ls.operations
 function pushop!(ls::LoopSet, op::Operation, var::Symbol = name(op))
     for opp ∈ operations(ls)
-        matches(op, opp) && return opp
+        if matches(op, opp)
+            ls.opdict[var] = opp
+            return opp
+        end
     end
     push!(ls.operations, op)
     ls.opdict[var] = op
