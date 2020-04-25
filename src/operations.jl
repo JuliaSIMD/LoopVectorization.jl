@@ -72,7 +72,7 @@ end
 loopdependencies(ref::ArrayReferenceMeta) = ref.ref.indices
 Base.convert(::Type{ArrayReference}, ref::ArrayReferenceMeta) = ref.ref
 Base.:(==)(x::ArrayReference, y::ArrayReference) = isequal(x, y)
-Base.:(==)(x::ArrayReferenceMeta, y::ArrayReferenceMeta) = isequal(x.ref, y.ref) && x.ptr === y.ptr
+Base.:(==)(x::ArrayReferenceMeta, y::ArrayReferenceMeta) = (x.ptr === y.ptr) && isequal(x.ref, y.ref)
 
 # Errors preferable than silently working?
 Base.:(==)(x::ArrayReference, y::ArrayReferenceMeta) = x == y.ref
@@ -197,7 +197,7 @@ function matches(op1::Operation, op2::Operation)
     end
     op1.dependencies == op2.dependencies || return false
     op2.reduced_deps == op2.reduced_deps || return false
-    if isload(op1)
+    if accesses_memory(op1)
         op1.ref == op2.ref || return false
     end
     nparents = length(parents(op1))

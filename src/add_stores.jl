@@ -46,7 +46,6 @@ function add_store!(
         end
         # add_pvar &= (name(first(parents(opp))) != pvar)
     end
-    # @show add_pvar
     pushfirst!(vparents, parent)
     update_deps!(ldref, reduceddeps, parent)
     op = Operation( id, name(mpref), elementbytes, :setindex!, memstore, mpref )
