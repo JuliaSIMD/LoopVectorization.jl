@@ -45,16 +45,18 @@ function append_loop_valdims!(valcall::Expr, loop::Loop)
     end
     nothing
 end
+const DISCONTIGUOUS = Symbol("##DISCONTIGUOUSSUBARRAY##")
 function subset_vptr!(ls::LoopSet, vptr::Symbol, indnum::Int, ind, previndices, loopindex)
     subsetvptr = Symbol(vptr, "_subset_$(indnum)_with_$(ind)##")
     valcall = Expr(:call, Expr(:curly, :Val, 1))
     if indnum > 1
+        offset = first(previndices) === DISCONTIGUOUS
         valcall = Expr(:call, lv(:valsum), valcall)
         for i ∈ 1:indnum-1
             if loopindex[i]
-                append_loop_valdims!(valcall, getloop(ls, previndices[i]))
+                append_loop_valdims!(valcall, getloop(ls, previndices[i+offset]))
             else
-                for loopdep ∈ loopdependencies(ls.opdict[previndices[i]])
+                for loopdep ∈ loopdependencies(ls.opdict[previndices[i+offset]])
                     append_loop_valdims!(valcall, getloop(ls, loopdep))
                 end
             end
@@ -104,7 +106,6 @@ function checkforoffset!(
     end        
 end
 
-const DISCONTIGUOUS = Symbol("##DISCONTIGUOUSSUBARRAY##")
 function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementbytes::Int, var::Union{Nothing,Symbol} = nothing)
     vptrarray = vptr(array)
     add_vptr!(ls, array, vptrarray) # now, subset
