@@ -50,8 +50,11 @@ end
     A = rand(LIM, LIM, LA, LA);
     B = rand(LIM, LIM, LIM, LIM);
 
-    C1 = Array{Float64}(undef, LIM, LIM, LA, LA);
-    C2 = similar(C1); C3 = similar(C1);
+    C1 = fill(-999.999, LIM, LIM, LA, LA);
+    C2 = fill(-999.999, LIM, LIM, LA, LA);
+    C3 = fill(-999.999, LIM, LIM, LA, LA);
+    # C1 = Array{Float64}(undef, LIM, LIM, LA, LA);
+    # C2 = similar(C1); C3 = similar(C1);
 
     @time contract!(C1, A, B)
     @time contracttest1!(C2, A, B)
