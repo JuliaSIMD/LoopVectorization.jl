@@ -11,10 +11,10 @@ function UnrollSpecification(us::UnrollSpecification, u₁, u₂)
     @unpack u₁loopnum, u₂loopnum, vectorizedloopnum = us
     UnrollSpecification(u₁loopnum, u₂loopnum, vectorizedloopnum, u₁, u₂)
 end
-function UnrollSpecification(us::UnrollSpecification; u₁ = us.u₁, u₂ = us.u₂)
-    @unpack u₁loopnum, u₂loopnum, vectorizedloopnum = us
-    UnrollSpecification(u₁loopnum, u₂loopnum, vectorizedloopnum, u₁, u₂)
-end
+# function UnrollSpecification(us::UnrollSpecification; u₁ = us.u₁, u₂ = us.u₂)
+#     @unpack u₁loopnum, u₂loopnum, vectorizedloopnum = us
+#     UnrollSpecification(u₁loopnum, u₂loopnum, vectorizedloopnum, u₁, u₂)
+# end
 isunrolled1(us::UnrollSpecification, n::Int) = us.u₁loopnum == n
 isunrolled2(us::UnrollSpecification, n::Int) = !isunrolled1(us, n) && us.u₂loopnum == n
 isvectorized(us::UnrollSpecification, n::Int) = us.vectorizedloopnum == n
@@ -225,20 +225,20 @@ function zerotype(ls::LoopSet, op::Operation)
     end
     INVALID
 end
-function Base.iszero(ls::LoopSet, op::Operation)
-    opid = identifier(op)
-    for (id,_) ∈ ls.preamble_zeros
-        opid == id && return true
-    end
-    false
-end
-function Base.isone(ls::LoopSet, op::Operation)
-    opid = identifier(op)
-    for (id,_) ∈ ls.preamble_ones
-        opid == id && return true
-    end
-    false
-end
+# function Base.iszero(ls::LoopSet, op::Operation)
+#     opid = identifier(op)
+#     for (id,_) ∈ ls.preamble_zeros
+#         opid == id && return true
+#     end
+#     false
+# end
+# function Base.isone(ls::LoopSet, op::Operation)
+#     opid = identifier(op)
+#     for (id,_) ∈ ls.preamble_ones
+#         opid == id && return true
+#     end
+#     false
+# end
 
 
 includesarray(ls::LoopSet, array::Symbol) = array ∈ ls.includedarrays

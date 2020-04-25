@@ -12,7 +12,7 @@
     end
     function myvexpavx!(b, a)
         @avx for i ∈ eachindex(a)
-            b[i] = exp(a[i])
+            b[i] = Base.exp(a[i])
         end
     end
     function myvexp_avx!(b, a)

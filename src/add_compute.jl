@@ -90,16 +90,16 @@ end
     # @assert iscompute(op)
     # pushop!(ls, child, name(op))
 # end
-function isreductzero(op::Operation, ls::LoopSet, reduct_zero::Symbol)
-    isconstant(op) || return false
-    reduct_zero === op.instruction.mod && return true
-    if reduct_zero === :zero
-        iszero(ls, op) && return true
-    elseif reduct_zero === :one
-        isone(ls, op) && return true
-    end
-    false
-end
+# function isreductzero(op::Operation, ls::LoopSet, reduct_zero::Symbol)
+#     isconstant(op) || return false
+#     reduct_zero === op.instruction.mod && return true
+#     if reduct_zero === :zero
+#         iszero(ls, op) && return true
+#     elseif reduct_zero === :one
+#         isone(ls, op) && return true
+#     end
+#     false
+# end
 
 # function substitute_op_in_parents!(vparents::Vector{Operation}, replacer::Operation, replacee::Operation)
 #     for i ∈ eachindex(vparents)
