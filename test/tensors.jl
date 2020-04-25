@@ -46,6 +46,7 @@ function contracttest2!(tiJaB_d_temp3, tiJaB_i, Wmnij)
 end
 
 @testset "Tensors" begin
+    @show @__LINE__, Float64
     LA, LIM = 31, 23;
     A = rand(LIM, LIM, LA, LA);
     B = rand(LIM, LIM, LIM, LIM);
@@ -56,9 +57,9 @@ end
     # C1 = Array{Float64}(undef, LIM, LIM, LA, LA);
     # C2 = similar(C1); C3 = similar(C1);
 
-    @time contract!(C1, A, B)
-    @time contracttest1!(C2, A, B)
-    @time contracttest2!(C3, A, B)
+    contract!(C1, A, B)
+    contracttest1!(C2, A, B)
+    contracttest2!(C3, A, B)
 
     @test C1 ≈ C2
     @test C1 ≈ C3
