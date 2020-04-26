@@ -48,15 +48,15 @@ T = Float64
     #        end);
     # lsq2d = LoopVectorization.LoopSet(q2d); LoopVectorization.choose_order(lsq2d)
 
-    oq2 = :(for j in rng2, i in rng1
-            tmp = zero(eltype(out))
-            for jk in -1:1, ik in -1:1
-                tmp += A[i+ik,j+jk]*kern[ik,jk]
-            end
-            out[i,j] = tmp
-           end);
-    lsoq = LoopVectorization.LoopSet(oq2);
-    LoopVectorization.choose_order(lsoq)
+    # oq2 = :(for j in rng2, i in rng1
+    #         tmp = zero(eltype(out))
+    #         for jk in -1:1, ik in -1:1
+    #             tmp += A[i+ik,j+jk]*kern[ik,jk]
+    #         end
+    #         out[i,j] = tmp
+    #        end);
+    # lsoq = LoopVectorization.LoopSet(oq2);
+    # LoopVectorization.choose_order(lsoq)
 
     function avx2d!(out::AbstractMatrix, A::AbstractMatrix, kern)
         rng1k, rng2k = axes(kern)
@@ -141,19 +141,20 @@ T = Float64
     # lsuq = LoopVectorization.LoopSet(macroexpand(Base, uq));
     # LoopVectorization.choose_order(lsuq)
 
-#     out = out1;
-#     z = zero(eltype(out));
-#     R=CartesianIndices(out);
-#     Rk = CartesianIndices(kern);
-#     lsgeneric = LoopVectorization.@avx_debug for I in R
-#            tmp = z
-#            for J in Rk
-#                tmp += A[I+J]*kern[J]
-#            end
-#            out[I] = tmp
-#        end;
-#     LoopVectorization.choose_order(lsgeneric)
-#     out = out1;
+    # using LoopVectorization, OffsetArrays
+    # T = Float64
+    # A = rand(T, 100, 100);
+    # kern = OffsetArray(rand(T, 3, 3), -1:1, -1:1);
+    # out = OffsetArray(similar(A, size(A).-2), 1, 1);   # stay away from the edges of A
+    # lsgeneric = LoopVectorization.@avx_debug for I in CartesianIndices(out)
+    #        tmp = zero(eltype(out))
+    #        for J in CartesianIndices(kern)
+    #            tmp += A[I+J]*kern[J]
+    #        end
+    #        out[I] = tmp
+    #    end;
+    # LoopVectorization.choose_order(lsgeneric)
+    # # out = out1;
 #     lsgenerics = LoopVectorization.@avx_debug for I in CartesianIndices(out)
 #            tmp = zero(eltype(out))
 #            for J in CartesianIndices(skern)
@@ -194,7 +195,7 @@ T = Float64
 
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
-        A = rand(T, 100, 100);
+        A = rand(T, 100, 100); At = copy(A');
         kern = OffsetArray(rand(T, 3, 3), -1:1, -1:1);
         skern = SizedOffsetMatrix{T,-1,1,-1,1}(parent(kern));
         out1 = OffsetArray(similar(A, size(A).-2), 1, 1);   # stay away from the edges of A
@@ -209,6 +210,15 @@ T = Float64
 
         fill!(out2, NaN); avx2d!(out2, A, skern);
         @test out1 ≈ out2
+
+        fill!(out2, NaN); avx2d!(out2, At', skern);
+        @test out1 ≈ out2
+
+        fill!(out2, NaN); avx2d!(out2', A, skern);
+        @test out1 ≈ out2'
+
+        fill!(out2, NaN); avx2d!(out2', At', skern);
+        @test out1 ≈ out2'
 
         fill!(out3, NaN); avx2douter!(out3, A, skern);
         @test out1 ≈ out3

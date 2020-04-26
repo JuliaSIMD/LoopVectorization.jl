@@ -15,6 +15,21 @@ end
 @inline function VectorizationBase.stridedpointer(A::OffsetArrays.OffsetArray)
     OffsetStridedPointer(stridedpointer(parent(A)), VectorizationBase.staticm1(A.offsets))
 end
+
+@inline function VectorizationBase.stridedpointer(
+    B::Adjoint{T,A}
+) where {T,A<:OffsetArrays.OffsetArray{T}}
+    Boff = parent(B)
+    OffsetStridedPointer(
+        stridedpointer(parent(Boff)'),
+        VectorizationBase.staticm1(Boff.offsets)
+    )
+end
+@inline function Base.transpose(A::OffsetStridedPointer)
+    OffsetStridedPointer(
+        transpose(A.ptr), A.offsets
+    )
+end
 # Tuple of length == 1, use ind directly.
 # @inline VectorizationBase.offset(ptr::OffsetStridedPointer, ind::Tuple{I}) where {I} = VectorizationBase.offset(ptr.ptr, ind)
 # Tuple of length > 1, subtract offsets.
