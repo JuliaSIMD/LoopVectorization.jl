@@ -133,7 +133,7 @@ using Test
     if LoopVectorization.VectorizationBase.REGISTER_COUNT == 32
         @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, 4, 6)
     else
-        @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, 4, 4)
+        @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :i, :j, :j, 4, 4)
     end
     
     function myvar!(s², A, x̄)
