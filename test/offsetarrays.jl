@@ -29,17 +29,17 @@ T = Float64
     #     tmp += A[i+ik,j+jk]*skern[ik,jk]
     # end;
     # ls1
-    out = out1;
-    rng1,  rng2  = CartesianIndices(out1).indices;
-    rng1k, rng2k = axes(skern);
-    ls2dstatic = LoopVectorization.@avx_debug for j in rng2, i in rng1
-            tmp = zero(eltype(out))
-            for jk in rng2k, ik in rng1k
-                tmp += A[i+ik,j+jk]*skern[ik,jk]
-            end
-            out1[i,j] = tmp
-    end;
-    LoopVectorization.choose_order(ls2dstatic)
+    # out = out1;
+    # rng1,  rng2  = CartesianIndices(out1).indices;
+    # rng1k, rng2k = axes(skern);
+    # ls2dstatic = LoopVectorization.@avx_debug for j in rng2, i in rng1
+    #         tmp = zero(eltype(out))
+    #         for jk in rng2k, ik in rng1k
+    #             tmp += A[i+ik,j+jk]*skern[ik,jk]
+    #         end
+    #         out1[i,j] = tmp
+    # end;
+    # LoopVectorization.choose_order(ls2dstatic)
     # q2d = :(for j in rng2, i in rng1
     #         tmp = zero(eltype(out))
     #         for jk in rng2k, ik in rng1k
