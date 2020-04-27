@@ -26,6 +26,8 @@ export LowDimArray, stridedpointer, vectorizable,
     vmap, vmap!, vmapnt, vmapnt!, vmapntt, vmapntt!,
     vfilter, vfilter!
 
+const VECTORWIDTHSYMBOL, ELTYPESYMBOL = Symbol("##Wvecwidth##"), Symbol("##Tloopeltype##")
+
 
 include("vectorizationbase_extensions.jl")
 include("predicates.jl")

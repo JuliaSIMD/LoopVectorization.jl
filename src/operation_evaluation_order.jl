@@ -15,6 +15,18 @@
 # function iterate()
 
 # end
+function isnopidentity(op::Operation, u₁loop::Symbol, u₂loop::Symbol, suffix)
+    parents_op = parents(op)
+    if iscompute(op) && instruction(op).instr === :identity && name(first(parents_op)) === name(op) && isone(length(parents_op))
+        mvar, u₁unrolledsym, u₂unrolledsym = variable_name_and_unrolled(op, u₁loop, u₂loop, suffix)
+        parents_u₁syms, parents_u₂syms = parent_unroll_status(op, u₁loop, u₂loop, suffix)
+        if (u₁unrolledsym == first(parents_u₁syms)) && ((!isnothing(suffix)) == parents_u₂syms[1])
+            true
+        end
+    else
+        false
+    end
+end
 
 function set_upstream_family!(adal::Vector{T}, op::Operation, val::T, ld::Vector{Symbol}, id::Int) where {T}
     adal[identifier(op)] == val && return # must already have been set
@@ -29,22 +41,29 @@ function set_upstream_family!(adal::Vector{T}, op::Operation, val::T, ld::Vector
 end
 
 function addoptoorder!(
-    lo::LoopOrder, included_vars::Vector{Bool}, place_after_loop::Vector{Bool}, op::Operation, loopsym::Symbol, _n::Int, unrolled::Symbol, tiled::Symbol, loopistiled::Bool
+    lo::LoopOrder, included_vars::Vector{Bool}, place_after_loop::Vector{Bool}, op::Operation, loopsym::Symbol, _n::Int, u₁loop::Symbol, u₂loop::Symbol, loopistiled::Bool
 )
     id = identifier(op)
     included_vars[id] && return nothing
     loopsym ∈ loopdependencies(op) || return nothing
     for opp ∈ parents(op) # ensure parents are added first
-        addoptoorder!(lo, included_vars, place_after_loop, opp, loopsym, _n, unrolled, tiled, loopistiled)
+        addoptoorder!(lo, included_vars, place_after_loop, opp, loopsym, _n, u₁loop, u₂loop, loopistiled)
     end
     included_vars[id] && return nothing
     included_vars[id] = true
-    isunrolled = (unrolled ∈ loopdependencies(op)) + 1
-    istiled = (loopistiled ? (tiled ∈ loopdependencies(op)) : false) + 1
+    isunrolled = (u₁loop ∈ loopdependencies(op)) + 1
+    istiled = u₂loop ∈ loopdependencies(op)
     # optype = Int(op.node_type) + 1
     after_loop = place_after_loop[id] + 1
     # @show place_after_loop[id], op
-    isloopvalue(op) || push!(lo[isunrolled,istiled,after_loop,_n], op)
+    if !isloopvalue(op)
+        if istiled
+            isnopidentity(op, u₁loop, u₂loop, 0) || push!(lo[isunrolled,2,after_loop,_n], op)
+        else
+            isnopidentity(op, u₁loop, u₂loop, nothing) || push!(lo[isunrolled,1,after_loop,_n], op)
+        end
+    end
+    # isloopvalue(op) || push!(lo[isunrolled,istiled,after_loop,_n], op)
     # all(opp -> iszero(length(reduceddependencies(opp))), parents(op)) &&
     set_upstream_family!(place_after_loop, op, false, loopdependencies(op), identifier(op)) # parents that have already been included are not moved, so no need to check included_vars to filter
     nothing

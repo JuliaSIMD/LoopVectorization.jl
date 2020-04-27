@@ -1,50 +1,74 @@
 # A compute op needs to know the unrolling and tiling status of each of its parents.
 
-function promote_to_231(op, unrolled, tiled)
+function promote_to_231(op, u₁loop, u₂loop)
     unrolleddeps = Symbol[]
-    unrolled ∈ loopdependencies(op) && push!(unrolleddeps, unrolled)
-    tiled ∈ loopdependencies(op) && push!(unrolleddeps, tiled)
-    !any(opp -> isload(opp) && all(in(loopdependencies(opp)), unrolleddeps), parents(op))
+    loopdeps = loopdependencies(op)
+    u₁loop ∈ loopdeps && push!(unrolleddeps, u₁loop)
+    u₂loop ∈ loopdeps && push!(unrolleddeps, u₂loop)
+    !any(opp -> isload(opp) && all(in(loopdeps), unrolleddeps), parents(op))
 end
 
 struct FalseCollection end
 Base.getindex(::FalseCollection, i...) = false
+function parent_unroll_status(op::Operation, u₁loop::Symbol, u₂loop::Symbol, ::Nothing)
+    map(opp -> isunrolled_sym(opp, u₁loop), parents(op)), FalseCollection()
+end
+# function parent_unroll_status(op::Operation, u₁loop::Symbol, u₂loop::Symbol, ::Nothing)
+#     vparents = parents(op);
+#     parent_names = Vector{Symbol}(undef, length(vparents))
+#     parents_u₁syms = Vector{Bool}(undef, length(vparents))
+#     # parents_u₂syms = Vector{Bool}(undef, length(vparents))
+#     for i ∈ eachindex(vparents)
+#         parent_names[i], parents_u₁syms[i], _ = variable_name_and_unrolled(vparents[i], u₁loop, u₂loop, nothing)
+#     end
+#     parent_names, parents_u₁syms, FalseCollection()
+# end
+function parent_unroll_status(op::Operation, u₁loop::Symbol, u₂loop::Symbol, u₂iter::Int)
+    vparents = parents(op);
+    # parent_names = Vector{Symbol}(undef, length(vparents))
+    parents_u₁syms = Vector{Bool}(undef, length(vparents))
+    parents_u₂syms = Vector{Bool}(undef, length(vparents))
+    for i ∈ eachindex(vparents)
+        # parent_names[i], parents_u₁syms[i], parents_u₂syms[i] = variable_name_and_unrolled(vparents[i], u₁loop, u₂loop, u₂iter)
+        parents_u₁syms[i], parents_u₂syms[i] = isunrolled_sym(vparents[i], u₁loop, u₂loop, u₂iter)
+    end
+    # parent_names, parents_u₁syms, parents_u₂syms
+    parents_u₁syms, parents_u₂syms
+end
+
 function lower_compute!(
-    q::Expr, op::Operation, vectorized::Symbol, W::Symbol, unrolled::Symbol, tiled::Symbol, U::Int,
+    q::Expr, op::Operation, vectorized::Symbol, u₁loop::Symbol, u₂loop::Symbol, U::Int,
     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing,
-    opunrolled = unrolled ∈ loopdependencies(op)
+    opunrolled = u₁loop ∈ loopdependencies(op)
 )
 
     var = name(op)
     instr = instruction(op)
     parents_op = parents(op)
-    mvar = mangledvar(op)
     nparents = length(parents_op)
-    parentstiled = if suffix === nothing
-        optiled = false
-        tiledouterreduction = -1
-        FalseCollection()
+    
+    mvar, u₁unrolledsym, u₂unrolledsym = variable_name_and_unrolled(op, u₁loop, u₂loop, suffix)
+    opunrolled = u₁unrolledsym || u₁loop ∈ loopdependencies(op)
+    # parent_names, parents_u₁syms, parents_u₂syms = parent_unroll_status(op, u₁loop, u₂loop, suffix)
+    parents_u₁syms, parents_u₂syms = parent_unroll_status(op, u₁loop, u₂loop, suffix)
+    tiledouterreduction = if isnothing(suffix)
+        -1
     else
-        tiledouterreduction = isouterreduction(op)
         suffix_ = Symbol(suffix, :_)
-        if tiledouterreduction == -1
-            mvar = Symbol(mvar, suffix_)
-        end
-        optiled = true
-        [tiled ∈ loopdependencies(opp) for opp ∈ parents_op]
+        isouterreduction(op)
     end
-    parentsunrolled = isunrolled_sym.(parents_op, unrolled, tiled)
-    if instr.instr === :identity && name(first(parents_op)) === var && isone(length(parents_op))
-        if (opunrolled == first(parentsunrolled)) && ((!isnothing(suffix)) == parentstiled[1])
-            return
-        end
-    end
-    unrollsym = isunrolled_sym(op, unrolled, suffix)
-    if !opunrolled && any(parentsunrolled) # TODO: Clean up this mess, refactor the naming code, putting it in one place and have everywhere else use it for easy equivalence.
+    # parenttiled = isunrolled_sym.(parents_op, tiled, unrolled)
+    # if instr.instr === :identity && name(first(parents_op)) === var && isone(length(parents_op))
+    #     if (u₁unrolledsym == first(parents_u₁syms)) && ((!isnothing(suffix)) == parents_u₂syms[1])
+    #         return
+    #     end
+    # end
+    # unrollsym = isunrolled_sym(op, unrolled)
+    if !opunrolled && any(parents_u₁syms) # TODO: Clean up this mess, refactor the naming code, putting it in one place and have everywhere else use it for easy equivalence.
         parents_op = copy(parents_op)
-        for i ∈ eachindex(parentsunrolled)
-            parentsunrolled[i] || continue
-            parentsunrolled[i] = false
+        for i ∈ eachindex(parents_u₁syms)
+            parents_u₁syms[i] || continue
+            parents_u₁syms[i] = false
             parentop = parents_op[i]
             i == tiledouterreduction && isconstant(parentop) && continue
             newparentop = Operation(
@@ -54,7 +78,7 @@ function lower_compute!(
             parentname = mangledvar(parentop)
             newparentname = mangledvar(newparentop)
             parents_op[i] = newparentop
-            if parentstiled[i]
+            if parents_u₂syms[i]
                 parentname = Symbol(parentname, suffix_)
                 newparentname = Symbol(newparentname, suffix_)
             end
@@ -76,6 +100,7 @@ function lower_compute!(
     # parentsyms = [opp.variable for opp ∈ parents(op)]
     Uiter = opunrolled ? U - 1 : 0
     isreduct = isreduction(op)
+    # @show op opunrolled, optiled, isreduct, unrollsym
     # if instr.instr === :vfmadd_fast
         # diffdeps = !any(opp -> isload(opp) && all(in(loopdependencies(opp)), loopdependencies(op)), parents(op)) # want to instcombine when parent load's deps are superset
         # @show suffix, !isnothing(suffix), isreduct, diffdeps
@@ -85,7 +110,7 @@ function lower_compute!(
         instrfid = findfirst(isequal(instr.instr), (:vfmadd_fast, :vfnmadd_fast, :vfmsub_fast, :vfnmsub_fast))
         # want to instcombine when parent load's deps are superset
         # also make sure opp is unrolled
-        if instrfid !== nothing && (opunrolled && U > 1) && promote_to_231(op, unrolled, tiled)            
+        if instrfid !== nothing && (opunrolled && U > 1) && promote_to_231(op, u₁loop, u₂loop)
             instr = Instruction((:vfmadd231, :vfnmadd231, :vfmsub231, :vfnmsub231)[instrfid])
         end
     end
@@ -104,8 +129,8 @@ function lower_compute!(
         varsym = if tiledouterreduction > 0 # then suffix !== nothing
             modsuffix = ((u + suffix*U) & 3)
             # modsuffix = suffix # (suffix & 3)
-            Symbol(mvar, modsuffix)
-        elseif unrollsym
+            Symbol(mangledvar(op), modsuffix)
+        elseif u₁unrolledsym
             Symbol(mvar, u)
         else
             mvar
@@ -113,9 +138,9 @@ function lower_compute!(
         for n ∈ 1:nparents
             if isloopvalue(parents_op[n])
                 loopvalue = first(loopdependencies(parents_op[n]))
-                if u > 0 && loopvalue === unrolled #parentsunrolled[n]
+                if u > 0 && loopvalue === u₁loop #parentsunrolled[n]
                     if loopvalue === vectorized
-                        push!(instrcall.args, Expr(:call, :+, loopvalue, Expr(:call, lv(:valmul), W, u)))
+                        push!(instrcall.args, Expr(:call, :+, loopvalue, Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, u)))
                     else
                         push!(instrcall.args, Expr(:call, :+, loopvalue, u))
                     end
@@ -128,17 +153,17 @@ function lower_compute!(
                 if n == tiledouterreduction
                     parent = Symbol(parent, modsuffix)
                 else
-                    if parentstiled[n]
+                    if parents_u₂syms[n]
                         parent = Symbol(parent, suffix_)
                     end
-                    if parentsunrolled[n]
+                    if parents_u₁syms[n]
                         parent = Symbol(parent, u)
                     end
                 end
                 push!(instrcall.args, parent)
             end
         end
-        if maskreduct && (u == Uiter || unrolled !== vectorized) # only mask last
+        if maskreduct && (u == Uiter || u₁loop !== vectorized) # only mask last
             if last(instrcall.args) == varsym
                 pushfirst!(instrcall.args, lv(:vifelse))
                 insert!(instrcall.args, 3, mask)

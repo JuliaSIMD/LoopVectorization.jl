@@ -44,13 +44,13 @@ function Loop(itersymbol::Symbol, start::Union{Int,Symbol}, stop::Union{Int,Symb
 end
 Base.length(loop::Loop) = 1 + loop.stophint - loop.starthint
 isstaticloop(loop::Loop) = loop.startexact & loop.stopexact
-function startloop(loop::Loop, isvectorized, W, itersymbol)
+function startloop(loop::Loop, isvectorized, itersymbol)
     startexact = loop.startexact
     if isvectorized
         if startexact
-            Expr(:(=), itersymbol, Expr(:call, lv(:_MM), W, loop.starthint))
+            Expr(:(=), itersymbol, Expr(:call, lv(:_MM), VECTORWIDTHSYMBOL, loop.starthint))
         else
-            Expr(:(=), itersymbol, Expr(:call, lv(:_MM), W, loop.startsym))
+            Expr(:(=), itersymbol, Expr(:call, lv(:_MM), VECTORWIDTHSYMBOL, loop.startsym))
         end
     elseif startexact
         Expr(:(=), itersymbol, loop.starthint)
@@ -58,12 +58,12 @@ function startloop(loop::Loop, isvectorized, W, itersymbol)
         Expr(:(=), itersymbol, Expr(:call, lv(:unwrap), loop.startsym))
     end
 end
-function vec_looprange(loop::Loop, W::Symbol, UF::Int, mangledname::Symbol)
+function vec_looprange(loop::Loop, UF::Int, mangledname::Symbol)
     isunrolled = UF > 1
     incr = if isunrolled
-        Expr(:call, lv(:valmuladd), W, UF, -2)
+        Expr(:call, lv(:valmuladd), VECTORWIDTHSYMBOL, UF, -2)
     else
-        Expr(:call, lv(:valsub), W, 2)
+        Expr(:call, lv(:valsub), VECTORWIDTHSYMBOL, 2)
     end
     if loop.stopexact # split for type stability
         Expr(:call, lv(:scalar_less), mangledname, Expr(:call, :-, loop.stophint, incr))
@@ -80,22 +80,22 @@ function looprange(loop::Loop, incr::Int, mangledname::Symbol)
     end
 end
 function terminatecondition(
-    loop::Loop, us::UnrollSpecification, n::Int, W::Symbol, mangledname::Symbol, inclmask::Bool, UF::Int = unrollfactor(us, n)
+    loop::Loop, us::UnrollSpecification, n::Int, mangledname::Symbol, inclmask::Bool, UF::Int = unrollfactor(us, n)
 )
     if !isvectorized(us, n)
         looprange(loop, UF, mangledname)
     elseif inclmask
         looprange(loop, 1, mangledname)
     else
-        vec_looprange(loop, W, UF, mangledname) # may not be u₂loop
+        vec_looprange(loop, UF, mangledname) # may not be u₂loop
     end
 end
-function incrementloopcounter(us::UnrollSpecification, n::Int, W::Symbol, mangledname::Symbol, UF::Int = unrollfactor(us, n))
+function incrementloopcounter(us::UnrollSpecification, n::Int, mangledname::Symbol, UF::Int = unrollfactor(us, n))
     if isvectorized(us, n)
         if UF == 1
-            Expr(:(=), mangledname, Expr(:call, lv(:valadd), W, mangledname))
+            Expr(:(=), mangledname, Expr(:call, lv(:valadd), VECTORWIDTHSYMBOL, mangledname))
         else
-            Expr(:+=, mangledname, Expr(:call, lv(:valmul), W, UF))
+            Expr(:+=, mangledname, Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, UF))
         end
     else
         Expr(:+=, mangledname, UF)
@@ -158,8 +158,6 @@ struct LoopSet
     reg_pres::Matrix{Float64}
     included_vars::Vector{Bool}
     place_after_loop::Vector{Bool}
-    W::Symbol
-    T::Symbol
     mod::Symbol
 end
 
@@ -240,10 +238,9 @@ end
 #     false
 # end
 
-
 includesarray(ls::LoopSet, array::Symbol) = array ∈ ls.includedarrays
 
-function LoopSet(mod::Symbol, W = Symbol("##Wvecwidth##"), T = Symbol("##Tloopeltype##"))# = :LoopVectorization)
+function LoopSet(mod::Symbol)
     LoopSet(
         Symbol[], [0], Loop[],
         Dict{Symbol,Operation}(),
@@ -259,8 +256,7 @@ function LoopSet(mod::Symbol, W = Symbol("##Wvecwidth##"), T = Symbol("##Tloopel
         ArrayReferenceMeta[],
         Matrix{Float64}(undef, 4, 2),
         Matrix{Float64}(undef, 4, 2),
-        Bool[], Bool[],
-        W, T, mod
+        Bool[], Bool[], mod
     )
 end
 

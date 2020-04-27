@@ -4,12 +4,12 @@ using Test
 
 @testset "Miscellaneous" begin
 
-    Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 6)
+    Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 3) : (4, 4)
     dot3q = :(for m ∈ 1:M, n ∈ 1:N
               s += x[m] * A[m,n] * y[n]
               end);
     lsdot3 = LoopVectorization.LoopSet(dot3q);
-    @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :m, :n, :m, Unum, Tnum)#&-2
+    @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :n, :m, :m, Unum, Tnum)#&-2
 
     @static if VERSION < v"1.4"
         dot3(x, A, y) = dot(x, A * y)
@@ -57,7 +57,7 @@ using Test
                 B[j,i] = A[j,i] - x[j]
                 end)
     lssubcol = LoopVectorization.LoopSet(subcolq);
-    @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :i, :j, :j, 4, 4)
+    @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, :i, :j, 4, 6)
     ## @avx is SLOWER!!!!
     ## need to fix!
     function mysubcol!(B, A, x)
@@ -82,7 +82,7 @@ using Test
                 x[j] += A[j,i] - 0.25
                 end)
     lscolsum = LoopVectorization.LoopSet(colsumq);
-    @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :i, :j, :j, 4, 4)
+    @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, :i, :j, 4, 6)
 
     # my colsum is wrong (by 0.25), but slightly more interesting
     function mycolsum!(x, A)
@@ -119,7 +119,7 @@ using Test
     lsvar = LoopVectorization.LoopSet(varq);
     # LoopVectorization.choose_order(lsvar)
     # @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, Symbol("##undefined##"), :j, 4, -1)
-    @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :i, :j, :j, 4, 4)
+    @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, 4, 6)
 
     function myvar!(s², A, x̄)
         @. s² = 0
@@ -558,7 +558,37 @@ using Test
             r[q + 1] = tmp
         end
         return r
-    end    
+    end
+
+
+    function multiple_unrolls_split_depchains!(c_re::AbstractArray{T}, a_re, b_re, a_im, b_im, keep = nothing) where {T}
+        for k in 1:2
+            for n in 1:2
+                # acc = ifelse(keep === nothing, zero(T), c_re[k, n]) # same problem
+                acc = keep === nothing ? zero(T) : c_re[k, n]
+                # acc = zero(T) # this works fine
+                for c in 1:2
+                    acc = acc + (a_re[k, n, c] * b_re[c, k] + a_im[k, n, c] * b_im[c, k])
+                end
+                c_re[k, n] = acc
+            end
+        end
+        c_re
+    end
+    function multiple_unrolls_split_depchains_avx!(c_re::AbstractArray{T}, a_re, b_re, a_im, b_im, keep = nothing) where {T}
+        @avx for k in 1:2
+            for n in 1:2
+                # acc = ifelse(keep === nothing, zero(T), c_re[k, n]) # same problem
+                acc = keep === nothing ? zero(T) : c_re[k, n]
+                # acc = zero(T) # this works fine
+                for c in 1:2
+                    acc = acc + (a_re[k, n, c] * b_re[c, k] + a_im[k, n, c] * b_im[c, k])
+                end
+                c_re[k, n] = acc
+            end
+        end
+        c_re
+    end
 
     
     for T ∈ (Float32, Float64)
@@ -735,6 +765,16 @@ using Test
         crossedsumavx!(X2, Y2, z)
         @test X1 ≈ X2
         @test Y1 ≈ Y2
+
+        a_re, a_im = rand(T, 2, 2, 2), rand(T, 2, 2, 2);
+        b_re, b_im = rand(T, 2, 2), rand(T, 2, 2);
+        c_re_1 = ones(T, 2, 2); c_re_2 = ones(T, 2, 2);
+        multiple_unrolls_split_depchains!(c_re_1, a_re, b_re, a_im, b_im, true) # [1 1; 1 1]
+        multiple_unrolls_split_depchains_avx!(c_re_2, a_re, b_re, a_im, b_im, true) # [1 1; 1 1]
+        @test c_re_1 ≈ c_re_2
+        multiple_unrolls_split_depchains!(c_re_1, a_re, b_re, a_im, b_im) # [1 1; 1 1]
+        multiple_unrolls_split_depchains_avx!(c_re_2, a_re, b_re, a_im, b_im) # [1 1; 1 1]
+        @test c_re_1 ≈ c_re_2
     end
     for T ∈ [Int16, Int32, Int64]
         n = 8sizeof(T) - 1

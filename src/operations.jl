@@ -232,7 +232,7 @@ function Base.show(io::IO, op::Operation)
 end
 
 function isreduction(op::Operation)
-    ((op.node_type == compute) || (op.node_type == memstore)) && length(op.reduced_deps) > 0
+    ((op.node_type == compute) || (op.node_type == memstore)) && length(reduceddependencies(op)) > 0
     # (op.node_type == memstore) && (length(op.symbolic_metadata) < length(op.dependencies))# && issubset(op.symbolic_metadata, op.dependencies)
 end
 optype(op::Operation) = op.node_type

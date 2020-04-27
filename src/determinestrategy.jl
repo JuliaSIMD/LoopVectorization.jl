@@ -618,6 +618,7 @@ function add_constant_offset_load_elmination_cost!(
     end
 end
 
+
 # Just tile outer two loops?
 # But optimal order within tile must still be determined
 # as well as size of the tiles.
@@ -789,35 +790,93 @@ function choose_unroll_order(ls::LoopSet, lowest_cost::Float64 = Inf)
         new_order, state = iter
     end
 end
+
+
+"""
+This function searches for unrolling combinations that will cause LoopVectorization to generate invalid code.
+
+Currently, it is only searching for one scenario, based on how `isunrolled_sym` and lowering currently work.
+`isunrolledsym` tries to avoid the creation of excessive numbers of accumulation vectors in the case of reductions.
+If an unrolled loop isn't reduced, it will need separate vectors.
+But separate vectors for a reduced loop are not needed. Separate vectors will help to break up dependency chains,
+so you want to unroll at least one of the loops. However, reductions demand combining all the separate vectors,
+and each vector also eats a valuable register, so it's best to avoid excessive numbers these accumulation vectors.
+
+
+If a reduced op depends on both unrolled loops (u1 and u2), it will check over which of these it is reduced. If...
+neither: cannot avoid unrolling it along both
+one of them: don't unroll the reduced loop
+both of them: don't unroll along u2 (unroll along u1)
+
+Now, a look at lowering:
+It interleaves u1-unrolled operations in an effort to improve superscalar parallelism,
+while u2-unrolled operations are lowered by block. E.g., op_u2id_u1id (as they're printed):
+
+u2 = 0
+opa_0_0 = fa(...)
+opa_0_1 = fa(...)
+opa_0_2 = fa(...)
+opb_0_0 = fb(...)
+opb_0_1 = fb(...)
+opb_0_2 = fb(...)
+u2 += 1
+opa_1_0 = fa(...)
+opa_1_1 = fa(...)
+opa_1_2 = fa(...)
+opb_1_0 = fb(...)
+opb_1_1 = fb(...)
+opb_1_2 = fb(...)
+
+what if `opa` vectors were not replicated across u1?
+opa_0_ = fa(...)
+opa_0_ = fa(...)
+opa_0_ = fa(...)
+
+Then unless `fa` was taking the previous `opa_0_`s as an argument and updating them, this would be wrong, because it'd be overwriting the previous `opa_0_` values.
+"""
+function reject_candidate(op::Operation, u₁loopsym::Symbol, u₂loopsym::Symbol)
+    if iscompute(op) && u₁loopsym ∈ reduceddependencies(op) && u₁loopsym ∈ loopdependencies(op)
+        if u₂loopsym ∉ reduceddependencies(op) && !any(opp -> name(opp) === name(op), parents(op))
+            return true
+        end
+    end
+    false
+end
+
+function reject_candidate(ls::LoopSet, u₁loopsym::Symbol, u₂loopsym::Symbol)
+    for op ∈ operations(ls)
+        reject_candidate(op, u₁loopsym, u₂loopsym) && return true
+    end
+    false
+end
+
 function choose_tile(ls::LoopSet)
     lo = LoopOrders(ls)
     best_order = copyto!(ls.loop_order.bestorder, lo.syms)
     bestu₁ = bestu₂ = best_vec = first(best_order) # filler
-    new_order, state = iterate(lo) # right now, new_order === best_order
     u₁, u₂, lowest_cost = 0, 0, Inf
-    nloops = length(new_order)
-    while true
-        for new_vec ∈ new_order # view to skip first
-            for nt ∈ 1:nloops-1
-                newu₂ = new_order[nt]
-                for newu₁ ∈ @view(new_order[nt+1:end])
-                    u₁temp, u₂temp, cost_temp = evaluate_cost_tile(ls, new_order, newu₁, newu₂, new_vec)
-                    if cost_temp < lowest_cost
-                        lowest_cost = cost_temp
-                        u₁, u₂ = u₁temp, u₂temp
-                        best_vec = new_vec
-                        bestu₂ = newu₂
-                        bestu₁ = newu₁
-                        copyto!(best_order, new_order)
-                        save_tilecost!(ls)
-                    end
+    for newu₂ ∈ lo.syms, newu₁ ∈ lo.syms#@view(new_order[nt+1:end])
+        ((newu₁ == newu₂) || reject_candidate(ls, newu₁, newu₂)) && continue
+        new_order, state = iterate(lo) # right now, new_order === best_order
+        while true
+            for new_vec ∈ new_order # view to skip first
+                u₁temp, u₂temp, cost_temp = evaluate_cost_tile(ls, new_order, newu₁, newu₂, new_vec)
+                if cost_temp < lowest_cost
+                    lowest_cost = cost_temp
+                    u₁, u₂ = u₁temp, u₂temp
+                    best_vec = new_vec
+                    bestu₂ = newu₂
+                    bestu₁ = newu₁
+                    copyto!(best_order, new_order)
+                    save_tilecost!(ls)
                 end
             end
+            iter = iterate(lo, state)
+            iter === nothing && break
+            new_order, state = iter
         end
-        iter = iterate(lo, state)
-        iter === nothing && return best_order, bestu₁, bestu₂, best_vec, u₁, u₂, lowest_cost
-        new_order, state = iter
     end
+    best_order, bestu₁, bestu₂, best_vec, u₁, u₂, lowest_cost
 end
 # Last in order is the inner most loop
 function choose_order_cost(ls::LoopSet)

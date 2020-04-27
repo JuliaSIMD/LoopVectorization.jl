@@ -100,17 +100,48 @@ end
 #     end
 #     false
 # end
+function add_reduced_deps!(op::Operation, reduceddeps::Vector{Symbol})
+    # op.dependencies = copy(loopdependencies(op))
+    # mergesetv!(loopdependencies(op), reduceddeps)
+    reduceddepsop = reduceddependencies(op)
+    if reduceddepsop === NODEPENDENCY
+        op.reduced_deps = copy(reduceddeps)
+    else
+        mergesetv!(reduceddepsop, reduceddeps)
+    end
+    # reduceddepsop = reducedchildren(op)
+    # if reduceddepsop === NODEPENDENCY
+    #     op.reduced_children = copy(reduceddeps)
+    # else
+    #     mergesetv!(reduceddepsop, reduceddeps)
+    # end
+    nothing
+end
 
-# function substitute_op_in_parents!(vparents::Vector{Operation}, replacer::Operation, replacee::Operation)
-#     for i ∈ eachindex(vparents)
-#         opp = vparents[i]
-#         if opp === replacee
-#             vparents[i] = replacer
-#         else
-#             substitute_op_in_parents!(parents(opp), replacer, replacee)
-#         end
-#     end
+# function substitute_op_in_parents!(
+#     vparents::Vector{Operation}, replacer::Operation, replacee::Operation, reduceddeps::Vector{Symbol}
+# )
+#     @show replacer replacee
+#     # 
+#     substitute_op_in_parents_recurse!(vparents, replacer, replacee)
 # end
+function substitute_op_in_parents!(
+    vparents::Vector{Operation}, replacer::Operation, replacee::Operation, reduceddeps::Vector{Symbol}
+)
+    found = false
+    for i ∈ eachindex(vparents)
+        opp = vparents[i]
+        if opp === replacee
+            vparents[i] = replacer
+            found = true
+        else
+            fopp = substitute_op_in_parents!(parents(opp), replacer, replacee, reduceddeps)
+            fopp && add_reduced_deps!(opp, reduceddeps)
+            found |= fopp
+        end
+    end
+    found
+end
 
 
 function add_reduction_update_parent!(
@@ -157,8 +188,8 @@ function add_reduction_update_parent!(
         if instr.instr ∈ (:-, :vsub!, :vsub, :/, :vfdiv!, :vfidiv!)
             update_deps!(deps, reduceddeps, reductinit)#parent) # deps and reduced deps will not be disjoint
         end
-    # elseif !isouterreduction
-        # substitute_op_in_parents!(vparents, reductinit, parent)
+    elseif !isouterreduction
+        substitute_op_in_parents!(vparents, reductinit, parent, reduceddeps)
     end
     update_reduction_status!(vparents, reduceddeps, name(reductinit))
     # this is the op added by add_compute

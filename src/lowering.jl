@@ -12,20 +12,19 @@ function lower!(
     q::Expr, op::Operation, vectorized::Symbol, ls::LoopSet, u₁loop::Symbol, u₂loop::Symbol, U::Int,
     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned}, ::Nothing
 )
-    W = ls.W
     if isconstant(op)
         zerotyp = zerotype(ls, op)
         if zerotyp == INVALID
-            lower_constant!(q, op, vectorized, ls, u₁loop, U, suffix)
+            lower_constant!(q, op, vectorized, ls, u₁loop, u₂loop, U, suffix)
         else
-            lower_zero!(q, op, vectorized, ls, u₁loop, U, suffix, zerotyp)
+            lower_zero!(q, op, vectorized, ls, u₁loop, u₂loop, U, suffix, zerotyp)
         end
     elseif isload(op)
         lower_load!(q, op, vectorized, ls, u₁loop, u₂loop, U, suffix, mask)
     elseif iscompute(op)
-        lower_compute!(q, op, vectorized, W, u₁loop, u₂loop, U, suffix, mask)
+        lower_compute!(q, op, vectorized, u₁loop, u₂loop, U, suffix, mask)
     elseif isstore(op)
-        lower_store!(q, op, vectorized, W, u₁loop, u₂loop, U, suffix, mask)
+        lower_store!(q, op, vectorized, u₁loop, u₂loop, U, suffix, mask)
     # elseif isloopvalue(op)
     end
 end
@@ -33,23 +32,22 @@ function lower!(
     q::Expr, op::Operation, vectorized::Symbol, ls::LoopSet, u₁loop::Symbol, u₂loop::Symbol, U::Int,
     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned}, filterstore::Bool
 )
-    W = ls.W
     if filterstore
         if isstore(op)
-            lower_store!(q, op, vectorized, W, u₁loop, u₂loop, U, suffix, mask)
+            lower_store!(q, op, vectorized, u₁loop, u₂loop, U, suffix, mask)
         end
     else
         if isconstant(op)
             zerotyp = zerotype(ls, op)
             if zerotyp == INVALID
-                lower_constant!(q, op, vectorized, ls, u₁loop, U, suffix)
+                lower_constant!(q, op, vectorized, ls, u₁loop, u₂loop, U, suffix)
             else
-                lower_zero!(q, op, vectorized, ls, u₁loop, U, suffix, zerotyp)
+                lower_zero!(q, op, vectorized, ls, u₁loop, u₂loop, U, suffix, zerotyp)
             end
         elseif isload(op)
             lower_load!(q, op, vectorized, ls, u₁loop, u₂loop, U, suffix, mask)
         elseif iscompute(op)
-            lower_compute!(q, op, vectorized, W, u₁loop, u₂loop, U, suffix, mask)
+            lower_compute!(q, op, vectorized, u₁loop, u₂loop, U, suffix, mask)
         end
     end
 end
@@ -67,6 +65,8 @@ function lower_block(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask::Boo
         lower_block(ls, us, n, nothing, UF)
     end
 end
+
+
 function lower_block(
     ls::LoopSet, us::UnrollSpecification, n::Int, mask::Union{Nothing,Symbol}, UF::Int
 )
@@ -96,12 +96,15 @@ function lower_block(
                 nstores = 0
                 iszero(length(opsv1)) || (nstores += sum(isstore, opsv1))
                 iszero(length(opsv2)) || (nstores += sum(isstore, opsv2))
-                
+                if !store && length(opsv1) + length(opsv2) == nstores
+                    u₁ != 4 && lower!(blockq, ops[2,1,prepost,n], vectorized, ls, u₁loop, u₂loop, u₁, nothing, mask) # for u ∈ 0:u₁-1     
+                    continue
+                end
                 for t ∈ 0:u₂-1
                     if t == 0
                         push!(blockq.args, Expr(:(=), u₂loop, tiledsym(u₂loop)))
                     elseif u₂loopnum == vectorizedloopnum
-                        push!(blockq.args, Expr(:(=), u₂loop, Expr(:call, lv(:valadd), ls.W, u₂loop)))
+                        push!(blockq.args, Expr(:(=), u₂loop, Expr(:call, lv(:valadd), VECTORWIDTHSYMBOL, u₂loop)))
                     else
                         push!(blockq.args, Expr(:+=, u₂loop, 1))
                     end
@@ -137,7 +140,7 @@ function lower_block(
         end
     end
     loopsym = mangletiledsym(order[n], us, n)
-    push!(blockq.args, incrementloopcounter(us, n, ls.W, loopsym, UF))
+    push!(blockq.args, incrementloopcounter(us, n, loopsym, UF))
     blockq
 end
 tiledsym(s::Symbol) = Symbol("##outer##", s, "##outer##")
@@ -148,12 +151,12 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
     loopsym = mangletiledsym(loopsym, us, n)
     nisvectorized = isvectorized(us, n)
 
-    sl = startloop(loop, nisvectorized, ls.W, loopsym)
-    tc = terminatecondition(loop, us, n, ls.W, loopsym, inclmask, 1)
+    sl = startloop(loop, nisvectorized, loopsym)
+    tc = terminatecondition(loop, us, n, loopsym, inclmask, 1)
     body = lower_block(ls, us, n, inclmask, 1)
     q = Expr( :block, sl, Expr(:while, tc, body))
     if nisvectorized
-        tc = terminatecondition(loop, us, n, ls.W, loopsym, true, 1)
+        tc = terminatecondition(loop, us, n, loopsym, true, 1)
         body = lower_block(ls, us, n, true, 1)
         push!(q.args, Expr(:if, tc, body))
     end
@@ -175,13 +178,13 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
 
     remmask = inclmask | nisvectorized
     Ureduct = (n == num_loops(ls) && (u₂ == -1)) ? calc_Ureduct(ls, us) : -1
-    sl = startloop(loop, nisvectorized, ls.W, loopsym)
+    sl = startloop(loop, nisvectorized, loopsym)
 
     remfirst = loopisstatic & !(unsigned(Ureduct) < unsigned(UF))
     if remfirst
         tc = Expr(:call, lv(:scalar_less), loopsym, loop.stophint + 1)
     else
-        tc = terminatecondition(loop, us, n, ls.W, loopsym, inclmask, UF)
+        tc = terminatecondition(loop, us, n, loopsym, inclmask, UF)
     end
     body = lower_block(ls, us, n, inclmask, UF)
     q = Expr(:while, tc, body)
@@ -196,7 +199,7 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
             :block, sl,
             add_upper_outer_reductions(ls, q, Ureduct, UF, loop, vectorized),
             Expr(
-                :if, terminatecondition(loop, us, n, ls.W, loopsym, inclmask, UF - Ureduct),
+                :if, terminatecondition(loop, us, n, loopsym, inclmask, UF - Ureduct),
                 lower_block(ls, us, n, inclmask, UF - Ureduct)
             ),
             remblock
@@ -223,9 +226,9 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     while !iszero(UFt)
         comparison = if nisvectorized
             itercount = if loop.stopexact
-                Expr(:call, :-, loop.stophint, Expr(:call, lv(:valmul), ls.W, UFt))
+                Expr(:call, :-, loop.stophint, Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, UFt))
             else
-                Expr(:call, :-, loop.stopsym, Expr(:call, lv(:valmul), ls.W, UFt))
+                Expr(:call, :-, loop.stopsym, Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, UFt))
             end
             Expr(:call, lv(:scalar_greater), loopsym, itercount)
         elseif remfirst
@@ -249,7 +252,7 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
 end
 
 function initialize_outer_reductions!(
-    q::Expr, op::Operation, Umin::Int, Umax::Int, vectorized::Symbol, W::Symbol, suffix::Union{Symbol,Nothing} = nothing
+    q::Expr, op::Operation, Umin::Int, Umax::Int, vectorized::Symbol, suffix::Union{Symbol,Nothing} = nothing
 )
     reduct_zero = reduction_zero(op.instruction)
     isvectorized = vectorized ∈ reduceddependencies(op)
@@ -257,9 +260,9 @@ function initialize_outer_reductions!(
     typeTr = Expr(:call, :typeof, mangledvar(op))
     z = if isvectorized
         if reduct_zero === :zero
-            Expr(:call, lv(:vzero), W, typeTr)
+            Expr(:call, lv(:vzero), VECTORWIDTHSYMBOL, typeTr)
         else
-            Expr(:call, lv(:vbroadcast), W, Expr(:call, reduct_zero, typeTr))
+            Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, Expr(:call, reduct_zero, typeTr))
         end
     else
         Expr(:call, reduct_zero, typeTr)
@@ -271,7 +274,7 @@ function initialize_outer_reductions!(
     nothing
 end
 function initialize_outer_reductions!(q::Expr, ls::LoopSet, Umin::Int, Umax::Int, vectorized::Symbol, suffix::Union{Symbol,Nothing} = nothing)
-    foreach(or -> initialize_outer_reductions!(q, ls.operations[or], Umin, Umax, vectorized, ls.W, suffix), ls.outer_reductions)
+    foreach(or -> initialize_outer_reductions!(q, ls.operations[or], Umin, Umax, vectorized, suffix), ls.outer_reductions)
 end
 function initialize_outer_reductions!(ls::LoopSet, Umin::Int, Umax::Int, vectorized::Symbol, suffix::Union{Symbol,Nothing} = nothing)
     initialize_outer_reductions!(ls.preamble, ls, Umin, Umax, vectorized, suffix)
@@ -282,15 +285,15 @@ function add_upper_outer_reductions(ls::LoopSet, loopq::Expr, Ulow::Int, Uhigh::
     push!(ifq.args, loopq)
     reduce_range!(ifq, ls, Ulow, Uhigh)
     comparison = if isstaticloop(unrolledloop)
-        Expr(:call, lv(:scalar_less), length(unrolledloop), Expr(:call, lv(:valmul), ls.W, Uhigh))
+        Expr(:call, lv(:scalar_less), length(unrolledloop), Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, Uhigh))
     elseif unrolledloop.starthint == 1
-        Expr(:call, lv(:scalar_less), unrolledloop.stopsym, Expr(:call, lv(:valmul), ls.W, Uhigh))
+        Expr(:call, lv(:scalar_less), unrolledloop.stopsym, Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, Uhigh))
     elseif unrolledloop.startexact
-        Expr(:call, lv(:scalar_less), Expr(:call, :-, unrolledloop.stopsym, unrolledloop.starthint-1), Expr(:call, lv(:valmul), ls.W, Uhigh))
+        Expr(:call, lv(:scalar_less), Expr(:call, :-, unrolledloop.stopsym, unrolledloop.starthint-1), Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, Uhigh))
     elseif unrolledloop.stopexact
-        Expr(:call, lv(:scalar_less), Expr(:call, :-, unrolledloop.stophint+1, unrolledloop.sartsym), Expr(:call, lv(:valmul), ls.W, Uhigh))
+        Expr(:call, lv(:scalar_less), Expr(:call, :-, unrolledloop.stophint+1, unrolledloop.sartsym), Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, Uhigh))
     else# both are given by symbols
-        Expr(:call, lv(:scalar_less), Expr(:call, :-, unrolledloop.stopsym, Expr(:call,:-,unrolledloop.startsym)), Expr(:call, lv(:valmul), ls.W, Uhigh))
+        Expr(:call, lv(:scalar_less), Expr(:call, :-, unrolledloop.stopsym, Expr(:call,:-,unrolledloop.startsym)), Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, Uhigh))
     end
     ncomparison = Expr(:call, :!, comparison)
     Expr(:if, ncomparison, ifq)
@@ -337,7 +340,7 @@ function determine_width(
     end
     # push!(vwidth_q.args, ls.T)
     if length(ls.includedactualarrays) < 2
-        push!(vwidth_q.args, ls.T)
+        push!(vwidth_q.args, ELTYPESYMBOL)
     else
         for array ∈ ls.includedactualarrays
             push!(vwidth_q.args, Expr(:call, :eltype, array))
@@ -354,16 +357,16 @@ function init_remblock(unrolledloop::Loop, u₁loop::Symbol = unrolledloop.iters
     Expr(:if, condition, nothing)
 end
 
-function maskexpr(W::Symbol, looplimit)
-    Expr(:(=), Symbol("##mask##"), Expr(:call, lv(:mask), W, looplimit))
+function maskexpr(looplimit)
+    Expr(:(=), Symbol("##mask##"), Expr(:call, lv(:mask), VECTORWIDTHSYMBOL, looplimit))
     # rem = Expr(:call, lv(:valrem), W, looplimit)
     # Expr(:(=), Symbol("##mask##"), Expr(:call, lv(:masktable), W, rem))
 end
-function definemask(loop::Loop, W::Symbol)
+function definemask(loop::Loop)
     if isstaticloop(loop)
-        maskexpr(W, length(loop))
+        maskexpr(length(loop))
     elseif loop.startexact && loop.starthint == 1
-        maskexpr(W, loop.stopsym)
+        maskexpr(loop.stopsym)
     else
         lexpr = if loop.startexact
             Expr(:call, :-, loop.stopsym, loop.starthint - 1)
@@ -372,7 +375,7 @@ function definemask(loop::Loop, W::Symbol)
         else
             Expr(:call, :-, Expr(:call, :+, loop.stopsym, 1), loop.startsym)
         end
-        maskexpr(W, lexpr)
+        maskexpr(lexpr)
     end
 end
 
@@ -382,16 +385,14 @@ function setup_preamble!(ls::LoopSet, us::UnrollSpecification)
     u₁loop = order[u₁loopnum]
     u₂loop = order[u₂loopnum]
     vectorized = order[vectorizedloopnum]
-    # println("Setup preamble")
-    W = ls.W; typeT = ls.T
     if length(ls.includedactualarrays) > 0
-        push!(ls.preamble.args, Expr(:(=), typeT, determine_eltype(ls)))
-        push!(ls.preamble.args, Expr(:(=), W, determine_width(ls, vectorized)))
+        push!(ls.preamble.args, Expr(:(=), ELTYPESYMBOL, determine_eltype(ls)))
+        push!(ls.preamble.args, Expr(:(=), VECTORWIDTHSYMBOL, determine_width(ls, vectorized)))
     end
     lower_licm_constants!(ls)
-    pushpreamble!(ls, definemask(getloop(ls, vectorized), W))#, u₁ > 1 && u₁loopnum == vectorizedloopnum))
+    pushpreamble!(ls, definemask(getloop(ls, vectorized)))#, u₁ > 1 && u₁loopnum == vectorizedloopnum))
     for op ∈ operations(ls)
-        (iszero(length(loopdependencies(op))) && iscompute(op)) && lower_compute!(ls.preamble, op, vectorized, ls.W, u₁loop, u₂loop, u₁, nothing, nothing)
+        (iszero(length(loopdependencies(op))) && iscompute(op)) && lower_compute!(ls.preamble, op, vectorized, u₁loop, u₂loop, u₁, nothing, nothing)
     end
     # define_remaining_ops!( ls, vectorized, W, u₁loop, u₂loop, u₁ )
 end
@@ -448,15 +449,62 @@ end
 Base.convert(::Type{Expr}, ls::LoopSet) = lower(ls)
 Base.show(io::IO, ls::LoopSet) = println(io, lower(ls))
 
-function isunrolled_sym(op::Operation, u₁loop::Symbol, ::Nothing)
-    u₁loop ∈ loopdependencies(op) || (isconstant(op) && (u₁loop ∈ reducedchildren(op)))
-end
-function isunrolled_sym(op::Operation, u₁loop::Symbol, ::Int)
-    uild = u₁loop ∈ loopdependencies(op)
-    (isconstant(op) & uild) && return true # ignore reduced children if u₁loop
-    uild && u₁loop ∉ reduceddependencies(op)
+
+
+"""
+This function is normally called
+isunrolled_sym(op, u₁loop)
+isunrolled_sym(op, u₁loop, u₂loop)
+
+It returns `true`/`false` for each loop, indicating whether they're unrolled.
+
+If there is a third argument, it will avoid unrolling that symbol along reductions if said symbol is part of the reduction chain.
+
+"""
+function isunrolled_sym(op::Operation, u₁loop::Symbol, u₂loop::Symbol)
+    u₁ild = u₁loop ∈ loopdependencies(op)
+    u₂ild = u₂loop ∈ loopdependencies(op)
+    (accesses_memory(op) | isloopvalue(op)) && return (u₁ild, u₂ild)
+    if isconstant(op)
+        if !u₁ild
+            u₁ild = u₁loop ∈ reducedchildren(op)
+        end
+        if !u₂ild
+            u₂ild = u₂loop ∈ reducedchildren(op)
+        end
+    end
+    (u₁ild & u₂ild) || return u₁ild, u₂ild
+    reductops = isconstant(op) ? reducedchildren(op) : reduceddependencies(op)
+    iszero(length(reductops)) && return true, true
+    u₁reduced = u₁loop ∈ reductops
+    u₂reduced = u₂loop ∈ reductops
+    # We want to only unroll one of them.
+    # We prefer not to unroll a reduced loop
+    if u₂reduced # if both are reduced, we unroll u₁
+        true, false
+    elseif u₁reduced
+        false, true
+    else
+        true, true
+    end
 end
 
-isunrolled_sym(op::Operation, u₁loop::Symbol, istiled::Bool) = istiled ? isunrolled_sym(op, u₁loop, 0) : isunrolled_sym(op, u₁loop, nothing)
-isunrolled_sym(op::Operation, u₁loop::Symbol, u₂loop::Symbol) = isunrolled_sym(op, u₁loop, u₂loop ∈ loopdependencies(op))
+function isunrolled_sym(op::Operation, u₁loop::Symbol)
+    u₁loop ∈ loopdependencies(op) || (isconstant(op) && (u₁loop ∈ reducedchildren(op)))
+end
+
+isunrolled_sym(op::Operation, u₁loop::Symbol, u₂loop::Symbol, ::Nothing) = (isunrolled_sym(op, u₁loop), false)
+isunrolled_sym(op::Operation, u₁loop::Symbol, u₂loop::Symbol, ::Int) = isunrolled_sym(op, u₁loop, u₂loop)
+
+variable_name(op::Operation, ::Nothing) = mangledvar(op)
+variable_name(op::Operation, suffix) = Symbol(mangledvar(op), suffix, :_)
+
+function variable_name_and_unrolled(op::Operation, u₁loop::Symbol, u₂loop::Symbol, ::Nothing)
+    mangledvar(op), isunrolled_sym(op, u₁loop), false
+end
+function variable_name_and_unrolled(op::Operation, u₁loop::Symbol, u₂loop::Symbol, u₂iter::Int)
+    u₁op, u₂op = isunrolled_sym(op, u₁loop, u₂loop)
+    mvar = u₂op ? variable_name(op, u₂iter) : mangledvar(op)
+    mvar, u₁op, u₂op
+end
 
