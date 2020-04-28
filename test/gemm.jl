@@ -87,13 +87,22 @@
     #         end
     #         C[m,n] += ΔCₘₙ * factor
     #     end;
-    function AmuladdBavx!(C, A, B, factor = 1)
+    function AmuladdBavx!(C, A, B, α = one(eltype(C)))
         @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
             ΔCₘₙ = zero(eltype(C))
             for k ∈ 1:size(A,2)
                 ΔCₘₙ += A[m,k] * B[k,n]
             end
-            C[m,n] += ΔCₘₙ * factor
+            C[m,n] += α * ΔCₘₙ
+        end
+    end
+    function AmuladdBavx!(C, A, B, α, β)# = zero(eltype(C)))
+        @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+            ΔCₘₙ = zero(eltype(C))
+            for k ∈ 1:size(A,2)
+                ΔCₘₙ += A[m,k] * B[k,n]
+            end
+            C[m,n] = α * ΔCₘₙ + β * C[m,n]
         end
     end
     Amuladdq = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
@@ -101,22 +110,23 @@
                  for k ∈ 1:size(A,2)
                  ΔCₘₙ += A[m,k] * B[k,n]
                  end
-                 C[m,n] += ΔCₘₙ * factor
+                 C[m,n] = α * ΔCₘₙ + β * C[m,n]
                  end);
     lsAmuladd = LoopVectorization.LoopSet(Amuladdq);
+    @test LoopVectorization.choose_order(lsAmuladd) == (Symbol[:n,:m,:k], :n, :m, :m, Unum, Tnum)
     Atmuladdq = :(for m ∈ 1:size(A,2), n ∈ 1:size(B,2)
                  ΔCₘₙ = zero(eltype(C))
                  for k ∈ 1:size(A,1)
                  ΔCₘₙ += A[k,m] * B[k,n]
-                 end
-                 C[m,n] += ΔCₘₙ * factor
+                  end
+                  C[m,n] += α * ΔCₘₙ
                  end);
     lsAtmuladd = LoopVectorization.LoopSet(Atmuladdq);
-    LoopVectorization.lower(lsAtmuladd, 2, 2)
+    # LoopVectorization.lower(lsAtmuladd, 2, 2)
     # lsAmuladd.operations
     # LoopVectorization.loopdependencies.(lsAmuladd.operations)
     # LoopVectorization.reduceddependencies.(lsAmuladd.operations)
-    @test LoopVectorization.choose_order(lsAmuladd) == (Symbol[:n,:m,:k], :n, :m, :m, Unum, Tnum)
+    @test LoopVectorization.choose_order(lsAtmuladd) == (Symbol[:n,:m,:k], :n, :m, :k, Unum, Tnum)
 
     function AmulB_avx1!(C, A, B)
         @_avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
@@ -615,6 +625,14 @@
             @test C ≈ C2
             AmuladdBavx!(C, At', B, -2)
             @test C ≈ -C2
+            AmuladdBavx!(C, At', B, 3, 2)
+            @test C ≈ C2
+            # How much of this can I do before rounding errors are likely to cause test failures?
+            # Setting back to zero here...
+            AmuladdBavx!(C, At', B, 1, 0) 
+            @test C ≈ C2
+            AmuladdBavx!(C, At', Bt', 2, -1)
+            @test C ≈ C2
             fill!(C, 9999.999); AmulB2x2avx!(C, A, B);
             @test C ≈ C2
             fill!(C, 9999.999); AmulB2x2avx!(C, At', B);

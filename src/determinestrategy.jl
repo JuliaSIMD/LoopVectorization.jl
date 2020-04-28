@@ -408,41 +408,55 @@ function maybedemotesize(u₂::Int, N::Int, U::Int, Uloop::Loop, maxu₂base::In
     end
     u₂
 end
+
 function solve_unroll(
-    ls::LoopSet, u₁loopsym::Symbol, tiled::Symbol,
+    ls::LoopSet, u₁loopsym::Symbol, u₂loopsym::Symbol,
     cost_vec::AbstractVector{Float64},
     reg_pressure::AbstractVector{Float64},
     W::Int, vectorized::Symbol
 )
+    u₁loop = getloop(ls, u₁loopsym)
+    u₂loop = getloop(ls, u₂loopsym)
+    solve_unroll(
+        u₁loopsym, u₂loopsym, cost_vec, reg_pressure, W, vectorized, u₁loop, u₂loop
+    )
+end
+
+function solve_unroll(
+    u₁loopsym::Symbol, u₂loopsym::Symbol,
+    cost_vec::AbstractVector{Float64},
+    reg_pressure::AbstractVector{Float64},
+    W::Int, vectorized::Symbol,
+    u₁loop::Loop, u₂loop::Loop
+)
     maxu₂base = maxu₁base = VectorizationBase.REGISTER_COUNT == 32 ? 6 : 4#8
     maxu₂ = maxu₂base#8
     maxu₁ = maxu₁base#8
-    tiledloop = getloop(ls, tiled)
-    unrolledloop = getloop(ls, u₁loopsym)
-    if isstaticloop(tiledloop)
-        if length(tiledloop) ≤ 4
-            u₂ = length(tiledloop)
-            u₁ = max(1, solve_unroll_constT(cost_vec, reg_pressure, u₂))
-            return u₁, u₂, unroll_cost(cost_vec, u₁, u₂, length(unrolledloop), u₂)
+    if isstaticloop(u₂loop)
+        u₂L = length(u₂loop)
+        if u₂loopsym !== vectorized && u₂L ≤ 4
+            u₁ = max(1, solve_unroll_constT(cost_vec, reg_pressure, u₂L))
+            return u₁, u₂L, unroll_cost(cost_vec, u₁, u₂L, length(u₁loop), u₂L)
         end
-        maxu₂ = min(4maxu₂, length(tiledloop))
+        u₂L = u₂loopsym === vectorized ? cld(u₂L,W) : u₂L
+        maxu₂ = min(4maxu₂, u₂L)
     end
-    if isstaticloop(unrolledloop)
-        u₁L = length(unrolledloop)
+    if isstaticloop(u₁loop)
+        u₁L = length(u₁loop)
         if u₁loopsym !== vectorized && u₁L ≤ 4
             u₂ = max(1, solve_unroll_constU(cost_vec, reg_pressure, u₁L))
-            return u₁L, u₂, unroll_cost(cost_vec, u₁L, u₂, u₁L, length(tiledloop))
+            return u₁L, u₂, unroll_cost(cost_vec, u₁L, u₂, u₁L, length(u₂loop))
         end
         u₁L = u₁loopsym === vectorized ? cld(u₁L,W) : u₁L
         maxu₁ = min(4maxu₁, u₁L)
     end
-    u₁, u₂, cost = solve_unroll(cost_vec, reg_pressure, maxu₁, maxu₂, length(unrolledloop), length(tiledloop))
+    u₁, u₂, cost = solve_unroll(cost_vec, reg_pressure, maxu₁, maxu₂, length(u₁loop), length(u₂loop))
     # heuristic to more evenly divide small numbers of iterations
-    if isstaticloop(tiledloop)
-        u₂ = maybedemotesize(u₂, length(tiledloop), u₁, unrolledloop, maxu₂base)
+    if isstaticloop(u₂loop)
+        u₂ = maybedemotesize(u₂, length(u₂loop), u₁, u₁loop, maxu₂base)
     end
-    if isstaticloop(unrolledloop)
-        u₁ = maybedemotesize(u₁, length(unrolledloop), u₂, tiledloop, maxu₁base)
+    if isstaticloop(u₁loop)
+        u₁ = maybedemotesize(u₁, length(u₁loop), u₂, u₂loop, maxu₁base)
     end
     u₁, u₂, cost
 end
@@ -641,8 +655,8 @@ function evaluate_cost_tile(
     size_T = biggest_type_size(ls)
     W, Wshift = VectorizationBase.pick_vector_width_shift(length(ls, vectorized), size_T)::Tuple{Int,Int}
     # costs =
-    # cost_mat[1] / ( unrolled * tiled)
-    # cost_mat[2] / ( tiled)
+    # cost_mat[1] / ( unrolled * u₂loopsym)
+    # cost_mat[2] / ( u₂loopsym)
     # cost_mat[3] / ( unrolled)
     # cost_mat[4]
     # @show order
@@ -681,7 +695,7 @@ function evaluate_cost_tile(
             # cost is reduced by unrolling u₁ if it is interior to u₁loop (true if either u₁reached, or if depends on u₂ [or u₁]) and doesn't depend on u₁
             reduced_by_unrolling[1,id] = (u₁reached | depends_on_u₂) & !depends_on_u₁
             reduced_by_unrolling[2,id] = (u₂reached | depends_on_u₁) & !depends_on_u₂
-            # @show op iter, unrolledtiled[:,id]
+            # @show op iter, unrolledu₂loopsym[:,id]
             iters[id] = iter
             innerloop ∈ loopdependencies(op) && set_upstream_family!(descendentsininnerloop, op, true)
         end
