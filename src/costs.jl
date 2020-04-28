@@ -138,6 +138,8 @@ const COST = Dict{Symbol,InstructionCost}(
     :evsub => InstructionCost(4,0.5),
     :evmul => InstructionCost(4,0.5),
     :evfdiv => InstructionCost(13,4.0,-2.0),
+    :vsum => InstructionCost(6,2.0),
+    :vprod => InstructionCost(6,2.0),
     :reduced_add => InstructionCost(4,0.5),# ignoring reduction part of cost, might be nop
     :reduced_prod => InstructionCost(4,0.5),# ignoring reduction part of cost, might be nop
     :reduce_to_add => InstructionCost(0,0.0,0.0,0),
@@ -307,6 +309,10 @@ reduction_to_single_vector(x) = reduction_to_single_vector(reduction_instruction
 #     x == 1.0 ? :vsum : x == 2.0 ? :vprod : x == 5.0 ? :maximum : x == 6.0 ? :minimum : throw("Reduction not found.")
 # end
 # reduction_to_scalar(x) = reduction_to_scalar(reduction_instruction_class(x))
+function reduction_to_scalar(x::Float64)
+    x == ADDITIVE_IN_REDUCTIONS ? :vsum : x == MULTIPLICATIVE_IN_REDUCTIONS ? :vprod : x == MAX ? :vmaximum : x == MIN ? :vminimum : throw("Reduction not found.")
+end
+reduction_to_scalar(x) = reduction_to_scalar(reduction_instruction_class(x))
 function reduction_scalar_combine(x::Float64)
     # x == 1.0 ? :reduced_add : x == 2.0 ? :reduced_prod : x == 3.0 ? :reduced_any : x == 4.0 ? :reduced_all : x == 5.0 ? :reduced_max : x == 6.0 ? :reduced_min : throw("Reduction not found.")
     x == ADDITIVE_IN_REDUCTIONS ? :reduced_add : x == MULTIPLICATIVE_IN_REDUCTIONS ? :reduced_prod : x == MAX ? :reduced_max : x == MIN ? :reduced_min : throw("Reduction not found.")

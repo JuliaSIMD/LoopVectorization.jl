@@ -36,6 +36,39 @@ function parent_unroll_status(op::Operation, u₁loop::Symbol, u₂loop::Symbol,
     parents_u₁syms, parents_u₂syms
 end
 
+# """
+#     Requires a parents_op argument, because it may `===` parents(op), due to previous divergence, e.g. to handle unrolling.
+# """
+# function isreducingidentity!(q::Expr, op::Operation, parents_op::Vector{Operation}, U::Int, u₁loop::Symbol, u₂loop::Symbol, vectorized::Symbol, suffix)
+#     vparents = copy(parents_op) # don't mutate the original!
+#     for (i,opp) ∈ enumerate(parents_op)
+#         @show opp vectorized ∈ loopdependencies(opp), vectorized ∈ reducedchildren(opp) # must reduce
+#         @show vectorized, loopdependencies(opp), reducedchildren(opp) # must reduce
+#         if vectorized ∈ loopdependencies(opp) || vectorized ∈ reducedchildren(opp) # must reduce
+#             loopdeps = [l for l ∈ loopdependencies(opp) if l !== vectorized]
+#             @show opp
+#             reductinstruct = reduction_to_scalar(instruction(opp))
+            
+#             reducedparent = Operation(
+#                 opp.identifier, gensym(opp.variable), opp.elementbytes, Instruction(:LoopVectorization, reductinstruct), opp.node_type,
+#                 loopdeps, opp.reduced_deps, opp.parents, opp.ref, opp.reduced_children
+#             )
+#             pname,   pu₁,  pu₂ = variable_name_and_unrolled(opp, u₁loop, u₂loop, suffix)
+#             rpname, rpu₁, rpu₂ = variable_name_and_unrolled(reducedparent, u₁loop, u₂loop, suffix)
+#             @assert pu₁ == rpu₁ && pu₂ == rpu₂
+#             if rpu₁
+#                 for u ∈ 0:U-1
+#                     push!(q.args, Expr(:(=), Symbol(rpname,u), Expr(:call, lv(reductinstruct), Symbol(pname,u))))
+#                 end
+#             else
+#                 push!(q.args, Expr(:(=), rpname, Expr(:call, lv(reductinstruct), pname)))
+#             end
+#             vparents[i] = reducedparent
+#         end
+#     end
+#     vparents
+# end
+
 function lower_compute!(
     q::Expr, op::Operation, vectorized::Symbol, u₁loop::Symbol, u₂loop::Symbol, U::Int,
     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing,
@@ -65,7 +98,7 @@ function lower_compute!(
     # end
     # unrollsym = isunrolled_sym(op, unrolled)
     if !opunrolled && any(parents_u₁syms) # TODO: Clean up this mess, refactor the naming code, putting it in one place and have everywhere else use it for easy equivalence.
-        parents_op = copy(parents_op)
+        parents_op = copy(parents_op) # don't mutate the original!
         for i ∈ eachindex(parents_u₁syms)
             parents_u₁syms[i] || continue
             parents_u₁syms[i] = false
@@ -115,7 +148,13 @@ function lower_compute!(
         end
     end
     # @show instr.instr
-    maskreduct = mask !== nothing && isreduct && vectorized ∈ reduceddependencies(op) #any(opp -> opp.variable === var, parents_op)
+    reduceddeps = reduceddependencies(op)
+    vecinreduceddeps = isreduct && vectorized ∈ reduceddeps
+    maskreduct = mask !== nothing && vecinreduceddeps #any(opp -> opp.variable === var, parents_op)
+    # if vecinreduceddeps && vectorized ∉ loopdependencies(op) # screen parent opps for those needing a reduction to scalar
+    #     # parents_op = reduce_vectorized_parents!(q, op, parents_op, U, u₁loop, u₂loop, vectorized, suffix)
+    #     isreducingidentity!(q, op, parents_op, U, u₁loop, u₂loop, vectorized, suffix) && return
+    # end    
     # if a parent is not unrolled, the compiler should handle broadcasting CSE.
     # because unrolled/tiled parents result in an unrolled/tiled dependendency,
     # we handle both the tiled and untiled case here.

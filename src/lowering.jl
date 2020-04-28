@@ -424,7 +424,7 @@ function lower(ls::LoopSet, us::UnrollSpecification)
 end
 
 function lower(ls::LoopSet, order, u₁loop, u₂loop, vectorized, u₁, u₂)
-    fillorder!(ls, order, u₁loop, u₂loop, u₂ != -1)
+    fillorder!(ls, order, u₁loop, u₂loop, u₂ != -1, vectorized)
     q = lower(ls, UnrollSpecification(ls, u₁loop, u₂loop, vectorized, u₁, u₂))
     iszero(length(ls.opdict)) && pushfirst!(q.args, Expr(:meta, :inline))
     q

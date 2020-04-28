@@ -1,5 +1,5 @@
 @testset "GEMM" begin
-# using LoopVectorization, LinearAlgebra, Test; T = Float64
+ # using LoopVectorization, LinearAlgebra, Test; T = Float64
     Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (5, 5)
     AmulBtq1 = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
                  C[m,n] = zeroB
@@ -102,8 +102,17 @@
                  ΔCₘₙ += A[m,k] * B[k,n]
                  end
                  C[m,n] += ΔCₘₙ * factor
-                 end)
+                 end);
     lsAmuladd = LoopVectorization.LoopSet(Amuladdq);
+    Atmuladdq = :(for m ∈ 1:size(A,2), n ∈ 1:size(B,2)
+                 ΔCₘₙ = zero(eltype(C))
+                 for k ∈ 1:size(A,1)
+                 ΔCₘₙ += A[k,m] * B[k,n]
+                 end
+                 C[m,n] += ΔCₘₙ * factor
+                 end);
+    lsAtmuladd = LoopVectorization.LoopSet(Atmuladdq);
+    LoopVectorization.lower(lsAtmuladd, 2, 2)
     # lsAmuladd.operations
     # LoopVectorization.loopdependencies.(lsAmuladd.operations)
     # LoopVectorization.reduceddependencies.(lsAmuladd.operations)
@@ -520,7 +529,7 @@
             C[m,n] = Cmn_hi
         end
     end
-
+    
     function threegemms!(Ab, Bb, Cb, A, B, C)
         M, N = size(Cb); K = size(B,1)
         @avx for m in 1:M, k in 1:K, n in 1:N

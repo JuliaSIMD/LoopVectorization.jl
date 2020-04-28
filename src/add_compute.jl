@@ -48,25 +48,30 @@ function pushparent!(mpref::ArrayReferenceMetaPosition, parent::Operation)
     pushparent!(mpref.parents, mpref.loopdependencies, mpref.reduceddeps, parent)
 end
 function add_parent!(
-    parents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet, var, elementbytes::Int, position::Int
+    vparents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet, var, elementbytes::Int, position::Int
 )
     parent = if var isa Symbol
-        getop(ls, var, elementbytes)
+        opp = getop(ls, var, elementbytes)
+        if iscompute(opp) && instruction(opp).instr === :identity && length(loopdependencies(opp)) < position && isone(length(parents(opp))) && name(opp) === name(first(parents(opp)))
+            first(parents(opp))
+        else
+            opp
+        end
     elseif var isa Expr #CSE candidate
         add_operation!(ls, gensym(:temporary), var, elementbytes, position)
     else # assumed constant
         add_constant!(ls, var, elementbytes)
         # add_constant!(ls, var, deps, gensym(:loopredefconst), elementbytes)
     end
-    pushparent!(parents, deps, reduceddeps, parent)
+    pushparent!(vparents, deps, reduceddeps, parent)
 end
-function add_reduction!(
-    parents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet, var::Symbol, elementbytes::Int
-)
-    get!(ls.opdict, var) do
-        add_constant!(ls, var, elementbytes)
-    end
-end
+# function add_reduction!(
+#     vparents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet, var::Symbol, elementbytes::Int
+# )
+#     get!(ls.opdict, var) do
+#         add_constant!(ls, var, elementbytes)
+#     end
+# end
 function search_tree(opv::Vector{Operation}, var::Symbol) # relies on cycles being forbidden
     for opp ∈ opv
         name(opp) === var && return true
@@ -118,13 +123,6 @@ function add_reduced_deps!(op::Operation, reduceddeps::Vector{Symbol})
     nothing
 end
 
-# function substitute_op_in_parents!(
-#     vparents::Vector{Operation}, replacer::Operation, replacee::Operation, reduceddeps::Vector{Symbol}
-# )
-#     @show replacer replacee
-#     # 
-#     substitute_op_in_parents_recurse!(vparents, replacer, replacee)
-# end
 function substitute_op_in_parents!(
     vparents::Vector{Operation}, replacer::Operation, replacee::Operation, reduceddeps::Vector{Symbol}
 )
@@ -188,7 +186,7 @@ function add_reduction_update_parent!(
         if instr.instr ∈ (:-, :vsub!, :vsub, :/, :vfdiv!, :vfidiv!)
             update_deps!(deps, reduceddeps, reductinit)#parent) # deps and reduced deps will not be disjoint
         end
-    elseif !isouterreduction
+    elseif !isouterreduction && reductinit !== parent
         substitute_op_in_parents!(vparents, reductinit, parent, reduceddeps)
     end
     update_reduction_status!(vparents, reduceddeps, name(reductinit))
@@ -228,7 +226,8 @@ function add_compute!(
     for (ind,arg) ∈ enumerate(args)
         if var === arg
             reduction_ind = ind
-            add_reduction!(vparents, deps, reduceddeps, ls, arg, elementbytes)
+            # add_reduction!(vparents, deps, reduceddeps, ls, arg, elementbytes)
+            getop(ls, arg, elementbytes)
         elseif arg isa Expr
             isref, argref = tryrefconvert(ls, arg, elementbytes, varname(mpref))
             if isref
@@ -270,7 +269,8 @@ function add_compute!(
         parent = ls.opdict[var]
         setdiffv!(reduceddeps, deps, loopdependencies(parent))
         # parent = getop(ls, var, elementbytes)
-        if length(reduceddeps) == 0
+        # if length(reduceddeps) == 0
+        if all(!in(deps), reduceddeps)
             insert!(vparents, reduction_ind, parent)
             mergesetv!(deps, loopdependencies(parent))
             op = Operation(length(operations(ls)), var, elementbytes, instr, compute, deps, reduceddeps, vparents)

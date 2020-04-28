@@ -15,13 +15,31 @@
 # function iterate()
 
 # end
-function isnopidentity(op::Operation, u₁loop::Symbol, u₂loop::Symbol, suffix)
+
+function dependent_outer_reducts(ls::LoopSet, op)
+    for i ∈ ls.outer_reductions
+        search_tree(parents(operations(ls)[i]), name(op)) && return true
+    end
+    false
+end
+
+function isnopidentity(ls::LoopSet, op::Operation, u₁loop::Symbol, u₂loop::Symbol, vectorized::Symbol, suffix)
     parents_op = parents(op)
     if iscompute(op) && instruction(op).instr === :identity && name(first(parents_op)) === name(op) && isone(length(parents_op))
         mvar, u₁unrolledsym, u₂unrolledsym = variable_name_and_unrolled(op, u₁loop, u₂loop, suffix)
         parents_u₁syms, parents_u₂syms = parent_unroll_status(op, u₁loop, u₂loop, suffix)
         if (u₁unrolledsym == first(parents_u₁syms)) && ((!isnothing(suffix)) == parents_u₂syms[1])
-            true
+            #TODO: identifer(first(parents_op)) ∉ ls.outer_reductions is going to miss a lot of cases
+            #Should probably replace that with `DVec` (demoting Vec) types, that demote to scalar.
+            if (vectorized ∈ loopdependencies(first(parents_op)) && vectorized ∉ loopdependencies(op)) && !dependent_outer_reducts(ls, op)
+                op.instruction = reduction_to_scalar(instruction(first(parents_op)))
+                op.mangledvariable = gensym(op.mangledvariable)
+                false
+            else
+                true
+            end
+        else
+            false
         end
     else
         false
@@ -30,7 +48,6 @@ end
 
 function set_upstream_family!(adal::Vector{T}, op::Operation, val::T, ld::Vector{Symbol}, id::Int) where {T}
     adal[identifier(op)] == val && return # must already have been set
-    # @show op
     if ld != loopdependencies(op) || id == identifier(op)
         (adal[identifier(op)] = val)
     end
@@ -41,13 +58,15 @@ function set_upstream_family!(adal::Vector{T}, op::Operation, val::T, ld::Vector
 end
 
 function addoptoorder!(
-    lo::LoopOrder, included_vars::Vector{Bool}, place_after_loop::Vector{Bool}, op::Operation, loopsym::Symbol, _n::Int, u₁loop::Symbol, u₂loop::Symbol, loopistiled::Bool
+    ls::LoopSet, included_vars::Vector{Bool}, place_after_loop::Vector{Bool}, op::Operation,
+    loopsym::Symbol, _n::Int, u₁loop::Symbol, u₂loop::Symbol, vectorized::Symbol, loopistiled::Bool
 )
+    lo = ls.loop_order
     id = identifier(op)
     included_vars[id] && return nothing
     loopsym ∈ loopdependencies(op) || return nothing
     for opp ∈ parents(op) # ensure parents are added first
-        addoptoorder!(lo, included_vars, place_after_loop, opp, loopsym, _n, u₁loop, u₂loop, loopistiled)
+        addoptoorder!(ls, included_vars, place_after_loop, opp, loopsym, _n, u₁loop, u₂loop, vectorized, loopistiled)
     end
     included_vars[id] && return nothing
     included_vars[id] = true
@@ -55,12 +74,11 @@ function addoptoorder!(
     istiled = u₂loop ∈ loopdependencies(op)
     # optype = Int(op.node_type) + 1
     after_loop = place_after_loop[id] + 1
-    # @show place_after_loop[id], op
     if !isloopvalue(op)
         if istiled
-            isnopidentity(op, u₁loop, u₂loop, 0) || push!(lo[isunrolled,2,after_loop,_n], op)
+            isnopidentity(ls, op, u₁loop, u₂loop, vectorized, 0) || push!(lo[isunrolled,2,after_loop,_n], op)
         else
-            isnopidentity(op, u₁loop, u₂loop, nothing) || push!(lo[isunrolled,1,after_loop,_n], op)
+            isnopidentity(ls, op, u₁loop, u₂loop, vectorized, nothing) || push!(lo[isunrolled,1,after_loop,_n], op)
         end
     end
     # isloopvalue(op) || push!(lo[isunrolled,istiled,after_loop,_n], op)
@@ -69,7 +87,7 @@ function addoptoorder!(
     nothing
 end
 
-function fillorder!(ls::LoopSet, order::Vector{Symbol}, unrolled::Symbol, tiled::Symbol, loopistiled::Bool)
+function fillorder!(ls::LoopSet, order::Vector{Symbol}, u₁loop::Symbol, u₂loop::Symbol, loopistiled::Bool, vectorized::Symbol)
     lo = ls.loop_order
     resize!(lo, length(ls.loopsymbols))
     ro = lo.loopnames # reverse order; will have same order as lo
@@ -85,7 +103,7 @@ function fillorder!(ls::LoopSet, order::Vector{Symbol}, unrolled::Symbol, tiled:
         ro[_n] = loopsym = order[n]
         #loopsym = order[n]
         for op ∈ ops
-            addoptoorder!( lo, included_vars, place_after_loop, op, loopsym, _n, unrolled, tiled, loopistiled )
+            addoptoorder!( ls, included_vars, place_after_loop, op, loopsym, _n, u₁loop, u₂loop, vectorized, loopistiled )
         end
     end
 end
