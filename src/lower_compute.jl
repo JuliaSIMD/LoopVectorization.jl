@@ -1,11 +1,10 @@
-# A compute op needs to know the unrolling and tiling status of each of its parents.
 
 function promote_to_231(op, u₁loop, u₂loop)
     unrolleddeps = Symbol[]
     loopdeps = loopdependencies(op)
     u₁loop ∈ loopdeps && push!(unrolleddeps, u₁loop)
     u₂loop ∈ loopdeps && push!(unrolleddeps, u₂loop)
-    !any(opp -> isload(opp) && all(in(loopdeps), unrolleddeps), parents(op))
+    !any(opp -> isload(opp) && all(in(loopdependencies(opp)), unrolleddeps), parents(op))
 end
 
 struct FalseCollection end
