@@ -29,7 +29,7 @@ T = Float64
     #     tmp += A[i+ik,j+jk]*skern[ik,jk]
     # end;
     # ls1
-    # out = out1;
+    # # out = out1;
     # rng1,  rng2  = CartesianIndices(out1).indices;
     # rng1k, rng2k = axes(skern);
     # ls2dstatic = LoopVectorization.@avx_debug for j in rng2, i in rng1

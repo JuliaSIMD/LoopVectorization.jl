@@ -19,7 +19,7 @@ using Base.Meta: isexpr
 using DocStringExtensions
 
 
-const SUPPORTED_TYPES = Union{Float16,Float32,Float64,Integer}
+const NativeTypes = Union{Bool, Base.HWReal}
 
 export LowDimArray, stridedpointer, vectorizable,
     @avx, @_avx, *ˡ, _avx_!,

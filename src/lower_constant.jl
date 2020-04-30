@@ -6,9 +6,10 @@
 
 
 function lower_zero!(
-    q::Expr, op::Operation, vectorized::Symbol, ls::LoopSet, u₁loop::Symbol, u₂loop::Symbol, U::Int, suffix::Union{Nothing,Int}, zerotyp::NumberType = zerotype(ls, op)
+    q::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs, zerotyp::NumberType = zerotype(ls, op)
 )
-    mvar, opu₁, opu₂ = variable_name_and_unrolled(op, u₁loop, u₂loop, suffix)
+    @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = ua
+    mvar, opu₁, opu₂ = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, suffix)
     !isnothing(suffix) && !opu₂ && suffix > 0 && return
     typeT = ELTYPESYMBOL
     if zerotyp == HardInt
@@ -26,11 +27,10 @@ function lower_zero!(
         call = Expr(:call, :zero, typeT)
     end
     if opu₁
-        broadcastsym = Symbol(mvar, "_#init#")
-        pushpreamble!(ls, Expr(:(=), broadcastsym, call))
-        # push!(q.args, Expr(:(=), broadcastsym, call))
-        for u ∈ 0:U-1
-            push!(q.args, Expr(:(=), Symbol(mvar, u), broadcastsym))
+        # broadcastsym = Symbol(mvar, "_#init#")
+        # pushpreamble!(ls, Expr(:(=), broadcastsym, call))
+        for u ∈ 0:u₁-1
+            push!(q.args, Expr(:(=), Symbol(mvar, u), call))
         end
     else
         push!(q.args, Expr(:(=), mvar, call))
@@ -48,9 +48,10 @@ function getparentsreductzero(ls::LoopSet, op::Operation)::Float64
     throw("Reduct zero not found.")
 end
 function lower_constant!(
-    q::Expr, op::Operation, vectorized::Symbol, ls::LoopSet, u₁loop::Symbol, u₂loop::Symbol, U::Int, suffix::Union{Nothing,Int}
+    q::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs
 )
-    mvar, opu₁, opu₂ = variable_name_and_unrolled(op, u₁loop, u₂loop, suffix)
+    @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = ua
+    mvar, opu₁, opu₂ = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, suffix)
     !isnothing(suffix) && !opu₂ && suffix > 0 && return
     instruction = op.instruction
     constsym = instruction.instr
@@ -70,16 +71,16 @@ function lower_constant!(
             Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, constsym)
         end
         if opu₁
-            broadcastsym = Symbol(mvar, "_#init#")
-            push!(q.args, Expr(:(=), broadcastsym, call))
-            for u ∈ 0:U-1
-                push!(q.args, Expr(:(=), Symbol(mvar, u), broadcastsym))
+            # broadcastsym = Symbol(mvar, "_#init#")
+            # push!(q.args, Expr(:(=), broadcastsym, call))
+            for u ∈ 0:u₁-1
+                push!(q.args, Expr(:(=), Symbol(mvar, u), call))
             end
         else
             push!(q.args, Expr(:(=), mvar, call))
         end
     elseif opu₁
-        for u ∈ 0:U-1
+        for u ∈ 0:u₁-1
             push!(q.args, Expr(:(=), Symbol(mvar, u), constsym))
         end
     else

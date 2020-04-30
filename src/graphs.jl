@@ -1,4 +1,26 @@
 
+struct UnrollSymbols
+    u₁loopsym::Symbol
+    u₂loopsym::Symbol
+    vectorized::Symbol
+end
+struct UnrollArgs{T <: Union{Nothing,Int}}
+    u₁::Int
+    u₁loopsym::Symbol
+    u₂loopsym::Symbol
+    vectorized::Symbol
+    suffix::T
+end
+function UnrollArgs(U::Int, unrollsyms::UnrollSymbols, suffix)
+    @unpack u₁loopsym, u₂loopsym, vectorized = unrollsyms
+    UnrollArgs(U, u₁loopsym, u₂loopsym, vectorized, suffix)
+end
+function UnrollArgs(ua::UnrollArgs, u::Int)
+    @unpack u₁loopsym, u₂loopsym, vectorized, suffix = ua
+    UnrollArgs(u, u₁loopsym, u₂loopsym, vectorized, suffix)
+end
+# UnrollSymbols(ua::UnrollArgs) = UnrollSymbols(ua.u₁loopsym, ua.u₂loopsym, ua.vectorized)
+
 struct UnrollSpecification
     u₁loopnum::Int
     u₂loopnum::Int

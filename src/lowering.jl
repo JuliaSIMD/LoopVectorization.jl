@@ -9,53 +9,51 @@
 
 
 function lower!(
-    q::Expr, op::Operation, vectorized::Symbol, ls::LoopSet, u₁loop::Symbol, u₂loop::Symbol, U::Int,
-    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned}, ::Nothing
+    q::Expr, op::Operation, ls::LoopSet, unrollargs::UnrollArgs, mask::Union{Nothing,Symbol,Unsigned}, ::Nothing
 )
     if isconstant(op)
         zerotyp = zerotype(ls, op)
         if zerotyp == INVALID
-            lower_constant!(q, op, vectorized, ls, u₁loop, u₂loop, U, suffix)
+            lower_constant!(q, op, ls, unrollargs)
         else
-            lower_zero!(q, op, vectorized, ls, u₁loop, u₂loop, U, suffix, zerotyp)
+            lower_zero!(q, op, ls, unrollargs, zerotyp)
         end
     elseif isload(op)
-        lower_load!(q, op, vectorized, ls, u₁loop, u₂loop, U, suffix, mask)
+        lower_load!(q, op, ls, unrollargs, mask)
     elseif iscompute(op)
-        lower_compute!(q, op, vectorized, u₁loop, u₂loop, U, suffix, mask)
+        lower_compute!(q, op, unrollargs, mask)
     elseif isstore(op)
-        lower_store!(q, op, vectorized, u₁loop, u₂loop, U, suffix, mask)
+        lower_store!(q, op, unrollargs, mask)
     # elseif isloopvalue(op)
     end
 end
 function lower!(
-    q::Expr, op::Operation, vectorized::Symbol, ls::LoopSet, u₁loop::Symbol, u₂loop::Symbol, U::Int,
-    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned}, filterstore::Bool
+    q::Expr, op::Operation, ls::LoopSet, unrollargs::UnrollArgs, mask::Union{Nothing,Symbol,Unsigned}, filterstore::Bool
 )
     if filterstore
         if isstore(op)
-            lower_store!(q, op, vectorized, u₁loop, u₂loop, U, suffix, mask)
+            lower_store!(q, op, unrollargs, mask)
         end
     else
         if isconstant(op)
             zerotyp = zerotype(ls, op)
             if zerotyp == INVALID
-                lower_constant!(q, op, vectorized, ls, u₁loop, u₂loop, U, suffix)
+                lower_constant!(q, op, ls, unrollargs)
             else
-                lower_zero!(q, op, vectorized, ls, u₁loop, u₂loop, U, suffix, zerotyp)
+                lower_zero!(q, op, ls, unrollargs, zerotyp)
             end
         elseif isload(op)
-            lower_load!(q, op, vectorized, ls, u₁loop, u₂loop, U, suffix, mask)
+            lower_load!(q, op, ls, unrollargs, mask)
         elseif iscompute(op)
-            lower_compute!(q, op, vectorized, u₁loop, u₂loop, U, suffix, mask)
+            lower_compute!(q, op, unrollargs, mask)
         end
     end
 end
 function lower!(
-    q::Expr, ops::AbstractVector{Operation}, vectorized::Symbol, ls::LoopSet, u₁loop::Symbol, u₂loop::Symbol, U::Int,
+    q::Expr, ops::AbstractVector{Operation}, ls::LoopSet, unrollsyms::UnrollSymbols, U::Int,
     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned}, filterstore = nothing
 )
-    foreach(op -> lower!(q, op, vectorized, ls, u₁loop, u₂loop, U, suffix, mask, filterstore), ops)
+    foreach(op -> lower!(q, op, ls, UnrollArgs(U, unrollsyms, suffix), mask, filterstore), ops)
 end
 
 function lower_block(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask::Bool, UF)
@@ -73,17 +71,18 @@ function lower_block(
     @unpack u₁loopnum, u₂loopnum, vectorizedloopnum, u₁, u₂ = us
     ops = oporder(ls)
     order = names(ls)
-    u₁loop = order[u₁loopnum]
-    u₂loop = order[u₂loopnum]
+    u₁loopsym = order[u₁loopnum]
+    u₂loopsym = order[u₂loopnum]
     vectorized = order[vectorizedloopnum]
+    unrollsyms = UnrollSymbols(u₁loopsym, u₂loopsym, vectorized)
     u₁ = n == u₁loopnum ? UF : u₁
     dontmaskfirsttiles = !isnothing(mask) && vectorizedloopnum == u₂loopnum
     blockq = Expr(:block)
     for prepost ∈ 1:2
         # !u₁ && !u₂
-        lower!(blockq, ops[1,1,prepost,n], vectorized, ls, u₁loop, u₂loop, u₁, nothing, mask)
+        lower!(blockq, ops[1,1,prepost,n], ls, unrollsyms, u₁, nothing, mask)
         if u₁ == 4
-            lower!(blockq, ops[2,1,prepost,n], vectorized, ls, u₁loop, u₂loop, u₁, nothing, mask)
+            lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, nothing, mask)
         end
         opsv1 = ops[1,2,prepost,n]
         opsv2 = ops[2,2,prepost,n]
@@ -97,34 +96,34 @@ function lower_block(
                 iszero(length(opsv1)) || (nstores += sum(isstore, opsv1))
                 iszero(length(opsv2)) || (nstores += sum(isstore, opsv2))
                 if !store && length(opsv1) + length(opsv2) == nstores
-                    u₁ != 4 && lower!(blockq, ops[2,1,prepost,n], vectorized, ls, u₁loop, u₂loop, u₁, nothing, mask) # for u ∈ 0:u₁-1     
+                    u₁ != 4 && lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, nothing, mask) # for u ∈ 0:u₁-1     
                     continue
                 end
                 for t ∈ 0:u₂-1
-                    if t == 0
-                        push!(blockq.args, Expr(:(=), u₂loop, tiledsym(u₂loop)))
-                    elseif u₂loopnum == vectorizedloopnum
-                        push!(blockq.args, Expr(:(=), u₂loop, Expr(:call, lv(:valadd), VECTORWIDTHSYMBOL, u₂loop)))
-                    else
-                        push!(blockq.args, Expr(:+=, u₂loop, 1))
-                    end
+                    # if t == 0
+                    #     push!(blockq.args, Expr(:(=), u₂loop, tiledsym(u₂loop)))
+                    # elseif u₂loopnum == vectorizedloopnum
+                    #     push!(blockq.args, Expr(:(=), u₂loop, Expr(:call, lv(:valadd), VECTORWIDTHSYMBOL, u₂loop)))
+                    # else
+                    #     push!(blockq.args, Expr(:+=, u₂loop, 1))
+                    # end
                     if dontmaskfirsttiles && t < u₂ - 1 # !u₁ &&  u₂
-                        lower!(blockq, opsv1, vectorized, ls, u₁loop, u₂loop, u₁, t, nothing, store)
+                        lower!(blockq, opsv1, ls, unrollsyms, u₁, t, nothing, store)
                     else # !u₁ &&  u₂
-                        lower!(blockq, opsv1, vectorized, ls, u₁loop, u₂loop, u₁, t, mask, store)
+                        lower!(blockq, opsv1, ls, unrollsyms, u₁, t, mask, store)
                     end
                     if iszero(t) && !store && u₁ != 4 #  u₁ && !u₂
                         # for u ∈ 0:u₁-1     
-                        lower!(blockq, ops[2,1,prepost,n], vectorized, ls, u₁loop, u₂loop, u₁, nothing, mask)
+                        lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, nothing, mask)
                         # end
                     end
                     if dontmaskfirsttiles && t < u₂ - 1 #  u₁ && u₂
                         # for u ∈ 0:u₁-1
-                        lower!(blockq, opsv2, vectorized, ls, u₁loop, u₂loop, u₁, t, nothing, store)
+                        lower!(blockq, opsv2, ls, unrollsyms, u₁, t, nothing, store)
                         # end
                     else #  u₁ && u₂
                         # for u ∈ 0:u₁-1 
-                        lower!(blockq, opsv2, vectorized, ls, u₁loop, u₂loop, u₁, t, mask, store)
+                        lower!(blockq, opsv2, ls, unrollsyms, u₁, t, mask, store)
                         # end
                     end
                 end
@@ -132,23 +131,24 @@ function lower_block(
             end
         elseif u₁ != 4
             # for u ∈ 0:u₁-1     #  u₁ && !u₂
-            lower!(blockq, ops[2,1,prepost,n], vectorized, ls, u₁loop, u₂loop, u₁, nothing, mask)
+            lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, nothing, mask)
             # end
         end
         if n > 1 && prepost == 1
             push!(blockq.args, lower_unrolled_dynamic(ls, us, n-1, !isnothing(mask)))
         end
     end
-    loopsym = mangletiledsym(order[n], us, n)
+    # loopsym = mangletiledsym(order[n], us, n)
+    loopsym = order[n]
     push!(blockq.args, incrementloopcounter(us, n, loopsym, UF))
     blockq
 end
-tiledsym(s::Symbol) = Symbol("##outer##", s, "##outer##")
-mangletiledsym(s::Symbol, us::UnrollSpecification, n::Int) = isunrolled2(us, n) ? tiledsym(s) : s
+# tiledsym(s::Symbol) = Symbol("##outer##", s, "##outer##")
+# mangletiledsym(s::Symbol, us::UnrollSpecification, n::Int) = isunrolled2(us, n) ? tiledsym(s) : s
 function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask::Bool)
     loopsym = names(ls)[n]
     loop = getloop(ls, loopsym)
-    loopsym = mangletiledsym(loopsym, us, n)
+    # loopsym = mangletiledsym(loopsym, us, n)
     nisvectorized = isvectorized(us, n)
 
     sl = startloop(loop, nisvectorized, loopsym)
@@ -169,7 +169,7 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     order = names(ls)
     loopsym = order[n]
     loop = getloop(ls, loopsym)
-    loopsym = mangletiledsym(loopsym, us, n)
+    # loopsym = mangletiledsym(loopsym, us, n)
     vectorized = order[vectorizedloopnum]
     nisunrolled = isunrolled1(us, n)
     nisvectorized = isvectorized(us, n)
@@ -382,8 +382,8 @@ end
 function setup_preamble!(ls::LoopSet, us::UnrollSpecification)
     @unpack u₁loopnum, u₂loopnum, vectorizedloopnum, u₁, u₂ = us
     order = names(ls)
-    u₁loop = order[u₁loopnum]
-    u₂loop = order[u₂loopnum]
+    u₁loopsym = order[u₁loopnum]
+    u₂loopsym = order[u₂loopnum]
     vectorized = order[vectorizedloopnum]
     if length(ls.includedactualarrays) > 0
         push!(ls.preamble.args, Expr(:(=), ELTYPESYMBOL, determine_eltype(ls)))
@@ -392,7 +392,7 @@ function setup_preamble!(ls::LoopSet, us::UnrollSpecification)
     lower_licm_constants!(ls)
     pushpreamble!(ls, definemask(getloop(ls, vectorized)))#, u₁ > 1 && u₁loopnum == vectorizedloopnum))
     for op ∈ operations(ls)
-        (iszero(length(loopdependencies(op))) && iscompute(op)) && lower_compute!(ls.preamble, op, vectorized, u₁loop, u₂loop, u₁, nothing, nothing)
+        (iszero(length(loopdependencies(op))) && iscompute(op)) && lower_compute!(ls.preamble, op, UnrollArgs(u₁, u₁loopsym, u₂loopsym, vectorized, nothing), nothing)
     end
     # define_remaining_ops!( ls, vectorized, W, u₁loop, u₂loop, u₁ )
 end

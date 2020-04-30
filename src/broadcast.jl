@@ -227,8 +227,8 @@ end
 # size of dest determines loops
 # function vmaterialize!(
 @generated function vmaterialize!(
-    dest::AbstractArray{T,N}, bc::BC, ::Val{Mod}
-) where {T <: SUPPORTED_TYPES, N, BC <: Broadcasted, Mod}
+    dest::StridedArray{T,N}, bc::BC, ::Val{Mod}
+) where {T <: NativeTypes, N, BC <: Broadcasted, Mod}
     # we have an N dimensional loop.
     # need to construct the LoopSet
     # @show typeof(dest)
@@ -245,6 +245,7 @@ end
     add_broadcast!(ls, :dest, :bc, loopsyms, BC, elementbytes)
     add_simple_store!(ls, :dest, ArrayReference(:dest, loopsyms), elementbytes)
     resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
+    # return ls
     q = lower(ls)
     push!(q.args, :dest)
     pushfirst!(q.args, Expr(:meta,:inline))
@@ -254,7 +255,7 @@ end
 end
 @generated function vmaterialize!(
     dest′::Union{Adjoint{T,A},Transpose{T,A}}, bc::BC, ::Val{Mod}
-) where {T <: SUPPORTED_TYPES, N, A <: AbstractArray{T,N}, BC <: Broadcasted, Mod}
+) where {T <: NativeTypes, N, A <: StridedArray{T,N}, BC <: Broadcasted, Mod}
     # we have an N dimensional loop.
     # need to construct the LoopSet
     loopsyms = [gensym(:n) for n ∈ 1:N]
@@ -282,3 +283,6 @@ end
     ElType = Base.Broadcast.combine_eltypes(bc.f, bc.args)
     vmaterialize!(similar(bc, ElType), bc, Val{Mod}())
 end
+
+vmaterialize!(dest, bc, ::Val{mod}) where {mod} = Base.Broadcast.materialize!(dest, bc)
+    

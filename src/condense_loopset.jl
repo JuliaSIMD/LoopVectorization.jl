@@ -295,6 +295,13 @@ concat_vals() = Val{()}()
     end
     Expr(:call, Expr(:curly, :Val, tup))
 end
+
+# check_valid_args() = true
+# check_valid_args(::Any) = false
+# check_valid_args(::T) where {T <: Union{Base.HWReal, Bool}} = true
+# check_valid_args(::StridedArray{T}) where {T <: Union{Base.HWReal, Bool}} = true
+# check_valid_args(a, b, args...) = check_valid_args(a) && check_valid_args(b) && check_valid_args(args....)
+
 function setup_call_noinline(ls::LoopSet, U = zero(Int8), T = zero(Int8))
     call = generate_call(ls, (false,U,T))
     hasouterreductions = length(ls.outer_reductions) > 0

@@ -1,6 +1,6 @@
 
 if (Base.libllvm_version ≥ v"7" && VectorizationBase.AVX512F) || Base.libllvm_version ≥ v"9"
-    function vfilter!(f::F, x::Vector{T}, y::AbstractArray{T}) where {F,T <: SUPPORTED_TYPES}
+    function vfilter!(f::F, x::Vector{T}, y::AbstractArray{T}) where {F,T <: NativeTypes}
         W, Wshift = VectorizationBase.pick_vector_width_shift(T)
         N = length(y)
         Nrep = N >>> Wshift
@@ -26,8 +26,8 @@ if (Base.libllvm_version ≥ v"7" && VectorizationBase.AVX512F) || Base.libllvm_
         end
         x
     end
-    vfilter!(f, x::Vector{T}) where {T<:SUPPORTED_TYPES} = vfilter!(f, x, x)
-    vfilter(f, y::AbstractArray{T}) where {T<:SUPPORTED_TYPES} = vfilter!(f, Vector{T}(undef, length(y)), y)
+    vfilter!(f, x::Vector{T}) where {T<:NativeTypes} = vfilter!(f, x, x)
+    vfilter(f, y::AbstractArray{T}) where {T<:NativeTypes} = vfilter!(f, Vector{T}(undef, length(y)), y)
 end
 vfilter(f, y) = filter(f, y)
 vfilter!(f, y) = filter!(f, y)

@@ -501,16 +501,17 @@ function stride_penalty(ls::LoopSet, order::Vector{Symbol})
     end
     stridepenalty# * 1e-9
 end
-function isoptranslation(ls::LoopSet, op::Operation, u1::Symbol, u2::Symbol, vectorized::Symbol)
-    (vectorized == u1 || vectorized == u2) && return false, false
-    (u1 ∈ loopdependencies(op) && u2 ∈ loopdependencies(op)) || return false, false
+function isoptranslation(ls::LoopSet, op::Operation, unrollsyms::UnrollSymbols)
+    @unpack u₁loopsym, u₂loopsym, vectorized = unrollsyms
+    (vectorized == u₁loopsym || vectorized == u₂loopsym) && return false, false
+    (u₁loopsym ∈ loopdependencies(op) && u₂loopsym ∈ loopdependencies(op)) || return false, false
     istranslation = false
     inds = getindices(op); li = op.ref.loopedindex
     translationplus = false
     for i ∈ eachindex(li)
         if !li[i]
             opp = findparent(ls, inds[i + (first(inds) === Symbol("##DISCONTIGUOUSSUBARRAY##"))])
-            if instruction(opp).instr ∈ (:+, :-) && u1 ∈ loopdependencies(opp) && u2 ∈ loopdependencies(opp)
+            if instruction(opp).instr ∈ (:+, :-) && u₁loopsym ∈ loopdependencies(opp) && u₂loopsym ∈ loopdependencies(opp)
                 istranslation = true
                 translationplus = instruction(opp).instr === :+
             end
@@ -554,18 +555,19 @@ function maxnegativeoffset(ls::LoopSet, op::Operation, u::Symbol)
     end
     mno, id
 end
-function maxnegativeoffset(ls::LoopSet, op::Operation, u1::Symbol, u2::Symbol, v::Symbol)
+function maxnegativeoffset(ls::LoopSet, op::Operation, unrollsyms::UnrollSymbols)
+    @unpack u₁loopsym, u₂loopsym, vectorized = unrollsyms
     mno = typemin(Int)
     i = 0
-    if u1 !== v
-        mnou₁ = first(maxnegativeoffset(ls, op, u1))
+    if u₁loopsym !== vectorized
+        mnou₁ = first(maxnegativeoffset(ls, op, u₁loopsym))
         if mnou₁ > mno
             i = 1
             mno = mnou₁
         end
     end
-    if u2 !== v
-        mnou₂ = first(maxnegativeoffset(ls, op, u2))
+    if u₂loopsym !== vectorized
+        mnou₂ = first(maxnegativeoffset(ls, op, u₂loopsym))
         if mnou₂ > mno
             i = 2
             mno = mnou₂
@@ -573,15 +575,16 @@ function maxnegativeoffset(ls::LoopSet, op::Operation, u1::Symbol, u2::Symbol, v
     end
     mno, i
 end
-function load_elimination_cost_factor(ls::LoopSet, op::Operation, u1::Symbol, u2::Symbol, v::Symbol)
-    if first(isoptranslation(ls, op, u1, u2, v))
+function load_elimination_cost_factor(ls::LoopSet, op::Operation, unrollsyms::UnrollSymbols)
+    @unpack u₁loopsym, u₂loopsym = unrollsyms
+    if first(isoptranslation(ls, op, unrollsyms))
         for loop ∈ ls.loops
             # If another loop is short, assume that LLVM will unroll it, in which case
             # we want to be a little more conservative in terms of register pressure.
             #FIXME: heuristic hack to get some desired behavior.
             if isstaticloop(loop) && length(loop) ≤ 4
                 itersym = loop.itersymbol
-                if itersym !== u1 && itersym !== u2
+                if itersym !== u₁loopsym && itersym !== u₂loopsym
                     return (0.25, VectorizationBase.REGISTER_COUNT == 32 ? 2.0 : 1.0)
                 end
             end
@@ -592,13 +595,14 @@ function load_elimination_cost_factor(ls::LoopSet, op::Operation, u1::Symbol, u2
     end
 end
 function add_constant_offset_load_elmination_cost!(
-    X, R, ls::LoopSet, op::Operation, iters, u₁loop::Symbol, u₁reduces::Bool, u₂loop::Symbol, u₂reduces::Bool, v::Symbol, Wshift::Int, size_T::Int, opisininnerloop::Bool
+    X, R, ls::LoopSet, op::Operation, iters, unrollsyms::UnrollSymbols, u₁reduces::Bool, u₂reduces::Bool, Wshift::Int, size_T::Int, opisininnerloop::Bool
 )
-    offset, uid = maxnegativeoffset(ls, op, u₁loop, u₂loop, v)
+    @unpack u₁loopsym, u₂loopsym, vectorized = unrollsyms
+    offset, uid = maxnegativeoffset(ls, op, unrollsyms)
     if -4 < offset < 0
         udependent_reduction = (-1 - offset) / 3
         uindependent_increase = (4 + offset) / 3
-        rt, lat, rp = cost(ls, op, v, Wshift, size_T)
+        rt, lat, rp = cost(ls, op, vectorized, Wshift, size_T)
         rt *= iters
         rp = opisininnerloop ? rp : zero(rp)
         # u_uid is getting eliminated
@@ -637,10 +641,11 @@ end
 # But optimal order within tile must still be determined
 # as well as size of the tiles.
 function evaluate_cost_tile(
-    ls::LoopSet, order::Vector{Symbol}, u₁loopsym::Symbol, u₂loopsym::Symbol, vectorized::Symbol
+    ls::LoopSet, order::Vector{Symbol}, unrollsyms::UnrollSymbols
 )
     N = length(order)
     @assert N ≥ 2 "Cannot tile merely $N loops!"
+    @unpack u₁loopsym, u₂loopsym, vectorized = unrollsyms
     # u₂loopsym = order[1]
     # u₁loopsym = order[2]
     ops = operations(ls)
@@ -706,11 +711,11 @@ function evaluate_cost_tile(
         
         u₁reduces, u₂reduces = reduced_by_unrolling[1,id], reduced_by_unrolling[2,id]
         # @show op, u₁reduces, u₂reduces
-        if !(isload(op) && add_constant_offset_load_elmination_cost!(cost_vec, reg_pressure, ls, op, iters[id], u₁loopsym, u₁reduces, u₂loopsym, u₂reduces, vectorized, Wshift, size_T, opisininnerloop))
+        if !(isload(op) && add_constant_offset_load_elmination_cost!(cost_vec, reg_pressure, ls, op, iters[id], unrollsyms, u₁reduces, u₂reduces, Wshift, size_T, opisininnerloop))
             rt, lat, rp = cost(ls, op, vectorized, Wshift, size_T)
         # @show op rt, lat, rp
             if isload(op)
-                factor1, factor2 = load_elimination_cost_factor(ls, op, u₁loopsym, u₂loopsym, vectorized)
+                factor1, factor2 = load_elimination_cost_factor(ls, op, unrollsyms)
                 rt *= factor1; rp *= factor2;
             end
             # @show isunrolled₁, isunrolled₂, op rt, lat, rp
@@ -874,8 +879,9 @@ function choose_tile(ls::LoopSet)
         new_order, state = iterate(lo) # right now, new_order === best_order
         while true
             for new_vec ∈ new_order # view to skip first
-                u₁temp, u₂temp, cost_temp = evaluate_cost_tile(ls, new_order, newu₁, newu₂, new_vec)
-                if cost_temp < lowest_cost
+                u₁temp, u₂temp, cost_temp = evaluate_cost_tile(ls, new_order, UnrollSymbols(newu₁, newu₂, new_vec))
+                # if cost_temp < lowest_cost
+                if cost_temp ≤ lowest_cost
                     lowest_cost = cost_temp
                     u₁, u₂ = u₁temp, u₂temp
                     best_vec = new_vec

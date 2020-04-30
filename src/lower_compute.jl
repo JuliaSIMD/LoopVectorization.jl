@@ -68,21 +68,41 @@ end
 #     vparents
 # end
 
-function lower_compute!(
-    q::Expr, op::Operation, vectorized::Symbol, u₁loop::Symbol, u₂loop::Symbol, U::Int,
-    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing,
-    opunrolled = u₁loop ∈ loopdependencies(op)
-)
+function add_loopvalue!(instrcall::Expr, loopval::Symbol, vectorized::Symbol, u::Int)
+    if loopval === vectorized
+        if isone(u)
+            push!(instrcall.args, Expr(:call, :valadd, VECTORWIDTHSYMBOL, loopval))
+        else
+            push!(instrcall.args, Expr(:call, lv(:valmuladd), VECTORWIDTHSYMBOL, u, loopval))
+        end
+    else
+        push!(instrcall.args, Expr(:call, :+, loopval, u))
+    end
+end
+function add_loopvalue!(instrcall::Expr, loopval, ua::UnrollArgs, u::Int)
+    @unpack u₁loopsym, u₂loopsym, vectorized, suffix = ua
+    if u > 0 && loopval === u₁loopsym #parentsunrolled[n]
+        add_loopvalue!(instrcall, loopval, vectorized, u)
+    elseif !isnothing(suffix) && suffix > 0 && loopval === u₂loopsym
+        add_loopvalue!(instrcall, loopval, vectorized, suffix)
+    else
+        push!(instrcall.args, loopval)
+    end
+end
 
+function lower_compute!(
+    q::Expr, op::Operation, ua::UnrollArgs, mask::Union{Nothing,Symbol,Unsigned} = nothing,
+    opunrolled = ua.u₁loopsym ∈ loopdependencies(op)
+)
+    @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = ua
     var = name(op)
     instr = instruction(op)
     parents_op = parents(op)
     nparents = length(parents_op)
-    
-    mvar, u₁unrolledsym, u₂unrolledsym = variable_name_and_unrolled(op, u₁loop, u₂loop, suffix)
-    opunrolled = u₁unrolledsym || u₁loop ∈ loopdependencies(op)
+    mvar, u₁unrolledsym, u₂unrolledsym = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, suffix)
+    opunrolled = u₁unrolledsym || u₁loopsym ∈ loopdependencies(op)
     # parent_names, parents_u₁syms, parents_u₂syms = parent_unroll_status(op, u₁loop, u₂loop, suffix)
-    parents_u₁syms, parents_u₂syms = parent_unroll_status(op, u₁loop, u₂loop, suffix)
+    parents_u₁syms, parents_u₂syms = parent_unroll_status(op, u₁loopsym, u₂loopsym, suffix)
     tiledouterreduction = if isnothing(suffix)
         -1
     else
@@ -118,10 +138,10 @@ function lower_compute!(
                 # @show i, parentstiled[i], newparentname, parentname
                 push!(q.args, Expr(:(=), newparentname, Symbol(parentname, 0)))
             else
-                for u ∈ 0:U-1
+                for u ∈ 0:u₁-1
                     push!(q.args, Expr(:(=), Symbol(newparentname, u), Symbol(parentname, u)))
                 end
-                reduce_expr!(q, newparentname, Instruction(reduction_to_single_vector(instruction(newparentop))), U)
+                reduce_expr!(q, newparentname, Instruction(reduction_to_single_vector(instruction(newparentop))), u₁)
                 push!(q.args, Expr(:(=), newparentname, Symbol(newparentname, 0)))
             end
         end
@@ -130,7 +150,7 @@ function lower_compute!(
     # not broadcasted, because we use frequent checks of individual bools
     # making BitArrays inefficient.
     # parentsyms = [opp.variable for opp ∈ parents(op)]
-    Uiter = opunrolled ? U - 1 : 0
+    Uiter = opunrolled ? u₁ - 1 : 0
     isreduct = isreduction(op)
     # @show op opunrolled, optiled, isreduct, unrollsym
     # if instr.instr === :vfmadd_fast
@@ -142,8 +162,9 @@ function lower_compute!(
         instrfid = findfirst(isequal(instr.instr), (:vfmadd_fast, :vfnmadd_fast, :vfmsub_fast, :vfnmsub_fast))
         # want to instcombine when parent load's deps are superset
         # also make sure opp is unrolled
-        if instrfid !== nothing && (opunrolled && U > 1) && promote_to_231(op, u₁loop, u₂loop)
-            instr = Instruction((:vfmadd231, :vfnmadd231, :vfmsub231, :vfnmsub231)[instrfid])
+        if instrfid !== nothing && (opunrolled && u₁ > 1) && promote_to_231(op, u₁loopsym, u₂loopsym)
+            specific_fmas = Base.libllvm_version > v"9.0.0" ? (:vfmadd, :vfnmadd, :vfmsub, :vfnmsub) : (:vfmadd231, :vfnmadd231, :vfmsub231, :vfnmsub231)
+            instr = Instruction(specific_fmas[instrfid])
         end
     end
     # @show instr.instr
@@ -151,8 +172,8 @@ function lower_compute!(
     vecinreduceddeps = isreduct && vectorized ∈ reduceddeps
     maskreduct = mask !== nothing && vecinreduceddeps #any(opp -> opp.variable === var, parents_op)
     # if vecinreduceddeps && vectorized ∉ loopdependencies(op) # screen parent opps for those needing a reduction to scalar
-    #     # parents_op = reduce_vectorized_parents!(q, op, parents_op, U, u₁loop, u₂loop, vectorized, suffix)
-    #     isreducingidentity!(q, op, parents_op, U, u₁loop, u₂loop, vectorized, suffix) && return
+    #     # parents_op = reduce_vectorized_parents!(q, op, parents_op, U, u₁loopsym, u₂loopsym, vectorized, suffix)
+    #     isreducingidentity!(q, op, parents_op, U, u₁loopsym, u₂loopsym, vectorized, suffix) && return
     # end    
     # if a parent is not unrolled, the compiler should handle broadcasting CSE.
     # because unrolled/tiled parents result in an unrolled/tiled dependendency,
@@ -165,7 +186,7 @@ function lower_compute!(
     for u ∈ 0:Uiter
         instrcall = Expr(instr) # Expr(:call, instr)
         varsym = if tiledouterreduction > 0 # then suffix !== nothing
-            modsuffix = ((u + suffix*U) & 3)
+            modsuffix = ((u + suffix*u₁) & 3)
             # modsuffix = suffix # (suffix & 3)
             Symbol(mangledvar(op), modsuffix)
         elseif u₁unrolledsym
@@ -175,16 +196,8 @@ function lower_compute!(
         end
         for n ∈ 1:nparents
             if isloopvalue(parents_op[n])
-                loopvalue = first(loopdependencies(parents_op[n]))
-                if u > 0 && loopvalue === u₁loop #parentsunrolled[n]
-                    if loopvalue === vectorized
-                        push!(instrcall.args, Expr(:call, :+, loopvalue, Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, u)))
-                    else
-                        push!(instrcall.args, Expr(:call, :+, loopvalue, u))
-                    end
-                else
-                    push!(instrcall.args, loopvalue)
-                end
+                loopval = first(loopdependencies(parents_op[n]))
+                add_loopvalue!(instrcall, loopval, ua, u)
             else
                 parent = mangledvar(parents_op[n])
                 # @show n, tiledouterreduction, parent
@@ -201,7 +214,7 @@ function lower_compute!(
                 push!(instrcall.args, parent)
             end
         end
-        if maskreduct && (u == Uiter || u₁loop !== vectorized) # only mask last
+        if maskreduct && (u == Uiter || u₁loopsym !== vectorized) # only mask last
             if last(instrcall.args) == varsym
                 pushfirst!(instrcall.args, lv(:vifelse))
                 insert!(instrcall.args, 3, mask)

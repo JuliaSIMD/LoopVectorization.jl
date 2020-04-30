@@ -87,45 +87,45 @@ end
 
 
 function lower_conditionalstore_scalar!(
-    q::Expr, op::Operation, vectorized::Symbol, u₁loop::Symbol, u₂loop::Symbol, U::Int,
-    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned}
+    q::Expr, op::Operation, ua::UnrollArgs, mask::Union{Nothing,Symbol,Unsigned}
 )
-    mvar, opu₁, opu₂ = variable_name_and_unrolled(first(parents(op)), u₁loop, u₂loop, suffix)
+    @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = ua
+    mvar, opu₁, opu₂ = variable_name_and_unrolled(first(parents(op)), u₁loopsym, u₂loopsym, suffix)
     # var = pvariable_name(op, suffix, tiled)
     cond = last(parents(op))
-    condvar, condu₁ = condvarname_and_unroll(cond, u₁loop, u₂loop, suffix, opu₂)
+    condvar, condu₁ = condvarname_and_unroll(cond, u₁loopsym, u₂loopsym, suffix, opu₂)
     ptr = refname(op)
-    for u ∈ 0:U-1
+    for u ∈ 0:u₁-1
         varname = varassignname(mvar, u, opu₁)
         condvarname = varassignname(condvar, u, condu₁)
-        td = UnrollArgs(u, u₁loop, u₂loop, suffix)
+        td = UnrollArgs(ua, u)
         push!(q.args, Expr(:&&, condvarname, Expr(:call, storeinstr(op), ptr, varname, mem_offset_u(op, td))))
     end
     nothing
 end
 function lower_conditionalstore_vectorized!(
-    q::Expr, op::Operation, vectorized::Symbol, u₁loop::Symbol, u₂loop::Symbol, U::Int,
-    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned}, isunrolled::Bool
+    q::Expr, op::Operation, ua::UnrollArgs, mask::Union{Nothing,Symbol,Unsigned}, isunrolled::Bool
 )
+    @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = ua
     loopdeps = loopdependencies(op)
     @assert vectorized ∈ loopdeps
-    mvar, opu₁, opu₂ = variable_name_and_unrolled(first(parents(op)), u₁loop, u₂loop, suffix)
+    mvar, opu₁, opu₂ = variable_name_and_unrolled(first(parents(op)), u₁loopsym, u₂loopsym, suffix)
     # var = pvariable_name(op, suffix, tiled)
     if isunrolled
         umin = 0
-        U = U
+        U = u₁
     else
         umin = -1
         U = 0
     end
     ptr = refname(op)
-    vecnotunrolled = vectorized !== u₁loop
+    vecnotunrolled = vectorized !== u₁loopsym
     cond = last(parents(op))
-    condvar, condu₁ = condvarname_and_unroll(cond, u₁loop, u₂loop, suffix, opu₂)
+    condvar, condu₁ = condvarname_and_unroll(cond, u₁loopsym, u₂loopsym, suffix, opu₂)
     # @show parents(op) cond condvar
     for u ∈ 0:U-1
-        td = UnrollArgs(u, u₁loop, u₂loop, suffix)
-        name, mo = name_memoffset(mvar, op, td, vecnotunrolled, opu₁)
+        td = UnrollArgs(ua, u)
+        name, mo = name_memoffset(mvar, op, td, opu₁)
         condvarname = varassignname(condvar, u, condu₁)
         instrcall = Expr(:call, storeinstr(op), ptr, name, mo)
         if mask !== nothing && (vecnotunrolled || u == U - 1)
@@ -138,41 +138,41 @@ function lower_conditionalstore_vectorized!(
 end
 
 function lower_store_scalar!(
-    q::Expr, op::Operation, vectorized::Symbol, u₁loop::Symbol, u₂loop::Symbol, U::Int,
-    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned}
+    q::Expr, op::Operation, ua::UnrollArgs, mask::Union{Nothing,Symbol,Unsigned}
 )
-    mvar, opu₁, opu₂ = variable_name_and_unrolled(first(parents(op)), u₁loop, u₂loop, suffix)
+    @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = ua
+    mvar, opu₁, opu₂ = variable_name_and_unrolled(first(parents(op)), u₁loopsym, u₂loopsym, suffix)
     # var = pvariable_name(op, suffix, tiled)
     ptr = refname(op)
     # parentisunrolled = unrolled ∈ loopdependencies(first(parents(op)))
-    for u ∈ 0:U-1
+    for u ∈ 0:u₁-1
         varname = varassignname(mvar, u, opu₁)
-        td = UnrollArgs(u, u₁loop, u₂loop, suffix)
+        td = UnrollArgs(ua, u)
         push!(q.args, Expr(:call, storeinstr(op), ptr, varname, mem_offset_u(op, td)))
     end
     nothing
 end
 function lower_store_vectorized!(
-    q::Expr, op::Operation, vectorized::Symbol, u₁loop::Symbol, u₂loop::Symbol, U::Int,
-    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned}, isunrolled::Bool
+    q::Expr, op::Operation, ua::UnrollArgs, mask::Union{Nothing,Symbol,Unsigned}, isunrolled::Bool
 )
+    @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = ua
     loopdeps = loopdependencies(op)
     @assert vectorized ∈ loopdeps
-    mvar, opu₁, opu₂ = variable_name_and_unrolled(first(parents(op)), u₁loop, u₂loop, suffix)
+    mvar, opu₁, opu₂ = variable_name_and_unrolled(first(parents(op)), u₁loopsym, u₂loopsym, suffix)
     # var = pvariable_name(op, suffix, tiled)
     # parentisunrolled = unrolled ∈ loopdependencies(first(parents(op)))
     if isunrolled
         umin = 0
-        U = U
+        U = u₁
     else
         umin = -1
         U = 0
     end
     ptr = refname(op)
-    vecnotunrolled = vectorized !== u₁loop
+    vecnotunrolled = vectorized !== u₁loopsym
     for u ∈ umin:U-1
-        td = UnrollArgs(u, u₁loop, u₂loop, suffix)
-        name, mo = name_memoffset(mvar, op, td, vecnotunrolled, opu₁)
+        td = UnrollArgs(ua, u)
+        name, mo = name_memoffset(mvar, op, td, opu₁)
         instrcall = Expr(:call, storeinstr(op), ptr, name, mo)
         if mask !== nothing && (vecnotunrolled || u == U - 1)
             push!(instrcall.args, mask)
@@ -181,22 +181,22 @@ function lower_store_vectorized!(
     end
 end
 function lower_store!(
-    q::Expr, op::Operation, vectorized::Symbol, unrolled::Symbol, tiled::Symbol, U::Int,
-    suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned} = nothing
+    q::Expr, op::Operation, ua::UnrollArgs, mask::Union{Nothing,Symbol,Unsigned} = nothing
 )
-    isunrolled = unrolled ∈ loopdependencies(op)
-    U = isunrolled ? U : 1
+    @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = ua
+    isunrolled = u₁loopsym ∈ loopdependencies(op)
+    ua = UnrollArgs(ua, isunrolled ? u₁ : 1)
     if instruction(op).instr !== :conditionalstore!
         if vectorized ∈ loopdependencies(op)
-            lower_store_vectorized!(q, op, vectorized, unrolled, tiled, U, suffix, mask, isunrolled)
+            lower_store_vectorized!(q, op, ua, mask, isunrolled)
         else
-            lower_store_scalar!(q, op, vectorized, unrolled, tiled, U, suffix, mask)
+            lower_store_scalar!(q, op, ua, mask)
         end
     else
         if vectorized ∈ loopdependencies(op)
-            lower_conditionalstore_vectorized!(q, op, vectorized, unrolled, tiled, U, suffix, mask, isunrolled)
+            lower_conditionalstore_vectorized!(q, op, ua, mask, isunrolled)
         else
-            lower_conditionalstore_scalar!(q, op, vectorized, unrolled, tiled, U, suffix, mask)
+            lower_conditionalstore_scalar!(q, op, ua, mask)
         end
     end
 end
