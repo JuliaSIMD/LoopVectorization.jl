@@ -71,7 +71,7 @@ end
 function add_loopvalue!(instrcall::Expr, loopval::Symbol, vectorized::Symbol, u::Int)
     if loopval === vectorized
         if isone(u)
-            push!(instrcall.args, Expr(:call, :valadd, VECTORWIDTHSYMBOL, loopval))
+            push!(instrcall.args, Expr(:call, lv(:valadd), VECTORWIDTHSYMBOL, loopval))
         else
             push!(instrcall.args, Expr(:call, lv(:valmuladd), VECTORWIDTHSYMBOL, u, loopval))
         end

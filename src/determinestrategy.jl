@@ -880,8 +880,8 @@ function choose_tile(ls::LoopSet)
         while true
             for new_vec ∈ new_order # view to skip first
                 u₁temp, u₂temp, cost_temp = evaluate_cost_tile(ls, new_order, UnrollSymbols(newu₁, newu₂, new_vec))
-                # if cost_temp < lowest_cost
-                if cost_temp ≤ lowest_cost
+                # if cost_temp < lowest_cost # leads to 4 vmovapds
+                if cost_temp ≤ lowest_cost # lead to 2 vmovapds
                     lowest_cost = cost_temp
                     u₁, u₂ = u₁temp, u₂temp
                     best_vec = new_vec

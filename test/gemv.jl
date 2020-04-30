@@ -2,7 +2,8 @@ using LoopVectorization
 using Test
 
 @testset "GEMV" begin
-    Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 6)
+    # Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 6)
+    Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 4)
     gemvq = :(for i ∈ eachindex(y)
               yᵢ = 0.0
               for j ∈ eachindex(x)
@@ -11,7 +12,11 @@ using Test
               y[i] = yᵢ
               end)
     lsgemv = LoopVectorization.LoopSet(gemvq);
-    @test LoopVectorization.choose_order(lsgemv) == (Symbol[:i, :j], :j, :i, :i, Unum, Tnum)
+    if LoopVectorization.VectorizationBase.REGISTER_COUNT == 16
+        @test LoopVectorization.choose_order(lsgemv) == (Symbol[:i, :j], :j, :i, :i, Unum, Tnum)
+    else
+        @test LoopVectorization.choose_order(lsgemv) == (Symbol[:i, :j], :i, :j, :i, 4, 4)
+    end
 
     function mygemv!(y, A, x)
         @inbounds for i ∈ eachindex(y)
@@ -127,7 +132,11 @@ using Test
               G[d1,κ] = z
               end)
     lsgemv = LoopVectorization.LoopSet(gemvq);
-    @test LoopVectorization.choose_order(lsgemv) == ([:d1,:d2], :d2, :d1, :d2, Unum, Tnum)
+    if LoopVectorization.VectorizationBase.REGISTER_COUNT == 16
+        @test LoopVectorization.choose_order(lsgemv) == ([:d1,:d2], :d2, :d1, :d2, Unum, Tnum)
+    else
+        @test LoopVectorization.choose_order(lsgemv) == ([:d1,:d2], :d1, :d2, :d2, 4, 4)
+    end
     function AtmulvB_avx3!(G, B,κ)
         d = size(G,1)
         @_avx for d1=1:d
@@ -144,7 +153,8 @@ using Test
            end
            end)
     lsp = LoopVectorization.LoopSet(pq);
-    @test LoopVectorization.choose_order(lsp) == ([:d1, :d2], :d2, :d1, :d2, Unum, Tnum)
+    # @test LoopVectorization.choose_order(lsp) == ([:d1, :d2], :d2, :d1, :d2, Unum, Tnum)
+    @test LoopVectorization.choose_order(lsp) == ([:d1, :d2], :d1, :d2, :d2, Unum, Tnum)
     # lsp.preamble_symsym
 
     function hhavx!(A::AbstractVector{T}, B, C, D) where {T}

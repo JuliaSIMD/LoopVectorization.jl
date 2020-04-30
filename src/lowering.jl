@@ -78,10 +78,12 @@ function lower_block(
     u₁ = n == u₁loopnum ? UF : u₁
     dontmaskfirsttiles = !isnothing(mask) && vectorizedloopnum == u₂loopnum
     blockq = Expr(:block)
+    delay_u₁ = true
+    # delay_u₁ = false
     for prepost ∈ 1:2
         # !u₁ && !u₂
         lower!(blockq, ops[1,1,prepost,n], ls, unrollsyms, u₁, nothing, mask)
-        if u₁ == 4
+        if !delay_u₁ || u₁ == 4
             lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, nothing, mask)
         end
         opsv1 = ops[1,2,prepost,n]
@@ -112,7 +114,7 @@ function lower_block(
                     else # !u₁ &&  u₂
                         lower!(blockq, opsv1, ls, unrollsyms, u₁, t, mask, store)
                     end
-                    if iszero(t) && !store && u₁ != 4 #  u₁ && !u₂
+                    if delay_u₁ && iszero(t) && !store && u₁ != 4 #  u₁ && !u₂
                         # for u ∈ 0:u₁-1     
                         lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, nothing, mask)
                         # end
@@ -129,7 +131,7 @@ function lower_block(
                 end
                 nstores == 0 && break
             end
-        elseif u₁ != 4
+        elseif delay_u₁ && u₁ != 4
             # for u ∈ 0:u₁-1     #  u₁ && !u₂
             lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, nothing, mask)
             # end

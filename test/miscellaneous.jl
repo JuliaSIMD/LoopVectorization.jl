@@ -4,13 +4,15 @@ using Test
 
 @testset "Miscellaneous" begin
 
-    Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 4)
+    # Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 4)
+    Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 6)
     dot3q = :(for m ∈ 1:M, n ∈ 1:N
               s += x[m] * A[m,n] * y[n]
               end);
     lsdot3 = LoopVectorization.LoopSet(dot3q);
     if LoopVectorization.VectorizationBase.REGISTER_COUNT == 32
-        @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :n, :m, :m, Unum, Tnum)#&-2
+        # @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :n, :m, :m, Unum, Tnum)#&-2
+        @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :m, :n, :m, Unum, Tnum)#&-2
     else
         @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :m, :n, :m, Unum, Tnum)#&-2
     end
@@ -64,7 +66,8 @@ using Test
     if LoopVectorization.VectorizationBase.REGISTER_COUNT == 32
         @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, :i, :j, 4, 6)
     else
-        @test LoopVectorization.choose_order(lssubcol) == ([:j, :i], :j, :i, :j, 3, 4)#&-2
+        # @test LoopVectorization.choose_order(lssubcol) == ([:j, :i], :j, :i, :j, 3, 4)#&-2
+        @test LoopVectorization.choose_order(lssubcol) == ([:j, :i], :i, :j, :j, 4, 4)#&-2
     end
     ## @avx is SLOWER!!!!
     ## need to fix!
@@ -93,7 +96,8 @@ using Test
     if LoopVectorization.VectorizationBase.REGISTER_COUNT == 32
         @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, :i, :j, 4, 6)
     else
-        @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, :i, :j, 3, 4)
+        # @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, :i, :j, 3, 4)
+        @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :i, :j, :j, 4, 4)
     end
     # my colsum is wrong (by 0.25), but slightly more interesting
     function mycolsum!(x, A)
@@ -133,7 +137,8 @@ using Test
     if LoopVectorization.VectorizationBase.REGISTER_COUNT == 32
         @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, 4, 6)
     else
-        @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :i, :j, :j, 4, 4)
+        # @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :i, :j, :j, 4, 4)
+        @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, 2, 4)
     end
     
     function myvar!(s², A, x̄)

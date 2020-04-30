@@ -81,6 +81,7 @@ function addoptoorder!(
             isnopidentity(ls, op, u₁loop, u₂loop, vectorized, nothing) || push!(lo[isunrolled,1,after_loop,_n], op)
         end
     end
+    # @show op, after_loop
     # isloopvalue(op) || push!(lo[isunrolled,istiled,after_loop,_n], op)
     # all(opp -> iszero(length(reduceddependencies(opp))), parents(op)) &&
     set_upstream_family!(place_after_loop, op, false, loopdependencies(op), identifier(op)) # parents that have already been included are not moved, so no need to check included_vars to filter
