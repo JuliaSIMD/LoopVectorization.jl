@@ -1,6 +1,7 @@
 
 @testset "Fall back behavior" begin
 
+    @show Float64, @__LINE__
     function msd(x)
         s = zero(eltype(x))
         for i in eachindex(x)

@@ -46,7 +46,7 @@ function contracttest2!(tiJaB_d_temp3, tiJaB_i, Wmnij)
 end
 
 @testset "Tensors" begin
-    @show @__LINE__, Float64
+    @show Float64, @__LINE__
     LA, LIM = 31, 23;
     A = rand(LIM, LIM, LA, LA);
     B = rand(LIM, LIM, LIM, LIM);
