@@ -412,7 +412,8 @@ function calc_Ureduct(ls::LoopSet, us::UnrollSpecification)
         u₂ == -1 ? u₁ : 4#u₂
     end
 end
-function lower(ls::LoopSet, us::UnrollSpecification)
+function lower_unrollspec(ls::LoopSet)
+    us = ls.unrollspecification[]
     @unpack vectorizedloopnum, u₁, u₂ = us
     order = names(ls)
     vectorized = order[vectorizedloopnum]
@@ -427,7 +428,8 @@ end
 
 function lower(ls::LoopSet, order, u₁loop, u₂loop, vectorized, u₁, u₂)
     fillorder!(ls, order, u₁loop, u₂loop, u₂ != -1, vectorized)
-    q = lower(ls, UnrollSpecification(ls, u₁loop, u₂loop, vectorized, u₁, u₂))
+    ls.unrollspecification[] = UnrollSpecification(ls, u₁loop, u₂loop, vectorized, u₁, u₂)
+    q = lower_unrollspec(ls)
     iszero(length(ls.opdict)) && pushfirst!(q.args, Expr(:meta, :inline))
     q
 end

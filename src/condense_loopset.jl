@@ -297,16 +297,32 @@ concat_vals() = Val{()}()
 end
 
 
-# Courtesy of mcabbott
-@inline function check_args(A::AbstractArray)
+"""
+    check_args(::Vararg{AbstractArray})
+
+
+LoopVectorization will optimize an `@avx` loop if `check_args` on each on the indexed abstract arrays returns true.
+It returns true for `AbstractArray{T}`s when `check_type(T) == true` and the array or its parent is a `StridedArray` or `AbstractRange`.
+
+To provide support for a custom array type, ensure that `check_args` returns true, either through overloading it or subtyping `StridedArray`.
+Additionally, define `pointer` and `stride` methods.
+"""
+@inline function check_args(A::AbstractArray)# Courtesy of mcabbott
     P = parent(A)
     if typeof(P) === typeof(A)
-        eltype(A) <: NativeTypes && typeof(A) <: Union{StridedArray, AbstractRange}
+        check_type(eltype(A)) && typeof(A) <: Union{StridedArray, AbstractRange}
     else
         check_args(P)
     end
 end
 @inline check_args(A, Bs...) = check_args(A) && check_args(Bs...)
+"""
+    check_type(::Type{T}) where {T}
+
+Returns true if the element type is supported.
+"""
+check_type(::Type{T}) where {T <: NativeTypes} = true
+check_type(::Type{T}) where {T} = false
 
 function check_args_call(ls::LoopSet)
     q = Expr(:call, lv(:check_args))

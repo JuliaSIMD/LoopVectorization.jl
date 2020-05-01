@@ -1,10 +1,10 @@
 
-function promote_to_231(op, u₁loop, u₂loop)
+function load_constrained(op, u₁loop, u₂loop)
     unrolleddeps = Symbol[]
     loopdeps = loopdependencies(op)
     u₁loop ∈ loopdeps && push!(unrolleddeps, u₁loop)
     u₂loop ∈ loopdeps && push!(unrolleddeps, u₂loop)
-    !any(opp -> isload(opp) && all(in(loopdependencies(opp)), unrolleddeps), parents(op))
+    any(opp -> isload(opp) && all(in(loopdependencies(opp)), unrolleddeps), parents(op))
 end
 
 struct FalseCollection end
@@ -162,8 +162,9 @@ function lower_compute!(
         instrfid = findfirst(isequal(instr.instr), (:vfmadd_fast, :vfnmadd_fast, :vfmsub_fast, :vfnmsub_fast))
         # want to instcombine when parent load's deps are superset
         # also make sure opp is unrolled
-        if instrfid !== nothing && (opunrolled && u₁ > 1) && promote_to_231(op, u₁loopsym, u₂loopsym)
+        if instrfid !== nothing && (opunrolled && u₁ > 1) && !load_constrained(op, u₁loopsym, u₂loopsym)
             specific_fmas = Base.libllvm_version > v"9.0.0" ? (:vfmadd, :vfnmadd, :vfmsub, :vfnmsub) : (:vfmadd231, :vfnmadd231, :vfmsub231, :vfnmsub231)
+            # specific_fmas = (:vfmadd231, :vfnmadd231, :vfmsub231, :vfnmsub231)
             instr = Instruction(specific_fmas[instrfid])
         end
     end

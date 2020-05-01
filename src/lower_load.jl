@@ -63,10 +63,33 @@ function pushvectorload!(
     end
     push!(q.args, Expr(:(=), name, instrcall))
 end
+function prefetchisagoodidea(ls::LoopSet, op::Operation, td::UnrollArgs)
+    # return false
+    @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = td
+    vectorized ∈ loopdependencies(op) || return false
+    u₂loopsym === Symbol("##undefined##") && return false
+    dontskip = (64 ÷ VectorizationBase.REGISTER_SIZE) - 1
+    (!isnothing(suffix) && !iszero(suffix & dontskip)) && return false
+    loopedindex = op.ref.loopedindex
+    if length(loopedindex) > 1 && first(loopedindex) && last(loopedindex)
+        indices = getindices(op)
+        if first(indices) === vectorized && last(indices) === last(ls.loop_order.bestorder)
+            if prod(s -> length(getloop(ls, s)), @view(indices[1:end-1])) ≥ 120 && length(getloop(ls, last(indices))) ≥ 120
+                if last(op.ref.ref.offsets) < 120
+                    for opp ∈ operations(ls)
+                        iscompute(opp) && load_constrained(opp, u₁loopsym, u₂loopsym) && return false
+                    end
+                    return true
+                end
+            end
+        end
+    end
+    false
+end
 function lower_load_vectorized!(
-    q::Expr, op::Operation, td::UnrollArgs, mask::Union{Nothing,Symbol,Unsigned} = nothing, umin::Int = 0
+    q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, mask::Union{Nothing,Symbol,Unsigned} = nothing, umin::Int = 0
 )
-    @unpack u₁, u₁loopsym, vectorized, suffix = td
+    @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = td
     loopdeps = loopdependencies(op)
     @assert vectorized ∈ loopdeps
     if u₁loopsym ∈ loopdeps
@@ -81,6 +104,27 @@ function lower_load_vectorized!(
     for u ∈ umin:U-1
         td = UnrollArgs(td, u)
         pushvectorload!(q, op, var, td, U, vectorized, mask)
+    end
+    if prefetchisagoodidea(ls, op, td)
+        dontskip = (64 ÷ VectorizationBase.REGISTER_SIZE) - 1
+        ptr = refname(op)
+        innermostloopsym = last(ls.loop_order.bestorder)
+        us = ls.unrollspecification[]
+        prefetch_multiplier = 3
+        prefetch_distance = u₁loopsym === innermostloopsym ? us.u₁ : ( u₂loopsym === innermostloopsym ? us.u₂ : 1 )
+        prefetch_distance *= prefetch_multiplier
+        offsets = op.ref.ref.offsets
+        last_offset = last(offsets)
+        
+        for u ∈ umin:U-1
+            (u₁loopsym === vectorized && !iszero(u & dontskip)) && continue
+            offsets[end] = last_offset + prefetch_distance
+            mo = last(name_memoffset(var, op, UnrollArgs(td, u)))
+            instrcall = Expr(:call, lv(:prefetch0), ptr, mo)
+            push!(q.args, instrcall)
+            
+        end
+        offsets[end] = last_offset
     end
     nothing
 end
@@ -124,7 +168,7 @@ function lower_load!(
         umin = 0
     end
     if vectorized ∈ loopdependencies(op)
-        lower_load_vectorized!(q, op, td, mask, umin)
+        lower_load_vectorized!(q, ls, op, td, mask, umin)
     else
         lower_load_scalar!(q, op, td, umin)
     end

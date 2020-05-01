@@ -38,9 +38,8 @@ function add_store!(
     mref = mpref.mref
     add_pvar = true
     for opp ∈ operations(ls)
-        isstore(opp) || continue
         if mref == opp.ref
-            id = opp.identifier
+            isstore(opp) && (id = opp.identifier)
             add_pvar = false
             break
         end

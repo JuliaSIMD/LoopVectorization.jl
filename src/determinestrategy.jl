@@ -494,6 +494,7 @@ function stride_penalty(ls::LoopSet, op::Operation, order::Vector{Symbol})
 end
 function stride_penalty(ls::LoopSet, order::Vector{Symbol})
     stridepenalty = 0
+    total_iter = prod(length, ls.loops)
     for op ∈ operations(ls)
         if accesses_memory(op)
             stridepenalty += stride_penalty(ls, op, order)
@@ -908,9 +909,11 @@ function choose_order_cost(ls::LoopSet)
     end
     uorder, uvec, uc = choose_unroll_order(ls, tc)
     if num_loops(ls) > 1 && tc ≤ uc
+        copyto!(ls.loop_order.bestorder, torder)
         return torder, tunroll, ttile, tvec, min(tU, tT), tT, tc
         # return torder, tvec, 4, 4#5, 5
     else
+        copyto!(ls.loop_order.bestorder, uorder)
         return uorder, first(uorder), Symbol("##undefined##"), uvec, determine_unroll_factor(ls, uorder, first(uorder), uvec), -1, uc
     end
 end

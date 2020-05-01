@@ -233,6 +233,7 @@ const COST = Dict{Symbol,InstructionCost}(
     :prefetch2 => InstructionCost(0,0.0,0.0,0)
 )
 @inline prefetch0(x, i) = SIMDPirates.prefetch(gep(stridedpointer(x), (extract_data(i) - 1,)), Val{3}(), Val{0}())
+@inline prefetch0(x, I::Tuple{Vararg{<:Any,N}}) where {N} = SIMDPirates.prefetch(gep(stridedpointer(x), ntuple(i -> extract_data(I[i]) - 1, Val{N}())), Val{3}(), Val{0}())
 @inline prefetch0(x, i, j) = SIMDPirates.prefetch(gep(stridedpointer(x), (extract_data(i) - 1, extract_data(j) - 1)), Val{3}(), Val{0}())
 # @inline prefetch0(x, i, j, oi, oj) = SIMDPirates.prefetch(gep(stridedpointer(x), (extract_data(i) + extract_data(oi) - 1, extract_data(j) + extract_data(oj) - 1)), Val{3}(), Val{0}())
 @inline prefetch1(x, i) = SIMDPirates.prefetch(gep(stridedpointer(x), (extract_data(i) - 1,)), Val{2}(), Val{0}())

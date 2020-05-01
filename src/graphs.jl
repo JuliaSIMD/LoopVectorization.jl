@@ -180,6 +180,7 @@ struct LoopSet
     reg_pres::Matrix{Float64}
     included_vars::Vector{Bool}
     place_after_loop::Vector{Bool}
+    unrollspecification::Base.RefValue{UnrollSpecification}
     mod::Symbol
 end
 
@@ -278,7 +279,7 @@ function LoopSet(mod::Symbol)
         ArrayReferenceMeta[],
         Matrix{Float64}(undef, 4, 2),
         Matrix{Float64}(undef, 4, 2),
-        Bool[], Bool[], mod
+        Bool[], Bool[], Ref{UnrollSpecification}(), mod
     )
 end
 
