@@ -153,8 +153,11 @@ using Test
            end
            end)
     lsp = LoopVectorization.LoopSet(pq);
-    # @test LoopVectorization.choose_order(lsp) == ([:d1, :d2], :d2, :d1, :d2, Unum, Tnum)
-    @test LoopVectorization.choose_order(lsp) == ([:d1, :d2], :d1, :d2, :d2, Unum, Tnum)
+    if LoopVectorization.VectorizationBase.REGISTER_COUNT == 16
+        @test LoopVectorization.choose_order(lsp) == ([:d1, :d2], :d2, :d1, :d2, Unum, Tnum)
+    else
+        @test LoopVectorization.choose_order(lsp) == ([:d1, :d2], :d1, :d2, :d2, Unum, Tnum)
+    end
     # lsp.preamble_symsym
 
     function hhavx!(A::AbstractVector{T}, B, C, D) where {T}

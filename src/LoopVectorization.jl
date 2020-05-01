@@ -18,6 +18,7 @@ using LinearAlgebra: Adjoint, Transpose
 using Base.Meta: isexpr
 using DocStringExtensions
 
+using Base.FastMath: add_fast, sub_fast, mul_fast, div_fast
 
 const NativeTypes = Union{Bool, Base.HWReal}
 

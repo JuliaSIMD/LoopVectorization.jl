@@ -121,7 +121,7 @@ and `uᵢ=-1` disables unrolling for the correspond loop.
 macro avx(q)
     q = macroexpand(__module__, q)
     q2 = if q.head === :for
-        setup_call(LoopSet(q, __module__))
+        setup_call(LoopSet(q, __module__), q)
     else# assume broadcast
         substitute_broadcast(q, Symbol(__module__))
     end
@@ -173,14 +173,14 @@ macro avx(arg, q)
     q = macroexpand(__module__, q)
     inline, u₁, u₂ = check_macro_kwarg(arg)
     ls = LoopSet(q, __module__)
-    esc(setup_call(ls, inline, u₁, u₂))
+    esc(setup_call(ls, q, inline, u₁, u₂))
 end
 macro avx(arg1, arg2, q)
     @assert q.head === :for
     q = macroexpand(__module__, q)
     inline, u₁, u₂ = check_macro_kwarg(arg1)
     inline, u₁, u₂ = check_macro_kwarg(arg2, inline, u₁, u₂)
-    esc(setup_call(LoopSet(q, __module__), inline, u₁, u₂))
+    esc(setup_call(LoopSet(q, __module__), q, inline, u₁, u₂))
 end
 
 

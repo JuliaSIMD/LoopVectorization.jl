@@ -568,15 +568,16 @@
     # end)
     # lsmul2x2q = LoopVectorization.LoopSet(mul2x2q)
 
-    struct SizedMatrix{M,N,T} <: AbstractMatrix{T}
+    struct SizedMatrix{M,N,T} <: DenseMatrix{T}
         data::Matrix{T}
     end
+    Base.parent(A::SizedMatrix) = A.data
     SizedMatrix{M,N}(A::Matrix{T}) where {M,N,T} = SizedMatrix{M,N,T}(A)
-    Base.@propagate_inbounds Base.getindex(A::SizedMatrix, i...) = getindex(A.data, i...)
-    Base.@propagate_inbounds Base.setindex!(A::SizedMatrix, v, i...) = setindex!(A.data, v, i...)
+    Base.@propagate_inbounds Base.getindex(A::SizedMatrix, i...) = getindex(parent(A), i...)
+    Base.@propagate_inbounds Base.setindex!(A::SizedMatrix, v, i...) = setindex!(parent(A), v, i...)
     Base.size(::SizedMatrix{M,N}) where {M,N} = (M,N)
     @inline function LoopVectorization.stridedpointer(A::SizedMatrix{M,N,T}) where {M,N,T}
-        LoopVectorization.StaticStridedPointer{T,Tuple{1,M}}(pointer(A.data))
+        LoopVectorization.StaticStridedPointer{T,Tuple{1,M}}(pointer(parent(A)))
     end
     @inline function LoopVectorization.stridedpointer(A::LinearAlgebra.Adjoint{T,SizedMatrix{M,N,T}}) where {M,N,T}
         LoopVectorization.StaticStridedPointer{T,Tuple{M,1}}(pointer(parent(A).data))

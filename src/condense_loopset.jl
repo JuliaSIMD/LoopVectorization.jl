@@ -296,11 +296,24 @@ concat_vals() = Val{()}()
     Expr(:call, Expr(:curly, :Val, tup))
 end
 
-# check_valid_args() = true
-# check_valid_args(::Any) = false
-# check_valid_args(::T) where {T <: Union{Base.HWReal, Bool}} = true
-# check_valid_args(::StridedArray{T}) where {T <: Union{Base.HWReal, Bool}} = true
-# check_valid_args(a, b, args...) = check_valid_args(a) && check_valid_args(b) && check_valid_args(args....)
+
+# Courtesy of mcabbott
+@inline function check_args(A::AbstractArray)
+    P = parent(A)
+    if typeof(P) === typeof(A)
+        eltype(A) <: NativeTypes && typeof(A) <: Union{StridedArray, AbstractRange}
+    else
+        check_args(P)
+    end
+end
+@inline check_args(A, Bs...) = check_args(A) && check_args(Bs...)
+
+function check_args_call(ls::LoopSet)
+    q = Expr(:call, lv(:check_args))
+    append!(q.args, ls.includedactualarrays)
+    q
+end
+
 
 function setup_call_noinline(ls::LoopSet, U = zero(Int8), T = zero(Int8))
     call = generate_call(ls, (false,U,T))
@@ -410,15 +423,17 @@ function setup_call_debug(ls::LoopSet)
     pushpreamble!(ls, generate_call(ls, (true,zero(Int8),zero(Int8)), true))
     ls.preamble
 end
-function setup_call(ls::LoopSet, inline::Bool = true, u₁ = zero(Int8), u₂ = zero(Int8))
+function setup_call(ls::LoopSet, q = nothing, inline::Bool = true, u₁ = zero(Int8), u₂ = zero(Int8))
     # We outline/inline at the macro level by creating/not creating an anonymous function.
     # The old API instead was based on inlining or not inline the generated function, but
     # the generated function must be inlined into the initial loop preamble for performance reasons.
     # Creating an anonymous function and calling it also achieves the outlining, while still
     # inlining the generated function into the loop preamble.
-    if inline
+    call = if inline
         setup_call_inline(ls, u₁, u₂)
     else
         setup_call_noinline(ls, u₁, u₂)
     end
+    isnothing(q) && return call
+    Expr(:if, check_args_call(ls), call, q)
 end
