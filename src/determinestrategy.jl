@@ -742,7 +742,8 @@ function evaluate_cost_tile(
     # @show order, vectorized cost_vec reg_pressure
     # @show solve_unroll(ls, u₁loopsym, u₂loopsym, cost_vec, reg_pressure)
     u₁, u₂, ucost = solve_unroll(ls, u₁loopsym, u₂loopsym, cost_vec, reg_pressure, W, vectorized)
-    u₁, u₂, costpenalty * ucost + stride_penalty(ls, order)
+    outer_reduct_penalty = length(ls.outer_reductions) * (u₁ + isodd(u₁))
+    u₁, u₂, costpenalty * ucost + stride_penalty(ls, order) + outer_reduct_penalty
 end
 
 
@@ -910,7 +911,7 @@ function choose_order_cost(ls::LoopSet)
     uorder, uvec, uc = choose_unroll_order(ls, tc)
     if num_loops(ls) > 1 && tc ≤ uc
         copyto!(ls.loop_order.bestorder, torder)
-        return torder, tunroll, ttile, tvec, min(tU, tT), tT, tc
+        return torder, tunroll, ttile, tvec, tU, tT, tc
         # return torder, tvec, 4, 4#5, 5
     else
         copyto!(ls.loop_order.bestorder, uorder)

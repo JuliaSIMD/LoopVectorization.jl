@@ -187,7 +187,8 @@ function lower_compute!(
     for u ∈ 0:Uiter
         instrcall = Expr(instr) # Expr(:call, instr)
         varsym = if tiledouterreduction > 0 # then suffix !== nothing
-            modsuffix = ((u + suffix*u₁) & 3)
+            # modsuffix = ((u + suffix*u₁) & 3)
+            modsuffix = u
             # modsuffix = suffix # (suffix & 3)
             Symbol(mangledvar(op), modsuffix)
         elseif u₁unrolledsym

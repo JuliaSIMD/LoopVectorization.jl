@@ -42,6 +42,15 @@ using Test
         end
         s
     end
+    # q = :( for n ∈ 1:N
+    #         t = zero(s)
+    #         for m ∈ 1:M
+    #             t += x[m] * A[m,n]
+    #         end
+    #         s += t * y[n]
+    #        end);
+    # ls = LoopVectorization.LoopSet(q);
+    
     function dot3avx24(x, A, y)
         M, N = size(A)
         s = zero(promote_type(eltype(x), eltype(A), eltype(y)))

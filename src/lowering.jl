@@ -406,10 +406,15 @@ function calc_Ureduct(ls::LoopSet, us::UnrollSpecification)
     @unpack u₁loopnum, u₁, u₂ = us
     if iszero(length(ls.outer_reductions))
         -1
-    elseif num_loops(ls) == u₁loopnum
+    elseif u₂ == -1
         min(u₁, 4)
     else
-        u₂ == -1 ? u₁ : 4#u₂
+        u₁
+    # elseif num_loops(ls) == u₁loopnum
+    #     min(u₁, 4)
+    # else
+    #     # u₂ == -1 ? u₁ : 4
+    #     u₁
     end
 end
 function lower_unrollspec(ls::LoopSet)

@@ -3,7 +3,7 @@ using Test
 
 @testset "GEMV" begin
     # Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 6)
-    Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 4)
+    Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (6, 4)
     gemvq = :(for i ∈ eachindex(y)
               yᵢ = 0.0
               for j ∈ eachindex(x)
@@ -15,9 +15,9 @@ using Test
     if LoopVectorization.VectorizationBase.REGISTER_COUNT == 16
         @test LoopVectorization.choose_order(lsgemv) == (Symbol[:i, :j], :j, :i, :i, Unum, Tnum)
     else
-        @test LoopVectorization.choose_order(lsgemv) == (Symbol[:i, :j], :i, :j, :i, 4, 4)
+        @test LoopVectorization.choose_order(lsgemv) == (Symbol[:i, :j], :i, :j, :i, Unum, Tnum)
     end
-
+    
     function mygemv!(y, A, x)
         @inbounds for i ∈ eachindex(y)
             yᵢ = zero(eltype(y))
@@ -135,7 +135,7 @@ using Test
     if LoopVectorization.VectorizationBase.REGISTER_COUNT == 16
         @test LoopVectorization.choose_order(lsgemv) == ([:d1,:d2], :d2, :d1, :d2, Unum, Tnum)
     else
-        @test LoopVectorization.choose_order(lsgemv) == ([:d1,:d2], :d1, :d2, :d2, 4, 4)
+        @test LoopVectorization.choose_order(lsgemv) == ([:d1,:d2], :d1, :d2, :d2, Unum, Tnum)
     end
     function AtmulvB_avx3!(G, B,κ)
         d = size(G,1)

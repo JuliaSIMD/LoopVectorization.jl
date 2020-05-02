@@ -29,6 +29,7 @@
     @test !LoopVectorization.check_args(x, FallbackArrayWrapper(x), x)
     @test !LoopVectorization.check_args(x, x, FallbackArrayWrapper(x))
     @test !LoopVectorization.check_args(x, x, FallbackArrayWrapper(x), FallbackArrayWrapper(x))
+    @test !LoopVectorization.check_args(['a'])
 
     @test msdavx(FallbackArrayWrapper(x)) == 1e18
     @test msd(x) == msdavx(FallbackArrayWrapper(x))

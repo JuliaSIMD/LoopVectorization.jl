@@ -1,7 +1,7 @@
 using LoopVectorization, LinearAlgebra, OffsetArrays
 BLAS.set_num_threads(1)
 
-struct SizedOffsetMatrix{T,LR,UR,LC,RC} <: AbstractMatrix{T}
+struct SizedOffsetMatrix{T,LR,UR,LC,RC} <: DenseMatrix{T}
     data::Matrix{T}
 end
 using LoopVectorization.VectorizationBase: StaticUnitRange

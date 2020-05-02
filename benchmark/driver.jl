@@ -33,13 +33,13 @@ filter2d_dynamic_bench = benchmark_filter2ddynamic(sizes)#512:-1:2)
 filter2d_3x3_bench = benchmark_filter2d3x3(sizes)#512:-1:2)
 filter2d_unrolled_bench = benchmark_filter2dunrolled(sizes)#512:-1:2)
 
+dot3_bench = benchmark_dot3(sizes)
 dot_bench = benchmark_dot(sizes)
 selfdot_bench = benchmark_selfdot(sizes)
-dot3_bench = benchmark_dot3(sizes)
 sse_bench = benchmark_sse(sizes)
 aplusBc_bench = benchmark_aplusBc(sizes)
 AplusAt_bench = benchmark_AplusAt(sizes)
-exp_bench = benchmark_exp(sizes)
+vexp_bench = benchmark_exp(sizes)
 randomaccess_bench = benchmark_random_access(sizes)
 logdettriangle_bench = benchmark_logdettriangle(sizes)
 
@@ -55,7 +55,7 @@ save(joinpath(PICTURES, "bench_dot3_v$v.$filetype"), plot(dot3_bench));
 save(joinpath(PICTURES, "bench_sse_v$v.$filetype"), plot(sse_bench));
 save(joinpath(PICTURES, "bench_aplusBc_v$v.$filetype"), plot(aplusBc_bench));
 save(joinpath(PICTURES, "bench_AplusAt_v$v.$filetype"), plot(AplusAt_bench));
-save(joinpath(PICTURES, "bench_exp_v$v.$filetype"), plot(exp_bench));
+save(joinpath(PICTURES, "bench_exp_v$v.$filetype"), plot(vexp_bench));
 save(joinpath(PICTURES, "bench_random_access_v$v.$filetype"), plot(randomaccess_bench));
 save(joinpath(PICTURES, "bench_logdettriangle_v$v.$filetype"), plot(logdettriangle_bench));
 save(joinpath(PICTURES, "bench_AmulB_v$v.$filetype"), plot(AmulB_bench));
@@ -75,7 +75,7 @@ plot(selfdot_bench)
 plot(gemv_bench)
 plot(dot3_bench)
 plot(sse_bench)
-plot(exp_bench)
+plot(vexp_bench)
 plot(aplusBc_bench)
 plot(AplusAt_bench)
 
