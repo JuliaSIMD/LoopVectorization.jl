@@ -56,6 +56,7 @@ include("split_loops.jl")
 include("condense_loopset.jl")
 include("reconstruct_loopset.jl")
 include("constructors.jl")
+include("user_api_conveniences.jl")
 
 """
 LoopVectorization provides macros and functions that combine SIMD vectorization and

@@ -1,6 +1,8 @@
 @testset "GEMM" begin
  # using LoopVectorization, LinearAlgebra, Test; T = Float64
     Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (5, 5)
+    @test LoopVectorization.mᵣ == Unum
+    @test LoopVectorization.nᵣ == Tnum
     AmulBtq1 = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
                  C[m,n] = zeroB
                  for k ∈ 1:size(A,2)

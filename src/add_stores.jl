@@ -68,7 +68,7 @@ function add_simple_store!(ls::LoopSet, var::Symbol, ref::ArrayReference, elemen
     add_simple_store!(ls, getop(ls, var, elementbytes), ref, elementbytes)
 end
 function add_store_ref!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int)
-    array, raw_indices = ref_from_ref(ex)
+    array, raw_indices = ref_from_ref!(ls, ex)
     add_store!(ls, var, array, raw_indices, elementbytes)
 end
 function add_store_ref!(ls::LoopSet, var, ex::Expr, elementbytes::Int)
@@ -80,14 +80,14 @@ function add_store_ref!(ls::LoopSet, var, ex::Expr, elementbytes::Int)
     add_store_ref!(ls, name(c), ex, elementbytes)
 end
 function add_store_setindex!(ls::LoopSet, ex::Expr, elementbytes::Int)
-    array, raw_indices = ref_from_setindex(ex)
+    array, raw_indices = ref_from_setindex!(ls, ex)
     add_store!(ls, (ex.args[3])::Symbol, array, raw_indices, elementbytes)
 end
 
 # For now, it is illegal to load from a conditional store.
 # if you want that sort of behavior, do a conditional reassignment, and store that result unconditionally.
 function add_conditional_store!(ls::LoopSet, LHS, condop::Operation, storeop::Operation, elementbytes::Int)
-    array, rawindices = ref_from_ref(LHS)
+    array, rawindices = ref_from_ref!(ls, LHS)
     mpref = array_reference_meta!(ls, array, rawindices, elementbytes)
     mref = mpref.mref
     ldref = mpref.loopdependencies

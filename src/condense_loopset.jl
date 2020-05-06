@@ -450,6 +450,6 @@ function setup_call(ls::LoopSet, q = nothing, inline::Bool = true, u₁ = zero(I
     else
         setup_call_noinline(ls, u₁, u₂)
     end
-    isnothing(q) && return call
-    Expr(:if, check_args_call(ls), call, q)
+    isnothing(q) && return Expr(:block, ls.prepreamble, call)
+    Expr(:block, ls.prepreamble, Expr(:if, check_args_call(ls), call, q))
 end

@@ -52,11 +52,11 @@ function add_simple_load!(
     pushop!(ls, op, var)
 end
 function add_load_ref!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int)
-    array, rawindices = ref_from_ref(ex)
+    array, rawindices = ref_from_ref!(ls, ex)
     add_load!(ls, var, array, rawindices, elementbytes)
 end
 function add_load_getindex!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int)
-    array, rawindices = ref_from_getindex(ex)
+    array, rawindices = ref_from_getindex!(ls, ex)
     add_load!(ls, var, array, rawindices, elementbytes)
 end
 

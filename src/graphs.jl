@@ -167,6 +167,7 @@ struct LoopSet
     outer_reductions::Vector{Int} # IDs of reduction operations that need to be reduced at end.
     loop_order::LoopOrder
     preamble::Expr
+    prepreamble::Expr # performs extractions that must be performed first, and don't need further registering
     preamble_symsym::Vector{Tuple{Int,Symbol}}
     preamble_symint::Vector{Tuple{Int,Int}}
     preamble_symfloat::Vector{Tuple{Int,Float64}}
@@ -206,7 +207,7 @@ function save_tilecost!(ls::LoopSet)
     end
 end
 
-
+pushprepreamble!(ls::LoopSet, ex) = push!(ls.prepreamble.args, ex)
 function pushpreamble!(ls::LoopSet, op::Operation, v::Symbol)
     if v !== mangledvar(op)
         push!(ls.preamble_symsym, (identifier(op),v))
@@ -270,7 +271,7 @@ function LoopSet(mod::Symbol)
         Operation[], [0],
         Int[],
         LoopOrder(),
-        Expr(:block),
+        Expr(:block),Expr(:block),
         Tuple{Int,Symbol}[],
         Tuple{Int,Int}[],
         Tuple{Int,Float64}[],
@@ -511,7 +512,7 @@ function add_operation!(
     ls::LoopSet, LHS_sym::Symbol, RHS::Expr, LHS_ref::ArrayReferenceMetaPosition, elementbytes::Int, position::Int
 )
     if RHS.head === :ref# || (RHS.head === :call && first(RHS.args) === :getindex)
-        array, rawindices = ref_from_expr(RHS)
+        array, rawindices = ref_from_expr!(ls, RHS)
         RHS_ref = array_reference_meta!(ls, array, rawindices, elementbytes, gensym(LHS_sym))
         op = add_load!(ls, RHS_ref, elementbytes)
         iop = add_compute!(ls, LHS_sym, :identity, [op], elementbytes)
@@ -559,7 +560,7 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
             elseif RHS isa Expr
                 # need to check if LHS appears in RHS
                 # assign RHS to lrhs
-                array, rawindices = ref_from_expr(LHS)
+                array, rawindices = ref_from_expr!(ls, LHS)
                 mpref = array_reference_meta!(ls, array, rawindices, elementbytes)
                 cachedparents = copy(mpref.parents)
                 ref = mpref.mref.ref

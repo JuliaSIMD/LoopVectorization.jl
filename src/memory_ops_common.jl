@@ -1,15 +1,30 @@
-function ref_from_expr(ex, offset1::Int, offset2::Int)
-    (ex.args[1 + offset1])::Symbol, @view(ex.args[2 + offset2:end])
+function extract_array_symbol_from_ref!(ls::LoopSet, ex::Expr, offset1::Int)::Symbol
+    ar = ex.args[1 + offset1]
+    if isa(ar, Symbol)
+        return ar
+    elseif isa(ar, Expr) && ar.head === :(.)
+        s = gensym(:extractedarray)
+        pushprepreamble!(ls, Expr(:(=), s, ar))
+        return s
+    else
+        throw("Indexing into the following expression was not recognized: $ar")
+    end
 end
-ref_from_ref(ex::Expr) = ref_from_expr(ex, 0, 0)
-ref_from_getindex(ex::Expr) = ref_from_expr(ex, 1, 1)
-ref_from_setindex(ex::Expr) = ref_from_expr(ex, 1, 2)
-function ref_from_expr(ex::Expr)
+
+
+function ref_from_expr!(ls, ex, offset1::Int, offset2::Int)
+    ar = extract_array_symbol_from_ref!(ls, ex, offset1)
+    ar, @view(ex.args[2 + offset2:end])
+end
+ref_from_ref!(ls::LoopSet, ex::Expr) = ref_from_expr!(ls, ex, 0, 0)
+ref_from_getindex!(ls::LoopSet, ex::Expr) = ref_from_expr!(ls, ex, 1, 1)
+ref_from_setindex!(ls::LoopSet, ex::Expr) = ref_from_expr!(ls, ex, 1, 2)
+function ref_from_expr!(ls::LoopSet, ex::Expr)
     if ex.head === :ref
-        ref_from_ref(ex)
+        ref_from_ref!(ls, ex)
     else#if ex.head === :call
         f = first(ex.args)::Symbol
-        f === :getindex ? ref_from_getindex(ex) : ref_from_setindex(ex)
+        f === :getindex ? ref_from_getindex!(ls, ex) : ref_from_setindex!(ls, ex)
     end
 end
 
@@ -159,13 +174,13 @@ function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementby
 end
 function tryrefconvert(ls::LoopSet, ex::Expr, elementbytes::Int, var::Union{Nothing,Symbol} = nothing)::Tuple{Bool,ArrayReferenceMetaPosition}
     ya, yinds = if ex.head === :ref
-        ref_from_ref(ex)
+        ref_from_ref!(ls, ex)
     elseif ex.head === :call
         f = first(ex.args)
         if f === :getindex
-            ref_from_getindex(ex)
+            ref_from_getindex!(ls, ex)
         elseif f === :setindex!
-            ref_from_setindex(ex)
+            ref_from_setindex!(ls, ex)
         else
             return false, NOTAREFERENCEMP
         end

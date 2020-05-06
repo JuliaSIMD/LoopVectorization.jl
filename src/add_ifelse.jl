@@ -58,7 +58,7 @@ function add_andblock!(ls::LoopSet, condexpr::Expr, condeval::Expr, elementbytes
     condop = add_operation!(ls, gensym(:mask), condexpr, elementbytes, position)
     if condeval.head === :call
         @assert first(condeval.args) === :setindex!
-        array, raw_indices = ref_from_setindex(condeval)
+        array, raw_indices = ref_from_setindex!(ls, condeval)
         ref = Expr(:ref, array, raw_indices...)
         return add_andblock!(ls, condop, ref, condeval.args[3], elementbytes, position)
     end
@@ -99,7 +99,7 @@ function add_orblock!(ls::LoopSet, condexpr::Expr, condeval::Expr, elementbytes:
     condop = add_operation!(ls, gensym(:mask), condexpr, elementbytes, position)
     if condeval.head === :call
         @assert first(condeval.args) === :setindex!
-        array, raw_indices = ref_from_setindex(condeval)
+        array, raw_indices = ref_from_setindex!(ls, condeval)
         return add_orblock!(ls, condop, Expr(:ref, array, raw_indices...), condeval.args[3], elementbytes, position)
     end
     @assert condeval.head === :(=)
