@@ -619,13 +619,7 @@ using Test
         c_re
     end
 
-    struct MatHolder{T}
-        d    :: Vector{T}
-        Wt   :: Matrix{T}
-        WtD  :: Matrix{T}
-    end
-
-    function MatCalcWtD(m::MatHolder)
+    function MatCalcWtD(m)
         l, n = size(m.Wt)
         @avx for j in 1:n
             for i in 1:l
@@ -633,16 +627,6 @@ using Test
            end
        end
     end
-   function MatHolder(
-       d   :: Vector{T},
-       Wt   :: Matrix{T}
-   ) where {T}
-       l, n = size(Wt)
-       @assert length(d) == n
-       WtD = Matrix{T}(undef, l, n)
-       MatHolder(d, Wt, WtD)
-   end
-
  
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
@@ -828,8 +812,8 @@ using Test
         multiple_unrolls_split_depchains!(c_re_1, a_re, b_re, a_im, b_im) # [1 1; 1 1]
         multiple_unrolls_split_depchains_avx!(c_re_2, a_re, b_re, a_im, b_im) # [1 1; 1 1]
         @test c_re_1 ≈ c_re_2
-        
-        mh = MatHolder(rand(T, 23), rand(T, 15,23));
+
+        mh = (WtD = rand(T, 15,23), Wt = rand(T, 15,23), d = rand(T, 23))
         MatCalcWtD(mh)
         @test mh.WtD ≈ mh.Wt .* mh.d'
 

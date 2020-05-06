@@ -130,14 +130,16 @@ end
 
 function check_inline(arg)
     a1 = (arg.args[1])::Symbol
-    a1 === :inline || return nothing
-    (arg.args[2])::Bool
+    a1 === :inline || return zero(Int8)
+    i = (arg.args[2])::Bool % Int8
+    i + i - one(Int8)
 end
 function check_unroll(arg)
     a1 = (arg.args[1])::Symbol
-    a1 === :unroll || return nothing
+    default = (zero(Int8),zero(Int8))
+    a1 === :unroll || return default
     tup = arg.args[2]
-    u₂ = Int8(-1)
+    u₂ = -one(Int8)
     if tup isa Integer
         u₁ = convert(Int8, tup)
     elseif isa(tup, Expr)
@@ -147,23 +149,20 @@ function check_unroll(arg)
             u₁ = convert(Int8, tup.args[1])
             u₂ = convert(Int8, tup.args[2])
         else
-            return nothing
+            return default
         end
     else
-        return nothing
+        return default
     end
     u₁, u₂
 end
-function check_macro_kwarg(arg, inline::Bool = true, u₁::Int8 = zero(Int8), u₂::Int8 = zero(Int8))
+function check_macro_kwarg(arg, inline::Int8 = zero(Int8), u₁::Int8 = zero(Int8), u₂::Int8 = zero(Int8))
     @assert arg.head === :(=)
     i = check_inline(arg)
-    if i !== nothing
-        inline = i
+    if iszero(i)
+        u₁, u₂ = check_unroll(arg)
     else
-        u = check_unroll(arg)
-        if u !== nothing
-            u₁, u₂ = u
-        end
+        inline = i
     end
     inline, u₁, u₂
 end

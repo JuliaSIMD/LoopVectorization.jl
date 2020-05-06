@@ -434,16 +434,14 @@ end
 function lower(ls::LoopSet, order, u₁loop, u₂loop, vectorized, u₁, u₂)
     fillorder!(ls, order, u₁loop, u₂loop, u₂ != -1, vectorized)
     ls.unrollspecification[] = UnrollSpecification(ls, u₁loop, u₂loop, vectorized, u₁, u₂)
-    q = lower_unrollspec(ls)
-    iszero(length(ls.opdict)) && pushfirst!(q.args, Expr(:meta, :inline))
-    q
+    lower_unrollspec(ls)
 end
 
-function lower(ls::LoopSet)#, prependinlineORorUnroll = 0)
+function lower(ls::LoopSet)
     order, u₁loop, u₂loop, vectorized, u₁, u₂ = choose_order(ls)
     lower(ls, order, u₁loop, u₂loop, vectorized, u₁, u₂)
 end
-function lower(ls::LoopSet, u₁, u₂)#, prependinlineORorUnroll = 0)
+function lower(ls::LoopSet, u₁, u₂)
     if u₂ > 1
         @assert num_loops(ls) > 1 "There is only $(num_loops(ls)) loop, but specified blocking parameter u₂ is $u₂."
         order, u₁loop, u₂loop, vectorized, _u₁, _u₂, c = choose_tile(ls)

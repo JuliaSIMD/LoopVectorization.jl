@@ -107,48 +107,67 @@ function ArrayReferenceMeta(
 end
 
 extract_varg(i) = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, :vargs, i))
-pushvarg!(ls::LoopSet, ar::ArrayReferenceMeta, i) = pushpreamble!(ls, Expr(:(=), vptr(ar), extract_varg(i)))
-function pushvarg′!(ls::LoopSet, ar::ArrayReferenceMeta, i)
+pushvarg!(ls::LoopSet, ar::ArrayReferenceMeta, i, name) = pushpreamble!(ls, Expr(:(=), name, extract_varg(i)))
+function pushvarg′!(ls::LoopSet, ar::ArrayReferenceMeta, i, name)
     reverse!(ar.loopedindex); reverse!(getindices(ar)) # reverse the listed indices here, and transpose it to make it column major
-    pushpreamble!(ls, Expr(:(=), vptr(ar), Expr(:call, lv(:transpose), extract_varg(i))))
+    pushpreamble!(ls, Expr(:(=), name, Expr(:call, lv(:transpose), extract_varg(i))))
 end
 function add_mref!(
-    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}
+    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name = vptr(ar)
 ) where {T, N, S <: AbstractColumnMajorStridedPointer{T,N}}
-    pushvarg!(ls, ar, i)
+    pushvarg!(ls, ar, i, name)
 end
 function add_mref!(
-    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}
+    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name = vptr(ar)
 ) where {T, N, S <: AbstractRowMajorStridedPointer{T, N}}
-    pushvarg′!(ls, ar, i)
+    pushvarg′!(ls, ar, i, name)
 end
 function add_mref!(
-    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{OffsetStridedPointer{T,N,P}}
+    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name = vptr(ar)
+) where {S1, S2, T, P, S <: VectorizationBase.PermutedDimsStridedPointer{S1,S2,T,P}}
+    gensymname = gensym(name)
+    add_mref!(ls, ar, i, P, gensymname)
+    pushpreamble!(ls, Expr(:(=), name, Expr(:(.), gensymname, QuoteNode(:ptr))))
+    li = ar.loopedindex; inds = getindices(ar)
+    lib = similar(li); indsb = similar(inds)
+    for i ∈ eachindex(li, inds)
+        lib[i] = li[i]
+        indsb[i] = inds[i]
+    end
+    for i ∈ eachindex(li, inds)
+        li[i] = lib[S1[i]]
+        inds[i] = indsb[S1[i]]
+    end
+end
+function add_mref!(
+    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{OffsetStridedPointer{T,N,P}}, name = vptr(ar)
 ) where {T,N,P}
-    add_mref!(ls, ar, i, P)
+    add_mref!(ls, ar, i, P, name)
 end
 
 function add_mref!(
-    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}
+    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name = vptr(ar)
 ) where {T, X <: Tuple, S <: AbstractStaticStridedPointer{T,X}}
     if last(X.parameters)::Int == 1
-        pushvarg′!(ls, ar, i)
+        pushvarg′!(ls, ar, i, name)
     else
-        pushvarg!(ls, ar, i)
+        pushvarg!(ls, ar, i, name)
         first(X.parameters)::Int == 1 || pushfirst!(getindices(ar), Symbol("##DISCONTIGUOUSSUBARRAY##"))
     end
 end
 function add_mref!(
-    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}
+    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name = vptr(ar)
 ) where {T, N, S <: AbstractSparseStridedPointer{T, N}}
-    pushvarg!(ls, ar, i)
+    pushvarg!(ls, ar, i, name)
     pushfirst!(getindices(ar), Symbol("##DISCONTIGUOUSSUBARRAY##"))
 end
-function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{VectorizationBase.MappedStridedPointer{F,T,P}}) where {F,T,P}
-    add_mref!(ls, ar, i, P)
+function add_mref!(
+    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{VectorizationBase.MappedStridedPointer{F,T,P}}, name = vptr(ar)
+) where {F,T,P}
+    add_mref!(ls, ar, i, P, name)
 end
-function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{<:AbstractRange{T}}) where {T}
-    pushvarg!(ls, ar, i)
+function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{<:AbstractRange{T}}, name = vptr(ar)) where {T}
+    pushvarg!(ls, ar, i, name)
 end
 function create_mrefs!(
     ls::LoopSet, arf::Vector{ArrayRefStruct}, as::Vector{Symbol}, os::Vector{Symbol},
@@ -400,9 +419,17 @@ function avx_loopset(instr, ops, arf, AM, LPSYM, LB, @nospecialize(vargs))
     ls
 end
 function avx_body(ls, UNROLL)
-    u₁, u₂ = UNROLL
-    q = iszero(u₁) ? lower_and_split_loops(ls) : lower(ls, u₁, u₂)
+    inline, u₁, u₂ = UNROLL
+    q = iszero(u₁) ? lower_and_split_loops(ls) : lower(ls, u₁ % Int, u₂ % Int)
     length(ls.outer_reductions) == 0 ? push!(q.args, nothing) : push!(q.args, loopset_return_value(ls, Val(true)))
+    doinline = if isone(inline)
+        true
+    elseif iszero(inline)
+        prod(length, ls.loops) ≤ 1024^2
+    else
+        false
+    end
+    doinline && pushfirst!(q.args, Expr(:meta, :inline))
     # @show q
     q
 end

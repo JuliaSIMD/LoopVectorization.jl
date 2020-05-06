@@ -1,8 +1,6 @@
 
 # Rename file to offsetarrays?
 
-import OffsetArrays
-
 # If ndim(::OffsetArray) == 1, we can convert to a regular strided pointer and offset.
 @inline VectorizationBase.stridedpointer(a::OffsetArrays.OffsetArray{<:Any,1}) = gesp(stridedpointer(parent(a)), (-@inbounds(a.offsets[1]),))
 
