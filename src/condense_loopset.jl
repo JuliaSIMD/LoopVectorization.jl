@@ -297,7 +297,7 @@ It returns true for `AbstractArray{T}`s when `check_type(T) == true` and the arr
 To provide support for a custom array type, ensure that `check_args` returns true, either through overloading it or subtyping `DenseArray`.
 Additionally, define `pointer` and `stride` methods.
 """
-@inline check_args(A::SubArray) = check_args(parent(A))
+@inline check_args(A::SubArray{T,N,P,I}) where {T,N,P,I<:Tuple{Vararg{Union{Int,Colon,AbstractRange}}}} = check_args(parent(A))
 @inline check_args(A::OffsetArray) = check_args(parent(A))
 @inline check_args(A::Adjoint) = check_args(parent(A))
 @inline check_args(A::Transpose) = check_args(parent(A))
