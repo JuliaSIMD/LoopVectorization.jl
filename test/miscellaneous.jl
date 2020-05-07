@@ -10,12 +10,13 @@ using Test
               s += x[m] * A[m,n] * y[n]
               end);
     lsdot3 = LoopVectorization.LoopSet(dot3q);
-    if LoopVectorization.VectorizationBase.REGISTER_COUNT == 32
-        # @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :n, :m, :m, Unum, Tnum)#&-2
-        @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :m, :n, :m, Unum, Tnum)#&-2
-    else
-        @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :m, :n, :m, Unum, Tnum)#&-2
-    end
+    @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :m, :n, :m, Unum, Tnum)#&-2
+    # if LoopVectorization.VectorizationBase.REGISTER_COUNT == 32
+    #     # @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :n, :m, :m, Unum, Tnum)#&-2
+    #     @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :m, :n, :m, Unum, Tnum)#&-2
+    # else
+    #     @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :m, :n, :m, Unum, Tnum)#&-2
+    # end
 
     @static if VERSION < v"1.4"
         dot3(x, A, y) = dot(x, A * y)
@@ -72,7 +73,7 @@ using Test
                 B[j,i] = A[j,i] - x[j]
                 end)
     lssubcol = LoopVectorization.LoopSet(subcolq);
-    @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, :i, :j, U, T)
+    @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, :i, :j, Unum, Tnum)
     # if LoopVectorization.VectorizationBase.REGISTER_COUNT == 32
     #     @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, :i, :j, 4, 6)
     # else
@@ -103,7 +104,7 @@ using Test
                 x[j] += A[j,i] - 0.25
                 end)
     lscolsum = LoopVectorization.LoopSet(colsumq);
-    @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, :i, :j, U, T)
+    @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, :i, :j, Unum, Tnum)
     # if LoopVectorization.VectorizationBase.REGISTER_COUNT == 32
     #     @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, :i, :j, 4, 6)
     # else
