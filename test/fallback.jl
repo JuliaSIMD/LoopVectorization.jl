@@ -20,16 +20,18 @@
     x = fill(sqrt(63.0), 128);
     x[1] = 1e9
 
-    @test LoopVectorization.check_args(x)
-    @test LoopVectorization.check_args(x, x)
-    @test LoopVectorization.check_args(x, x, x)
-    @test !LoopVectorization.check_args(FallbackArrayWrapper(x))
-    @test !LoopVectorization.check_args(FallbackArrayWrapper(x), x, x)
-    @test !LoopVectorization.check_args(x, FallbackArrayWrapper(x))
-    @test !LoopVectorization.check_args(x, FallbackArrayWrapper(x), x)
-    @test !LoopVectorization.check_args(x, x, FallbackArrayWrapper(x))
-    @test !LoopVectorization.check_args(x, x, FallbackArrayWrapper(x), FallbackArrayWrapper(x))
-    @test !LoopVectorization.check_args(['a'])
+    @test @inferred LoopVectorization.check_args(x)
+    @test @inferred LoopVectorization.check_args(x, x)
+    @test @inferred LoopVectorization.check_args(x, x, x)
+    @test @inferred !LoopVectorization.check_args(view(x, [1,3,4,18]))
+    @test @inferred !LoopVectorization.check_args(FallbackArrayWrapper(x))
+    @test @inferred !LoopVectorization.check_args(FallbackArrayWrapper(x), x, x)
+    @test @inferred !LoopVectorization.check_args(x, FallbackArrayWrapper(x))
+    @test @inferred !LoopVectorization.check_args(x, FallbackArrayWrapper(x), x)
+    @test @inferred !LoopVectorization.check_args(x, x, FallbackArrayWrapper(x))
+    @test @inferred !LoopVectorization.check_args(x, x, FallbackArrayWrapper(x), FallbackArrayWrapper(x))
+    @test @inferred !LoopVectorization.check_args(['a'])
+    @test @inferred !LoopVectorization.check_args(Diagonal(x))
 
     @test msdavx(FallbackArrayWrapper(x)) == 1e18
     @test msd(x) == msdavx(FallbackArrayWrapper(x))

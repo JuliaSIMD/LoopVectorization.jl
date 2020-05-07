@@ -332,7 +332,11 @@ Similar approaches can be taken to make kernels working with a variety of numeri
 
 ## Packages using LoopVectorization
 
-* [Gaius](https://github.com/MasonProtter/Gaius.jl)
+* [Gaius.jl](https://github.com/MasonProtter/Gaius.jl)
+* [MaBLAS.jl](https://github.com/YingboMa/MaBLAS.jl)
+* [PaddedMatrices.jl](https://github.com/chriselrod/PaddedMatrices.jl)
+* [RecursiveFactorization.jl](https://github.com/YingboMa/RecursiveFactorization.jl)
+* [Tullio.jl](https://github.com/mcabbott/Tullio.jl)
 
 If you're using LoopVectorization, please feel free to file a PR adding yours to the list!
 

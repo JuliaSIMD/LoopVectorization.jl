@@ -3,7 +3,7 @@ using Test
 
 @testset "GEMV" begin
     # Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 6)
-    Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (6, 4)
+    Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 6)
     gemvq = :(for i ∈ eachindex(y)
               yᵢ = 0.0
               for j ∈ eachindex(x)
@@ -12,11 +12,11 @@ using Test
               y[i] = yᵢ
               end)
     lsgemv = LoopVectorization.LoopSet(gemvq);
-    if LoopVectorization.VectorizationBase.REGISTER_COUNT == 16
+    # if LoopVectorization.VectorizationBase.REGISTER_COUNT == 16
         @test LoopVectorization.choose_order(lsgemv) == (Symbol[:i, :j], :j, :i, :i, Unum, Tnum)
-    else
-        @test LoopVectorization.choose_order(lsgemv) == (Symbol[:i, :j], :i, :j, :i, Unum, Tnum)
-    end
+    # else
+        # @test LoopVectorization.choose_order(lsgemv) == (Symbol[:i, :j], :i, :j, :i, Unum, Tnum)
+    # end
     
     function mygemv!(y, A, x)
         @inbounds for i ∈ eachindex(y)
@@ -132,11 +132,11 @@ using Test
               G[d1,κ] = z
               end)
     lsgemv = LoopVectorization.LoopSet(gemvq);
-    if LoopVectorization.VectorizationBase.REGISTER_COUNT == 16
+    # if LoopVectorization.VectorizationBase.REGISTER_COUNT == 16
         @test LoopVectorization.choose_order(lsgemv) == ([:d1,:d2], :d2, :d1, :d2, Unum, Tnum)
-    else
-        @test LoopVectorization.choose_order(lsgemv) == ([:d1,:d2], :d1, :d2, :d2, Unum, Tnum)
-    end
+    # else
+        # @test LoopVectorization.choose_order(lsgemv) == ([:d1,:d2], :d1, :d2, :d2, Unum, Tnum)
+    # end
     function AtmulvB_avx3!(G, B,κ)
         d = size(G,1)
         @_avx for d1=1:d
@@ -153,11 +153,11 @@ using Test
            end
            end)
     lsp = LoopVectorization.LoopSet(pq);
-    if LoopVectorization.VectorizationBase.REGISTER_COUNT == 16
+    # if LoopVectorization.VectorizationBase.REGISTER_COUNT == 16
         @test LoopVectorization.choose_order(lsp) == ([:d1, :d2], :d2, :d1, :d2, Unum, Tnum)
-    else
-        @test LoopVectorization.choose_order(lsp) == ([:d1, :d2], :d1, :d2, :d2, Unum, Tnum)
-    end
+    # else
+        # @test LoopVectorization.choose_order(lsp) == ([:d1, :d2], :d1, :d2, :d2, Unum, Tnum)
+    # end
     # lsp.preamble_symsym
 
     function hhavx!(A::AbstractVector{T}, B, C, D) where {T}

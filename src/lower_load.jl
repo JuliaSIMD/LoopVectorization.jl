@@ -18,10 +18,10 @@ function lower_load_scalar!(
     else
         opu₂ = !isnothing(suffix) && u₂loopsym ∈ loopdeps
         condop = last(parents(op))
-        condvar, condu₁ = condvarname_and_unroll(cond, u₁loopsym, u₂loopsym, suffix, opu₂)
+        condvar, condu₁ = condvarname_and_unroll(condop, u₁loopsym, u₂loopsym, suffix, opu₂)
         for u ∈ umin:U-1
             condsym = varassignname(condvar, u, condu₁)
-            varname = varassignname(mvar, u, isunrolled)
+            varname = varassignname(mvar, u, u₁loopsym ∈ loopdependencies(op))
             td = UnrollArgs(ua, u)
             load = Expr(:call, lv(:vload), ptr, mem_offset_u(op, td))
             cload = Expr(:if, condsym, load, Expr(:call, :zero, Expr(:call, :eltype, ptr)))

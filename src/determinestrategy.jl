@@ -303,59 +303,6 @@ function solve_unroll(X, R, u₁L, u₂L)
     u₁, u₂, ucost    
 end
 
-function solve_unrollold(X, R, u₁L, u₂L)
-    # @inbounds any(iszero, (R[1],R[2],R[3])) && return -1,-1,Inf #solve_smalltilesize(X, R, u₁max, u₂max)
-    # (iszero(X[2]) || iszero(X[3])) && return -1,-1,Inf #solve_smalltilesize(X, R, u₁max, u₂max)
-    iszero(first(R)) && return -1,-1,Inf #solve_smalltilesize(X, R, u₁max, u₂max)
-    # @inbounds any(iszero, (R[1],R[2],R[3])) && return -1,-1,Inf #solve_smalltilesize(X, R, u₁max, u₂max)
-    # We use a lagrange multiplier to find floating point values for u₁ and u₂
-    # first solving for u₁ via quadratic formula
-    # X is vector of costs, and R is of register pressures
-    RR = REGISTER_COUNT - R[3] - R[4] # RR ≡ RemainingRegisters
-    R[1] + R[2] > 0.5RR && return 1, 1, unroll_cost(X, 1, 1, u₁L, u₂L)
-    a = (R[1])^2*X[2] - (R[2])^2*R[1]*X[3]/RR
-    b = 2*R[1]*R[2]*X[3]
-    c = -RR*R[1]*X[3]
-    discriminant = b^2 - 4a*c
-    discriminant < 0 && return -1,-1,Inf
-    u₁float = max(1.0, (sqrt(discriminant) - b) / (2a)) # must be at least 1
-    u₂float = (RR - u₁float*R[2])/(u₁float*R[1])
-    if !(isfinite(u₂float) && isfinite(u₁float))
-        return 4, 4, unroll_cost(X, 4, 4, u₁L, u₂L)
-        # return itertilesize(X, u₁L, u₂L)
-    end
-    u₁low = floor(Int, u₁float)
-    u₂low = max(1, floor(Int, u₂float)) # must be at least 1
-    u₁high = u₁low + 1 #ceil(Int, u₁float)
-    u₂high = u₂low + 1 #ceil(Int, u₂float)
-
-    # RR = REGISTER_COUNT - R[3] - R[4]
-    u₁, u₂ = u₁low, u₂low
-    ucost = unroll_cost(X, u₁low, u₂low, u₁L, u₂L)
-    # @show u₁low*u₂high*R[1] + u₁low*R[2]
-    if RR ≥ u₁low*u₂high*R[1] + u₁low*R[2]
-        ucost_temp = unroll_cost(X, u₁low, u₂high, u₁L, u₂L)
-        # @show ucost_temp, ucost
-        if ucost_temp < ucost
-            ucost = ucost_temp
-            u₁, u₂ = u₁low, u₂high
-        end
-    end
-    # The RR + 1 is a hack to get it to favor u₁high in more scenarios
-    u₂l = u₂low
-    while RR < u₁high*u₂l*R[1] + u₁high*R[2] && u₂l > 1
-        u₂l -= 1
-    end
-    ucost_temp = unroll_cost(X, u₁high, u₂l, u₁L, u₂L)
-    if ucost_temp < ucost
-        ucost = ucost_temp
-        u₁, u₂ = u₁high, u₂l
-    end
-    if RR > u₁high*u₂high*R[1] + u₁high*R[2]
-        throw("Something went wrong when solving for u₂float and u₁float.")
-    end
-    u₁, u₂, ucost
-end
 function solve_unroll_constU(X, R, U)
     floor(Int, (REGISTER_COUNT - R[3] - R[4] - U*R[2]) / (U * R[1]))
 end
@@ -432,20 +379,22 @@ function solve_unroll(
     maxu₂base = maxu₁base = VectorizationBase.REGISTER_COUNT == 32 ? 6 : 4#8
     maxu₂ = maxu₂base#8
     maxu₁ = maxu₁base#8
+    u₁L = length(u₁loop)
+    u₂L = length(u₂loop)
     if isstaticloop(u₂loop)
-        u₂L = length(u₂loop)
         if u₂loopsym !== vectorized && u₂L ≤ 4
             u₁ = max(1, solve_unroll_constT(cost_vec, reg_pressure, u₂L))
-            return u₁, u₂L, unroll_cost(cost_vec, u₁, u₂L, length(u₁loop), u₂L)
+            u₁ = isstaticloop(u₁loop) ? min(u₁, u₁L) : u₁
+            return u₁, u₂L, unroll_cost(cost_vec, u₁, u₂L, u₁L, u₂L)
         end
         u₂L = u₂loopsym === vectorized ? cld(u₂L,W) : u₂L
         maxu₂ = min(4maxu₂, u₂L)
     end
     if isstaticloop(u₁loop)
-        u₁L = length(u₁loop)
         if u₁loopsym !== vectorized && u₁L ≤ 4
             u₂ = max(1, solve_unroll_constU(cost_vec, reg_pressure, u₁L))
-            return u₁L, u₂, unroll_cost(cost_vec, u₁L, u₂, u₁L, length(u₂loop))
+            u₂ = isstaticloop(u₂loop) ? min(u₂, u₂L) : u₂
+            return u₁L, u₂, unroll_cost(cost_vec, u₁L, u₂, u₁L, u₂L)
         end
         u₁L = u₁loopsym === vectorized ? cld(u₁L,W) : u₁L
         maxu₁ = min(4maxu₁, u₁L)
@@ -596,7 +545,7 @@ function load_elimination_cost_factor(ls::LoopSet, op::Operation, unrollsyms::Un
     end
 end
 function add_constant_offset_load_elmination_cost!(
-    X, R, ls::LoopSet, op::Operation, iters, unrollsyms::UnrollSymbols, u₁reduces::Bool, u₂reduces::Bool, Wshift::Int, size_T::Int, opisininnerloop::Bool
+    X, R, choose_to_inline, ls::LoopSet, op::Operation, iters, unrollsyms::UnrollSymbols, u₁reduces::Bool, u₂reduces::Bool, Wshift::Int, size_T::Int, opisininnerloop::Bool
 )
     @unpack u₁loopsym, u₂loopsym, vectorized = unrollsyms
     offset, uid = maxnegativeoffset(ls, op, unrollsyms)
@@ -631,6 +580,7 @@ function add_constant_offset_load_elmination_cost!(
         R[r] += rp * uindependent_increase
         X[i] += rt * udependent_reduction
         R[i] += rp * udependent_reduction
+        choose_to_inline[] = true
         return true
     else
         return false
@@ -672,6 +622,7 @@ function evaluate_cost_tile(
     # @inbounds reg_pressure[3] = 1
     iter::Int = 1
     u₁reached = u₂reached = false
+    choose_to_inline = Ref(false)
     for n ∈ 1:N
         itersym = order[n]
         if itersym == u₁loopsym
@@ -694,7 +645,7 @@ function evaluate_cost_tile(
             # # @show nested_loop_syms
             # # @show reduceddependencies(op)
             rd = reduceddependencies(op)
-            hasintersection(rd, @view(nested_loop_syms[1:end-length(rd)])) && return 0,0,Inf
+            hasintersection(rd, @view(nested_loop_syms[1:end-length(rd)])) && return 0,0,Inf,false
             included_vars[id] = true
             depends_on_u₁ = u₁loopsym ∈ loopdependencies(op)
             depends_on_u₂ = u₂loopsym ∈ loopdependencies(op)
@@ -712,12 +663,13 @@ function evaluate_cost_tile(
         
         u₁reduces, u₂reduces = reduced_by_unrolling[1,id], reduced_by_unrolling[2,id]
         # @show op, u₁reduces, u₂reduces
-        if !(isload(op) && add_constant_offset_load_elmination_cost!(cost_vec, reg_pressure, ls, op, iters[id], unrollsyms, u₁reduces, u₂reduces, Wshift, size_T, opisininnerloop))
+        if !(isload(op) && add_constant_offset_load_elmination_cost!(cost_vec, reg_pressure, choose_to_inline, ls, op, iters[id], unrollsyms, u₁reduces, u₂reduces, Wshift, size_T, opisininnerloop))
             rt, lat, rp = cost(ls, op, vectorized, Wshift, size_T)
         # @show op rt, lat, rp
             if isload(op)
                 factor1, factor2 = load_elimination_cost_factor(ls, op, unrollsyms)
                 rt *= factor1; rp *= factor2;
+                choose_to_inline[] |= factor1 < 1
             end
             # @show isunrolled₁, isunrolled₂, op rt, lat, rp
             rp = opisininnerloop ? rp : zero(rp) # we only care about register pressure within the inner most loop
@@ -743,9 +695,18 @@ function evaluate_cost_tile(
     # @show solve_unroll(ls, u₁loopsym, u₂loopsym, cost_vec, reg_pressure)
     u₁, u₂, ucost = solve_unroll(ls, u₁loopsym, u₂loopsym, cost_vec, reg_pressure, W, vectorized)
     outer_reduct_penalty = length(ls.outer_reductions) * (u₁ + isodd(u₁))
-    u₁, u₂, costpenalty * ucost + stride_penalty(ls, order) + outer_reduct_penalty
+    favor_bigger_u₂ = u₁ - u₂
+    u₁, u₂, costpenalty * ucost + stride_penalty(ls, order) + outer_reduct_penalty + favor_bigger_u₂, choose_to_inline[]
 end
 
+function should_inline(ls::LoopSet, u₁::Int, u₂::Int)
+    # Extremely simplistic heuristic
+    prod(length, ls.loops) ≤ 1024^2 && return true
+    for op ∈ operations(ls)
+
+    end
+    false
+end
 
 struct LoopOrders
     syms::Vector{Symbol}
@@ -870,18 +831,18 @@ function reject_candidate(ls::LoopSet, u₁loopsym::Symbol, u₂loopsym::Symbol)
     end
     false
 end
-
+inlinedecision(inline::Int, shouldinline::Bool) = iszero(inline) ? shouldinline : isone(inline)
 function choose_tile(ls::LoopSet)
     lo = LoopOrders(ls)
     best_order = copyto!(ls.loop_order.bestorder, lo.syms)
     bestu₁ = bestu₂ = best_vec = first(best_order) # filler
-    u₁, u₂, lowest_cost = 0, 0, Inf
+    u₁ = u₂ = 0; lowest_cost = Inf; shouldinline = false
     for newu₂ ∈ lo.syms, newu₁ ∈ lo.syms#@view(new_order[nt+1:end])
         ((newu₁ == newu₂) || reject_candidate(ls, newu₁, newu₂)) && continue
         new_order, state = iterate(lo) # right now, new_order === best_order
         while true
             for new_vec ∈ new_order # view to skip first
-                u₁temp, u₂temp, cost_temp = evaluate_cost_tile(ls, new_order, UnrollSymbols(newu₁, newu₂, new_vec))
+                u₁temp, u₂temp, cost_temp, shouldinline_temp = evaluate_cost_tile(ls, new_order, UnrollSymbols(newu₁, newu₂, new_vec))
                 # if cost_temp < lowest_cost # leads to 4 vmovapds
                 if cost_temp ≤ lowest_cost # lead to 2 vmovapds
                     lowest_cost = cost_temp
@@ -889,6 +850,7 @@ function choose_tile(ls::LoopSet)
                     best_vec = new_vec
                     bestu₂ = newu₂
                     bestu₁ = newu₁
+                    shouldinline = shouldinline_temp
                     copyto!(best_order, new_order)
                     save_tilecost!(ls)
                 end
@@ -898,24 +860,24 @@ function choose_tile(ls::LoopSet)
             new_order, state = iter
         end
     end
-    best_order, bestu₁, bestu₂, best_vec, u₁, u₂, lowest_cost
+    best_order, bestu₁, bestu₂, best_vec, u₁, u₂, lowest_cost, shouldinline
 end
 # Last in order is the inner most loop
 function choose_order_cost(ls::LoopSet)
     resize!(ls.loop_order, length(ls.loopsymbols))
     if num_loops(ls) > 1
-        torder, tunroll, ttile, tvec, tU, tT, tc = choose_tile(ls)
+        torder, tunroll, ttile, tvec, tU, tT, tc, shouldinline = choose_tile(ls)
     else
         tc = Inf
     end
     uorder, uvec, uc = choose_unroll_order(ls, tc)
     if num_loops(ls) > 1 && tc ≤ uc
         copyto!(ls.loop_order.bestorder, torder)
-        return torder, tunroll, ttile, tvec, tU, tT, tc
+        return torder, tunroll, ttile, tvec, tU, tT, tc, shouldinline
         # return torder, tvec, 4, 4#5, 5
     else
         copyto!(ls.loop_order.bestorder, uorder)
-        return uorder, first(uorder), Symbol("##undefined##"), uvec, determine_unroll_factor(ls, uorder, first(uorder), uvec), -1, uc
+        return uorder, first(uorder), Symbol("##undefined##"), uvec, determine_unroll_factor(ls, uorder, first(uorder), uvec), -1, uc, true
     end
 end
 function choose_order(ls::LoopSet)

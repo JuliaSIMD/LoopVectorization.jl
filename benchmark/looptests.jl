@@ -267,9 +267,10 @@ function jlogdettriangle(T::Union{LowerTriangular,UpperTriangular})
     ld
 end
 function jlogdettriangleavx(T::Union{LowerTriangular,UpperTriangular})
-    ld = 0.0
+    A = parent(T) # No longer supported
+    ld = zero(eltype(A))
     @avx for n ∈ 1:size(T,1)
-        ld += log(T[n,n])
+        ld += log(A[n,n])
     end
     ld
 end

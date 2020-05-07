@@ -192,13 +192,13 @@ works on just the expressions. This requires that it makes a number of default a
 """
 macro _avx(q)
     q = macroexpand(__module__, q)
-    esc(lower(LoopSet(q, __module__)))
+    esc(lower_and_split_loops(LoopSet(q, __module__), -1))
 end
 macro _avx(arg, q)
     @assert q.head === :for
     q = macroexpand(__module__, q)
     inline, u₁, u₂ = check_macro_kwarg(arg)
-    esc(lower(LoopSet(q, __module__), u₁, u₂))
+    esc(lower(LoopSet(q, __module__), u₁ % Int, u₂ % Int, -1))
 end
 
 macro avx_debug(q)
