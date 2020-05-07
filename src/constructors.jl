@@ -101,14 +101,16 @@ using keyword arguments:
 
 where `body` is the code of the block (e.g., `for ... end`).
 
-`inline` is a Boolean. When `true` (the default), `body` will be directly inlined
+`inline` is a Boolean. When `true`, `body` will be directly inlined
 into the function (via a forced-inlining call to `_avx_!`).
-When `false`, it will call `__avx__!` instead, letting Julia's own inlining engine
-determine whether the call to `__avx__!` should be inlined. (Typically, it won't.)
-In priniciple, first calling `__avx__!` (which itself calls `_avx_!`) can sometimes
-allow better code generation.
+When `false`, it wont force inlining of the call to `_avx_!` instead, letting Julia's own inlining engine
+determine whether the call to `_avx_!` should be inlined. (Typically, it won't.)
+Sometimes not inlining can lead to substantially worse code generation, and >40% regressions, even in very
+large problems (2-d convolutions are a case where this has been observed).
 One can find some circumstances where `inline=true` is faster, and other circumstances
-where `inline=false` is faster, so the best setting may require experimentation.
+where `inline=false` is faster, so the best setting may require experimentation. By default, the macro
+tries to guess. Currently the algorithm is simple: roughly, if there are more than two dynamically sized loops
+or and no convolutions, it will probably not force inlining. Otherwise, it probably will.
 
 `unroll` is an integer that specifies the loop unrolling factor, or a
 tuple `(u₁, u₂) = (4, 2)` signaling that the generated code should unroll more than
@@ -117,6 +119,13 @@ but it applies to the loop ordering and unrolling that will be chosen by LoopVec
 *not* the order in `body`.
 `uᵢ=0` (the default) indicates that LoopVectorization should pick its own value,
 and `uᵢ=-1` disables unrolling for the correspond loop.
+
+The `@avx` macro also checks the array arguments using `LoopVectorization.check_args` to try and determine
+if they are compatible with the macro. If `check_args` returns false, a fall back loop annotated with `@inbounds`
+and `@fastmath` is generated. Note that `SIMDPirates` provides functions such as `evadd` and `evmul` that will
+ignore `@fastmath`, preserving IEEE semantics both within `@avx` and `@fastmath`.
+`check_args` currently returns false for some wrapper types like `LinearAlgebra.UpperTriangular`, requiring you to
+use their `parent`. Triangular loops aren't yet supported.
 """
 macro avx(q)
     q = macroexpand(__module__, q)

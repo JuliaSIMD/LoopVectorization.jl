@@ -72,12 +72,13 @@ using Test
                 B[j,i] = A[j,i] - x[j]
                 end)
     lssubcol = LoopVectorization.LoopSet(subcolq);
-    if LoopVectorization.VectorizationBase.REGISTER_COUNT == 32
-        @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, :i, :j, 4, 6)
-    else
-        # @test LoopVectorization.choose_order(lssubcol) == ([:j, :i], :j, :i, :j, 3, 4)#&-2
-        @test LoopVectorization.choose_order(lssubcol) == ([:j, :i], :i, :j, :j, 4, 4)#&-2
-    end
+    @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, :i, :j, U, T)
+    # if LoopVectorization.VectorizationBase.REGISTER_COUNT == 32
+    #     @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, :i, :j, 4, 6)
+    # else
+    #     # @test LoopVectorization.choose_order(lssubcol) == ([:j, :i], :j, :i, :j, 3, 4)#&-2
+    #     @test LoopVectorization.choose_order(lssubcol) == ([:j, :i], :i, :j, :j, 4, 4)#&-2
+    # end
     ## @avx is SLOWER!!!!
     ## need to fix!
     function mysubcol!(B, A, x)
@@ -102,12 +103,13 @@ using Test
                 x[j] += A[j,i] - 0.25
                 end)
     lscolsum = LoopVectorization.LoopSet(colsumq);
-    if LoopVectorization.VectorizationBase.REGISTER_COUNT == 32
-        @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, :i, :j, 4, 6)
-    else
-        # @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, :i, :j, 3, 4)
-        @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :i, :j, :j, 4, 4)
-    end
+    @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, :i, :j, U, T)
+    # if LoopVectorization.VectorizationBase.REGISTER_COUNT == 32
+    #     @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, :i, :j, 4, 6)
+    # else
+    #     # @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, :i, :j, 3, 4)
+    #     @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :i, :j, :j, 4, 4)
+    # end
     # my colsum is wrong (by 0.25), but slightly more interesting
     function mycolsum!(x, A)
         @. x = 0

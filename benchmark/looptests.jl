@@ -259,17 +259,17 @@ function randomaccessavx(P, basis, coeffs::Vector{T}) where {T}
     end
     return p
 end
-function jlogdettriangle(T::Union{LowerTriangular,UpperTriangular})
+function jlogdettriangle(B::Union{LowerTriangular,UpperTriangular})
     ld = 0.0
-    @inbounds for n ∈ 1:size(T,1)
-        ld += log(T[n,n])
+    @inbounds @fastmath for n ∈ 1:size(B,1)
+        ld += log(B[n,n])
     end
     ld
 end
-function jlogdettriangleavx(T::Union{LowerTriangular,UpperTriangular})
-    A = parent(T) # No longer supported
+function jlogdettriangleavx(B::Union{LowerTriangular,UpperTriangular})
+    A = parent(B) # No longer supported
     ld = zero(eltype(A))
-    @avx for n ∈ 1:size(T,1)
+    @avx for n ∈ axes(A,1)
         ld += log(A[n,n])
     end
     ld

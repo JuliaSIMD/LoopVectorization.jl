@@ -202,46 +202,6 @@ end
 @inline array_wrapper(A::Adjoint) = Adjoint
 @inline array_wrapper(A::SubArray) = A.indices
 
-
-# If you change the number of arguments here, make commensurate changes
-# to the `insert!` locations in `setup_call_noinline`.
-@generated function __avx__!(
-    ::Val{UNROLL}, ::Type{OPS}, ::Type{ARF}, ::Type{AM}, ::Type{LPSYM}, lb::LB,
-    ::Val{AR}, ::Val{D}, ::Val{IND}, subsetvals, arraydescript, vargs::Vararg{<:Any,N}
-) where {UNROLL, OPS, ARF, AM, LPSYM, LB, N, AR, D, IND}
-    1 + 1
-    num_vptrs = length(ARF.parameters)::Int
-    vptrs = [gensym(:vptr) for _ ∈ 1:num_vptrs]
-    call = Expr(:call, lv(:_avx_!), Val{UNROLL}(), OPS, ARF, AM, LPSYM, :lb)
-    for n ∈ 1:num_vptrs
-        push!(call.args, vptrs[n])
-    end
-    q = Expr(:block)
-    j = 0
-    assigned_names = Vector{Symbol}(undef, length(AR))
-    num_arrays = 0
-    for i ∈ eachindex(AR)
-        ari = (AR[i])::Int
-        ind = (IND[i])::Union{Nothing,Int}
-        LHS = ind === nothing ? gensym() : vptrs[ind]
-        assigned_names[i] = LHS
-        d = (D[i])::Union{Nothing,Int}
-        if d === nothing
-            num_arrays += 1
-            RHS = Expr(:call, lv(:stridedpointer), Expr(:ref, :vargs, ari), Expr(:ref, :arraydescript, ari))
-        else #subsetview
-            j += 1
-            RHS = Expr(:call, :subsetview, assigned_names[ari], Expr(:call, Expr(:curly, :Val, d)), Expr(:ref, :subsetvals, j))
-        end
-        push!(q.args, Expr(:(=), LHS, RHS))
-    end
-    for n ∈ num_arrays+1:N
-        push!(call.args, Expr(:ref, :vargs, n))
-    end
-    push!(q.args, call)
-    Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), q)
-end
-
 # Try to condense in type stable manner
 function generate_call(ls::LoopSet, inline_unroll::NTuple{3,Int8}, debug::Bool = false)
     operation_descriptions = Expr(:curly, :Tuple)
@@ -330,6 +290,9 @@ function check_args_call(ls::LoopSet)
     q
 end
 
+make_fast(q) = Expr(:macrocall, Symbol("@fastmath"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), q)
+make_crashy(q) = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), q)
+make_fast_and_crashy(q) = q |> make_fast |> make_crashy
 
 function setup_call_inline(ls::LoopSet, inline::Int8 = zero(Int8), U::Int8 = zero(Int8), T::Int8 = zero(Int8))
     call = generate_call(ls, (inline,U,T))
@@ -369,5 +332,5 @@ function setup_call(ls::LoopSet, q = nothing, inline::Int8 = zero(Int8), u₁::I
     # inlining the generated function into the loop preamble.
     call = setup_call_inline(ls, inline, u₁, u₂)
     isnothing(q) && return Expr(:block, ls.prepreamble, call)
-    Expr(:block, ls.prepreamble, Expr(:if, check_args_call(ls), call, q))
+    Expr(:block, ls.prepreamble, Expr(:if, check_args_call(ls), call, make_fast_and_crashy(q)))
 end

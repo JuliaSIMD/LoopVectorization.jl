@@ -3,7 +3,7 @@
 Here I'll discuss a variety of Matrix-vector operations, naturally starting with matrix-vector multiplication.
 
 ```julia
-@inline function jgemvavx!(𝐲, 𝐀, 𝐱)
+function jgemvavx!(𝐲, 𝐀, 𝐱)
     @avx for i ∈ eachindex(𝐲)
         𝐲ᵢ = zero(eltype(𝐲))
         for j ∈ eachindex(𝐱)

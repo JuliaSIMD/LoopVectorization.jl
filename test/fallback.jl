@@ -12,7 +12,7 @@
     function msdavx(x)
         s = zero(eltype(x))
         @avx for i in eachindex(x)
-            s += x[i] * x[i]
+            s = muladd(x[i], x[i], s) # Avoids fastmath in fallback loop.
         end
         s
     end

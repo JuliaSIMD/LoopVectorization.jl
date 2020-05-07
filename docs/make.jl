@@ -10,6 +10,7 @@ makedocs(;
             "examples/matrix_multiplication.md",
             "examples/matrix_vector_ops.md",
             "examples/dot_product.md",
+            "examples/special_functions.md",
             "examples/sum_of_squared_error.md",
             "examples/filtering.md"
         ],
