@@ -91,19 +91,19 @@ function vector_cost(ic::InstructionCost, Wshift, sizeof_T)
     srt, sl, srp
 end
 
-const OPAQUE_INSTRUCTION = InstructionCost(50, 50.0, -1.0, VectorizationBase.REGISTER_COUNT)
+const OPAQUE_INSTRUCTION = InstructionCost(-1.0, 50, 50.0, VectorizationBase.REGISTER_COUNT)
 
 instruction_cost(instruction::Instruction) = instruction.mod === :LoopVectorization ? COST[instruction.instr] : OPAQUE_INSTRUCTION
 instruction_cost(instruction::Symbol) = get(COST, instruction, OPAQUE_INSTRUCTION)
 scalar_cost(instr::Instruction) = scalar_cost(instruction_cost(instr))
 vector_cost(instr::Instruction, Wshift, sizeof_T) = vector_cost(instruction_cost(instr), Wshift, sizeof_T)
-function cost(instruction::InstructionCost, Wshift, sizeof_T)
-    Wshift == 0 ? scalar_cost(instruction) : vector_cost(instruction, Wshift, sizeof_T)
-end
+# function cost(instruction::InstructionCost, Wshift, sizeof_T)
+#     Wshift == 0 ? scalar_cost(instruction) : vector_cost(instruction, Wshift, sizeof_T)
+# end
 
-function cost(instruction::Instruction, Wshift, sizeof_T)
-    cost( instruction_cost(instruction), Wshift, sizeof_T )
-end
+# function cost(instruction::Instruction, Wshift, sizeof_T)
+#     cost( instruction_cost(instruction), Wshift, sizeof_T )
+# end
 
 
 # Just a semi-reasonable assumption; should not be that sensitive to anything other than loads
@@ -323,11 +323,11 @@ function reduction_scalar_combine(x::Float64)
     x == ADDITIVE_IN_REDUCTIONS ? :reduced_add : x == MULTIPLICATIVE_IN_REDUCTIONS ? :reduced_prod : x == MAX ? :reduced_max : x == MIN ? :reduced_min : throw("Reduction not found.")
 end
 reduction_scalar_combine(x) = reduction_scalar_combine(reduction_instruction_class(x))
-function reduction_combine_to(x::Float64)
-    # x == 1.0 ? :reduce_to_add : x == 2.0 ? :reduce_to_prod : x == 3.0 ? :reduce_to_any : x == 4.0 ? :reduce_to_all : x == 5.0 ? :reduce_to_max : x == 6.0 ? :reduce_to_min : throw("Reduction not found.")
-    x == ADDITIVE_IN_REDUCTIONS ? :reduce_to_add : x == MULTIPLICATIVE_IN_REDUCTIONS ? :reduce_to_prod : x == MAX ? :reduce_to_max : x == MIN ? :reduce_to_min : throw("Reduction not found.")
-end
-reduction_combine_to(x) = reduction_combine_to(reduction_instruction_class(x))
+# function reduction_combine_to(x::Float64)
+#     # x == 1.0 ? :reduce_to_add : x == 2.0 ? :reduce_to_prod : x == 3.0 ? :reduce_to_any : x == 4.0 ? :reduce_to_all : x == 5.0 ? :reduce_to_max : x == 6.0 ? :reduce_to_min : throw("Reduction not found.")
+#     x == ADDITIVE_IN_REDUCTIONS ? :reduce_to_add : x == MULTIPLICATIVE_IN_REDUCTIONS ? :reduce_to_prod : x == MAX ? :reduce_to_max : x == MIN ? :reduce_to_min : throw("Reduction not found.")
+# end
+# reduction_combine_to(x) = reduction_combine_to(reduction_instruction_class(x))
 function reduction_zero(x::Float64)
     # x == 1.0 ? :zero : x == 2.0 ? :one : x == 3.0 ? :false : x == 4.0 ? :true : x == 5.0 ? :typemin : x == 6.0 ? :typemax : throw("Reduction not found.")
     x == ADDITIVE_IN_REDUCTIONS ? :zero : x == MULTIPLICATIVE_IN_REDUCTIONS ? :one : x == MAX ? :typemin : x == MIN ? :typemax : throw("Reduction not found.")

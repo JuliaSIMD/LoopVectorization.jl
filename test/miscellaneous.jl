@@ -835,6 +835,7 @@ using Test
     end
 
     @testset "Mixed CartesianIndex/Int indexing" begin
+        @show T, @__LINE__
         # A demo similar to the exponential filtering demo from https://julialang.org/blog/2016/02/iteration/,
         # but with no loop-carried dependency.
         function smoothdim!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)

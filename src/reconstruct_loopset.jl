@@ -75,7 +75,8 @@ function ArrayReferenceMeta(
                 pushfirst!(offset_vec, offset)
                 pushfirst!(loopedindex, true)
             end
-        elseif index_types == ComputedIndex
+        else#if index_types == ComputedIndex
+            @assert index_types == ComputedIndex
             opsym = opsymbols[ind]
             if expandedv[ind]
                 nops = nopsv[ind]
@@ -89,11 +90,11 @@ function ArrayReferenceMeta(
                 pushfirst!(offset_vec, offset)
                 pushfirst!(loopedindex, false)
             end
-        else
-            @assert index_types == SymbolicIndex
-            pushfirst!(index_vec, arraysymbolinds[ind])
-            pushfirst!(offset_vec, offset)
-            pushfirst!(loopedindex, false)
+        # else
+            # @assert index_types == SymbolicIndex
+            # pushfirst!(index_vec, arraysymbolinds[ind])
+            # pushfirst!(offset_vec, offset)
+            # pushfirst!(loopedindex, false)
         end
         index_types >>>= 8
         indices >>>= 8

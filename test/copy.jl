@@ -53,8 +53,10 @@ using LoopVectorization, OffsetArrays, Test
         end
     end
     function make2point3avx!(x)
+        a = 1.742416161578685
+        b = 1.5
         @avx for i ∈ eachindex(x)
-            x[i] = 2.3
+            x[i] = a ^ b
         end
     end
     function make2point3_avx!(x)

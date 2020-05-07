@@ -183,6 +183,27 @@ using Test
         4acc/length(x)
     end
 
+    function dotloopinductvarpow(x)
+        s = zero(eltype(x))
+        for i ∈ eachindex(x)
+            s += x[i] * i^3
+        end
+        s
+    end
+    function dotloopinductvarpowavx(x)
+        s = zero(eltype(x))
+        @avx for i ∈ eachindex(x)
+            s += x[i] * i^3
+        end
+        s
+    end
+    function dot_from_n_to_100(a, b, n)
+        s = zero(eltype(a))
+        @avx for i ∈ n:100
+            s += a[i] * b[i]
+        end
+        s
+    end
     # @macroexpand @_avx for i = 1:length(a_re) - 1
     #     c_re[i] = b_re[i] * a_re[i + 1] - b_im[i] * a_im[i + 1]
     #     c_im[i] = b_re[i] * a_im[i + 1] + b_im[i] * a_re[i + 1]
@@ -219,6 +240,9 @@ using Test
             @test πest == pi_avx(a, b)
             @test πest == pi_avx_u4(a, b)
         end
+
+        @test dotloopinductvarpow(a) ≈ dotloopinductvarpowavx(a)
+        @test dot_from_n_to_100(a, b, 33) == @views mydotavx(a[33:100], b[33:100])
 
         a_re = rand(R, N); a_im = rand(R, N);
         b_re = rand(R, N); b_im = rand(R, N);

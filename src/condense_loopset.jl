@@ -43,13 +43,14 @@ function ArrayRefStruct(ls::LoopSet, mref::ArrayReferenceMeta, arraysymbolinds::
             indices |= getloopid(ls, ind)
         else
             parent = get(ls.opdict, ind, nothing)
-            if parent === nothing
-                index_types |= SymbolicIndex
-                indices |= findindoradd!(arraysymbolinds, ind)
-            else
-                index_types |= ComputedIndex
-                indices |= identifier(parent)
-            end
+            @assert !isnothing(parent) # Symbolic indices should have been subset
+            # if parent === nothing
+            #     index_types |= SymbolicIndex
+            #     indices |= findindoradd!(arraysymbolinds, ind)
+            # else
+            index_types |= ComputedIndex
+            indices |= identifier(parent)
+            # end
         end
     end
     ArrayRefStruct{mref.ref.array,mref.ptr}( index_types, indices, offsets )
@@ -154,13 +155,14 @@ function argmeta_and_consts_description(ls::LoopSet, arraysymbolinds)
 end
 
 function loopset_return_value(ls::LoopSet, ::Val{extract}) where {extract}
-    if length(ls.outer_reductions) == 1
+    @assert !iszero(length(ls.outer_reductions))
+    if isone(length(ls.outer_reductions))
         if extract
             Expr(:call, :extract_data, Symbol(mangledvar(getop(ls, ls.outer_reductions[1])), 0))
         else
             Symbol(mangledvar(getop(ls, ls.outer_reductions[1])), 0)
         end
-    elseif length(ls.outer_reductions) > 1
+    else#if length(ls.outer_reductions) > 1
         ret = Expr(:tuple)
         ops = operations(ls)
         for or ∈ ls.outer_reductions
@@ -171,8 +173,6 @@ function loopset_return_value(ls::LoopSet, ::Val{extract}) where {extract}
             end
         end
         ret
-    else
-        nothing
     end
 end
 
@@ -296,8 +296,8 @@ make_fast_and_crashy(q) = q |> make_fast |> make_crashy
 
 function setup_call_inline(ls::LoopSet, inline::Int8 = zero(Int8), U::Int8 = zero(Int8), T::Int8 = zero(Int8))
     call = generate_call(ls, (inline,U,T))
-    hasouterreductions = length(ls.outer_reductions) > 0
-    if !hasouterreductions
+    noouterreductions = iszero(length(ls.outer_reductions))
+    if noouterreductions
         q = Expr(:block,gc_preserve(ls, call))
         append!(ls.preamble.args, q.args)
         return ls.preamble
@@ -315,7 +315,7 @@ function setup_call_inline(ls::LoopSet, inline::Int8 = zero(Int8), U::Int8 = zer
         push!(outer_reducts.args, out)
         push!(q.args, Expr(:(=), var, Expr(:call, lv(reduction_scalar_combine(instr)), out, var)))
     end
-    hasouterreductions && pushpreamble!(ls, outer_reducts)
+    pushpreamble!(ls, outer_reducts)
     append!(ls.preamble.args, q.args)
     ls.preamble
 end
