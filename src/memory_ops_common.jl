@@ -1,9 +1,11 @@
+dottosym(x) = x
+dottosym(x::Expr) = Symbol(dottosym(x.args[1]), "###extractarray###", x.args[2].value)
 function extract_array_symbol_from_ref!(ls::LoopSet, ex::Expr, offset1::Int)::Symbol
     ar = ex.args[1 + offset1]
     if isa(ar, Symbol)
         return ar
     elseif isa(ar, Expr) && ar.head === :(.)
-        s = gensym(:extractedarray)
+        s = dottosym(ar)
         pushprepreamble!(ls, Expr(:(=), s, ar))
         return s
     else
