@@ -22,7 +22,8 @@ function plot(br::BenchmarkResult)
             sizes[j + i*ntests] = si
         end
     end
-    tests = vcat((@view(br.tests[2:end]) for _ ∈ eachindex(brsizes))...)
+    names = ["$(i > 9 ? string(i) : "0$i"). $test" for (i,test) ∈ enumerate(@view(br.tests[2:end]))]
+    tests = reduce(vcat, (names for _ ∈ eachindex(brsizes)))
     t = table((GFLOPS = res, Size = sizes, Method = tests))
     t |> @vlplot(
         :line,

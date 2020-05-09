@@ -68,16 +68,16 @@ save(joinpath(PICTURES, "bench_Atmulvb_v$v.$filetype"), plot(Atmulvb_bench));
 
 
 
-plot(gemm_bench)
-plot(AtmulB_bench)
-plot(dot_bench)
-plot(selfdot_bench)
-plot(gemv_bench)
-plot(dot3_bench)
-plot(sse_bench)
-plot(vexp_bench)
-plot(aplusBc_bench)
-plot(AplusAt_bench)
+# plot(gemm_bench)
+# plot(AtmulB_bench)
+# plot(dot_bench)
+# plot(selfdot_bench)
+# plot(gemv_bench)
+# plot(dot3_bench)
+# plot(sse_bench)
+# plot(vexp_bench)
+# plot(aplusBc_bench)
+# plot(AplusAt_bench)
 
 
 

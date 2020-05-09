@@ -40,31 +40,31 @@ tothreetuple(i::NTuple{3,Int}) = i
 function matmul_bench!(br, C, A, B, i)
     M, N = size(C); K = size(B,1);
     n_gflop = M*K*N*2e-9
-    br[1,i] = n_gflop / @belapsed mul!($C, $A, $B)
-    Cblas = copy(C); fill!(C, NaN)
+    Cblas = A * B
+    br[1,i] = n_gflop / @belapsed gemmavx!($C, $A, $B)
+    @assert C ≈ Cblas "LoopVec gemm wrong?"; fill!(C, NaN)
     br[2,i] = n_gflop / @belapsed jgemm!($C, $A, $B)
     @assert C ≈ Cblas "Julia gemm wrong?"; fill!(C, NaN)
     br[3,i] = n_gflop / @belapsed cgemm!($C, $A, $B)
     @assert C ≈ Cblas "Clang gemm wrong?"; fill!(C, NaN)
     br[4,i] = n_gflop / @belapsed fgemm!($C, $A, $B)
     @assert C ≈ Cblas "Fort gemm wrong?"; fill!(C, NaN)
-    br[5,i] = n_gflop / @belapsed fgemm_builtin!($C, $A, $B)
-    @assert C ≈ Cblas "Fort intrinsic gemm wrong?"; fill!(C, NaN)
-    br[6,i] = n_gflop / @belapsed icgemm!($C, $A, $B)
+    br[5,i] = n_gflop / @belapsed icgemm!($C, $A, $B)
     @assert C ≈ Cblas "icc gemm wrong?"; fill!(C, NaN)
-    br[7,i] = n_gflop / @belapsed ifgemm!($C, $A, $B)
+    br[6,i] = n_gflop / @belapsed ifgemm!($C, $A, $B)
     @assert C ≈ Cblas "ifort gemm wrong?"; fill!(C, NaN)
-    br[8,i] = n_gflop / @belapsed ifgemm_builtin!($C, $A, $B)
-    @assert C ≈ Cblas "ifort intrinsic gemm wrong?"; fill!(C, NaN)
-    br[9,i] = n_gflop / @belapsed egemm!($C, $A, $B)
+    br[7,i] = n_gflop / @belapsed egemm!($C, $A, $B)
     @assert C ≈ Cblas "eigen gemm wrong?"; fill!(C, NaN)
-    br[10,i] = n_gflop / @belapsed iegemm!($C, $A, $B)
+    br[8,i] = n_gflop / @belapsed iegemm!($C, $A, $B)
     @assert C ≈ Cblas "i-eigen gemm wrong?"; fill!(C, NaN)
-    br[11,i] = n_gflop / @belapsed dgemmmkl!($C, $A, $B)
+    br[9,i] = n_gflop / @belapsed fgemm_builtin!($C, $A, $B)
+    @assert C ≈ Cblas "Fort intrinsic gemm wrong?"; fill!(C, NaN)
+    br[10,i] = n_gflop / @belapsed ifgemm_builtin!($C, $A, $B)
+    @assert C ≈ Cblas "ifort intrinsic gemm wrong?"; fill!(C, NaN)
+    br[11,i] = n_gflop / @belapsed mul!($C, $A, $B)
+    br[12,i] = n_gflop / @belapsed dgemmmkl!($C, $A, $B)
     @assert C ≈ Cblas "MKL JIT gemm wrong?"; fill!(C, NaN)
     # br[12,i] = n_gflop / @belapsed gemmavx!($C, $A, $B)
-    br[end,i] = n_gflop / @belapsed gemmavx!($C, $A, $B)
-    @assert C ≈ Cblas "LoopVec gemm wrong?"
 end
 function A_mul_B_bench!(br, s, i)
     M, K, N = tothreetuple(s)
@@ -103,14 +103,13 @@ function At_mul_Bt_bench!(br, s, i)
 end
 
 blastests() = [
-    BLAS.vendor() === :mkl ? "IntelMKL" : "OpenBLAS",
+    "LoopVectorization",
     "Julia", "Clang",
-    "GFortran", "GFort-intrinsic",
-    "icc", "ifort", "ifort-intrinsic",
-    "g++ & Eigen-3", "icpc & Eigen-3", "MKL",
-    "LoopVectorization"
-    # "MKL JIT", "LoopVectorization"
-]
+    "GFortran", "icc", "ifort",
+    "g++ & Eigen-3", "icpc & Eigen-3",
+    "GFort-intrinsic", "ifort-intrinsic",
+    BLAS.vendor() === :mkl ? "IntelMKL" : "OpenBLAS", "MKL"
+]    
 
 function benchmark_AmulB(sizes)
     br = BenchmarkResult(blastests(), sizes)
@@ -139,9 +138,10 @@ end
 
 function dot_bench!(br, s, i)
     a = rand(s); b = rand(s);
-    n_gflop = s * 2e-9
-    br[1,i] = n_gflop / @belapsed dot($a, $b)
     dotblas = dot(a, b)
+    n_gflop = s * 2e-9
+    br[1,i] = n_gflop / @belapsed jdotavx($a, $b)
+    @assert jdotavx(a,b) ≈ dotblas "LoopVec dot wrong?"
     br[2,i] = n_gflop / @belapsed jdot($a, $b)
     @assert jdot(a,b) ≈ dotblas "Julia dot wrong?"
     br[3,i] = n_gflop / @belapsed cdot($a, $b)
@@ -156,11 +156,10 @@ function dot_bench!(br, s, i)
     @assert edot(a,b) ≈ dotblas "eigen dot wrong?"
     br[8,i] = n_gflop / @belapsed iedot($a, $b)
     @assert iedot(a,b) ≈ dotblas "i-eigen dot wrong?"
-    br[9,i] = n_gflop / @belapsed jdotavx($a, $b)
-    @assert jdotavx(a,b) ≈ dotblas "LoopVec dot wrong?"
+    br[9,i] = n_gflop / @belapsed dot($a, $b)
 end
 function benchmark_dot(sizes)
-    tests = [BLAS.vendor() === :mkl ? "IntelMKL" : "OpenBLAS", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "icpc & Eigen-3", "LoopVectorization"]
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "icpc & Eigen-3", BLAS.vendor() === :mkl ? "IntelMKL" : "OpenBLAS"]
     br = BenchmarkResult(tests, sizes)
     sm = br.sizedresults.results
     pmap(is -> dot_bench!(sm, is[2], is[1]), enumerate(sizes))
@@ -168,9 +167,10 @@ function benchmark_dot(sizes)
 end
 function selfdot_bench!(br, s, i)
     a = rand(s); b = rand(s);
-    n_gflop = s * 2e-9
-    br[1,i] = n_gflop / @belapsed dot($a, $a)
     dotblas = dot(a, a)
+    n_gflop = s * 2e-9
+    br[1,i] = n_gflop / @belapsed jselfdotavx($a)
+    @assert jselfdotavx(a) ≈ dotblas "LoopVec dot wrong?"
     br[2,i] = n_gflop / @belapsed jselfdot($a)
     @assert jselfdot(a) ≈ dotblas "Julia dot wrong?"
     br[3,i] = n_gflop / @belapsed cselfdot($a)
@@ -185,11 +185,10 @@ function selfdot_bench!(br, s, i)
     @assert eselfdot(a) ≈ dotblas "eigen dot wrong?"
     br[8,i] = n_gflop / @belapsed ieselfdot($a)
     @assert ieselfdot(a) ≈ dotblas "i-eigen dot wrong?"
-    br[9,i] = n_gflop / @belapsed jselfdotavx($a)
-    @assert jselfdotavx(a) ≈ dotblas "LoopVec dot wrong?"
+    br[9,i] = n_gflop / @belapsed dot($a, $a)
 end
 function benchmark_selfdot(sizes)
-    tests = [BLAS.vendor() === :mkl ? "IntelMKL" : "OpenBLAS", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "icpc & Eigen-3", "LoopVectorization"]
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "icpc & Eigen-3", BLAS.vendor() === :mkl ? "IntelMKL" : "OpenBLAS"]
     br = BenchmarkResult(tests, sizes)
     sm = br.sizedresults.results
     pmap(is -> selfdot_bench!(sm, is[2], is[1]), enumerate(sizes))
@@ -201,30 +200,30 @@ totwotuple(i::Tuple{Int,Int}) = i
 function gemv_bench!(br, x, A, y, i)
     M, N = size(A)
     n_gflop = M*N * 2e-9
-    br[1,i] = n_gflop / @belapsed mul!($x, $A, $y)
-    xblas = copy(x); fill!(x, NaN);
+    xblas = A * y
+    br[1,i] = n_gflop / @belapsed jgemvavx!($x, $A, $y)
+    @assert x ≈ xblas "LoopVec wrong?"; fill!(x, NaN);
     br[2,i] = n_gflop / @belapsed jgemv!($x, $A, $y)
     @assert x ≈ xblas "Julia wrong?"; fill!(x, NaN);
     br[3,i] = n_gflop / @belapsed cgemv!($x, $A, $y)
     @assert x ≈ xblas "Clang wrong?"; fill!(x, NaN);
     br[4,i] = n_gflop / @belapsed fgemv!($x, $A, $y)
     @assert x ≈ xblas "Fort wrong?"; fill!(x, NaN);
-    br[5,i] = n_gflop / @belapsed fgemv_builtin!($x, $A, $y)
-    @assert x ≈ xblas "Fort wrong?"; fill!(x, NaN);
-    br[6,i] = n_gflop / @belapsed icgemv!($x, $A, $y)
+    br[5,i] = n_gflop / @belapsed icgemv!($x, $A, $y)
     @assert x ≈ xblas "icc wrong?"; fill!(x, NaN);
-    br[7,i] = n_gflop / @belapsed ifgemv!($x, $A, $y)
+    br[6,i] = n_gflop / @belapsed ifgemv!($x, $A, $y)
     @assert x ≈ xblas "ifort wrong?"; fill!(x, NaN);
-    br[8,i] = n_gflop / @belapsed ifgemv_builtin!($x, $A, $y)
-    @assert x ≈ xblas "ifort wrong?"; fill!(x, NaN);
-    br[9,i] = n_gflop / @belapsed egemv!($x, $A, $y)
+    br[7,i] = n_gflop / @belapsed egemv!($x, $A, $y)
     @assert x ≈ xblas "eigen wrong?"; fill!(x, NaN);
-    br[10,i] = n_gflop / @belapsed iegemv!($x, $A, $y)
+    br[8,i] = n_gflop / @belapsed iegemv!($x, $A, $y)
     @assert x ≈ xblas "i-eigen wrong?"; fill!(x, NaN);
+    br[9,i] = n_gflop / @belapsed fgemv_builtin!($x, $A, $y)
+    @assert x ≈ xblas "Fort wrong?"; fill!(x, NaN);
+    br[10,i] = n_gflop / @belapsed ifgemv_builtin!($x, $A, $y)
+    @assert x ≈ xblas "ifort wrong?"; fill!(x, NaN);
+    br[11,i] = n_gflop / @belapsed mul!($x, $A, $y)
     br[11,i] = n_gflop / @belapsed dgemvmkl!($x, $A, $y)
     @assert x ≈ xblas "gemvmkl wrong?"; fill!(x, NaN);
-    br[end,i] = n_gflop / @belapsed jgemvavx!($x, $A, $y)
-    @assert x ≈ xblas "LoopVec wrong?"
 end
 function A_mul_vb_bench!(br, s, i)
     M, N = totwotuple(s)
@@ -256,9 +255,10 @@ end
 function dot3_bench!(br, s, i)
     M, N = totwotuple(s)
     x = rand(M); A = rand(M, N); y = rand(N);
-    n_gflop = M*N * 3e-9
-    br[1,i] = n_gflop / @belapsed dot($x, $A, $y)
     dotblas = dot(x, A, y)
+    n_gflop = M*N * 3e-9
+    br[1,i] = n_gflop / @belapsed jdot3avx($x, $A, $y)
+    @assert jdot3avx(x, A, y) ≈ dotblas "LoopVec dot wrong?"
     br[2,i] = n_gflop / @belapsed jdot3($x, $A, $y)
     @assert jdot3(x, A, y) ≈ dotblas "Julia dot wrong?"
     br[3,i] = n_gflop / @belapsed cdot3($x, $A, $y)
@@ -273,11 +273,10 @@ function dot3_bench!(br, s, i)
     @assert edot3(x, A, y) ≈ dotblas "eigen dot wrong?"
     br[8,i] = n_gflop / @belapsed iedot3($x, $A, $y)
     @assert iedot3(x, A, y) ≈ dotblas "i-eigen dot wrong?"
-    br[9,i] = n_gflop / @belapsed jdot3avx($x, $A, $y)
-    @assert jdot3avx(x, A, y) ≈ dotblas "LoopVec dot wrong?"
+    br[9,i] = n_gflop / @belapsed dot($x, $A, $y)
 end
 function benchmark_dot3(sizes)
-    tests = ["LinearAlgebra", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "icpc & Eigen-3", "LoopVectorization"]
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "icpc & Eigen-3", "LinearAlgebra" ]
     br = BenchmarkResult(tests, sizes)
     sm = br.sizedresults.results
     pmap(is -> dot3_bench!(sm, is[2], is[1]), enumerate(sizes))
@@ -295,9 +294,10 @@ function sse_bench!(br, s, i)
     y = rand(N); β = rand(P)
     X = randn(N, P)
     Xβ = similar(y)
-    n_gflop = 2e-9*(P*N + 2N)
-    br[1,i] = n_gflop / @belapsed sse!($Xβ, $y, $X, $β)
     lpblas = sse!(Xβ, y, X, β)
+    n_gflop = 2e-9*(P*N + 2N)
+    br[1,i] = n_gflop / @belapsed jOLSlp_avx($y, $X, $β)
+    @assert jOLSlp_avx(y, X, β) ≈ lpblas "LoopVec wrong?"
     br[2,i] = n_gflop / @belapsed jOLSlp($y, $X, $β)
     @assert jOLSlp(y, X, β) ≈ lpblas "Julia wrong?"
     br[3,i] = n_gflop / @belapsed cOLSlp($y, $X, $β)
@@ -312,11 +312,10 @@ function sse_bench!(br, s, i)
     @assert eOLSlp(y, X, β) ≈ lpblas "eigen wrong?"
     br[8,i] = n_gflop / @belapsed ieOLSlp($y, $X, $β)
     @assert ieOLSlp(y, X, β) ≈ lpblas "i-eigen wrong?"
-    br[9,i] = n_gflop / @belapsed jOLSlp_avx($y, $X, $β)
-    @assert jOLSlp_avx(y, X, β) ≈ lpblas "LoopVec wrong?"
+    br[9,i] = n_gflop / @belapsed sse!($Xβ, $y, $X, $β)
 end
 function benchmark_sse(sizes)
-    tests = [BLAS.vendor() === :mkl ? "IntelMKL" : "OpenBLAS", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "icpc & Eigen-3", "LoopVectorization"]
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "icpc & Eigen-3", BLAS.vendor() === :mkl ? "IntelMKL" : "OpenBLAS"]
     br = BenchmarkResult(tests, sizes)
     sm = br.sizedresults.results
     pmap(is -> sse_bench!(sm, is[2], is[1]), enumerate(sizes))
@@ -326,21 +325,21 @@ end
 function exp_bench!(br, s, i)
     a = rand(s); b = similar(a)
     n_gflop = 1e-9*s # not really gflops
-    br[1,i] = n_gflop / @belapsed @. $b = exp($a)
+    br[1,i] = n_gflop / @belapsed @avx @. $b = exp($a)
     baseb = copy(b)
-    br[2,i] = n_gflop / @belapsed cvexp!($b, $a)
-    @assert b ≈ baseb "Clang wrong?"
-    br[3,i] = n_gflop / @belapsed fvexp!($b, $a)
-    @assert b ≈ baseb "Fort wrong?"
-    br[4,i] = n_gflop / @belapsed icvexp!($b, $a)
-    @assert b ≈ baseb "icc wrong?"
-    br[5,i] = n_gflop / @belapsed ifvexp!($b, $a)
-    @assert b ≈ baseb "ifort wrong?"
-    br[6,i] = n_gflop / @belapsed @avx @. $b = exp($a)
+    br[2,i] = n_gflop / @belapsed @. $b = exp($a)
     @assert b ≈ baseb "LoopVec wrong?"
+    br[3,i] = n_gflop / @belapsed cvexp!($b, $a)
+    @assert b ≈ baseb "Clang wrong?"
+    br[4,i] = n_gflop / @belapsed fvexp!($b, $a)
+    @assert b ≈ baseb "Fort wrong?"
+    br[5,i] = n_gflop / @belapsed icvexp!($b, $a)
+    @assert b ≈ baseb "icc wrong?"
+    br[6,i] = n_gflop / @belapsed ifvexp!($b, $a)
+    @assert b ≈ baseb "ifort wrong?"
 end
 function benchmark_exp(sizes)
-    tests = ["Julia", "Clang", "GFortran", "icc", "ifort", "LoopVectorization"]
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort"]
     br = BenchmarkResult(tests, sizes)
     sm = br.sizedresults.results
     pmap(is -> exp_bench!(sm, is[2], is[1]), enumerate(sizes))
@@ -352,25 +351,25 @@ function aplusBc_bench!(br, s, i)
     a = rand(M); B = rand(M,N); c = rand(N);
     c′ = c'; D = similar(B)
     n_gflop = 2e-9 * M*N
-    br[1,i] = n_gflop / @belapsed @. $D = $a + $B * $c′
+    br[1,i] = n_gflop / @belapsed @avx @. $D = $a + $B * $c′
     Dcopy = copy(D); fill!(D, NaN);
-    br[2,i] = n_gflop / @belapsed caplusBc!($D, $a, $B, $c)
-    @assert D ≈ Dcopy "Clang wrong?"; fill!(D, NaN);
-    br[3,i] = n_gflop / @belapsed faplusBc!($D, $a, $B, $c)
-    @assert D ≈ Dcopy "Fort wrong?"; fill!(D, NaN);
-    br[4,i] = n_gflop / @belapsed icaplusBc!($D, $a, $B, $c)
-    @assert D ≈ Dcopy "icc wrong?"; fill!(D, NaN);
-    br[5,i] = n_gflop / @belapsed ifaplusBc!($D, $a, $B, $c)
-    @assert D ≈ Dcopy "ifort wrong?"; fill!(D, NaN);
-    br[6,i] = n_gflop / @belapsed eaplusBc!($D, $a, $B, $c)
-    @assert D ≈ Dcopy "eigen wrong?"; fill!(D, NaN);
-    br[7,i] = n_gflop / @belapsed ieaplusBc!($D, $a, $B, $c)
-    @assert D ≈ Dcopy "i-eigen wrong?"; fill!(D, NaN);
-    br[8,i] = n_gflop / @belapsed @avx @. $D = $a + $B * $c′
+    br[2,i] = n_gflop / @belapsed @. $D = $a + $B * $c′
     @assert D ≈ Dcopy "LoopVec wrong?"
+    br[3,i] = n_gflop / @belapsed caplusBc!($D, $a, $B, $c)
+    @assert D ≈ Dcopy "Clang wrong?"; fill!(D, NaN);
+    br[4,i] = n_gflop / @belapsed faplusBc!($D, $a, $B, $c)
+    @assert D ≈ Dcopy "Fort wrong?"; fill!(D, NaN);
+    br[5,i] = n_gflop / @belapsed icaplusBc!($D, $a, $B, $c)
+    @assert D ≈ Dcopy "icc wrong?"; fill!(D, NaN);
+    br[6,i] = n_gflop / @belapsed ifaplusBc!($D, $a, $B, $c)
+    @assert D ≈ Dcopy "ifort wrong?"; fill!(D, NaN);
+    br[7,i] = n_gflop / @belapsed eaplusBc!($D, $a, $B, $c)
+    @assert D ≈ Dcopy "eigen wrong?"; fill!(D, NaN);
+    br[8,i] = n_gflop / @belapsed ieaplusBc!($D, $a, $B, $c)
+    @assert D ≈ Dcopy "i-eigen wrong?"; fill!(D, NaN);
 end
 function benchmark_aplusBc(sizes)
-    tests = ["Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "icpc & Eigen-3", "LoopVectorization"]
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "icpc & Eigen-3"]
     br = BenchmarkResult(tests, sizes)
     sm = br.sizedresults.results
     pmap(is -> aplusBc_bench!(sm, is[2], is[1]), enumerate(sizes))
@@ -380,29 +379,29 @@ end
 function AplusAt_bench!(br, s, i)
     A = rand(s,s); B = similar(A)
     n_gflop = 1e-9*s^2
-    br[1,i] = n_gflop / @belapsed @. $B = $A + $A'
+    br[1,i] = n_gflop / @belapsed @avx @. $B = $A + $A'
     baseB = copy(B); fill!(B, NaN);
-    br[2,i] = n_gflop / @belapsed cAplusAt!($B, $A)
+    br[2,i] = n_gflop / @belapsed @. $B = $A + $A'
+    @assert B ≈ baseB "LoopVec wrong?"
+    br[3,i] = n_gflop / @belapsed cAplusAt!($B, $A)
     @assert B ≈ baseB "Clang wrong?"; fill!(B, NaN);
-    br[3,i] = n_gflop / @belapsed fAplusAt!($B, $A)
+    br[4,i] = n_gflop / @belapsed fAplusAt!($B, $A)
     @assert B ≈ baseB "Fort wrong?"; fill!(B, NaN);
-    br[4,i] = n_gflop / @belapsed fAplusAt_builtin!($B, $A)
-    @assert B ≈ baseB "Fort-builtin wrong?"; fill!(B, NaN);
     br[5,i] = n_gflop / @belapsed icAplusAt!($B, $A)
     @assert B ≈ baseB "icc wrong?"; fill!(B, NaN);
     br[6,i] = n_gflop / @belapsed ifAplusAt!($B, $A)
     @assert B ≈ baseB "ifort wrong?"; fill!(B, NaN);
-    br[7,i] = n_gflop / @belapsed ifAplusAt_builtin!($B, $A)
-    @assert B ≈ baseB "ifort-builtin wrong?"; fill!(B, NaN);
-    br[8,i] = n_gflop / @belapsed eAplusAt!($B, $A)
+    br[7,i] = n_gflop / @belapsed eAplusAt!($B, $A)
     @assert B ≈ baseB "eigen wrong?"; fill!(B, NaN);
-    br[9,i] = n_gflop / @belapsed ieAplusAt!($B, $A)
+    br[8,i] = n_gflop / @belapsed ieAplusAt!($B, $A)
     @assert B ≈ baseB "i-eigen wrong?"; fill!(B, NaN);
-    br[10,i] = n_gflop / @belapsed @avx @. $B = $A + $A'
-    @assert B ≈ baseB "LoopVec wrong?"
+    br[9,i] = n_gflop / @belapsed fAplusAt_builtin!($B, $A)
+    @assert B ≈ baseB "Fort-builtin wrong?"; fill!(B, NaN);
+    br[10,i] = n_gflop / @belapsed ifAplusAt_builtin!($B, $A)
+    @assert B ≈ baseB "ifort-builtin wrong?"; fill!(B, NaN);
 end
 function benchmark_AplusAt(sizes)
-    tests = ["Julia", "Clang", "GFortran", "GFortran-builtin", "icc", "ifort", "ifort-builtin", "g++ & Eigen-3", "icpc & Eigen-3", "LoopVectorization"]
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "icpc & Eigen-3", "GFortran-builtin", "ifort-builtin"]
     br = BenchmarkResult(tests, sizes)
     sm = br.sizedresults.results
     pmap(is -> AplusAt_bench!(sm, is[2], is[1]), enumerate(sizes))
@@ -416,20 +415,20 @@ function randomaccess_bench!(br, s, i)
     coefs = randn(C);
     n_gflop = 1e-9*(A*C + C)
     p = randomaccess(P, basis, coefs);
-    br[1,i] = n_gflop / @belapsed  randomaccess($P, $basis, $coefs)
-    br[2,i] = n_gflop / @belapsed crandomaccess($P, $basis, $coefs)
-    @assert p ≈ crandomaccess(P, basis, coefs) "Clang wrong?"
-    br[3,i] = n_gflop / @belapsed frandomaccess($P, $basis, $coefs)
-    @assert p ≈ frandomaccess(P, basis, coefs) "Fort wrong?"
-    br[4,i] = n_gflop / @belapsed icrandomaccess($P, $basis, $coefs)
-    @assert p ≈ icrandomaccess(P, basis, coefs) "icc wrong?"
-    br[5,i] = n_gflop / @belapsed ifrandomaccess($P, $basis, $coefs)
-    @assert p ≈ ifrandomaccess(P, basis, coefs) "ifort wrong?"
-    br[6,i] = n_gflop / @belapsed randomaccessavx($P, $basis, $coefs)
+    br[1,i] = n_gflop / @belapsed randomaccessavx($P, $basis, $coefs)
     @assert p ≈ randomaccessavx(P, basis, coefs) "LoopVec wrong?"
+    br[2,i] = n_gflop / @belapsed  randomaccess($P, $basis, $coefs)
+    br[3,i] = n_gflop / @belapsed crandomaccess($P, $basis, $coefs)
+    @assert p ≈ crandomaccess(P, basis, coefs) "Clang wrong?"
+    br[4,i] = n_gflop / @belapsed frandomaccess($P, $basis, $coefs)
+    @assert p ≈ frandomaccess(P, basis, coefs) "Fort wrong?"
+    br[5,i] = n_gflop / @belapsed icrandomaccess($P, $basis, $coefs)
+    @assert p ≈ icrandomaccess(P, basis, coefs) "icc wrong?"
+    br[6,i] = n_gflop / @belapsed ifrandomaccess($P, $basis, $coefs)
+    @assert p ≈ ifrandomaccess(P, basis, coefs) "ifort wrong?"
 end
 function benchmark_random_access(sizes)
-    tests = ["Julia", "Clang", "GFortran", "icc", "ifort", "LoopVectorization"]
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort"]
     br = BenchmarkResult(tests, sizes)
     sm = br.sizedresults.results
     pmap(is -> randomaccess_bench!(sm, is[2], is[1]), enumerate(sizes))
@@ -441,7 +440,8 @@ function logdettriangle_bench!(br, s, i)
     U = cholesky(Symmetric(S * S')).U
     n_gflop = 1e-9*s
     ld = logdet(U)
-    br[1,i] = n_gflop / @belapsed logdet($U)
+    br[1,i] = n_gflop / @belapsed jlogdettriangleavx($U)
+    @assert ld ≈ jlogdettriangleavx(U) "LoopVec wrong?"
     br[2,i] = n_gflop / @belapsed jlogdettriangle($U)
     @assert ld ≈ jlogdettriangle(U) "Julia wrong?"
     br[3,i] = n_gflop / @belapsed clogdettriangle($U)
@@ -452,11 +452,10 @@ function logdettriangle_bench!(br, s, i)
     @assert ld ≈ iclogdettriangle(U) "icc wrong?"
     br[6,i] = n_gflop / @belapsed iflogdettriangle($U)
     @assert ld ≈ iflogdettriangle(U) "ifort wrong?"
-    br[7,i] = n_gflop / @belapsed jlogdettriangleavx($U)
-    @assert ld ≈ jlogdettriangleavx(U) "LoopVec wrong?"
+    br[7,i] = n_gflop / @belapsed logdet($U)
 end
 function benchmark_logdettriangle(sizes)
-    tests = ["Julia-builtin", "Julia", "Clang", "GFortran", "icc", "ifort", "LoopVectorization"]
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "Julia-builtin"]
     br = BenchmarkResult(tests, sizes)
     sm = br.sizedresults.results
     pmap(is -> logdettriangle_bench!(sm, is[2], is[1]), enumerate(sizes))
@@ -469,21 +468,21 @@ function filter2d_bench_run!(br, s, i, K)
     B = OffsetArray(similar(A, (s,s)), 1, 1)
     Mk, Nk = size(K)
     n_gflop = 1e-9 * (2Mk * Nk - 1) * s^2
-    br[1,i] = n_gflop / @belapsed filter2d!($B, $A, $K)
+    br[1,i] = n_gflop / @belapsed filter2davx!($B, $A, $K)
     Bcopy = copy(B); fill!(B, NaN);
-    br[2,i] = n_gflop / @belapsed cfilter2d!($B, $A, $K)
-    @assert B ≈ Bcopy "Clang wrong?"
-    br[3,i] = n_gflop / @belapsed ffilter2d!($B, $A, $K)
-    @assert B ≈ Bcopy "Fort wrong?"
-    br[4,i] = n_gflop / @belapsed icfilter2d!($B, $A, $K)
-    @assert B ≈ Bcopy "icc wrong?"
-    br[5,i] = n_gflop / @belapsed iffilter2d!($B, $A, $K)
-    @assert B ≈ Bcopy "ifort wrong?"
-    br[6,i] = n_gflop / @belapsed filter2davx!($B, $A, $K)
+    br[2,i] = n_gflop / @belapsed filter2d!($B, $A, $K)
     @assert B ≈ Bcopy "LoopVec wrong?"
+    br[3,i] = n_gflop / @belapsed cfilter2d!($B, $A, $K)
+    @assert B ≈ Bcopy "Clang wrong?"
+    br[4,i] = n_gflop / @belapsed ffilter2d!($B, $A, $K)
+    @assert B ≈ Bcopy "Fort wrong?"
+    br[5,i] = n_gflop / @belapsed icfilter2d!($B, $A, $K)
+    @assert B ≈ Bcopy "icc wrong?"
+    br[6,i] = n_gflop / @belapsed iffilter2d!($B, $A, $K)
+    @assert B ≈ Bcopy "ifort wrong?"
 end
 function benchmark_filter2d(sizes, K)
-    tests = ["Julia", "Clang", "GFortran", "icc", "ifort", "LoopVectorization"]
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort"]
     br = BenchmarkResult(tests, sizes)
     sm = br.sizedresults.results
     pmap(is -> filter2d_bench_run!(sm, is[2], is[1], K), enumerate(sizes))
@@ -504,21 +503,21 @@ function filter2dunrolled_bench_run!(br, s, i, K)
     B = OffsetArray(similar(A, (s,s)), 1, 1)
     Mk, Nk = size(K)
     n_gflop = 1e-9 * (2Mk * Nk - 1) * s^2
-    br[1,i] = n_gflop / @belapsed filter2dunrolled!($B, $A, $K)
+    br[1,i] = n_gflop / @belapsed filter2dunrolledavx!($B, $A, $K)
     Bcopy = copy(B); fill!(B, NaN);
-    br[2,i] = n_gflop / @belapsed cfilter2dunrolled!($B, $A, $K)
-    @assert B ≈ Bcopy "Clang wrong?"
-    br[3,i] = n_gflop / @belapsed ffilter2dunrolled!($B, $A, $K)
-    @assert B ≈ Bcopy "Fort wrong?"
-    br[4,i] = n_gflop / @belapsed icfilter2dunrolled!($B, $A, $K)
-    @assert B ≈ Bcopy "icc wrong?"
-    br[5,i] = n_gflop / @belapsed iffilter2dunrolled!($B, $A, $K)
-    @assert B ≈ Bcopy "ifort wrong?"
-    br[6,i] = n_gflop / @belapsed filter2dunrolledavx!($B, $A, $K)
+    br[2,i] = n_gflop / @belapsed filter2dunrolled!($B, $A, $K)
     @assert B ≈ Bcopy "LoopVec wrong?"
+    br[3,i] = n_gflop / @belapsed cfilter2dunrolled!($B, $A, $K)
+    @assert B ≈ Bcopy "Clang wrong?"
+    br[4,i] = n_gflop / @belapsed ffilter2dunrolled!($B, $A, $K)
+    @assert B ≈ Bcopy "Fort wrong?"
+    br[5,i] = n_gflop / @belapsed icfilter2dunrolled!($B, $A, $K)
+    @assert B ≈ Bcopy "icc wrong?"
+    br[6,i] = n_gflop / @belapsed iffilter2dunrolled!($B, $A, $K)
+    @assert B ≈ Bcopy "ifort wrong?"
 end
 function benchmark_filter2dunrolled(sizes)
-    tests = ["Julia", "Clang", "GFortran", "icc", "ifort", "LoopVectorization"]
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort"]
     br = BenchmarkResult(tests, sizes)
     sm = br.sizedresults.results
     K = SizedOffsetMatrix{Float64,-1,1,-1,1}(rand(3,3))
