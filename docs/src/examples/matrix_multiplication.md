@@ -19,29 +19,22 @@ and this can handle all transposed/not-tranposed permutations. LoopVectorization
 Letting all three matrices be square and `Size` x `Size`, we attain the following benchmark results:
 
 ![AmulB](../assets/bench_AmulB_v1.svg)
-This is classic GEMM, `𝐂 = 𝐀 * 𝐁`. GFortran's intrinsic `matmul` function does fairly well, as does Clang-Polly, because Polly is designed to specfically recognize GEMM-like loops and optimize them. But all the compilers are well behind LoopVectorization here, which falls behind MKL's `gemm` beyond `56 × 56`. The problem imposed by alignment is also striking: performance is much higher when the sizes are integer multiplies of 8. Padding arrays so that each column is aligned regardless of the number of rows can thus be very profitable. [PaddedMatrices.jl](https://github.com/chriselrod/PaddedMatrices.jl) offers just such arrays in Julia. I believe that is also what the [-pad](https://software.intel.com/en-us/fortran-compiler-developer-guide-and-reference-pad-qpad) compiler flag does when using Intel's compilers.
+This is classic GEMM, `𝐂 = 𝐀 * 𝐁`. GFortran's intrinsic `matmul` function does fairly well. But all the compilers are well behind LoopVectorization here, which falls behind MKL's `gemm` beyond 70x70 or so. The problem imposed by alignment is also striking: performance is much higher when the sizes are integer multiplies of 8. Padding arrays so that each column is aligned regardless of the number of rows can thus be very profitable. [PaddedMatrices.jl](https://github.com/chriselrod/PaddedMatrices.jl) offers just such arrays in Julia. I believe that is also what the [-pad](https://software.intel.com/en-us/fortran-compiler-developer-guide-and-reference-pad-qpad) compiler flag does when using Intel's compilers.
 
 ![AmulBt](../assets/bench_AmulBt_v1.svg)
-The optimal pattern for `𝐂 = 𝐀 * 𝐁ᵀ` is almost identical to that for `𝐂 = 𝐀 * 𝐁`. Yet, as soon as we deviate slightly from the gemm-loops, Clang-Polly's pattern matching doesn't identify the loops, and it fails to optimize at all. LoopVectorization and the three Intel-compiled versions all do well. Similarly, it seems that gfortran's `matmul` instrinsic function has only been optimized for the non-transposed case, so that the simple loops actually performed better here.
+The optimal pattern for `𝐂 = 𝐀 * 𝐁ᵀ` is almost identical to that for `𝐂 = 𝐀 * 𝐁`. Yet, gfortran's `matmul` instrinsic stumbles, surprisingly doing much worse than gfortran + loops, and almost certainly worse than allocating memory for `𝐁ᵀ` and creating the ecplicit copy.
 
-ifort did equally well whethor or not `𝐁` was transposed, while LoopVectorization's performance degraded slightly faster as a function of size in the transposed case, because strides between memory accesses are larger when `𝐁` is transposed. But it still performed best of all the compiled loops over this size range, only losing to MKL.
+ifort did equally well whethor or not `𝐁` was transposed, while LoopVectorization's performance degraded slightly faster as a function of size in the transposed case, because strides between memory accesses are larger when `𝐁` is transposed. But it still performed best of all the compiled loops over this size range, losing out to MKL and eventually OpenBLAS.
 icc interestingly does better when it is transposed.
 
 GEMM is easiest when the matrix `𝐀` is not tranposed (assuming column-major memory layouts), because then you can sum up columns of `𝐀` to store into `𝐂`. If `𝐀` were transposed, then we cannot efficiently load contiguous elements from `𝐀` that can best stored directly in `𝐂`. So for `𝐂 = 𝐀ᵀ * 𝐁`, contiguous vectors along the `k`-loop have to be reduced, adding some overhead.
 ![AtmulB](../assets/bench_AtmulB_v1.svg)
-I am not sure what exactly MKL is doing, but it is able to maintain its performance. I suspect it may be able to efficiently transpose and pack the arrays.
+Packing is critical for performance here. LoopVectorization does not pack, therefore it is well behind MKL and OpenBLAS, which do. Eigen packs, but is poorly optimized for this CPU architecture.
 
-LoopVectorization and both ifort versions have similar performance, while icc isn't too far behind. Clang-Polly is far in last.
-
-When both `𝐀` and ` 𝐁` are transposed, the loops become rather awkward to vectorize.
+When both `𝐀` and ` 𝐁` are transposed, we now have `𝐂 = 𝐀ᵀ * 𝐁ᵀ = (𝐁 * 𝐀)ᵀ`.
 ![AtmulBt](../assets/bench_AtmulBt_v1.svg)
-
-LoopVectorization and MKL managed to do about as well as normal.
-The ifort and gfortran intrinsics also do fairly well here, perhaps because it can be expressed as:
-```fortran
-C = transpose(matmul(B, A))
-```
-The ifort-loop version also did fairly well. The other loop versions did poorly.
+Julia, Clang, and gfortran all struggled to vectorize this, because none of the matrices share a contiguous access: `M` for `𝐂`, `K` for `𝐀ᵀ`, and `N` for `𝐁ᵀ`. However, LoopVectorization and all the specialized matrix multiplication functions managed to do about as well as normal; transposing while storing the results takes negligible amounts of time relative to the matrix multiplication itself.
+The ifort-loop version also did fairly well.
 
 
 
