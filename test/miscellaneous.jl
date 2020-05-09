@@ -622,14 +622,19 @@ using Test
         c_re
     end
 
-    function MatCalcWtD(m)
+
+    function MatCalcWtDW!(m)
         l, n = size(m.Wt)
-        @avx for j in 1:n
-            for i in 1:l
-                m.WtD[i, j] = m.Wt[i, j] * m.d[j]
-           end
-       end
+        fill!(m.Wt_D_W, 0)
+        @avx for k in 1: n
+            for j in 1:l
+                for i in 1:l
+                    m.Wt_D_W[i, j] += m.Wt[i, k] * m.Wt[j, k] * m.d[k]
+                end
+            end
+        end
     end
+
  
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
@@ -816,9 +821,15 @@ using Test
         multiple_unrolls_split_depchains_avx!(c_re_2, a_re, b_re, a_im, b_im) # [1 1; 1 1]
         @test c_re_1 ≈ c_re_2
 
-        mh = (WtD = rand(T, 15,23), Wt = rand(T, 15,23), d = rand(T, 23))
-        MatCalcWtD(mh)
-        @test mh.WtD ≈ mh.Wt .* mh.d'
+        mh = (
+            Wt_D_W = Matrix{T}(undef, 181, 181),
+            Wt = rand(T, 181, 191),
+            d = rand(T, 191)
+        )
+        Wt_D_W = similar(mh.Wt_D_W)
+
+        MatCalcWtDW!(mh)
+        @test mh.Wt_D_W ≈ mh.Wt * Diagonal(mh.d) * mh.Wt'
 
    
     end
