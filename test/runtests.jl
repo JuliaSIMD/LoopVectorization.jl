@@ -45,6 +45,8 @@ Base.IndexStyle(::Type{<:FallbackArrayWrapper}) = IndexLinear()
 
     @time include("filter.jl")
 
+    @time include("mapreduce.jl")
+
     @time include("ifelsemasks.jl")
 
     @time include("dot.jl")

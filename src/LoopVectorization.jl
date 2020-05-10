@@ -26,7 +26,7 @@ const NativeTypes = Union{Bool, Base.HWReal}
 export LowDimArray, stridedpointer, vectorizable,
     @avx, @_avx, *ˡ, _avx_!,
     vmap, vmap!, vmapnt, vmapnt!, vmapntt, vmapntt!,
-    vfilter, vfilter!
+    vfilter, vfilter!, vmapreduce, vreduce
 
 const VECTORWIDTHSYMBOL, ELTYPESYMBOL = Symbol("##Wvecwidth##"), Symbol("##Tloopeltype##")
 
@@ -58,6 +58,7 @@ include("condense_loopset.jl")
 include("reconstruct_loopset.jl")
 include("constructors.jl")
 include("user_api_conveniences.jl")
+include("mapreduce.jl")
 
 """
 LoopVectorization provides macros and functions that combine SIMD vectorization and

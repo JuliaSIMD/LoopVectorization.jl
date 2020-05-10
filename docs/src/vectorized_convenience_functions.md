@@ -114,6 +114,22 @@ BenchmarkTools.Trial:
   evals/sample:     193
 ```
 
+## vmapreduce
 
+Vectorized version of `mapreduce`. `vmapreduce(f, op, a, b, c)` applies `f(a[i], b[i], c[i])` for `i in eachindex(a,b,c)`, reducing the results to a scalar with `op`.
+
+```julia
+julia> using LoopVectorization, BenchmarkTools
+
+julia> x = rand(127); y = rand(127);
+
+julia> @btime vmapreduce(hypot, +, $x, $y)
+  191.420 ns (0 allocations: 0 bytes)
+96.75538300513509
+
+julia> @btime mapreduce(hypot, +, $x, $y)
+  1.777 μs (5 allocations: 1.25 KiB)
+96.75538300513509
+```
 
 
