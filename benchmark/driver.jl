@@ -21,6 +21,7 @@ end
 
 # sizes = 23:23
 sizes = 256:-1:2
+selfdot_bench = benchmark_selfdot(sizes)
 
 AmulB_bench = benchmark_AmulB(sizes)
 AmulBt_bench = benchmark_AmulBt(sizes)
@@ -35,7 +36,6 @@ filter2d_unrolled_bench = benchmark_filter2dunrolled(sizes)#512:-1:2)
 
 dot3_bench = benchmark_dot3(sizes)
 dot_bench = benchmark_dot(sizes)
-selfdot_bench = benchmark_selfdot(sizes)
 sse_bench = benchmark_sse(sizes)
 aplusBc_bench = benchmark_aplusBc(sizes)
 AplusAt_bench = benchmark_AplusAt(sizes)
@@ -44,26 +44,30 @@ randomaccess_bench = benchmark_random_access(sizes)
 logdettriangle_bench = benchmark_logdettriangle(sizes)
 
 v = 1
-filetype = "svg"
+using Cairo, Fontconfig
 const PICTURES = joinpath(pkgdir(LoopVectorization), "docs", "src", "assets")
-save(joinpath(PICTURES, "bench_filter2d_dynamic_v$v.$filetype"), plot(filter2d_dynamic_bench));
-save(joinpath(PICTURES, "bench_filter2d_3x3_v$v.$filetype"), plot(filter2d_3x3_bench));
-save(joinpath(PICTURES, "bench_filter2d_unrolled_v$v.$filetype"), plot(filter2d_unrolled_bench));
-save(joinpath(PICTURES, "bench_dot_v$v.$filetype"), plot(dot_bench));
-save(joinpath(PICTURES, "bench_selfdot_v$v.$filetype"), plot(selfdot_bench));
-save(joinpath(PICTURES, "bench_dot3_v$v.$filetype"), plot(dot3_bench));
-save(joinpath(PICTURES, "bench_sse_v$v.$filetype"), plot(sse_bench));
-save(joinpath(PICTURES, "bench_aplusBc_v$v.$filetype"), plot(aplusBc_bench));
-save(joinpath(PICTURES, "bench_AplusAt_v$v.$filetype"), plot(AplusAt_bench));
-save(joinpath(PICTURES, "bench_exp_v$v.$filetype"), plot(vexp_bench));
-save(joinpath(PICTURES, "bench_random_access_v$v.$filetype"), plot(randomaccess_bench));
-save(joinpath(PICTURES, "bench_logdettriangle_v$v.$filetype"), plot(logdettriangle_bench));
-save(joinpath(PICTURES, "bench_AmulB_v$v.$filetype"), plot(AmulB_bench));
-save(joinpath(PICTURES, "bench_AmulBt_v$v.$filetype"), plot(AmulBt_bench));
-save(joinpath(PICTURES, "bench_AtmulB_v$v.$filetype"), plot(AtmulB_bench));
-save(joinpath(PICTURES, "bench_AtmulBt_v$v.$filetype"), plot(AtmulBt_bench));
-save(joinpath(PICTURES, "bench_Amulvb_v$v.$filetype"), plot(Amulvb_bench));
-save(joinpath(PICTURES, "bench_Atmulvb_v$v.$filetype"), plot(Atmulvb_bench));
+function saveplot(f, br)
+    draw(PNG(joinpath(PICTURES, f * "$v.png"), 12inch, 8inch), plot(br))
+end
+
+saveplot("bench_filter2d_dynamic_v", filter2d_dynamic_bench);
+saveplot("bench_filter2d_3x3_v", filter2d_3x3_bench);
+saveplot("bench_filter2d_unrolled_v", filter2d_unrolled_bench);
+saveplot("bench_dot_v", dot_bench);
+saveplot("bench_selfdot_v", selfdot_bench);
+saveplot("bench_dot3_v", dot3_bench);
+saveplot("bench_sse_v", sse_bench);
+saveplot("bench_aplusBc_v", aplusBc_bench);
+saveplot("bench_AplusAt_v", AplusAt_bench);
+saveplot("bench_exp_v", vexp_bench);
+saveplot("bench_random_access_v", randomaccess_bench);
+saveplot("bench_logdettriangle_v", logdettriangle_bench);
+saveplot("bench_AmulB_v", AmulB_bench);
+saveplot("bench_AmulBt_v", AmulBt_bench);
+saveplot("bench_AtmulB_v", AtmulB_bench);
+saveplot("bench_AtmulBt_v", AtmulBt_bench);
+saveplot("bench_Amulvb_v", Amulvb_bench);
+saveplot("bench_Atmulvb_v", Atmulvb_bench);
 
 
 

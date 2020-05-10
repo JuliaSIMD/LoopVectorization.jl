@@ -15,13 +15,13 @@ end
 ```
 
 Using a square `Size` x `Size` matrix `𝐀`, we find the following results.
-![Amulvb](../assets/bench_Amulvb_v1.svg)
+![Amulvb](../assets/bench_Amulvb_v1.png)
 
 If `𝐀` is transposed, or equivalently, if we're instead computing `x * 𝐀`:
-![Atmulvb](../assets/bench_Atmulvb_v1.svg)
+![Atmulvb](../assets/bench_Atmulvb_v1.png)
 
 Finally, the three-argument dot product `y' * 𝐀 * x`:
-![dot3](../assets/bench_dot3_v1.svg)
+![dot3](../assets/bench_dot3_v1.png)
 
 The performance impact of alignment is dramatic here.
 

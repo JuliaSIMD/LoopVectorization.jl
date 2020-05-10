@@ -21,7 +21,7 @@ However, it still does much better than all the compiled loops, with only the BL
 Performance starts to degrade for sizes larger than 60. Letting `N` be the size, `X` was a `3N/2`x `N/2` matrix. Therefore, performance started to suffer
 when `X` had more than about 30 columns (performance is much less sensitive to the number of rows).
 
-![sse](../assets/bench_sse_v1.svg)
+![sse](../assets/bench_sse_v1.png)
 
 
 

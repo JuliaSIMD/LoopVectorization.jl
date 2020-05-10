@@ -24,7 +24,7 @@ However, there is another bottle neck: we can only perform 2 aligned loads per c
 Thus, in 4 clock cycles, we can do up to 8 loads. But each `fma` requires 2 loads, meaning we are limited to 4 of them per 4 clock cyles, and any unrolling beyond 4 gives us no benefit.
 
 Double precision benchmarks pitting Julia's builtin dot product (named `MKL` here), and code compiled with a variety of compilers:
-![dot](../assets/bench_dot_v1.svg)
+![dot](../assets/bench_dot_v1.png)
 What we just described is the core of the approach used by all these compilers. The variation in results is explained mostly by how they handle vectors with lengths that are not an integer multiple of `W`. I ran these on a computer with AVX512 so that `W = 8`. LLVM, the backend compiler of both Julia and Clang, shows rapid performance degredation as `N % 4W` increases, where `N` is the length of the vectors.
 This is because, to handle the remainder, it uses a scalar loop that runs as written: multiply and add single elements, one after the other. 
 
@@ -51,7 +51,7 @@ end
 ```
 Because we only need a single load per `fma`-instruction, we can now benefit from having 8 separate accumulators.
 For this reason, LoopVectorization now unrolls by 8 -- it decides how much to unroll by comparing the bottlenecks on throughput with latency. The other compilers do not change their behavior, so now LoopVectorization has the advantage:
-![selfdot](../assets/bench_selfdot_v1.svg)
+![selfdot](../assets/bench_selfdot_v1.png)
 This algorithm may need refinement, because Julia (without LoopVectorization) only unrolls by 4, yet achieves roughly the same performance as LoopVectorization at multiples of `4W = 32`, although performance declines rapidly from there due to the slow scalar loop. Performance for most is much higher -- more GFLOPS -- than the normal dot product, but still under half of the CPU's potential 131.2 GFLOPS, suggesting that some other bottlenecks are preventing the core from attaining 2 fmas per clock cycle.
 Note also that `8W = 64`, so we don't really have enough iterations of the loop to amortize the overhead of performing the reductions of all these vectors into a single scalar.
 By the time the vectors are long enough to do this, we'll start running into memory bandwidth bottlenecks.

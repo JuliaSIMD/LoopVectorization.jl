@@ -11,14 +11,14 @@ function logdettriangle(B::Union{LowerTriangular,UpperTriangular})
     ld
 end
 ```
-![selfdot](../assets/bench_logdettriangle_v1.svg)
+![selfdot](../assets/bench_logdettriangle_v1.png)
 
 While Intel's proprietary compilers do the best, LoopVectorization performs very well among open source alternatives. A complicating
 factor to the above benchmark is that in accessing the diagonals, we are not accessing contiguous elements. A benchmark
 simply exponentiating a vector shows that `gcc` also has efficient special function vectorization, but that the autovectorizer
 disagrees with the discontiguous memory acesses:
 
-![selfdot](../assets/bench_exp_v1.svg)
+![selfdot](../assets/bench_exp_v1.png)
 
 The similar performance between `gfortran` and `LoopVectorization` at multiples of 8 is no fluke: on Linux systems with a recent GLIBC, SLEEFPirates.jl --
 which LoopVectorization depends on to vectorize these special functions -- looks for the GNU vector library and uses these functions

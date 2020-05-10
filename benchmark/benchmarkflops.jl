@@ -58,9 +58,9 @@ function matmul_bench!(br, C, A, B, i)
     br[8,i] = n_gflop / @belapsed iegemm!($C, $A, $B)
     @assert C ≈ Cblas "i-eigen gemm wrong?"; fill!(C, NaN)
     br[9,i] = n_gflop / @belapsed fgemm_builtin!($C, $A, $B)
-    @assert C ≈ Cblas "Fort intrinsic gemm wrong?"; fill!(C, NaN)
+    @assert C ≈ Cblas "Fort builtin gemm wrong?"; fill!(C, NaN)
     br[10,i] = n_gflop / @belapsed ifgemm_builtin!($C, $A, $B)
-    @assert C ≈ Cblas "ifort intrinsic gemm wrong?"; fill!(C, NaN)
+    @assert C ≈ Cblas "ifort builtin gemm wrong?"; fill!(C, NaN)
     br[11,i] = n_gflop / @belapsed mul!($C, $A, $B)
     br[12,i] = n_gflop / @belapsed dgemmmkl!($C, $A, $B)
     @assert C ≈ Cblas "MKL JIT gemm wrong?"; fill!(C, NaN)
@@ -107,7 +107,7 @@ blastests() = [
     "Julia", "Clang",
     "GFortran", "icc", "ifort",
     "g++ & Eigen-3", "icpc & Eigen-3",
-    "GFort-intrinsic", "ifort-intrinsic",
+    "GFortran-builtin", "ifort-builtin",
     BLAS.vendor() === :mkl ? "IntelMKL" : "OpenBLAS", "MKL"
 ]    
 
