@@ -860,6 +860,7 @@ function choose_tile(ls::LoopSet)
             new_order, state = iter
         end
     end
+    ls.loadelimination[] = shouldinline
     best_order, bestu₁, bestu₂, best_vec, u₁, u₂, lowest_cost, shouldinline
 end
 # Last in order is the inner most loop

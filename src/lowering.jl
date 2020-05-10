@@ -145,14 +145,46 @@ function lower_block(
     push!(blockq.args, incrementloopcounter(us, n, loopsym, UF))
     blockq
 end
-# tiledsym(s::Symbol) = Symbol("##outer##", s, "##outer##")
-# mangletiledsym(s::Symbol, us::UnrollSpecification, n::Int) = isunrolled2(us, n) ? tiledsym(s) : s
-function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask::Bool)
+
+function lower_llvm_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, loop::Loop)
     loopsym = names(ls)[n]
     loop = getloop(ls, loopsym)
     # loopsym = mangletiledsym(loopsym, us, n)
+    nisvectorized = false#isvectorized(us, n)
+    sl = startloop(loop, nisvectorized, loopsym)
+    # tc = terminatecondition(loop, us, n, loopsym, inclmask, 1)
+    looprange = if loop.startexact
+        if loop.stopexact
+            Expr(:(=), loopsym, Expr(:call, :(:), loop.starthint, loop.stophint))
+        else
+            Expr(:(=), loopsym, Expr(:call, :(:), loop.starthint, loop.stopsym))
+        end
+    elseif loop.stopexact
+        Expr(:(=), loopsym, Expr(:call, :(:), loop.startsym, loop.stophint))
+    else
+        Expr(:(=), loopsym, Expr(:call, :(:), loop.startsym, loop.stopsym))
+    end
+    body = lower_block(ls, us, n, false, 1)
+    push!(body.args, Expr(:loopinfo, (Symbol("llvm.loop.unroll.count"), 4)))
+    # q = Expr( :block, sl, Expr(:while, tc, body))
+    q = Expr(:for, looprange, body)
+    # if nisvectorized
+    #     tc = terminatecondition(loop, us, n, loopsym, true, 1)
+    #     body = lower_block(ls, us, n, true, 1)
+    #     push!(q.args, Expr(:if, tc, body))
+    # end
+    q
+end
+# tiledsym(s::Symbol) = Symbol("##outer##", s, "##outer##")
+# mangletiledsym(s::Symbol, us::UnrollSpecification, n::Int) = isunrolled2(us, n) ? tiledsym(s) : s
+function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask::Bool)
+    usorig = ls.unrollspecification[]
     nisvectorized = isvectorized(us, n)
-
+    loopsym = names(ls)[n]
+    loop = getloop(ls, loopsym)
+    if VERSION ≥ v"1.4" && !nisvectorized && !inclmask && isone(n) && !ls.loadelimination[] && (us.u₁ > 1) && (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && length(loop) > 7
+        return lower_llvm_unroll(ls, us, n, loop)
+    end
     sl = startloop(loop, nisvectorized, loopsym)
     tc = terminatecondition(loop, us, n, loopsym, inclmask, 1)
     body = lower_block(ls, us, n, inclmask, 1)
@@ -171,7 +203,6 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     order = names(ls)
     loopsym = order[n]
     loop = getloop(ls, loopsym)
-    # loopsym = mangletiledsym(loopsym, us, n)
     vectorized = order[vectorizedloopnum]
     nisunrolled = isunrolled1(us, n)
     nisvectorized = isvectorized(us, n)
