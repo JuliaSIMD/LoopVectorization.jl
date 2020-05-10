@@ -1,6 +1,12 @@
 
 @testset "mapreduce" begin
-
+    function maximum_avx(x)
+        s = typemin(eltype(x))
+        @avx for i in eachindex(x)
+            s = max(s, x[i])
+        end
+        s
+    end
     for T ∈ (Int32, Int64, Float32, Float64)
         if T <: Integer
             R = T(1):T(100)
@@ -19,6 +25,7 @@
         @test vmapreduce(sin, +, x7) ≈ mapreduce(sin, +, x7)
         @test vmapreduce(log, +, x) ≈ mapreduce(log, +, x)
         @test vmapreduce(abs2, +, x) ≈ mapreduce(abs2, +, x)
+        @test maximum(x) == vreduce(max, x) == maximum_avx(x)
     end
 
 end
