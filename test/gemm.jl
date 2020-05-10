@@ -634,7 +634,7 @@
             @test C ≈ 2C2
             AmuladdBavx!(C, A, B, -1)
             @test C ≈ C2
-            AmuladdBavx!(C, At', B, -2)
+            AmuladdBavx!(C, At', Bt', -2)
             @test C ≈ -C2
             AmuladdBavx!(C, At', B, 3, 2)
             @test C ≈ C2

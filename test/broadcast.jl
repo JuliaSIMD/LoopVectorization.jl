@@ -28,6 +28,11 @@
         fill!(c2, 99999);
         @avx @. c2 = a + bl;
         @test c1 ≈ c2
+
+        xs = rand(T, M);
+        max_ = maximum(xs, dims=1)
+        @test (@avx exp.(xs .- LowDimArray{(false,)}(max_))) ≈ exp.(xs .- LowDimArray{(false,)}(max_))
+
         
         a = rand(R, M); B = rand(R, M, N); c = rand(R, N); c′ = c';
         d1 =      @. a + B * c′;

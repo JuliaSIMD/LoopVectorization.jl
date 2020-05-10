@@ -115,6 +115,7 @@ struct LowDimArray{D,T,N,A<:DenseArray{T,N}} <: DenseArray{T,N}
     data::A
 end
 @inline Base.pointer(A::LowDimArray) = pointer(A.data)
+Base.@propagate_inbounds Base.getindex(A::LowDimArray, i...) = getindex(A.data, i...)
 Base.size(A::LowDimArray) = Base.size(A.data)
 @generated function VectorizationBase.stridedpointer(A::LowDimArray{D,T,N}) where {D,T,N}
     s = Expr(:tuple, [Expr(:ref, :strideA, n) for n ∈ 1+D[1]:N if D[n]]...)
@@ -125,11 +126,19 @@ end
 function LowDimArray{D}(data::A) where {D,T,N,A <: AbstractArray{T,N}}
     LowDimArray{D,T,N,A}(data)
 end
+function extract_all_1_array!(ls::LoopSet, bcname::Symbol, N::Int, elementbytes::Int)
+    refextract = gensym(bcname)
+    pushpreamble!(ls, Expr(:(=), refextract, Expr(:ref, bcname, [1 for n ∈ 1:N]...)))
+    return add_constant!(ls, refextract, elementbytes) # or replace elementbytes with sizeof(T) ? u
+end
 function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
     @nospecialize(LDA::Type{<:LowDimArray}), elementbytes::Int
 )
     D,T,N::Int,_ = LDA.parameters
+    if !any(D)
+        return extract_all_1_array!(ls, bcname, N, elementbytes)
+    end
     fulldims = Symbol[loopsyms[n] for n ∈ 1:N if D[n]::Bool]
     ref = ArrayReference(bcname, fulldims)
     add_simple_load!(ls, destname, ref, elementbytes, true, false )::Operation
@@ -139,12 +148,14 @@ function add_broadcast_adjoint_array!(
 ) where {T,N,A<:AbstractArray{T,N}}
     parent = gensym(:parent)
     pushpreamble!(ls, Expr(:(=), parent, Expr(:call, :parent, bcname)))
+    # isone(length(loopsyms)) && return extract_all_1_array!(ls, bcname, N, elementbytes)
     ref = ArrayReference(parent, Symbol[loopsyms[N + 1 - n] for n ∈ 1:N])
     add_simple_load!( ls, destname, ref, elementbytes, true, true )::Operation
 end
 function add_broadcast_adjoint_array!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{<:AbstractVector}, elementbytes::Int
 )
+    # isone(length(loopsyms)) && return extract_all_1_array!(ls, bcname, N, elementbytes)
     ref = ArrayReference(bcname, Symbol[loopsyms[2]])
     add_simple_load!( ls, destname, ref, elementbytes, true, true )
 end
