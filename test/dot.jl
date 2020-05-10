@@ -241,7 +241,9 @@ using Test
             @test πest == pi_avx_u4(a, b)
         end
 
-        @test dotloopinductvarpow(a) ≈ dotloopinductvarpowavx(a)
+        if !(!LoopVectorization.VectorizationBase.AVX2 && T === Int32)
+            @test dotloopinductvarpow(a) ≈ dotloopinductvarpowavx(a)
+        end
         @test dot_from_n_to_100(a, b, 33) == @views mydotavx(a[33:100], b[33:100])
 
         a_re = rand(R, N); a_im = rand(R, N);

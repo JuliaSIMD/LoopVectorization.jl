@@ -44,8 +44,8 @@ Base.IndexStyle(::Type{<:FallbackArrayWrapper}) = IndexLinear()
     @time include("map.jl")
 
     @time include("filter.jl")
-
-    @time include("mapreduce.jl")
+    
+    VERSION ≥ v"1.3" && @time include("mapreduce.jl")
 
     @time include("ifelsemasks.jl")
 
