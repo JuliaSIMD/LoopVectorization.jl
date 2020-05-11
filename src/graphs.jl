@@ -531,11 +531,28 @@ function add_operation!(
     end
 end
 
+function prepare_rhs_for_storage!(ls::LoopSet, RHS::Symbol, array, rawindices, elementbytes::Int, position::Int)
+    add_store!(ls, RHS, array, rawindices, elementbytes)
+end
+function prepare_rhs_for_storage!(ls::LoopSet, RHS::Expr, array, rawindices, elementbytes::Int, position::Int)
+    mpref = array_reference_meta!(ls, array, rawindices, elementbytes)
+    cachedparents = copy(mpref.parents)
+    ref = mpref.mref.ref
+    # id = findfirst(r -> r == ref, ls.refs_aliasing_syms)
+    # lrhs = id === nothing ? gensym(:RHS) : ls.syms_aliasing_refs[id]
+    lrhs = gensym(:RHS)
+    mpref.varname = lrhs
+    add_operation!(ls, lrhs, RHS, mpref, elementbytes, position)
+    mpref.parents = cachedparents
+    add_store!(ls, mpref, elementbytes)
+end
+
 function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
     if ex.head === :call
         finex = first(ex.args)::Symbol
         if finex === :setindex!
-            add_store_setindex!(ls, ex, elementbytes)
+            array, rawindices = ref_from_setindex!(ls, ex)
+            prepare_rhs_for_storage!(ls, ex.args[3], array, rawindices, elementbytes, position)
         else
             throw("Function $finex not recognized.")
         end
@@ -556,16 +573,7 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
                 # need to check if LHS appears in RHS
                 # assign RHS to lrhs
                 array, rawindices = ref_from_expr!(ls, LHS)
-                mpref = array_reference_meta!(ls, array, rawindices, elementbytes)
-                cachedparents = copy(mpref.parents)
-                ref = mpref.mref.ref
-                # id = findfirst(r -> r == ref, ls.refs_aliasing_syms)
-                # lrhs = id === nothing ? gensym(:RHS) : ls.syms_aliasing_refs[id]
-                lrhs = gensym(:RHS)
-                mpref.varname = lrhs
-                add_operation!(ls, lrhs, RHS, mpref, elementbytes, position)
-                mpref.parents = cachedparents
-                add_store!(ls, mpref, elementbytes)
+                prepare_rhs_for_storage!(ls, RHS, array, rawindices, elementbytes, position)
             else
                 add_store_ref!(ls, RHS, LHS, elementbytes)
             end

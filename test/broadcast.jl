@@ -60,15 +60,20 @@
 
         M, K, N = 77, 83, 57;
         A = rand(R,M,K); B = rand(R,K,N); C = rand(R,M,N);
-        At = copy(A')
+        At = copy(A');
         D1 = C .+ A * B;
         D2 = @avx C .+ A *ˡ B;
         @test D1 ≈ D2
         fill!(D2, -999999); D2 = @avx C .+ At' *ˡ B;
         @test D1 ≈ D2
-        D1 .= view(C, 1, :) .+ A * B;
+        D1 .= view(C, 1, :)' .+ A * B;
         fill!(D2, -999999);
-        @avx D2 .= view(C1, 1, :) .+ A *ˡ B;
+        @avx D2 .= view(C, 1, :)' .+ A *ˡ B;
+        @test D1 ≈ D2
+        C3d = rand(R,3,M,N);
+        D1 .= view(C3d, 1, :, :) .+ A * B;
+        fill!(D2, -999999);
+        @avx D2 .= view(C3d, 1, :, :) .+ A *ˡ B;
         @test D1 ≈ D2
 
         if VERSION > v"1.2"

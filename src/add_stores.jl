@@ -79,10 +79,6 @@ function add_store_ref!(ls::LoopSet, var, ex::Expr, elementbytes::Int)
     c = add_constant!(ls, var, elementbytes)
     add_store_ref!(ls, name(c), ex, elementbytes)
 end
-function add_store_setindex!(ls::LoopSet, ex::Expr, elementbytes::Int)
-    array, raw_indices = ref_from_setindex!(ls, ex)
-    add_store!(ls, (ex.args[3])::Symbol, array, raw_indices, elementbytes)
-end
 
 # For now, it is illegal to load from a conditional store.
 # if you want that sort of behavior, do a conditional reassignment, and store that result unconditionally.
