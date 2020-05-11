@@ -150,7 +150,7 @@ function argmeta_and_consts_description(ls::LoopSet, arraysymbolinds)
         Expr(:curly, :Tuple, ls.preamble_symint...),
         Expr(:curly, :Tuple, ls.preamble_symfloat...),
         Expr(:curly, :Tuple, ls.preamble_zeros...),
-        Expr(:curly, :Tuple, ls.preamble_ones...)
+        Expr(:curly, :Tuple, ls.preamble_funcofeltypes...)
     )
 end
 

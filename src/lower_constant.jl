@@ -1,6 +1,6 @@
 
-@inline onefloat(::Type{T}) where {T} = one(sizeequivalentfloat(T))
-@inline oneinteger(::Type{T}) where {T} = one(sizeequivalentint(T))
+# @inline onefloat(::Type{T}) where {T} = one(sizeequivalentfloat(T))
+# @inline oneinteger(::Type{T}) where {T} = one(sizeequivalentint(T))
 @inline zerofloat(::Type{T}) where {T} = zero(sizeequivalentfloat(T))
 @inline zerointeger(::Type{T}) where {T} = zero(sizeequivalentint(T))
 
@@ -64,6 +64,12 @@ function lower_constant!(
                 Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:SIMDPirates)), QuoteNode(:addscalar)), Expr(:call, lv(:vzero), VECTORWIDTHSYMBOL, ELTYPESYMBOL), constsym)
             elseif instrclass == MULTIPLICATIVE_IN_REDUCTIONS
                 Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:SIMDPirates)), QuoteNode(:mulscalar)), Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, Expr(:call, :one, ELTYPESYMBOL)), constsym)
+            elseif instrclass == MAX
+                Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:SIMDPirates)), QuoteNode(:maxscalar)), Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, Expr(:call, :typemin, ELTYPESYMBOL)), constsym)
+                
+            elseif instrclass == MIN
+                Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:SIMDPirates)), QuoteNode(:minscalar)), Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, Expr(:call, :typemax, ELTYPESYMBOL)), constsym)
+                
             else
                 throw("Reductions of type $(reduction_zero(reinstrclass)) not yet supported; please file an issue as a reminder to take care of this.")
             end
@@ -132,14 +138,8 @@ function lower_licm_constants!(ls::LoopSet)
             setconstantop!(ls, ops[id], Expr(:call, lv(:zerofloat), ELTYPESYMBOL))
         end
     end
-    for (id,typ) ∈ ls.preamble_ones
-        if typ == IntOrFloat
-            setop!(ls, ops[id], Expr(:call, :one, ELTYPESYMBOL))
-        elseif typ == HardInt
-            setop!(ls, ops[id], Expr(:call, lv(:oneinteger), ELTYPESYMBOL))
-        else#if typ == HardFloat
-            setop!(ls, ops[id], Expr(:call, lv(:onefloat), ELTYPESYMBOL))
-        end
+    for (id,f) ∈ ls.preamble_funcofeltypes
+        setop!(ls, ops[id], Expr(:call, f, ELTYPESYMBOL))
     end
 end
 
