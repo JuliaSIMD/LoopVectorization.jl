@@ -195,13 +195,6 @@ function add_external_functions!(q::Expr, ls::LoopSet)
     end
 end
 
-@inline unwrap_array(A) = A
-@inline unwrap_array(A::Union{SubArray,Transpose,Adjoint}) = parent(A)
-@inline array_wrapper(A) = nothing
-@inline array_wrapper(A::Transpose) = Transpose
-@inline array_wrapper(A::Adjoint) = Adjoint
-@inline array_wrapper(A::SubArray) = A.indices
-
 # Try to condense in type stable manner
 function generate_call(ls::LoopSet, inline_unroll::NTuple{3,Int8}, debug::Bool = false)
     operation_descriptions = Expr(:curly, :Tuple)
@@ -234,16 +227,6 @@ function generate_call(ls::LoopSet, inline_unroll::NTuple{3,Int8}, debug::Bool =
     add_reassigned_syms!(q, ls)
     add_external_functions!(q, ls)
     q
-end
-concat_vals() = Val{()}()
-# @generated concat_vals(::Val{N}) where {N} = Val{(N,)}()
-# @generated concat_vals(::Val{M}, ::Val{N}) where {M, N} = Val{(M,N)}()
-@generated function concat_vals(args...)
-    tup = Expr(:tuple)
-    for n in eachindex(args)
-        push!(tup.args, args[n].parameters[1])
-    end
-    Expr(:call, Expr(:curly, :Val, tup))
 end
 
 

@@ -66,6 +66,10 @@
         @test D1 ≈ D2
         fill!(D2, -999999); D2 = @avx C .+ At' *ˡ B;
         @test D1 ≈ D2
+        D1 .= view(C, 1, :) .+ A * B;
+        fill!(D2, -999999);
+        @avx D2 .= view(C1, 1, :) .+ A *ˡ B;
+        @test D1 ≈ D2
 
         if VERSION > v"1.2"
             b = rand(T,K); x = rand(R,N);

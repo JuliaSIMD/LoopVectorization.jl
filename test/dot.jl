@@ -38,7 +38,7 @@ using Test
     function myselfdot(a)
         s = zero(eltype(a))
         @inbounds @simd for i ∈ eachindex(a)
-            s += a[i]*a[i]
+            s += getindex(a, i) * a[i]
         end
         s
     end
@@ -142,7 +142,7 @@ using Test
     function complex_mul_with_index_offset_avx!(c_re, c_im, a_re, a_im, b_re, b_im)
         @_avx for i = 1:length(a_re) - 1
             c_re[i] = b_re[i] * a_re[i + 1] - b_im[i] * a_im[i + 1]
-            c_im[i] = b_re[i] * a_im[i + 1] + b_im[i] * a_re[i + 1]
+            setindex!(c_im, b_re[i] * a_im[i + 1] + b_im[i] * a_re[i + 1], i)
         end
     end
 

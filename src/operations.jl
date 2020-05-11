@@ -25,7 +25,6 @@ function sameref(x::ArrayReference, y::ArrayReference)
     yinds = y.indices
     nrefs = length(xinds)
     nrefs == length(yinds) || return false
-    xoffs = x.offsets; yoffs = y.offsets
     for n ∈ 1:nrefs
         xinds[n] === yinds[n] || return false
     end

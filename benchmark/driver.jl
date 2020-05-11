@@ -21,12 +21,12 @@ end
 
 # sizes = 23:23
 sizes = 256:-1:2
-selfdot_bench = benchmark_selfdot(sizes)
 
 AmulB_bench = benchmark_AmulB(sizes)
 AmulBt_bench = benchmark_AmulBt(sizes)
-AtmulB_bench = benchmark_AtmulB(sizes)
 AtmulBt_bench = benchmark_AtmulBt(sizes)
+AtmulB_bench = benchmark_AtmulB(sizes)
+
 Amulvb_bench = benchmark_Amulvb(sizes)
 Atmulvb_bench = benchmark_Atmulvb(sizes)
 
@@ -36,6 +36,7 @@ filter2d_unrolled_bench = benchmark_filter2dunrolled(sizes)#512:-1:2)
 
 dot3_bench = benchmark_dot3(sizes)
 dot_bench = benchmark_dot(sizes)
+selfdot_bench = benchmark_selfdot(sizes)
 sse_bench = benchmark_sse(sizes)
 aplusBc_bench = benchmark_aplusBc(sizes)
 AplusAt_bench = benchmark_AplusAt(sizes)
@@ -43,7 +44,7 @@ vexp_bench = benchmark_exp(sizes)
 randomaccess_bench = benchmark_random_access(sizes)
 logdettriangle_bench = benchmark_logdettriangle(sizes)
 
-v = 1
+const v = 1
 using Cairo, Fontconfig
 const PICTURES = joinpath(pkgdir(LoopVectorization), "docs", "src", "assets")
 function saveplot(f, br)
