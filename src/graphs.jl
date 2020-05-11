@@ -172,7 +172,7 @@ struct LoopSet
     preamble_symint::Vector{Tuple{Int,Int}}
     preamble_symfloat::Vector{Tuple{Int,Float64}}
     preamble_zeros::Vector{Tuple{Int,NumberType}}
-    preamble_ones::Vector{Tuple{Int,NumberType}}
+    preamble_funcofeltypes::Vector{Tuple{Int,Symbol}}
     includedarrays::Vector{Symbol}
     includedactualarrays::Vector{Symbol}
     syms_aliasing_refs::Vector{Symbol}
@@ -220,7 +220,7 @@ function pushpreamble!(ls::LoopSet, op::Operation, v::Number)
     if iszero(v)
         push!(ls.preamble_zeros, (id, typ))
     elseif isone(v)
-        push!(ls.preamble_ones, (id, typ))
+        push!(ls.preamble_funcofeltypes, (id, :one))
     elseif v isa Integer
         push!(ls.preamble_symint, (id, convert(Int,v)))
     else
@@ -233,7 +233,7 @@ function pushpreamble!(ls::LoopSet, op::Operation, RHS::Expr)
     if RHS.head === :call && first(RHS.args) === :zero
         push!(ls.preamble_zeros, (identifier(op), IntOrFloat))
     elseif RHS.head === :call && first(RHS.args) === :one
-        push!(ls.preamble_ones, (identifier(op), IntOrFloat))
+        push!(ls.preamble_funcofeltypes, (identifier(op), :one))
     else
         pushpreamble!(ls, Expr(:(=), c, RHS))
         pushpreamble!(ls, op, c)
@@ -247,20 +247,6 @@ function zerotype(ls::LoopSet, op::Operation)
     end
     INVALID
 end
-# function Base.iszero(ls::LoopSet, op::Operation)
-#     opid = identifier(op)
-#     for (id,_) ∈ ls.preamble_zeros
-#         opid == id && return true
-#     end
-#     false
-# end
-# function Base.isone(ls::LoopSet, op::Operation)
-#     opid = identifier(op)
-#     for (id,_) ∈ ls.preamble_ones
-#         opid == id && return true
-#     end
-#     false
-# end
 
 includesarray(ls::LoopSet, array::Symbol) = array ∈ ls.includedarrays
 
@@ -496,7 +482,11 @@ function add_operation!(
         elseif f === :zero || f === :one
             c = gensym(f)
             op = add_constant!(ls, c, ls.loopsymbols[1:position], LHS, elementbytes, :numericconstant)
-            push!(f === :zero ? ls.preamble_zeros : ls.preamble_ones, (identifier(op), IntOrFloat))
+            if f === :zero
+                push!(ls.preamble_zeros, (identifier(op), IntOrFloat))
+            else
+                push!(ls.preamble_funcofeltypes, (identifier(op), :one))
+            end
             op
         else
             add_compute!(ls, LHS, RHS, elementbytes, position)
@@ -524,7 +514,11 @@ function add_operation!(
         elseif f === :zero || f === :one
             c = gensym(f)
             op = add_constant!(ls, c, ls.loopsymbols[1:position], LHS_sym, elementbytes, :numericconstant)
-            push!(f === :zero ? ls.preamble_zeros : ls.preamble_ones, (identifier(op), IntOrFloat))
+            if f === :zero
+                push!(ls.preamble_zeros, (identifier(op), IntOrFloat))
+            else
+                push!(ls.preamble_funcofeltypes, (identifier(op), :one))
+            end
             op
         else
             add_compute!(ls, LHS_sym, RHS, elementbytes, position, LHS_ref)

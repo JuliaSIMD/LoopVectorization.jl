@@ -17,11 +17,6 @@ function add_constant!(ls::LoopSet, var::Number, elementbytes::Int = 8)
             (instruction(ops[id]) === LOOPCONSTANT && typ == typ_) && return ops[id]
         end
         push!(ls.preamble_zeros, (identifier(op),typ))
-    elseif isone(var)
-        for (id,typ_) ∈ ls.preamble_ones
-            (instruction(ops[id]) === LOOPCONSTANT && typ == typ_) && return ops[id]
-        end
-        push!(ls.preamble_ones, (identifier(op),typ))
     elseif var isa Integer
         for (id,ivar) ∈ ls.preamble_symint
             (instruction(ops[id]) === LOOPCONSTANT && ivar == var) && return ops[id]

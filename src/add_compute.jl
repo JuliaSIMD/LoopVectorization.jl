@@ -161,19 +161,9 @@ function add_reduction_update_parent!(
         reductinit = add_constant!(ls, gensym(:reductzero), loopdependencies(parent), reductsym, elementbytes, :numericconstant)
         if reduct_zero === :zero
             push!(ls.preamble_zeros, (identifier(reductinit), IntOrFloat))
-        elseif reduct_zero === :one
-            push!(ls.preamble_ones, (identifier(reductinit), IntOrFloat))
         else
-            if reductzero === :true || reductzero === :false
-                pushpreamble!(ls, Expr(:(=), name(reductinit), reductzero))
-            else
-                pushpreamble!(ls, Expr(:(=), name(reductinit), Expr(:call, reductzero, ls.T)))
-            end
-            pushpreamble!(ls, op, name, reductinit)
+            push!(ls.preamble_funcofeltypes, (identifier(reductinit), reduct_zero))
         end
-        # if 
-            # reductcombine = reduction_combine_to(instrclass)
-        # end
     else
         reductinit = parent
         reductsym = var
@@ -328,7 +318,7 @@ function add_pow!(
     end
     if pint == 0
         op = Operation(length(operations(ls)), var, elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS)
-        push!(ls.preamble_ones, (identifier(op),IntOrFloat))
+        push!(ls.preamble_funcofeltypes, (identifier(op),:one))
         return pushop!(ls, op)
     elseif pint == 1
         return add_compute!(ls, var, :identity, [xop], elementbytes)

@@ -203,7 +203,7 @@ function process_metadata!(ls::LoopSet, AM, num_arrays::Int)
     expandbyoffset!(ls.preamble_symint, AM[4].parameters, opoffsets)
     expandbyoffset!(ls.preamble_symfloat, AM[5].parameters, opoffsets)
     expandbyoffset!(ls.preamble_zeros, AM[6].parameters, opoffsets)
-    expandbyoffset!(ls.preamble_ones, AM[7].parameters, opoffsets)
+    expandbyoffset!(ls.preamble_funcofeltypes, AM[7].parameters, opoffsets)
     nothing
 end
 function expandbyoffset!(indexpand::Vector{T}, inds, offsets::Vector{Int}, expand::Bool = true) where {T <: Union{Int,Tuple{Int,<:Any}}}

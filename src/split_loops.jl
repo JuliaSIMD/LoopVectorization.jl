@@ -43,7 +43,7 @@ function split_loopset(ls::LoopSet, ids)
     append_if_included!(ls_new.preamble_symint, ls.preamble_symint, included)
     append_if_included!(ls_new.preamble_symfloat, ls.preamble_symfloat, included)
     append_if_included!(ls_new.preamble_zeros, ls.preamble_zeros, included)
-    append_if_included!(ls_new.preamble_ones, ls.preamble_ones, included)
+    append_if_included!(ls_new.preamble_funcofeltypes, ls.preamble_funcofeltypes, included)
     ls_new
 end
 
