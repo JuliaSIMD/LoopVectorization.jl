@@ -48,7 +48,6 @@ include("add_stores.jl")
 include("add_compute.jl")
 include("add_constants.jl")
 include("add_ifelse.jl")
-include("broadcast.jl")
 include("determinestrategy.jl")
 include("lower_compute.jl")
 include("lower_constant.jl")
@@ -62,6 +61,7 @@ include("reconstruct_loopset.jl")
 include("constructors.jl")
 include("user_api_conveniences.jl")
 include("mapreduce.jl")
+include("broadcast.jl")
 
 """
 LoopVectorization provides macros and functions that combine SIMD vectorization and
