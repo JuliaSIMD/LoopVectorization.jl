@@ -17,6 +17,9 @@ using Base.Broadcast: Broadcasted, DefaultArrayStyle
 using LinearAlgebra: Adjoint, Transpose
 using Base.Meta: isexpr
 using DocStringExtensions
+@static if iszero(VERSION.minor) && isone(VERSION.major)
+    using Compat: isnothing
+end
 import LinearAlgebra # for check_args
 
 using Base.FastMath: add_fast, sub_fast, mul_fast, div_fast

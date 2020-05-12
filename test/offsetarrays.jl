@@ -3,6 +3,20 @@ using LoopVectorization.VectorizationBase: StaticUnitRange
 using Test
 T = Float64
 # T = Float32
+    struct SizedOffsetMatrix{T,LR,UR,LC,RC} <: DenseMatrix{T}
+        data::Matrix{T}
+    end
+    Base.axes(::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (StaticUnitRange{LR,UR}(),StaticUnitRange{LC,UC}())
+    Base.parent(A::SizedOffsetMatrix) = A.data
+    @generated function LoopVectorization.stridedpointer(A::SizedOffsetMatrix{T,LR,UR,LC,RC}) where {T,LR,UR,LC,RC}
+        quote
+            $(Expr(:meta,:inline))
+            LoopVectorization.OffsetStridedPointer(
+                LoopVectorization.StaticStridedPointer{$T,Tuple{1,$(UR-LR+1)}}(pointer(parent(A))),
+                ($(LR-2), $(LC-2))
+            )
+        end
+    end
 
 @testset "OffsetArrays" begin
 
@@ -85,20 +99,6 @@ T = Float64
     end
 
 
-    struct SizedOffsetMatrix{T,LR,UR,LC,RC} <: DenseMatrix{T}
-        data::Matrix{T}
-    end
-    Base.axes(::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (StaticUnitRange{LR,UR}(),StaticUnitRange{LC,UC}())
-    Base.parent(A::SizedOffsetMatrix) = A.data
-    @generated function LoopVectorization.stridedpointer(A::SizedOffsetMatrix{T,LR,UR,LC,RC}) where {T,LR,UR,LC,RC}
-        quote
-            $(Expr(:meta,:inline))
-            LoopVectorization.OffsetStridedPointer(
-                LoopVectorization.StaticStridedPointer{$T,Tuple{1,$(UR-LR+1)}}(pointer(parent(A))),
-                ($(LR-2), $(LC-2))
-            )
-        end
-    end
     # Base.size(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (1 + UR-LR, 1 + UC-LC)
     # Base.CartesianIndices(::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = CartesianIndices((LR:UR,LC:UC))
     Base.getindex(A::SizedOffsetMatrix, i, j) = LoopVectorization.vload(LoopVectorization.stridedpointer(A), (i,j)) # only needed to print

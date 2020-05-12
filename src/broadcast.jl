@@ -205,10 +205,19 @@ function add_broadcast!(
     elementbytes::Int
 )
     S,_,F,A = B.parameters
-    instr = get(FUNCTIONSYMBOLS, F) do
-        f = gensym(:func)
-        pushpreamble!(ls, Expr(:(=), f, Expr(:(.), bcname, QuoteNode(:f))))
-        Instruction(bcname, f)
+    @static if iszero(VERSION.minor) && isone(VERSION.major)
+        instr = get(FUNCTIONSYMBOLS, F, nothing)
+        if isnothing(instr)
+            f = gensym(:func)
+            pushpreamble!(ls, Expr(:(=), f, Expr(:(.), bcname, QuoteNode(:f))))
+            instr = Instruction(bcname, f)
+        end
+    else
+        instr = get(FUNCTIONSYMBOLS, F) do
+            f = gensym(:func)
+            pushpreamble!(ls, Expr(:(=), f, Expr(:(.), bcname, QuoteNode(:f))))
+            Instruction(bcname, f)
+        end
     end
     args = A.parameters
     Nargs = length(args)

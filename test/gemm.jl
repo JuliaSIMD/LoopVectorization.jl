@@ -1,3 +1,28 @@
+struct SizedMatrix{M,N,T} <: DenseMatrix{T}
+    data::Matrix{T}
+end
+Base.parent(A::SizedMatrix) = A.data
+SizedMatrix{M,N}(A::Matrix{T}) where {M,N,T} = SizedMatrix{M,N,T}(A)
+Base.@propagate_inbounds Base.getindex(A::SizedMatrix, i...) = getindex(parent(A), i...)
+Base.@propagate_inbounds Base.setindex!(A::SizedMatrix, v, i...) = setindex!(parent(A), v, i...)
+Base.size(::SizedMatrix{M,N}) where {M,N} = (M,N)
+@inline function LoopVectorization.stridedpointer(A::SizedMatrix{M,N,T}) where {M,N,T}
+    LoopVectorization.StaticStridedPointer{T,Tuple{1,M}}(pointer(parent(A)))
+end
+@inline function LoopVectorization.stridedpointer(A::LinearAlgebra.Adjoint{T,SizedMatrix{M,N,T}}) where {M,N,T}
+    LoopVectorization.StaticStridedPointer{T,Tuple{M,1}}(pointer(parent(A).data))
+end
+@inline function LoopVectorization.stridedpointer(A::LinearAlgebra.Transpose{T,SizedMatrix{M,N,T}}) where {M,N,T}
+    LoopVectorization.StaticStridedPointer{T,Tuple{M,1}}(pointer(parent(A).data))
+end
+LoopVectorization.maybestaticsize(::SizedMatrix{M,N}, ::Val{1}) where {M,N} = LoopVectorization.Static{M}()
+LoopVectorization.maybestaticsize(::SizedMatrix{M,N}, ::Val{2}) where {M,N} = LoopVectorization.Static{N}()
+LoopVectorization.maybestaticsize(::LinearAlgebra.Adjoint{T,SizedMatrix{M,N,T}}, ::Val{1}) where {M,N,T} = LoopVectorization.Static{N}()
+LoopVectorization.maybestaticsize(::LinearAlgebra.Adjoint{T,SizedMatrix{M,N,T}}, ::Val{2}) where {M,N,T} = LoopVectorization.Static{M}()
+LoopVectorization.maybestaticsize(::LinearAlgebra.Transpose{T,SizedMatrix{M,N,T}}, ::Val{1}) where {M,N,T} = LoopVectorization.Static{N}()
+LoopVectorization.maybestaticsize(::LinearAlgebra.Transpose{T,SizedMatrix{M,N,T}}, ::Val{2}) where {M,N,T} = LoopVectorization.Static{M}()
+
+
 @testset "GEMM" begin
  # using LoopVectorization, LinearAlgebra, Test; T = Float64
     Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (5, 5)
@@ -570,29 +595,6 @@
     # end)
     # lsmul2x2q = LoopVectorization.LoopSet(mul2x2q)
 
-    struct SizedMatrix{M,N,T} <: DenseMatrix{T}
-        data::Matrix{T}
-    end
-    Base.parent(A::SizedMatrix) = A.data
-    SizedMatrix{M,N}(A::Matrix{T}) where {M,N,T} = SizedMatrix{M,N,T}(A)
-    Base.@propagate_inbounds Base.getindex(A::SizedMatrix, i...) = getindex(parent(A), i...)
-    Base.@propagate_inbounds Base.setindex!(A::SizedMatrix, v, i...) = setindex!(parent(A), v, i...)
-    Base.size(::SizedMatrix{M,N}) where {M,N} = (M,N)
-    @inline function LoopVectorization.stridedpointer(A::SizedMatrix{M,N,T}) where {M,N,T}
-        LoopVectorization.StaticStridedPointer{T,Tuple{1,M}}(pointer(parent(A)))
-    end
-    @inline function LoopVectorization.stridedpointer(A::LinearAlgebra.Adjoint{T,SizedMatrix{M,N,T}}) where {M,N,T}
-        LoopVectorization.StaticStridedPointer{T,Tuple{M,1}}(pointer(parent(A).data))
-    end
-    @inline function LoopVectorization.stridedpointer(A::LinearAlgebra.Transpose{T,SizedMatrix{M,N,T}}) where {M,N,T}
-        LoopVectorization.StaticStridedPointer{T,Tuple{M,1}}(pointer(parent(A).data))
-    end
-    LoopVectorization.maybestaticsize(::SizedMatrix{M,N}, ::Val{1}) where {M,N} = LoopVectorization.Static{M}()
-    LoopVectorization.maybestaticsize(::SizedMatrix{M,N}, ::Val{2}) where {M,N} = LoopVectorization.Static{N}()
-    LoopVectorization.maybestaticsize(::LinearAlgebra.Adjoint{T,SizedMatrix{M,N,T}}, ::Val{1}) where {M,N,T} = LoopVectorization.Static{N}()
-    LoopVectorization.maybestaticsize(::LinearAlgebra.Adjoint{T,SizedMatrix{M,N,T}}, ::Val{2}) where {M,N,T} = LoopVectorization.Static{M}()
-    LoopVectorization.maybestaticsize(::LinearAlgebra.Transpose{T,SizedMatrix{M,N,T}}, ::Val{1}) where {M,N,T} = LoopVectorization.Static{N}()
-    LoopVectorization.maybestaticsize(::LinearAlgebra.Transpose{T,SizedMatrix{M,N,T}}, ::Val{2}) where {M,N,T} = LoopVectorization.Static{M}()
     
     for T ∈ (Float32, Float64, Int32, Int64)
         @show T, @__LINE__

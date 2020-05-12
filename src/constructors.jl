@@ -30,16 +30,42 @@ function substitute_broadcast(q::Expr, mod::Symbol)
     syms = [gensym() for _ ∈ 1:nargs]
     for n ∈ 1:nargs
         ciₙ = ci[n]
+        @static if iszero(VERSION.minor) && isone(VERSION.major)
+            if ciₙ.head === :call && length(ciₙ.args) == 3 && ciₙ.args[1] === GlobalRef(Base, :getproperty) && ciₙ.args[2] === GlobalRef(Base, :Broadcast)
+                if ciₙ.args[3] === QuoteNode(:materialize)
+                    syms[n] = :vmaterialize; continue
+                elseif ciₙ.args[3] === QuoteNode(:materialize!)
+                    syms[n] = :vmaterialize!; continue
+                end
+            end
+        end
         ciₙargs = ciₙ.args
         f = first(ciₙargs)
         if ciₙ.head === :(=)
             push!(ex.args, Expr(:(=), f, syms[((ciₙargs[2])::Core.SSAValue).id]))
-        elseif isglobalref(f, Base, :materialize!)
-            add_ci_call!(ex, lv(:vmaterialize!), ciₙargs, syms, n, mod)
-        elseif isglobalref(f, Base, :materialize)
-            add_ci_call!(ex, lv(:vmaterialize), ciₙargs, syms, n, mod)
         else
-            add_ci_call!(ex, f, ciₙargs, syms, n)
+            @static if iszero(VERSION.minor) && isone(VERSION.major)
+                if f isa Core.SSAValue
+                    sym = syms[f.id]
+                    if sym === :vmaterialize
+                        add_ci_call!(ex, lv(:vmaterialize), ciₙargs, syms, n, mod)
+                    elseif sym === :vmaterialize!
+                        add_ci_call!(ex, lv(:vmaterialize!), ciₙargs, syms, n, mod)
+                    else
+                        add_ci_call!(ex, f, ciₙargs, syms, n)
+                    end
+                else
+                    add_ci_call!(ex, f, ciₙargs, syms, n)
+                end
+            else
+                if isglobalref(f, Base, :materialize!)
+                    add_ci_call!(ex, lv(:vmaterialize!), ciₙargs, syms, n, mod)
+                elseif isglobalref(f, Base, :materialize)
+                    add_ci_call!(ex, lv(:vmaterialize), ciₙargs, syms, n, mod)
+                else
+                    add_ci_call!(ex, f, ciₙargs, syms, n)
+                end
+            end
         end
     end
     ex
