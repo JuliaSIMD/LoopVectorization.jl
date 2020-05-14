@@ -330,10 +330,12 @@ using Test
                 qq[i,k] = tmp
             end
         end
-        @avx for k in maxk+1:nk
-            for i in eachindex(lse)
-                tmp = exp(xx[i,k] - tmpmax[i])
-                lse[i] += tmp
+        if maxk < nk
+            @avx for k in maxk+1:nk
+                for i in eachindex(lse)
+                    tmp = exp(xx[i,k] - tmpmax[i])
+                    lse[i] += tmp
+                end
             end
         end
         qq[:,Base.OneTo(maxk)] ./= vec(lse)
@@ -346,10 +348,12 @@ using Test
                 qq[i,k] = tmp
             end
         end
-        @_avx for k in maxk+1:nk
-            for i in eachindex(lse)
-                tmp = exp(xx[i,k] - tmpmax[i])
-                lse[i] += tmp
+        if maxk < nk
+            @_avx for k in maxk+1:nk
+                for i in eachindex(lse)
+                    tmp = exp(xx[i,k] - tmpmax[i])
+                    lse[i] += tmp
+                end
             end
         end
         qq[:,Base.OneTo(maxk)] ./= vec(lse)
