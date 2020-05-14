@@ -186,9 +186,9 @@ end
 function assume(ex)
     Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:SIMDPirates)), QuoteNode(:assume)), ex)
 end
-function expect(ex)
-    Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:SIMDPirates)), QuoteNode(:expect)), ex)
-end
+# function expect(ex)
+#     Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:SIMDPirates)), QuoteNode(:expect)), ex)
+# end
 function loopiteratesatleastonce(loop::Loop, as::Bool = true)
     comp = if loop.startexact # requires !loop.stopexact
         Expr(:call, :>, loop.stopsym, loop.starthint - 1)
@@ -197,7 +197,8 @@ function loopiteratesatleastonce(loop::Loop, as::Bool = true)
     else
         Expr(:call, :>, loop.stopsym, Expr(:call, :-, loop.stopsym, 1))
     end
-    as ? assume(comp) : expect(comp)
+    # as ? assume(comp) : expect(comp)
+    assume(comp)
 end
 function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask::Bool)
     usorig = ls.unrollspecification[]

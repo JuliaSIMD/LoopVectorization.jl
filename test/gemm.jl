@@ -13,7 +13,7 @@
     # @test LoopVectorization.choose_order(lsAmulBt1) == (Symbol[:n,:m,:k], :n, :m, :m, Unum, Tnum)
     @test LoopVectorization.choose_order(lsAmulBt1) == (Symbol[:n,:m,:k], :m, :n, :m, Unum, Tnum)
 
-    AmulBq1 = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+    AmulBq1 = :(for n ∈ 1:size(B,2), m ∈ 1:size(A,1)
                 C[m,n] = zeroB
                 for k ∈ 1:size(A,2)
                 C[m,n] += A[m,k] * B[k,n]
