@@ -163,8 +163,8 @@ function lower_compute!(
         # want to instcombine when parent load's deps are superset
         # also make sure opp is unrolled
         if instrfid !== nothing && (opunrolled && u₁ > 1) && !load_constrained(op, u₁loopsym, u₂loopsym)
-            # specific_fmas = Base.libllvm_version > v"9.0.0" ? (:vfmadd, :vfnmadd, :vfmsub, :vfnmsub) : (:vfmadd231, :vfnmadd231, :vfmsub231, :vfnmsub231)
-            specific_fmas = (:vfmadd231, :vfnmadd231, :vfmsub231, :vfnmsub231)
+            specific_fmas = Base.libllvm_version > v"11.0.0" ? (:vfmadd, :vfnmadd, :vfmsub, :vfnmsub) : (:vfmadd231, :vfnmadd231, :vfmsub231, :vfnmsub231)
+            # specific_fmas = (:vfmadd231, :vfnmadd231, :vfmsub231, :vfnmsub231)
             instr = Instruction(specific_fmas[instrfid])
         end
     end
@@ -183,6 +183,7 @@ function lower_compute!(
     # but smaller function is probably worthwhile. Compiler could theoreically split anyway
     # but I suspect that the branches are so cheap compared to the cost of everything else going on
     # that smaller size is more advantageous.
+    isvectorized = vectorized ∈ loopdependencies(op)
     modsuffix = 0
     for u ∈ 0:Uiter
         instrcall = Expr(instr) # Expr(:call, instr)
@@ -212,6 +213,13 @@ function lower_compute!(
                     if parents_u₁syms[n]
                         parent = Symbol(parent, u)
                     end
+                end
+                if isvectorized && isload(parents_op[n]) && vectorized ∉ loopdependencies(parents_op[n]) && n != tiledouterreduction && !(parents_u₁syms[n] & parents_u₂syms[n])
+                    broadcast_parent = Symbol(parent, "##broadcasted##")
+                    if (parents_u₂syms[n] && iszero(u)) || (parents_u₁syms[n] && (isnothing(suffix) || iszero(suffix))) || (!(parents_u₁syms[n] | parents_u₂syms[n]) && iszero(u) && (isnothing(suffix) || iszero(suffix)))
+                        push!(q.args, Expr(:(=), broadcast_parent, Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, parent)))
+                    end
+                    parent = broadcast_parent
                 end
                 push!(instrcall.args, parent)
             end

@@ -11,22 +11,29 @@ function Base.show(io::IO, br::BenchmarkResult)
 end
 
 
-using Colors, Gadfly
-const COLORS = distinguishable_colors(21, [RGB(1,1,1), RGB(0,0,0)])
-const COLOR_MAP = Dict{String,RGB{Colors.N0f8}}()
+using Colors, ColorSchemes, Gadfly
+const COLORS = [RGB(0.0,0.0,0.0),RGB(1.0,0.0,0.0)]
+# const COLORS = [RGB(0.0,0.0,0.0),RGB(0.0,1.0,0.0)]
+# const COLORS = distinguishable_colors(14, pushfirst!(get(ColorSchemes.Paired_12, (0.5:11.5) ./ 12), RGB(0.0,0.0,0.0)))
+for i ∈ 1:12 # 11 is number of tested libs - 2
+    push!(COLORS, get(ColorSchemes.cyclic_mygbm_30_95_c78_n256_s25, i/12))
+    # push!(COLORS, get(ColorSchemes.vikO, (i-0.5)/12))
+end
+# const COLOR_MAP = Dict{String,RGB{Float64}}()
+# const COLOR_MAP = Dict{String,RGB{Colors.N0f8}}()
+const COLOR_MAP64 = Dict{String,RGB{Float64}}()
 function getcolor(s::String)
-    get!(COLOR_MAP, s) do
-        COLORS[length(COLOR_MAP) + 2]
+    get!(COLOR_MAP64, s) do
+        COLORS[length(COLOR_MAP64) + 1]
     end
 end
-
+replace_and(str) = replace(str, '&' => "with")
 
 function Gadfly.plot(br::BenchmarkResult)
     res = br.sizedresults.results
     sizes = br.sizedresults.sizes
     # sizes = Vector{eltype(brsizes)}(undef, length(res))
-    tests = @view(br.tests[2:end])
-    ntests = length(tests)
+    tests = replace_and.(@view(br.tests[2:end]))
     colors = getcolor.(tests)
     
     xt = 0:20:260
@@ -34,13 +41,13 @@ function Gadfly.plot(br::BenchmarkResult)
     maxtick = 10round(Int, 0.1maxres)
     yt = if iszero(maxtick)
         maxtick = 10round(0.1maxres)
-        range(0, maxtick, length = 20)
-    elseif maxtick < 50
-        0:5:maxtick
-    elseif maxtick < 20
-        0:2:maxtick
+        range(0, maxres, length = 20)
     elseif maxtick < 10
         0:1:maxtick
+    elseif maxtick < 20
+        0:2:maxtick
+    elseif maxtick < 50
+        0:5:maxtick
     else
         0:10:maxtick
     end

@@ -157,11 +157,14 @@ end
 #         if loop.stopexact
 #             Expr(:(=), loopsym, Expr(:call, :(:), loop.starthint, loop.stophint))
 #         else
+#             # expectation = expect(Expr(:call, :(>), loop.stopsym, loop.starthint-5))
 #             Expr(:(=), loopsym, Expr(:call, :(:), loop.starthint, loop.stopsym))
 #         end
 #     elseif loop.stopexact
+#         # expectation = expect(Expr(:call, :(>), loop.stophint+5, loop.startsym))
 #         Expr(:(=), loopsym, Expr(:call, :(:), loop.startsym, loop.stophint))
 #     else
+#         # expectation = expect(Expr(:call, :(>), loop.stopsym, Expr(:call, :-, loop.startsym, 5)))
 #         Expr(:(=), loopsym, Expr(:call, :(:), loop.startsym, loop.stopsym))
 #     end
 #     body = lower_block(ls, us, n, false, 1)
@@ -172,8 +175,30 @@ end
 #     #     body = lower_block(ls, us, n, true, 1)
 #     #     push!(q.args, Expr(:if, tc, body))
 #     # end
-#     q
+#     if loop.startexact && loop.stopexact
+#         q
+#     else
+#         # Expr(:block, assumption, expectation, q)
+#         Expr(:block, loopiteratesatleastonce(loop), q)
+#     end
 # end
+
+function assume(ex)
+    Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:SIMDPirates)), QuoteNode(:assume)), ex)
+end
+function expect(ex)
+    Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:SIMDPirates)), QuoteNode(:expect)), ex)
+end
+function loopiteratesatleastonce(loop::Loop, as::Bool = true)
+    comp = if loop.startexact # requires !loop.stopexact
+        Expr(:call, :>, loop.stopsym, loop.starthint - 1)
+    elseif loop.stopexact # requires !loop.startexact
+        Expr(:call, :>, loop.stopexact + 1, loop.stopsym)
+    else
+        Expr(:call, :>, loop.stopsym, Expr(:call, :-, loop.stopsym, 1))
+    end
+    as ? assume(comp) : expect(comp)
+end
 function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask::Bool)
     usorig = ls.unrollspecification[]
     nisvectorized = isvectorized(us, n)
@@ -185,7 +210,19 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
     sl = startloop(loop, nisvectorized, loopsym)
     tc = terminatecondition(loop, us, n, loopsym, inclmask, 1)
     body = lower_block(ls, us, n, inclmask, 1)
-    q = Expr( :block, sl, Expr(:while, tc, body))
+    q = if (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !isstaticloop(loop) && !inclmask# && !ls.loadelimination[]
+        # Expr(:block, sl, assumeloopiteratesatleastonce(loop), Expr(:while, tc, body))
+        if nisvectorized
+            Expr(:block, sl, loopiteratesatleastonce(loop, true), Expr(:while, tc, body))
+        else
+            # Expr(:block, sl, assume(tc), Expr(:while, tc, body))
+            push!(body.args, Expr(:||, tc, Expr(:break)))
+            Expr(:block, sl, assume(tc), Expr(:while, true, body))
+        end
+    else
+        Expr(:block, sl, Expr(:while, tc, body))
+    end
+
     if nisvectorized
         tc = terminatecondition(loop, us, n, loopsym, true, 1)
         body = lower_block(ls, us, n, true, 1)
@@ -216,6 +253,8 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     else
         tc = terminatecondition(loop, us, n, loopsym, inclmask, UF)
     end
+    usorig = ls.unrollspecification[]
+    # tc = (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !isstaticloop(loop) && !inclmask && !ls.loadelimination[] ? expect(tc) : tc
     body = lower_block(ls, us, n, inclmask, UF)
     q = Expr(:while, tc, body)
     remblock = init_remblock(loop, loopsym)
@@ -246,6 +285,12 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
             q
         end
     else
+        # if (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !isstaticloop(loop) && !inclmask# && !ls.loadelimination[]
+        #     # Expr(:block, sl, assumeloopiteratesatleastonce(loop), Expr(:while, tc, body))
+        #     Expr(:block, sl, expect(tc), q, remblock)
+        # else
+        #     Expr(:block, sl, q, remblock)
+        # end
         Expr( :block, sl, q, remblock )
     end
     UFt = if loopisstatic

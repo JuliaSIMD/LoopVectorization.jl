@@ -61,9 +61,10 @@ function matmul_bench!(br, C, A, B, i)
     @assert C ≈ Cblas "Fort builtin gemm wrong?"; fill!(C, NaN)
     br[10,i] = n_gflop / @belapsed ifgemm_builtin!($C, $A, $B)
     @assert C ≈ Cblas "ifort builtin gemm wrong?"; fill!(C, NaN)
-    br[11,i] = n_gflop / @belapsed mul!($C, $A, $B)
+    br[11,i] = n_gflop / @belapsed mul!($C, $A, $B);
+    fill!(C, NaN)
     br[12,i] = n_gflop / @belapsed dgemmmkl!($C, $A, $B)
-    @assert C ≈ Cblas "MKL JIT gemm wrong?"; fill!(C, NaN)
+    @assert C ≈ Cblas "MKL JIT gemm wrong?"
     # br[12,i] = n_gflop / @belapsed gemmavx!($C, $A, $B)
 end
 function A_mul_B_bench!(br, s, i)
@@ -222,7 +223,7 @@ function gemv_bench!(br, x, A, y, i)
     br[10,i] = n_gflop / @belapsed ifgemv_builtin!($x, $A, $y)
     @assert x ≈ xblas "ifort wrong?"; fill!(x, NaN);
     br[11,i] = n_gflop / @belapsed mul!($x, $A, $y)
-    br[11,i] = n_gflop / @belapsed dgemvmkl!($x, $A, $y)
+    br[12,i] = n_gflop / @belapsed dgemvmkl!($x, $A, $y)
     @assert x ≈ xblas "gemvmkl wrong?"; fill!(x, NaN);
 end
 function A_mul_vb_bench!(br, s, i)
@@ -455,7 +456,7 @@ function logdettriangle_bench!(br, s, i)
     br[7,i] = n_gflop / @belapsed logdet($U)
 end
 function benchmark_logdettriangle(sizes)
-    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "Julia-builtin"]
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "LinearAlgebra"]
     br = BenchmarkResult(tests, sizes)
     sm = br.sizedresults.results
     pmap(is -> logdettriangle_bench!(sm, is[2], is[1]), enumerate(sizes))

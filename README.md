@@ -14,6 +14,14 @@ Pkg.add("LoopVectorization")
 ```
 LoopVectorization is supported on Julia 1.1 and later. It is tested on Julia 1.1, 1.3, and nightly.
 
+## Warning
+
+Misusing LoopVectorization can have [serious consequences](http://catb.org/jargon/html/N/nasal-demons.html). Like `@inbounds`, misusing it can lead to segfaults and memory corruption.
+We expect that any time you use the `@avx` macro with a given block of code that you:
+1. Are not indexing an array out of bounds. `@avx` does not perform any bounds checking.
+2. Are not iterationg over an empty collection. Iterating over an empty loop such as `for i ∈ eachindex(Float64[])` is undefined behavior, and will likely result in the out of bounds memory accesses. Ensure that loops behave correctly.
+3. Are not relying on a specific execution order. `@avx` can and will re-order operations and loops inside its scope, so the correctness cannot depend on a particular order. You cannot implement `cumsum` with `@avx`.
+
 ## Usage
 
 This library provides the `@avx` macro, which may be used to prefix a `for` loop or broadcast statement.

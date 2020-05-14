@@ -21,6 +21,9 @@ function UnrollArgs(ua::UnrollArgs, u::Int)
 end
 # UnrollSymbols(ua::UnrollArgs) = UnrollSymbols(ua.u₁loopsym, ua.u₂loopsym, ua.vectorized)
 
+isfirst(ua::UnrollArgs{Nothing}) = iszero(ua.u₁)
+isfirst(ua::UnrollArgs{Int}) = iszero(ua.u₁) & iszero(ua.suffix)
+
 struct UnrollSpecification
     u₁loopnum::Int
     u₂loopnum::Int
@@ -103,7 +106,7 @@ function looprange(loop::Loop, incr::Int, mangledname::Symbol)
 end
 function terminatecondition(
     loop::Loop, us::UnrollSpecification, n::Int, mangledname::Symbol, inclmask::Bool, UF::Int = unrollfactor(us, n)
-)
+) 
     if !isvectorized(us, n)
         looprange(loop, UF, mangledname)
     elseif inclmask

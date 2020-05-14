@@ -290,8 +290,8 @@ end
     # ls
 end
 function vmaterialize!(
-    dest::StridedArray{T}, bc::Broadcasted{Base.Broadcast.DefaultArrayStyle{0},Nothing,typeof(identity),Tuple{T2}}, ::Val{Mod}
-) where {T <: NativeTypes, T2 <: Number, Mod}
+    dest::StridedArray{T,N}, bc::Broadcasted{Base.Broadcast.DefaultArrayStyle{0},Nothing,typeof(identity),Tuple{T2}}, ::Val{Mod}
+) where {T <: NativeTypes, N, T2 <: Number, Mod}
     arg = T(first(bc.args))
     @avx for i ∈ eachindex(dest)
         dest[i] = arg
@@ -300,7 +300,7 @@ function vmaterialize!(
 end
 function vmaterialize!(
     dest′::Union{Adjoint{T,A},Transpose{T,A}}, bc::Broadcasted{Base.Broadcast.DefaultArrayStyle{0},Nothing,typeof(identity),Tuple{T2}}, ::Val{Mod}
-) where {T <: NativeTypes, A <: StridedArray{T}, T2 <: Number, Mod}
+) where {T <: NativeTypes, N, A <: StridedArray{T,N}, T2 <: Number, Mod}
     arg = T(first(bc.args))
     dest = parent(dest′)
     @avx for i ∈ eachindex(dest)

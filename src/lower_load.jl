@@ -66,25 +66,29 @@ end
 function prefetchisagoodidea(ls::LoopSet, op::Operation, td::UnrollArgs)
     # return false
     @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = td
-    vectorized ∈ loopdependencies(op) || return false
-    u₂loopsym === Symbol("##undefined##") && return false
+    vectorized ∈ loopdependencies(op) || return 0
+    u₂loopsym === Symbol("##undefined##") && return 0
     dontskip = (64 ÷ VectorizationBase.REGISTER_SIZE) - 1
-    (!isnothing(suffix) && !iszero(suffix & dontskip)) && return false
+    (!isnothing(suffix) && (vectorized === u₂loopsym) && !iszero(suffix & dontskip)) && return 0
+    innermostloopsym = last(ls.loop_order.bestorder)
     loopedindex = op.ref.loopedindex
-    if length(loopedindex) > 1 && first(loopedindex) && last(loopedindex)
+    if length(loopedindex) > 1 && first(loopedindex)
         indices = getindices(op)
-        if first(indices) === vectorized && last(indices) === last(ls.loop_order.bestorder)
-            if prod(s -> length(getloop(ls, s)), @view(indices[1:end-1])) ≥ 120 && length(getloop(ls, last(indices))) ≥ 120
-                if last(op.ref.ref.offsets) < 120
+        if first(indices) === vectorized && last(indices) === innermostloopsym
+            innermostloopindv = findall(map(isequal(innermostloopsym), getindices(op)))
+            isone(length(innermostloopindv)) || return 0
+            innermostloopind = first(innermostloopindv)
+            if prod(s -> length(getloop(ls, s)), @view(indices[1:innermostloopind-1])) ≥ 120 && length(getloop(ls, innermostloopind)) ≥ 120
+                if op.ref.ref.offsets[innermostloopind] < 120
                     for opp ∈ operations(ls)
-                        iscompute(opp) && load_constrained(opp, u₁loopsym, u₂loopsym) && return false
+                        iscompute(opp) && load_constrained(opp, u₁loopsym, u₂loopsym) && return 0
                     end
-                    return true
+                    return innermostloopind
                 end
             end
         end
     end
-    false
+    0
 end
 function lower_load_vectorized!(
     q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, mask::Union{Nothing,Symbol,Unsigned} = nothing, umin::Int = 0
@@ -105,26 +109,27 @@ function lower_load_vectorized!(
         td = UnrollArgs(td, u)
         pushvectorload!(q, op, var, td, U, vectorized, mask)
     end
-    if prefetchisagoodidea(ls, op, td)
+    prefetchind = prefetchisagoodidea(ls, op, td)
+    if !iszero(prefetchind)
         dontskip = (64 ÷ VectorizationBase.REGISTER_SIZE) - 1
         ptr = refname(op)
         innermostloopsym = last(ls.loop_order.bestorder)
         us = ls.unrollspecification[]
-        prefetch_multiplier = 3
+        prefetch_multiplier = 4
         prefetch_distance = u₁loopsym === innermostloopsym ? us.u₁ : ( u₂loopsym === innermostloopsym ? us.u₂ : 1 )
         prefetch_distance *= prefetch_multiplier
         offsets = op.ref.ref.offsets
-        last_offset = last(offsets)
+        inner_offset = offsets[prefetchind]
         
         for u ∈ umin:U-1
+        # for u ∈ umin:min(umin,U-1)
             (u₁loopsym === vectorized && !iszero(u & dontskip)) && continue
-            offsets[end] = last_offset + prefetch_distance
+            offsets[prefetchind] = inner_offset + prefetch_distance
             mo = last(name_memoffset(var, op, UnrollArgs(td, u)))
             instrcall = Expr(:call, lv(:prefetch0), ptr, mo)
             push!(q.args, instrcall)
-            
         end
-        offsets[end] = last_offset
+        offsets[prefetchind] = inner_offset
     end
     nothing
 end

@@ -76,6 +76,13 @@
         @avx D2 .= view(C3d, 1, :, :) .+ A *ˡ B;
         @test D1 ≈ D2
 
+        D1 .= 9999;
+        @avx D2 .= 9999;
+        @test D1 == D2
+        D1 .= -99999;
+        @avx D2' .= -99999;
+        @test D1 == D2
+        
         if VERSION > v"1.2"
             b = rand(T,K); x = rand(R,N);
             D1 .= C .+ A * (b .+ x');

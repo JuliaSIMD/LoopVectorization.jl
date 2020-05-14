@@ -6,16 +6,19 @@ function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{<:AbstractUnitRange})
     pushpreamble!(ls, Expr(:(=), loopsym, ex))
     pushpreamble!(ls, Expr(:(=), start, Expr(:call, :first, loopsym)))
     pushpreamble!(ls, Expr(:(=), stop, Expr(:call, :last, loopsym)))
+    pushpreamble!(ls, assume(Expr(:call, :>, Expr(:call, :-, stop, Expr(:call, :-, start, 1)), 0)))
     Loop(sym, 1, 1024, start, stop, false, false)::Loop
 end
 function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{StaticUpperUnitRange{U}}) where {U}
     start = gensym(String(sym)*"_loopstart")
     pushpreamble!(ls, Expr(:(=), start, Expr(:(.), ex, QuoteNode(:L))))
+    pushpreamble!(ls, assume(Expr(:call, :>, Expr(:call, :-, U + 1, start), 0)))
     Loop(sym, U - 1024, U, start, Symbol(""), false, true)::Loop
 end
 function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{StaticLowerUnitRange{L}}) where {L}
     stop = gensym(String(sym)*"_loopstop")
     pushpreamble!(ls, Expr(:(=), stop, Expr(:(.), ex, QuoteNode(:U))))
+    pushpreamble!(ls, assume(Expr(:call, :>, Expr(:call, :-, stop, L - 1), 0)))
     Loop(sym, L, L + 1024, Symbol(""), stop, true, false)::Loop
 end
 # Is there any likely way to generate such a range?
@@ -107,7 +110,12 @@ function ArrayReferenceMeta(
     )
 end
 
-extract_varg(i) = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, :vargs, i))
+# extract_varg(i) = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, :vargs, i))
+function extract_varg(i)
+    sptr = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, :vargs, i))
+    Base.libllvm_version ≥ v"10" ? Expr(:call, lv(:noalias!), sptr) : sptr
+end
+
 pushvarg!(ls::LoopSet, ar::ArrayReferenceMeta, i, name) = pushpreamble!(ls, Expr(:(=), name, extract_varg(i)))
 function pushvarg′!(ls::LoopSet, ar::ArrayReferenceMeta, i, name)
     reverse!(ar.loopedindex); reverse!(getindices(ar)) # reverse the listed indices here, and transpose it to make it column major
@@ -461,7 +469,7 @@ Execute an `@avx` block. The block's code is represented via the arguments:
 - `vargs...` holds the encoded pointers of all the arrays (see `VectorizationBase`'s various pointer types).
 """
 @generated function _avx_!(::Val{UNROLL}, ::Type{OPS}, ::Type{ARF}, ::Type{AM}, ::Type{LPSYM}, lb::LB, vargs...) where {UNROLL, OPS, ARF, AM, LPSYM, LB}
-    # 1 + 1 # Irrelevant line you can comment out/in to force recompilation...
+    1 + 1 # Irrelevant line you can comment out/in to force recompilation...
     ls = _avx_loopset(OPS.parameters, ARF.parameters, AM.parameters, LPSYM.parameters, LB.parameters, vargs)
     # @show avx_body(ls, UNROLL)
     avx_body(ls, UNROLL)
