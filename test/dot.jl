@@ -21,6 +21,7 @@ using Test
         end
         s
     end
+    
     function mydot_avx(a, b)
         s = zero(eltype(a))
         @_avx for i ∈ eachindex(a,b)
@@ -91,7 +92,7 @@ using Test
     end
     function dot_unroll3avx_inline(x::Vector{T}, y::Vector{T}) where {T<:Number}
         z = zero(T)
-        @avx unroll=3 inline=true for i ∈ 1:length(x)
+        @avx unroll=3 inline=true check_empty=true for i ∈ 1:length(x)
             z += x[i]*y[i]
         end
         z
@@ -145,7 +146,11 @@ using Test
             setindex!(c_im, b_re[i] * a_im[i + 1] + b_im[i] * a_re[i + 1], i)
         end
     end
-
+    # q = :(for i = 1:length(a_re) - 1
+    #         c_re[i] = b_re[i] * a_re[i + 1] - b_im[i] * a_im[i + 1]
+    #         c_im[i] = b_re[i] * a_im[i + 1] + b_im[i] * a_re[i + 1]
+    #       end);
+    # ls = LoopVectorization.LoopSet(q)
 
     function pi(x, y)
         acc = 0
@@ -276,7 +281,9 @@ using Test
         for i ∈ [3, :, 1:N-1], j ∈ [5, :, 1:N-2], k ∈ [:, 1:N-3]
             Av = view(A, i, j, k);
             Bv = view(B, i, j, k);
+            # @show i, j, k
             @test mydot(Av, Bv) ≈ mydotavx(Av, Bv)            
         end
     end
 end
+

@@ -112,6 +112,10 @@ where `inline=false` is faster, so the best setting may require experimentation.
 tries to guess. Currently the algorithm is simple: roughly, if there are more than two dynamically sized loops
 or and no convolutions, it will probably not force inlining. Otherwise, it probably will.
 
+`check_empty` (default is `false`) determines whether or not it will check if any of the iterators are empty.
+If false, you must ensure yourself that they are not empty, else the behavior of the loop is undefined and
+(like with `@inbounds`) segmentation faults are likely.
+
 `unroll` is an integer that specifies the loop unrolling factor, or a
 tuple `(u₁, u₂) = (4, 2)` signaling that the generated code should unroll more than
 one loop. `u₁` is the unrolling factor for the first unrolled loop and `u₂` for the next (if present),
@@ -165,30 +169,46 @@ function check_unroll(arg)
     end
     u₁, u₂
 end
-function check_macro_kwarg(arg, inline::Int8 = zero(Int8), u₁::Int8 = zero(Int8), u₂::Int8 = zero(Int8))
+function check_checkempty(arg)
+    arg.args[1] === :check_empty ? (arg.args[2])::Bool : nothing
+end
+function check_macro_kwarg(arg, inline::Int8 = zero(Int8), check_empty::Bool = false, u₁::Int8 = zero(Int8), u₂::Int8 = zero(Int8))
     @assert arg.head === :(=)
     i = check_inline(arg)
     if iszero(i)
-        u₁, u₂ = check_unroll(arg)
+        ce = check_checkempty(arg)
+        if isnothing(ce)
+            u₁, u₂ = check_unroll(arg)
+        else
+            check_empty = ce
+        end
     else
         inline = i
     end
-    inline, u₁, u₂
+    inline, check_empty, u₁, u₂
 end
 macro avx(arg, q)
     @assert q.head === :for
     @assert arg.head === :(=)
     q = macroexpand(__module__, q)
-    inline, u₁, u₂ = check_macro_kwarg(arg)
+    inline, check_empty, u₁, u₂ = check_macro_kwarg(arg)
     ls = LoopSet(q, __module__)
-    esc(setup_call(ls, q, inline, u₁, u₂))
+    esc(setup_call(ls, q, inline, check_empty, u₁, u₂))
 end
 macro avx(arg1, arg2, q)
     @assert q.head === :for
     q = macroexpand(__module__, q)
-    inline, u₁, u₂ = check_macro_kwarg(arg1)
-    inline, u₁, u₂ = check_macro_kwarg(arg2, inline, u₁, u₂)
-    esc(setup_call(LoopSet(q, __module__), q, inline, u₁, u₂))
+    inline, check_empty, u₁, u₂ = check_macro_kwarg(arg1)
+    inline, check_empty, u₁, u₂ = check_macro_kwarg(arg2, inline, check_empty, u₁, u₂)
+    esc(setup_call(LoopSet(q, __module__), q, inline, check_empty, u₁, u₂))
+end
+macro avx(arg1, arg2, arg3, q)
+    @assert q.head === :for
+    q = macroexpand(__module__, q)
+    inline, check_empty, u₁, u₂ = check_macro_kwarg(arg1)
+    inline, check_empty, u₁, u₂ = check_macro_kwarg(arg2, inline, check_empty, u₁, u₂)
+    inline, check_empty, u₁, u₂ = check_macro_kwarg(arg3, inline, check_empty, u₁, u₂)
+    esc(setup_call(LoopSet(q, __module__), q, inline, check_empty, u₁, u₂))
 end
 
 
@@ -197,20 +217,25 @@ end
 
 This macro transforms loops similarly to [`@avx`](@ref).
 While `@avx` punts to a generated function to enable type-based analysis, `_@avx`
-works on just the expressions. This requires that it makes a number of default assumptions.
+works on just the expressions. This requires that it makes a number of default assumptions. Use of `@avx` is preferred.
+
+This macro accepts the `inline` and `unroll` keyword arguments like `@avx`, but ignores the `check_empty` argument.
 """
 macro _avx(q)
     q = macroexpand(__module__, q)
-    esc(lower_and_split_loops(LoopSet(q, __module__), -1))
+    ls = LoopSet(q, __module__)
+    esc(Expr(:block, ls.prepreamble, lower_and_split_loops(ls, -1)))
 end
 macro _avx(arg, q)
     @assert q.head === :for
     q = macroexpand(__module__, q)
-    inline, u₁, u₂ = check_macro_kwarg(arg)
-    esc(lower(LoopSet(q, __module__), u₁ % Int, u₂ % Int, -1))
+    inline, check_empty, u₁, u₂ = check_macro_kwarg(arg)
+    ls = LoopSet(q, __module__)
+    esc(Expr(:block, ls.prepreamble, lower(ls, u₁ % Int, u₂ % Int, -1)))
 end
 
 macro avx_debug(q)
     q = macroexpand(__module__, q)
-    esc(LoopVectorization.setup_call_debug(LoopSet(q, __module__)))
+    ls = LoopSet(q, __module__)
+    esc(LoopVectorization.setup_call_debug(ls))
 end

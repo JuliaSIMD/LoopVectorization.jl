@@ -195,6 +195,11 @@ function add_external_functions!(q::Expr, ls::LoopSet)
     end
 end
 
+function check_if_empty(ls::LoopSet, q::Expr)
+    lb = loop_boundaries(ls)
+    Expr(:if, Expr(:call, :!, Expr(:call, :any, :isempty, lb)), q)
+end
+
 # Try to condense in type stable manner
 function generate_call(ls::LoopSet, inline_unroll::NTuple{3,Int8}, debug::Bool = false)
     operation_descriptions = Expr(:curly, :Tuple)
@@ -247,6 +252,8 @@ Additionally, define `pointer` and `stride` methods.
 @inline check_args(A::PermutedDimsArray) = check_args(parent(A))
 @inline check_args(A::StridedArray) = check_type(eltype(A))
 @inline check_args(A::AbstractRange) = check_type(eltype(A))
+@inline check_args(A::BitVector) = true
+@inline check_args(A::BitMatrix) = true
 @inline function check_args(A::AbstractArray)
     M = parentmodule(typeof(A))
     if parent(A) === A # SparseMatrix, StaticArray, etc
@@ -305,15 +312,16 @@ end
 function setup_call_debug(ls::LoopSet)
     # avx_loopset(instr, ops, arf, AM, LB, vargs)
     pushpreamble!(ls, generate_call(ls, (zero(Int8),zero(Int8),zero(Int8)), true))
-    ls.preamble
+    Expr(:block, ls.prepreamble, ls.preamble)
 end
-function setup_call(ls::LoopSet, q = nothing, inline::Int8 = zero(Int8), u₁::Int8 = zero(Int8), u₂::Int8 = zero(Int8))
+function setup_call(ls::LoopSet, q = nothing, inline::Int8 = zero(Int8), check_empty::Bool = false, u₁::Int8 = zero(Int8), u₂::Int8 = zero(Int8))
     # We outline/inline at the macro level by creating/not creating an anonymous function.
     # The old API instead was based on inlining or not inline the generated function, but
     # the generated function must be inlined into the initial loop preamble for performance reasons.
     # Creating an anonymous function and calling it also achieves the outlining, while still
     # inlining the generated function into the loop preamble.
     call = setup_call_inline(ls, inline, u₁, u₂)
+    call = check_empty ? check_if_empty(ls, call) : call
     isnothing(q) && return Expr(:block, ls.prepreamble, call)
     Expr(:block, ls.prepreamble, Expr(:if, check_args_call(ls), call, make_fast_and_crashy(q)))
 end

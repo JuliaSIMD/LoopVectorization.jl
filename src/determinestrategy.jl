@@ -767,7 +767,7 @@ function choose_unroll_order(ls::LoopSet, lowest_cost::Float64 = Inf)
             cost_temp = evaluate_cost_unroll(ls, new_order, new_vec, lowest_cost)
             if cost_temp < lowest_cost
                 lowest_cost = cost_temp
-                best_order = new_order
+                copyto!(best_order, new_order)
                 best_vec = new_vec
             end
         end

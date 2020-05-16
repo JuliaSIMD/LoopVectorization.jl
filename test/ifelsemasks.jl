@@ -38,7 +38,7 @@ T = Float32
     end
 
     function Bernoulli_logit(y::BitVector, α::AbstractVector{T}) where {T}
-        t = zero(promote_type(Float32,T))
+        t = zero(promote_type(Float64,T))
         @inbounds for i ∈ eachindex(α)
             invOmP = 1 + exp(α[i])
             nlogOmP = log(invOmP)
@@ -48,7 +48,7 @@ T = Float32
         t
     end
     function Bernoulli_logitavx(y::BitVector, α::AbstractVector{T}) where {T}
-        t = zero(promote_type(Float32,T))
+        t = zero(promote_type(Float64,T))
         @avx for i ∈ eachindex(α)
             invOmP = 1 + exp(α[i])
             nlogOmP = log(invOmP)
@@ -67,7 +67,7 @@ T = Float32
         end
         t
     end
-
+    
     function addormul!(c, a, b)
         for i ∈ eachindex(c,a,b)
             c[i] = a[i] > b[i] ? a[i] + b[i] : a[i] * b[i]

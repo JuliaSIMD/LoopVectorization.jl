@@ -71,13 +71,13 @@ Base.length(loop::Loop) = 1 + loop.stophint - loop.starthint
 isstaticloop(loop::Loop) = loop.startexact & loop.stopexact
 function startloop(loop::Loop, isvectorized, itersymbol)
     startexact = loop.startexact
-    if isvectorized
-        if startexact
-            Expr(:(=), itersymbol, Expr(:call, lv(:_MM), VECTORWIDTHSYMBOL, loop.starthint))
-        else
-            Expr(:(=), itersymbol, Expr(:call, lv(:_MM), VECTORWIDTHSYMBOL, loop.startsym))
-        end
-    elseif startexact
+    # if isvectorized
+    #     if startexact
+    #         Expr(:(=), itersymbol, Expr(:call, lv(:_MM), VECTORWIDTHSYMBOL, loop.starthint))
+    #     else
+    #         Expr(:(=), itersymbol, Expr(:call, lv(:_MM), VECTORWIDTHSYMBOL, loop.startsym))
+    #     end
+    if startexact
         Expr(:(=), itersymbol, loop.starthint)
     else
         Expr(:(=), itersymbol, Expr(:call, lv(:unwrap), loop.startsym))
@@ -91,17 +91,17 @@ function vec_looprange(loop::Loop, UF::Int, mangledname::Symbol)
         Expr(:call, lv(:valsub), VECTORWIDTHSYMBOL, 2)
     end
     if loop.stopexact # split for type stability
-        Expr(:call, lv(:scalar_less), mangledname, Expr(:call, :-, loop.stophint, incr))
+        Expr(:call, :<, mangledname, Expr(:call, lv(:vsub), loop.stophint, incr))
     else
-        Expr(:call, lv(:scalar_less), mangledname, Expr(:call, :-, loop.stopsym, incr))
+        Expr(:call, :<, mangledname, Expr(:call, lv(:vsub), loop.stopsym, incr))
     end
 end
 function looprange(loop::Loop, incr::Int, mangledname::Symbol)
     incr = 2 - incr
     if iszero(incr)
-        Expr(:call, lv(:scalar_less), mangledname, loop.stopexact ? loop.stophint : loop.stopsym)
+        Expr(:call, :<, mangledname, loop.stopexact ? loop.stophint : loop.stopsym)
     else
-        Expr(:call, lv(:scalar_less), mangledname, loop.stopexact ? loop.stophint + incr : Expr(:call, :+, loop.stopsym, incr))
+        Expr(:call, :<, mangledname, loop.stopexact ? loop.stophint + incr : Expr(:call, lv(:vadd), loop.stopsym, incr))
     end
 end
 function terminatecondition(
@@ -119,11 +119,12 @@ function incrementloopcounter(us::UnrollSpecification, n::Int, mangledname::Symb
     if isvectorized(us, n)
         if UF == 1
             Expr(:(=), mangledname, Expr(:call, lv(:valadd), VECTORWIDTHSYMBOL, mangledname))
+            # Expr(:(=), mangledname, Expr(:macrocall, Symbol("@show"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), Expr(:call, lv(:valadd), VECTORWIDTHSYMBOL, mangledname)))
         else
-            Expr(:+=, mangledname, Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, UF))
+            Expr(:(=), mangledname, Expr(:call, lv(:valmuladd), VECTORWIDTHSYMBOL, UF, mangledname))
         end
     else
-        Expr(:+=, mangledname, UF)
+        Expr(:(=), mangledname, Expr(:call, lv(:vadd), mangledname, UF))
     end
 end
 
@@ -367,7 +368,7 @@ function add_loop_bound!(ls::LoopSet, itersym::Symbol, bound, upper::Bool = true
     (bound isa Symbol && upper) && return bound
     bound isa Expr && maybestatic!(bound)
     N = gensym(string(itersym) * (upper ? "_loop_upper_bound" : "_loop_lower_bound"))
-    pushpreamble!(ls, Expr(:(=), N, bound))
+    pushprepreamble!(ls, Expr(:(=), N, bound))
     N
 end
 
@@ -410,12 +411,12 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
             else
                 otN isa Expr && maybestatic!(otN)
                 N = gensym("loop" * string(itersym))
-                pushpreamble!(ls, Expr(:(=), N, otN))
+                pushprepreamble!(ls, Expr(:(=), N, otN))
                 Loop(itersym, 1, N)
             end
         else
             N = gensym("loop" * string(itersym))
-            pushpreamble!(ls, Expr(:(=), N, Expr(:call, lv(:maybestaticrange), r)))
+            pushprepreamble!(ls, Expr(:(=), N, Expr(:call, lv(:maybestaticrange), r)))
             L = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticfirst), N), false)
             U = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticlast), N), true)
             Loop(itersym, L, U)
@@ -423,7 +424,7 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
     elseif isa(r, Symbol)
         # Treat similar to `eachindex`
         N = gensym("loop" * string(itersym))
-        pushpreamble!(ls, Expr(:(=), N, Expr(:call, lv(:maybestaticrange), r)))
+        pushprepreamble!(ls, Expr(:(=), N, Expr(:call, lv(:maybestaticrange), r)))
         L = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticfirst), N), false)
         U = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticlast), N), true)
         loop = Loop(itersym, L, U)

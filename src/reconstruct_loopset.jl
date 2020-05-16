@@ -6,20 +6,23 @@ function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{<:AbstractUnitRange})
     pushpreamble!(ls, Expr(:(=), loopsym, ex))
     pushpreamble!(ls, Expr(:(=), start, Expr(:call, :first, loopsym)))
     pushpreamble!(ls, Expr(:(=), stop, Expr(:call, :last, loopsym)))
-    pushpreamble!(ls, assume(Expr(:call, :>, Expr(:call, :-, stop, Expr(:call, :-, start, 1)), 0)))
-    Loop(sym, 1, 1024, start, stop, false, false)::Loop
+    loop = Loop(sym, 1, 1024, start, stop, false, false)::Loop
+    pushpreamble!(ls, loopiteratesatleastonce(loop))
+    loop
 end
 function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{StaticUpperUnitRange{U}}) where {U}
     start = gensym(String(sym)*"_loopstart")
     pushpreamble!(ls, Expr(:(=), start, Expr(:(.), ex, QuoteNode(:L))))
-    pushpreamble!(ls, assume(Expr(:call, :>, Expr(:call, :-, U + 1, start), 0)))
-    Loop(sym, U - 1024, U, start, Symbol(""), false, true)::Loop
+    loop = Loop(sym, U - 1024, U, start, Symbol(""), false, true)::Loop
+    pushpreamble!(ls, loopiteratesatleastonce(loop))
+    loop
 end
 function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{StaticLowerUnitRange{L}}) where {L}
     stop = gensym(String(sym)*"_loopstop")
     pushpreamble!(ls, Expr(:(=), stop, Expr(:(.), ex, QuoteNode(:U))))
-    pushpreamble!(ls, assume(Expr(:call, :>, Expr(:call, :-, stop, L - 1), 0)))
-    Loop(sym, L, L + 1024, Symbol(""), stop, true, false)::Loop
+    loop = Loop(sym, L, L + 1024, Symbol(""), stop, true, false)::Loop
+    pushpreamble!(ls, loopiteratesatleastonce(loop))
+    loop
 end
 # Is there any likely way to generate such a range?
 # function Loop(ls::LoopSet, l::Int, ::Type{StaticLengthUnitRange{N}}) where {N}

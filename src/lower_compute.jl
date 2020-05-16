@@ -71,9 +71,9 @@ end
 function add_loopvalue!(instrcall::Expr, loopval::Symbol, vectorized::Symbol, u::Int)
     if loopval === vectorized
         if isone(u)
-            push!(instrcall.args, Expr(:call, lv(:valadd), VECTORWIDTHSYMBOL, loopval))
+            push!(instrcall.args, Expr(:call, lv(:valadd), VECTORWIDTHSYMBOL, _MMind(loopval)))
         else
-            push!(instrcall.args, Expr(:call, lv(:valmuladd), VECTORWIDTHSYMBOL, u, loopval))
+            push!(instrcall.args, Expr(:call, lv(:valmuladd), VECTORWIDTHSYMBOL, u, _MMind(loopval)))
         end
     else
         push!(instrcall.args, Expr(:call, :+, loopval, u))
@@ -85,6 +85,8 @@ function add_loopvalue!(instrcall::Expr, loopval, ua::UnrollArgs, u::Int)
         add_loopvalue!(instrcall, loopval, vectorized, u)
     elseif !isnothing(suffix) && suffix > 0 && loopval === u₂loopsym
         add_loopvalue!(instrcall, loopval, vectorized, suffix)
+    elseif loopval === vectorized
+        push!(instrcall.args, _MMind(loopval))
     else
         push!(instrcall.args, loopval)
     end

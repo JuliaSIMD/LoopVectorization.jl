@@ -34,12 +34,15 @@ end
 # @inline VectorizationBase.offset(ptr::OffsetStridedPointer{<:Any,N}, ind::Tuple) where {N} = VectorizationBase.offset(ptr.ptr, ntuple(n -> ind[n] + ptr.offsets[n], Val{N}()))
 @inline VectorizationBase.offset(ptr::OffsetStridedPointer, ind::Tuple{I}) where {I} = ind
 # Tuple of length > 1, subtract offsets.
-@inline VectorizationBase.offset(ptr::OffsetStridedPointer{<:Any,N}, ind::Tuple) where {N} = ntuple(n -> ind[n] - ptr.offsets[n], Val{N}())
+@inline VectorizationBase.offset(ptr::OffsetStridedPointer{<:Any,N}, ind::Tuple) where {N} = ntuple(n -> vsub(ind[n], ptr.offsets[n]), Val{N}())
 @inline Base.similar(p::OffsetStridedPointer, ptr::Ptr) = OffsetStridedPointer(similar(p.ptr, ptr), p.offsets)
 @inline Base.pointer(p::OffsetStridedPointer) = pointer(p.ptr)
-
+@inline VectorizationBase.gesp(p::OffsetStridedPointer, i) = similar(p.ptr, gep(p, staticm1(i)))
+# @inline VectorizationBase.gesp(p::OffsetStridedPointer, i) = similar(p, gep(p.ptr, i))
 # If an OffsetArray is getting indexed by a (loop-)constant value, then this particular vptr object cannot also be eachindexed, so we can safely return a stridedpointer
 @inline function VectorizationBase.subsetview(ptr::OffsetStridedPointer{<:Any,N}, ::Val{I}, i) where {I,N}
     subsetview(gesp(ptr.ptr, ntuple(n -> 0 - @inbounds(ptr.offsets[n]), Val{N}())), Val{I}(), i)
 end
 
+@inline VectorizationBase.offset(ptr::OffsetStridedPointer{<:Any,<:Any,<:VectorizationBase.AbstractBitPointer}, ind::Tuple{I}) where {I} = (vsub(ind[1], ptr.offsets[1]),)
+@inline VectorizationBase.gesp(ptr::VectorizationBase.AbstractBitPointer, i) = OffsetStridedPointer(ptr, vsub.(-1, unwrap.(i)))

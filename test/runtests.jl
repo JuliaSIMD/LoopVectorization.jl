@@ -37,6 +37,8 @@ Base.IndexStyle(::Type{<:FallbackArrayWrapper}) = IndexLinear()
 
     @time include("arraywrappers.jl")
 
+    @time include("check_empty.jl")
+
     @time include("offsetarrays.jl")
 
     @time include("tensors.jl")
