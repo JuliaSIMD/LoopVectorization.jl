@@ -17,7 +17,7 @@
         s
     end
 
-    x = fill(sqrt(63.0), 128);
+    x = fill(8.0, 128);
     x[1] = 1e9
 
     @test @inferred LoopVectorization.check_args(x)

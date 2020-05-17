@@ -2,7 +2,7 @@ module LoopVectorization
 
 using VectorizationBase, SIMDPirates, SLEEFPirates, UnPack, OffsetArrays
 using VectorizationBase: REGISTER_SIZE, REGISTER_COUNT, extract_data, num_vector_load_expr,
-    mask, masktable, pick_vector_width_val, valmul, valrem, valmuladd, valadd, valsub, _MM,
+    mask, masktable, pick_vector_width_val, valmul, valrem, valmuladd, valmulsub, valadd, valsub, _MM,
     maybestaticlength, maybestaticsize, staticm1, staticp1, subsetview, vzero, stridedpointer_for_broadcast,
     Static, StaticUnitRange, StaticLowerUnitRange, StaticUpperUnitRange, unwrap, maybestaticrange,
     AbstractColumnMajorStridedPointer, AbstractRowMajorStridedPointer, AbstractSparseStridedPointer, AbstractStaticStridedPointer,

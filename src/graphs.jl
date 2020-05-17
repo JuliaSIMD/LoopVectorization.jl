@@ -78,31 +78,50 @@ function startloop(loop::Loop, isvectorized, itersymbol)
     #         Expr(:(=), itersymbol, Expr(:call, lv(:_MM), VECTORWIDTHSYMBOL, loop.startsym))
     #     end
     if startexact
-        Expr(:(=), itersymbol, loop.starthint)
+        Expr(:(=), itersymbol, loop.starthint - 1)
     else
-        Expr(:(=), itersymbol, Expr(:call, lv(:unwrap), loop.startsym))
+        Expr(:(=), itersymbol, Expr(:call, lv(:staticm1), Expr(:call, lv(:unwrap), loop.startsym)))
     end
 end
-function vec_looprange(loop::Loop, UF::Int, mangledname::Symbol)
-    isunrolled = UF > 1
-    incr = if isunrolled
-        Expr(:call, lv(:valmuladd), VECTORWIDTHSYMBOL, UF, -2)
+addexpr(ex, incr) = Expr(:call, lv(:vadd), ex, incr)
+function addexpr(ex, incr::Number)
+    if iszero(incr)
+        incr
+    elseif incr > 0
+        Expr(:call, lv(:vadd), ex, incr)
     else
-        Expr(:call, lv(:valsub), VECTORWIDTHSYMBOL, 2)
+        Expr(:call, lv(:vsub), ex, -incr)
+    end
+end
+addexpr(ex::Number, incr::Number) = ex + incr
+subexpr(ex, incr) = Expr(:call, lv(:vsub), ex, incr)
+subexpr(ex::Number, incr::Number) = ex - incr
+subexpr(ex, incr::Number) = addexpr(ex,  -incr)
+function vec_looprange(loop::Loop, UF::Int, mangledname::Symbol)
+    incr = if isone(UF)
+        Expr(:call, lv(:valsub), VECTORWIDTHSYMBOL, 1)
+    else
+        Expr(:call, lv(:valmulsub), VECTORWIDTHSYMBOL, UF, 1)
     end
     if loop.stopexact # split for type stability
-        Expr(:call, :<, mangledname, Expr(:call, lv(:vsub), loop.stophint, incr))
+        Expr(:call, :<, mangledname, subexpr(loop.stophint, incr))
     else
-        Expr(:call, :<, mangledname, Expr(:call, lv(:vsub), loop.stopsym, incr))
+        Expr(:call, :<, mangledname, subexpr(loop.stopsym, incr))
+    end
+end
+
+function looprange(stopcon, incr::Int, mangledname::Symbol)
+    incr = 1 - incr
+    if iszero(incr)
+        Expr(:call, :<, mangledname, stopcon)
+    elseif isone(incr)
+        Expr(:call, :≤, mangledname, stopcon)
+    else
+        Expr(:call, :<, mangledname, addexpr(stopcon, incr))
     end
 end
 function looprange(loop::Loop, incr::Int, mangledname::Symbol)
-    incr = 2 - incr
-    if iszero(incr)
-        Expr(:call, :<, mangledname, loop.stopexact ? loop.stophint : loop.stopsym)
-    else
-        Expr(:call, :<, mangledname, loop.stopexact ? loop.stophint + incr : Expr(:call, lv(:vadd), loop.stopsym, incr))
-    end
+    loop.stopexact ? looprange(loop.stophint, incr, mangledname) : looprange(loop.stopsym, incr, mangledname)
 end
 function terminatecondition(
     loop::Loop, us::UnrollSpecification, n::Int, mangledname::Symbol, inclmask::Bool, UF::Int = unrollfactor(us, n)

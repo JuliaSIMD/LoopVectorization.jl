@@ -15,11 +15,13 @@ function symbolind(ind::Symbol, op::Operation, td::UnrollArgs)
     else
         mangledvar(parent)
     end
-    u₁loopsym ∈ loopdependencies(parent) ? Symbol(pvar, u₁) : pvar
+    ex = u₁loopsym ∈ loopdependencies(parent) ? Symbol(pvar, u₁) : pvar
+    Expr(:call, lv(:staticm1), ex)
 end
 
 
 _MMind(ind) = Expr(:call, lv(:_MM), VECTORWIDTHSYMBOL, ind)
+_MMind(ind::Integer) = Expr(:call, lv(:_MM), VECTORWIDTHSYMBOL, convert(Int, ind))
 function addoffset!(ret::Expr, ex, offset::Integer, _mm::Bool = false)
     if iszero(offset)
         if _mm
@@ -147,7 +149,7 @@ function mem_offset_u(op::Operation, td::UnrollArgs, unrolled::Bool)
         # append_inds!(ret, indices, loopedindex)
     else
         for (n,ind) ∈ enumerate(indices)
-            offset = offsets[n]
+            offset = convert(Int, offsets[n])
             # if ind isa Int # impossible
                 # push!(ret.args, ind + offset)
             # else
@@ -182,15 +184,6 @@ function mem_offset_u(op::Operation, td::UnrollArgs, unrolled::Bool)
     ret
 end
 
-# function add_expr(q, incr)
-#     if q.head === :call && q.args[2] === :+
-#         qc = copy(q)
-#         push!(qc.args, incr)
-#         qc
-#     else
-#         Expr(:call, :+, q, incr)
-#     end
-# end
 function varassignname(var::Symbol, u::Int, isunrolled::Bool)
     isunrolled ? Symbol(var, u) : var
 end

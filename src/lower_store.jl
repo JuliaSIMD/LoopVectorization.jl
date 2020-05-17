@@ -63,6 +63,7 @@ end
 
 function reduce_expr!(q::Expr, toreduct::Symbol, instr::Instruction, U::Int)
     U == 1 && return nothing
+    @assert U > 1 "U = $U somehow < 1"
     instr = Instruction(reduction_to_single_vector(instr))
     Uh2 = U
     iter = 0

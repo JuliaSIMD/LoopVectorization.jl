@@ -63,6 +63,7 @@ function pushvectorload!(
         push!(instrcall.args, mask)
     end
     push!(q.args, Expr(:(=), name, instrcall))
+    # push!(q.args, :(@show $name))
 end
 function prefetchisagoodidea(ls::LoopSet, op::Operation, td::UnrollArgs)
     # return false

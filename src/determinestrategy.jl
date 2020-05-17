@@ -233,7 +233,7 @@ function determine_unroll_factor(
         load_recip_throughput,
         store_recip_throughput
     )
-    roundpow2(max(1, round(Int, latency / (recip_throughput * num_reductions) ) ))
+    min(8, roundpow2(max(1, round(Int, latency / (recip_throughput * num_reductions) ) )))
 end
 
 function unroll_cost(X, u₁, u₂, u₁L, u₂L)

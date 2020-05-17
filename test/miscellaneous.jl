@@ -849,52 +849,52 @@ using Test
         @test out1 == out2
     end
 
+function smoothdim!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
+    ifirst, ilast = first(irng), last(irng)
+    ifirst > ilast && return s
+    # @inbounds @fastmath for Ipost in Rpost
+    for Ipost in Rpost
+        # Initialize the first value along the filtered dimension
+        for Ipre in Rpre
+            s[Ipre, ifirst, Ipost] = x[Ipre, ifirst, Ipost]
+        end
+        # Handle all other entries
+        for i = ifirst+1:ilast
+            for Ipre in Rpre
+                s[Ipre, i, Ipost] = α*x[Ipre, i, Ipost] + (1-α)*x[Ipre, i-1, Ipost]
+            end
+        end
+    end
+    s
+end
+function smoothdim_avx!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
+    ifirst, ilast = first(irng), last(irng)
+    ifirst > ilast && return s
+    @avx for Ipost in Rpost
+        for Ipre in Rpre
+            s[Ipre, ifirst, Ipost] = x[Ipre, ifirst, Ipost]
+            for i = ifirst+1:ilast
+                s[Ipre, i, Ipost] = α*x[Ipre, i, Ipost] + (1-α)*x[Ipre, i-1, Ipost]
+            end
+        end
+    end
+    s
+end
+function smoothdim_ifelse_avx!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
+    ifirst, ilast = first(irng), last(irng)
+    ifirst > ilast && return s
+    @avx for Ipost in Rpost, i = ifirst:ilast, Ipre in Rpre
+        xi = x[Ipre, i, Ipost]
+        xim = i > ifirst ? x[Ipre, i-1, Ipost] : xi
+        s[Ipre, i, Ipost] = α*xi + (1-α)*xim
+    end
+    s
+end
     for T ∈ (Float32, Float64)
         @testset "Mixed CartesianIndex/Int indexing" begin
             @show T, @__LINE__
             # A demo similar to the exponential filtering demo from https://julialang.org/blog/2016/02/iteration/,
             # but with no loop-carried dependency.
-            function smoothdim!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
-                ifirst, ilast = first(irng), last(irng)
-                ifirst > ilast && return s
-                # @inbounds @fastmath for Ipost in Rpost
-                for Ipost in Rpost
-                    # Initialize the first value along the filtered dimension
-                    for Ipre in Rpre
-                        s[Ipre, ifirst, Ipost] = x[Ipre, ifirst, Ipost]
-                    end
-                    # Handle all other entries
-                    for i = ifirst+1:ilast
-                        for Ipre in Rpre
-                            s[Ipre, i, Ipost] = α*x[Ipre, i, Ipost] + (1-α)*x[Ipre, i-1, Ipost]
-                        end
-                    end
-                end
-                s
-            end
-            function smoothdim_avx!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
-                ifirst, ilast = first(irng), last(irng)
-                ifirst > ilast && return s
-                @avx for Ipost in Rpost
-                    for Ipre in Rpre
-                        s[Ipre, ifirst, Ipost] = x[Ipre, ifirst, Ipost]
-                        for i = ifirst+1:ilast
-                            s[Ipre, i, Ipost] = α*x[Ipre, i, Ipost] + (1-α)*x[Ipre, i-1, Ipost]
-                        end
-                    end
-                end
-                s
-            end
-            function smoothdim_ifelse_avx!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
-                ifirst, ilast = first(irng), last(irng)
-                ifirst > ilast && return s
-                @avx for Ipost in Rpost, i = ifirst:ilast, Ipre in Rpre
-                    xi = x[Ipre, i, Ipost]
-                    xim = i > ifirst ? x[Ipre, i-1, Ipost] : xi
-                    s[Ipre, i, Ipost] = α*xi + (1-α)*xim
-                end
-                s
-            end
 
             # s = dest1; 
             # ifirst, ilast = first(axes(x, d)), last(axes(x, d))

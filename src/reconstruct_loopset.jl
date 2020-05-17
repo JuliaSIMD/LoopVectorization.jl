@@ -124,15 +124,22 @@ function pushvarg′!(ls::LoopSet, ar::ArrayReferenceMeta, i, name)
     reverse!(ar.loopedindex); reverse!(getindices(ar)) # reverse the listed indices here, and transpose it to make it column major
     pushpreamble!(ls, Expr(:(=), name, Expr(:call, lv(:transpose), extract_varg(i))))
 end
+function assume_strides!(ls, name, N)
+    for n ∈ 1:N
+        pushpreamble!(ls, assume( Expr(:call, :>, Expr(:ref, Expr(:(.), name, QuoteNode(:strides)), n), 0) ))
+    end
+end
 function add_mref!(
     ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name = vptr(ar)
 ) where {T, N, S <: AbstractColumnMajorStridedPointer{T,N}}
     pushvarg!(ls, ar, i, name)
+    assume_strides!(ls, name, N)
 end
 function add_mref!(
     ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name = vptr(ar)
 ) where {T, N, S <: AbstractRowMajorStridedPointer{T, N}}
     pushvarg′!(ls, ar, i, name)
+    assume_strides!(ls, name, N)
 end
 function add_mref!(
     ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name = vptr(ar)
@@ -150,6 +157,7 @@ function add_mref!(
         li[i] = lib[S1[i]]
         inds[i] = indsb[S1[i]]
     end
+    assume_strides!(ls, name, length(S1))
 end
 function add_mref!(
     ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{OffsetStridedPointer{T,N,P}}, name = vptr(ar)

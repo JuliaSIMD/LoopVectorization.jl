@@ -188,7 +188,8 @@ function assume(ex)
     Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:SIMDPirates)), QuoteNode(:assume)), ex)
 end
 function expect(ex)
-    Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:SIMDPirates)), QuoteNode(:expect)), ex)
+    # Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:SIMDPirates)), QuoteNode(:expect)), ex)
+    ex
 end
 function loopiteratesatleastonce(loop::Loop, as::Bool = true)
     comp = if loop.startexact # requires !loop.stopexact
@@ -209,23 +210,21 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
     # if VERSION ≥ v"1.4" && !nisvectorized && !inclmask && isone(n) && !ls.loadelimination[] && (us.u₁ > 1) && (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && length(loop) > 7
     #     return lower_llvm_unroll(ls, us, n, loop)
     # end
-
-    
     sl = startloop(loop, nisvectorized, loopsym)
     tc = terminatecondition(loop, us, n, loopsym, inclmask, 1)
     body = lower_block(ls, us, n, inclmask, 1)
     q = if (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !isstaticloop(loop) && !inclmask# && !ls.loadelimination[]
         # Expr(:block, sl, assumeloopiteratesatleastonce(loop), Expr(:while, tc, body))
         if nisvectorized
-            Expr(:block, sl, loopiteratesatleastonce(loop, true), Expr(:while, expect(tc), body))
+            Expr(:block, loopiteratesatleastonce(loop, true), Expr(:while, expect(tc), body))
         else
             # Expr(:block, sl, assume(tc), Expr(:while, tc, body))
             push!(body.args, Expr(:||, expect(tc), Expr(:break)))
             # Expr(:block, sl, assume(tc), Expr(:while, true, body))
-            Expr(:block, sl, Expr(:while, true, body))
+            Expr(:block, Expr(:while, true, body))
         end
     else
-        Expr(:block, sl, Expr(:while, tc, body))
+        Expr(:block, Expr(:while, tc, body))
     end
 
     if nisvectorized
@@ -233,7 +232,7 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
         body = lower_block(ls, us, n, true, 1)
         push!(q.args, Expr(:if, tc, body))
     end
-    q
+    Expr(:block, Expr(:let, sl, q))
 end
 function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask::Bool)
     UF = unrollfactor(us, n)
@@ -254,12 +253,12 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
 
     remfirst = loopisstatic & !(unsigned(Ureduct) < unsigned(UF))
     if remfirst
-        tc = Expr(:call, lv(:scalar_less), loopsym, loop.stophint + 1)
+        tc = Expr(:call, :<, loopsym, loop.stophint)
     else
         tc = terminatecondition(loop, us, n, loopsym, inclmask, UF)
     end
     usorig = ls.unrollspecification[]
-    tc = (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !isstaticloop(loop) && !inclmask && !ls.loadelimination[] ? expect(tc) : tc
+    tc = (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !loopisstatic && !inclmask && !ls.loadelimination[] ? expect(tc) : tc
     body = lower_block(ls, us, n, inclmask, UF)
     q = Expr(:while, tc, body)
     remblock = init_remblock(loop, loopsym)
@@ -272,7 +271,7 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
         UF_cleanup = UF - Ureduct
         us_cleanup = nisunrolled ? UnrollSpecification(us, UF_cleanup, u₂) : UnrollSpecification(us, u₁, UF_cleanup)
         Expr(
-            :block, sl,
+            :block,
             add_upper_outer_reductions(ls, q, Ureduct, UF, loop, vectorized),
             Expr(
                 :if, terminatecondition(loop, us, n, loopsym, inclmask, UF_cleanup),
@@ -283,9 +282,9 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     elseif remfirst
         numiters = length(loop) ÷ UF
         if numiters > 2
-            Expr( :block, sl, remblock, q )
+            Expr( :block, remblock, q )
         else
-            q = Expr(:block, sl, remblock)
+            q = Expr(:block, remblock)
             for i ∈ 1:numiters
                 push!(q.args, body)
             end
@@ -298,7 +297,7 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
         # else
         #     Expr(:block, sl, q, remblock)
         # end
-        Expr( :block, sl, q, remblock )
+        Expr( :block, q, remblock )
     end
     UFt = if loopisstatic
         length(loop) % UF
@@ -308,17 +307,17 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     while !iszero(UFt)
         comparison = if nisvectorized
             itercount = if loop.stopexact
-                Expr(:call, lv(:vsub), loop.stophint, Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, UFt))
+                Expr(:call, lv(:vsub), loop.stophint - 1, Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, UFt))
             else
-                Expr(:call, lv(:vsub), loop.stopsym, Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, UFt))
+                Expr(:call, lv(:vsub), loop.stopsym, Expr(:call, lv(:valmuladd), VECTORWIDTHSYMBOL, UFt, 1))
             end
-            Expr(:call, lv(:scalar_greater), loopsym, itercount)
+            Expr(:call, :>, loopsym, itercount)
         elseif remfirst
-            Expr(:call, lv(:scalar_less), loopsym, loop.starthint + UFt)
+            Expr(:call, :<, loopsym, loop.starthint + UFt - 1)
         elseif loop.stopexact
-            Expr(:call, lv(:scalar_greater), loopsym, loop.stophint - UFt)
+            Expr(:call, :>, loopsym, loop.stophint - UFt - 1)
         else
-            Expr(:call, lv(:scalar_greater), loopsym, Expr(:call, lv(:vsub), loop.stopsym, UFt))
+            Expr(:call, :>, loopsym, Expr(:call, lv(:vsub), loop.stopsym, UFt + 1))
         end
         ust = nisunrolled ? UnrollSpecification(us, UFt, u₂) : UnrollSpecification(us, u₁, UFt)
         remblocknew = Expr(:elseif, comparison, lower_block(ls, ust, n, remmask, UFt))
@@ -330,7 +329,7 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
             UFt += 1
         end
     end
-    q
+    Expr(:block, Expr(:let, sl, q))
 end
 
 function initialize_outer_reductions!(
@@ -432,9 +431,9 @@ function determine_width(
 end
 function init_remblock(unrolledloop::Loop, u₁loop::Symbol = unrolledloop.itersymbol)
     condition = if unrolledloop.stopexact
-        Expr(:call, lv(:scalar_greater), u₁loop, unrolledloop.stophint)
+        Expr(:call, :>, u₁loop, unrolledloop.stophint - 1)
     else
-        Expr(:call, lv(:scalar_greater), u₁loop, unrolledloop.stopsym)
+        Expr(:call, :≥, u₁loop, unrolledloop.stopsym)
     end
     Expr(:if, condition, nothing)
 end
