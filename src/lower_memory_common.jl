@@ -38,6 +38,21 @@ function addoffset!(ret::Expr, ex, offset::Integer, _mm::Bool = false)
     push!(ret.args, ind)
     nothing
 end
+function addoffset!(ret::Expr, offset::Integer, _mm::Bool = false)
+    if iszero(offset)
+        ex = Expr(:call, lv(:Zero))
+        if _mm
+            push!(ret.args, _MMind(ex))
+        else
+            push!(ret.args, ex)
+        end
+    elseif _mm
+        push!(ret.args, _MMind(convert(Int, offset)))
+    else
+        push!(ret.args, convert(Int, offset))
+    end
+    nothing
+end
 
 """
 unrolled loads are calculated as offsets with respect to an initial gesp. This has proven important to helping LLVM generate efficient code in some cases.
@@ -50,9 +65,7 @@ function mem_offset(op::Operation, td::UnrollArgs, unrolled::Bool, _mm::Bool = t
     indices = getindicesonly(op)
     offsets = getoffsets(op)
     loopedindex = op.ref.loopedindex
-    if unrolled
-        unrolled = all(loopedindex)
-    end
+    unrolled = unrolled && use_gesp(op, td)
     @unpack vectorized = td
     for (n,ind) ∈ enumerate(indices)
         offset = _mm ? offsets[n] % Int : 0
@@ -61,7 +74,7 @@ function mem_offset(op::Operation, td::UnrollArgs, unrolled::Bool, _mm::Bool = t
         # else
         if loopedindex[n]
             if unrolled
-                addoffset!(ret, offset, 0, _mm && ind === vectorized)
+                addoffset!(ret, offset, _mm && ind === vectorized)
             else
                 addoffset!(ret, ind, offset, _mm && ind === vectorized)
             end
@@ -71,10 +84,11 @@ function mem_offset(op::Operation, td::UnrollArgs, unrolled::Bool, _mm::Bool = t
     end
     ret
 end
-function offset_refname(op::Operation)
+function offset_refname(op::Operation, td::UnrollArgs)
     rn = refname(op)
-    all(op.ref.loopedindex) ? Symbol(refname(op), "#offset#", name(op)) : rn
+    use_gesp(op, td) ? Symbol(refname(op), "#offset#", name(op)) : rn
 end
+use_gesp(op::Operation, td::UnrollArgs) = all(op.ref.loopedindex)# && td.vectorized ∈ loopdependencies(op)
 function gesp_call!(q::Expr, op::Operation, td::UnrollArgs)
     ref = refname(op)
     # ref_offset = offset_refname(op)
@@ -85,7 +99,7 @@ function gesp_call!(q::Expr, op::Operation, td::UnrollArgs)
 end
 function maybegesp_call!(q::Expr, op::Operation, td::UnrollArgs)
     @unpack u₁loopsym, u₂loopsym, suffix = td
-    if ((isnothing(suffix) || iszero(suffix)) && ((u₁loopsym ∈ loopdependencies(op)) || (u₂loopsym ∈ loopdependencies(op))) && all(op.ref.loopedindex))
+    if ((isnothing(suffix) || iszero(suffix)) && ((u₁loopsym ∈ loopdependencies(op)) || (u₂loopsym ∈ loopdependencies(op))) && use_gesp(op, td))
         gesp_call!(q, op, td)
     end
 end
@@ -118,7 +132,11 @@ function add_vectorized_offset_unrolled!(ret::Expr, offset, incr)
             push!(ret.args, _MMind(Expr(:call, lv(:valadd), VECTORWIDTHSYMBOL, convert(Int, offset))))
         end
     elseif iszero(incr)
-        push!(ret.args, _MMind(convert(Int, offset)))
+        if iszero(offset)
+            push!(ret.args, _MMind(Expr(:call, lv(:Zero))))
+        else
+            push!(ret.args, _MMind(convert(Int, offset)))
+        end
     elseif iszero(offset)
         push!(ret.args, _MMind(Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, incr)))
     else
@@ -141,9 +159,7 @@ function mem_offset_u(op::Operation, td::UnrollArgs, unrolled::Bool)
     indices = getindicesonly(op)
     offsets = getoffsets(op)
     loopedindex = op.ref.loopedindex
-    if unrolled
-        unrolled = all(loopedindex)
-    end
+    unrolled = unrolled && use_gesp(op, td)
     if iszero(incr₁) & iszero(incr₂)
         return mem_offset(op, td, unrolled)
         # append_inds!(ret, indices, loopedindex)
@@ -158,7 +174,7 @@ function mem_offset_u(op::Operation, td::UnrollArgs, unrolled::Bool)
                 if indvectorized
                     add_vectorized_offset!(ret, ind, offset, incr₁, unrolled)
                 elseif unrolled
-                    addoffset!(ret, incr₁ + offset, 0)
+                    addoffset!(ret, incr₁ + offset)
                 else
                     addoffset!(ret, ind, incr₁ + offset)
                 end
@@ -166,13 +182,13 @@ function mem_offset_u(op::Operation, td::UnrollArgs, unrolled::Bool)
                 if indvectorized
                     add_vectorized_offset!(ret, ind, offset, incr₂, unrolled)
                 elseif unrolled
-                    addoffset!(ret, incr₂ + offset, 0)
+                    addoffset!(ret, incr₂ + offset)
                 else
                     addoffset!(ret, ind, incr₂ + offset)
                 end
             elseif loopedindex[n]
                 if unrolled
-                    addoffset!(ret, offset, 0, indvectorized)
+                    addoffset!(ret, offset, indvectorized)
                 else
                     addoffset!(ret, ind, offset, indvectorized)
                 end

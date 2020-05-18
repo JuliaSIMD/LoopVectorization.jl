@@ -98,7 +98,7 @@ function lower_conditionalstore_scalar!(
     loopdeps = loopdependencies(op)
     opu₁ = u₁loopsym ∈ loopdeps
     unrolled = opu₁ || u₂loopsym ∈ loopdeps
-    ptr = unrolled ? offset_refname(op) : refname(op)
+    ptr = unrolled ? offset_refname(op, ua) : refname(op)
     for u ∈ 0:u₁-1
         varname = varassignname(mvar, u, opu₁)
         condvarname = varassignname(condvar, u, condu₁)
@@ -123,7 +123,7 @@ function lower_conditionalstore_vectorized!(
         U = 0
     end
     unrolled = opu₁ | opu₂
-    ptr = unrolled ? offset_refname(op) : refname(op)
+    ptr = unrolled ? offset_refname(op, ua) : refname(op)
     vecnotunrolled = vectorized !== u₁loopsym
     cond = last(parents(op))
     condvar, condu₁ = condvarname_and_unroll(cond, u₁loopsym, u₂loopsym, suffix, opu₂)
@@ -148,7 +148,7 @@ function lower_store_scalar!(
     @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = ua
     mvar, opu₁, opu₂ = variable_name_and_unrolled(first(parents(op)), u₁loopsym, u₂loopsym, suffix)
     unrolled = opu₁ | opu₂
-    ptr = unrolled ? offset_refname(op) : refname(op)
+    ptr = unrolled ? offset_refname(op, ua) : refname(op)
     # var = pvariable_name(op, suffix, tiled)
     # parentisunrolled = unrolled ∈ loopdependencies(first(parents(op)))
     for u ∈ 0:u₁-1
@@ -166,7 +166,7 @@ function lower_store_vectorized!(
     @assert vectorized ∈ loopdeps
     mvar, opu₁, opu₂ = variable_name_and_unrolled(first(parents(op)), u₁loopsym, u₂loopsym, suffix)
     unrolled = opu₁ | opu₂
-    ptr = unrolled ? offset_refname(op) : refname(op)
+    ptr = unrolled ? offset_refname(op, ua) : refname(op)
     # var = pvariable_name(op, suffix, tiled)
     # parentisunrolled = unrolled ∈ loopdependencies(first(parents(op)))
     if isunrolled

@@ -137,14 +137,14 @@ T = Float64
         end
         out
     end
-    uq = :(for j in rng2, i in rng1
-            tmp_0 = zero(eltype(out))
-            Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> tmp_{ik+(jk-1)*3} = A[i+(ik-2),j+(jk-2)] * kern_ik_jk + tmp_{ik+(jk-1)*3-1}
-            out[i,j] = tmp_9
-           end);
-    lsuq = LoopVectorization.LoopSet(macroexpand(Base, uq));
-    LoopVectorization.choose_order(lsuq)
-    lsuq
+    # uq = :(for j in rng2, i in rng1
+    #         tmp_0 = zero(eltype(out))
+    #         Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> tmp_{ik+(jk-1)*3} = A[i+(ik-2),j+(jk-2)] * kern_ik_jk + tmp_{ik+(jk-1)*3-1}
+    #         out[i,j] = tmp_9
+    #        end);
+    # lsuq = LoopVectorization.LoopSet(macroexpand(Base, uq));
+    # LoopVectorization.choose_order(lsuq)
+    # lsuq
     
     # using LoopVectorization, OffsetArrays
     # T = Float64

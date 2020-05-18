@@ -1,22 +1,24 @@
 using LoopVectorization, LinearAlgebra, OffsetArrays
 BLAS.set_num_threads(1)
 
+using LoopVectorization.VectorizationBase: StaticUnitRange
 struct SizedOffsetMatrix{T,LR,UR,LC,RC} <: DenseMatrix{T}
     data::Matrix{T}
 end
-using LoopVectorization.VectorizationBase: StaticUnitRange
 Base.axes(::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (StaticUnitRange{LR,UR}(),StaticUnitRange{LC,UC}())
+Base.parent(A::SizedOffsetMatrix) = A.data
 @generated function LoopVectorization.stridedpointer(A::SizedOffsetMatrix{T,LR,UR,LC,RC}) where {T,LR,UR,LC,RC}
     quote
         $(Expr(:meta,:inline))
         LoopVectorization.OffsetStridedPointer(
-            LoopVectorization.StaticStridedPointer{$T,Tuple{1,$(UR-LR+1)}}(pointer(A.data)),
-            ($(LR-2), $(LC-2))
+            LoopVectorization.StaticStridedPointer{$T,Tuple{1,$(UR-LR+1)}}(pointer(parent(A))),
+            ($(LR-1), $(LC-1))
         )
     end
 end
+Base.getindex(A::SizedOffsetMatrix, i, j) = LoopVectorization.vload(LoopVectorization.stridedpointer(A), (i-1,j-1))
+Base.axes(::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (StaticUnitRange{LR,UR}(),StaticUnitRange{LC,UC}())
 Base.size(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (1 + UR-LR, 1 + UC-LC)
-Base.getindex(A::SizedOffsetMatrix, i, j) = LoopVectorization.vload(LoopVectorization.stridedpointer(A), (i,j)) # only needed to print
 Base.unsafe_convert(::Type{Ptr{Float64}}, A::SizedOffsetMatrix) = Base.unsafe_convert(Ptr{Float64}, A.data)
 
 

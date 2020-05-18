@@ -22,34 +22,32 @@ end
 # sizes = 23:23
 sizes = 256:-1:2
 
-AmulB_bench = benchmark_AmulB(sizes)
-AmulBt_bench = benchmark_AmulBt(sizes)
-AtmulBt_bench = benchmark_AtmulBt(sizes)
-AtmulB_bench = benchmark_AtmulB(sizes)
+@show AmulB_bench = benchmark_AmulB(sizes);
+@show AmulBt_bench = benchmark_AmulBt(sizes);
+@show AtmulBt_bench = benchmark_AtmulBt(sizes);
+@show AtmulB_bench = benchmark_AtmulB(sizes);
 
-Amulvb_bench = benchmark_Amulvb(sizes)
-Atmulvb_bench = benchmark_Atmulvb(sizes)
+@show Amulvb_bench = benchmark_Amulvb(sizes);
+@show Atmulvb_bench = benchmark_Atmulvb(sizes);
 
-filter2d_dynamic_bench = benchmark_filter2ddynamic(sizes)#512:-1:2)
-filter2d_3x3_bench = benchmark_filter2d3x3(sizes)#512:-1:2)
-filter2d_unrolled_bench = benchmark_filter2dunrolled(sizes)#512:-1:2)
+@show filter2d_dynamic_bench = benchmark_filter2ddynamic(sizes);
+@show filter2d_3x3_bench = benchmark_filter2d3x3(sizes);
+@show filter2d_unrolled_bench = benchmark_filter2dunrolled(sizes);
 
-dot3_bench = benchmark_dot3(sizes)
-dot_bench = benchmark_dot(sizes)
-selfdot_bench = benchmark_selfdot(sizes)
-sse_bench = benchmark_sse(sizes)
-aplusBc_bench = benchmark_aplusBc(sizes)
-AplusAt_bench = benchmark_AplusAt(sizes)
-vexp_bench = benchmark_exp(sizes)
-randomaccess_bench = benchmark_random_access(sizes)
-logdettriangle_bench = benchmark_logdettriangle(sizes)
+@show dot3_bench = benchmark_dot3(sizes);
+@show dot_bench = benchmark_dot(sizes);
+@show selfdot_bench = benchmark_selfdot(sizes);
+@show sse_bench = benchmark_sse(sizes);
+@show aplusBc_bench = benchmark_aplusBc(sizes);
+@show AplusAt_bench = benchmark_AplusAt(sizes);
+@show vexp_bench = benchmark_exp(sizes);
+@show randomaccess_bench = benchmark_random_access(sizes);
+@show logdettriangle_bench = benchmark_logdettriangle(sizes);
 
 const v = 1
 using Cairo, Fontconfig
 const PICTURES = joinpath(pkgdir(LoopVectorization), "docs", "src", "assets")
-function saveplot(f, br)
-    draw(PNG(joinpath(PICTURES, f * "$v.png"), 12inch, 8inch), plot(br))
-end
+saveplot(f, br) = draw(PNG(joinpath(PICTURES, f * "$v.png"), 12inch, 8inch), plot(br))
 
 saveplot("bench_filter2d_dynamic_v", filter2d_dynamic_bench);
 saveplot("bench_filter2d_3x3_v", filter2d_3x3_bench);
@@ -69,20 +67,4 @@ saveplot("bench_AtmulB_v", AtmulB_bench);
 saveplot("bench_AtmulBt_v", AtmulBt_bench);
 saveplot("bench_Amulvb_v", Amulvb_bench);
 saveplot("bench_Atmulvb_v", Atmulvb_bench);
-
-
-
-
-# plot(gemm_bench)
-# plot(AtmulB_bench)
-# plot(dot_bench)
-# plot(selfdot_bench)
-# plot(gemv_bench)
-# plot(dot3_bench)
-# plot(sse_bench)
-# plot(vexp_bench)
-# plot(aplusBc_bench)
-# plot(AplusAt_bench)
-
-
 

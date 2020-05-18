@@ -19,7 +19,7 @@ end
     xv = view(x, :, 1:0, :);
     @test mysum_checked(x) == mysum_unchecked(x) == sum(x)
     @test iszero(mysum_checked(xv))
-    @test_broken !iszero(mysum_unchecked(xv))
+    @test !iszero(mysum_unchecked(xv))
     
 end
 
