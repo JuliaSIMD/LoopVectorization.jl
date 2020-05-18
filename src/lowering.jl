@@ -156,17 +156,17 @@ end
 #     # tc = terminatecondition(loop, us, n, loopsym, inclmask, 1)
 #     looprange = if loop.startexact
 #         if loop.stopexact
-#             Expr(:(=), loopsym, Expr(:call, :(:), loop.starthint, loop.stophint))
+#             Expr(:(=), loopsym, Expr(:call, :(:), loop.starthint-1, loop.stophint-1))
 #         else
 #             # expectation = expect(Expr(:call, :(>), loop.stopsym, loop.starthint-5))
-#             Expr(:(=), loopsym, Expr(:call, :(:), loop.starthint, loop.stopsym))
+#             Expr(:(=), loopsym, Expr(:call, :(:), loop.starthint-1, Expr(:call, lv(:staticm1), loop.stopsym)))
 #         end
 #     elseif loop.stopexact
 #         # expectation = expect(Expr(:call, :(>), loop.stophint+5, loop.startsym))
-#         Expr(:(=), loopsym, Expr(:call, :(:), loop.startsym, loop.stophint))
+#         Expr(:(=), loopsym, Expr(:call, :(:), Expr(:call, lv(:staticm1), loop.startsym), loop.stophint - 1))
 #     else
 #         # expectation = expect(Expr(:call, :(>), loop.stopsym, Expr(:call, lv(:vsub), loop.startsym, 5)))
-#         Expr(:(=), loopsym, Expr(:call, :(:), loop.startsym, loop.stopsym))
+#         Expr(:(=), loopsym, Expr(:call, :(:), Expr(:call, lv(:staticm1), loop.startsym), Expr(:call, lv(:staticm1), loop.stopsym)))
 #     end
 #     body = lower_block(ls, us, n, false, 1)
 #     push!(body.args, Expr(:loopinfo, (Symbol("llvm.loop.unroll.count"), 4)))
@@ -180,8 +180,27 @@ end
 #         q
 #     else
 #         # Expr(:block, assumption, expectation, q)
+#         q
 #         Expr(:block, loopiteratesatleastonce(loop), q)
 #     end
+# end
+# function lower_unroll_for_throughput(ls::LoopSet, us::UnrollSpecification, n::Int, loop::Loop, loopsym::Symbol)
+#     sl = startloop(loop, false, loopsym)
+#     UF = 4
+#     tcc = terminatecondition(loop, us, n, loopsym, false, 1)
+#     tcu = terminatecondition(loop, us, n, loopsym, false, UF)
+#     body = lower_block(ls, us, n, false, 1)
+#     # loopisstatic = isstaticloop(loop)
+#     unrolledlabel = gensym(:unrolled)
+#     cleanuplabel = gensym(:cleanup)
+#     gotounrolled = Expr(:macrocall, Symbol("@goto"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), unrolledlabel)
+#     gotocleanup = Expr(:macrocall, Symbol("@goto"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), cleanuplabel)
+#     branch = Expr(:if, tcu, gotounrolled, gotocleanup)
+#     unrolled = Expr(:block, Expr(:macrocall, Symbol("@label"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), unrolledlabel))
+#     foreach(_ -> push!(unrolled.args, body), 1:UF)
+#     push!(unrolled.args, Expr(:if, tcu, gotounrolled, Expr(:if, tcc, gotocleanup)))
+#     cleanup = Expr(:block, Expr(:macrocall, Symbol("@label"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), cleanuplabel), body, Expr(:if, tcc, gotocleanup))
+#     Expr(:let, sl, Expr(:block, branch, unrolled, cleanup))
 # end
 
 function assume(ex)
@@ -207,24 +226,21 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
     nisvectorized = isvectorized(us, n)
     loopsym = names(ls)[n]
     loop = getloop(ls, loopsym)
-    # if VERSION ≥ v"1.4" && !nisvectorized && !inclmask && isone(n) && !ls.loadelimination[] && (us.u₁ > 1) && (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && length(loop) > 7
+    # if !nisvectorized && !inclmask && isone(n) && !ls.loadelimination[] && (us.u₁ > 1) && (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && length(loop) > 7
+    #     # return lower_unroll_for_throughput(ls, us, n, loop, loopsym)
     #     return lower_llvm_unroll(ls, us, n, loop)
     # end
     sl = startloop(loop, nisvectorized, loopsym)
     tc = terminatecondition(loop, us, n, loopsym, inclmask, 1)
     body = lower_block(ls, us, n, inclmask, 1)
-    q = if (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !isstaticloop(loop) && !inclmask# && !ls.loadelimination[]
-        # Expr(:block, sl, assumeloopiteratesatleastonce(loop), Expr(:while, tc, body))
-        if nisvectorized
-            Expr(:block, loopiteratesatleastonce(loop, true), Expr(:while, expect(tc), body))
-        else
-            # Expr(:block, sl, assume(tc), Expr(:while, tc, body))
-            push!(body.args, Expr(:||, expect(tc), Expr(:break)))
-            # Expr(:block, sl, assume(tc), Expr(:while, true, body))
-            Expr(:block, Expr(:while, true, body))
-        end
+    q = if nisvectorized
+            # Expr(:block, loopiteratesatleastonce(loop, true), Expr(:while, expect(tc), body))
+        Expr(:block, Expr(:while, expect(tc), body))
     else
-        Expr(:block, Expr(:while, tc, body))
+        # Expr(:block, sl, assume(tc), Expr(:while, tc, body))
+        push!(body.args, Expr(:||, expect(tc), Expr(:break)))
+        # Expr(:block, sl, assume(tc), Expr(:while, true, body))
+        Expr(:block, Expr(:while, true, body))
     end
 
     if nisvectorized
