@@ -4,14 +4,14 @@ function vmap_quote(N, ::Type{T}) where {T}
     val = Expr(:call, Expr(:curly, :Val, W))
     q = Expr(:block, Expr(:(=), :M, Expr(:call, :length, :dest)), Expr(:(=), :vdest, Expr(:call, :pointer, :dest)), Expr(:(=), :m, 0))
     fcall = Expr(:call, :f)
-    loopbody = Expr(:block, Expr(:call, :vstore!, :vdest, fcall, :m), Expr(:(+=), :m, W))
+    loopbody = Expr(:block, Expr(:call, :vstore!, Expr(:call, :gep, :vdest, :m), fcall), Expr(:(+=), :m, W))
     fcallmask = Expr(:call, :f)
-    bodymask = Expr(:block, Expr(:(=), :__mask__, Expr(:call, :mask, val, Expr(:call, :&, :M, W-1))), Expr(:call, :vstore!, :vdest, fcallmask, :m, :__mask__))
+    bodymask = Expr(:block, Expr(:(=), :__mask__, Expr(:call, :mask, val, Expr(:call, :&, :M, W-1))), Expr(:call, :vstore!, Expr(:call, :gep, :vdest, :m), fcallmask, :__mask__))
     for n ∈ 1:N
         arg_n = Symbol(:varg_,n)
         push!(q.args, Expr(:(=), arg_n, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), Expr(:call, :pointer, Expr(:ref, :args, n)))))
-        push!(fcall.args, Expr(:call, :vload, val, arg_n, :m))
-        push!(fcallmask.args, Expr(:call, :vload, val, arg_n, :m, :__mask__))
+        push!(fcall.args, Expr(:call, :vload, val, Expr(:call, :gep, arg_n, :m)))
+        push!(fcallmask.args, Expr(:call, :vload, val, Expr(:call, :gep, arg_n, :m), :__mask__))
     end
     loop = Expr(:for, Expr(:(=), :_, Expr(:call, :(:), 0, Expr(:call, :-, Expr(:call, :(>>>), :M, Wshift), 1))), loopbody)
     push!(q.args, loop)
@@ -114,17 +114,17 @@ function vmapnt!(f::F, y::AbstractVector{T}, args::Vararg{<:Any,A}) where {F,T,A
     W = VectorizationBase.pick_vector_width(T)
     V = VectorizationBase.pick_vector_width_val(T)
     while i < N - ((W << 2) - 1)
-        vstorent!(ptry, extract_data(f(vload.(V, ptrargs, i)...)), i); i += W
-        vstorent!(ptry, extract_data(f(vload.(V, ptrargs, i)...)), i); i += W
-        vstorent!(ptry, extract_data(f(vload.(V, ptrargs, i)...)), i); i += W
-        vstorent!(ptry, extract_data(f(vload.(V, ptrargs, i)...)), i); i += W
+        vstorent!(gep(ptry, i), extract_data(f(vload.(V, gep.(ptrargs, i))...))); i += W
+        vstorent!(gep(ptry, i), extract_data(f(vload.(V, gep.(ptrargs, i))...))); i += W
+        vstorent!(gep(ptry, i), extract_data(f(vload.(V, gep.(ptrargs, i))...))); i += W
+        vstorent!(gep(ptry, i), extract_data(f(vload.(V, gep.(ptrargs, i))...))); i += W
     end
     while i < N - (W - 1) # stops at 16 when
-        vstorent!(ptry, extract_data(f(vload.(V, ptrargs, i)...)), i); i += W
+        vstorent!(gep(ptry, i), extract_data(f(vload.(V, gep.(ptrargs, i))...))); i += W
     end
-    if i < N
+     if i < N
         m = mask(T, N & (W - 1))
-        vstore!(ptry, extract_data(f(vload.(V, ptrargs, i, m)...)), i, m)
+        vstore!(gep(ptry, i), extract_data(f(vload.(V, gep.(ptrargs, i), m)...)), m)
     end
     y
 end
@@ -143,18 +143,18 @@ function vmapntt!(f::F, y::AbstractVector{T}, args::Vararg{<:Any,A}) where {F,T,
     Niter = N >>> Wsh
     Base.Threads.@threads for j ∈ 0:Niter-1
         i = j << Wsh
-        vstorent!(ptry, extract_data(f(vload.(V, ptrargs, i)...)), i); i += W
-        vstorent!(ptry, extract_data(f(vload.(V, ptrargs, i)...)), i); i += W
-        vstorent!(ptry, extract_data(f(vload.(V, ptrargs, i)...)), i); i += W
-        vstorent!(ptry, extract_data(f(vload.(V, ptrargs, i)...)), i)
+        vstorent!(gep(ptry, i), extract_data(f(vload.(V, gep.(ptrargs, i))...))); i += W
+        vstorent!(gep(ptry, i), extract_data(f(vload.(V, gep.(ptrargs, i))...))); i += W
+        vstorent!(gep(ptry, i), extract_data(f(vload.(V, gep.(ptrargs, i))...))); i += W
+        vstorent!(gep(ptry, i), extract_data(f(vload.(V, gep.(ptrargs, i))...)))
     end
     ii = Niter << Wsh
     while ii < N - (W - 1) # stops at 16 when
-        vstorent!(ptry, extract_data(f(vload.(V, ptrargs, ii)...)), ii); ii += W
+        vstorent!(gep(ptry, ii), extract_data(f(vload.(V, gep.(ptrargs, ii))...))); ii += W
     end
     if ii < N
         m = mask(T, N & (W - 1))
-        vstore!(ptry, extract_data(f(vload.(V, ptrargs, ii, m)...)), ii, m)
+        vstore!(gep(ptry, ii), extract_data(f(vload.(V, gep.(ptrargs, ii), m)...)), m)
     end
     y
 end

@@ -20,7 +20,7 @@ function mapreduce_simple(f::F, op::OP, args::Vararg{DenseArray{T},A}) where {F,
     iszero(N) && throw("Length of vector is 0!")
     a_0 = f(vload.(ptrargs)...); i = 1
     while i < N
-        a_0 = op(a_0, f(vload.(ptrargs, i)...)); i += 1
+        a_0 = op(a_0, f(vload.(gep.(ptrargs, i))...)); i += 1
     end
     a_0
 end
@@ -38,28 +38,28 @@ function vmapreduce(f::F, op::OP, args::Vararg{DenseArray{T},A}) where {F,OP,T<:
     V = VectorizationBase.pick_vector_width_val(T)
     N < W && return mapreduce_simple(f, op, args...)
     ptrargs = pointer.(args)
-        
+    
     a_0 = f(vload.(V, ptrargs)...); i = W
     if N ≥ 4W
-        a_1 = f(vload.(V, ptrargs, i)...); i += W
-        a_2 = f(vload.(V, ptrargs, i)...); i += W
-        a_3 = f(vload.(V, ptrargs, i)...); i += W
+        a_1 = f(vload.(V, gep.(ptrargs, i))...); i += W
+        a_2 = f(vload.(V, gep.(ptrargs, i))...); i += W
+        a_3 = f(vload.(V, gep.(ptrargs, i))...); i += W
         while i < N - ((W << 2) - 1)
-            a_0 = op(a_0, f(vload.(V, ptrargs, i)...)); i += W
-            a_1 = op(a_1, f(vload.(V, ptrargs, i)...)); i += W
-            a_2 = op(a_2, f(vload.(V, ptrargs, i)...)); i += W
-            a_3 = op(a_3, f(vload.(V, ptrargs, i)...)); i += W
+            a_0 = op(a_0, f(vload.(V, gep.(ptrargs, i))...)); i += W
+            a_1 = op(a_1, f(vload.(V, gep.(ptrargs, i))...)); i += W
+            a_2 = op(a_2, f(vload.(V, gep.(ptrargs, i))...)); i += W
+            a_3 = op(a_3, f(vload.(V, gep.(ptrargs, i))...)); i += W
         end
         a_0 = op(a_0, a_1)
         a_2 = op(a_2, a_3)
         a_0 = op(a_0, a_2)
     end
     while i < N - (W - 1)
-        a_0 = op(a_0, f(vload.(V, ptrargs, i)...)); i += W
+        a_0 = op(a_0, f(vload.(V, gep.(ptrargs, i))...)); i += W
     end
     if i < N
         m = mask(T, N & (W - 1))
-        a_0 = vifelse(m, op(a_0, f(vload.(V, ptrargs, i)...)), a_0)
+        a_0 = vifelse(m, op(a_0, f(vload.(V, gep.(ptrargs, i))...)), a_0)
     end
     vreduce(op, a_0)
 end

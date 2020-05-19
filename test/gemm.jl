@@ -3,9 +3,9 @@
     Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (5, 5)
     @test LoopVectorization.mᵣ == Unum
     @test LoopVectorization.nᵣ == Tnum
-    AmulBtq1 = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+    AmulBtq1 = :(for m ∈ axes(A,1), n ∈ axes(B,2)
                  C[m,n] = zeroB
-                 for k ∈ 1:size(A,2)
+                 for k ∈ axes(A,2)
                  C[m,n] += A[m,k] * B[n,k]
                  end
                  end);
@@ -13,9 +13,9 @@
     # @test LoopVectorization.choose_order(lsAmulBt1) == (Symbol[:n,:m,:k], :n, :m, :m, Unum, Tnum)
     @test LoopVectorization.choose_order(lsAmulBt1) == (Symbol[:n,:m,:k], :m, :n, :m, Unum, Tnum)
 
-    AmulBq1 = :(for n ∈ 1:size(B,2), m ∈ 1:size(A,1)
+    AmulBq1 = :(for n ∈ axes(B,2), m ∈ axes(A,1)
                 C[m,n] = zeroB
-                for k ∈ 1:size(A,2)
+                for k ∈ axes(A,2)
                 C[m,n] += A[m,k] * B[k,n]
                 end
                 end)
@@ -31,9 +31,9 @@
     lsAmulB2 = LoopVectorization.LoopSet(AmulBq2);
     # @test LoopVectorization.choose_order(lsAmulB2) == (Symbol[:n,:m,:k], :n, :m, :m, Unum, Tnum)
     @test LoopVectorization.choose_order(lsAmulB2) == (Symbol[:n,:m,:k], :m, :n, :m, Unum, Tnum)
-    AmulBq3 = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+    AmulBq3 = :(for m ∈ axes(A,1), n ∈ axes(B,2)
                 ΔCₘₙ = zero(eltype(C))
-                for k ∈ 1:size(A,2)
+                for k ∈ axes(A,2)
                 ΔCₘₙ += A[m,k] * B[k,n]
                 end
                 C[m,n] += ΔCₘₙ
@@ -43,14 +43,14 @@
 
     function AmulB!(C, A, B)
         C .= 0
-        for k ∈ 1:size(A,2), j ∈ 1:size(B,2)
-            @simd ivdep for i ∈ 1:size(A,1)
+        for k ∈ axes(A,2), j ∈ axes(B,2)
+            @simd ivdep for i ∈ axes(A,1)
                 @inbounds C[i,j] += A[i,k] * B[k,j]
             end
         end
     end
     function AmulBavx1!(C, A, B)
-        @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+        @avx for m ∈ 1:size(A,1), n ∈ axes(B,2)
             Cₘₙ = zero(eltype(C))
             for k ∈ 1:size(A,2)
                 Cₘₙ += A[m,k] * B[k,n]
@@ -60,59 +60,59 @@
     end
     function AmulBavx2!(C, A, B)
         z = zero(eltype(C))
-        @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+        @avx for m ∈ axes(A,1), n ∈ axes(B,2)
             C[m,n] = z
-            for k ∈ 1:size(A,2)
+            for k ∈ axes(A,2)
                 C[m,n] += A[m,k] * B[k,n]
             end
         end
     end
     function AmulBavx3!(C, A, B)
-        @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+        @avx for m ∈ axes(A,1), n ∈ axes(B,2)
             C[m,n] = zero(eltype(C))
-            for k ∈ 1:size(A,2)
+            for k ∈ axes(A,2)
                 C[m,n] += A[m,k] * B[k,n]
             end
         end
     end
     myzero(A) = zero(eltype(A))
     # function AmulBavx4!(C, A, B)
-    #     @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+    #     @avx for m ∈ axes(A,1), n ∈ axes(B,2)
     #         C[m,n] = myzero(C)
-    #         for k ∈ 1:size(A,2)
+    #         for k ∈ axes(A,2)
     #             C[m,n] += A[m,k] * B[k,n]
     #         end
     #     end
     # end
     # C = Cs; A = Ats'; B = Bs; factor = 1;
-    # ls = LoopVectorization.@avx_debug for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+    # ls = LoopVectorization.@avx_debug for m ∈ axes(A,1), n ∈ axes(B,2)
     #         ΔCₘₙ = zero(eltype(C))
-    #         for k ∈ 1:size(A,2)
+    #         for k ∈ axes(A,2)
     #             ΔCₘₙ += A[m,k] * B[k,n]
     #         end
     #         C[m,n] += ΔCₘₙ * factor
     #     end;
     function AmuladdBavx!(C, A, B, α = one(eltype(C)))
-        @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+        @avx for m ∈ axes(A,1), n ∈ axes(B,2)
             ΔCₘₙ = zero(eltype(C))
-            for k ∈ 1:size(A,2)
+            for k ∈ axes(A,2)
                 ΔCₘₙ += A[m,k] * B[k,n]
             end
             C[m,n] += α * ΔCₘₙ
         end
     end
     function AmuladdBavx!(C, A, B, α, β)# = zero(eltype(C)))
-        @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+        @avx for m ∈ axes(A,1), n ∈ axes(B,2)
             ΔCₘₙ = zero(eltype(C))
-            for k ∈ 1:size(A,2)
+            for k ∈ axes(A,2)
                 ΔCₘₙ += A[m,k] * B[k,n]
             end
             C[m,n] = α * ΔCₘₙ + β * C[m,n]
         end
     end
-    Amuladdq = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+    Amuladdq = :(for m ∈ axes(A,1), n ∈ axes(B,2)
                  ΔCₘₙ = zero(eltype(C))
-                 for k ∈ 1:size(A,2)
+                 for k ∈ axes(A,2)
                  ΔCₘₙ += A[m,k] * B[k,n]
                  end
                  C[m,n] = α * ΔCₘₙ + β * C[m,n]
@@ -120,9 +120,9 @@
     lsAmuladd = LoopVectorization.LoopSet(Amuladdq);
     # @test LoopVectorization.choose_order(lsAmuladd) == (Symbol[:n,:m,:k], :n, :m, :m, Unum, Tnum)
     @test LoopVectorization.choose_order(lsAmuladd) == (Symbol[:n,:m,:k], :m, :n, :m, Unum, Tnum)
-    Atmuladdq = :(for m ∈ 1:size(A,2), n ∈ 1:size(B,2)
+    Atmuladdq = :(for m ∈ axes(A,2), n ∈ axes(B,2)
                  ΔCₘₙ = zero(eltype(C))
-                 for k ∈ 1:size(A,1)
+                 for k ∈ axes(A,1)
                  ΔCₘₙ += A[k,m] * B[k,n]
                   end
                   C[m,n] += α * ΔCₘₙ
@@ -138,15 +138,15 @@
     function AmulB_avx1!(C, A, B)
         @_avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
             Cₘₙ = zero(eltype(C))
-            for k ∈ 1:size(A,2)
+            for k ∈ axes(A,2)
                 Cₘₙ += A[m,k] * B[k,n]
             end
             C[m,n] = Cₘₙ
         end
     end
-    fq = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+    fq = :(for m ∈ axes(A,1), n ∈ axes(B,2)
            Cₘₙ = zero(eltype(C))
-           for k ∈ 1:size(A,2)
+           for k ∈ axes(A,2)
            Cₘₙ += A[m,k] * B[k,n]
            end
            C[m,n] = Cₘₙ
@@ -158,17 +158,17 @@
     #         A = rand(M, M); B = rand(M, M); C = similar(A);
     function AmulB_avx2!(C, A, B)
         z = zero(eltype(C))
-        @_avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+        @_avx for m ∈ axes(A,1), n ∈ axes(B,2)
             C[m,n] = z
-            for k ∈ 1:size(A,2)
+            for k ∈ axes(A,2)
                 C[m,n] += A[m,k] * B[k,n]
             end
         end
     end
     # AmulB_avx2!(C, A, B)
-    # gq = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+    # gq = :(for m ∈ axes(A,1), n ∈ axes(B,2)
     # C[m,n] = z
-    # for k ∈ 1:size(A,2)
+    # for k ∈ axes(A,2)
     # C[m,n] += A[m,k] * B[k,n]
     # end
     # end);
@@ -176,32 +176,33 @@
     # ls.preamble_symsym
     # ls.operations[1]
     function AmulB_avx3!(C, A, B)
-        @_avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+        Kmin = firstindex(axes(A,2)); Kmax = lastindex(axes(A,2))
+        @_avx for m ∈ axes(A,1), n ∈ axes(B,2)
             C[m,n] = zero(eltype(C))
-            for k ∈ 1:size(A,2)
+            for k ∈ Kmin:Kmax
                 C[m,n] += A[m,k] * B[k,n]
             end
         end
     end
     # function AmulB_avx4!(C, A, B)
-    #     @_avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+    #     @_avx for m ∈ axes(A,1), n ∈ axes(B,2)
     #         C[m,n] = myzero(C)
-    #         for k ∈ 1:size(A,2)
+    #         for k ∈ axes(A,2)
     #             C[m,n] += A[m,k] * B[k,n]
     #         end
     #     end
     # end
-    # q = :(for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+    # q = :(for m ∈ axes(A,1), n ∈ axes(B,2)
     #       C[m,n] = myzero(C)
-    #       for k ∈ 1:size(A,2)
+    #       for k ∈ axes(A,2)
     #       C[m,n] += A[m,k] * B[k,n]
     #       end
     #       end)
     # ls = LoopVectorization.LoopSet(q);
     function AmuladdB_avx!(C, A, B, factor = 1)
-        @_avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+        @_avx for m ∈ axes(A,1), n ∈ axes(B,2)
             ΔCₘₙ = zero(eltype(C))
-            for k ∈ 1:size(A,2)
+            for k ∈ axes(A,2)
                 ΔCₘₙ += A[m,k] * B[k,n]
             end
             C[m,n] += ΔCₘₙ * factor
@@ -209,18 +210,18 @@
     end
 
     function AmulB2x2avx!(C, A, B)
-        @avx unroll=(2,2) for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+        @avx unroll=(2,2) for m ∈ axes(A,1), n ∈ axes(B,2)
             ΔCₘₙ = zero(eltype(C))
-            for k ∈ 1:size(A,2)
+            for k ∈ axes(A,2)
                 ΔCₘₙ += A[m,k] * B[k,n]
             end
             C[m,n] = ΔCₘₙ
         end
     end
     function AmulB2x2_avx!(C, A, B)
-        @_avx unroll=(2,2) for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+        @_avx unroll=(2,2) for m ∈ axes(A,1), n ∈ axes(B,2)
             ΔCₘₙ = zero(eltype(C))
-            for k ∈ 1:size(A,2)
+            for k ∈ axes(A,2)
                 ΔCₘₙ += A[m,k] * B[k,n]
             end
             C[m,n] = ΔCₘₙ
@@ -228,17 +229,17 @@
     end
 
     # function AtmulB!(C, A, B)
-    #     for j ∈ 1:size(C,2), i ∈ 1:size(C,1)
+    #     for j ∈ axes(C,2), i ∈ axes(C,1)
     #         Cᵢⱼ = zero(eltype(C))
-    #         @simd ivdep for k ∈ 1:size(A,1)
+    #         @simd ivdep for k ∈ axes(A,1)
     #             @inbounds Cᵢⱼ += A[k,i] * B[k,j]
     #         end
     #         C[i,j] = Cᵢⱼ
     #     end
     # end
-    AtmulBq = :(for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
+    AtmulBq = :(for n ∈ axes(C,2), m ∈ axes(C,1)
                 Cₘₙ = zero(eltype(C))
-                for k ∈ 1:size(A,1)
+                for k ∈ axes(A,1)
                 Cₘₙ += A[k,m] * B[k,n]
                 end
                 C[m,n] = Cₘₙ
@@ -249,17 +250,17 @@
     @test LoopVectorization.choose_order(lsAtmulB) == (Symbol[:n,:m,:k], :n, :m, :k, Unum, Tnum)
     
     function AtmulBavx1!(C, A, B)
-        @avx for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
+        @avx for n ∈ axes(C,2), m ∈ axes(C,1)
             Cₘₙ = zero(eltype(C))
-            for k ∈ 1:size(A,1)
+            for k ∈ axes(A,1)
                 Cₘₙ += A[k,m] * B[k,n]
             end
             C[m,n] = Cₘₙ
         end
     end
-    Atq = :(for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
+    Atq = :(for n ∈ axes(C,2), m ∈ axes(C,1)
             Cₘₙ = zero(eltype(C))
-            for k ∈ 1:size(A,1)
+            for k ∈ axes(A,1)
             Cₘₙ += A[k,m] * B[k,n]
             end
             C[m,n] += Cₘₙ * factor
@@ -269,9 +270,9 @@
     # LoopVectorization.loopdependencies.(operations(atls))
     # LoopVectorization.reduceddependencies.(operations(atls))
     function AtmulB_avx1!(C, A, B)
-        @_avx for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
+        @_avx for n ∈ axes(C,2), m ∈ axes(C,1)
             Cₘₙ = zero(eltype(C))
-            for k ∈ 1:size(A,1)
+            for k ∈ axes(A,1)
                 Cₘₙ += A[k,m] * B[k,n]
             end
             C[m,n] = Cₘₙ
@@ -284,9 +285,9 @@
         @assert size(A, 1) == size(B, 1)
         # When the @avx macro is available, this code is faster:
         z = zero(eltype(C))
-        @avx for n in 1:size(C,2), m in 1:size(C,1)
+        @avx for n in axes(C,2), m in axes(C,1)
             Cmn = z
-            for k in 1:size(A,1)
+            for k in axes(A,1)
                 Cmn += A[k,m] * B[k,n]
             end
             C[m,n] = Cmn
@@ -300,9 +301,9 @@
         @assert size(A, 1) == size(B, 1)
         # When the @avx macro is available, this code is faster:
         z = zero(eltype(C))
-        @_avx for n in 1:size(C,2), m in 1:size(C,1)
+        @_avx for n in axes(C,2), m in axes(C,1)
             Cmn = z
-            for k in 1:size(A,1)
+            for k in axes(A,1)
                 Cmn += A[k,m] * B[k,n]
             end
             C[m,n] = Cmn
@@ -310,17 +311,17 @@
         return C
     end
     function rank2AmulB!(C, Aₘ, Aₖ, B)
-        @inbounds for m ∈ 1:size(C,1), n ∈ 1:size(C,2)
+        @inbounds for m ∈ axes(C,1), n ∈ axes(C,2)
             Cₘₙ = zero(eltype(C))
-            @fastmath for k ∈ 1:size(B,1)
+            @fastmath for k ∈ axes(B,1)
                 Cₘₙ += (Aₘ[m,1]*Aₖ[1,k]+Aₘ[m,2]*Aₖ[2,k]) * B[k,n]
             end
             C[m,n] = Cₘₙ
         end
     end
-    r2ambq = :(for m ∈ 1:size(C,1), n ∈ 1:size(C,2)
+    r2ambq = :(for m ∈ axes(C,1), n ∈ axes(C,2)
                Cₘₙ = zero(eltype(C))
-               for k ∈ 1:size(B,1)
+               for k ∈ axes(B,1)
                Cₘₙ += (Aₘ[m,1]*Aₖ[1,k]+Aₘ[m,2]*Aₖ[2,k]) * B[k,n]
                end
                C[m,n] = Cₘₙ
@@ -334,27 +335,27 @@
         @test LoopVectorization.choose_order(lsr2amb) == ([:n, :m, :k], :m, :n, :m, 2, 4)
     end
     function rank2AmulBavx!(C, Aₘ, Aₖ, B)
-        @avx for m ∈ 1:size(C,1), n ∈ 1:size(C,2)
+        @avx for m ∈ axes(C,1), n ∈ axes(C,2)
             Cₘₙ = zero(eltype(C))
-            for k ∈ 1:size(B,1)
+            for k ∈ axes(B,1)
                 Cₘₙ += (Aₘ[m,1]*Aₖ[1,k]+Aₘ[m,2]*Aₖ[2,k]) * B[k,n]
             end
             C[m,n] = Cₘₙ
         end
     end
     function rank2AmulB_avx!(C, Aₘ, Aₖ, B)
-        @_avx for m ∈ 1:size(C,1), n ∈ 1:size(C,2)
+        @_avx for m ∈ axes(C,1), n ∈ axes(C,2)
             Cₘₙ = zero(eltype(C))
-            for k ∈ 1:size(B,1)
+            for k ∈ axes(B,1)
                 Cₘₙ += (Aₘ[m,1]*Aₖ[1,k]+Aₘ[m,2]*Aₖ[2,k]) * B[k,n]
             end
             C[m,n] = Cₘₙ
         end
     end
     function rank2AmulBavx_noinline!(C, Aₘ, Aₖ, B)
-        @avx inline=false for m ∈ 1:size(C,1), n ∈ 1:size(C,2)
+        @avx inline=false for m ∈ axes(C,1), n ∈ axes(C,2)
             Cₘₙ = zero(eltype(C))
-            for k ∈ 1:size(B,1)
+            for k ∈ axes(B,1)
                 Cₘₙ += (Aₘ[m,1]*Aₖ[1,k]+Aₘ[m,2]*Aₖ[2,k]) * B[k,n]
             end
             C[m,n] = Cₘₙ
@@ -525,10 +526,10 @@
     end
 
     function gemm_accurate!(C, A, B)
-        @avx for n in 1:size(C,2), m in 1:size(C,1)
+        @avx for n in axes(C,2), m in axes(C,1)
             Cmn_hi = zero(eltype(C))
             Cmn_lo = zero(eltype(C))
-            for k in 1:size(B,1)
+            for k in axes(B,1)
                 hiprod = evmul(A[m,k], B[k,n])
                 loprod = vfmsub(A[m,k], B[k,n], hiprod)
                 hi_ts = evadd(hiprod, Cmn_hi)
