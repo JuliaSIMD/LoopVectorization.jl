@@ -69,6 +69,7 @@ end
     # hash(x.array, h)
 # end
 loopdependencies(ref::ArrayReferenceMeta) = ref.ref.indices
+sameref(x::ArrayReferenceMeta, y::ArrayReferenceMeta) = sameref(x.ref, y.ref)
 Base.convert(::Type{ArrayReference}, ref::ArrayReferenceMeta) = ref.ref
 Base.:(==)(x::ArrayReference, y::ArrayReference) = isequal(x, y)
 Base.:(==)(x::ArrayReferenceMeta, y::ArrayReferenceMeta) = (x.ptr === y.ptr) && isequal(x.ref, y.ref)
@@ -163,7 +164,12 @@ mutable struct Operation <: AbstractLoopOperation
     """Loop variables that *consumers* of this operation depend on.
     Often used in reductions to replicate assignment of initializers when unrolling."""
     reduced_children::Vector{Symbol}
-
+    "Cached value for whether u₁loopsym ∈ loopdependencies(op)"
+    u₁unrolled::Bool
+    "Cached value for whether u₂loopsym ∈ loopdependencies(op)"
+    u₂unrolled::Bool
+    "Cached value for whether vectorized ∈ loopdependencies(op)"
+    vectorized::Bool
     function Operation(
         identifier::Int,
         variable,
@@ -185,6 +191,16 @@ mutable struct Operation <: AbstractLoopOperation
             reduced_children
         )
     end
+end
+
+isu₁unrolled(op::Operation) = op.u₁unrolled
+isu₂unrolled(op::Operation) = op.u₂unrolled
+isvectorized(op::Operation) = op.vectorized
+function setunrolled!(op::Operation, u₁loopsym, u₂loopsym, vectorized)
+    op.u₁unrolled = u₁loopsym ∈ loopdependencies(op)
+    op.u₂unrolled = u₂loopsym ∈ loopdependencies(op)
+    op.vectorized = vectorized ∈ loopdependencies(op)
+    nothing
 end
 
 function matches(op1::Operation, op2::Operation)
@@ -258,7 +274,8 @@ name(x::ArrayReferenceMeta) = x.ref.array
 name(op::Operation) = op.variable
 instruction(op::Operation) = op.instruction
 isreductionzero(op::Operation, instr::Symbol) = op.instruction.mod === REDUCTION_ZERO[instr]
-refname(op::Operation) = op.ref.ptr
+refname(ref::ArrayReferenceMeta) = ref.ptr
+refname(op::Operation) = refname(op.ref)
 isreductcombineinstr(op::Operation) = iscompute(op) && isreductcombineinstr(instruction(op))
 """
     mvar = mangledvar(op)

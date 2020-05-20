@@ -38,7 +38,7 @@ function addoffset!(ret::Expr, ex, offset::Integer, _mm::Bool = false)
     push!(ret.args, ind)
     nothing
 end
-function addoffset!(ret::Expr, offset::Integer, _mm::Bool = false)
+function addoffset!(ret::Expr, offset::Int, _mm::Bool = false)
     if iszero(offset)
         ex = Expr(:call, lv(:Zero))
         if _mm
@@ -46,10 +46,17 @@ function addoffset!(ret::Expr, offset::Integer, _mm::Bool = false)
         else
             push!(ret.args, ex)
         end
+    elseif isone(offset)
+        ex = Expr(:call, Expr(:curly, lv(:Static), offset))
+        if _mm
+            push!(ret.args, _MMind(ex))
+        else
+            push!(ret.args, ex)
+        end        
     elseif _mm
-        push!(ret.args, _MMind(convert(Int, offset)))
+        push!(ret.args, _MMind(offset))
     else
-        push!(ret.args, convert(Int, offset))
+        push!(ret.args, offset)
     end
     nothing
 end
@@ -59,24 +66,24 @@ unrolled loads are calculated as offsets with respect to an initial gesp. This h
 Therefore, unrolled === true results in inds being ignored.
 _mm means to insert `mm`s.
 """
-function mem_offset(op::Operation, td::UnrollArgs, unrolled::Bool, _mm::Bool = true)
+function mem_offset(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Vector{Bool})
     # @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
     ret = Expr(:tuple)
     indices = getindicesonly(op)
     offsets = getoffsets(op)
     loopedindex = op.ref.loopedindex
-    unrolled = unrolled && use_gesp(op, td)
+    # inds_calc_by_ptr_offset = indices_calculated_by_pointer_offsets(ls, op.ref)
     @unpack vectorized = td
     for (n,ind) ∈ enumerate(indices)
-        offset = _mm ? offsets[n] % Int : 0
+        offset = offsets[n] % Int
         # if ind isa Int # impossible
             # push!(ret.args, ind + offset)
         # else
         if loopedindex[n]
-            if unrolled
-                addoffset!(ret, offset, _mm && ind === vectorized)
+            if inds_calc_by_ptr_offset[n]
+                addoffset!(ret, offset, ind === vectorized)
             else
-                addoffset!(ret, ind, offset, _mm && ind === vectorized)
+                addoffset!(ret, ind, offset, ind === vectorized)
             end
         else
             addoffset!(ret, symbolind(ind, op, td), offset)
@@ -84,25 +91,25 @@ function mem_offset(op::Operation, td::UnrollArgs, unrolled::Bool, _mm::Bool = t
     end
     ret
 end
-function offset_refname(op::Operation, td::UnrollArgs)
-    rn = refname(op)
-    use_gesp(op, td) ? Symbol(refname(op), "#offset#", name(op)) : rn
-end
-use_gesp(op::Operation, td::UnrollArgs) = all(op.ref.loopedindex)# && td.vectorized ∈ loopdependencies(op)
-function gesp_call!(q::Expr, op::Operation, td::UnrollArgs)
-    ref = refname(op)
-    # ref_offset = offset_refname(op)
-    ref_offset = Symbol(refname(op), "#offset#", name(op))
-    mo = mem_offset(op, td, false, false) # false, to say emit-all-indices
-    push!(q.args, Expr(:(=), ref_offset, Expr(:call, lv(:gesp), ref, mo)))
-    nothing
-end
-function maybegesp_call!(q::Expr, op::Operation, td::UnrollArgs)
-    @unpack u₁loopsym, u₂loopsym, suffix = td
-    if ((isnothing(suffix) || iszero(suffix)) && ((u₁loopsym ∈ loopdependencies(op)) || (u₂loopsym ∈ loopdependencies(op))) && use_gesp(op, td))
-        gesp_call!(q, op, td)
-    end
-end
+# function offset_refname(op::Operation, td::UnrollArgs)
+#     rn = refname(op)
+#     use_gesp(op, td) ? Symbol(refname(op), "#offset#", name(op)) : rn
+# end
+# use_gesp(op::Operation, td::UnrollArgs) = all(op.ref.loopedindex)# && td.vectorized ∈ loopdependencies(op)
+# function gesp_call!(q::Expr, op::Operation, td::UnrollArgs)
+#     ref = refname(op)
+#     # ref_offset = offset_refname(op)
+#     ref_offset = Symbol(refname(op), "#offset#", name(op))
+#     mo = mem_offset(op, td, false, false) # false, to say emit-all-indices
+#     push!(q.args, Expr(:(=), ref_offset, Expr(:call, lv(:gesp), ref, mo)))
+#     nothing
+# end
+# function maybegesp_call!(q::Expr, op::Operation, td::UnrollArgs)
+#     @unpack u₁loopsym, u₂loopsym, suffix = td
+#     if ((isnothing(suffix) || iszero(suffix)) && ((u₁loopsym ∈ loopdependencies(op)) || (u₂loopsym ∈ loopdependencies(op))) && use_gesp(op, td))
+#         gesp_call!(q, op, td)
+#     end
+# end
 
 
 function add_vectorized_offset!(ret::Expr, ind, offset, incr)
@@ -150,7 +157,7 @@ function add_vectorized_offset!(ret::Expr, ind, offset, incr, unrolled)
         add_vectorized_offset!(ret, ind, offset, incr)
     end
 end
-function mem_offset_u(op::Operation, td::UnrollArgs, unrolled::Bool)
+function mem_offset_u(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Vector{Bool})
     @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
     @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = td
     incr₁ = u₁
@@ -159,12 +166,12 @@ function mem_offset_u(op::Operation, td::UnrollArgs, unrolled::Bool)
     indices = getindicesonly(op)
     offsets = getoffsets(op)
     loopedindex = op.ref.loopedindex
-    unrolled = unrolled && use_gesp(op, td)
     if iszero(incr₁) & iszero(incr₂)
-        return mem_offset(op, td, unrolled)
+        return mem_offset(op, td, inds_calc_by_ptr_offset)
         # append_inds!(ret, indices, loopedindex)
     else
         for (n,ind) ∈ enumerate(indices)
+            ind_by_offset = inds_calc_by_ptr_offset[n]
             offset = convert(Int, offsets[n])
             # if ind isa Int # impossible
                 # push!(ret.args, ind + offset)
@@ -172,22 +179,22 @@ function mem_offset_u(op::Operation, td::UnrollArgs, unrolled::Bool)
             indvectorized = ind === vectorized
             if ind === u₁loopsym
                 if indvectorized
-                    add_vectorized_offset!(ret, ind, offset, incr₁, unrolled)
-                elseif unrolled
+                    add_vectorized_offset!(ret, ind, offset, incr₁, ind_by_offset)
+                elseif ind_by_offset
                     addoffset!(ret, incr₁ + offset)
                 else
                     addoffset!(ret, ind, incr₁ + offset)
                 end
             elseif ind === u₂loopsym
                 if indvectorized
-                    add_vectorized_offset!(ret, ind, offset, incr₂, unrolled)
-                elseif unrolled
+                    add_vectorized_offset!(ret, ind, offset, incr₂, ind_by_offset)
+                elseif ind_by_offset
                     addoffset!(ret, incr₂ + offset)
                 else
                     addoffset!(ret, ind, incr₂ + offset)
                 end
             elseif loopedindex[n]
-                if unrolled
+                if ind_by_offset
                     addoffset!(ret, offset, indvectorized)
                 else
                     addoffset!(ret, ind, offset, indvectorized)
@@ -204,14 +211,14 @@ function varassignname(var::Symbol, u::Int, isunrolled::Bool)
     isunrolled ? Symbol(var, u) : var
 end
 # name_memoffset only gets called when vectorized
-function name_memoffset(var::Symbol, op::Operation, td::UnrollArgs, u₁unrolled::Bool, unrolled::Bool)
+function name_memoffset(var::Symbol, op::Operation, td::UnrollArgs, u₁unrolled::Bool, inds_calc_by_ptr_offset::Vector{Bool})
     @unpack u₁, u₁loopsym, u₂loopsym, suffix = td
     if isnothing(suffix) && u₁ < 0 # sentinel value meaning not unrolled
         name = var
-        mo = mem_offset(op, td, unrolled)
+        mo = mem_offset(op, td, inds_calc_by_ptr_offset)
     else
         name = u₁unrolled ? Symbol(var, u₁) : var
-        mo = mem_offset_u(op, td, unrolled)
+        mo = mem_offset_u(op, td, inds_calc_by_ptr_offset)
     end
     name, mo
 end

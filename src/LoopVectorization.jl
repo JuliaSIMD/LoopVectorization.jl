@@ -3,8 +3,8 @@ module LoopVectorization
 using VectorizationBase, SIMDPirates, SLEEFPirates, UnPack, OffsetArrays
 using VectorizationBase: REGISTER_SIZE, REGISTER_COUNT, extract_data, num_vector_load_expr,
     mask, masktable, pick_vector_width_val, valmul, valrem, valmuladd, valmulsub, valadd, valsub, _MM,
-    maybestaticlength, maybestaticsize, staticm1, staticp1, subsetview, vzero, stridedpointer_for_broadcast,
-    Static, StaticUnitRange, StaticLowerUnitRange, StaticUpperUnitRange, unwrap, maybestaticrange,
+    maybestaticlength, maybestaticsize, staticm1, staticp1, staticmul, subsetview, vzero, stridedpointer_for_broadcast,
+    Static, Zero, StaticUnitRange, StaticLowerUnitRange, StaticUpperUnitRange, unwrap, maybestaticrange,
     AbstractColumnMajorStridedPointer, AbstractRowMajorStridedPointer, AbstractSparseStridedPointer, AbstractStaticStridedPointer,
     PackedStridedPointer, SparseStridedPointer, RowMajorStridedPointer, StaticStridedPointer, StaticStridedStruct,
     maybestaticfirst, maybestaticlast, scalar_less, scalar_greater, noalias!, gesp, gepbyte
@@ -47,9 +47,10 @@ include("add_compute.jl")
 include("add_constants.jl")
 include("add_ifelse.jl")
 include("determinestrategy.jl")
+include("loopstartstopmanager.jl")
 include("lower_compute.jl")
 include("lower_constant.jl")
-include("zero.jl")
+# include("zero.jl")
 include("lower_memory_common.jl")
 include("lower_load.jl")
 include("lower_store.jl")

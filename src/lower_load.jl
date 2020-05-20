@@ -1,20 +1,19 @@
 function lower_load_scalar!(
-    q::Expr, op::Operation, ua::UnrollArgs, umin::Int = 0
+    q::Expr, op::Operation, ua::UnrollArgs, umin::Int, inds_calc_by_ptr_offset::Vector{Bool}
 )
     loopdeps = loopdependencies(op)
     @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = ua
     @assert vectorized ∉ loopdeps
     # mvar, opu₁, opu₂ = variable_name_and_unrolled(op, u₁loop, u₂loop, suffix)
     mvar = variable_name(op, suffix)
-    opu₁ = u₁loopsym ∈ loopdeps
-    unrolled = (opu₁ || u₂loopsym ∈ loopdeps)
-    ptr = unrolled ? offset_refname(op, ua) : refname(op)
+    opu₁ = isu₁unrolled(op)
+    ptr = refname(op)
     U = opu₁ ? u₁ : 1
     if instruction(op).instr !== :conditionalload
         for u ∈ umin:U-1
             varname = varassignname(mvar, u, opu₁)
             td = UnrollArgs(ua, u)
-            push!(q.args, Expr(:(=), varname, Expr(:call, lv(:vload), ptr, mem_offset_u(op, td, unrolled))))
+            push!(q.args, Expr(:(=), varname, Expr(:call, lv(:vload), ptr, mem_offset_u(op, td, inds_calc_by_ptr_offset))))
         end
     else
         opu₂ = !isnothing(suffix) && u₂loopsym ∈ loopdeps
@@ -24,7 +23,7 @@ function lower_load_scalar!(
             condsym = varassignname(condvar, u, condu₁)
             varname = varassignname(mvar, u, u₁loopsym ∈ loopdependencies(op))
             td = UnrollArgs(ua, u)
-            load = Expr(:call, lv(:vload), ptr, mem_offset_u(op, td, unrolled))
+            load = Expr(:call, lv(:vload), ptr, mem_offset_u(op, td, inds_calc_by_ptr_offset))
             cload = Expr(:if, condsym, load, Expr(:call, :zero, Expr(:call, :eltype, ptr)))
             push!(q.args, Expr(:(=), varname, cload))
         end
@@ -32,12 +31,12 @@ function lower_load_scalar!(
     nothing
 end
 function pushvectorload!(
-    q::Expr, op::Operation, var::Symbol, td::UnrollArgs, U::Int, vectorized::Symbol, mask, u₁unrolled::Bool, unrolled::Bool
+    q::Expr, op::Operation, var::Symbol, td::UnrollArgs, U::Int, vectorized::Symbol, mask, u₁unrolled::Bool, inds_calc_by_ptr_offset::Vector{Bool}
 )
     @unpack u₁, u₁loopsym, u₂loopsym, suffix = td
-    ptr = unrolled ? offset_refname(op, td) : refname(op)
+    ptr = refname(op)
     vecnotunrolled = vectorized !== u₁loopsym
-    name, mo = name_memoffset(var, op, td, u₁unrolled, unrolled)
+    name, mo = name_memoffset(var, op, td, u₁unrolled, inds_calc_by_ptr_offset)
     instrcall = Expr(:call, lv(:vload), ptr, mo)
 
     iscondstore = instruction(op).instr === :conditionalload
@@ -67,20 +66,27 @@ function pushvectorload!(
 end
 function prefetchisagoodidea(ls::LoopSet, op::Operation, td::UnrollArgs)
     # return false
-    @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = td
+    @unpack u₁, u₁loopsym, u₂loopsym, vectorized, u₂max, suffix = td
     vectorized ∈ loopdependencies(op) || return 0
     u₂loopsym === Symbol("##undefined##") && return 0
     dontskip = (64 ÷ VectorizationBase.REGISTER_SIZE) - 1
-    (!isnothing(suffix) && (vectorized === u₂loopsym) && !iszero(suffix & dontskip)) && return 0
-    innermostloopsym = last(ls.loop_order.bestorder)
+    # u₂loopsym is vectorized
+    # u₁vectorized = vectorized === u₁loopsym
+    u₂vectorized = vectorized === u₂loopsym
+    (!isnothing(suffix) && u₂vectorized && !iszero(suffix & dontskip)) && return 0
+    innermostloopsym = first(names(ls))
     loopedindex = op.ref.loopedindex
     if length(loopedindex) > 1 && first(loopedindex)
         indices = getindices(op)
         if first(indices) === vectorized && last(indices) === innermostloopsym
+            # We want at least 4 reuses per load
+            uses = ifelse(isu₁unrolled(op), 1, u₁)
+            uses = ifelse(isu₂unrolled(op), uses, uses * u₂max)
+            uses < 4 && return 0
             innermostloopindv = findall(map(isequal(innermostloopsym), getindices(op)))
             isone(length(innermostloopindv)) || return 0
             innermostloopind = first(innermostloopindv)
-            if prod(s -> length(getloop(ls, s)), @view(indices[1:innermostloopind-1])) ≥ 120 && length(getloop(ls, innermostloopind)) ≥ 120
+            if prod(s -> length(getloop(ls, s)), @view(indices[1:innermostloopind-1])) ≥ 120 && length(getloop(ls, innermostloopsym)) ≥ 120
                 if op.ref.ref.offsets[innermostloopind] < 120
                     for opp ∈ operations(ls)
                         iscompute(opp) && load_constrained(opp, u₁loopsym, u₂loopsym) && return 0
@@ -97,9 +103,9 @@ function lower_load_vectorized!(
 )
     @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = td
     loopdeps = loopdependencies(op)
-    @assert vectorized ∈ loopdeps
-    opu₁ = u₁loopsym ∈ loopdeps
-    unrolled = opu₁ || u₂loopsym ∈ loopdeps
+    @assert isvectorized(op)
+    opu₁ = isu₁unrolled(op)
+    inds_calc_by_ptr_offset = indices_calculated_by_pointer_offsets(ls, op.ref)
     if opu₁
         umin = umin
         U = u₁
@@ -111,13 +117,13 @@ function lower_load_vectorized!(
     var = variable_name(op, suffix)
     for u ∈ umin:U-1
         td = UnrollArgs(td, u)
-        pushvectorload!(q, op, var, td, U, vectorized, mask, opu₁, unrolled)
+        pushvectorload!(q, op, var, td, U, vectorized, mask, opu₁, inds_calc_by_ptr_offset)
     end
     prefetchind = prefetchisagoodidea(ls, op, td)
     if !iszero(prefetchind)
         dontskip = (64 ÷ VectorizationBase.REGISTER_SIZE) - 1
-        ptr = offset_refname(op, td)
-        innermostloopsym = last(ls.loop_order.bestorder)
+        ptr = refname(op)
+        innermostloopsym = first(names(ls))
         us = ls.unrollspecification[]
         prefetch_multiplier = 4
         prefetch_distance = u₁loopsym === innermostloopsym ? us.u₁ : ( u₂loopsym === innermostloopsym ? us.u₂ : 1 )
@@ -128,7 +134,7 @@ function lower_load_vectorized!(
         # for u ∈ umin:min(umin,U-1)
             (u₁loopsym === vectorized && !iszero(u & dontskip)) && continue
             offsets[prefetchind] = inner_offset + prefetch_distance
-            mo = mem_offset_u(op, UnrollArgs(td, u), true)
+            mo = mem_offset_u(op, UnrollArgs(td, u), inds_calc_by_ptr_offset)
             instrcall = Expr(:call, lv(:prefetch0), ptr, mo)
             push!(q.args, instrcall)
         end
@@ -158,7 +164,7 @@ function lower_load!(
                 varnew = variable_name(op, suffix)
                 varold = variable_name(operations(ls)[id], suffix + mno)
                 opold = operations(ls)[id]
-                if u₁loopsym ∈ loopdependencies(op)
+                if isu₁unrolled(op)
                     for u ∈ 0:u₁-1
                         push!(q.args, Expr(:(=), Symbol(varnew, u), Symbol(varold, u)))
                     end
@@ -173,12 +179,11 @@ function lower_load!(
             umin = 0
         end
     else
-        maybegesp_call!(q, op, td)
         umin = 0
     end
-    if vectorized ∈ loopdependencies(op)
+    if isvectorized(op)
         lower_load_vectorized!(q, ls, op, td, mask, umin)
     else
-        lower_load_scalar!(q, op, td, umin)
+        lower_load_scalar!(q, op, td, umin, indices_calculated_by_pointer_offsets(ls, op.ref))
     end
 end

@@ -454,7 +454,7 @@ end
 function isoptranslation(ls::LoopSet, op::Operation, unrollsyms::UnrollSymbols)
     @unpack u₁loopsym, u₂loopsym, vectorized = unrollsyms
     (vectorized == u₁loopsym || vectorized == u₂loopsym) && return false, false
-    (u₁loopsym ∈ loopdependencies(op) && u₂loopsym ∈ loopdependencies(op)) || return false, false
+    (isu₁unrolled(op) && isu₂unrolled(op)) || return false, false
     istranslation = false
     inds = getindices(op); li = op.ref.loopedindex
     translationplus = false
@@ -597,6 +597,7 @@ function evaluate_cost_tile(
     N = length(order)
     @assert N ≥ 2 "Cannot tile merely $N loops!"
     @unpack u₁loopsym, u₂loopsym, vectorized = unrollsyms
+    cacheunrolled!(ls, u₁loopsym, u₂loopsym, vectorized)
     # u₂loopsym = order[1]
     # u₁loopsym = order[2]
     ops = operations(ls)
@@ -647,8 +648,8 @@ function evaluate_cost_tile(
             rd = reduceddependencies(op)
             hasintersection(rd, @view(nested_loop_syms[1:end-length(rd)])) && return 0,0,Inf,false
             included_vars[id] = true
-            depends_on_u₁ = u₁loopsym ∈ loopdependencies(op)
-            depends_on_u₂ = u₂loopsym ∈ loopdependencies(op)
+            depends_on_u₁ = isu₁unrolled(op)
+            depends_on_u₂ = isu₂unrolled(op)
             # cost is reduced by unrolling u₁ if it is interior to u₁loop (true if either u₁reached, or if depends on u₂ [or u₁]) and doesn't depend on u₁
             reduced_by_unrolling[1,id] = (u₁reached | depends_on_u₂) & !depends_on_u₁
             reduced_by_unrolling[2,id] = (u₂reached | depends_on_u₁) & !depends_on_u₂

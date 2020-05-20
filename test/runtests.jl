@@ -29,6 +29,8 @@ Base.IndexStyle(::Type{<:FallbackArrayWrapper}) = IndexLinear()
 
 @time @testset "LoopVectorization.jl" begin
 
+    @test isempty(detect_unbound_args(LoopVectorization))
+
     @time include("printmethods.jl")
 
     @time include("fallback.jl")

@@ -23,7 +23,7 @@ function lower!(
     elseif iscompute(op)
         lower_compute!(q, op, unrollargs, mask)
     elseif isstore(op)
-        lower_store!(q, op, unrollargs, mask)
+        lower_store!(q, ls, op, unrollargs, mask)
     # elseif isloopvalue(op)
     end
 end
@@ -32,7 +32,7 @@ function lower!(
 )
     if filterstore
         if isstore(op)
-            lower_store!(q, op, unrollargs, mask)
+            lower_store!(q, ls, op, unrollargs, mask)
         end
     else
         if isconstant(op)
@@ -50,23 +50,23 @@ function lower!(
     end
 end
 function lower!(
-    q::Expr, ops::AbstractVector{Operation}, ls::LoopSet, unrollsyms::UnrollSymbols, U::Int,
+    q::Expr, ops::AbstractVector{Operation}, ls::LoopSet, unrollsyms::UnrollSymbols, u₁::Int, u₂::Int,
     suffix::Union{Nothing,Int}, mask::Union{Nothing,Symbol,Unsigned}, filterstore = nothing
 )
-    foreach(op -> lower!(q, op, ls, UnrollArgs(U, unrollsyms, suffix), mask, filterstore), ops)
+    foreach(op -> lower!(q, op, ls, UnrollArgs(u₁, unrollsyms, u₂, suffix), mask, filterstore), ops)
 end
 
-function lower_block(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask::Bool, UF)
+function lower_block(ls::LoopSet, lssm::LoopStartStopManager, us::UnrollSpecification, n::Int, inclmask::Bool, UF)
     if inclmask
-        lower_block(ls, us, n, Symbol("##mask##"), UF)
+        lower_block(ls, lssm, us, n, Symbol("##mask##"), UF)
     else
-        lower_block(ls, us, n, nothing, UF)
+        lower_block(ls, lssm, us, n, nothing, UF)
     end
 end
 
 
 function lower_block(
-    ls::LoopSet, us::UnrollSpecification, n::Int, mask::Union{Nothing,Symbol}, UF::Int
+    ls::LoopSet, lssm::LoopStartStopManager, us::UnrollSpecification, n::Int, mask::Union{Nothing,Symbol}, UF::Int
 )
     @unpack u₁loopnum, u₂loopnum, vectorizedloopnum, u₁, u₂ = us
     ops = oporder(ls)
@@ -83,15 +83,15 @@ function lower_block(
     dontdelayat = nothing#4
     for prepost ∈ 1:2
         # !u₁ && !u₂
-        lower!(blockq, ops[1,1,prepost,n], ls, unrollsyms, u₁, nothing, mask)
+        lower!(blockq, ops[1,1,prepost,n], ls, unrollsyms, u₁, u₂, nothing, mask)
         if !delay_u₁ || u₁ == dontdelayat
-            lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, nothing, mask)
+            lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, u₂, nothing, mask)
         end
         opsv1 = ops[1,2,prepost,n]
         opsv2 = ops[2,2,prepost,n]
         if length(opsv1) + length(opsv2) > 0
             # if u₁ == 3
-                # lower!(blockq, ops[2,1,prepost,n], vectorized, ls, u₁loop, u₂loop, u₁, nothing, mask)
+                # lower!(blockq, ops[2,1,prepost,n], vectorized, ls, u₁loop, u₂loop, u₁, u₂, nothing, mask)
             # end
             for store ∈ (false,true)
                 # let store = nothing
@@ -99,7 +99,7 @@ function lower_block(
                 iszero(length(opsv1)) || (nstores += sum(isstore, opsv1))
                 iszero(length(opsv2)) || (nstores += sum(isstore, opsv2))
                 if delay_u₁ && !store && length(opsv1) + length(opsv2) == nstores
-                    u₁ != dontdelayat && lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, nothing, mask) # for u ∈ 0:u₁-1     
+                    u₁ != dontdelayat && lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, u₂, nothing, mask) # for u ∈ 0:u₁-1     
                     continue
                 end
                 for t ∈ 0:u₂-1
@@ -111,22 +111,22 @@ function lower_block(
                     #     push!(blockq.args, Expr(:+=, u₂loop, 1))
                     # end
                     if dontmaskfirsttiles && t < u₂ - 1 # !u₁ &&  u₂
-                        lower!(blockq, opsv1, ls, unrollsyms, u₁, t, nothing, store)
+                        lower!(blockq, opsv1, ls, unrollsyms, u₁, u₂, t, nothing, store)
                     else # !u₁ &&  u₂
-                        lower!(blockq, opsv1, ls, unrollsyms, u₁, t, mask, store)
+                        lower!(blockq, opsv1, ls, unrollsyms, u₁, u₂, t, mask, store)
                     end
                     if delay_u₁ && iszero(t) && !store && u₁ != dontdelayat #  u₁ && !u₂
                         # for u ∈ 0:u₁-1     
-                        lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, nothing, mask)
+                        lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, u₂, nothing, mask)
                         # end
                     end
                     if dontmaskfirsttiles && t < u₂ - 1 #  u₁ && u₂
                         # for u ∈ 0:u₁-1
-                        lower!(blockq, opsv2, ls, unrollsyms, u₁, t, nothing, store)
+                        lower!(blockq, opsv2, ls, unrollsyms, u₁, u₂, t, nothing, store)
                         # end
                     else #  u₁ && u₂
                         # for u ∈ 0:u₁-1 
-                        lower!(blockq, opsv2, ls, unrollsyms, u₁, t, mask, store)
+                        lower!(blockq, opsv2, ls, unrollsyms, u₁, u₂, t, mask, store)
                         # end
                     end
                 end
@@ -134,16 +134,17 @@ function lower_block(
             end
         elseif delay_u₁ && u₁ != dontdelayat
             # for u ∈ 0:u₁-1     #  u₁ && !u₂
-            lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, nothing, mask)
+            lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, u₂, nothing, mask)
             # end
         end
         if n > 1 && prepost == 1
-            push!(blockq.args, lower_unrolled_dynamic(ls, us, n-1, !isnothing(mask)))
+            push!(blockq.args, lower_unrolled_dynamic(ls, lssm, us, n-1, !isnothing(mask)))
         end
     end
     # loopsym = mangletiledsym(order[n], us, n)
     loopsym = order[n]
-    push!(blockq.args, incrementloopcounter(us, n, loopsym, UF))
+    # push!(blockq.args, incrementloopcounter(us, n, loopsym, UF))
+    push!(blockq.args, incrementloopcounter(ls, lssm, us, n, UF))
     blockq
 end
 
@@ -221,7 +222,7 @@ function loopiteratesatleastonce(loop::Loop, as::Bool = true)
     # as ? assume(comp) : expect(comp)
     assume(comp)
 end
-function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask::Bool)
+function lower_no_unroll(ls::LoopSet, lssm::LoopStartStopManager, us::UnrollSpecification, n::Int, inclmask::Bool)
     usorig = ls.unrollspecification[]
     nisvectorized = isvectorized(us, n)
     loopsym = names(ls)[n]
@@ -230,9 +231,10 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
     #     # return lower_unroll_for_throughput(ls, us, n, loop, loopsym)
     #     return lower_llvm_unroll(ls, us, n, loop)
     # end
-    sl = startloop(loop, nisvectorized, loopsym)
-    tc = terminatecondition(loop, us, n, loopsym, inclmask, 1)
-    body = lower_block(ls, us, n, inclmask, 1)
+    # sl = startloop(loop, nisvectorized, loopsym)
+    sl = startloop(ls, lssm, us, n)
+    tc = terminatecondition(ls, lssm, us, n, inclmask, 1)
+    body = lower_block(ls, lssm, us, n, inclmask, 1)
     q = if nisvectorized
             # Expr(:block, loopiteratesatleastonce(loop, true), Expr(:while, expect(tc), body))
         Expr(:block, Expr(:while, expect(tc), body))
@@ -244,15 +246,16 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
     end
 
     if nisvectorized
-        tc = terminatecondition(loop, us, n, loopsym, true, 1)
-        body = lower_block(ls, us, n, true, 1)
+        # tc = terminatecondition(loop, us, n, loopsym, true, 1)
+        tc = terminatecondition(ls, lssm, us, n, true, 1)
+        body = lower_block(ls, lssm, us, n, true, 1)
         push!(q.args, Expr(:if, tc, body))
     end
     Expr(:block, Expr(:let, sl, q))
 end
-function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask::Bool)
+function lower_unrolled_dynamic(ls::LoopSet, lssm::LoopStartStopManager, us::UnrollSpecification, n::Int, inclmask::Bool)
     UF = unrollfactor(us, n)
-    UF == 1 && return lower_no_unroll(ls, us, n, inclmask)
+    UF == 1 && return lower_no_unroll(ls, lssm, us, n, inclmask)
     @unpack u₁loopnum, vectorizedloopnum, u₁, u₂ = us
     order = names(ls)
     loopsym = order[n]
@@ -265,19 +268,18 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
 
     remmask = inclmask | nisvectorized
     Ureduct = (n == num_loops(ls) && (u₂ == -1)) ? calc_Ureduct(ls, us) : -1
-    sl = startloop(loop, nisvectorized, loopsym)
+    # sl = startloop(loop, nisvectorized, loopsym)
+    sl = startloop(ls, lssm, us, n)
 
     remfirst = loopisstatic & !(unsigned(Ureduct) < unsigned(UF))
-    if remfirst
-        tc = Expr(:call, :<, loopsym, loop.stophint)
-    else
-        tc = terminatecondition(loop, us, n, loopsym, inclmask, UF)
-    end
+    tc = terminatecondition(ls, lssm, us, n, inclmask, remfirst ? 1 : UF)
     usorig = ls.unrollspecification[]
-    tc = (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !loopisstatic && !inclmask && !ls.loadelimination[] ? expect(tc) : tc
-    body = lower_block(ls, us, n, inclmask, UF)
+
+    # tc = (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !loopisstatic && !inclmask && !ls.loadelimination[] ? expect(tc) : tc
+
+    body = lower_block(ls, lssm, us, n, inclmask, UF)
     q = Expr(:while, tc, body)
-    remblock = init_remblock(loop, loopsym)
+    remblock = init_remblock(loop, lssm, n)#loopsym)
     UFt = if loopisstatic
         length(loop) % UF
     else
@@ -290,8 +292,9 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
             :block,
             add_upper_outer_reductions(ls, q, Ureduct, UF, loop, vectorized),
             Expr(
-                :if, terminatecondition(loop, us, n, loopsym, inclmask, UF_cleanup),
-                lower_block(ls, us_cleanup, n, inclmask, UF_cleanup)
+                # :if, terminatecondition(loop, us, n, loopsym, inclmask, UF_cleanup),
+                :if, terminatecondition(ls, lssm, us, n, inclmask, UF_cleanup),
+                lower_block(ls, lssm, us_cleanup, n, inclmask, UF_cleanup)
             ),
             remblock
         )
@@ -321,22 +324,9 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
         1
     end
     while !iszero(UFt)
-        comparison = if nisvectorized
-            itercount = if loop.stopexact
-                Expr(:call, lv(:vsub), loop.stophint - 1, Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, UFt))
-            else
-                Expr(:call, lv(:vsub), loop.stopsym, Expr(:call, lv(:valmuladd), VECTORWIDTHSYMBOL, UFt, 1))
-            end
-            Expr(:call, :>, loopsym, itercount)
-        elseif remfirst
-            Expr(:call, :<, loopsym, loop.starthint + UFt - 1)
-        elseif loop.stopexact
-            Expr(:call, :>, loopsym, loop.stophint - UFt - 1)
-        else
-            Expr(:call, :>, loopsym, Expr(:call, lv(:vsub), loop.stopsym, UFt + 1))
-        end
+        comparison = unrollremcomparison(lssm, loop, UFt, n, nisvectorized, remfirst)
         ust = nisunrolled ? UnrollSpecification(us, UFt, u₂) : UnrollSpecification(us, u₁, UFt)
-        remblocknew = Expr(:elseif, comparison, lower_block(ls, ust, n, remmask, UFt))
+        remblocknew = Expr(:elseif, comparison, lower_block(ls, lssm, ust, n, remmask, UFt))
         push!(remblock.args, remblocknew)
         remblock = remblocknew
         if !(UFt < UF - 1 + nisvectorized) || UFt == Ureduct || loopisstatic
@@ -346,6 +336,49 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
         end
     end
     Expr(:block, Expr(:let, sl, q))
+end
+function unrollremcomparison(lssm::LoopStartStopManager, loop::Loop, UFt::Int, n::Int, nisvectorized::Bool, remfirst::Bool)
+    termind = lssm.terminators[n]
+    if iszero(termind)
+        loopvarremcomparison(loop, UFt, nisvectorized, remfirst)
+    else
+        pointerremcomparison(lssm, termind, UFt, n, nisvectorized, remfirst)
+    end
+end
+function loopvarremcomparison(loop::Loop, UFt::Int, nisvectorized::Bool, remfirst::Bool)
+    loopsym = loop.itersymbol
+    if nisvectorized
+        itercount = if loop.stopexact
+            Expr(:call, lv(:vsub), loop.stophint - 1, Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, UFt))
+        else
+            Expr(:call, lv(:vsub), loop.stopsym, Expr(:call, lv(:valmuladd), VECTORWIDTHSYMBOL, UFt, 1))
+        end
+        Expr(:call, :>, loopsym, itercount)
+    elseif remfirst
+        Expr(:call, :<, loopsym, loop.starthint + UFt - 1)
+    elseif loop.stopexact
+        Expr(:call, :>, loopsym, loop.stophint - UFt - 1)
+    else
+        Expr(:call, :>, loopsym, Expr(:call, lv(:vsub), loop.stopsym, UFt + 1))
+    end
+end
+function pointerremcomparison(lssm::LoopStartStopManager, termind::Int, UFt::Int, n::Int, nisvectorized::Bool, remfirst::Bool)
+    termar = lssm.incrementedptrs[n][termind]
+    ptr = refname(termar)
+    maxptr = Symbol(ptr, "##MAX##")
+    ptrex = callpointer(ptr)
+    if nisvectorized
+        Expr(:call, :>, ptrex, Expr(:call, lv(:vsub), maxptr, staticmulincr(ptr, Expr(:call, lv(:valmuladd), VECTORWIDTHSYMBOL, UFt, 1))))
+    elseif remfirst
+        if UFt > 1
+            Expr(:call, :<, ptrex, Expr(:call, lv(:vadd), maxptr, staticmulincr(ptr, UFt - 1)))
+        else
+            @assert isone(UFt)
+            Expr(:call, :<, ptrex, maxptr)
+        end
+    else
+        Expr(:call, :>, ptrex, Expr(:call, lv(:vsub), maxptr, staticmulincr(ptr, UFt + 1)))
+    end
 end
 
 function initialize_outer_reductions!(
@@ -445,11 +478,19 @@ function determine_width(
     end
     vwidth_q
 end
-function init_remblock(unrolledloop::Loop, u₁loop::Symbol = unrolledloop.itersymbol)
-    condition = if unrolledloop.stopexact
-        Expr(:call, :>, u₁loop, unrolledloop.stophint - 1)
+function init_remblock(unrolledloop::Loop, lssm::LoopStartStopManager, n::Int)#u₁loop::Symbol = unrolledloop.itersymbol)
+    termind = lssm.terminators[n]
+    if iszero(termind)
+        loopsym = unrolledloop.itersymbol
+        condition = if unrolledloop.stopexact
+            Expr(:call, :>, loopsym, unrolledloop.stophint - 1)
+        else
+            Expr(:call, :≥, loopsym, unrolledloop.stopsym)
+        end
     else
-        Expr(:call, :≥, u₁loop, unrolledloop.stopsym)
+        termar = lssm.incrementedptrs[n][termind]
+        ptr = refname(termar)
+        condition = Expr(:call, :≥, callpointer(ptr), Symbol(ptr, "##MAX##"))
     end
     Expr(:if, condition, nothing)
 end
@@ -520,13 +561,13 @@ function lower_unrollspec(ls::LoopSet)
     setup_preamble!(ls, us)
     Ureduct = calc_Ureduct(ls, us)
     initialize_outer_reductions!(ls, 0, Ureduct, vectorized)
-    
-    q = gc_preserve( ls, lower_unrolled_dynamic(ls, us, num_loops(ls), false) )
+    q = gc_preserve( ls, lower_unrolled_dynamic(ls, LoopStartStopManager(ls), us, num_loops(ls), false) )
     reduce_expr!(q, ls, Ureduct)
     lsexpr(ls, q)
 end
 
 function lower(ls::LoopSet, order, u₁loop, u₂loop, vectorized, u₁, u₂, inline::Bool)
+    cacheunrolled!(ls, u₁loop, u₂loop, vectorized)
     fillorder!(ls, order, u₁loop, u₂loop, u₂ != -1, vectorized)
     ls.unrollspecification[] = UnrollSpecification(ls, u₁loop, u₂loop, vectorized, u₁, u₂)
     q = lower_unrollspec(ls)

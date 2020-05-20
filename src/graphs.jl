@@ -9,15 +9,16 @@ struct UnrollArgs{T <: Union{Nothing,Int}}
     u₁loopsym::Symbol
     u₂loopsym::Symbol
     vectorized::Symbol
+    u₂max::Int
     suffix::T
 end
-function UnrollArgs(U::Int, unrollsyms::UnrollSymbols, suffix)
+function UnrollArgs(u₁::Int, unrollsyms::UnrollSymbols, u₂max::Int, suffix)
     @unpack u₁loopsym, u₂loopsym, vectorized = unrollsyms
-    UnrollArgs(U, u₁loopsym, u₂loopsym, vectorized, suffix)
+    UnrollArgs(u₁, u₁loopsym, u₂loopsym, vectorized, u₂max, suffix)
 end
 function UnrollArgs(ua::UnrollArgs, u::Int)
-    @unpack u₁loopsym, u₂loopsym, vectorized, suffix = ua
-    UnrollArgs(u, u₁loopsym, u₂loopsym, vectorized, suffix)
+    @unpack u₁loopsym, u₂loopsym, vectorized, u₂max, suffix = ua
+    UnrollArgs(u, u₁loopsym, u₂loopsym, vectorized, u₂max, suffix)
 end
 # UnrollSymbols(ua::UnrollArgs) = UnrollSymbols(ua.u₁loopsym, ua.u₂loopsym, ua.vectorized)
 
@@ -69,14 +70,8 @@ function Loop(itersymbol::Symbol, start::Union{Int,Symbol}, stop::Union{Int,Symb
 end
 Base.length(loop::Loop) = 1 + loop.stophint - loop.starthint
 isstaticloop(loop::Loop) = loop.startexact & loop.stopexact
-function startloop(loop::Loop, isvectorized, itersymbol)
+function startloop(loop::Loop, itersymbol)
     startexact = loop.startexact
-    # if isvectorized
-    #     if startexact
-    #         Expr(:(=), itersymbol, Expr(:call, lv(:_MM), VECTORWIDTHSYMBOL, loop.starthint))
-    #     else
-    #         Expr(:(=), itersymbol, Expr(:call, lv(:_MM), VECTORWIDTHSYMBOL, loop.startsym))
-    #     end
     if startexact
         Expr(:(=), itersymbol, loop.starthint - 1)
     else
@@ -97,31 +92,44 @@ addexpr(ex::Number, incr::Number) = ex + incr
 subexpr(ex, incr) = Expr(:call, lv(:vsub), ex, incr)
 subexpr(ex::Number, incr::Number) = ex - incr
 subexpr(ex, incr::Number) = addexpr(ex,  -incr)
-function vec_looprange(loop::Loop, UF::Int, mangledname::Symbol)
+
+staticmulincr(ptr, incr) = Expr(:call, lv(:staticmul), Expr(:call, :eltype, ptr), incr)
+callpointer(sym) = Expr(:call, :pointer, sym)
+function vec_looprange(loopmax, UF::Int, mangledname::Symbol, ptrcomp::Bool)
     incr = if isone(UF)
         Expr(:call, lv(:valsub), VECTORWIDTHSYMBOL, 1)
     else
         Expr(:call, lv(:valmulsub), VECTORWIDTHSYMBOL, UF, 1)
     end
-    if loop.stopexact # split for type stability
-        Expr(:call, :<, mangledname, subexpr(loop.stophint, incr))
+    incr = ptrcomp ? staticmulincr(mangledname, incr) : incr
+    compexpr = subexpr(loopmax, incr)
+    if ptrcomp
+        Expr(:call, :<, callpointer(mangledname), compexpr)
     else
-        Expr(:call, :<, mangledname, subexpr(loop.stopsym, incr))
+        Expr(:call, :<, mangledname, compexpr)
     end
 end
 
-function looprange(stopcon, incr::Int, mangledname::Symbol)
+function looprange(stopcon, incr::Int, mangledname::Symbol, ptrcomp::Bool)
     incr = 1 - incr
     if iszero(incr)
-        Expr(:call, :<, mangledname, stopcon)
-    elseif isone(incr)
-        Expr(:call, :≤, mangledname, stopcon)
+        if ptrcomp
+            Expr(:call, :<, callpointer(mangledname), stopcon)
+        else
+            Expr(:call, :<, mangledname, stopcon)
+        end
+    elseif ptrcomp
+        Expr(:call, :<, callpointer(mangledname), addexpr(stopcon, staticmulincr(mangledname, incr)))
     else
-        Expr(:call, :<, mangledname, addexpr(stopcon, incr))
+        if isone(incr)
+            Expr(:call, :≤, mangledname, stopcon)
+        else
+            Expr(:call, :<, mangledname, addexpr(stopcon, incr))
+        end
     end
 end
 function looprange(loop::Loop, incr::Int, mangledname::Symbol)
-    loop.stopexact ? looprange(loop.stophint, incr, mangledname) : looprange(loop.stopsym, incr, mangledname)
+    loop.stopexact ? looprange(loop.stophint, incr, mangledname, false) : looprange(loop.stopsym, incr, mangledname, false)
 end
 function terminatecondition(
     loop::Loop, us::UnrollSpecification, n::Int, mangledname::Symbol, inclmask::Bool, UF::Int = unrollfactor(us, n)
@@ -130,20 +138,34 @@ function terminatecondition(
         looprange(loop, UF, mangledname)
     elseif inclmask
         looprange(loop, 1, mangledname)
+    elseif loop.stopexact
+        vec_looprange(loop.stophint, UF, mangledname, false) # may not be u₂loop
     else
-        vec_looprange(loop, UF, mangledname) # may not be u₂loop
+        vec_looprange(loop.stopsym, UF, mangledname, false) # may not be u₂loop
     end
 end
 function incrementloopcounter(us::UnrollSpecification, n::Int, mangledname::Symbol, UF::Int = unrollfactor(us, n))
     if isvectorized(us, n)
         if UF == 1
             Expr(:(=), mangledname, Expr(:call, lv(:valadd), VECTORWIDTHSYMBOL, mangledname))
-            # Expr(:(=), mangledname, Expr(:macrocall, Symbol("@show"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), Expr(:call, lv(:valadd), VECTORWIDTHSYMBOL, mangledname)))
         else
             Expr(:(=), mangledname, Expr(:call, lv(:valmuladd), VECTORWIDTHSYMBOL, UF, mangledname))
         end
     else
         Expr(:(=), mangledname, Expr(:call, lv(:vadd), mangledname, UF))
+    end
+end
+function incrementloopcounter!(q, us::UnrollSpecification, n::Int, UF::Int = unrollfactor(us, n))
+    if isvectorized(us, n)
+        if UF == 1
+            push!(q.args, Expr(:call, lv(:unwrap), VECTORWIDTHSYMBOL))
+        else
+            push!(q.args, Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, UF))
+        end
+    elseif isone(UF)
+        push!(q.args, Expr(:call, Expr(:curly, lv(:Static), UF)))
+    else
+        push!(q.args, UF)
     end
 end
 
@@ -294,19 +316,22 @@ function LoopSet(mod::Symbol)
     )
 end
 
+cacheunrolled!(ls::LoopSet, u₁loop, u₂loop, vectorized) = foreach(op -> setunrolled!(op, u₁loop, u₂loop, vectorized), operations(ls))
+
 num_loops(ls::LoopSet) = length(ls.loops)
 function oporder(ls::LoopSet)
     N = length(ls.loop_order.loopnames)
     reshape(ls.loop_order.oporder, (2,2,2,N))
 end
 names(ls::LoopSet) = ls.loop_order.loopnames
+reversenames(ls::LoopSet) = ls.loop_order.bestorder
 function getloopid(ls::LoopSet, s::Symbol)::Int
     for (loopnum,sym) ∈ enumerate(ls.loopsymbols)
         s === sym && return loopnum
     end
 end
 getloop(ls::LoopSet, s::Symbol) = ls.loops[getloopid(ls, s)]
-getloop(ls::LoopSet, i::Integer) = ls.loops[i]
+# getloop(ls::LoopSet, i::Integer) = ls.loops[i]
 getloopsym(ls::LoopSet, i::Integer) = ls.loopsymbols[i]
 Base.length(ls::LoopSet, s::Symbol) = length(getloop(ls, s))
 
