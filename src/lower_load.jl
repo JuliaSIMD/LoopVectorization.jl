@@ -142,6 +142,119 @@ function lower_load_vectorized!(
     end
     nothing
 end
+function indisvectorized(ls::LoopSet, ind::Symbol, vectorized::Symbol)
+    for op ∈ operations(ls)
+        ((op.variable === ind) && isvectorized(op)) && return true
+    end
+    false
+end
+
+# function lower_load_for_optranslation!(
+#     q::Expr, op::Operation, ls::LoopSet, td::UnrollArgs{Int}, mask::Union{Nothing,Symbol,Unsigned}, translationind::Int
+# )
+#     @unpack u₁, u₁loopsym, u₂loopsym, vectorized, u₂max, suffix = td
+#     iszero(suffix) || return
+
+#     gespinds = mem_offset(op, UnrollArgs(td, 0), indices_calculated_by_pointer_offsets(ls, op.ref), false)
+#     ptr = vptr(op)
+#     gptr = Symbol(ptr, "##GESPED##")
+#     for i ∈ eachindex(gespinds.args)
+#         if i != translationind
+#             gespinds.args[i] = Expr(:call, lv(:extract_data), gespinds.args[i])
+#         end
+#     end    
+#     push!(q.args, Expr(:(=), gptr, Expr(:call, lv(:gesp), ptr, gespinds)))
+
+#     inds = Expr(:tuple)
+#     ginds = Expr(:tuple)
+#     indices = getindicesonly(op)
+
+#     for (i,ind) ∈ enumerate(indices)
+#         if i == translationind # ind cannot be the translation ind
+#             push!(inds.args, Expr(:call, lv(:Zero)))
+#             push!(ginds.args, Expr(:call, Expr(:curly, lv(:Static), 1)))
+#         elseif (ind === vectorized) || indisvectorized(ls, ind, vectorized)
+#             push!(inds.args, _MMind(Expr(:call, lv(:Zero))))
+#             push!(ginds.args, Expr(:call, lv(:Zero)))
+#         else
+#             push!(inds.args, Expr(:call, lv(:Zero)))
+#             push!(ginds.args, Expr(:call, lv(:Zero)))
+#         end
+#     end
+#     varbase = variable_name(op, 0)
+#     vloadexpr = Expr(:call, lv(:vload), gptr, inds)
+#     gespexpr  = Expr(:(=), gptr, Expr(:call, lv(:gesp), gptr, ginds))
+#     push!(q.args, Expr(:(=), Symbol(varbase, 0), vloadexpr))
+
+#     for u ∈ 1:u₁-1
+#         push!(q.args, gespexpr)
+#         push!(q.args, Expr(:(=), Symbol(varbase, u), vloadexpr))
+#     end
+#     # this takes care of u₂ == 0
+#     offset = u₁
+#     for u₂ ∈ 1:u₂max-1
+#         varold = varbase
+#         varbase = variable_name(op, u₂)
+#         for u ∈ 0:u₁-2
+#             push!(q.args, Expr(:(=), Symbol(varbase, u), Symbol(varold, u + 1)))
+#         end
+#         push!(q.args, gespexpr)
+#         push!(q.args, Expr(:(=), Symbol(varbase, u₁ - 1), vloadexpr))
+#         offset += 1
+#     end
+#     nothing
+# end
+
+
+function lower_load_for_optranslation!(
+    q::Expr, op::Operation, ls::LoopSet, td::UnrollArgs{Int}, mask::Union{Nothing,Symbol,Unsigned}, translationind::Int
+)
+    @unpack u₁, u₁loopsym, u₂loopsym, vectorized, u₂max, suffix = td
+    iszero(suffix) || return
+
+    gespinds = mem_offset(op, UnrollArgs(td, 0), indices_calculated_by_pointer_offsets(ls, op.ref), false)
+    ptr = vptr(op)
+    gptr = Symbol(ptr, "##GESPED##")
+    for i ∈ eachindex(gespinds.args)
+        if i != translationind
+            gespinds.args[i] = Expr(:call, lv(:extract_data), gespinds.args[i])
+        end
+    end    
+    push!(q.args, Expr(:(=), gptr, Expr(:call, lv(:gesp), ptr, gespinds)))
+
+    inds = Expr(:tuple)
+    indices = getindicesonly(op)
+
+    for (i,ind) ∈ enumerate(indices)
+        if i == translationind # ind cannot be the translation ind
+            push!(inds.args, Expr(:call, Expr(:curly, lv(:Static), 0)))
+        elseif (ind === vectorized) || indisvectorized(ls, ind, vectorized)
+            push!(inds.args, _MMind(Expr(:call, lv(:Zero))))
+        else
+            push!(inds.args, Expr(:call, lv(:Zero)))
+        end
+    end
+    varbase = variable_name(op, 0)
+    push!(q.args, Expr(:(=), Symbol(varbase, 0), Expr(:call, lv(:vload), gptr, copy(inds))))
+
+    for u ∈ 1:u₁-1
+        inds.args[translationind] = Expr(:call, Expr(:curly, lv(:Static), u))
+        push!(q.args, Expr(:(=), Symbol(varbase, u), Expr(:call, lv(:vload), gptr, copy(inds))))
+    end
+    # this takes care of u₂ == 0
+    offset = u₁
+    for u₂ ∈ 1:u₂max-1
+        varold = varbase
+        varbase = variable_name(op, u₂)
+        for u ∈ 0:u₁-2
+            push!(q.args, Expr(:(=), Symbol(varbase, u), Symbol(varold, u + 1)))
+        end
+        inds.args[translationind] = Expr(:call, Expr(:curly, lv(:Static), offset))
+        push!(q.args, Expr(:(=), Symbol(varbase, u₁ - 1), Expr(:call, lv(:vload), gptr, copy(inds))))
+        offset += 1
+    end
+    nothing
+end
 
 # TODO: this code should be rewritten to be more "orthogonal", so that we're just combining separate pieces.
 # Using sentinel values (eg, T = -1 for non tiling) in part to avoid recompilation.
@@ -149,38 +262,30 @@ function lower_load!(
     q::Expr, op::Operation, ls::LoopSet, td::UnrollArgs, mask::Union{Nothing,Symbol,Unsigned} = nothing
 )
     @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = td
-    if !isnothing(suffix) && suffix > 0
+    if !isnothing(suffix) && ls.loadelimination[]
         istr, ispl = isoptranslation(ls, op, UnrollSymbols(u₁loopsym, u₂loopsym, vectorized))
-        if istr && ispl
-            varnew = variable_name(op, suffix)
-            varold = variable_name(op, suffix - 1)
-            for u ∈ 0:u₁-2
-                push!(q.args, Expr(:(=), Symbol(varnew, u), Symbol(varold, u + 1)))
-            end
-            umin = u₁ - 1
-        elseif u₂loopsym !== vectorized
-            mno, id = maxnegativeoffset(ls, op, u₂loopsym)
-            if -suffix < mno < 0
-                varnew = variable_name(op, suffix)
-                varold = variable_name(operations(ls)[id], suffix + mno)
-                opold = operations(ls)[id]
-                if isu₁unrolled(op)
-                    for u ∈ 0:u₁-1
-                        push!(q.args, Expr(:(=), Symbol(varnew, u), Symbol(varold, u)))
+        if !iszero(istr) & ispl
+            lower_load_for_optranslation!(q, op, ls, td, mask, istr)
+        elseif suffix > 0
+            if u₂loopsym !== vectorized
+                mno, id = maxnegativeoffset(ls, op, u₂loopsym)
+                if -suffix < mno < 0
+                    varnew = variable_name(op, suffix)
+                    varold = variable_name(operations(ls)[id], suffix + mno)
+                    opold = operations(ls)[id]
+                    if isu₁unrolled(op)
+                        for u ∈ 0:u₁-1
+                            push!(q.args, Expr(:(=), Symbol(varnew, u), Symbol(varold, u)))
+                        end
+                    else
+                        push!(q.args, Expr(:(=), varnew, varold))
                     end
-                else
-                    push!(q.args, Expr(:(=), varnew, varold))
+                    return
                 end
-                return
-            else
-                umin = 0
             end
-        else
-            umin = 0
         end
-    else
-        umin = 0
     end
+    umin = 0
     if isvectorized(op)
         lower_load_vectorized!(q, ls, op, td, mask, umin)
     else

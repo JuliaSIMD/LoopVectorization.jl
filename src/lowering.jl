@@ -238,6 +238,10 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
     q = if nisvectorized
             # Expr(:block, loopiteratesatleastonce(loop, true), Expr(:while, expect(tc), body))
         Expr(:block, Expr(:while, expect(tc), body))
+    elseif isstaticloop(loop) && length(loop) ≤ 4
+        qt = Expr(:block)
+        foreach(_ -> push!(qt.args, body), 1:length(loop))
+        qt
     else
         # Expr(:block, sl, assume(tc), Expr(:while, tc, body))
         push!(body.args, Expr(:||, expect(tc), Expr(:break)))

@@ -66,7 +66,7 @@ unrolled loads are calculated as offsets with respect to an initial gesp. This h
 Therefore, unrolled === true results in inds being ignored.
 _mm means to insert `mm`s.
 """
-function mem_offset(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Vector{Bool})
+function mem_offset(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Vector{Bool}, _mm::Bool = true)
     # @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
     ret = Expr(:tuple)
     indices = getindicesonly(op)
@@ -81,9 +81,9 @@ function mem_offset(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Vect
         # else
         if loopedindex[n]
             if inds_calc_by_ptr_offset[n]
-                addoffset!(ret, offset, ind === vectorized)
+                addoffset!(ret, offset, _mm & (ind === vectorized))
             else
-                addoffset!(ret, ind, offset, ind === vectorized)
+                addoffset!(ret, ind, offset, _mm & (ind === vectorized))
             end
         else
             addoffset!(ret, symbolind(ind, op, td), offset)
@@ -91,6 +91,7 @@ function mem_offset(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Vect
     end
     ret
 end
+
 
 function add_vectorized_offset!(ret::Expr, ind, offset, incr)
     if isone(incr)

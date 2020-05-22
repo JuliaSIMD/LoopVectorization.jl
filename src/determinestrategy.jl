@@ -453,16 +453,16 @@ function stride_penalty(ls::LoopSet, order::Vector{Symbol})
 end
 function isoptranslation(ls::LoopSet, op::Operation, unrollsyms::UnrollSymbols)
     @unpack u₁loopsym, u₂loopsym, vectorized = unrollsyms
-    (vectorized == u₁loopsym || vectorized == u₂loopsym) && return false, false
-    (isu₁unrolled(op) && isu₂unrolled(op)) || return false, false
-    istranslation = false
+    (vectorized == u₁loopsym || vectorized == u₂loopsym) && return 0, false
+    (isu₁unrolled(op) && isu₂unrolled(op)) || return 0, false
+    istranslation = 0
     inds = getindices(op); li = op.ref.loopedindex
     translationplus = false
     for i ∈ eachindex(li)
         if !li[i]
             opp = findparent(ls, inds[i + (first(inds) === Symbol("##DISCONTIGUOUSSUBARRAY##"))])
             if instruction(opp).instr ∈ (:+, :-) && u₁loopsym ∈ loopdependencies(opp) && u₂loopsym ∈ loopdependencies(opp)
-                istranslation = true
+                istranslation = i
                 translationplus = instruction(opp).instr === :+
             end
         end
@@ -527,7 +527,7 @@ function maxnegativeoffset(ls::LoopSet, op::Operation, unrollsyms::UnrollSymbols
 end
 function load_elimination_cost_factor(ls::LoopSet, op::Operation, unrollsyms::UnrollSymbols)
     @unpack u₁loopsym, u₂loopsym = unrollsyms
-    if first(isoptranslation(ls, op, unrollsyms))
+    if !iszero(first(isoptranslation(ls, op, unrollsyms)))
         for loop ∈ ls.loops
             # If another loop is short, assume that LLVM will unroll it, in which case
             # we want to be a little more conservative in terms of register pressure.
