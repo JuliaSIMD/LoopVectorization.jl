@@ -1,6 +1,6 @@
 using LoopVectorization
 using Test
-
+# T = Float32
 @testset "GEMV" begin
     # Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 6)
     Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 6)
@@ -46,13 +46,14 @@ using Test
             y[i] = yᵢ
         end
     end
-    q = :(for i ∈ eachindex(y)
-          yᵢ = zero(eltype(y))
-          for j ∈ eachindex(x)
-          yᵢ += A[i,j] * x[j]
-          end
-          y[i] = yᵢ
-          end)
+    # q = :(for i ∈ eachindex(y)
+    #       yᵢ = zero(eltype(y))
+    #       for j ∈ eachindex(x)
+    #       yᵢ += A[i,j] * x[j]
+    #       end
+    #       y[i] = yᵢ
+    #       end);
+    # ls = LoopVectorization.LoopSet(q);
     function mygemv_avx!(y, A, x)
         # Need to test 0s somewhere!
         @_avx for i ∈ eachindex(y)
@@ -63,6 +64,15 @@ using Test
             y[i] = yᵢ
         end
     end
+    # q = :(for i ∈ eachindex(y)
+    #         yᵢ = 0.0#zero(eltype(y))
+    #         for j ∈ eachindex(x)
+    #             yᵢ += A[i,j] * x[j]
+    #         end
+    #         y[i] = yᵢ
+    #   end);
+    # ls = LoopVectorization.LoopSet(q);
+    # LoopVectorization.lower(ls, 2, 2, 0)
 
 
     function AtmulvB!(G, B,κ)
@@ -180,33 +190,48 @@ using Test
             end
         end
     end
-    
 
     M, K, N = 51, 49, 61
     for T ∈ (Float32, Float64, Int32, Int64)
         @show T, @__LINE__
         TC = sizeof(T) == 4 ? Float32 : Float64
         R = T <: Integer ? (T(-1000):T(1000)) : T
+        Afull = fill(T(10^3), 3M, 3K);
+        xfull = fill(T(1), 3K);
+        y1full = fill(TC(-1000), 3M); y2full = copy(y1full);
 
-        A = rand(R, M, K);
-        x = rand(R, K);
-        y1 = Vector{TC}(undef, M); y2 = similar(y1);
+        A = view(Afull, M .+ (1:M), K .+ (1:K)); A .= rand.(Ref(R));
+        x = view(xfull, K .+ (1:K)); x .= rand.(Ref(R));
+        y1 = view(y1full, M .+ (1:M));
+        y2 = view(y2full, M .+ (1:M));
+
+        # A = rand(R, M, K);
+        # x = rand(R, K);
+        # y1 = Vector{TC}(undef, M); y2 = similar(y1);
+
         mygemv!(y1, A, x);
         mygemvavx!(y2, A, x);
-        @test y1 ≈ y2
-        fill!(y2, -999.9); mygemv_avx!(y2, A, x);
-        @test y1 ≈ y2
-        fill!(y2, -999.9);
+        @test y1full ≈ y2full
+        fill!(y2, -9999); mygemv_avx!(y2, A, x);
+        @test y1full ≈ y2full
+        fill!(y2, -9999);
         mygemvavx_range!(y2, A, x)
-        @test y1 ≈ y2
+        @test y1full ≈ y2full
 
         Abit = A .> 0.5;
-        fill!(y2, -999.9); mygemv_avx!(y2, Abit, x);
+        fill!(y2, -9999); mygemv_avx!(y2, Abit, x);
+        @test y2 ≈ Abit * x
+        fill!(y2, -9999); mygemvavx!(y2, Abit, x);
         @test y2 ≈ Abit * x
         xbit = x .> 0.5;
-        fill!(y2, -999.9); mygemv_avx!(y2, A, xbit);
+        fill!(y2, -9999); mygemv_avx!(y2, A, xbit);
+        @test y2 ≈ A * xbit
+        fill!(y2, -9999); mygemvavx!(y2, A, xbit);
         @test y2 ≈ A * xbit
 
+        # Check for out of bounds stores
+        fill!(y1, 0); fill!(y2, 0); @test y1full ≈ y2full
+        
         B = rand(R, N, N);
         G1 = Matrix{TC}(undef, N, 1);
         G2 = similar(G1);

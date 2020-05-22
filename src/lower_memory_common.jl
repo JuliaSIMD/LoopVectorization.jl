@@ -91,26 +91,6 @@ function mem_offset(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Vect
     end
     ret
 end
-# function offset_refname(op::Operation, td::UnrollArgs)
-#     rn = refname(op)
-#     use_gesp(op, td) ? Symbol(refname(op), "#offset#", name(op)) : rn
-# end
-# use_gesp(op::Operation, td::UnrollArgs) = all(op.ref.loopedindex)# && td.vectorized ∈ loopdependencies(op)
-# function gesp_call!(q::Expr, op::Operation, td::UnrollArgs)
-#     ref = refname(op)
-#     # ref_offset = offset_refname(op)
-#     ref_offset = Symbol(refname(op), "#offset#", name(op))
-#     mo = mem_offset(op, td, false, false) # false, to say emit-all-indices
-#     push!(q.args, Expr(:(=), ref_offset, Expr(:call, lv(:gesp), ref, mo)))
-#     nothing
-# end
-# function maybegesp_call!(q::Expr, op::Operation, td::UnrollArgs)
-#     @unpack u₁loopsym, u₂loopsym, suffix = td
-#     if ((isnothing(suffix) || iszero(suffix)) && ((u₁loopsym ∈ loopdependencies(op)) || (u₂loopsym ∈ loopdependencies(op))) && use_gesp(op, td))
-#         gesp_call!(q, op, td)
-#     end
-# end
-
 
 function add_vectorized_offset!(ret::Expr, ind, offset, incr)
     if isone(incr)

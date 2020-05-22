@@ -626,7 +626,6 @@ using Test
         c_re
     end
 
-
     function MatCalcWtDW!(m)
         l, n = size(m.Wt)
         fill!(m.Wt_D_W, 0)
@@ -638,7 +637,6 @@ using Test
             end
         end
     end
-
  
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
@@ -829,8 +827,8 @@ using Test
             Wt_D_W = Matrix{T}(undef, 181, 181),
             Wt = rand(T, 181, 191),
             d = rand(T, 191)
-        )
-        Wt_D_W = similar(mh.Wt_D_W)
+        );
+        Wt_D_W = similar(mh.Wt_D_W);
 
         MatCalcWtDW!(mh)
         @test mh.Wt_D_W ≈ mh.Wt * Diagonal(mh.d) * mh.Wt'

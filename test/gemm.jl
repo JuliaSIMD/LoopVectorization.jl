@@ -173,7 +173,7 @@
     # end
     # end);
     # ls = LoopVectorization.LoopSet(gq);
-    # ls.preamble_symsym
+    # # ls.preamble_symsym
     # ls.operations[1]
     function AmulB_avx3!(C, A, B)
         Kmin = firstindex(axes(A,2)); Kmax = lastindex(axes(A,2))
@@ -373,7 +373,7 @@
 	    for n ∈ 1:2:(N & -2)
 	    	n1 = n + 1
 		C11, C21, C12, C22 = zero(T), zero(T), zero(T), zero(T)
-		@avx for k ∈ 1:K
+		@avx inline=true for k ∈ 1:K
 		    C11 += A[k,m] * B[k,n] 
 		    C21 += A[k,m1] * B[k,n] 
 		    C12 += A[k,m] * B[k,n1] 
@@ -387,7 +387,7 @@
             if isodd(N)
 	    	C1n = 0.0
 	    	C2n = 0.0
-	    	@avx for k ∈ 1:K
+	    	@avx inline=true for k ∈ 1:K
 	    	    C1n += A[k,m] * B[k,N]
 	    	    C2n += A[k,m1] * B[k,N]
 	    	end
@@ -399,7 +399,7 @@
 	    for n ∈ 1:2:(N & -2)
 	    	n1 = n + 1
 		Cm1, Cm2 = zero(T), zero(T)
-		@avx for k ∈ 1:K
+		@avx inline=true for k ∈ 1:K
 		    Cm1 += A[k,M] * B[k,n] 
 		    Cm2 += A[k,M] * B[k,n1] 
 		end
@@ -408,7 +408,7 @@
 	    end
             if isodd(N)
 	    	Cmn = 0.0
-	    	@avx for k ∈ 1:K
+	    	@avx inline=true for k ∈ 1:K
 	    	    Cmn += A[k,M] * B[k,N]
 	    	end
 	    	C[M,N] = Cmn
@@ -470,6 +470,9 @@
         end
         return C
     end
+    A = rand(35,23); B = rand(35,17); C1 = A' * B; C2 = similar(C1);
+    mulCAtB_2x2block_avx!(C2, A, B);
+    
     function mulCAtB_2x2blockavx_noinline!(C, A, B)
         M, N = size(C); K = size(B,1)
         @assert size(C, 1) == size(A, 2)
@@ -673,11 +676,11 @@
             @test C ≈ C2
             fill!(C, 9999.999); gemm_accurate!(C, At', Bt');
             @test C ≈ C2
-            Abit = A .> 0.5
-            fill!(C, 9999.999); AmulBavx1!(C, Abit, B)
+            Abit = A .> 0.5;
+            fill!(C, 9999.999); AmulBavx1!(C, Abit, B);
             @test C ≈ Abit * B
-            Bbit = B .> 0.5
-            fill!(C, 9999.999); AmulBavx1!(C, A, Bbit)
+            Bbit = B .> 0.5;
+            fill!(C, 9999.999); AmulBavx1!(C, A, Bbit);
             @test C ≈ A * Bbit
             Ab = zero(A); Bb = zero(B); Cb = zero(C);
             threegemms!(Ab, Bb, Cb, A, B, C)

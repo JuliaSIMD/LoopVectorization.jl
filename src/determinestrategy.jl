@@ -704,14 +704,6 @@ function evaluate_cost_tile(
     u₁, u₂, costpenalty * ucost + stride_penalty(ls, order) + outer_reduct_penalty + favoring_heuristics, choose_to_inline[]
 end
 
-function should_inline(ls::LoopSet, u₁::Int, u₂::Int)
-    # Extremely simplistic heuristic
-    prod(length, ls.loops) ≤ 1024^2 && return true
-    for op ∈ operations(ls)
-
-    end
-    false
-end
 
 struct LoopOrders
     syms::Vector{Symbol}
@@ -866,7 +858,7 @@ function choose_tile(ls::LoopSet)
         end
     end
     ls.loadelimination[] = shouldinline
-    best_order, bestu₁, bestu₂, best_vec, u₁, u₂, lowest_cost, shouldinline
+    best_order, bestu₁, bestu₂, best_vec, u₁, u₂, lowest_cost, false#shouldinline
 end
 # Last in order is the inner most loop
 function choose_order_cost(ls::LoopSet)

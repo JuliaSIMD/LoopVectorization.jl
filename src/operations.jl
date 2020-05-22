@@ -39,6 +39,7 @@ function Base.isequal(x::ArrayReference, y::ArrayReference)
     end
     true
 end
+
 """
     ArrayReferenceMeta
 
@@ -69,7 +70,12 @@ end
     # hash(x.array, h)
 # end
 loopdependencies(ref::ArrayReferenceMeta) = ref.ref.indices
-sameref(x::ArrayReferenceMeta, y::ArrayReferenceMeta) = sameref(x.ref, y.ref)
+"""
+This definition is used to find the matching arrays for the LoopStartStopManager.
+It checks the underly ArrayReferences, but also the vptr names. This is because different
+slices of the same array will have the same ArrayReference, but different vptr names.
+"""
+sameref(x::ArrayReferenceMeta, y::ArrayReferenceMeta) = (vptr(x) === vptr(y)) && sameref(x.ref, y.ref)
 Base.convert(::Type{ArrayReference}, ref::ArrayReferenceMeta) = ref.ref
 Base.:(==)(x::ArrayReference, y::ArrayReference) = isequal(x, y)
 Base.:(==)(x::ArrayReferenceMeta, y::ArrayReferenceMeta) = (x.ptr === y.ptr) && isequal(x.ref, y.ref)
@@ -269,13 +275,12 @@ vptr(x::Symbol) = Symbol("##vptr##_", x)
 vptr(x::ArrayReference) = vptr(x.array)
 vptr(x::ArrayReferenceMeta) = x.ptr
 vptr(x::Operation) = x.ref.ptr
+vptrbase(x) = Symbol(vptr(x), "##BASE##")
 name(x::ArrayReference) = x.array
 name(x::ArrayReferenceMeta) = x.ref.array
 name(op::Operation) = op.variable
 instruction(op::Operation) = op.instruction
 isreductionzero(op::Operation, instr::Symbol) = op.instruction.mod === REDUCTION_ZERO[instr]
-refname(ref::ArrayReferenceMeta) = ref.ptr
-refname(op::Operation) = refname(op.ref)
 isreductcombineinstr(op::Operation) = iscompute(op) && isreductcombineinstr(instruction(op))
 """
     mvar = mangledvar(op)
@@ -335,16 +340,17 @@ varname(mpref::ArrayReferenceMetaPosition) = mpref.varname
 name(mpref::ArrayReferenceMetaPosition) = name(mpref.mref.ref)
 loopdependencies(ref::ArrayReferenceMetaPosition) = ref.loopdependencies
 reduceddependencies(ref::ArrayReferenceMetaPosition) = ref.reduceddeps
-getindices(ref::ArrayReference) = ref.indices
-getindices(mref::ArrayReferenceMeta) = mref.ref.indices
-getindices(mpref::ArrayReferenceMetaPosition) = mpref.ref.ref.indices
-getindices(op::Operation) = op.ref.ref.indices
-getoffsets(op::Operation) = op.ref.ref.offsets
+arrayref(ref::ArrayReference) = ref
+arrayref(ref::ArrayReferenceMeta) = ref.ref
+arrayref(ref::ArrayReferenceMetaPosition) = ref.ref.ref
+arrayref(op::Operation) = op.ref.ref
+getindices(ref) = arrayref(ref).indices
+getoffsets(ref) = arrayref(ref).offsets
+isdiscontiguous(ref) = first(getindices(ref)) === Symbol("##DISCONTIGUOUSSUBARRAY##")
 
 function getindicesonly(ref)
     indices = getindices(ref)
-    start = (first(indices) === Symbol("##DISCONTIGUOUSSUBARRAY##")) + 1
-    @view(indices[start:end])
+    @view(indices[isdiscontiguous(ref) + 1:end])
 end
 # function hasintersection(s1::Set{T}, s2::Set{T}) where {T}
     # for x ∈ s1

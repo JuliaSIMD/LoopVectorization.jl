@@ -94,42 +94,47 @@ subexpr(ex::Number, incr::Number) = ex - incr
 subexpr(ex, incr::Number) = addexpr(ex,  -incr)
 
 staticmulincr(ptr, incr) = Expr(:call, lv(:staticmul), Expr(:call, :eltype, ptr), incr)
-callpointer(sym) = Expr(:call, :pointer, sym)
+callpointerforcomparison(sym) = Expr(:call, lv(:pointerforcomparison), sym)
 function vec_looprange(loopmax, UF::Int, mangledname::Symbol, ptrcomp::Bool)
-    incr = if isone(UF)
-        Expr(:call, lv(:valsub), VECTORWIDTHSYMBOL, 1)
-    else
-        Expr(:call, lv(:valmulsub), VECTORWIDTHSYMBOL, UF, 1)
-    end
-    incr = ptrcomp ? staticmulincr(mangledname, incr) : incr
-    compexpr = subexpr(loopmax, incr)
     if ptrcomp
-        Expr(:call, :<, callpointer(mangledname), compexpr)
+        vec_looprange(loopmax, UF, callpointerforcomparison(mangledname), staticmulincr(mangledname, VECTORWIDTHSYMBOL))
     else
-        Expr(:call, :<, mangledname, compexpr)
+        vec_looprange(loopmax, UF, mangledname, VECTORWIDTHSYMBOL)
     end
+end
+function vec_looprange(loopmax, UF::Int, mangledname, W)
+    incr = if isone(UF)
+        Expr(:call, lv(:valsub), W, 1)
+    else
+        Expr(:call, lv(:valmulsub), W, UF, 1)
+    end
+    compexpr = subexpr(loopmax, incr)
+    Expr(:call, :<, mangledname, compexpr)
 end
 
-function looprange(stopcon, incr::Int, mangledname::Symbol, ptrcomp::Bool)
-    incr = 1 - incr
+# function looprange(stopcon, incr::Int, mangledname::Symbol, ptrcomp::Bool, verbose)
+#     if ptrcomp
+#         looprange(stopcon, Expr(:call, lv(:vsub), staticmulincr(mangledname, incr), 1), callpointer(mangledname), verbose)
+#     else
+#         looprange(stopcon, incr - 1, mangledname)
+#     end
+# end
+# function looprange(stopcon, incr, mangledname, verbose)
+#     if verbose
+#         Expr(:call, :<, :(@show $mangledname), :(@show $(subexpr(stopcon, incr))))
+#     else
+#         Expr(:call, :<, mangledname, subexpr(stopcon, incr))
+#     end
+# end
+function looprange(stopcon, incr::Int, mangledname)
     if iszero(incr)
-        if ptrcomp
-            Expr(:call, :<, callpointer(mangledname), stopcon)
-        else
-            Expr(:call, :<, mangledname, stopcon)
-        end
-    elseif ptrcomp
-        Expr(:call, :<, callpointer(mangledname), addexpr(stopcon, staticmulincr(mangledname, incr)))
+        Expr(:call, :≤, mangledname, stopcon)
     else
-        if isone(incr)
-            Expr(:call, :≤, mangledname, stopcon)
-        else
-            Expr(:call, :<, mangledname, addexpr(stopcon, incr))
-        end
+        Expr(:call, :≤, mangledname, subexpr(stopcon, incr))
     end
 end
-function looprange(loop::Loop, incr::Int, mangledname::Symbol)
-    loop.stopexact ? looprange(loop.stophint, incr, mangledname, false) : looprange(loop.stopsym, incr, mangledname, false)
+function looprange(loop::Loop, incr::Int, mangledname)
+    loop.stopexact ? looprange(loop.stophint, incr, mangledname) : looprange(loop.stopsym, incr, mangledname)
 end
 function terminatecondition(
     loop::Loop, us::UnrollSpecification, n::Int, mangledname::Symbol, inclmask::Bool, UF::Int = unrollfactor(us, n)
@@ -168,6 +173,23 @@ function incrementloopcounter!(q, us::UnrollSpecification, n::Int, UF::Int = unr
         push!(q.args, UF)
     end
 end
+function looplengthexpr(loop::Loop)
+    if loop.stopexact
+        if loop.startexact
+            length(loop)
+        else
+            Expr(:call, lv(:vsub), loop.stophint + 1, loop.startsym)
+        end
+    elseif loop.startexact
+        if isone(loop.starthint)
+            loop.stopsym
+        else
+            Expr(:call, lv(:vsub), loop.stopsym, loop.starthint - 1)
+        end
+    else
+        Expr(:call, lv(:vsub), loop.stopsym, Expr(:call, lv(:staticm1), loop.startsym))
+    end
+end
 
 # load/compute/store × isunrolled × istiled × pre/post loop × Loop number
 struct LoopOrder <: AbstractArray{Vector{Operation},5}
@@ -199,6 +221,11 @@ Base.@propagate_inbounds Base.getindex(lo::LoopOrder, i...) = lo.oporder[LinearI
 
 @enum NumberType::Int8 HardInt HardFloat IntOrFloat INVALID
 
+struct LoopStartStopManager
+    terminators::Vector{Int}
+    incrementedptrs::Vector{Vector{ArrayReferenceMeta}}
+    uniquearrayrefs::Vector{ArrayReferenceMeta}
+end
 # Must make it easy to iterate
 # outer_reductions is a vector of indices (within operation vectors) of the reduction operation, eg the vmuladd op in a dot product
 # O(N) search is faster at small sizes
@@ -228,8 +255,10 @@ struct LoopSet
     place_after_loop::Vector{Bool}
     unrollspecification::Base.RefValue{UnrollSpecification}
     loadelimination::Base.RefValue{Bool}
+    lssm::Base.RefValue{LoopStartStopManager}
     mod::Symbol
 end
+
 
 
 function cost_vec_buf(ls::LoopSet)
@@ -312,7 +341,8 @@ function LoopSet(mod::Symbol)
         ArrayReferenceMeta[],
         Matrix{Float64}(undef, 4, 2),
         Matrix{Float64}(undef, 4, 2),
-        Bool[], Bool[], Ref{UnrollSpecification}(), Ref(false), mod
+        Bool[], Bool[], Ref{UnrollSpecification}(),
+        Ref(false), Ref{LoopStartStopManager}(), mod
     )
 end
 

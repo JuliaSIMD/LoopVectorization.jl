@@ -14,7 +14,7 @@
     a
 end
 
-function mapreduce_simple(f::F, op::OP, args::Vararg{DenseArray{T},A}) where {F,OP,T<:NativeTypes,A}
+function mapreduce_simple(f::F, op::OP, args::Vararg{DenseArray{<:NativeTypes},A}) where {F,OP,A}
     ptrargs = ntuple(a -> pointer(args[a]), Val(A))
     N = length(first(args))
     iszero(N) && throw("Length of vector is 0!")
@@ -31,35 +31,40 @@ end
 
 Vectorized version of `mapreduce`. Applies `f` to each element of the arrays `A`, and reduces the result with `op`.
 """
-function vmapreduce(f::F, op::OP, args::Vararg{DenseArray{T},A}) where {F,OP,T<:NativeTypes,A}
-    N = length(first(args))
-    A > 1 && @assert all(isequal(length.(args)...))
+function vmapreduce(f::F, op::OP, arg1::DenseArray{T}, args::Vararg{DenseArray{T},A}) where {F,OP,T<:NativeTypes,A}
+    N = length(arg1)
+    iszero(A) || @assert all(length.(args) .== N)
     W = VectorizationBase.pick_vector_width(T)
     V = VectorizationBase.pick_vector_width_val(T)
-    N < W && return mapreduce_simple(f, op, args...)
+    if N < W
+        mapreduce_simple(f, op, arg1, args...)
+    else
+        _vmapreduce(f, op, V, N, T, arg1, args...)
+    end
+end
+function _vmapreduce(f::F, op::OP, ::Val{W}, N, ::Type{T}, args::Vararg{DenseArray{<:NativeTypes},A}) where {F,OP,A,W,T}
     ptrargs = pointer.(args)
-    
-    a_0 = f(vload.(V, ptrargs)...); i = W
+    a_0 = f(vload.(Val{W}(), ptrargs)...); i = W
     if N ≥ 4W
-        a_1 = f(vload.(V, gep.(ptrargs, i))...); i += W
-        a_2 = f(vload.(V, gep.(ptrargs, i))...); i += W
-        a_3 = f(vload.(V, gep.(ptrargs, i))...); i += W
+        a_1 = f(vload.(Val{W}(), gep.(ptrargs, i))...); i += W
+        a_2 = f(vload.(Val{W}(), gep.(ptrargs, i))...); i += W
+        a_3 = f(vload.(Val{W}(), gep.(ptrargs, i))...); i += W
         while i < N - ((W << 2) - 1)
-            a_0 = op(a_0, f(vload.(V, gep.(ptrargs, i))...)); i += W
-            a_1 = op(a_1, f(vload.(V, gep.(ptrargs, i))...)); i += W
-            a_2 = op(a_2, f(vload.(V, gep.(ptrargs, i))...)); i += W
-            a_3 = op(a_3, f(vload.(V, gep.(ptrargs, i))...)); i += W
+            a_0 = op(a_0, f(vload.(Val{W}(), gep.(ptrargs, i))...)); i += W
+            a_1 = op(a_1, f(vload.(Val{W}(), gep.(ptrargs, i))...)); i += W
+            a_2 = op(a_2, f(vload.(Val{W}(), gep.(ptrargs, i))...)); i += W
+            a_3 = op(a_3, f(vload.(Val{W}(), gep.(ptrargs, i))...)); i += W
         end
         a_0 = op(a_0, a_1)
         a_2 = op(a_2, a_3)
         a_0 = op(a_0, a_2)
     end
     while i < N - (W - 1)
-        a_0 = op(a_0, f(vload.(V, gep.(ptrargs, i))...)); i += W
+        a_0 = op(a_0, f(vload.(Val{W}(), gep.(ptrargs, i))...)); i += W
     end
     if i < N
         m = mask(T, N & (W - 1))
-        a_0 = vifelse(m, op(a_0, f(vload.(V, gep.(ptrargs, i))...)), a_0)
+        a_0 = vifelse(m, op(a_0, f(vload.(Val{W}(), gep.(ptrargs, i))...)), a_0)
     end
     vreduce(op, a_0)
 end

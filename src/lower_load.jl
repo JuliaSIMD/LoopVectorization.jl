@@ -7,7 +7,7 @@ function lower_load_scalar!(
     # mvar, opu₁, opu₂ = variable_name_and_unrolled(op, u₁loop, u₂loop, suffix)
     mvar = variable_name(op, suffix)
     opu₁ = isu₁unrolled(op)
-    ptr = refname(op)
+    ptr = vptr(op)
     U = opu₁ ? u₁ : 1
     if instruction(op).instr !== :conditionalload
         for u ∈ umin:U-1
@@ -34,7 +34,7 @@ function pushvectorload!(
     q::Expr, op::Operation, var::Symbol, td::UnrollArgs, U::Int, vectorized::Symbol, mask, u₁unrolled::Bool, inds_calc_by_ptr_offset::Vector{Bool}
 )
     @unpack u₁, u₁loopsym, u₂loopsym, suffix = td
-    ptr = refname(op)
+    ptr = vptr(op)
     vecnotunrolled = vectorized !== u₁loopsym
     name, mo = name_memoffset(var, op, td, u₁unrolled, inds_calc_by_ptr_offset)
     instrcall = Expr(:call, lv(:vload), ptr, mo)
@@ -122,7 +122,7 @@ function lower_load_vectorized!(
     prefetchind = prefetchisagoodidea(ls, op, td)
     if !iszero(prefetchind)
         dontskip = (64 ÷ VectorizationBase.REGISTER_SIZE) - 1
-        ptr = refname(op)
+        ptr = vptr(op)
         innermostloopsym = first(names(ls))
         us = ls.unrollspecification[]
         prefetch_multiplier = 4

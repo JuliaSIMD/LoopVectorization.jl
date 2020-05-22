@@ -10,7 +10,7 @@ function add_load!(ls::LoopSet, op::Operation, actualarray::Bool = true, broadca
         opp = ls.opdict[ls.syms_aliasing_refs[id]] # throw an error if not found.
         return isstore(opp) ? getop(ls, first(parents(opp))) : opp
     end    
-    add_vptr!(ls, op.ref.ref.array, vptr(op.ref), actualarray, broadcast)
+    add_vptr!(ls, op.ref.ref.array, vptr(op), actualarray, broadcast)
     pushop!(ls, op, name(op))
 end
 
@@ -35,7 +35,7 @@ function add_simple_load!(
 )
     loopdeps = Symbol[s for s ∈ ref.indices]
     mref = ArrayReferenceMeta(
-        ref, fill(true, length(loopdeps))
+        ref, fill(true, length(loopdeps) - isdiscontiguous(ref))
     )
     add_simple_load!(ls, var, mref, loopdeps, elementbytes, actualarray, broadcast)
 end
@@ -48,7 +48,7 @@ function add_simple_load!(
         :getindex, memload, loopdeps,
         NODEPENDENCY, NOPARENTS, mref
     )
-    add_vptr!(ls, op.ref.ref.array, vptr(op.ref), actualarray, broadcast)
+    add_vptr!(ls, op.ref.ref.array, vptr(op), actualarray, broadcast)
     pushop!(ls, op, var)
 end
 function add_load_ref!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int)
