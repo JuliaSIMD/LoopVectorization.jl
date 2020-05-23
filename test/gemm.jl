@@ -1,6 +1,7 @@
 @testset "GEMM" begin
  # using LoopVectorization, LinearAlgebra, Test; T = Float64
-    Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (5, 5)
+    Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (3, 9)
+    Unumt, Tnumt = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (5, 5)
     @test LoopVectorization.mᵣ == Unum
     @test LoopVectorization.nᵣ == Tnum
     AmulBtq1 = :(for m ∈ axes(A,1), n ∈ axes(B,2)
@@ -18,7 +19,7 @@
                 for k ∈ axes(A,2)
                 C[m,n] += A[m,k] * B[k,n]
                 end
-                end)
+                end);
     lsAmulB1 = LoopVectorization.LoopSet(AmulBq1);
     # @test LoopVectorization.choose_order(lsAmulB1) == (Symbol[:n,:m,:k], :n, :m, :m, Unum, Tnum)
     @test LoopVectorization.choose_order(lsAmulB1) == (Symbol[:n,:m,:k], :m, :n, :m, Unum, Tnum)
@@ -133,7 +134,7 @@
     # LoopVectorization.loopdependencies.(lsAmuladd.operations)
     # LoopVectorization.reduceddependencies.(lsAmuladd.operations)
     # @test LoopVectorization.choose_order(lsAtmuladd) == (Symbol[:n,:m,:k], :n, :m, :k, Unum, Tnum)
-    @test LoopVectorization.choose_order(lsAtmuladd) == (Symbol[:n,:m,:k], :m, :n, :k, Unum, Tnum)
+    @test LoopVectorization.choose_order(lsAtmuladd) == (Symbol[:n,:m,:k], :m, :n, :k, Unumt, Tnumt)
 
     function AmulB_avx1!(C, A, B)
         @_avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
@@ -247,7 +248,7 @@
     lsAtmulB = LoopVectorization.LoopSet(AtmulBq);
     # LoopVectorization.choose_order(lsAtmulB)
     # @test LoopVectorization.choose_order(lsAtmulB) == (Symbol[:n,:m,:k], :m, :n, :k, Unum, Tnum)
-    @test LoopVectorization.choose_order(lsAtmulB) == (Symbol[:n,:m,:k], :n, :m, :k, Unum, Tnum)
+    @test LoopVectorization.choose_order(lsAtmulB) == (Symbol[:n,:m,:k], :n, :m, :k, Unumt, Tnumt)
     
     function AtmulBavx1!(C, A, B)
         @avx for n ∈ axes(C,2), m ∈ axes(C,1)
@@ -329,7 +330,7 @@
     lsr2amb = LoopVectorization.LoopSet(r2ambq);
     if LoopVectorization.VectorizationBase.REGISTER_COUNT == 32
         # @test LoopVectorization.choose_order(lsr2amb) == ([:n, :m, :k], :n, :m, :m, 3, 3)
-        @test LoopVectorization.choose_order(lsr2amb) == ([:n, :m, :k], :m, :n, :m, 3, 6)
+        @test LoopVectorization.choose_order(lsr2amb) == ([:n, :m, :k], :n, :m, :m, 7, 3)
     else
         # @test LoopVectorization.choose_order(lsr2amb) == ([:n, :m, :k], :n, :m, :m, 2, 2)
         @test LoopVectorization.choose_order(lsr2amb) == ([:n, :m, :k], :m, :n, :m, 2, 4)

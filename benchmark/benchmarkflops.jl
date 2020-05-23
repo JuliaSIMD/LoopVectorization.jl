@@ -258,9 +258,9 @@ function dot3_bench!(br, s, i)
     x = rand(M); A = rand(M, N); y = rand(N);
     dotblas = dot(x, A, y)
     n_gflop = M*N * 3e-9
-    br[1,i] = n_gflop / @belapsed jdot3avx($x, $A, $y)
+    br[1,i] = n_gflop / @belapsed jdot3v2avx($x, $A, $y)
     @assert jdot3avx(x, A, y) ≈ dotblas "LoopVec dot wrong?"
-    br[2,i] = n_gflop / @belapsed jdot3($x, $A, $y)
+    br[2,i] = n_gflop / @belapsed jdot3v2($x, $A, $y)
     @assert jdot3(x, A, y) ≈ dotblas "Julia dot wrong?"
     br[3,i] = n_gflop / @belapsed cdot3($x, $A, $y)
     @assert cdot3(x, A, y) ≈ dotblas "Clang dot wrong?"

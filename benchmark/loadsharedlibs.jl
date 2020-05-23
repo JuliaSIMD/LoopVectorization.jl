@@ -238,7 +238,7 @@ for (p,s) ∈ [(:c,Cshared) (:e,Eshared)]
     @eval function $(Symbol(prefix,p,:dot3))(x, A, y)
         M, N = size(A)
         ccall(
-            (:dot3, $s), Float64,
+            (:dot3v2, $s), Float64,
             (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Clong, Clong),
             x, A, y, M, N
         )
@@ -247,7 +247,7 @@ end
     @eval function $(Symbol(prefix,:fdot3))(x, A, y)
         M, N = size(A)
         ccall(
-            (:dot3, $Fshared), Float64,
+            (:dot3v2, $Fshared), Float64,
             (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}, Ref{Clong}),
             x, A, y, Ref(M), Ref(N)
         )

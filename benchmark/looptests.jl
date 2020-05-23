@@ -116,11 +116,10 @@ function jdot3avx(x, A, y)
     s
 end
 function jdot3v2(x, A, y)
-    M, N = size(A)
     s = zero(promote_type(eltype(x), eltype(A), eltype(y)))
-    @inbounds @fastmath for n ∈ 1:N
+    @inbounds @fastmath for n ∈ axes(A,2)
         t = zero(s)
-        @simd ivdep for m ∈ 1:M
+        @simd ivdep for m ∈ axes(A,1)
             t += x[m] * A[m,n]
         end
         s += t * y[n]
@@ -128,11 +127,10 @@ function jdot3v2(x, A, y)
     s
 end
 function jdot3v2avx(x, A, y)
-    M, N = size(A)
     s = zero(promote_type(eltype(x), eltype(A), eltype(y)))
-    @avx for n ∈ 1:N
+    @avx for n ∈ axes(A,2)
         t = zero(s)
-        for m ∈ 1:M
+        for m ∈ axes(A,1)
             t += x[m] * A[m,n]
         end
         s += t * y[n]

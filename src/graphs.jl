@@ -190,6 +190,16 @@ function looplengthexpr(loop::Loop)
         Expr(:call, lv(:vsub), loop.stopsym, Expr(:call, lv(:staticm1), loop.startsym))
     end
 end
+# use_expect() = false
+use_expect() = true
+function looplengthexpr(loop, n)
+    le = looplengthexpr(loop)
+    if false && use_expect() && isone(n) && !isstaticloop(loop)
+        le = expect(le)
+        push!(le.args, Expr(:call, Expr(:curly, :Val, length(loop))))
+    end
+    le
+end
 
 # load/compute/store × isunrolled × istiled × pre/post loop × Loop number
 struct LoopOrder <: AbstractArray{Vector{Operation},5}
@@ -270,7 +280,7 @@ function cost_vec_buf(ls::LoopSet)
 end
 function reg_pres_buf(ls::LoopSet)
     ps = @view(ls.reg_pres[:,2])
-    @inbounds for i ∈ 1:4
+    @inbounds for i ∈ 1:5
         ps[i] = 0
     end
     ps
@@ -280,6 +290,7 @@ function save_tilecost!(ls::LoopSet)
         ls.cost_vec[i,1] = ls.cost_vec[i,2]
         ls.reg_pres[i,1] = ls.reg_pres[i,2]
     end
+    ls.reg_pres[5,1] = ls.reg_pres[5,2]
 end
 
 pushprepreamble!(ls::LoopSet, ex) = push!(ls.prepreamble.args, ex)
@@ -340,7 +351,7 @@ function LoopSet(mod::Symbol)
         Symbol[], Symbol[], Symbol[],
         ArrayReferenceMeta[],
         Matrix{Float64}(undef, 4, 2),
-        Matrix{Float64}(undef, 4, 2),
+        Matrix{Float64}(undef, 5, 2),
         Bool[], Bool[], Ref{UnrollSpecification}(),
         Ref(false), Ref{LoopStartStopManager}(), mod
     )

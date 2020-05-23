@@ -141,7 +141,7 @@ function pointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvec
     pointermax(ls, ar, n, sub, isvectorized, getloop(ls, names(ls)[n]))
 end
 function pointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvectorized::Bool, loop::Loop)::Expr
-    pointermax(ls, ar, n, sub, isvectorized, looplengthexpr(loop))::Expr
+    pointermax(ls, ar, n, sub, isvectorized, looplengthexpr(loop, n))::Expr
 end
 function pointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvectorized::Bool, stophint::Int)::Expr
     # @unpack u₁loopnum, u₂loopnum, vectorizedloopnum, u₁, u₂ = us
@@ -243,7 +243,7 @@ function incrementloopcounter(ls::LoopSet, us::UnrollSpecification, n::Int, UF::
     for (j,ar) ∈ enumerate(ptrdefs)
         offsetinds = indices_calculated_by_pointer_offsets(ls, ar)
         indices = getindices(ar)
-        offset = first(indices) === Symbol("##DISCONTIGUOUSSUBARRAY##")
+        offset = first(indices) === DISCONTIGUOUS
         gespinds = Expr(:tuple)
         li = ar.loopedindex
         for i ∈ eachindex(li)

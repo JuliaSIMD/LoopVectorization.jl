@@ -208,6 +208,7 @@ function assume(ex)
     Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:SIMDPirates)), QuoteNode(:assume)), ex)
 end
 function expect(ex)
+    use_expect() || return ex
     Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:SIMDPirates)), QuoteNode(:expect)), ex)
     # ex
 end
@@ -239,15 +240,16 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
             # Expr(:block, loopiteratesatleastonce(loop, true), Expr(:while, expect(tc), body))
         Expr(:block, Expr(:while, expect(tc), body))
     elseif isstaticloop(loop) && length(loop) ≤ 4
-        qt = Expr(:block)
-        foreach(_ -> push!(qt.args, body), 1:length(loop))
-        qt
+        Expr(:block, (body for _ ∈ 1:length(loop))...)
     else
-        # Expr(:block, sl, assume(tc), Expr(:while, tc, body))
-        push!(body.args, Expr(:||, expect(tc), Expr(:break)))
+        termcond = gensym(:maybeterm)
+        push!(body.args, Expr(:(=), termcond, expect(tc)))
+        Expr(:block, Expr(:(=), termcond, true), Expr(:while, termcond, body))
+        # Expr(:block, assume(tc), Expr(:while, tc, body))
         # push!(body.args, Expr(:&&, expect(Expr(:call, :!, tc)), Expr(:break)))
-        # Expr(:block, sl, assume(tc), Expr(:while, true, body))
-        Expr(:block, Expr(:while, true, body))
+        # Expr(:block, assume(tc), Expr(:while, true, body))
+        # push!(body.args, Expr(:||, expect(tc), Expr(:break)))
+        # Expr(:block, Expr(:while, true, body))
     end
 
     if nisvectorized
@@ -548,7 +550,7 @@ function calc_Ureduct(ls::LoopSet, us::UnrollSpecification)
     elseif u₂ == -1
         min(u₁, 4)
     else
-        u₁
+        4#u₁
     # elseif num_loops(ls) == u₁loopnum
     #     min(u₁, 4)
     # else

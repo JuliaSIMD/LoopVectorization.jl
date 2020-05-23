@@ -5,7 +5,7 @@ using Test
 @testset "Miscellaneous" begin
 
     # Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 4)
-    Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 6)
+    Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (2, 10)
     dot3q = :(for m ∈ 1:M, n ∈ 1:N
               s += x[m] * A[m,n] * y[n]
               end);
@@ -43,14 +43,14 @@ using Test
         end
         s
     end
-    # q = :( for n ∈ 1:N
-    #         t = zero(s)
-    #         for m ∈ 1:M
-    #             t += x[m] * A[m,n]
-    #         end
-    #         s += t * y[n]
-    #        end);
-    # ls = LoopVectorization.LoopSet(q);
+    q = :( for n ∈ 1:N
+            t = zero(s)
+            for m ∈ 1:M
+                t += x[m] * A[m,n]
+            end
+            s += t * y[n]
+           end);
+    ls = LoopVectorization.LoopSet(q);
     
     function dot3avx24(x, A, y)
         M, N = size(A)
@@ -147,7 +147,7 @@ using Test
     # LoopVectorization.choose_order(lsvar)
     # @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, Symbol("##undefined##"), :j, 4, -1)
     if LoopVectorization.VectorizationBase.REGISTER_COUNT == 32
-        @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, 4, 6)
+        @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, 2, 10)
     else
         # @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :i, :j, :j, 4, 4)
         @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, 2, 4)
@@ -637,7 +637,7 @@ using Test
             end
         end
     end
- 
+
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
         A = randn(T, 199, 498);

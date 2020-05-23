@@ -78,6 +78,20 @@
         end
         ld
     end
+    function testrepindshigherdim_avx(L)
+        ld = zero(eltype(L))
+        @_avx for i ∈ axes(L,1), j ∈ axes(L,2)
+            ld += log(L[i,j,i])
+        end
+        ld
+    end
+    function testrepindshigherdimavx(L)
+        ld = zero(eltype(L))
+        @avx for i ∈ axes(L,1), j ∈ axes(L,2)
+            ld += log(L[i,j,i])
+        end
+        ld
+    end
     ldq = :(for i ∈ 1:size(L,1)
             ld += log(L[i,i])
             end)
@@ -292,6 +306,10 @@
         ld = logdet(UpperTriangular(A))
         @test ld ≈ trianglelogdetavx(A)
         @test ld ≈ trianglelogdet_avx(A)
+        Adim3 = rand(T, 37, 13, 37);
+        ld = sum(i -> logdet(UpperTriangular(@view(Adim3[:,i,:]))), axes(Adim3,2))
+        @test ld ≈ testrepindshigherdimavx(Adim3)
+        @test ld ≈ testrepindshigherdim_avx(Adim3)
 
         x = rand(T, 999);
         r1 = similar(x);

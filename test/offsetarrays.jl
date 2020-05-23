@@ -1,6 +1,5 @@
-using LoopVectorization, OffsetArrays
+using LoopVectorization, OffsetArrays, Test
 using LoopVectorization.VectorizationBase: StaticUnitRange
-using Test
 T = Float64
 # T = Float32
 
@@ -33,16 +32,17 @@ T = Float64
     # out = out1;
     # rng1,  rng2  = CartesianIndices(out1).indices;
     # rng1k, rng2k = axes(kern);
-    # C = At';
+    # # C = At';
     # ls2d = LoopVectorization.@avx_debug for j in rng2, i in rng1
     #         tmp = zero(eltype(out))
     #         for jk in rng2k, ik in rng1k
-    #             tmp += C[i+ik,j+jk]*kern[ik,jk]
+    #             tmp += A[i+ik,j+jk]*kern[ik,jk]
     #         end
     #         out1[i,j] = tmp
     # end;
-    # # LoopVectorization.choose_order(ls2dstatic)
-    # # q2d = :(for j in rng2, i in rng1
+    # LoopVectorization.choose_order(ls2d)
+    
+    # q2d = :(for j in rng2, i in rng1
     #         tmp = zero(eltype(out))
     #         for jk in rng2k, ik in rng1k
     #             tmp += A[i+ik,j+jk]*kern[ik,jk]
@@ -202,7 +202,8 @@ T = Float64
         @show T, @__LINE__
         A = rand(T, 100, 100); At = copy(A');
         kern = OffsetArray(rand(T, 3, 3), -1:1, -1:1);
-        out1 = OffsetArray(similar(A, size(A).-2), 1, 1);   # stay away from the edges of A
+        out1 = OffsetArray(view(similar(A, size(A) .+ 32), (1:98) .+ 32, (1:98) .+ 32), 1, 1);   # stay away from the edges of A
+        # out1 = OffsetArray(similar(A, size(A).-2), 1, 1);   # stay away from the edges of A
         out2 = similar(out1); out3 = similar(out1); out4 = similar(out1);
         skern = SizedOffsetMatrix{T,-1,1,-1,1}(parent(kern));
 

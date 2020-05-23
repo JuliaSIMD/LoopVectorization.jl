@@ -156,7 +156,6 @@ function add_mref!(
 ) where {T,N,P}
     add_mref!(ls, ar, i, P, name)
 end
-
 function add_mref!(
     ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name
 ) where {T, X <: Tuple, S <: AbstractStaticStridedPointer{T,X}}
@@ -164,14 +163,14 @@ function add_mref!(
         pushvarg′!(ls, ar, i, name)
     else
         pushvarg!(ls, ar, i, name)
-        first(X.parameters)::Int == 1 || pushfirst!(getindices(ar), Symbol("##DISCONTIGUOUSSUBARRAY##"))
+        first(X.parameters)::Int == 1 || makediscontiguous!(getindices(ar))
     end
 end
 function add_mref!(
     ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name
 ) where {T, N, S <: AbstractSparseStridedPointer{T, N}}
     pushvarg!(ls, ar, i, name)
-    pushfirst!(getindices(ar), Symbol("##DISCONTIGUOUSSUBARRAY##"))
+    makediscontiguous!(getindices(ar))
 end
 function add_mref!(
     ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{VectorizationBase.MappedStridedPointer{F,T,P}}, name
@@ -468,7 +467,7 @@ Execute an `@avx` block. The block's code is represented via the arguments:
 - `vargs...` holds the encoded pointers of all the arrays (see `VectorizationBase`'s various pointer types).
 """
 @generated function _avx_!(::Val{UNROLL}, ::Type{OPS}, ::Type{ARF}, ::Type{AM}, ::Type{LPSYM}, lb::LB, vargs...) where {UNROLL, OPS, ARF, AM, LPSYM, LB}
-    # 1 + 1 # Irrelevant line you can comment out/in to force recompilation...
+    1 + 1 # Irrelevant line you can comment out/in to force recompilation...
     ls = _avx_loopset(OPS.parameters, ARF.parameters, AM.parameters, LPSYM.parameters, LB.parameters, vargs)
     # @show avx_body(ls, UNROLL)
     avx_body(ls, UNROLL)

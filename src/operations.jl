@@ -346,7 +346,11 @@ arrayref(ref::ArrayReferenceMetaPosition) = ref.ref.ref
 arrayref(op::Operation) = op.ref.ref
 getindices(ref) = arrayref(ref).indices
 getoffsets(ref) = arrayref(ref).offsets
-isdiscontiguous(ref) = first(getindices(ref)) === Symbol("##DISCONTIGUOUSSUBARRAY##")
+const DISCONTIGUOUS = Symbol("##DISCONTIGUOUSSUBARRAY##")
+function makediscontiguous!(inds)
+    first(inds) === DISCONTIGUOUS || pushfirst!(inds, DISCONTIGUOUS)
+end
+isdiscontiguous(ref) = first(getindices(ref)) === DISCONTIGUOUS
 
 function getindicesonly(ref)
     indices = getindices(ref)
