@@ -11,7 +11,7 @@ end
 # if ndim(A::OffsetArray) ≥ 2, then eachindex(A) isa Base.OneTo, index starting at 1.
 # but multiple indexing is calculated using offsets, so we need a special type to express this.
 @inline function VectorizationBase.stridedpointer(A::OffsetArrays.OffsetArray)
-    OffsetStridedPointer(stridedpointer(parent(A)), VectorizationBase.staticm1(A.offsets))
+    OffsetStridedPointer(stridedpointer(parent(A)), A.offsets)
 end
 
 @inline function VectorizationBase.stridedpointer(
@@ -20,7 +20,7 @@ end
     Boff = parent(B)
     OffsetStridedPointer(
         stridedpointer(parent(Boff)'),
-        VectorizationBase.staticm1(Boff.offsets)
+        Boff.offsets
     )
 end
 @inline function Base.transpose(A::OffsetStridedPointer)
@@ -37,7 +37,7 @@ end
 @inline VectorizationBase.offset(ptr::OffsetStridedPointer{<:Any,N}, ind::Tuple) where {N} = ntuple(n -> vsub(ind[n], ptr.offsets[n]), Val{N}())
 @inline Base.similar(p::OffsetStridedPointer, ptr::Ptr) = OffsetStridedPointer(similar(p.ptr, ptr), p.offsets)
 @inline Base.pointer(p::OffsetStridedPointer) = pointer(p.ptr)
-@inline VectorizationBase.gesp(p::OffsetStridedPointer, i) = similar(p.ptr, gep(p, staticm1(i)))
+@inline VectorizationBase.gesp(p::OffsetStridedPointer, i) = similar(p.ptr, gep(p, i))
 # @inline VectorizationBase.gesp(p::OffsetStridedPointer, i) = similar(p, gep(p.ptr, i))
 # If an OffsetArray is getting indexed by a (loop-)constant value, then this particular vptr object cannot also be eachindexed, so we can safely return a stridedpointer
 @inline function VectorizationBase.subsetview(ptr::OffsetStridedPointer{<:Any,N}, ::Val{I}, i) where {I,N}

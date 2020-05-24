@@ -15,6 +15,7 @@ extern "C" {
   void aplusBc(double*, double*, double*, double*, long, long);
   double OLSlp(double*, double*, double*, long, long);
   void AplusAt(double*, double*, long);
+  double logdettriangle(double*, long);
 }
 
 typedef Map<MatrixXd> mMatrix;
@@ -107,4 +108,9 @@ void AplusAt(double* pB, double* pA, long N){
   B = A + A.transpose();
   return;
 }
+
+// double logdettriangle(double* pA, long N){
+//   mMatrix A(pA, N, N);
+//   return log(A.diagonal()).sum();
+// }
 

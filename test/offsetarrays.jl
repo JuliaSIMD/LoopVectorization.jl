@@ -1,6 +1,5 @@
-using LoopVectorization, OffsetArrays
+using LoopVectorization, OffsetArrays, Test
 using LoopVectorization.VectorizationBase: StaticUnitRange
-using Test
 T = Float64
 # T = Float32
 
@@ -29,18 +28,21 @@ T = Float64
     #     tmp += A[i+ik,j+jk]*skern[ik,jk]
     # end;
     # ls1
+
     # out = out1;
     # rng1,  rng2  = CartesianIndices(out1).indices;
     # rng1k, rng2k = axes(kern);
-    # ls2dstatic = LoopVectorization.@avx_debug for j in rng2, i in rng1
+    # # C = At';
+    # ls2d = LoopVectorization.@avx_debug for j in rng2, i in rng1
     #         tmp = zero(eltype(out))
     #         for jk in rng2k, ik in rng1k
     #             tmp += A[i+ik,j+jk]*kern[ik,jk]
     #         end
     #         out1[i,j] = tmp
     # end;
-    # LoopVectorization.choose_order(ls2dstatic)
-    # # q2d = :(for j in rng2, i in rng1
+    # LoopVectorization.choose_order(ls2d)
+    
+    # q2d = :(for j in rng2, i in rng1
     #         tmp = zero(eltype(out))
     #         for jk in rng2k, ik in rng1k
     #             tmp += A[i+ik,j+jk]*kern[ik,jk]
@@ -95,13 +97,13 @@ T = Float64
             $(Expr(:meta,:inline))
             LoopVectorization.OffsetStridedPointer(
                 LoopVectorization.StaticStridedPointer{$T,Tuple{1,$(UR-LR+1)}}(pointer(parent(A))),
-                ($(LR-2), $(LC-2))
+                ($(LR-1), $(LC-1))
             )
         end
     end
     # Base.size(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (1 + UR-LR, 1 + UC-LC)
     # Base.CartesianIndices(::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = CartesianIndices((LR:UR,LC:UC))
-    Base.getindex(A::SizedOffsetMatrix, i, j) = LoopVectorization.vload(LoopVectorization.stridedpointer(A), (i,j)) # only needed to print
+    Base.getindex(A::SizedOffsetMatrix, i, j) = LoopVectorization.vload(LoopVectorization.stridedpointer(A), (i-1,j-1))
     function avx2dunrolled!(out::AbstractMatrix, A::AbstractMatrix, kern::SizedOffsetMatrix{T,-1,1,-1,1}) where {T}
         rng1,  rng2  = axes(out)
         Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> kern_ik_jk = kern[ik-2,jk-2]
@@ -135,14 +137,14 @@ T = Float64
         end
         out
     end
-    uq = :(for j in rng2, i in rng1
-            tmp_0 = zero(eltype(out))
-            Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> tmp_{ik+(jk-1)*3} = A[i+(ik-2),j+(jk-2)] * kern_ik_jk + tmp_{ik+(jk-1)*3-1}
-            out[i,j] = tmp_9
-           end);
-    lsuq = LoopVectorization.LoopSet(macroexpand(Base, uq));
-    LoopVectorization.choose_order(lsuq)
-    lsuq
+    # uq = :(for j in rng2, i in rng1
+    #         tmp_0 = zero(eltype(out))
+    #         Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> tmp_{ik+(jk-1)*3} = A[i+(ik-2),j+(jk-2)] * kern_ik_jk + tmp_{ik+(jk-1)*3-1}
+    #         out[i,j] = tmp_9
+    #        end);
+    # lsuq = LoopVectorization.LoopSet(macroexpand(Base, uq));
+    # LoopVectorization.choose_order(lsuq)
+    # lsuq
     
     # using LoopVectorization, OffsetArrays
     # T = Float64
@@ -200,9 +202,10 @@ T = Float64
         @show T, @__LINE__
         A = rand(T, 100, 100); At = copy(A');
         kern = OffsetArray(rand(T, 3, 3), -1:1, -1:1);
-        skern = SizedOffsetMatrix{T,-1,1,-1,1}(parent(kern));
-        out1 = OffsetArray(similar(A, size(A).-2), 1, 1);   # stay away from the edges of A
+        out1 = OffsetArray(view(similar(A, size(A) .+ 32), (1:98) .+ 32, (1:98) .+ 32), 1, 1);   # stay away from the edges of A
+        # out1 = OffsetArray(similar(A, size(A).-2), 1, 1);   # stay away from the edges of A
         out2 = similar(out1); out3 = similar(out1); out4 = similar(out1);
+        skern = SizedOffsetMatrix{T,-1,1,-1,1}(parent(kern));
 
         old2d!(out1, A, kern);
         avx2d!(out2, A, kern);
@@ -241,6 +244,12 @@ T = Float64
 
         fill!(out4, NaN); @test avxgeneric2!(out4, A, kern) ≈ out1
         fill!(out4, NaN); @test avxgeneric2!(out4, A, skern) ≈ out1
+        fill!(out4, NaN); @test avxgeneric2!(out4, At', kern) ≈ out1
+        fill!(out4, NaN); @test avxgeneric2!(out4, At', skern) ≈ out1
+        fill!(out4, NaN); @test avxgeneric2!(out4', A, kern) ≈ out1
+        fill!(out4, NaN); @test avxgeneric2!(out4', A, skern) ≈ out1
+        fill!(out4, NaN); @test avxgeneric2!(out4', At', kern) ≈ out1
+        fill!(out4, NaN); @test avxgeneric2!(out4', At', skern) ≈ out1
     end
 
 

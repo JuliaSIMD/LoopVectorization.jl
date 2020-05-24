@@ -5,23 +5,22 @@ if (Base.libllvm_version ≥ v"7" && VectorizationBase.AVX512F) || Base.libllvm_
         N = length(y)
         Nrep = N >>> Wshift
         Nrem = N & (W - 1)
-        i = 0
         j = 0
         GC.@preserve x y begin
             ptr_x = pointer(x)
             ptr_y = pointer(y)
             for _ ∈ 1:Nrep
-                vy = vload(Vec{W,T}, ptr_y, i)
+                vy = vload(Vec{W,T}, ptr_y)
                 mask = f(SVec(vy))
                 SIMDPirates.compressstore!(gep(ptr_x, j), vy, mask)
-                i += W
-                j += count_ones(mask)
+                ptr_y = gepbyte(ptr_y, VectorizationBase.REGISTER_SIZE)
+                j = vadd(j, count_ones(mask))
             end
             rem_mask = VectorizationBase.mask(T, Nrem)
-            vy = vload(Vec{W,T}, gep(ptr_y, i), rem_mask)
+            vy = vload(Vec{W,T}, ptr_y, rem_mask)
             mask = rem_mask & f(SVec(vy))
             SIMDPirates.compressstore!(gep(ptr_x, j), vy, mask)
-            j += count_ones(mask)
+            j = vadd(j, count_ones(mask))
             Base._deleteend!(x, N-j) # resize!(x, j)
         end
         x

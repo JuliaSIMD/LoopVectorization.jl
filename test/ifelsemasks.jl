@@ -48,7 +48,7 @@ T = Float32
         t
     end
     function Bernoulli_logitavx(y::BitVector, α::AbstractVector{T}) where {T}
-        t = zero(promote_type(Float64,T))
+        t = zero(T === Int32 ? Float32 : Float64)
         @avx for i ∈ eachindex(α)
             invOmP = 1 + exp(α[i])
             nlogOmP = log(invOmP)
@@ -58,7 +58,7 @@ T = Float32
         t
     end
     function Bernoulli_logit_avx(y::BitVector, α::AbstractVector{T}) where {T}
-        t = zero(promote_type(Float32,T))
+        t = zero(T === Int32 ? Float32 : Float64)
         @_avx for i ∈ eachindex(α)
             invOmP = 1 + exp(α[i])
             nlogOmP = log(invOmP)
@@ -396,8 +396,8 @@ T = Float32
     a = rand(-10:10, 43);
     bit = a .> 0.5;
     t = Bernoulli_logit(bit, a);
-    @test t ≈ Bernoulli_logitavx(bit, a)
-    @test t ≈ Bernoulli_logit_avx(bit, a)
+    @test isapprox(t, Bernoulli_logitavx(bit, a), atol = Int === Int32 ? 0.1 : 0)
+    @test isapprox(t, Bernoulli_logit_avx(bit, a), atol = Int === Int32 ? 0.1 : 0)
     a = rand(43);
     bit = a .> 0.5;
     t = Bernoulli_logit(bit, a);

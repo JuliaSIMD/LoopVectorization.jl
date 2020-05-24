@@ -78,6 +78,20 @@
         end
         ld
     end
+    function testrepindshigherdim_avx(L)
+        ld = zero(eltype(L))
+        @_avx for i ∈ axes(L,1), j ∈ axes(L,2)
+            ld += log(L[i,j,i])
+        end
+        ld
+    end
+    function testrepindshigherdimavx(L)
+        ld = zero(eltype(L))
+        @avx for i ∈ axes(L,1), j ∈ axes(L,2)
+            ld += log(L[i,j,i])
+        end
+        ld
+    end
     ldq = :(for i ∈ 1:size(L,1)
             ld += log(L[i,i])
             end)
@@ -117,7 +131,6 @@
             r[i] = tmp
             s += tmp
         end
-
         invs = inv(s)
         r .*= invs
 
@@ -271,6 +284,25 @@
         end
         y
     end    
+
+    function transposedvectoraccess(x::AbstractVector{T}) where T
+        N = length(x)
+        ent = zeros(T, N)
+        x isa AbstractVector && (x = x')
+        for i = 1:N, j = 1:size(x,1)
+            ent[i] += x[j,i]*log(x[j,i])
+        end
+        ent
+    end
+    function transposedvectoraccessavx(x::AbstractVector{T}) where T
+        N = length(x)
+        ent = zeros(T, N)
+        x isa AbstractVector && (x = x')
+        @avx for i = 1:N, j = 1:size(x,1)
+            ent[i] += x[j,i]*log(x[j,i])
+        end
+        ent
+    end
     
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
@@ -292,6 +324,10 @@
         ld = logdet(UpperTriangular(A))
         @test ld ≈ trianglelogdetavx(A)
         @test ld ≈ trianglelogdet_avx(A)
+        Adim3 = rand(T, 37, 13, 37);
+        ld = sum(i -> logdet(UpperTriangular(@view(Adim3[:,i,:]))), axes(Adim3,2))
+        @test ld ≈ testrepindshigherdimavx(Adim3)
+        @test ld ≈ testrepindshigherdim_avx(Adim3)
 
         x = rand(T, 999);
         r1 = similar(x);
@@ -338,5 +374,8 @@
         X = rand(T, N, M); Z = rand(T, N, M);
         Y1 = similar(X); Y2 = similar(Y1);
         @test csetanh!(Y1, X, Z) ≈ csetanhavx!(Y2, X, Z)
+
+        x = rand(T, 97);
+        @test transposedvectoraccessavx(x) ≈ transposedvectoraccess(x)
     end
 end

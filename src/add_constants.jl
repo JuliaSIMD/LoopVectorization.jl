@@ -36,7 +36,7 @@ function add_constant!(ls::LoopSet, mpref::ArrayReferenceMetaPosition, elementby
     temp = gensym(:intermediateconstref)
     vloadcall = Expr(:call, lv(:vload), mpref.mref.ptr)
     if length(getindices(op)) > 0
-        push!(vloadcall.args, mem_offset(op, UnrollArgs(0, Symbol(""), Symbol(""), Symbol(""), nothing), false, false))
+        push!(vloadcall.args, mem_offset(op, UnrollArgs(0, Symbol(""), Symbol(""), Symbol(""), 0, nothing), Bool[]))
     end
     pushpreamble!(ls, Expr(:(=), temp, vloadcall))
     pushpreamble!(ls, op, temp)

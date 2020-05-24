@@ -31,7 +31,7 @@ function isnopidentity(ls::LoopSet, op::Operation, u₁loop::Symbol, u₂loop::S
         if (u₁unrolledsym == first(parents_u₁syms)) && ((!isnothing(suffix)) == parents_u₂syms[1])
             #TODO: identifer(first(parents_op)) ∉ ls.outer_reductions is going to miss a lot of cases
             #Should probably replace that with `DVec` (demoting Vec) types, that demote to scalar.
-            if (vectorized ∈ loopdependencies(first(parents_op)) && vectorized ∉ loopdependencies(op)) && !dependent_outer_reducts(ls, op)
+            if (isvectorized(first(parents_op)) && !isvectorized(op)) && !dependent_outer_reducts(ls, op)
                 op.instruction = reduction_to_scalar(instruction(first(parents_op)))
                 op.mangledvariable = gensym(op.mangledvariable)
                 false
@@ -70,8 +70,8 @@ function addoptoorder!(
     end
     included_vars[id] && return nothing
     included_vars[id] = true
-    isunrolled = (u₁loop ∈ loopdependencies(op)) + 1
-    istiled = u₂loop ∈ loopdependencies(op)
+    isunrolled = (isu₁unrolled(op)) + 1
+    istiled = isu₂unrolled(op)
     # optype = Int(op.node_type) + 1
     after_loop = place_after_loop[id] + 1
     if !isloopvalue(op)

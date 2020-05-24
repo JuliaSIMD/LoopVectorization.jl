@@ -39,6 +39,7 @@ function Base.isequal(x::ArrayReference, y::ArrayReference)
     end
     true
 end
+
 """
     ArrayReferenceMeta
 
@@ -69,6 +70,12 @@ end
     # hash(x.array, h)
 # end
 loopdependencies(ref::ArrayReferenceMeta) = ref.ref.indices
+"""
+This definition is used to find the matching arrays for the LoopStartStopManager.
+It checks the underly ArrayReferences, but also the vptr names. This is because different
+slices of the same array will have the same ArrayReference, but different vptr names.
+"""
+sameref(x::ArrayReferenceMeta, y::ArrayReferenceMeta) = (vptr(x) === vptr(y)) && sameref(x.ref, y.ref)
 Base.convert(::Type{ArrayReference}, ref::ArrayReferenceMeta) = ref.ref
 Base.:(==)(x::ArrayReference, y::ArrayReference) = isequal(x, y)
 Base.:(==)(x::ArrayReferenceMeta, y::ArrayReferenceMeta) = (x.ptr === y.ptr) && isequal(x.ref, y.ref)
@@ -163,7 +170,12 @@ mutable struct Operation <: AbstractLoopOperation
     """Loop variables that *consumers* of this operation depend on.
     Often used in reductions to replicate assignment of initializers when unrolling."""
     reduced_children::Vector{Symbol}
-
+    "Cached value for whether u₁loopsym ∈ loopdependencies(op)"
+    u₁unrolled::Bool
+    "Cached value for whether u₂loopsym ∈ loopdependencies(op)"
+    u₂unrolled::Bool
+    "Cached value for whether vectorized ∈ loopdependencies(op)"
+    vectorized::Bool
     function Operation(
         identifier::Int,
         variable,
@@ -185,6 +197,16 @@ mutable struct Operation <: AbstractLoopOperation
             reduced_children
         )
     end
+end
+
+isu₁unrolled(op::Operation) = op.u₁unrolled
+isu₂unrolled(op::Operation) = op.u₂unrolled
+isvectorized(op::Operation) = op.vectorized
+function setunrolled!(op::Operation, u₁loopsym, u₂loopsym, vectorized)
+    op.u₁unrolled = u₁loopsym ∈ loopdependencies(op)
+    op.u₂unrolled = u₂loopsym ∈ loopdependencies(op)
+    op.vectorized = vectorized ∈ loopdependencies(op)
+    nothing
 end
 
 function matches(op1::Operation, op2::Operation)
@@ -253,12 +275,12 @@ vptr(x::Symbol) = Symbol("##vptr##_", x)
 vptr(x::ArrayReference) = vptr(x.array)
 vptr(x::ArrayReferenceMeta) = x.ptr
 vptr(x::Operation) = x.ref.ptr
+vptrbase(x) = Symbol(vptr(x), "##BASE##")
 name(x::ArrayReference) = x.array
 name(x::ArrayReferenceMeta) = x.ref.array
 name(op::Operation) = op.variable
 instruction(op::Operation) = op.instruction
 isreductionzero(op::Operation, instr::Symbol) = op.instruction.mod === REDUCTION_ZERO[instr]
-refname(op::Operation) = op.ref.ptr
 isreductcombineinstr(op::Operation) = iscompute(op) && isreductcombineinstr(instruction(op))
 """
     mvar = mangledvar(op)
@@ -318,16 +340,21 @@ varname(mpref::ArrayReferenceMetaPosition) = mpref.varname
 name(mpref::ArrayReferenceMetaPosition) = name(mpref.mref.ref)
 loopdependencies(ref::ArrayReferenceMetaPosition) = ref.loopdependencies
 reduceddependencies(ref::ArrayReferenceMetaPosition) = ref.reduceddeps
-getindices(ref::ArrayReference) = ref.indices
-getindices(mref::ArrayReferenceMeta) = mref.ref.indices
-getindices(mpref::ArrayReferenceMetaPosition) = mpref.ref.ref.indices
-getindices(op::Operation) = op.ref.ref.indices
-getoffsets(op::Operation) = op.ref.ref.offsets
+arrayref(ref::ArrayReference) = ref
+arrayref(ref::ArrayReferenceMeta) = ref.ref
+arrayref(ref::ArrayReferenceMetaPosition) = ref.ref.ref
+arrayref(op::Operation) = op.ref.ref
+getindices(ref) = arrayref(ref).indices
+getoffsets(ref) = arrayref(ref).offsets
+const DISCONTIGUOUS = Symbol("##DISCONTIGUOUSSUBARRAY##")
+function makediscontiguous!(inds)
+    first(inds) === DISCONTIGUOUS || pushfirst!(inds, DISCONTIGUOUS)
+end
+isdiscontiguous(ref) = first(getindices(ref)) === DISCONTIGUOUS
 
 function getindicesonly(ref)
     indices = getindices(ref)
-    start = (first(indices) === Symbol("##DISCONTIGUOUSSUBARRAY##")) + 1
-    @view(indices[start:end])
+    @view(indices[isdiscontiguous(ref) + 1:end])
 end
 # function hasintersection(s1::Set{T}, s2::Set{T}) where {T}
     # for x ∈ s1

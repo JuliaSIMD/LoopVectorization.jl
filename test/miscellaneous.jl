@@ -5,7 +5,7 @@ using Test
 @testset "Miscellaneous" begin
 
     # Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 4)
-    Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 6)
+    Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (2, 6) : (2, 10)
     dot3q = :(for m ∈ 1:M, n ∈ 1:N
               s += x[m] * A[m,n] * y[n]
               end);
@@ -43,14 +43,14 @@ using Test
         end
         s
     end
-    # q = :( for n ∈ 1:N
-    #         t = zero(s)
-    #         for m ∈ 1:M
-    #             t += x[m] * A[m,n]
-    #         end
-    #         s += t * y[n]
-    #        end);
-    # ls = LoopVectorization.LoopSet(q);
+    q = :( for n ∈ 1:N
+            t = zero(s)
+            for m ∈ 1:M
+                t += x[m] * A[m,n]
+            end
+            s += t * y[n]
+           end);
+    ls = LoopVectorization.LoopSet(q);
     
     function dot3avx24(x, A, y)
         M, N = size(A)
@@ -147,10 +147,10 @@ using Test
     # LoopVectorization.choose_order(lsvar)
     # @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, Symbol("##undefined##"), :j, 4, -1)
     if LoopVectorization.VectorizationBase.REGISTER_COUNT == 32
-        @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, 4, 6)
+        @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, 2, 10)
     else
         # @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :i, :j, :j, 4, 4)
-        @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, 2, 4)
+        @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, 2, 6)
     end
     
     function myvar!(s², A, x̄)
@@ -626,7 +626,6 @@ using Test
         c_re
     end
 
-
     function MatCalcWtDW!(m)
         l, n = size(m.Wt)
         fill!(m.Wt_D_W, 0)
@@ -639,7 +638,6 @@ using Test
         end
     end
 
- 
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
         A = randn(T, 199, 498);
@@ -829,8 +827,8 @@ using Test
             Wt_D_W = Matrix{T}(undef, 181, 181),
             Wt = rand(T, 181, 191),
             d = rand(T, 191)
-        )
-        Wt_D_W = similar(mh.Wt_D_W)
+        );
+        Wt_D_W = similar(mh.Wt_D_W);
 
         MatCalcWtDW!(mh)
         @test mh.Wt_D_W ≈ mh.Wt * Diagonal(mh.d) * mh.Wt'
@@ -849,52 +847,52 @@ using Test
         @test out1 == out2
     end
 
+function smoothdim!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
+    ifirst, ilast = first(irng), last(irng)
+    ifirst > ilast && return s
+    # @inbounds @fastmath for Ipost in Rpost
+    for Ipost in Rpost
+        # Initialize the first value along the filtered dimension
+        for Ipre in Rpre
+            s[Ipre, ifirst, Ipost] = x[Ipre, ifirst, Ipost]
+        end
+        # Handle all other entries
+        for i = ifirst+1:ilast
+            for Ipre in Rpre
+                s[Ipre, i, Ipost] = α*x[Ipre, i, Ipost] + (1-α)*x[Ipre, i-1, Ipost]
+            end
+        end
+    end
+    s
+end
+function smoothdim_avx!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
+    ifirst, ilast = first(irng), last(irng)
+    ifirst > ilast && return s
+    @avx for Ipost in Rpost
+        for Ipre in Rpre
+            s[Ipre, ifirst, Ipost] = x[Ipre, ifirst, Ipost]
+            for i = ifirst+1:ilast
+                s[Ipre, i, Ipost] = α*x[Ipre, i, Ipost] + (1-α)*x[Ipre, i-1, Ipost]
+            end
+        end
+    end
+    s
+end
+function smoothdim_ifelse_avx!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
+    ifirst, ilast = first(irng), last(irng)
+    ifirst > ilast && return s
+    @avx for Ipost in Rpost, i = ifirst:ilast, Ipre in Rpre
+        xi = x[Ipre, i, Ipost]
+        xim = i > ifirst ? x[Ipre, i-1, Ipost] : xi
+        s[Ipre, i, Ipost] = α*xi + (1-α)*xim
+    end
+    s
+end
     for T ∈ (Float32, Float64)
         @testset "Mixed CartesianIndex/Int indexing" begin
             @show T, @__LINE__
             # A demo similar to the exponential filtering demo from https://julialang.org/blog/2016/02/iteration/,
             # but with no loop-carried dependency.
-            function smoothdim!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
-                ifirst, ilast = first(irng), last(irng)
-                ifirst > ilast && return s
-                # @inbounds @fastmath for Ipost in Rpost
-                for Ipost in Rpost
-                    # Initialize the first value along the filtered dimension
-                    for Ipre in Rpre
-                        s[Ipre, ifirst, Ipost] = x[Ipre, ifirst, Ipost]
-                    end
-                    # Handle all other entries
-                    for i = ifirst+1:ilast
-                        for Ipre in Rpre
-                            s[Ipre, i, Ipost] = α*x[Ipre, i, Ipost] + (1-α)*x[Ipre, i-1, Ipost]
-                        end
-                    end
-                end
-                s
-            end
-            function smoothdim_avx!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
-                ifirst, ilast = first(irng), last(irng)
-                ifirst > ilast && return s
-                @avx for Ipost in Rpost
-                    for Ipre in Rpre
-                        s[Ipre, ifirst, Ipost] = x[Ipre, ifirst, Ipost]
-                        for i = ifirst+1:ilast
-                            s[Ipre, i, Ipost] = α*x[Ipre, i, Ipost] + (1-α)*x[Ipre, i-1, Ipost]
-                        end
-                    end
-                end
-                s
-            end
-            function smoothdim_ifelse_avx!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
-                ifirst, ilast = first(irng), last(irng)
-                ifirst > ilast && return s
-                @avx for Ipost in Rpost, i = ifirst:ilast, Ipre in Rpre
-                    xi = x[Ipre, i, Ipost]
-                    xim = i > ifirst ? x[Ipre, i-1, Ipost] : xi
-                    s[Ipre, i, Ipost] = α*xi + (1-α)*xim
-                end
-                s
-            end
 
             # s = dest1; 
             # ifirst, ilast = first(axes(x, d)), last(axes(x, d))

@@ -24,7 +24,7 @@
                 @test vmapreduce(hypot, +, x, y) ≈ sum(hypot.(x, y))
                 @test vmapreduce(^, (a,b) -> a + b, x7, y7) ≈ sum(x7 .^ y7)
             end
-        end
+        end;
         @test vreduce(+, x7) ≈ sum(x7)
         @test vreduce(+, x) ≈ sum(x)
         @test_throws AssertionError vmapreduce(hypot, +, x7, x)

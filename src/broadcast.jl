@@ -118,7 +118,7 @@ end
 Base.@propagate_inbounds Base.getindex(A::LowDimArray, i...) = getindex(A.data, i...)
 Base.size(A::LowDimArray) = Base.size(A.data)
 @generated function VectorizationBase.stridedpointer(A::LowDimArray{D,T,N}) where {D,T,N}
-    s = Expr(:tuple, [Expr(:ref, :strideA, n) for n ∈ 1+D[1]:N if D[n]]...)
+    s = Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:VectorizationBase)), QuoteNode(:staticmul)), T, Expr(:tuple, [Expr(:ref, :strideA, n) for n ∈ 1+D[1]:N if D[n]]...))
     f = D[1] ? :PackedStridedPointer : :SparseStridedPointer
     Expr(:block, Expr(:meta,:inline), Expr(:(=), :strideA, Expr(:call, :strides, Expr(:(.), :A, QuoteNode(:data)))),
          Expr(:call, Expr(:(.), :VectorizationBase, QuoteNode(f)), Expr(:call, :pointer, Expr(:(.), :A, QuoteNode(:data))), s))

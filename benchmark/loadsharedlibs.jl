@@ -35,11 +35,13 @@ end
 eigenfile = joinpath(LOOPVECBENCHDIR, "looptestseigen.cpp")
 if !isfile(LIBEIGENTEST) || mtime(eigenfile) > mtime(LIBEIGENTEST)
     # Clang seems to have trouble finding includes
-    run(`g++ -O3 -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBEIGENTEST`)
-    # run(`clang++ -Ofast -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -I/usr/include/c++/9 -I/usr/include/c++/9/x86_64-generic-linux -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBEIGENTEST`)
+    run(`g++ -O3 -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -DEIGEN_VECTORIZE_AVX512 -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBEIGENTEST`)
+    
 end
 if !isfile(LIBIEIGENTEST) || mtime(eigenfile) > mtime(LIBIEIGENTEST)
-    run(`icpc -fast -qopt-zmm-usage=high -fargument-noalias-global -qoverride-limits -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBIEIGENTEST`)
+    # run(`/usr/bin/clang++ -Ofast -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -DEIGEN_VECTORIZE_AVX512 -I/usr/include/c++/9 -I/usr/include/c++/9/x86_64-generic-linux -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBEIGENTEST`)
+    run(`/usr/bin/clang++ -Ofast -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -DEIGEN_VECTORIZE_AVX512 -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBEIGENTEST`)
+    # run(`icpc -fast -qopt-zmm-usage=high -fargument-noalias-global -qoverride-limits -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBIEIGENTEST`)
 end
 
 MKL_ROOT = "/home/chriselrod/intel"
@@ -382,16 +384,16 @@ end
             B, A, Ref(N)
         )
     end
-for (p,s) ∈ [(:c,Cshared) (:e,Eshared)]
-    @eval function $(Symbol(prefix,p,:AplusAt!))(B, A)
-        N = size(B,1)
-        ccall(
-            (:AplusAt, $s), Cvoid,
-            (Ptr{Float64}, Ptr{Float64}, Clong),
-            B, A, N
-        )
+    for (p,s) ∈ [(:c,Cshared) (:e,Eshared)]
+        @eval function $(Symbol(prefix,p,:AplusAt!))(B, A)
+            N = size(B,1)
+            ccall(
+                (:AplusAt, $s), Cvoid,
+                (Ptr{Float64}, Ptr{Float64}, Clong),
+                B, A, N
+            )
+        end
     end
-end
     @eval function $(Symbol(prefix,:crandomaccess))(P, basis, coefs)
         A, C = size(P)
         ccall(
@@ -408,14 +410,16 @@ end
             P, basis, coefs, Ref(A), Ref(C)
         )
     end
-    @eval function $(Symbol(prefix,:clogdettriangle))(T::Union{LowerTriangular,UpperTriangular})
-        N = size(T,1)
-        Tp = parent(T)
-        ccall(
-            (:logdettriangle, $Cshared), Float64,
-            (Ptr{Float64}, Clong),
-            Tp, N
-        )
+    for (p,s) ∈ [(:c,Cshared) (:e,Eshared)]
+        @eval function $(Symbol(prefix,p,:logdettriangle))(T::Union{LowerTriangular,UpperTriangular})
+            N = size(T,1)
+            Tp = parent(T)
+            ccall(
+                (:logdettriangle, $s), Float64,
+                (Ptr{Float64}, Clong),
+                Tp, N
+            )
+        end
     end
     @eval function $(Symbol(prefix,:flogdettriangle))(T::Union{LowerTriangular,UpperTriangular})
         N = size(T,1)

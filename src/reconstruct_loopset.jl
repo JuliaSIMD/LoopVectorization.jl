@@ -125,17 +125,17 @@ function pushvarg′!(ls::LoopSet, ar::ArrayReferenceMeta, i, name)
     pushpreamble!(ls, Expr(:(=), name, Expr(:call, lv(:transpose), extract_varg(i))))
 end
 function add_mref!(
-    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name = vptr(ar)
+    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name
 ) where {T, N, S <: AbstractColumnMajorStridedPointer{T,N}}
     pushvarg!(ls, ar, i, name)
 end
 function add_mref!(
-    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name = vptr(ar)
+    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name
 ) where {T, N, S <: AbstractRowMajorStridedPointer{T, N}}
     pushvarg′!(ls, ar, i, name)
 end
 function add_mref!(
-    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name = vptr(ar)
+    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name
 ) where {S1, S2, T, P, S <: VectorizationBase.PermutedDimsStridedPointer{S1,S2,T,P}}
     gensymname = gensym(name)
     add_mref!(ls, ar, i, P, gensymname)
@@ -152,33 +152,32 @@ function add_mref!(
     end
 end
 function add_mref!(
-    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{OffsetStridedPointer{T,N,P}}, name = vptr(ar)
+    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{OffsetStridedPointer{T,N,P}}, name
 ) where {T,N,P}
     add_mref!(ls, ar, i, P, name)
 end
-
 function add_mref!(
-    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name = vptr(ar)
+    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name
 ) where {T, X <: Tuple, S <: AbstractStaticStridedPointer{T,X}}
     if last(X.parameters)::Int == 1
         pushvarg′!(ls, ar, i, name)
     else
         pushvarg!(ls, ar, i, name)
-        first(X.parameters)::Int == 1 || pushfirst!(getindices(ar), Symbol("##DISCONTIGUOUSSUBARRAY##"))
+        first(X.parameters)::Int == 1 || makediscontiguous!(getindices(ar))
     end
 end
 function add_mref!(
-    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name = vptr(ar)
+    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name
 ) where {T, N, S <: AbstractSparseStridedPointer{T, N}}
     pushvarg!(ls, ar, i, name)
-    pushfirst!(getindices(ar), Symbol("##DISCONTIGUOUSSUBARRAY##"))
+    makediscontiguous!(getindices(ar))
 end
 function add_mref!(
-    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{VectorizationBase.MappedStridedPointer{F,T,P}}, name = vptr(ar)
+    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{VectorizationBase.MappedStridedPointer{F,T,P}}, name
 ) where {F,T,P}
     add_mref!(ls, ar, i, P, name)
 end
-function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{<:AbstractRange{T}}, name = vptr(ar)) where {T}
+function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{<:AbstractRange{T}}, name) where {T}
     pushvarg!(ls, ar, i, name)
 end
 function create_mrefs!(
@@ -188,7 +187,7 @@ function create_mrefs!(
     mrefs = Vector{ArrayReferenceMeta}(undef, length(arf))
     for i ∈ eachindex(arf)
         ar = ArrayReferenceMeta(ls, arf[i], as, os, nopsv, expanded)
-        add_mref!(ls, ar, i, vargs[i])
+        add_mref!(ls, ar, i, vargs[i], vptr(ar))
         mrefs[i] = ar
     end
     mrefs
@@ -419,10 +418,6 @@ function avx_loopset(instr, ops, arf, AM, LPSYM, LB, @nospecialize(vargs))
     expandedv = [isexpanded(ls, ops, nopsv, i) for i ∈ eachindex(ops)]
     mrefs = create_mrefs!(ls, arf, arraysymbolinds, opsymbols, nopsv, expandedv, vargs)
     append!(ls.includedactualarrays, (vptr(mref) for mref ∈ mrefs))
-    # eltypes = [Expr(:call, :eltype, vptr(mref)) for mref ∈ mrefs]
-    # pushpreamble!(ls, Expr(:(=), ls.T, Expr(:call, :promote_type, eltypes...)))
-    # pushpreamble!(ls, Expr(:(=), ls.W, determine_width))
-                           # Expr(:call, lv(:pick_vector_width_val), [Expr(:call, :eltype, vptr(mref)) for mref ∈ mrefs]...)))
     num_params = num_arrays + num_parameters(AM)
     add_ops!(ls, instr, ops, mrefs, opsymbols, num_params, nopsv, expandedv, elementbytes)
     process_metadata!(ls, AM, length(arf))
@@ -438,7 +433,7 @@ function avx_body(ls, UNROLL)
     q
 end
 
-function _avx_loopset_debug(::Type{OPS}, ::Type{ARF}, ::Type{AM}, ::Type{LPSYM}, ::Type{LB}, vargs...) where {UNROLL, OPS, ARF, AM, LPSYM, LB}
+function _avx_loopset_debug(::Type{OPS}, ::Type{ARF}, ::Type{AM}, ::Type{LPSYM}, ::Type{LB}, vargs...) where {OPS, ARF, AM, LPSYM, LB}
     @show OPS ARF AM LPSYM LB vargs
     _avx_loopset(OPS.parameters, ARF.parameters, AM.parameters, LPSYM.parameters, LB.parameters, typeof.(vargs))
 end

@@ -2,12 +2,12 @@ module LoopVectorization
 
 using VectorizationBase, SIMDPirates, SLEEFPirates, UnPack, OffsetArrays
 using VectorizationBase: REGISTER_SIZE, REGISTER_COUNT, extract_data, num_vector_load_expr,
-    mask, masktable, pick_vector_width_val, valmul, valrem, valmuladd, valadd, valsub, _MM,
-    maybestaticlength, maybestaticsize, staticm1, staticp1, subsetview, vzero, stridedpointer_for_broadcast,
-    Static, StaticUnitRange, StaticLowerUnitRange, StaticUpperUnitRange, unwrap, maybestaticrange,
+    mask, masktable, pick_vector_width_val, valmul, valrem, valmuladd, valmulsub, valadd, valsub, _MM,
+    maybestaticlength, maybestaticsize, staticm1, staticp1, staticmul, subsetview, vzero, stridedpointer_for_broadcast,
+    Static, Zero, StaticUnitRange, StaticLowerUnitRange, StaticUpperUnitRange, unwrap, maybestaticrange,
     AbstractColumnMajorStridedPointer, AbstractRowMajorStridedPointer, AbstractSparseStridedPointer, AbstractStaticStridedPointer,
     PackedStridedPointer, SparseStridedPointer, RowMajorStridedPointer, StaticStridedPointer, StaticStridedStruct,
-    maybestaticfirst, maybestaticlast, scalar_less, scalar_greater, noalias!, gesp
+    maybestaticfirst, maybestaticlast, scalar_less, scalar_greater, noalias!, gesp, gepbyte, pointerforcomparison, NativeTypes
 using SIMDPirates: VECTOR_SYMBOLS, evadd, evsub, evmul, evfdiv, vrange, 
     reduced_add, reduced_prod, reduce_to_add, reduced_max, reduced_min, vsum, vprod, vmaximum, vminimum,
     sizeequivalentfloat, sizeequivalentint, vadd!, vsub!, vmul!, vfdiv!, vfmadd!, vfnmadd!, vfmsub!, vfnmsub!,
@@ -22,9 +22,7 @@ import LinearAlgebra # for check_args
 
 using Base.FastMath: add_fast, sub_fast, mul_fast, div_fast
 
-const NativeTypes = Union{Bool, Base.HWReal}
-
-export LowDimArray, stridedpointer, vectorizable,
+export LowDimArray, stridedpointer,
     @avx, @_avx, *ˡ, _avx_!,
     vmap, vmap!, vmapnt, vmapnt!, vmapntt, vmapntt!,
     vfilter, vfilter!, vmapreduce, vreduce
@@ -47,8 +45,10 @@ include("add_compute.jl")
 include("add_constants.jl")
 include("add_ifelse.jl")
 include("determinestrategy.jl")
+include("loopstartstopmanager.jl")
 include("lower_compute.jl")
 include("lower_constant.jl")
+# include("zero.jl")
 include("lower_memory_common.jl")
 include("lower_load.jl")
 include("lower_store.jl")

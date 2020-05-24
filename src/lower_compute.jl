@@ -71,12 +71,12 @@ end
 function add_loopvalue!(instrcall::Expr, loopval::Symbol, vectorized::Symbol, u::Int)
     if loopval === vectorized
         if isone(u)
-            push!(instrcall.args, Expr(:call, lv(:valadd), VECTORWIDTHSYMBOL, _MMind(loopval)))
+            push!(instrcall.args, Expr(:call, lv(:valadd), VECTORWIDTHSYMBOL, _MMind(Expr(:call, lv(:staticp1), loopval))))
         else
-            push!(instrcall.args, Expr(:call, lv(:valmuladd), VECTORWIDTHSYMBOL, u, _MMind(loopval)))
+            push!(instrcall.args, Expr(:call, lv(:valmuladd), VECTORWIDTHSYMBOL, u, _MMind(Expr(:call, lv(:staticp1), loopval))))
         end
     else
-        push!(instrcall.args, Expr(:call, :+, loopval, u))
+        push!(instrcall.args, Expr(:call, lv(:vadd), loopval, u + 1))
     end
 end
 function add_loopvalue!(instrcall::Expr, loopval, ua::UnrollArgs, u::Int)
@@ -86,15 +86,14 @@ function add_loopvalue!(instrcall::Expr, loopval, ua::UnrollArgs, u::Int)
     elseif !isnothing(suffix) && suffix > 0 && loopval === u₂loopsym
         add_loopvalue!(instrcall, loopval, vectorized, suffix)
     elseif loopval === vectorized
-        push!(instrcall.args, _MMind(loopval))
+        push!(instrcall.args, _MMind(Expr(:call, lv(:staticp1), loopval)))
     else
-        push!(instrcall.args, loopval)
+        push!(instrcall.args, Expr(:call, lv(:staticp1), loopval))
     end
 end
 
 function lower_compute!(
     q::Expr, op::Operation, ua::UnrollArgs, mask::Union{Nothing,Symbol,Unsigned} = nothing,
-    opunrolled = ua.u₁loopsym ∈ loopdependencies(op)
 )
     @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = ua
     var = name(op)
@@ -159,7 +158,7 @@ function lower_compute!(
         # diffdeps = !any(opp -> isload(opp) && all(in(loopdependencies(opp)), loopdependencies(op)), parents(op)) # want to instcombine when parent load's deps are superset
         # @show suffix, !isnothing(suffix), isreduct, diffdeps
     # end
-    if !isnothing(suffix) && isreduct
+    if !isnothing(suffix) && isreduct# && (iszero(suffix) || (ls.unrollspecification[].u₂ - 1 == suffix))
         # instrfid = findfirst(isequal(instr.instr), (:vfmadd, :vfnmadd, :vfmsub, :vfnmsub))
         instrfid = findfirst(isequal(instr.instr), (:vfmadd_fast, :vfnmadd_fast, :vfmsub_fast, :vfnmsub_fast))
         # want to instcombine when parent load's deps are superset
@@ -190,8 +189,8 @@ function lower_compute!(
     for u ∈ 0:Uiter
         instrcall = Expr(instr) # Expr(:call, instr)
         varsym = if tiledouterreduction > 0 # then suffix !== nothing
-            # modsuffix = ((u + suffix*u₁) & 3)
-            modsuffix = u
+            modsuffix = ((u + suffix*(Uiter + 1)) & 3)
+            # modsuffix = u
             # modsuffix = suffix # (suffix & 3)
             Symbol(mangledvar(op), modsuffix)
         elseif u₁unrolledsym

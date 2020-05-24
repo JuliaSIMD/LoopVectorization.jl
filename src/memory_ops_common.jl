@@ -33,7 +33,7 @@ end
 add_vptr!(ls::LoopSet, op::Operation) = add_vptr!(ls, op.ref)
 add_vptr!(ls::LoopSet, mref::ArrayReferenceMeta) = add_vptr!(ls, mref.ref.array, vptr(mref))
 using VectorizationBase: noaliasstridedpointer
-function add_vptr!(ls::LoopSet, array::Symbol, vptrarray::Symbol = vptr(array), actualarray::Bool = true, broadcast::Bool = false)
+function add_vptr!(ls::LoopSet, array::Symbol, vptrarray::Symbol, actualarray::Bool = true, broadcast::Bool = false)
     if !includesarray(ls, array)
         push!(ls.includedarrays, array)
         actualarray && push!(ls.includedactualarrays, array)
@@ -62,7 +62,6 @@ function append_loop_valdims!(valcall::Expr, loop::Loop)
     end
     nothing
 end
-const DISCONTIGUOUS = Symbol("##DISCONTIGUOUSSUBARRAY##")
 function subset_vptr!(ls::LoopSet, vptr::Symbol, indnum::Int, ind, previndices, loopindex)
     subsetvptr = Symbol(vptr, "_subset_$(indnum)_with_$(ind)##")
     valcall = Expr(:call, Expr(:curly, :Val, 1))
@@ -123,6 +122,25 @@ function checkforoffset!(
     end        
 end
 
+function move_to_last!(x, i)
+    i == length(x) && return
+    xᵢ = x[i]
+    deleteat!(x, i)
+    push!(x, xᵢ)
+    nothing
+end
+# TODO: Make this work with Cartesian Indices
+function repeated_index!(ls::LoopSet, indices::Vector{Symbol}, vptr::Symbol, indnum::Int, firstind::Int)
+    # Move ind to last position
+    vptrrepremoved = Symbol(vptr, "##ind##", firstind, "##repeated##", indnum, "##")
+    f = Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:VectorizationBase)), QuoteNode(:double_index))
+    fiv = Expr(:call, Expr(:curly, :Val, firstind - 1))
+    siv = Expr(:call, Expr(:curly, :Val, indnum - 1))
+    pushpreamble!(ls, Expr(:(=), vptrrepremoved, Expr(:call, f, vptr, fiv, siv)))
+    vptrrepremoved
+end
+
+
 function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementbytes::Int, var::Union{Nothing,Symbol} = nothing)
     vptrarray = vptr(array)
     add_vptr!(ls, array, vptrarray) # now, subset
@@ -150,10 +168,20 @@ function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementby
             ninds += 1
         elseif ind isa Symbol
             if ind ∈ loopset
-                push!(indices, ind); ninds += 1
-                push!(offsets, zero(Int8))
-                push!(loopedindex, true)
-                push!(loopdependencies, ind)
+                ind_prev_index = findfirst(isequal(ind), indices)
+                if isnothing(ind_prev_index)
+                    push!(indices, ind); ninds += 1
+                    push!(offsets, zero(Int8))
+                    push!(loopedindex, true)
+                    push!(loopdependencies, ind)
+                else
+                    move_to_last!(indices, ind_prev_index)
+                    move_to_last!(offsets, ind_prev_index)
+                    move_to_last!(loopedindex, ind_prev_index)
+                    move_to_last!(loopdependencies, ind_prev_index)
+                    vptrarray = repeated_index!(ls, indices, vptrarray, ninds, ind_prev_index + (first(indices) === DISCONTIGUOUS))
+                    makediscontiguous!(indices)
+                end
             else
                 indop = get(ls.opdict, ind, nothing)
                 if indop !== nothing  && !isconstant(indop)
