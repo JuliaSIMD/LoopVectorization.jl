@@ -346,9 +346,6 @@
         fill!(r2, NaN); calc_sins_avx!(r2)
         @test r1 ≈ r2
 
-        x = rand(T, 97);
-        @test transposedvectoraccessavx(x) ≈ transposedvectoraccess(x)
-        
         N,M = 47,53
         B = reshape(cumsum(ones(T, 3N)),N,:)
         A1 = zeros(T, N, M)
@@ -379,6 +376,7 @@
         Y1 = similar(X); Y2 = similar(Y1);
         @test csetanh!(Y1, X, Z) ≈ csetanhavx!(Y2, X, Z)
 
-        
+        x = rand(T, 97);
+        @test transposedvectoraccessavx(x) ≈ transposedvectoraccess(x)
     end
 end
