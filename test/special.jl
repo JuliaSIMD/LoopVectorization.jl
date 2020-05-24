@@ -346,7 +346,8 @@
         fill!(r2, NaN); calc_sins_avx!(r2)
         @test r1 ≈ r2
 
-        @test transposedvectoraccessavx(a) ≈ transposedvectoraccess(a)
+        x = rand(T, 97);
+        @test transposedvectoraccessavx(x) ≈ transposedvectoraccess(x)
         
         N,M = 47,53
         B = reshape(cumsum(ones(T, 3N)),N,:)
