@@ -131,7 +131,6 @@
             r[i] = tmp
             s += tmp
         end
-
         invs = inv(s)
         r .*= invs
 
