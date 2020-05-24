@@ -99,7 +99,7 @@ function jselfdotavx(a)
     end
     s
 end
-function jdot3(x, A, y)
+function jdot3v2(x, A, y)
     M, N = size(A)
     s = zero(promote_type(eltype(x), eltype(A), eltype(y)))
     @inbounds @fastmath for n ∈ 1:N, m ∈ 1:M
@@ -107,7 +107,7 @@ function jdot3(x, A, y)
     end
     s
 end
-function jdot3avx(x, A, y)
+function jdot3v2avx(x, A, y)
     M, N = size(A)
     s = zero(promote_type(eltype(x), eltype(A), eltype(y)))
     @avx for n ∈ 1:N, m ∈ 1:M
@@ -115,7 +115,7 @@ function jdot3avx(x, A, y)
     end
     s
 end
-function jdot3v2(x, A, y)
+function jdot3(x, A, y)
     s = zero(promote_type(eltype(x), eltype(A), eltype(y)))
     @inbounds @fastmath for n ∈ axes(A,2)
         t = zero(s)
@@ -126,7 +126,7 @@ function jdot3v2(x, A, y)
     end
     s
 end
-function jdot3v2avx(x, A, y)
+function jdot3avx(x, A, y)
     s = zero(promote_type(eltype(x), eltype(A), eltype(y)))
     @avx for n ∈ axes(A,2)
         t = zero(s)

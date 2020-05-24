@@ -151,30 +151,30 @@ module looptests
          selfdot = selfdot + a(i) * a(i)
       end do
     end function selfdot
-    real(C_double) function dot3(x, A, y, M, N) BIND(C, name="dot3")
-      integer(C_long), intent(in) :: M, N
-      real(C_double), intent(in) :: x(M), A(M,N), y(N)
-      real(C_double) :: t
-      integer(C_long) :: mm, nn
-      dot3 = 0.0d0
-      do concurrent(nn = 1:N, mm = 1:M)
-         dot3 = dot3 + x(mm) * A(mm, nn) * y(nn)
-      end do
-    end function dot3
     real(C_double) function dot3v2(x, A, y, M, N) BIND(C, name="dot3v2")
       integer(C_long), intent(in) :: M, N
       real(C_double), intent(in) :: x(M), A(M,N), y(N)
       real(C_double) :: t
       integer(C_long) :: mm, nn
       dot3v2 = 0.0d0
+      do concurrent(nn = 1:N, mm = 1:M)
+         dot3v2 = dot3v2 + x(mm) * A(mm, nn) * y(nn)
+      end do
+    end function dot3v2
+    real(C_double) function dot3(x, A, y, M, N) BIND(C, name="dot3")
+      integer(C_long), intent(in) :: M, N
+      real(C_double), intent(in) :: x(M), A(M,N), y(N)
+      real(C_double) :: t
+      integer(C_long) :: mm, nn
+      dot3 = 0.0d0
       do concurrent(nn = 1:N)
          t = 0.0d0
          do concurrent(mm = 1:M)
             t = t + x(mm) * A(mm, nn)
          end do
-         dot3v2 = dot3v2 + t * y(nn)
+         dot3 = dot3 + t * y(nn)
       end do
-    end function dot3v2
+    end function dot3
     real(C_double) function dot3builtin(x, A, y, M, N) BIND(C, name="dot3builtin")
       integer(C_long), intent(in) :: M, N
       real(C_double), intent(in) :: x(M), A(M,N), y(N)

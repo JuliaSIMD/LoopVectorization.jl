@@ -2,7 +2,7 @@
 # const LOOPVECBENCHDIR = joinpath(pkgdir("LoopVectorization"), "benchmarks")
 # includet(joinpath(LOOPVECBENCHDIR, "driver.jl"))
 
-using Distributed, LoopVectorization
+using Distributed, LoopVectorization, JLD2
 
 const LOOPVECBENCHDIR = joinpath(pkgdir(LoopVectorization), "benchmark")
 include(joinpath(LOOPVECBENCHDIR, "benchmarkflops.jl"))
@@ -22,6 +22,9 @@ end
 # sizes = 23:23
 sizes = 256:-1:2
 
+logdettriangle_bench = benchmark_logdettriangle(sizes); println("logdet(LowerTriangular(A)) benchmark results:"); println(logdettriangle_bench)
+dot3_bench = benchmark_dot3(sizes); println("x' * A * y benchmark results:"); println(dot3_bench)
+
 AmulB_bench = benchmark_AmulB(sizes); println("A * B benchmark results:"); println(AmulB_bench)
 AmulBt_bench = benchmark_AmulBt(sizes); println("A * B' benchmark results:"); println(AmulBt_bench)
 AtmulBt_bench = benchmark_AtmulBt(sizes); println("A' * B' benchmark results:"); println(AtmulBt_bench)
@@ -34,7 +37,6 @@ filter2d_dynamic_bench = benchmark_filter2ddynamic(sizes); println("Benchmark re
 filter2d_3x3_bench = benchmark_filter2d3x3(sizes); println("Benchmark results for statically sized 3x3 convolution:"); println(filter2d_3x3_bench)
 filter2d_unrolled_bench = benchmark_filter2dunrolled(sizes); println("Benchmark results for unrolled 3x3 convolution:"); println(filter2d_unrolled_bench)
 
-dot3_bench = benchmark_dot3(sizes); println("x' * A * y benchmark results:"); println(dot3_bench)
 dot_bench = benchmark_dot(sizes); println("a' * b benchmark results:"); println(dot_bench)
 selfdot_bench = benchmark_selfdot(sizes); println("a' * a benchmark results:"); println(selfdot_bench)
 sse_bench = benchmark_sse(sizes); println("Benchmark resutls of summing squared error:"); println(sse_bench)
@@ -42,7 +44,6 @@ aplusBc_bench = benchmark_aplusBc(sizes); println("Benchmark results of a .+ B .
 AplusAt_bench = benchmark_AplusAt(sizes); println("Benchmark results of A * A':"); println(AplusAt_bench)
 vexp_bench = benchmark_exp(sizes); println("Benchmark results of exponentiating a vector:"); println(vexp_bench)
 randomaccess_bench = benchmark_random_access(sizes); println("Benchmark results from using a vector of indices:"); println(randomaccess_bench)
-logdettriangle_bench = benchmark_logdettriangle(sizes); println("logdet(LowerTriangular(A)) benchmark results:"); println(logdettriangle_bench)
 
 const v = 1
 using Cairo, Fontconfig
@@ -67,4 +68,6 @@ saveplot("bench_AtmulB_v", AtmulB_bench);
 saveplot("bench_AtmulBt_v", AtmulBt_bench);
 saveplot("bench_Amulvb_v", Amulvb_bench);
 saveplot("bench_Atmulvb_v", Atmulvb_bench);
+
+@save "benchmarkresults.jld2" logdettriangle_bench filter2d_dynamic_bench filter2d_3x3_bench filter2d_unrolled_bench dot_bench selfdot_bench dot3_bench sse_bench aplusBc_bench AplusAt_bench vexp_bench randomaccess_bench AmulB_bench AmulBt_bench AtmulB_bench AtmulBt_bench Amulvb_bench Atmulvb_bench
 
