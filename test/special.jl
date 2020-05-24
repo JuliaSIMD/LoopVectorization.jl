@@ -285,6 +285,25 @@
         end
         y
     end    
+
+    function transposedvectoraccess(x::AbstractVector{T}) where T
+        N = length(x)
+        ent = zeros(T, N)
+        x isa AbstractVector && (x = x')
+        for i = 1:N, j = 1:size(x,1)
+            ent[i] += x[j,i]*log(x[j,i])
+        end
+        ent
+    end
+    function transposedvectoraccessavx(x::AbstractVector{T}) where T
+        N = length(x)
+        ent = zeros(T, N)
+        x isa AbstractVector && (x = x')
+        @avx for i = 1:N, j = 1:size(x,1)
+            ent[i] += x[j,i]*log(x[j,i])
+        end
+        ent
+    end
     
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
@@ -327,6 +346,8 @@
         fill!(r2, NaN); calc_sins_avx!(r2)
         @test r1 ≈ r2
 
+        @test transposedvectoraccessavx(a) ≈ transposedvectoraccess(a)
+        
         N,M = 47,53
         B = reshape(cumsum(ones(T, 3N)),N,:)
         A1 = zeros(T, N, M)
@@ -356,5 +377,7 @@
         X = rand(T, N, M); Z = rand(T, N, M);
         Y1 = similar(X); Y2 = similar(Y1);
         @test csetanh!(Y1, X, Z) ≈ csetanhavx!(Y2, X, Z)
+
+        
     end
 end
