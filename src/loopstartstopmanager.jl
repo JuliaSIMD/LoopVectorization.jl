@@ -12,16 +12,19 @@ function uniquearrayrefs(ls::LoopSet)
     uniquerefs
 end
 
-otherindexunrolled(loopsym::Symbol, ind::Symbol, loopdeps::Vector{Symbol}) = loopsym !== ind && loopsym ∈ loopdeps
+otherindexunrolled(loopsym::Symbol, ind::Symbol, loopdeps::Vector{Symbol}) = (loopsym !== ind) && (loopsym ∈ loopdeps)
 function otherindexunrolled(ls::LoopSet, ind::Symbol, ref::ArrayReferenceMeta)
     us = ls.unrollspecification[]
-    otherindexunrolled(getloopsym(ls, us.u₁loopnum), ind, loopdependencies(ref)) || otherindexunrolled(getloopsym(ls, us.u₂loopnum), ind, loopdependencies(ref))
+    u₁sym = names(ls)[us.u₁loopnum]
+    u₂sym = us.u₂loopnum > 0 ? names(ls)[us.u₂loopnum] : Symbol("##undefined##")
+    otherindexunrolled(u₁sym, ind, loopdependencies(ref)) || otherindexunrolled(u₂sym, ind, loopdependencies(ref))
 end
 multiple_with_name(n::Symbol, v::Vector{ArrayReferenceMeta}) = sum(ref -> n === vptr(ref), v) > 1
 # TODO: DRY between indices_calculated_by_pointer_offsets and use_loop_induct_var
 function indices_calculated_by_pointer_offsets(ls::LoopSet, ar::ArrayReferenceMeta)
-    looporder = names(ls)
     indices = getindices(ar)
+    ls.isbroadcast[] && return fill(false, length(indices))
+    looporder = names(ls)
     offset = isdiscontiguous(ar)
     gespinds = Expr(:tuple)
     out = Vector{Bool}(undef, length(indices))
@@ -29,11 +32,11 @@ function indices_calculated_by_pointer_offsets(ls::LoopSet, ar::ArrayReferenceMe
     for i ∈ eachindex(li)
         ii = i + offset
         ind = indices[ii]
-        j = findfirst(isequal(ind), view(indices, offset+1:ii-1))
-        if !isnothing(j)
-            out[i] = out[j - offset]
-            continue
-        end
+        # j = findfirst(isequal(ind), view(indices, offset+1:ii-1))
+        # if !isnothing(j)
+        #     out[i] = out[j - offset]
+        #     continue
+        # end
         if (!li[i]) || multiple_with_name(vptr(ar), ls.lssm[].uniquearrayrefs)
             out[i] = false
         elseif (isone(ii) && (first(looporder) === ind))
@@ -61,19 +64,21 @@ function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, alla
         println(ar)
         throw("Length of indices and length of offset do not match!")
     end
+    isbroadcast = ls.isbroadcast[]
     gespinds = Expr(:tuple)
     for i ∈ eachindex(li)
         ii = i + offset
         ind = indices[ii]
-        j = findfirst(isequal(ind), view(indices, offset+1:ii-1))
-        if !isnothing(j)
-            j -= offset
-            push!(gespinds.args, gespinds.args[j])
-            uliv[i] = uliv[j]
-        elseif (!li[i])
+        # j = findfirst(isequal(ind), view(indices, offset+1:ii-1))
+        # if !isnothing(j)
+        #     j -= offset
+        #     push!(gespinds.args, gespinds.args[j])
+        #     uliv[i] = uliv[j]
+        # else
+        if (!li[i])
             uliv[i] = 0
             push!(gespinds.args, Expr(:call, lv(:Zero)))
-        elseif (isone(ii) && (last(looporder) === ind)) && !(otherindexunrolled(ls, ind, ar)) || multiple_with_name(vptr(ar), allarrayrefs)
+        elseif isbroadcast || ((isone(ii) && (last(looporder) === ind)) && !(otherindexunrolled(ls, ind, ar)) || multiple_with_name(vptr(ar), allarrayrefs))
             uliv[i] = -findfirst(isequal(ind), looporder)::Int
             push!(gespinds.args, Expr(:call, lv(:Zero)))
         else

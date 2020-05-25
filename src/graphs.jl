@@ -266,6 +266,7 @@ struct LoopSet
     unrollspecification::Base.RefValue{UnrollSpecification}
     loadelimination::Base.RefValue{Bool}
     lssm::Base.RefValue{LoopStartStopManager}
+    isbroadcast::Base.RefValue{Bool}
     mod::Symbol
 end
 
@@ -353,7 +354,8 @@ function LoopSet(mod::Symbol)
         Matrix{Float64}(undef, 4, 2),
         Matrix{Float64}(undef, 5, 2),
         Bool[], Bool[], Ref{UnrollSpecification}(),
-        Ref(false), Ref{LoopStartStopManager}(), mod
+        Ref(false), Ref{LoopStartStopManager}(),
+        Ref(false), mod
     )
 end
 

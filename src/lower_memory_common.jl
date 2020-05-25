@@ -39,25 +39,12 @@ function addoffset!(ret::Expr, ex, offset::Integer, _mm::Bool = false)
     nothing
 end
 function addoffset!(ret::Expr, offset::Int, _mm::Bool = false)
-    if iszero(offset)
-        ex = Expr(:call, lv(:Zero))
-        if _mm
-            push!(ret.args, _MMind(ex))
-        else
-            push!(ret.args, ex)
-        end
-    elseif isone(offset)
-        ex = Expr(:call, Expr(:curly, lv(:Static), offset))
-        if _mm
-            push!(ret.args, _MMind(ex))
-        else
-            push!(ret.args, ex)
-        end        
-    elseif _mm
-        push!(ret.args, _MMind(offset))
+    ex = Expr(:call, Expr(:curly, lv(:Static), offset))
+    if _mm
+        push!(ret.args, _MMind(ex))
     else
-        push!(ret.args, offset)
-    end
+        push!(ret.args, ex)
+    end        
     nothing
 end
 
@@ -146,6 +133,7 @@ function mem_offset_u(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Ve
     ret = Expr(:tuple)
     indices = getindicesonly(op)
     offsets = getoffsets(op)
+    # allbasezero = all(inds_calc_by_ptr_offset) && all(iszero, offsets)
     loopedindex = op.ref.loopedindex
     if iszero(incr₁) & iszero(incr₂)
         return mem_offset(op, td, inds_calc_by_ptr_offset)

@@ -245,6 +245,7 @@ end
     # @show typeof(dest)
     loopsyms = [gensym(:n) for n ∈ 1:N]
     ls = LoopSet(Mod)
+    ls.isbroadcast[] = true
     sizes = Expr(:tuple)
     for (n,itersym) ∈ enumerate(loopsyms)
         Nsym = gensym(:N)
@@ -271,6 +272,7 @@ end
     # need to construct the LoopSet
     loopsyms = [gensym(:n) for n ∈ 1:N]
     ls = LoopSet(Mod)
+    ls.isbroadcast[] = true
     pushpreamble!(ls, Expr(:(=), :dest, Expr(:call, :parent, :dest′)))
     sizes = Expr(:tuple)
     for (n,itersym) ∈ enumerate(loopsyms)

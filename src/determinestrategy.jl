@@ -370,7 +370,7 @@ function solve_unroll(
     W::Int, vectorized::Symbol,
     u₁loop::Loop, u₂loop::Loop
 )
-    maxu₂base = maxu₁base = VectorizationBase.REGISTER_COUNT == 32 ? 10 : 6#8
+    maxu₂base = maxu₁base = REGISTER_COUNT == 32 ? 10 : 6#8
     maxu₂ = maxu₂base#8
     maxu₁ = maxu₁base#8
     u₁L = length(u₁loop)
@@ -535,13 +535,13 @@ function load_elimination_cost_factor!(
         #     if isstaticloop(loop) && length(loop) ≤ 4
         #         itersym = loop.itersymbol
         #         if itersym !== u₁loopsym && itersym !== u₂loopsym
-        #             return (0.25, VectorizationBase.REGISTER_COUNT == 32 ? 2.0 : 1.0)
+        #             return (0.25, REGISTER_COUNT == 32 ? 2.0 : 1.0)
         #             # return (0.25, 1.0)
         #             return true
         #         end
         #     end
         # end
-        # # (0.25, VectorizationBase.REGISTER_COUNT == 32 ? 1.2 : 1.0)
+        # # (0.25, REGISTER_COUNT == 32 ? 1.2 : 1.0)
         # (0.25, 1.0)
         cost_vec[1] += 0.1rt
         reg_pressure[1] += 0.51rp
@@ -707,7 +707,7 @@ function evaluate_cost_tile(
         end
     end
     # @show cost_vec reg_pressure
-    costpenalty = (sum(reg_pressure) > VectorizationBase.REGISTER_COUNT) ? 2 : 1
+    costpenalty = (sum(reg_pressure) > REGISTER_COUNT) ? 2 : 1
     # @show order, vectorized cost_vec reg_pressure
     # @show solve_unroll(ls, u₁loopsym, u₂loopsym, cost_vec, reg_pressure)
     u₁, u₂, ucost = solve_unroll(ls, u₁loopsym, u₂loopsym, cost_vec, reg_pressure, W, vectorized)

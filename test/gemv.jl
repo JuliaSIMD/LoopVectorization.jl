@@ -12,11 +12,9 @@ using Test
               y[i] = yᵢ
               end)
     lsgemv = LoopVectorization.LoopSet(gemvq);
-    # if LoopVectorization.VectorizationBase.REGISTER_COUNT == 16
+    if LoopVectorization.REGISTER_COUNT != 8
         @test LoopVectorization.choose_order(lsgemv) == (Symbol[:i, :j], :j, :i, :i, Unum, Tnum)
-    # else
-        # @test LoopVectorization.choose_order(lsgemv) == (Symbol[:i, :j], :i, :j, :i, Unum, Tnum)
-    # end
+    end
     
     function mygemv!(y, A, x)
         @inbounds for i ∈ eachindex(y)
@@ -142,11 +140,9 @@ using Test
               G[d1,κ] = z
               end)
     lsgemv = LoopVectorization.LoopSet(gemvq);
-    # if LoopVectorization.VectorizationBase.REGISTER_COUNT == 16
+    if LoopVectorization.REGISTER_COUNT != 8
         @test LoopVectorization.choose_order(lsgemv) == ([:d1,:d2], :d2, :d1, :d2, Unum, Tnum)
-    # else
-        # @test LoopVectorization.choose_order(lsgemv) == ([:d1,:d2], :d1, :d2, :d2, Unum, Tnum)
-    # end
+    end
     function AtmulvB_avx3!(G, B,κ)
         d = size(G,1)
         @_avx for d1=1:d
@@ -163,11 +159,9 @@ using Test
            end
            end)
     lsp = LoopVectorization.LoopSet(pq);
-    # if LoopVectorization.VectorizationBase.REGISTER_COUNT == 16
+    if LoopVectorization.REGISTER_COUNT != 8
         @test LoopVectorization.choose_order(lsp) == ([:d1, :d2], :d2, :d1, :d2, Unum, Tnum)
-    # else
-        # @test LoopVectorization.choose_order(lsp) == ([:d1, :d2], :d1, :d2, :d2, Unum, Tnum)
-    # end
+    end
     # lsp.preamble_symsym
 
     function hhavx!(A::AbstractVector{T}, B, C, D) where {T}

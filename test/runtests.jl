@@ -2,6 +2,9 @@ using Test
 using LoopVectorization
 using LinearAlgebra
 
+# const START_TIME = time()
+# exceeds_time_limit() = (time() - START_TIME) > 35 * 60
+
 function clenshaw(x,coeff)
     len_c = length(coeff)
     tmp = zero(x)
@@ -29,6 +32,7 @@ Base.IndexStyle(::Type{<:FallbackArrayWrapper}) = IndexLinear()
 
 @time @testset "LoopVectorization.jl" begin
 
+    
     @test isempty(detect_unbound_args(LoopVectorization))
 
     @time include("printmethods.jl")
@@ -65,8 +69,8 @@ Base.IndexStyle(::Type{<:FallbackArrayWrapper}) = IndexLinear()
 
     @time include("broadcast.jl")
 
-    # I test LoopVectorization.VectorizationBase.REGISTER_COUNT == 32 locally on master; times out on Travis.
-    if LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 || (VERSION.major == 1 && VERSION.minor == 4)
+    # I test  locally on master; times out on Travis.
+    if isnothing(get(ENV, "TRAVIS_BRANCH", nothing)) || LoopVectorization.REGISTER_COUNT != 32 || VERSION.minor == 4
         @time include("gemm.jl")
     end
 end

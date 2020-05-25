@@ -1,9 +1,11 @@
 @testset "GEMM" begin
  # using LoopVectorization, LinearAlgebra, Test; T = Float64
-    Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (3, 9)
-    Unumt, Tnumt = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (5, 5)
-    @test LoopVectorization.mᵣ == Unum
-    @test LoopVectorization.nᵣ == Tnum
+    Unum, Tnum = LoopVectorization.REGISTER_COUNT == 16 ? (3, 4) : (3, 9)
+    Unumt, Tnumt = LoopVectorization.REGISTER_COUNT == 16 ? (3, 4) : (5, 5)
+    if LoopVectorization.REGISTER_COUNT != 8
+        @test LoopVectorization.mᵣ == Unum
+        @test LoopVectorization.nᵣ == Tnum
+    end
     AmulBtq1 = :(for m ∈ axes(A,1), n ∈ axes(B,2)
                  C[m,n] = zeroB
                  for k ∈ axes(A,2)
@@ -11,9 +13,9 @@
                  end
                  end);
     lsAmulBt1 = LoopVectorization.LoopSet(AmulBtq1);
-    # @test LoopVectorization.choose_order(lsAmulBt1) == (Symbol[:n,:m,:k], :n, :m, :m, Unum, Tnum)
-    @test LoopVectorization.choose_order(lsAmulBt1) == (Symbol[:n,:m,:k], :m, :n, :m, Unum, Tnum)
-
+    if LoopVectorization.REGISTER_COUNT != 8
+        @test LoopVectorization.choose_order(lsAmulBt1) == (Symbol[:n,:m,:k], :m, :n, :m, Unum, Tnum)
+    end
     AmulBq1 = :(for n ∈ axes(B,2), m ∈ axes(A,1)
                 C[m,n] = zeroB
                 for k ∈ axes(A,2)
@@ -21,8 +23,9 @@
                 end
                 end);
     lsAmulB1 = LoopVectorization.LoopSet(AmulBq1);
-    # @test LoopVectorization.choose_order(lsAmulB1) == (Symbol[:n,:m,:k], :n, :m, :m, Unum, Tnum)
-    @test LoopVectorization.choose_order(lsAmulB1) == (Symbol[:n,:m,:k], :m, :n, :m, Unum, Tnum)
+    if LoopVectorization.REGISTER_COUNT != 8
+        @test LoopVectorization.choose_order(lsAmulB1) == (Symbol[:n,:m,:k], :m, :n, :m, Unum, Tnum)
+    end
     AmulBq2 = :(for m ∈ 1:M, n ∈ 1:N
                 C[m,n] = zero(eltype(B))
                 for k ∈ 1:K
@@ -30,8 +33,9 @@
                 end
                 end)
     lsAmulB2 = LoopVectorization.LoopSet(AmulBq2);
-    # @test LoopVectorization.choose_order(lsAmulB2) == (Symbol[:n,:m,:k], :n, :m, :m, Unum, Tnum)
-    @test LoopVectorization.choose_order(lsAmulB2) == (Symbol[:n,:m,:k], :m, :n, :m, Unum, Tnum)
+    if LoopVectorization.REGISTER_COUNT != 8
+        @test LoopVectorization.choose_order(lsAmulB2) == (Symbol[:n,:m,:k], :m, :n, :m, Unum, Tnum)
+    end
     AmulBq3 = :(for m ∈ axes(A,1), n ∈ axes(B,2)
                 ΔCₘₙ = zero(eltype(C))
                 for k ∈ axes(A,2)
@@ -40,8 +44,10 @@
                 C[m,n] += ΔCₘₙ
                 end)
     lsAmulB3 = LoopVectorization.LoopSet(AmulBq3);
-    @test LoopVectorization.choose_order(lsAmulB3) == (Symbol[:n,:m,:k], :m, :n, :m, Unum, Tnum)
-
+    if LoopVectorization.REGISTER_COUNT != 8
+        @test LoopVectorization.choose_order(lsAmulB3) == (Symbol[:n,:m,:k], :m, :n, :m, Unum, Tnum)
+    end
+    
     function AmulB!(C, A, B)
         C .= 0
         for k ∈ axes(A,2), j ∈ axes(B,2)
@@ -119,8 +125,9 @@
                  C[m,n] = α * ΔCₘₙ + β * C[m,n]
                  end);
     lsAmuladd = LoopVectorization.LoopSet(Amuladdq);
-    # @test LoopVectorization.choose_order(lsAmuladd) == (Symbol[:n,:m,:k], :n, :m, :m, Unum, Tnum)
-    @test LoopVectorization.choose_order(lsAmuladd) == (Symbol[:n,:m,:k], :m, :n, :m, Unum, Tnum)
+    if LoopVectorization.REGISTER_COUNT != 8
+        @test LoopVectorization.choose_order(lsAmuladd) == (Symbol[:n,:m,:k], :m, :n, :m, Unum, Tnum)
+    end
     Atmuladdq = :(for m ∈ axes(A,2), n ∈ axes(B,2)
                  ΔCₘₙ = zero(eltype(C))
                  for k ∈ axes(A,1)
@@ -133,8 +140,9 @@
     # lsAmuladd.operations
     # LoopVectorization.loopdependencies.(lsAmuladd.operations)
     # LoopVectorization.reduceddependencies.(lsAmuladd.operations)
-    # @test LoopVectorization.choose_order(lsAtmuladd) == (Symbol[:n,:m,:k], :n, :m, :k, Unum, Tnum)
-    @test LoopVectorization.choose_order(lsAtmuladd) == (Symbol[:n,:m,:k], :m, :n, :k, Unumt, Tnumt)
+    if LoopVectorization.REGISTER_COUNT != 8
+        @test LoopVectorization.choose_order(lsAtmuladd) == (Symbol[:n,:m,:k], :m, :n, :k, Unumt, Tnumt)
+    end
 
     function AmulB_avx1!(C, A, B)
         @_avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
@@ -246,10 +254,9 @@
                 C[m,n] = Cₘₙ
                 end)
     lsAtmulB = LoopVectorization.LoopSet(AtmulBq);
-    # LoopVectorization.choose_order(lsAtmulB)
-    # @test LoopVectorization.choose_order(lsAtmulB) == (Symbol[:n,:m,:k], :m, :n, :k, Unum, Tnum)
-    @test LoopVectorization.choose_order(lsAtmulB) == (Symbol[:n,:m,:k], :n, :m, :k, Unumt, Tnumt)
-    
+    if LoopVectorization.REGISTER_COUNT != 8
+        @test LoopVectorization.choose_order(lsAtmulB) == (Symbol[:n,:m,:k], :n, :m, :k, Unumt, Tnumt)
+    end
     function AtmulBavx1!(C, A, B)
         @avx for n ∈ axes(C,2), m ∈ axes(C,1)
             Cₘₙ = zero(eltype(C))
@@ -328,11 +335,9 @@
                C[m,n] = Cₘₙ
                end)
     lsr2amb = LoopVectorization.LoopSet(r2ambq);
-    if LoopVectorization.VectorizationBase.REGISTER_COUNT == 32
-        # @test LoopVectorization.choose_order(lsr2amb) == ([:n, :m, :k], :n, :m, :m, 3, 3)
+    if LoopVectorization.REGISTER_COUNT == 32
         @test LoopVectorization.choose_order(lsr2amb) == ([:n, :m, :k], :n, :m, :m, 7, 3)
-    else
-        # @test LoopVectorization.choose_order(lsr2amb) == ([:n, :m, :k], :n, :m, :m, 2, 2)
+    elseif LoopVectorization.REGISTER_COUNT == 16
         @test LoopVectorization.choose_order(lsr2amb) == ([:n, :m, :k], :n, :m, :m, 4, 2)
     end
     function rank2AmulBavx!(C, Aₘ, Aₖ, B)
@@ -600,6 +605,7 @@
     LoopVectorization.maybestaticsize(::LinearAlgebra.Transpose{T,SizedMatrix{M,N,T}}, ::Val{2}) where {M,N,T} = LoopVectorization.Static{M}()
     
     for T ∈ (Float32, Float64, Int32, Int64)
+        # exceeds_time_limit() && break
         @show T, @__LINE__
         # M, K, N = 128, 128, 128;
         M, K, N = 73, 75, 69;
@@ -689,6 +695,7 @@
             @test Bb ≈ A' * C
             @test Cb ≈ A * B
         end
+        # exceeds_time_limit() && break
         @time @testset "_avx $T dynamic gemm" begin
             AmulB_avx1!(C, A, B)
             @test C ≈ C2
@@ -731,6 +738,7 @@
             fill!(C, 9999.999); mulCAtB_2x2block_avx!(C, A', B);
             @test C ≈ C2
         end
+        # exceeds_time_limit() && break
         @time @testset "avx $T static gemm" begin
             AmulBavx1!(Cs, As, Bs)
             @test Cs ≈ C2
@@ -777,6 +785,7 @@
             fill!(Cs, 9999.999); mulCAtB_2x2blockavx_noinline!(Cs, As', Bs);
             @test Cs ≈ C2
         end
+        # exceeds_time_limit() && break
         @time @testset "_avx $T static gemm" begin
             AmulB_avx1!(Cs, As, Bs)
             @test Cs ≈ C2
@@ -819,7 +828,7 @@
             fill!(Cs, 9999.999); mulCAtB_2x2block_avx!(Cs, As', Bs);
             @test Cs ≈ C2
         end
-
+        # exceeds_time_limit() && break
         @time @testset "$T rank2mul" begin
             Aₘ= rand(R, M, 2); Aₖ = rand(R, 2, K);
             Aₖ′ = copy(Aₖ');

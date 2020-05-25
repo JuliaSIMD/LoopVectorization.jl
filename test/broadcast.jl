@@ -4,10 +4,10 @@
     for T ∈ (Float32, Float64, Int32, Int64)
         @show T, @__LINE__
         R = T <: Integer ? (T(-100):T(100)) : T
-        a = rand(R,100,100,100);
-        b = rand(R,100,100,1);
+        a = rand(R,99,99,99);
+        b = rand(R,99,99,1);
         bl = LowDimArray{(true,true,false)}(b);
-        br = reshape(b, (100,100));
+        br = reshape(b, (99,99));
         c1 = a .+ b;
         c2 = @avx a .+ bl;
         @test c1 ≈ c2
@@ -15,14 +15,14 @@
         @test c1 ≈ c2
         fill!(c2, 99999); @avx c2 .= a .+ b;
         @test c1 ≈ c2
-        br = reshape(b, (100,1,100));
+        br = reshape(b, (99,1,99));
         bl = LowDimArray{(true,false,true)}(br);
         @. c1 = a + br;
         fill!(c2, 99999); @avx @. c2 = a + bl;
         @test c1 ≈ c2
         fill!(c2, 99999); @avx @. c2 = a + br;
         @test c1 ≈ c2
-        br = reshape(b, (1,100,100));
+        br = reshape(b, (1,99,99));
         bl = LowDimArray{(false,true,true)}(br);
         @. c1 = a + br;
         fill!(c2, 99999);
@@ -33,6 +33,16 @@
         max_ = maximum(xs, dims=1)
         @test (@avx exp.(xs .- LowDimArray{(false,)}(max_))) ≈ exp.(xs .- LowDimArray{(false,)}(max_))
 
+        if T === Int32
+            a = rand(T(1):T(100), 73, 1)
+            @test sqrt.(Float32.(a)) ≈ @avx sqrt.(a)
+        elseif T === Int64
+            a = rand(T(1):T(100), 73, 1)
+            @test sqrt.(a) ≈ @avx sqrt.(a)
+        else
+            a = rand(T, 73, 1)
+            @test sqrt.(a) ≈ @avx sqrt.(a)
+        end
         
         a = rand(R, M); B = rand(R, M, N); c = rand(R, N); c′ = c';
         d1 =      @. a + B * c′;
