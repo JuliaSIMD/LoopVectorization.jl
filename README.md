@@ -31,16 +31,19 @@ The macro assumes that loop iterations can be reordered. It also currently suppo
 
 ## Benchmarks
 
-Please see the documentation for benchmarks versus base Julia, Clang-Polly, icc, ifort, gfortran, and Eigen. If you would believe any code or compiler flags can be improved, would like to submit your own benchmarks, or have Julia code using LoopVectorization that you would like to be tested for performance regressions on a semi-regular basis, please feel file an issue or PR with the code sample.
+Please see the documentation for benchmarks versus base Julia, Clang, icc, ifort, gfortran, and Eigen. If you would believe any code or compiler flags can be improved, would like to submit your own benchmarks, or have Julia code using LoopVectorization that you would like to be tested for performance regressions on a semi-regular basis, please feel file an issue or PR with the code sample.
 
 ## Examples
 ### Dot Product
+
+LLVM/Julia by default generate essentially optimal code for a primary vectorized part of this loop. In many cases -- such as the dot product -- this vectorized part of the loop computes 4*SIMD-vector-width iterations at a time.
+On the CPU I'm running these benchmarks on with `Float64` data, the SIMD-vector-width is 8, meaning it will compute 32 iterations at a time.
+However, LLVM is very slow at handling the tails, `length(iterations) % 32`. For this reason, [in benchmark plots](https://chriselrod.github.io/LoopVectorization.jl/latest/examples/dot_product/) you can see performance drop as the size of the remainder increases.
+
+For simple loops like a dot product, LoopVectorization.jl's most important optimization is to handle these tails more efficiently:
 <details>
  <summaryClick me! ></summary>
 <p>
-
-A simple example with a single loop is the dot product:
-```julia
 julia> using LoopVectorization, BenchmarkTools
 
 julia> function mydot(a, b)
@@ -64,72 +67,26 @@ mydotavx (generic function with 1 method)
 julia> a = rand(256); b = rand(256);
 
 julia> @btime mydot($a, $b)
-  12.273 ns (0 allocations: 0 bytes)
-62.61049816874535
+  12.220 ns (0 allocations: 0 bytes)
+62.67140864639772
 
-julia> @btime mydotavx($a, $b)
-  11.618 ns (0 allocations: 0 bytes)
-62.61049816874536
+julia> @btime mydotavx($a, $b) # performance is similar
+  12.104 ns (0 allocations: 0 bytes)
+62.67140864639772
 
 julia> a = rand(255); b = rand(255);
 
-julia> @btime mydot($a, $b)
-  36.539 ns (0 allocations: 0 bytes)
-62.29537331565549
+julia> @btime mydot($a, $b) # with loops shorter by 1, the remainder is now 32, and it is slow
+  36.530 ns (0 allocations: 0 bytes)
+61.25056244423578
 
-julia> @btime mydotavx($a, $b)
-  11.739 ns (0 allocations: 0 bytes)
-62.29537331565549
-```
-
-On most recent CPUs, the performance of the dot product is bounded by
-the speed at which it can load data; most recent x86_64 CPUs can perform
-two aligned loads and two fused multiply adds (`fma`) per clock cycle.
-However, the dot product requires two loads per `fma`.
-
-A self-dot function, on the otherhand, requires one load per fma:
-```julia
-julia> function myselfdot(a)
-           s = 0.0
-           @inbounds @simd for i ∈ eachindex(a)
-               s += a[i]*a[i]
-           end
-           s
-       end
-myselfdot (generic function with 1 method)
-
-julia> function myselfdotavx(a)
-           s = 0.0
-           @avx for i ∈ eachindex(a)
-               s += a[i]*a[i]
-           end
-           s
-       end
-myselfdotavx (generic function with 1 method)
-
-julia> a = rand(256);
-
-julia> @btime myselfdot($a)
-  8.578 ns (0 allocations: 0 bytes)
-90.16636687132868
-
-julia> @btime myselfdotavx($a)
-  9.560 ns (0 allocations: 0 bytes)
-90.16636687132868
-
-julia> @btime myselfdot($b)
-  28.923 ns (0 allocations: 0 bytes)
-83.20114563267853
-
-julia> @btime myselfdotavx($b)
-  9.174 ns (0 allocations: 0 bytes)
-83.20114563267856
-```
-For this reason, the `@avx` version is roughly twice as fast. The `@inbounds @simd` version, however, is not, because it runs into the problem of loop carried dependencies: to add `a[i]*b[i]` to `s_new = s_old + a[i-j]*b[i-j]`, we must have first finished calculating `s_new`, but -- while two `fma` instructions can be initiated per cycle -- they each take several clock cycles to complete.
-For this reason, we need to unroll the operation to run several independent instances concurrently. The `@avx` macro models this cost to try and pick an optimal unroll factor.
-
+julia> @btime mydotavx($a, $b) # performance remains mostly unchanged.
+  12.226 ns (0 allocations: 0 bytes)
+61.250562444235776
 </p>
 </details>
+
+
 
 ### Matrix Multiply
 <details>
@@ -139,9 +96,9 @@ For this reason, we need to unroll the operation to run several independent inst
 We can also vectorize fancier loops. A likely familiar example to dive into:
 ```julia
 julia> function mygemm!(C, A, B)
-           @inbounds @fastmath for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+           @inbounds @fastmath for m ∈ axes(A,1), n ∈ axes(B,2)
                Cmn = zero(eltype(C))
-               for k ∈ 1:size(A,2)
+               for k ∈ axes(A,2)
                    Cmn += A[m,k] * B[k,n]
                end
                C[m,n] = Cmn
@@ -150,9 +107,9 @@ julia> function mygemm!(C, A, B)
 mygemm! (generic function with 1 method)
 
 julia> function mygemmavx!(C, A, B)
-           @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+           @avx for m ∈ axes(A,1), n ∈ axes(B,2)
                Cmn = zero(eltype(C))
-               for k ∈ 1:size(A,2)
+               for k ∈ axes(A,2)
                    Cmn += A[m,k] * B[k,n]
                end
                C[m,n] = Cmn
@@ -160,36 +117,36 @@ julia> function mygemmavx!(C, A, B)
        end
 mygemmavx! (generic function with 1 method)
 
-julia> M, K, N = 72, 75, 71;
+julia> M, K, N = 191, 189, 171;
 
 julia> C1 = Matrix{Float64}(undef, M, N); A = randn(M, K); B = randn(K, N);
 
 julia> C2 = similar(C1); C3 = similar(C1);
 
 julia> @benchmark mygemmavx!($C1, $A, $B)
-BenchmarkTools.Trial: 
+BenchmarkTools.Trial:
   memory estimate:  0 bytes
   allocs estimate:  0
   --------------
-  minimum time:     7.381 μs (0.00% GC)
-  median time:      7.415 μs (0.00% GC)
-  mean time:        7.432 μs (0.00% GC)
-  maximum time:     15.444 μs (0.00% GC)
+  minimum time:     111.722 μs (0.00% GC)
+  median time:      112.528 μs (0.00% GC)
+  mean time:        112.673 μs (0.00% GC)
+  maximum time:     189.400 μs (0.00% GC)
   --------------
   samples:          10000
-  evals/sample:     4
+  evals/sample:     1
 
 julia> @benchmark mygemm!($C2, $A, $B)
-BenchmarkTools.Trial: 
+BenchmarkTools.Trial:
   memory estimate:  0 bytes
   allocs estimate:  0
   --------------
-  minimum time:     230.790 μs (0.00% GC)
-  median time:      231.288 μs (0.00% GC)
-  mean time:        231.882 μs (0.00% GC)
-  maximum time:     275.460 μs (0.00% GC)
+  minimum time:     4.891 ms (0.00% GC)
+  median time:      4.899 ms (0.00% GC)
+  mean time:        4.899 ms (0.00% GC)
+  maximum time:     5.049 ms (0.00% GC)
   --------------
-  samples:          10000
+  samples:          1021
   evals/sample:     1
 
 julia> using LinearAlgebra, Test
@@ -201,27 +158,30 @@ julia> BLAS.set_num_threads(1); BLAS.vendor()
 :mkl
 
 julia> @benchmark mul!($C3, $A, $B)
-BenchmarkTools.Trial: 
+BenchmarkTools.Trial:
   memory estimate:  0 bytes
   allocs estimate:  0
   --------------
-  minimum time:     6.830 μs (0.00% GC)
-  median time:      6.861 μs (0.00% GC)
-  mean time:        6.869 μs (0.00% GC)
-  maximum time:     15.125 μs (0.00% GC)
+  minimum time:     117.221 μs (0.00% GC)
+  median time:      118.745 μs (0.00% GC)
+  mean time:        118.892 μs (0.00% GC)
+  maximum time:     193.826 μs (0.00% GC)
   --------------
   samples:          10000
-  evals/sample:     5
+  evals/sample:     1
 
 julia> @test all(C1 .≈ C3)
 Test Passed
+
+julia> 2e-9M*K*N ./ (111.722e-6, 4.891e-3, 117.221e-6)
+(110.50516460500171, 2.524199141279902, 105.32121377568868)
 ```
-It can produce a decent macro kernel.
-In the future, I would like it to also model the cost of memory movement in the L1 and L2 cache, and use these to generate loops around the macro kernel following the work of [Low, et al. (2016)](http://www.cs.utexas.edu/users/flame/pubs/TOMS-BLIS-Analytical.pdf).
+It can produce a good macro kernel. An implementation of matrix multiplication able to handle large matrices would need to be perform blocking and packing of arrays to prevent the operations from being memory bottle-necked.
+Some day, LoopVectorization may itself may try to model the costs of memory movement in the L1 and L2 cache, and use these to generate loops around the macro kernel following the work of [Low, et al. (2016)](http://www.cs.utexas.edu/users/flame/pubs/TOMS-BLIS-Analytical.pdf).
 
-Until then, performance will degrade rapidly compared to BLAS as the size of the matrices increase. The advantage of the `@avx` macro, however, is that it is general. Not every operation is supported by BLAS.
+But for now, you should view it as a tool for generating efficient computational kernels, leaving tasks of parallelization and cache efficiency to you.
 
-For example, what if `A` were the outer product of two vectors?
+
 <!-- ```julia -->
 
 
@@ -239,24 +199,24 @@ Another example, a straightforward operation expressed well via broadcasting and
 ```julia
 julia> using LoopVectorization, LinearAlgebra, BenchmarkTools, Test; BLAS.set_num_threads(1)
 
-julia> a = rand(48); B = rand(48, 51); c = rand(51); d = rand(49);
+julia> A = rand(5,77); B = rand(77, 51); C = rand(51,49); D = rand(49,51);
 
-julia> X1 =        a .+ B * (c .+ d');
+julia> X1 =      view(A,1,:) .+ B  *  (C .+ D');
 
-julia> X2 = @avx @. a + B *ˡ (c + d');
+julia> X2 = @avx view(A,1,:) .+ B .*ˡ (C .+ D');
 
 julia> @test X1 ≈ X2
 Test Passed
 
-julia> buf1 = Matrix{Float64}(undef, length(c), length(d));
+julia> buf1 = Matrix{Float64}(undef, size(C,1), size(C,2));
 
 julia> buf2 = similar(X1);
 
-julia> @btime $X1 .= $a .+ mul!($buf2, $B, ($buf1 .= $c .+ $d'));
-  3.499 μs (0 allocations: 0 bytes)
+julia> @btime $X1 .= view($A,1,:) .+ mul!($buf2, $B, ($buf1 .= $C .+ $D'));
+  7.896 μs (0 allocations: 0 bytes)
 
-julia> @btime @avx @. $X2 = $a + $B *ˡ ($c + $d');
-  3.289 μs (0 allocations: 0 bytes)
+julia> @btime @avx $X2 .= view($A,1,:) .+ $B .*ˡ ($C .+ $D');
+  7.647 μs (0 allocations: 0 bytes)
 
 julia> @test X1 ≈ X2
 Test Passed
@@ -324,10 +284,10 @@ julia> C1 = StructArray(Matrix{ComplexF64}(undef, M, N));
 julia> C2 = collect(similar(C1));
 
 julia> @btime mul_avx!($C1, $A, $B)
-  13.634 μs (0 allocations: 0 bytes)
+  13.525 μs (0 allocations: 0 bytes)
 
 julia> @btime mul!(    $C2, $(collect(A)), $(collect(B))); # collect turns the StructArray into a regular Array
-  14.007 μs (0 allocations: 0 bytes)
+  14.003 μs (0 allocations: 0 bytes)
 
 julia> @test C1 ≈ C2
 Test Passed
