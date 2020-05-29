@@ -61,10 +61,10 @@ function matmul_bench!(br, C, A, B, i)
     @assert C ≈ Cblas "Fort builtin gemm wrong?"; fill!(C, NaN)
     br[10,i] = n_gflop / @belapsed ifgemm_builtin!($C, $A, $B)
     @assert C ≈ Cblas "ifort builtin gemm wrong?"; fill!(C, NaN)
-    br[11,i] = n_gflop / @belapsed mul!($C, $A, $B);
-    fill!(C, NaN)
+    br[11,i] = n_gflop / @belapsed dgemmopenblas!($C, $A, $B);
+    @assert C ≈ Cblas "OpenBLAS gemm wrong?"
     br[12,i] = n_gflop / @belapsed dgemmmkl!($C, $A, $B)
-    @assert C ≈ Cblas "MKL JIT gemm wrong?"
+    @assert C ≈ Cblas "MKL gemm wrong?"
     # br[12,i] = n_gflop / @belapsed gemmavx!($C, $A, $B)
 end
 function A_mul_B_bench!(br, s, i)
@@ -109,7 +109,7 @@ blastests() = [
     "GFortran", "icc", "ifort",
     "g++ & Eigen-3", "clang++ & Eigen-3",
     "GFortran-builtin", "ifort-builtin",
-    BLAS.vendor() === :mkl ? "IntelMKL" : "OpenBLAS", "MKL"
+    "OpenBLAS", "MKL"
 ]    
 
 function benchmark_AmulB(sizes)
@@ -160,7 +160,7 @@ function dot_bench!(br, s, i)
     br[9,i] = n_gflop / @belapsed dot($a, $b)
 end
 function benchmark_dot(sizes)
-    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "clang++ & Eigen-3", BLAS.vendor() === :mkl ? "IntelMKL" : "OpenBLAS"]
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "clang++ & Eigen-3", "OpenBLAS"]
     br = BenchmarkResult(tests, sizes)
     sm = br.sizedresults.results
     pmap(is -> dot_bench!(sm, is[2], is[1]), enumerate(sizes))
@@ -189,7 +189,7 @@ function selfdot_bench!(br, s, i)
     br[9,i] = n_gflop / @belapsed dot($a, $a)
 end
 function benchmark_selfdot(sizes)
-    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "clang++ & Eigen-3", BLAS.vendor() === :mkl ? "IntelMKL" : "OpenBLAS"]
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "clang++ & Eigen-3", "OpenBLAS"]
     br = BenchmarkResult(tests, sizes)
     sm = br.sizedresults.results
     pmap(is -> selfdot_bench!(sm, is[2], is[1]), enumerate(sizes))
@@ -222,7 +222,8 @@ function gemv_bench!(br, x, A, y, i)
     @assert x ≈ xblas "Fort wrong?"; fill!(x, NaN);
     br[10,i] = n_gflop / @belapsed ifgemv_builtin!($x, $A, $y)
     @assert x ≈ xblas "ifort wrong?"; fill!(x, NaN);
-    br[11,i] = n_gflop / @belapsed mul!($x, $A, $y)
+    br[11,i] = n_gflop / @belapsed dgemvopenblas!($x, $A, $y)
+    @assert x ≈ xblas "gemvopenblas wrong?"; fill!(x, NaN);
     br[12,i] = n_gflop / @belapsed dgemvmkl!($x, $A, $y)
     @assert x ≈ xblas "gemvmkl wrong?"; fill!(x, NaN);
 end
@@ -316,7 +317,7 @@ function sse_bench!(br, s, i)
     br[9,i] = n_gflop / @belapsed sse!($Xβ, $y, $X, $β)
 end
 function benchmark_sse(sizes)
-    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "clang++ & Eigen-3", BLAS.vendor() === :mkl ? "IntelMKL" : "OpenBLAS"]
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "clang++ & Eigen-3", "OpenBLAS"]
     br = BenchmarkResult(tests, sizes)
     sm = br.sizedresults.results
     pmap(is -> sse_bench!(sm, is[2], is[1]), enumerate(sizes))

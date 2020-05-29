@@ -1,5 +1,9 @@
 module LoopVectorization
 
+if (!isnothing(get(ENV, "TRAVIS_BRANCH", nothing)) || !isnothing(get(ENV, "APPVEYOR", nothing))) && isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@optlevel"))
+    @eval Base.Experimental.@optlevel 1
+end
+
 using VectorizationBase, SIMDPirates, SLEEFPirates, UnPack, OffsetArrays
 using VectorizationBase: REGISTER_SIZE, extract_data, num_vector_load_expr,
     mask, masktable, pick_vector_width_val, valmul, valrem, valmuladd, valmulsub, valadd, valsub, _MM,

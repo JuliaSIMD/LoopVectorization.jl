@@ -245,6 +245,7 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
         termcond = gensym(:maybeterm)
         push!(body.args, Expr(:(=), termcond, expect(tc)))
         Expr(:block, Expr(:(=), termcond, true), Expr(:while, termcond, body))
+        # Expr(:block, Expr(:while, expect(tc), body))
         # Expr(:block, assume(tc), Expr(:while, tc, body))
         # push!(body.args, Expr(:&&, expect(Expr(:call, :!, tc)), Expr(:break)))
         # Expr(:block, assume(tc), Expr(:while, true, body))
@@ -256,6 +257,7 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
         # tc = terminatecondition(loop, us, n, loopsym, true, 1)
         tc = terminatecondition(ls, us, n, true, 1)
         body = lower_block(ls, us, n, true, 1)
+        isone(num_loops(ls)) && pushfirst!(body.args, definemask(loop))
         push!(q.args, Expr(:if, tc, body))
     end
     Expr(:block, Expr(:let, sl, q))
@@ -278,7 +280,12 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     # sl = startloop(loop, nisvectorized, loopsym)
     sl = startloop(ls, us, n)
 
-    remfirst = loopisstatic & !(unsigned(Ureduct) < unsigned(UF))
+    UFt = if loopisstatic
+        length(loop) % UF
+    else
+        1
+    end
+    remfirst = loopisstatic & (UFt > 0) & !(unsigned(Ureduct) < unsigned(UF))
     tc = terminatecondition(ls, us, n, inclmask, remfirst ? 1 : UF)
     usorig = ls.unrollspecification[]
 
@@ -287,11 +294,6 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     body = lower_block(ls, us, n, inclmask, UF)
     q = Expr(:while, tc, body)
     remblock = init_remblock(loop, ls.lssm[], n)#loopsym)
-    UFt = if loopisstatic
-        length(loop) % UF
-    else
-        1
-    end
     q = if unsigned(Ureduct) < unsigned(UF) # unsigned(-1) == typemax(UInt); is logic relying on twos-complement bad?
         UF_cleanup = UF - Ureduct
         us_cleanup = nisunrolled ? UnrollSpecification(us, UF_cleanup, u₂) : UnrollSpecification(us, u₁, UF_cleanup)
@@ -316,6 +318,8 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
             end
             q
         end
+    elseif iszero(UFt)
+        Expr( :block, q )
     else
         # if (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !isstaticloop(loop) && !inclmask# && !ls.loadelimination[]
         #     # Expr(:block, sl, assumeloopiteratesatleastonce(loop), Expr(:while, tc, body))
@@ -324,11 +328,6 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
         #     Expr(:block, sl, q, remblock)
         # end
         Expr( :block, q, remblock )
-    end
-    UFt = if loopisstatic
-        length(loop) % UF
-    else
-        1
     end
     if !iszero(UFt)
         while true
@@ -339,9 +338,15 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
                 break
             end
             comparison = unrollremcomparison(ls, loop, UFt, n, nisvectorized, remfirst)
-            remblocknew = Expr(:elseif, comparison, newblock)
-            push!(remblock.args, remblocknew)
-            remblock = remblocknew
+            if isone(num_loops(ls)) && isone(UFt)
+                remblocknew = Expr(:if, comparison, newblock)
+                push!(remblock.args, Expr(:block, definemask(loop), remblocknew))
+                remblock = remblocknew
+            else
+                remblocknew = Expr(:elseif, comparison, newblock)
+                push!(remblock.args, remblocknew)
+                remblock = remblocknew
+            end
             UFt += 1
         end
     end
@@ -485,19 +490,19 @@ function determine_width(
 end
 function init_remblock(unrolledloop::Loop, lssm::LoopStartStopManager, n::Int)#u₁loop::Symbol = unrolledloop.itersymbol)
     termind = lssm.terminators[n]
-    if iszero(termind)
+    condition = if iszero(termind)
         loopsym = unrolledloop.itersymbol
-        condition = if unrolledloop.stopexact
-            Expr(:call, :>, loopsym, unrolledloop.stophint - 1)
+        if unrolledloop.stopexact
+            Expr(:call, :<, loopsym, unrolledloop.stophint)
         else
-            Expr(:call, :≥, loopsym, unrolledloop.stopsym)
+            Expr(:call, :<, loopsym, unrolledloop.stopsym)
         end
     else
         termar = lssm.incrementedptrs[n][termind]
         ptr = vptr(termar)
-        condition = Expr(:call, :≥, callpointerforcomparison(ptr), maxsym(ptr, 0))
+        Expr(:call, :<, callpointerforcomparison(ptr), maxsym(ptr, 0))
     end
-    Expr(:if, condition, nothing)
+    Expr(:if, condition)
 end
 
 function maskexpr(looplimit)
@@ -533,7 +538,7 @@ function setup_preamble!(ls::LoopSet, us::UnrollSpecification)
         push!(ls.preamble.args, Expr(:(=), VECTORWIDTHSYMBOL, determine_width(ls, vectorized)))
     end
     lower_licm_constants!(ls)
-    pushpreamble!(ls, definemask(getloop(ls, vectorized)))#, u₁ > 1 && u₁loopnum == vectorizedloopnum))
+    isone(num_loops(ls)) || pushpreamble!(ls, definemask(getloop(ls, vectorized)))#, u₁ > 1 && u₁loopnum == vectorizedloopnum))
     for op ∈ operations(ls)
         (iszero(length(loopdependencies(op))) && iscompute(op)) && lower_compute!(ls.preamble, op, UnrollArgs(u₁, u₁loopsym, u₂loopsym, vectorized, u₂, nothing), nothing)
     end

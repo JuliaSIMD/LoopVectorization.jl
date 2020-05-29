@@ -21,6 +21,7 @@ end
 
 # sizes = 23:23
 sizes = 256:-1:2
+longsizes = 512:-1:2
 
 logdettriangle_bench = benchmark_logdettriangle(sizes); println("logdet(LowerTriangular(A)) benchmark results:"); println(logdettriangle_bench)
 dot3_bench = benchmark_dot3(sizes); println("x' * A * y benchmark results:"); println(dot3_bench)
@@ -37,8 +38,8 @@ filter2d_dynamic_bench = benchmark_filter2ddynamic(sizes); println("Benchmark re
 filter2d_3x3_bench = benchmark_filter2d3x3(sizes); println("Benchmark results for statically sized 3x3 convolution:"); println(filter2d_3x3_bench)
 filter2d_unrolled_bench = benchmark_filter2dunrolled(sizes); println("Benchmark results for unrolled 3x3 convolution:"); println(filter2d_unrolled_bench)
 
-dot_bench = benchmark_dot(sizes); println("a' * b benchmark results:"); println(dot_bench)
-selfdot_bench = benchmark_selfdot(sizes); println("a' * a benchmark results:"); println(selfdot_bench)
+dot_bench = benchmark_dot(longsizes); println("a' * b benchmark results:"); println(dot_bench)
+selfdot_bench = benchmark_selfdot(longsizes); println("a' * a benchmark results:"); println(selfdot_bench)
 sse_bench = benchmark_sse(sizes); println("Benchmark resutls of summing squared error:"); println(sse_bench)
 aplusBc_bench = benchmark_aplusBc(sizes); println("Benchmark results of a .+ B .* c':"); println(aplusBc_bench)
 AplusAt_bench = benchmark_AplusAt(sizes); println("Benchmark results of A * A':"); println(AplusAt_bench)
