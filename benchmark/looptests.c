@@ -248,8 +248,8 @@ void filter2d(double* restrict B, double* restrict A, double* restrict K, long M
   for (long na = offset; na < N-offset; na++){
     for (long ma = offset; ma < M-offset; ma++){
       double tmp = 0.0;
-      for (long mk = -offset; mk < offset + 1; mk++){
-	for (long nk = -offset; nk < offset + 1; nk++){
+      for (long nk = -offset; nk < offset + 1; nk++){
+	for (long mk = -offset; mk < offset + 1; mk++){
 	  tmp += A[(ma+mk) + (na+nk)*M] * K[(mk+offset) + (nk+offset)*(2*offset+1)];
 	}
       }
@@ -262,8 +262,8 @@ void filter2d3x3(double* restrict B, double* restrict A, double* restrict K, lon
   for (long na = offset; na < N-offset; na++){
     for (long ma = offset; ma < M-offset; ma++){
       double tmp = 0.0;
-      for (long mk = -offset; mk < offset + 1; mk++){
-	for (long nk = -offset; nk < offset + 1; nk++){
+      for (long nk = -offset; nk < offset + 1; nk++){
+	for (long mk = -offset; mk < offset + 1; mk++){
 	  tmp += A[(ma+mk) + (na+nk)*M] * K[(mk+offset) + (nk+offset)*(2*offset+1)];
 	}
       }

@@ -35,8 +35,11 @@ function Gadfly.plot(br::BenchmarkResult)
     # sizes = Vector{eltype(brsizes)}(undef, length(res))
     tests = replace_and.(@view(br.tests[2:end]))
     colors = getcolor.(tests)
+    addlabel = false
     
-    xt = 0:20:260
+    maxxval, maxxind = findmax(sizes)
+    maxxtick = 10cld(maxxval,10) + (addlabel ? 20 : 0)
+    xt = 0:20:maxxtick
     maxres = maximum(res)
     maxtick = 10round(Int, 0.1maxres)
     yt = if iszero(maxtick)
@@ -59,6 +62,7 @@ function Gadfly.plot(br::BenchmarkResult)
     for i ∈ eachindex(tests)
         push!(p, layer(x = sizes, y = res[i,:], Geom.line, Theme(default_color=colors[i])))
     end
+    addlabel && push!(p, layer(x = fill(maxxtick - 10, length(tests)), y = res[:,maxxind], label=tests, Geom.label(position=:centered)))
     p
 end
 

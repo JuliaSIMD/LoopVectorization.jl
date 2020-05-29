@@ -157,10 +157,10 @@ function dot_bench!(br, s, i)
     @assert edot(a,b) ≈ dotblas "eigen dot wrong?"
     br[8,i] = n_gflop / @belapsed iedot($a, $b)
     @assert iedot(a,b) ≈ dotblas "i-eigen dot wrong?"
-    br[9,i] = n_gflop / @belapsed dot($a, $b)
+    # br[9,i] = n_gflop / @belapsed dot($a, $b)
 end
 function benchmark_dot(sizes)
-    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "clang++ & Eigen-3", "OpenBLAS"]
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "clang++ & Eigen-3"]#, "OpenBLAS"]
     br = BenchmarkResult(tests, sizes)
     sm = br.sizedresults.results
     pmap(is -> dot_bench!(sm, is[2], is[1]), enumerate(sizes))
@@ -186,10 +186,10 @@ function selfdot_bench!(br, s, i)
     @assert eselfdot(a) ≈ dotblas "eigen dot wrong?"
     br[8,i] = n_gflop / @belapsed ieselfdot($a)
     @assert ieselfdot(a) ≈ dotblas "i-eigen dot wrong?"
-    br[9,i] = n_gflop / @belapsed dot($a, $a)
+    # br[9,i] = n_gflop / @belapsed dot($a, $a)
 end
 function benchmark_selfdot(sizes)
-    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "clang++ & Eigen-3", "OpenBLAS"]
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "clang++ & Eigen-3"]#, "OpenBLAS"]
     br = BenchmarkResult(tests, sizes)
     sm = br.sizedresults.results
     pmap(is -> selfdot_bench!(sm, is[2], is[1]), enumerate(sizes))
@@ -284,6 +284,7 @@ function benchmark_dot3(sizes)
     pmap(is -> dot3_bench!(sm, is[2], is[1]), enumerate(sizes))
     br
 end
+BLAS.set_num_threads(1)
 function sse!(Xβ, y, X, β)
     mul!(copyto!(Xβ, y), X, β, 1.0, -1.0)
     dot(Xβ, Xβ)
@@ -317,7 +318,7 @@ function sse_bench!(br, s, i)
     br[9,i] = n_gflop / @belapsed sse!($Xβ, $y, $X, $β)
 end
 function benchmark_sse(sizes)
-    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "clang++ & Eigen-3", "OpenBLAS"]
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "clang++ & Eigen-3", BLAS.vendor() === :mkl ? "MKL" : "OpenBLAS"]
     br = BenchmarkResult(tests, sizes)
     sm = br.sizedresults.results
     pmap(is -> sse_bench!(sm, is[2], is[1]), enumerate(sizes))

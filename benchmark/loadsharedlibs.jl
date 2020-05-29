@@ -4,6 +4,13 @@ using LoopVectorization.VectorizationBase: REGISTER_SIZE
 # const LOOPVECBENCHDIR = joinpath(pkgdir(LoopVectorization), "benchmark")
 include(joinpath(LOOPVECBENCHDIR, "looptests.jl"))
 
+const LIBCTEST = joinpath(LOOPVECBENCHDIR, "libctests.so")
+const LIBFTEST = joinpath(LOOPVECBENCHDIR, "libftests.so")
+const LIBICTEST = joinpath(LOOPVECBENCHDIR, "libictests.so")
+const LIBIFTEST = joinpath(LOOPVECBENCHDIR, "libiftests.so")
+const LIBEIGENTEST = joinpath(LOOPVECBENCHDIR, "libetest.so")
+const LIBIEIGENTEST = joinpath(LOOPVECBENCHDIR, "libietest.so")
+
 
 # requires Clang with polly to build
 cfile = joinpath(LOOPVECBENCHDIR, "looptests.c")
@@ -28,12 +35,19 @@ end
 eigenfile = joinpath(LOOPVECBENCHDIR, "looptestseigen.cpp")
 if !isfile(LIBEIGENTEST) || mtime(eigenfile) > mtime(LIBEIGENTEST)
     # Clang seems to have trouble finding includes
-    run(`g++ -O3 -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -DEIGEN_VECTORIZE_AVX512 -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBEIGENTEST`)
-    
+    if LoopVectorization.VectorizationBase.AVX512F
+        run(`g++ -O3 -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -DEIGEN_VECTORIZE_AVX512 -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBEIGENTEST`)
+    else
+        run(`g++ -O3 -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBEIGENTEST`)
+    end
 end
 if !isfile(LIBIEIGENTEST) || mtime(eigenfile) > mtime(LIBIEIGENTEST)
     # run(`/usr/bin/clang++ -Ofast -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -DEIGEN_VECTORIZE_AVX512 -I/usr/include/c++/9 -I/usr/include/c++/9/x86_64-generic-linux -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBEIGENTEST`)
-    run(`/usr/bin/clang++ -Ofast -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -DEIGEN_VECTORIZE_AVX512 -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBEIGENTEST`)
+    if LoopVectorization.VectorizationBase.AVX512F
+        run(`/usr/bin/clang++ -Ofast -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -DEIGEN_VECTORIZE_AVX512 -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBEIGENTEST`)
+    else
+        run(`/usr/bin/clang++ -Ofast -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBEIGENTEST`)
+    end
     # run(`icpc -fast -qopt-zmm-usage=high -fargument-noalias-global -qoverride-limits -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBIEIGENTEST`)
 end
 
@@ -46,13 +60,6 @@ end
 #     # run(`gfortran -Ofast -march=native -DMKL_DIRECT_CALL_SEQ_JIT -cpp -mprefer-vector-width=$(8REGISTER_SIZE) -shared -fPIC $directcalljitfile -o $LIBDIRECTCALLJIT`)
 # end
 
-
-const LIBCTEST = joinpath(LOOPVECBENCHDIR, "libctests.so")
-const LIBFTEST = joinpath(LOOPVECBENCHDIR, "libftests.so")
-const LIBICTEST = joinpath(LOOPVECBENCHDIR, "libictests.so")
-const LIBIFTEST = joinpath(LOOPVECBENCHDIR, "libiftests.so")
-const LIBEIGENTEST = joinpath(LOOPVECBENCHDIR, "libetest.so")
-const LIBIEIGENTEST = joinpath(LOOPVECBENCHDIR, "libietest.so")
 
 using MKL_jll, OpenBLAS_jll
 
@@ -105,9 +112,9 @@ function dgemmopenblas!(C::AbstractMatrix{Float64}, A::AbstractMatrix{Float64}, 
         transA, transB, M, N, K, α, pA, ldA, pB, ldB, β, C, ldC
     )
 end
-mkl_set_num_threads(N::Integer) = ccall(MKL_SET_NUM_THREADS, Cvoid, (Ref{UInt32},), Ref(N % UInt32))
+mkl_set_num_threads(N::Integer) = ccall(MKL_SET_NUM_THREADS, Cvoid, (Int32,), N % Int32)
 mkl_set_num_threads(1)
-openblas_set_num_threads(N::Integer) = ccall(OPENBLAS_SET_NUM_THREADS, Cvoid, (Ref{Int64},), Ref(N))
+openblas_set_num_threads(N::Integer) = ccall(OPENBLAS_SET_NUM_THREADS, Cvoid, (Int64,), N)
 openblas_set_num_threads(1)
 function dgemvmkl!(y::AbstractVector{Float64}, A::AbstractMatrix{Float64}, x::AbstractVector{Float64})
     transA = istransposed(A)
@@ -123,7 +130,7 @@ function dgemvmkl!(y::AbstractVector{Float64}, A::AbstractMatrix{Float64}, x::Ab
     ccall(
         DGEMV_MKL, Cvoid,
         (Ref{UInt8}, Ref{Int32}, Ref{Int32}, Ref{Float64}, Ref{Float64}, Ref{Int32}, Ref{Float64}, Ref{Int32}, Ref{Float64}, Ref{Float64}, Ref{Int32}),
-        transA, M32, N32, α, A, ldA, x, incx, β, y, incy
+        transA, M32, N32, α, pA, ldA, x, incx, β, y, incy
     )
 end
 function dgemvopenblas!(y::AbstractVector{Float64}, A::AbstractMatrix{Float64}, x::AbstractVector{Float64})
@@ -138,7 +145,7 @@ function dgemvopenblas!(y::AbstractVector{Float64}, A::AbstractMatrix{Float64}, 
     ccall(
         DGEMV_OpenBLAS, Cvoid,
         (Ref{UInt8}, Ref{Int64}, Ref{Int64}, Ref{Float64}, Ref{Float64}, Ref{Int64}, Ref{Float64}, Ref{Int64}, Ref{Float64}, Ref{Float64}, Ref{Int64}),
-        transA, M, N, α, A, ldA, x, incx, β, y, incy
+        transA, M, N, α, pA, ldA, x, incx, β, y, incy
     )
 end
 

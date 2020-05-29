@@ -440,9 +440,7 @@ uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
 
 [[LoopVectorization]]
 deps = ["DocStringExtensions", "LinearAlgebra", "OffsetArrays", "SIMDPirates", "SLEEFPirates", "UnPack", "VectorizationBase"]
-git-tree-sha1 = "1a9a648f0aa612fdc36acb784ba47d77e8707383"
-repo-rev = "master"
-repo-url = "https://github.com/chriselrod/LoopVectorization.jl.git"
+path = "/home/chriselrod/.julia/dev/LoopVectorization"
 uuid = "bdcacae8-1622-11e9-2a5c-532679323890"
 version = "0.8.2"
 

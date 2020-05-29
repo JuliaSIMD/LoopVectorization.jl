@@ -324,10 +324,8 @@ module looptests
       real(C_double) :: tmp
       do concurrent(mma = 1+offset:Ma-offset, nna = 1+offset:Na-offset)
          tmp = 0
-         do mmk = -offset,offset
-            do nnk = -offset,offset
-               tmp = tmp + A(mma + mmk, nna + nnk) * K(mmk, nnk)
-            end do
+         do concurrent(mmk = -offset:offset, nnk = -offset:offset)
+            tmp = tmp + A(mma + mmk, nna + nnk) * K(mmk, nnk)
          end do
          B(mma,nna) = tmp
       end do
@@ -342,10 +340,8 @@ module looptests
       real(C_double) :: tmp
       do concurrent(mma = 1+offset:Ma-offset, nna = 1+offset:Na-offset)
          tmp = 0
-         do mmk = -offset,offset
-            do nnk = -offset,offset
-               tmp = tmp + A(mma + mmk, nna + nnk) * K(mmk, nnk)
-            end do
+         do concurrent(mmk = -offset:offset, nnk = -offset:offset)
+            tmp = tmp + A(mma + mmk, nna + nnk) * K(mmk, nnk)
          end do
          B(mma,nna) = tmp
       end do
