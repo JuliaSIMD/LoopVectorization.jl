@@ -284,10 +284,10 @@ function benchmark_dot3(sizes)
     pmap(is -> dot3_bench!(sm, is[2], is[1]), enumerate(sizes))
     br
 end
-BLAS.set_num_threads(1)
+# BLAS.set_num_threads(1)
 function sse!(Xβ, y, X, β)
-    mul!(copyto!(Xβ, y), X, β, 1.0, -1.0)
-    dot(Xβ, Xβ)
+    dgemvmkl!(copyto!(Xβ, y), X, β, 1.0, -1.0)
+    jdot(Xβ, Xβ)
 end
 sse_totwotuple(s::NTuple{2}) = s
 sse_totwotuple(s::Integer) = ((3s) >> 1, s >> 1)
@@ -318,7 +318,7 @@ function sse_bench!(br, s, i)
     br[9,i] = n_gflop / @belapsed sse!($Xβ, $y, $X, $β)
 end
 function benchmark_sse(sizes)
-    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "clang++ & Eigen-3", BLAS.vendor() === :mkl ? "MKL" : "OpenBLAS"]
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "clang++ & Eigen-3", "MKL"]
     br = BenchmarkResult(tests, sizes)
     sm = br.sizedresults.results
     pmap(is -> sse_bench!(sm, is[2], is[1]), enumerate(sizes))

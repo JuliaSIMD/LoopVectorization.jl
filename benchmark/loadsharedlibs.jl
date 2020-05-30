@@ -116,7 +116,7 @@ mkl_set_num_threads(N::Integer) = ccall(MKL_SET_NUM_THREADS, Cvoid, (Int32,), N 
 mkl_set_num_threads(1)
 openblas_set_num_threads(N::Integer) = ccall(OPENBLAS_SET_NUM_THREADS, Cvoid, (Int64,), N)
 openblas_set_num_threads(1)
-function dgemvmkl!(y::AbstractVector{Float64}, A::AbstractMatrix{Float64}, x::AbstractVector{Float64})
+function dgemvmkl!(y::AbstractVector{Float64}, A::AbstractMatrix{Float64}, x::AbstractVector{Float64}, α = 1.0, β = 0.0)
     transA = istransposed(A)
     pA = parent(A)
     M, N = size(pA)
@@ -125,8 +125,6 @@ function dgemvmkl!(y::AbstractVector{Float64}, A::AbstractMatrix{Float64}, x::Ab
     ldA = stride(pA, 2) % Int32
     incx = LinearAlgebra.stride1(x) % Int32
     incy = LinearAlgebra.stride1(y) % Int32
-    α = 1.0
-    β = 0.0
     ccall(
         DGEMV_MKL, Cvoid,
         (Ref{UInt8}, Ref{Int32}, Ref{Int32}, Ref{Float64}, Ref{Float64}, Ref{Int32}, Ref{Float64}, Ref{Int32}, Ref{Float64}, Ref{Float64}, Ref{Int32}),
