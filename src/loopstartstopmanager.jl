@@ -37,7 +37,7 @@ function indices_calculated_by_pointer_offsets(ls::LoopSet, ar::ArrayReferenceMe
         #     out[i] = out[j - offset]
         #     continue
         # end
-        if (!li[i]) || multiple_with_name(vptr(ar), ls.lssm[].uniquearrayrefs)
+        if (!li[i]) || multiple_with_name(vptr(ar), ls.lssm[].uniquearrayrefs) || isstaticloop(getloop(ls, ind))
             out[i] = false
         elseif (isone(ii) && (first(looporder) === ind))
             out[i] = otherindexunrolled(ls, ind, ar)
@@ -78,7 +78,7 @@ function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, alla
         if (!li[i])
             uliv[i] = 0
             push!(gespinds.args, Expr(:call, lv(:Zero)))
-        elseif isbroadcast || ((isone(ii) && (last(looporder) === ind)) && !(otherindexunrolled(ls, ind, ar)) || multiple_with_name(vptr(ar), allarrayrefs))
+        elseif isbroadcast || ((isone(ii) && (last(looporder) === ind)) && !(otherindexunrolled(ls, ind, ar)) || multiple_with_name(vptr(ar), allarrayrefs)) || isstaticloop(getloop(ls, ind))
             uliv[i] = -findfirst(isequal(ind), looporder)::Int
             push!(gespinds.args, Expr(:call, lv(:Zero)))
         else

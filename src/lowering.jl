@@ -236,14 +236,15 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
     sl = startloop(ls, us, n)
     tc = terminatecondition(ls, us, n, inclmask, 1)
     body = lower_block(ls, us, n, inclmask, 1)
+    isstatic = isstaticloop(loop)
     q = if nisvectorized
             # Expr(:block, loopiteratesatleastonce(loop, true), Expr(:while, expect(tc), body))
-        Expr(:block, Expr(:while, expect(tc), body))
-    elseif isstaticloop(loop) && length(loop) ≤ 4
+        Expr(:block, Expr(:while, isstatic ? tc : expect(tc), body))
+    elseif isstatic && length(loop) ≤ 8
         Expr(:block, (body for _ ∈ 1:length(loop))...)
     else
         termcond = gensym(:maybeterm)
-        push!(body.args, Expr(:(=), termcond, expect(tc)))
+        push!(body.args, Expr(:(=), termcond, isstatic ? tc : expect(tc)))
         Expr(:block, Expr(:(=), termcond, true), Expr(:while, termcond, body))
         # Expr(:block, Expr(:while, expect(tc), body))
         # Expr(:block, assume(tc), Expr(:while, tc, body))
