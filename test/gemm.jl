@@ -1,6 +1,6 @@
 @testset "GEMM" begin
- # using LoopVectorization, LinearAlgebra, Test; T = Float64
-    Unum, Tnum = LoopVectorization.REGISTER_COUNT == 16 ? (3, 4) : (3, 9)
+    # using LoopVectorization, LinearAlgebra, Test; T = Float64
+    Unum, Tnum = LoopVectorization.REGISTER_COUNT == 16 ? (2, 6) : (3, 9)
     Unumt, Tnumt = LoopVectorization.REGISTER_COUNT == 16 ? (3, 4) : (5, 5)
     if LoopVectorization.REGISTER_COUNT != 8
         @test LoopVectorization.mᵣ == Unum
@@ -476,8 +476,6 @@
         end
         return C
     end
-    A = rand(35,23); B = rand(35,17); C1 = A' * B; C2 = similar(C1);
-    mulCAtB_2x2block_avx!(C2, A, B);
     
     function mulCAtB_2x2blockavx_noinline!(C, A, B)
         M, N = size(C); K = size(B,1)
@@ -846,7 +844,6 @@
             fill!(C, 9999.999); rank2AmulBavx_noinline!(C, Aₘ, Aₖ′', B)
             @test C ≈ C2
         end
-
     end
 end
 
