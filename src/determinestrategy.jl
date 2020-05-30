@@ -274,27 +274,27 @@ function solve_unroll_iter(X, R, u₁L, u₂L, u₁range, u₂range)
     u₁best, u₂best, bestcost
 end
 
-function solve_unroll(X, R, u₁L, u₂L)
+function solve_unroll(X, R, u₁L, u₂L, u₁step, u₂step)
     X₁, X₂, X₃, X₄ = X[1], X[2], X[3], X[4]
     R₁, R₂, R₃, R₄, R₅ = R[1], R[2], R[3], R[4], R[5]
-    iszero(R₅) || return solve_unroll_iter(X, R, u₁L, u₂L, 1:10, 1:10)
+    iszero(R₅) || return solve_unroll_iter(X, R, u₁L, u₂L, u₁step:u₁step:10, u₂step:u₂step:10)
     RR = REGISTER_COUNT - R₃ - R₄
     a = R₂^2*X₃ -R₁*X₄ * R₂ - R₁*X₂*RR
     b = R₁ * X₄ * RR - R₁ * X₄ * RR - 2X₃*RR*R₂
     c = X₃*RR^2
     discriminant = b^2 - 4a*c
     discriminant < 0 && return -1,-1,Inf
-    u₁float = max(1.0, (sqrt(discriminant) + b) / (-2a)) # must be at least 1
+    u₁float = max(float(u₁step), (sqrt(discriminant) + b) / (-2a)) # must be at least 1
     u₂float = (RR - u₁float*R₂)/(u₁float*R₁)
     if !(isfinite(u₂float) && isfinite(u₁float))
         return 4, 4, unroll_cost(X, 4, 4, u₁L, u₂L)
         # return itertilesize(X, u₁L, u₂L)
     end
     u₁low = floor(Int, u₁float)
-    u₂low = max(1, floor(Int, u₂float)) # must be at least 1
-    u₁high = solve_unroll_constT(R, u₂low) + 1
-    u₂high = solve_unroll_constU(R, u₁low) + 1
-    solve_unroll_iter(X, R, u₁L, u₂L, u₁low:u₁high, u₂low:u₂high)
+    u₂low = max(u₂step, floor(Int, u₂float)) # must be at least 1
+    u₁high = solve_unroll_constT(R, u₂low) + u₁step
+    u₂high = solve_unroll_constU(R, u₁low) + u₂step
+    solve_unroll_iter(X, R, u₁L, u₂L, u₁low:u₁step:u₁high, u₂low:u₂step:u₂high)
 end
 
 function solve_unroll_constU(R::AbstractVector, u₁::Int)
@@ -308,9 +308,9 @@ function solve_unroll_constT(ls::LoopSet, u₂::Int)
     floor(Int, (REGISTER_COUNT - R[3] - R[4] - u₂*R[5]) / (u₂ * R[1] + R[2]))
 end
 # Tiling here is about alleviating register pressure for the UxT
-function solve_unroll(X, R, u₁max, u₂max, u₁L, u₂L)
+function solve_unroll(X, R, u₁max, u₂max, u₁L, u₂L, u₁step, u₂step)
     # iszero(first(R)) && return -1,-1,Inf #solve_smalltilesize(X, R, u₁max, u₂max)
-    u₁, u₂, cost = solve_unroll(X, R, u₁L, u₂L)
+    u₁, u₂, cost = solve_unroll(X, R, u₁L, u₂L, u₁step, u₂step)
     # u₂ -= u₂ & 1
     # u₁ = min(u₁, u₂)
     u₁_too_large = u₁ > u₁max
@@ -354,12 +354,19 @@ function solve_unroll(
     ls::LoopSet, u₁loopsym::Symbol, u₂loopsym::Symbol,
     cost_vec::AbstractVector{Float64},
     reg_pressure::AbstractVector{Float64},
-    W::Int, vectorized::Symbol
+    W::Int, vectorized::Symbol, rounduᵢ::Int
 )
+    (u₁step, u₂step) = if rounduᵢ == 1 # max is to safeguard against some weird arch I've never heard of.
+        (max(1,VectorizationBase.CACHELINE_SIZE ÷ VectorizationBase.REGISTER_SIZE), 1)
+    elseif rounduᵢ == 2
+        (1, max(1,VectorizationBase.CACHELINE_SIZE ÷ VectorizationBase.REGISTER_SIZE))
+    else
+        (1, 1)
+    end
     u₁loop = getloop(ls, u₁loopsym)
     u₂loop = getloop(ls, u₂loopsym)
     solve_unroll(
-        u₁loopsym, u₂loopsym, cost_vec, reg_pressure, W, vectorized, u₁loop, u₂loop
+        u₁loopsym, u₂loopsym, cost_vec, reg_pressure, W, vectorized, u₁loop, u₂loop, u₁step, u₂step
     )
 end
 
@@ -368,7 +375,8 @@ function solve_unroll(
     cost_vec::AbstractVector{Float64},
     reg_pressure::AbstractVector{Float64},
     W::Int, vectorized::Symbol,
-    u₁loop::Loop, u₂loop::Loop
+    u₁loop::Loop, u₂loop::Loop,
+    u₁step::Int, u₂step::Int
 )
     maxu₂base = maxu₁base = REGISTER_COUNT == 32 ? 10 : 6#8
     maxu₂ = maxu₂base#8
@@ -393,7 +401,7 @@ function solve_unroll(
         u₁L = u₁loopsym === vectorized ? cld(u₁L,W) : u₁L
         maxu₁ = min(4maxu₁, u₁L)
     end
-    u₁, u₂, cost = solve_unroll(cost_vec, reg_pressure, maxu₁, maxu₂, length(u₁loop), length(u₂loop))
+    u₁, u₂, cost = solve_unroll(cost_vec, reg_pressure, maxu₁, maxu₂, length(u₁loop), length(u₂loop), u₁step, u₂step)
     # heuristic to more evenly divide small numbers of iterations
     if isstaticloop(u₂loop)
         u₂ = maybedemotesize(u₂, length(u₂loop), u₁, u₁loop, maxu₂base)
@@ -637,6 +645,7 @@ function evaluate_cost_tile(
     u₁reached = u₂reached = false
     choose_to_inline = Ref(false)
     copyto!(names(ls), order); reverse!(names(ls))
+    prefetch_good_idea = false
     for n ∈ 1:N
         itersym = order[n]
         if itersym == u₁loopsym
@@ -688,6 +697,7 @@ function evaluate_cost_tile(
         rt, lat, rp = cost(ls, op, vectorized, Wshift, size_T)
         if isload(op) && !iszero(prefetchisagoodidea(ls, op, UnrollArgs(4, unrollsyms, 4, 0)))
             rt += 0.5VectorizationBase.REGISTER_SIZE / VectorizationBase.CACHELINE_SIZE
+            prefetch_good_idea = true
         end
         # @show isunrolled₁, isunrolled₂, op rt, lat, rp
         rp = opisininnerloop ? rp : zero(rp) # we only care about register pressure within the inner most loop
@@ -710,10 +720,11 @@ function evaluate_cost_tile(
     costpenalty = (sum(reg_pressure) > REGISTER_COUNT) ? 2 : 1
     # @show order, vectorized cost_vec reg_pressure
     # @show solve_unroll(ls, u₁loopsym, u₂loopsym, cost_vec, reg_pressure)
-    u₁, u₂, ucost = solve_unroll(ls, u₁loopsym, u₂loopsym, cost_vec, reg_pressure, W, vectorized)
+    u₁v = vectorized === u₁loopsym; u₂v = vectorized === u₂loopsym
+    round_uᵢ = prefetch_good_idea ? (u₁v ? 1 : (u₂v ? 2 : 0)) : 0
+    u₁, u₂, ucost = solve_unroll(ls, u₁loopsym, u₂loopsym, cost_vec, reg_pressure, W, vectorized, round_uᵢ)
     outer_reduct_penalty = length(ls.outer_reductions) * (u₁ + isodd(u₁))
     favor_bigger_u₂ = u₁ - u₂
-    u₁v = vectorized === u₁loopsym; u₂v = vectorized === u₂loopsym
     favor_smaller_vectorized = u₁v ? ( u₁ - u₂ )  : (u₂v ?  ( u₂ - u₁ ) : 0 )
     favor_u₁_vectorized = -0.2u₁v
     favoring_heuristics = favor_bigger_u₂ + 0.5favor_smaller_vectorized + favor_u₁_vectorized
