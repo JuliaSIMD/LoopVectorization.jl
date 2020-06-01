@@ -228,6 +228,7 @@ const COST = Dict{Symbol,InstructionCost}(
     :sincospi_fast => InstructionCost(25,22.0,70.0,26),
     :identity => InstructionCost(0,0.0,0.0,0),
     :adjoint => InstructionCost(0,0.0,0.0,0),
+    :conj => InstructionCost(0,0.0,0.0,0),
     :transpose => InstructionCost(0,0.0,0.0,0),
     :prefetch => InstructionCost(0,0.0,0.0,0),
     :prefetch0 => InstructionCost(0,0.0,0.0,0),
@@ -433,5 +434,6 @@ const FUNCTIONSYMBOLS = IdDict{Type{<:Function},Instruction}(
     typeof(>>>) => :>>>,
     typeof(ifelse) => :vifelse,
     typeof(vifelse) => :vifelse,
-    typeof(identity) => :identity
+    typeof(identity) => :identity,
+    typeof(conj) => :conj
 )
