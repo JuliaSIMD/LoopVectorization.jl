@@ -21,7 +21,7 @@ end
 
 # sizes = 23:23
 sizes = 256:-1:2
-longsizes = 512:-1:2
+longsizes = 1024:-1:2
 
 logdettriangle_bench = benchmark_logdettriangle(sizes); println("logdet(LowerTriangular(A)) benchmark results:"); println(logdettriangle_bench)
 dot3_bench = benchmark_dot3(sizes); println("x' * A * y benchmark results:"); println(dot3_bench)
