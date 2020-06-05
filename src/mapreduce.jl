@@ -79,3 +79,28 @@ Vectorized version of `reduce`. Reduces the array `A` using the operator `op`.
 """
 @inline vreduce(op, arg) = vmapreduce(identity, op, arg)
 
+for (op, init) in zip((:+, :max, :min), (:zero, :identity, :identity))
+    @eval function vreduce(::typeof($op), arg; dims = nothing)
+        isnothing(dims) && return _vreduce($op, arg)
+        @assert length(dims) == 1
+        out = $init(arg[ntuple(d -> d == dims ? (1:1) : (1:size(arg, d)), ndims(arg))...])
+        Rpre = CartesianIndices(axes(arg)[1:dims-1])
+        Rpost = CartesianIndices(axes(arg)[dims+1:end])
+        _vreduce_dims!(out, $op, Rpre, 1:size(arg, dims), Rpost, arg)
+    end
+
+    @eval function _vreduce_dims!(out, ::typeof($op), Rpre, is, Rpost, arg)
+        @avx for Ipost in Rpost, i in is, Ipre in Rpre
+            out[Ipre, 1, Ipost] = $op(out[Ipre, 1, Ipost], arg[Ipre, i, Ipost])
+        end
+        return out
+    end
+
+    @eval function _vreduce(::typeof($op), arg)
+        s = $init(arg[1])
+        @avx for i in 1:length(arg)
+            s = $op(s, arg[i])
+        end
+        return s
+    end
+end
