@@ -97,7 +97,7 @@ for (op, init) in zip((:+, :max, :min), (:zero, :identity, :identity))
 
     @eval function vreduce(::typeof($op), arg)
         s = $init(arg[1])
-        for i in 1:length(arg)
+        @avx for i in 1:length(arg)
             s = $op(s, arg[i])
         end
         return s
