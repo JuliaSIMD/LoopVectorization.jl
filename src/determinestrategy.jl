@@ -566,10 +566,10 @@ function load_elimination_cost_factor!(
     end
 end
 function loadintostore(ls::LoopSet, op::Operation)
-    isload(op) || return false
-    for opp ∈ operations(ls)
-        isstore(opp) && opp.ref == op.ref && return true
-    end
+    # isload(op) || return false # leads to bad behavior more than it helps
+    # for opp ∈ operations(ls)
+    #     isstore(opp) && opp.ref == op.ref && return true
+    # end
     false
 end
 function add_constant_offset_load_elmination_cost!(
