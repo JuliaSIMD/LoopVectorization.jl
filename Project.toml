@@ -15,7 +15,7 @@ VectorizationBase = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
 [compat]
 DocStringExtensions = "0.8"
 OffsetArrays = "1"
-SIMDPirates = "0.8.4"
+SIMDPirates = "0.8.6"
 SLEEFPirates = "0.5"
 UnPack = "0,1"
 VectorizationBase = "0.12.6"
