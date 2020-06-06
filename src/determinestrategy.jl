@@ -170,9 +170,16 @@ function roundpow2(i::Integer)
     ld = i - l
     ud > ld ? l : u
 end
-function unroll_no_reductions(ls, order, unrolled, vectorized, Wshift, size_T)
+function unroll_no_reductions(ls, order, vectorized)
+    size_T = biggest_type_size(ls)
+    W, Wshift = VectorizationBase.pick_vector_width_shift(length(ls, vectorized), size_T)::Tuple{Int,Int}
+
     compute_rt = 0.0
     load_rt = 0.0
+    unrolled = last(order)
+    if unrolled === vectorized && length(order) > 1
+        unrolled = order[end-1]
+    end
     # latency not a concern, because no depchains
     for op ∈ operations(ls)
         dependson(op, unrolled) || continue
@@ -186,28 +193,14 @@ function unroll_no_reductions(ls, order, unrolled, vectorized, Wshift, size_T)
     # @show compute_rt, load_rt
     # roundpow2(min(4, round(Int, (compute_rt + load_rt + 1) / compute_rt)))
     rt = max(compute_rt, load_rt)
-    iszero(rt) && return 4
-    max(1, roundpow2( min( 4, round(Int, 16 / rt) ) ))
+    (iszero(rt) ? 4 : max(1, roundpow2( min( 4, round(Int, 16 / rt) ) ))), unrolled
 end
 function determine_unroll_factor(
-    ls::LoopSet, order::Vector{Symbol}, unrolled::Symbol, vectorized::Symbol = first(order)
+    ls::LoopSet, order::Vector{Symbol}, unrolled::Symbol, vectorized::Symbol
 )
     size_T = biggest_type_size(ls)
     W, Wshift = VectorizationBase.pick_vector_width_shift(length(ls, vectorized), size_T)::Tuple{Int,Int}
 
-    # The strategy is to use an unroll factor of 1, unless there appears to be loop carried dependencies (ie, num_reductions > 0)
-    # The assumption here is that unrolling provides no real benefit, unless it is needed to enable OOO execution by breaking up these dependency chains
-    num_reductions = 0#sum(isreduction, operations(ls))
-    for op ∈ operations(ls)
-        if isreduction(op) & iscompute(op) && parentsnotreduction(op)
-            num_reductions += 1
-        end
-    end
-    if iszero(num_reductions)
-        # if only 1 loop, no need to unroll
-        # if more than 1 loop, there is some cost. Picking 2 here as a heuristic.
-        return unroll_no_reductions(ls, order, unrolled, vectorized, Wshift, size_T)
-    end
     # So if num_reductions > 0, we set the unroll factor to be high enough so that the CPU can be kept busy
     # if there are, U = max(1, round(Int, max(latency) * throughput / num_reductions)) = max(1, round(Int, latency / (recip_throughput * num_reductions)))
     # We also make sure register pressure is not too high.
@@ -233,7 +226,40 @@ function determine_unroll_factor(
         load_recip_throughput,
         store_recip_throughput
     )
-    min(8, roundpow2(max(1, round(Int, latency / (recip_throughput * num_reductions) ) )))
+    recip_throughput, latency
+end
+function count_reductions(ls::LoopSet)
+    num_reductions = 0
+    for op ∈ operations(ls)
+        if isreduction(op) & iscompute(op) && parentsnotreduction(op)
+            num_reductions += 1
+        end
+    end
+    num_reductions
+end
+
+function determine_unroll_factor(ls::LoopSet, order::Vector{Symbol}, vectorized::Symbol)
+    num_reductions = count_reductions(ls)
+    # The strategy is to use an unroll factor of 1, unless there appears to be loop carried dependencies (ie, num_reductions > 0)
+    # The assumption here is that unrolling provides no real benefit, unless it is needed to enable OOO execution by breaking up these dependency chains
+    if iszero(num_reductions)
+        # if only 1 loop, no need to unroll
+        # if more than 1 loop, there is some cost. Picking 2 here as a heuristic.
+        return unroll_no_reductions(ls, order, vectorized)
+    end
+
+    rt = Inf; rtcomp = Inf; latency = Inf; best_unrolled = Symbol("")
+    for unrolled ∈ order
+        rttemp, ltemp = determine_unroll_factor(ls, order, unrolled, vectorized)
+        rtcomptemp = rttemp + (0.01 * (vectorized === unrolled))
+        if rtcomptemp < rtcomp
+            rt = rttemp
+            rtcomp = rtcomptemp
+            latency = ltemp
+            best_unrolled = unrolled
+        end
+    end
+    min(8, roundpow2(max(1, round(Int, latency / (rt * num_reductions) ) ))), best_unrolled
 end
 
 function unroll_cost(X, u₁, u₂, u₁L, u₂L)
@@ -728,6 +754,7 @@ function evaluate_cost_tile(
             reg_pressure[1] += rp
         end
     end
+    # @inbounds ((cost_vec[4] > 0) || ((cost_vec[2] > 0) & (cost_vec[3] > 0))) || return 0,0,Inf,false
     # @show cost_vec reg_pressure
     costpenalty = (sum(reg_pressure) > REGISTER_COUNT) ? 2 : 1
     # @show order, vectorized cost_vec reg_pressure
@@ -914,7 +941,8 @@ function choose_order_cost(ls::LoopSet)
         # return torder, tvec, 4, 4#5, 5
     else
         copyto!(ls.loop_order.bestorder, uorder)
-        return uorder, first(uorder), Symbol("##undefined##"), uvec, determine_unroll_factor(ls, uorder, first(uorder), uvec), -1, uc, true
+        UF, uunroll = determine_unroll_factor(ls, uorder, uvec)
+        return uorder, uunroll, Symbol("##undefined##"), uvec, UF, -1, uc, true
     end
 end
 function choose_order(ls::LoopSet)

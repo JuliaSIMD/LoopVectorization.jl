@@ -71,6 +71,8 @@ end
 
 @inline vmapreduce(f, op, args...) = mapreduce(f, op, args...)
 
+length_one_axis(::Base.OneTo) = Base.OneTo(1)
+length_one_axis(::Any) = 1:1
 
 """
     vreduce(op, destination, A::DenseArray...)
@@ -79,26 +81,41 @@ Vectorized version of `reduce`. Reduces the array `A` using the operator `op`.
 """
 @inline vreduce(op, arg) = vmapreduce(identity, op, arg)
 
-for (op, init) in zip((:+, :max, :min), (:zero, :identity, :identity))
+for (op, init) in zip((:+, :max, :min), (:zero, :typemin, :typemax))
     @eval function vreduce(::typeof($op), arg; dims = nothing)
         isnothing(dims) && return _vreduce($op, arg)
         @assert length(dims) == 1
-        out = $init(arg[ntuple(d -> d == dims ? (1:1) : (1:size(arg, d)), ndims(arg))...])
-        Rpre = CartesianIndices(axes(arg)[1:dims-1])
-        Rpost = CartesianIndices(axes(arg)[dims+1:end])
-        _vreduce_dims!(out, $op, Rpre, 1:size(arg, dims), Rpost, arg)
+        axes_arg = axes(arg)
+        axes_out = Base.setindex(axes_arg, length_one_axis(axes_arg[dims]), dims)
+        out = similar(arg, axes_out)
+        # fill!(out, $init(first(arg)))
+        # TODO: generated function with Base.Cartesian.@nif to set to ndim(arg)
+        Base.Cartesian.@nif 5 d -> (d <= ndims(arg) && dims == d) d -> begin
+            Rpre = CartesianIndices(ntuple(i -> axes_arg[i], d-1))
+            Rpost = CartesianIndices(ntuple(i -> axes_arg[i+d], ndims(arg) - d))
+            _vreduce_dims!(out, $op, Rpre, 1:size(arg, dims), Rpost, arg)
+        end d -> begin
+            Rpre = CartesianIndices(axes_arg[1:dims-1])
+            Rpost = CartesianIndices(axes_arg[dims+1:end])
+            _vreduce_dims!(out, $op, Rpre, 1:size(arg, dims), Rpost, arg)
+        end
     end
 
     @eval function _vreduce_dims!(out, ::typeof($op), Rpre, is, Rpost, arg)
-        @avx for Ipost in Rpost, i in is, Ipre in Rpre
-            out[Ipre, 1, Ipost] = $op(out[Ipre, 1, Ipost], arg[Ipre, i, Ipost])
+        s = $init(first(arg))
+        @avx for Ipost in Rpost, Ipre in Rpre
+            accum = s
+            for i in is
+                accum = $op(accum, arg[Ipre, i, Ipost])
+            end
+            out[Ipre, 1, Ipost] = accum
         end
         return out
     end
 
     @eval function _vreduce(::typeof($op), arg)
-        s = $init(arg[1])
-        @avx for i in 1:length(arg)
+        s = $init(first(arg))
+        @avx for i in eachindex(arg)
             s = $op(s, arg[i])
         end
         return s
