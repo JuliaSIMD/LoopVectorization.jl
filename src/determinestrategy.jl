@@ -186,7 +186,7 @@ function unroll_no_reductions(ls, order, unrolled, vectorized, Wshift, size_T)
     # @show compute_rt, load_rt
     # roundpow2(min(4, round(Int, (compute_rt + load_rt + 1) / compute_rt)))
     rt = max(compute_rt, load_rt)
-    rt == 0.0 && return 4
+    iszero(rt) && return 4
     max(1, roundpow2( min( 4, round(Int, 16 / rt) ) ))
 end
 function determine_unroll_factor(
@@ -286,9 +286,10 @@ function solve_unroll(X, R, u₁L, u₂L, u₁step, u₂step)
     discriminant < 0 && return -1,-1,Inf
     u₁float = max(float(u₁step), (sqrt(discriminant) + b) / (-2a)) # must be at least 1
     u₂float = (RR - u₁float*R₂)/(u₁float*R₁)
-    if !(isfinite(u₂float) && isfinite(u₁float))
-        return 4, 4, unroll_cost(X, 4, 4, u₁L, u₂L)
-        # return itertilesize(X, u₁L, u₂L)
+    if !(isfinite(u₂float) & isfinite(u₁float)) # brute force
+        u₁low = u₂low = 1
+        u₁high = u₂high = REGISTER_COUNT == 32 ? 10 : 6#8
+        return solve_unroll_iter(X, R, u₁L, u₂L, u₁low:u₁step:u₁high, u₂low:u₂step:u₂high)
     end
     u₁low = floor(Int, u₁float)
     u₂low = max(u₂step, floor(Int, u₂float)) # must be at least 1
@@ -564,6 +565,13 @@ function load_elimination_cost_factor!(
         false
     end
 end
+function loadintostore(ls::LoopSet, op::Operation)
+    # isload(op) || return false # leads to bad behavior more than it helps
+    # for opp ∈ operations(ls)
+    #     isstore(opp) && opp.ref == op.ref && return true
+    # end
+    false
+end
 function add_constant_offset_load_elmination_cost!(
     X, R, choose_to_inline, ls::LoopSet, op::Operation, iters, unrollsyms::UnrollSymbols, u₁reduces::Bool, u₂reduces::Bool, Wshift::Int, size_T::Int, opisininnerloop::Bool
 )
@@ -575,6 +583,9 @@ function add_constant_offset_load_elmination_cost!(
         rt, lat, rp = cost(ls, op, vectorized, Wshift, size_T)
         rt *= iters
         rp = opisininnerloop ? rp : zero(rp)
+        # if loadintostore(ls, op) # For now, let's just avoid unrolling in this way...
+        #     rt = Inf
+        # end
         # u_uid is getting eliminated
         # we treat this as the unrolled loop getting eliminated is split into 2 parts:
         # 1 a non-cost-reduced part, with factor udependent_reduction
@@ -700,7 +711,8 @@ function evaluate_cost_tile(
             prefetch_good_idea = true
         end
         # @show isunrolled₁, isunrolled₂, op rt, lat, rp
-        rp = opisininnerloop ? rp : zero(rp) # we only care about register pressure within the inner most loop
+        rp = (opisininnerloop && !(loadintostore(ls, op))) ? rp : zero(rp) # we only care about register pressure within the inner most loop
+        # rp = opisininnerloop ? rp : zero(rp) # we only care about register pressure within the inner most loop
         rt *= iters[id]
         if u₁reduces & u₂reduces
             cost_vec[4] += rt
