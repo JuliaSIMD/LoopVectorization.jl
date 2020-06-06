@@ -9,14 +9,149 @@ include(joinpath(LOOPVECBENCHDIR, "benchmarkflops.jl"))
 include(joinpath(LOOPVECBENCHDIR, "plotbenchmarks.jl"))
 
 
-addprocs((Sys.CPU_THREADS >> 1)-1); nworkers()
-
-@everywhere begin
-    using LoopVectorization
-    const LOOPVECBENCHDIR = joinpath(pkgdir(LoopVectorization), "benchmark")
-    include(joinpath(LOOPVECBENCHDIR, "benchmarkflops.jl"))
-    # BenchmarkTools.DEFAULT_PARAMETERS.seconds = 1
+nprocs_to_add() = (Sys.CPU_THREADS >> 1) - 1
+start_worker(wid) = remotecall(include, wid, joinpath(LOOPVECBENCHDIR, "setup_worker.jl"))
+function start_workers()
+    addprocs(nprocs_to_add())
+    foreach(wait, map(start_worker, workers()))
 end
+stop_workers() = rmprocs(workers())
+addprocs(); nworkers()
+
+pmap_startstop(f, s) = (start_workers(); r = pmap(f, s); stop_workers(); r)
+
+blastests() = [
+    "LoopVectorization",
+    "Julia", "Clang",
+    "GFortran", "icc", "ifort",
+    "g++ & Eigen-3", "clang++ & Eigen-3",
+    "GFortran-builtin", "ifort-builtin",
+    "OpenBLAS", "MKL"
+]    
+function benchmark_AmulB(sizes)
+    br = BenchmarkResult(blastests(), sizes)
+    sm = br.sizedresults.results
+    pmap_startstop(is -> A_mul_B_bench!(sm, is[2], is[1]), enumerate(sizes))
+    br
+end
+function benchmark_AmulBt(sizes)
+    br = BenchmarkResult(blastests(), sizes)
+    sm = br.sizedresults.results
+    pmap_startstop(is -> A_mul_Bt_bench!(sm, is[2], is[1]), enumerate(sizes))
+    br
+end
+function benchmark_AtmulB(sizes)
+    br = BenchmarkResult(blastests(), sizes)
+    sm = br.sizedresults.results
+    pmap_startstop(is -> At_mul_B_bench!(sm, is[2], is[1]), enumerate(sizes))
+    br
+end
+function benchmark_AtmulBt(sizes)
+    br = BenchmarkResult(blastests(), sizes)
+    sm = br.sizedresults.results
+    pmap_startstop(is -> At_mul_Bt_bench!(sm, is[2], is[1]), enumerate(sizes))
+    br
+end
+function benchmark_dot(sizes)
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "clang++ & Eigen-3"]#, "OpenBLAS"]
+    br = BenchmarkResult(tests, sizes)
+    sm = br.sizedresults.results
+    pmap_startstop(is -> dot_bench!(sm, is[2], is[1]), enumerate(sizes))
+    br
+end
+function benchmark_selfdot(sizes)
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "clang++ & Eigen-3"]#, "OpenBLAS"]
+    br = BenchmarkResult(tests, sizes)
+    sm = br.sizedresults.results
+    pmap_startstop(is -> selfdot_bench!(sm, is[2], is[1]), enumerate(sizes))
+    br
+end
+function benchmark_Amulvb(sizes)
+    br = BenchmarkResult(blastests(), sizes)
+    sm = br.sizedresults.results
+    pmap_startstop(is -> A_mul_vb_bench!(sm, is[2], is[1]), enumerate(sizes))
+    br
+end
+function benchmark_Atmulvb(sizes)
+    br = BenchmarkResult(blastests(), sizes)
+    sm = br.sizedresults.results
+    pmap_startstop(is -> At_mul_vb_bench!(sm, is[2], is[1]), enumerate(sizes))
+    br
+end
+function benchmark_dot3(sizes)
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "clang++ & Eigen-3", "LinearAlgebra" ]
+    br = BenchmarkResult(tests, sizes)
+    sm = br.sizedresults.results
+    pmap_startstop(is -> dot3_bench!(sm, is[2], is[1]), enumerate(sizes))
+    br
+end
+function benchmark_sse(sizes)
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "clang++ & Eigen-3", "MKL"]
+    br = BenchmarkResult(tests, sizes)
+    sm = br.sizedresults.results
+    pmap_startstop(is -> sse_bench!(sm, is[2], is[1]), enumerate(sizes))
+    br
+end
+function benchmark_exp(sizes)
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort"]
+    br = BenchmarkResult(tests, sizes)
+    sm = br.sizedresults.results
+    pmap_startstop(is -> exp_bench!(sm, is[2], is[1]), enumerate(sizes))
+    br
+end
+function benchmark_aplusBc(sizes)
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "clang++ & Eigen-3"]
+    br = BenchmarkResult(tests, sizes)
+    sm = br.sizedresults.results
+    pmap_startstop(is -> aplusBc_bench!(sm, is[2], is[1]), enumerate(sizes))
+    br
+end
+function benchmark_AplusAt(sizes)
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "clang++ & Eigen-3", "GFortran-builtin", "ifort-builtin"]
+    br = BenchmarkResult(tests, sizes)
+    sm = br.sizedresults.results
+    pmap_startstop(is -> AplusAt_bench!(sm, is[2], is[1]), enumerate(sizes))
+    br
+end
+function benchmark_random_access(sizes)
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort"]
+    br = BenchmarkResult(tests, sizes)
+    sm = br.sizedresults.results
+    pmap_startstop(is -> randomaccess_bench!(sm, is[2], is[1]), enumerate(sizes))
+    br
+end
+function benchmark_logdettriangle(sizes)
+    # tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "clang++ & Eigen-3", "LinearAlgebra"]
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "LinearAlgebra"]
+    br = BenchmarkResult(tests, sizes)
+    sm = br.sizedresults.results
+    pmap_startstop(is -> logdettriangle_bench!(sm, is[2], is[1]), enumerate(sizes))
+    br
+end
+function benchmark_filter2d(sizes, K)
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort"]
+    br = BenchmarkResult(tests, sizes)
+    sm = br.sizedresults.results
+    pmap_startstop(is -> filter2d_bench_run!(sm, is[2], is[1], K), enumerate(sizes))
+    br
+end
+function benchmark_filter2ddynamic(sizes)
+    K = OffsetArray(rand(Float64, 3, 3), -1:1, -1:1)
+    benchmark_filter2d(sizes, K)
+end
+function benchmark_filter2d3x3(sizes)
+    K = SizedOffsetMatrix{Float64,-1,1,-1,1}(rand(3,3))
+    benchmark_filter2d(sizes, K)
+end
+function benchmark_filter2dunrolled(sizes)
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort"]
+    br = BenchmarkResult(tests, sizes)
+    sm = br.sizedresults.results
+    K = SizedOffsetMatrix{Float64,-1,1,-1,1}(rand(3,3))
+    pmap_startstop(is -> filter2dunrolled_bench_run!(sm, is[2], is[1], K), enumerate(sizes))
+    br
+end
+
 
 
 # sizes = 23:23
