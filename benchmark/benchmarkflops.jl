@@ -3,7 +3,7 @@ include(joinpath(LOOPVECBENCHDIR, "loadsharedlibs.jl"))
 
 using BenchmarkTools, SharedArrays
 struct SizedResults{V <: AbstractVector} <: AbstractMatrix{String}
-    results::SharedMatrix{Float64}
+    results::Matrix{Float64}
     sizes::V
 end
 function Base.size(sr::SizedResults)
@@ -14,11 +14,11 @@ struct BenchmarkResult{V}
     tests::Vector{String}
     sizedresults::SizedResults{V}
 end
-function BenchmarkResult(tests, sizes)
+function BenchmarkResult(results, tests, sizes)
     ntests = length(tests); nsizes = length(sizes)
     BenchmarkResult(
         append!(["Size"], tests),
-        SizedResults(SharedMatrix{Float64}(ntests, nsizes), sizes)
+        SizedResults(results, sizes)
     )
 end
 function Base.getindex(br::SizedResults, row, col)
@@ -29,7 +29,7 @@ function Base.vcat(br1::BenchmarkResult, br2::BenchmarkResult)
     BenchmarkResult(
         br1.tests,
         SizedResults(
-            SharedMatrix(hcat(br1.sizedresults.results, br2.sizedresults.results)),
+            hcat(br1.sizedresults.results, br2.sizedresults.results),
             vcat(br1.sizedresults.sizes, br2.sizedresults.sizes)
         )
     )
