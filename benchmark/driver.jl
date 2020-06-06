@@ -221,7 +221,6 @@ saveplot(f, br) = draw(PNG(joinpath(PICTURES, f * "$v.png"), 12inch, 8inch), plo
 
 # If only rerunning a few, remove them from load.
 # @load "benchmarkresults.jld2" logdettriangle_bench filter2d_dynamic_bench filter2d_3x3_bench filter2d_unrolled_bench dot_bench selfdot_bench dot3_bench sse_bench aplusBc_bench AplusAt_bench vexp_bench randomaccess_bench AmulB_bench AmulBt_bench AtmulB_bench AtmulBt_bench Amulvb_bench Atmulvb_bench
-@load "benchmarkresults.jld2" logdettriangle_bench filter2d_dynamic_bench filter2d_3x3_bench filter2d_unrolled_bench dot3_bench sse_bench aplusBc_bench AplusAt_bench vexp_bench randomaccess_bench AmulB_bench AmulBt_bench AtmulB_bench AtmulBt_bench Amulvb_bench Atmulvb_bench
 
 saveplot("bench_dot3_v", dot3_bench);
 saveplot("bench_dot_v", dot_bench);
@@ -242,8 +241,6 @@ saveplot("bench_filter2d_3x3_v", filter2d_3x3_bench);
 saveplot("bench_filter2d_unrolled_v", filter2d_unrolled_bench);
 saveplot("bench_exp_v", vexp_bench);
 saveplot("bench_random_access_v", randomaccess_bench);
-
-
 
 @save "benchmarkresults.jld2" logdettriangle_bench filter2d_dynamic_bench filter2d_3x3_bench filter2d_unrolled_bench dot_bench selfdot_bench dot3_bench sse_bench aplusBc_bench AplusAt_bench vexp_bench randomaccess_bench AmulB_bench AmulBt_bench AtmulB_bench AtmulBt_bench Amulvb_bench Atmulvb_bench
 
