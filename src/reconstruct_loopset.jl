@@ -284,7 +284,14 @@ function isexpanded(ls::LoopSet, ops::Vector{OperationStruct}, nopsv::Vector{NOp
         false
     end
 end
-
+# function addreduct_to_outer_reductions!(ls::LoopSet, op::Operation)
+#     if iscompute(op) && all(in(loopdependencies(op)), reduceddependencies(op))
+#         push!(ls.outer_reductions, identifier(op))
+#     else
+#         foreach(opp -> addreduct_to_outer_reductions!(ls, opp), parents(op))
+#     end
+#     nothing
+# end
 function add_op!(
     ls::LoopSet, instr::Instruction, ops::Vector{OperationStruct}, nopsv::Vector{NOpsType}, expandedv::Vector{Bool}, i::Int,
     mrefs::Vector{ArrayReferenceMeta}, opsymbol, elementbytes::Int
@@ -371,6 +378,11 @@ function add_ops!(
         add_op!(ls, instr[i], ops, nopsv, expandedv, i, mrefs, opsymbol, elementbytes)
     end
     add_parents_to_ops!(ls, ops, constoffset)
+    # for op ∈ operations(ls)
+    #     if isstore(op) && isreduction(op) && iszero(length(loopdependencies(op)))
+    #         addreduct_to_outer_reductions!(ls, op)
+    #     end
+    # end
     # for op in operations(ls)
         # @show op
     # end

@@ -348,7 +348,10 @@ getindices(ref) = arrayref(ref).indices
 getoffsets(ref) = arrayref(ref).offsets
 const DISCONTIGUOUS = Symbol("##DISCONTIGUOUSSUBARRAY##")
 function makediscontiguous!(inds)
-    first(inds) === DISCONTIGUOUS || pushfirst!(inds, DISCONTIGUOUS)
+    if iszero(length(inds)) || first(inds) !== DISCONTIGUOUS
+        pushfirst!(inds, DISCONTIGUOUS)
+    end
+    nothing
 end
 isdiscontiguous(ref) = first(getindices(ref)) === DISCONTIGUOUS
 

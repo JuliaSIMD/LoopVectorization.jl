@@ -84,6 +84,7 @@ Vectorized version of `reduce`. Reduces the array `A` using the operator `op`.
 for (op, init) in zip((:+, :max, :min), (:zero, :typemin, :typemax))
     @eval function vreduce(::typeof($op), arg; dims = nothing)
         isnothing(dims) && return _vreduce($op, arg)
+        isone(ndims(arg)) && return [_vreduce($op, arg)]
         @assert length(dims) == 1
         axes_arg = axes(arg)
         axes_out = Base.setindex(axes_arg, length_one_axis(axes_arg[dims]), dims)

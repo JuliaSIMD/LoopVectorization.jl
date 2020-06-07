@@ -39,9 +39,12 @@
         @test vmapreduce(abs2, +, x) ≈ sum(abs2, x)
         @test maximum(x) == vreduce(max, x) == maximum_avx(x)
 
+        @test vreduce(max, vec(x); dims = 1) == maximum(vec(x); dims = 1)
+        @test vreduce(min, vec(x); dims = 1) == minimum(vec(x); dims = 1)
+        @test vreduce(+, vec(x); dims = 1) ≈ sum(vec(x); dims = 1)
         for d in 1:ndims(x)
-            @test vreduce(max, x; dims = d) ≈ maximum(x; dims = d)
-            @test vreduce(min, x; dims = d) ≈ minimum(x; dims = d)
+            @test vreduce(max, x; dims = d) == maximum(x; dims = d)
+            @test vreduce(min, x; dims = d) == minimum(x; dims = d)
             @test vreduce(+, x; dims = d) ≈ sum(x; dims = d)
         end
     end
