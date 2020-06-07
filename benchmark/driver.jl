@@ -26,34 +26,38 @@ blastests() = [
     "OpenBLAS", "MKL"
 ]    
 function benchmark_AmulB(sizes)
+    tests = blastests()
     start_workers()
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
     pmap(is -> A_mul_B_bench!(sm, is[2], is[1]), enumerate(sizes))
-    br = BenchmarkResult(Matrix(sm), blastests(), sizes)
+    br = BenchmarkResult(Matrix(sm), tests, sizes)
     stop_workers()
     br
 end
 function benchmark_AmulBt(sizes)
+    tests = blastests()
     start_workers()
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
     pmap(is -> A_mul_Bt_bench!(sm, is[2], is[1]), enumerate(sizes))
-    br = BenchmarkResult(Matrix(sm), blastests(), sizes)
+    br = BenchmarkResult(Matrix(sm), tests, sizes)
     stop_workers()
     br
 end
 function benchmark_AtmulB(sizes)
+    tests = blastests()
     start_workers()
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
     pmap(is -> At_mul_B_bench!(sm, is[2], is[1]), enumerate(sizes))
-    br = BenchmarkResult(Matrix(sm), blastests(), sizes)
+    br = BenchmarkResult(Matrix(sm), tests, sizes)
     stop_workers()
     br
 end
 function benchmark_AtmulBt(sizes)
+    tests = blastests()
     start_workers()
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
     pmap(is -> At_mul_Bt_bench!(sm, is[2], is[1]), enumerate(sizes))
-    br = BenchmarkResult(Matrix(sm), blastests(), sizes)
+    br = BenchmarkResult(Matrix(sm), tests, sizes)
     stop_workers()
     br
 end
@@ -76,18 +80,20 @@ function benchmark_selfdot(sizes)
     br
 end
 function benchmark_Amulvb(sizes)
+    tests = blastests()
     start_workers()
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
     pmap(is -> A_mul_vb_bench!(sm, is[2], is[1]), enumerate(sizes))
-    br = BenchmarkResult(Matrix(sm), blastests(), sizes)
+    br = BenchmarkResult(Matrix(sm), tests, sizes)
     stop_workers()
     br
 end
 function benchmark_Atmulvb(sizes)
+    tests = blastests()
     start_workers()
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
     pmap(is -> At_mul_vb_bench!(sm, is[2], is[1]), enumerate(sizes))
-    br = BenchmarkResult(Matrix(sm), blastests(), sizes)
+    br = BenchmarkResult(Matrix(sm), tests, sizes)
     stop_workers()
     br
 end
