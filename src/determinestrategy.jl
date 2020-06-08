@@ -325,13 +325,19 @@ function solve_unroll(X, R, u₁L, u₂L, u₁step, u₂step)
 end
 
 function solve_unroll_constU(R::AbstractVector, u₁::Int)
-    floor(Int, (REGISTER_COUNT - R[3] - R[4] - u₁*R[2]) / (u₁ * R[1] + R[5]))
+    denom = u₁ * R[1] + R[5]
+    iszero(denom) && return 8
+    floor(Int, (REGISTER_COUNT - R[3] - R[4] - u₁*R[2]) / denom)
 end
 function solve_unroll_constT(R::AbstractVector, u₂::Int)
-    floor(Int, (REGISTER_COUNT - R[3] - R[4] - u₂*R[5]) / (u₂ * R[1] + R[2]))
+    denom = u₂ * R[1] + R[2]
+    iszero(denom) && return 8
+    floor(Int, (REGISTER_COUNT - R[3] - R[4] - u₂*R[5]) / denom)
 end
 function solve_unroll_constT(ls::LoopSet, u₂::Int)
     R = @view ls.reg_pres[:,1]
+    denom = u₂ * R[1] + R[2]
+    iszero(denom) && return 8
     floor(Int, (REGISTER_COUNT - R[3] - R[4] - u₂*R[5]) / (u₂ * R[1] + R[2]))
 end
 # Tiling here is about alleviating register pressure for the UxT
