@@ -623,6 +623,21 @@ using Test
             end
         end
     end
+    function loopinductvardivision(τ)
+        M,N = size(τ)
+        for t = 1:N, j = 1:M
+            τ[j, t] = ((j - 1) / (M - 1))
+        end
+        τ
+    end
+    function loopinductvardivisionavx(τ)
+        M,N = size(τ)
+        @avx for t = 1:N, j = 1:M
+            τ[j, t] = ((j - 1) / (M - 1))
+        end
+        τ
+    end
+
 
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
@@ -809,6 +824,8 @@ using Test
         multiple_unrolls_split_depchains_avx!(c_re_2, a_re, b_re, a_im, b_im) # [1 1; 1 1]
         @test c_re_1 ≈ c_re_2
 
+        @test loopinductvardivision(X1) ≈ loopinductvardivisionavx(X2)
+        
         mh = (
             Wt_D_W = Matrix{T}(undef, 181, 181),
             Wt = rand(T, 181, 191),
@@ -874,6 +891,7 @@ function smoothdim_ifelse_avx!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
     end
     s
 end
+
     for T ∈ (Float32, Float64)
         @testset "Mixed CartesianIndex/Int indexing" begin
             @show T, @__LINE__
