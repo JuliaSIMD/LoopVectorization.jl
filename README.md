@@ -213,16 +213,55 @@ julia> buf1 = Matrix{Float64}(undef, size(C,1), size(C,2));
 julia> buf2 = similar(X1);
 
 julia> @btime $X1 .= view($A,1,:) .+ mul!($buf2, $B, ($buf1 .= $C .+ $D'));
-  7.896 μs (0 allocations: 0 bytes)
+  9.188 μs (0 allocations: 0 bytes)
 
 julia> @btime @avx $X2 .= view($A,1,:) .+ $B .*ˡ ($C .+ $D');
-  7.647 μs (0 allocations: 0 bytes)
+  6.751 μs (0 allocations: 0 bytes)
+
+julia> @test X1 ≈ X2
+Test Passed
+
+julia> AmulBtest!(X1, B, C, D, view(A,1,:))
+
+julia> AmulBtest2!(X2, B, C, D, view(A,1,:))
 
 julia> @test X1 ≈ X2
 Test Passed
 ```
 The lazy matrix multiplication operator `*ˡ` escapes broadcasts and fuses, making it easy to write code that avoids intermediates. However, I would recomend always checking if splitting the operation into pieces, or at least isolating the matrix multiplication, increases performance. That will often be the case, especially if the matrices are large, where a separate multiplication can leverage BLAS (and perhaps take advantage of threads).
 This may improve as the optimizations within LoopVectorization improve.
+
+Note that loops will be faster than broadcasting in general. This is because the behavior of broadcasts is determined by runtime information (i.e., dimensions other than the leading dimension of size `1` will be broadcasted; it is not known which these will be at compile time).
+```julia
+julia> function AmulBtest!(C,A,Bk,Bn,d)
+          @avx for m ∈ axes(A,1), n ∈ axes(Bk,2)
+             ΔCₘₙ = zero(eltype(C))
+             for k ∈ axes(A,2)
+                ΔCₘₙ += A[m,k] * (Bk[k,n] + Bn[n,k])
+             end
+             C[m,n] = ΔCₘₙ + d[m]
+          end
+       end
+AmulBtest! (generic function with 1 method)
+
+julia> AmulBtest!(X2, B, C, D, view(A,1,:))
+
+julia> @test X1 ≈ X2
+Test Passed
+
+julia> @benchmark AmulBtest!($X2, $B, $C, $D, view($A,1,:))
+BenchmarkTools.Trial:
+  memory estimate:  0 bytes
+  allocs estimate:  0
+  --------------
+  minimum time:     5.793 μs (0.00% GC)
+  median time:      5.816 μs (0.00% GC)
+  mean time:        5.824 μs (0.00% GC)
+  maximum time:     14.234 μs (0.00% GC)
+  --------------
+  samples:          10000
+  evals/sample:     6
+```
 
 </p>
 </details>

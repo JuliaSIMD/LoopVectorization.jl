@@ -89,7 +89,7 @@ function prefetchisagoodidea(ls::LoopSet, op::Operation, td::UnrollArgs)
             if prod(s -> length(getloop(ls, s)), @view(indices[1:innermostloopind-1])) ≥ 120 && length(getloop(ls, innermostloopsym)) ≥ 120
                 if op.ref.ref.offsets[innermostloopind] < 120
                     for opp ∈ operations(ls)
-                        iscompute(opp) && (innermostloopsym ∈ loopdependencies(opp)) && load_constrained(opp, u₁loopsym, u₂loopsym) && return 0
+                        iscompute(opp) && (innermostloopsym ∈ loopdependencies(opp)) && load_constrained(opp, u₁loopsym, u₂loopsym, true) && return 0
                     end
                     return innermostloopind
                 end
