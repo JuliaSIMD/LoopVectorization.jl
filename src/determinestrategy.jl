@@ -315,7 +315,6 @@ function solve_unroll(X, R, u₁L, u₂L, u₁step, u₂step)
     if !(isfinite(u₂float) & isfinite(u₁float)) # brute force
         u₁low = u₂low = 1
         u₁high = u₂high = REGISTER_COUNT == 32 ? 10 : 6#8
-        println("Fail")
         return solve_unroll_iter(X, R, u₁L, u₂L, u₁low:u₁step:u₁high, u₂low:u₂step:u₂high)
     end
     u₁low = floor(Int, u₁float)
