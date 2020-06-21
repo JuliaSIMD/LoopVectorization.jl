@@ -61,15 +61,20 @@ end
 # end
 
 
+randa(::Type{T}, dim...) where {T} = rand(T, dim...)
+randa(::Type{T}, dim...) where {T <: Signed} = rand(T(-100):T(200), dim...)
+
 using MKL_jll, OpenBLAS_jll
 
 const libMKL = Libdl.dlopen(MKL_jll.libmkl_rt)
 const DGEMM_MKL = Libdl.dlsym(libMKL, :dgemm)
+const SGEMM_MKL = Libdl.dlsym(libMKL, :sgemm)
 const DGEMV_MKL = Libdl.dlsym(libMKL, :dgemv)
 const MKL_SET_NUM_THREADS = Libdl.dlsym(libMKL, :MKL_Set_Num_Threads)
 
 const libOpenBLAS = Libdl.dlopen(OpenBLAS_jll.libopenblas)
 const DGEMM_OpenBLAS = Libdl.dlsym(libOpenBLAS, :dgemm_64_)
+const SGEMM_OpenBLAS = Libdl.dlsym(libOpenBLAS, :sgemm_64_)
 const DGEMV_OpenBLAS = Libdl.dlsym(libOpenBLAS, :dgemv_64_)
 const OPENBLAS_SET_NUM_THREADS = Libdl.dlsym(libOpenBLAS, :openblas_set_num_threads64_)
 
@@ -77,58 +82,46 @@ istransposed(x) = 'N'
 istransposed(x::Adjoint{<:Real}) = 'T'
 istransposed(x::Adjoint) = 'C'
 istransposed(x::Transpose) = 'T'
-function dgemmmkl!(C::AbstractMatrix{Float64}, A::AbstractMatrix{Float64}, B::AbstractMatrix{Float64})
-    transA = istransposed(A)
-    transB = istransposed(B)
-    M, N = size(C); K = size(B, 1)
-    M32 = M % Int32
-    K32 = K % Int32
-    N32 = N % Int32
-    pA = parent(A); pB = parent(B)
-    ldA = stride(pA, 2) % Int32
-    ldB = stride(pB, 2) % Int32
-    ldC = stride(C, 2) % Int32
-    α = 1.0
-    β = 0.0
-    ccall(
-        DGEMM_MKL, Cvoid,
-        (Ref{UInt8}, Ref{UInt8}, Ref{Int32}, Ref{Int32}, Ref{Int32}, Ref{Float64}, Ref{Float64}, Ref{Int32}, Ref{Float64}, Ref{Int32}, Ref{Float64}, Ref{Float64}, Ref{Int32}),
-        transA, transB, M32, N32, K32, α, pA, ldA, pB, ldB, β, C, ldC
-    )
-end
-function dgemmopenblas!(C::AbstractMatrix{Float64}, A::AbstractMatrix{Float64}, B::AbstractMatrix{Float64})
-    transA = istransposed(A)
-    transB = istransposed(B)
-    M, N = size(C); K = size(B, 1)
-    pA = parent(A); pB = parent(B)
-    ldA = stride(pA, 2)
-    ldB = stride(pB, 2)
-    ldC = stride(C, 2)
-    α = 1.0
-    β = 0.0
-    ccall(
-        DGEMM_OpenBLAS, Cvoid,
-        (Ref{UInt8}, Ref{UInt8}, Ref{Int64}, Ref{Int64}, Ref{Int64}, Ref{Float64}, Ref{Float64}, Ref{Int64}, Ref{Float64}, Ref{Int64}, Ref{Float64}, Ref{Float64}, Ref{Int64}),
-        transA, transB, M, N, K, α, pA, ldA, pB, ldB, β, C, ldC
-    )
+for (lib,f) ∈ [(:GEMM_MKL,:gemmmkl!), (:GEMM_OpenBLAS,:gemmopenblas!)]
+    for (T,prefix) ∈ [(Float32,:S),(Float64,:D)]
+        fm = Symbol(prefix, lib)
+        @eval begin
+            function $f(C::AbstractMatrix{$T}, A::AbstractMatrix{$T}, B::AbstractMatrix{$T})
+                transA = istransposed(A)
+                transB = istransposed(B)
+                M, N = size(C); K = size(B, 1)
+                pA = parent(A); pB = parent(B)
+                ldA = stride(pA, 2)
+                ldB = stride(pB, 2)
+                ldC = stride(C, 2)
+                α = one($T)
+                β = zero($T)
+                ccall(
+                    $fm, Cvoid,
+                    (Ref{UInt8}, Ref{UInt8}, Ref{Int64}, Ref{Int64}, Ref{Int64}, Ref{$T}, Ref{$T},
+                     Ref{Int64}, Ref{$T}, Ref{Int64}, Ref{$T}, Ref{$T}, Ref{Int64}),
+                    transA, transB, M, N, K, α, pA, ldA, pB, ldB, β, C, ldC
+                )
+            end
+        end
+    end
 end
 mkl_set_num_threads(N::Integer) = ccall(MKL_SET_NUM_THREADS, Cvoid, (Int32,), N % Int32)
 mkl_set_num_threads(1)
 openblas_set_num_threads(N::Integer) = ccall(OPENBLAS_SET_NUM_THREADS, Cvoid, (Int64,), N)
 openblas_set_num_threads(1)
+
 function dgemvmkl!(y::AbstractVector{Float64}, A::AbstractMatrix{Float64}, x::AbstractVector{Float64}, α = 1.0, β = 0.0)
     transA = istransposed(A)
     pA = parent(A)
     M, N = size(pA)
-    M32 = M % Int32
-    N32 = N % Int32
-    ldA = stride(pA, 2) % Int32
-    incx = LinearAlgebra.stride1(x) % Int32
-    incy = LinearAlgebra.stride1(y) % Int32
+    ldA = stride(pA, 2)
+    incx = LinearAlgebra.stride1(x)
+    incy = LinearAlgebra.stride1(y)
     ccall(
         DGEMV_MKL, Cvoid,
-        (Ref{UInt8}, Ref{Int32}, Ref{Int32}, Ref{Float64}, Ref{Float64}, Ref{Int32}, Ref{Float64}, Ref{Int32}, Ref{Float64}, Ref{Float64}, Ref{Int32}),
-        transA, M32, N32, α, pA, ldA, x, incx, β, y, incy
+        (Ref{UInt8}, Ref{Int64}, Ref{Int64}, Ref{Float64}, Ref{Float64}, Ref{Int64}, Ref{Float64}, Ref{Int64}, Ref{Float64}, Ref{Float64}, Ref{Int64}),
+        transA, M, N, α, pA, ldA, x, incx, β, y, incy
     )
 end
 function dgemvopenblas!(y::AbstractVector{Float64}, A::AbstractMatrix{Float64}, x::AbstractVector{Float64})
