@@ -684,7 +684,7 @@ function evaluate_cost_tile(
     reg_pressure = reg_pres_buf(ls)
     # @inbounds reg_pressure[2] = 1
     # @inbounds reg_pressure[3] = 1
-    iter::Int = 1
+    iter::Float64 = 1.0
     u₁reached = u₂reached = false
     choose_to_inline = Ref(false)
     copyto!(names(ls), order); reverse!(names(ls))
@@ -716,8 +716,10 @@ function evaluate_cost_tile(
             depends_on_u₁ = isu₁unrolled(op)
             depends_on_u₂ = isu₂unrolled(op)
             # cost is reduced by unrolling u₁ if it is interior to u₁loop (true if either u₁reached, or if depends on u₂ [or u₁]) and doesn't depend on u₁
-            reduced_by_unrolling[1,id] = (u₁reached | depends_on_u₂) & !depends_on_u₁
-            reduced_by_unrolling[2,id] = (u₂reached | depends_on_u₁) & !depends_on_u₂
+            # reduced_by_unrolling[1,id] = (u₁reached | depends_on_u₂) & !depends_on_u₁
+            # reduced_by_unrolling[2,id] = (u₂reached | depends_on_u₁) & !depends_on_u₂
+            reduced_by_unrolling[1,id] = (u₁reached) & !depends_on_u₁
+            reduced_by_unrolling[2,id] = (u₂reached) & !depends_on_u₂
             # @show op iter, unrolledu₂loopsym[:,id]
             iters[id] = iter
             innerloop ∈ loopdependencies(op) && set_upstream_family!(descendentsininnerloop, op, true)
@@ -736,7 +738,6 @@ function evaluate_cost_tile(
                 continue
             end                
         end
-        # @show op rt, lat, rp
         rt, lat, rp = cost(ls, op, vectorized, Wshift, size_T)
         if isload(op) && !iszero(prefetchisagoodidea(ls, op, UnrollArgs(4, unrollsyms, 4, 0)))
             rt += 0.5VectorizationBase.REGISTER_SIZE / VectorizationBase.CACHELINE_SIZE
@@ -745,17 +746,22 @@ function evaluate_cost_tile(
         # @show isunrolled₁, isunrolled₂, op rt, lat, rp
         rp = (opisininnerloop && !(loadintostore(ls, op))) ? rp : zero(rp) # we only care about register pressure within the inner most loop
         # rp = opisininnerloop ? rp : zero(rp) # we only care about register pressure within the inner most loop
+        rto = rt
         rt *= iters[id]
         if u₁reduces & u₂reduces
+            # @show op 4, rto, iters[id], lat, rp
             cost_vec[4] += rt
             reg_pressure[4] += rp
         elseif u₂reduces # cost decreased by unrolling u₂loop
+            # @show op 2, rto, iters[id], lat, rp
             cost_vec[2] += rt
             reg_pressure[2] += rp
         elseif u₁reduces # cost decreased by unrolling u₁loop
+            # @show op 3, rto, iters[id], lat, rp
             cost_vec[3] += rt
             reg_pressure[3] += rp
         else # no cost decrease; cost must be repeated
+            # @show op 1, rto, iters[id], lat, rp
             cost_vec[1] += rt
             reg_pressure[1] += rp
         end
