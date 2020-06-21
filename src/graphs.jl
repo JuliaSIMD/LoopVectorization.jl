@@ -703,3 +703,11 @@ function UnrollSpecification(ls::LoopSet, u₁loop::Symbol, u₂loop::Symbol, ve
     nv = findfirst(isequal(vectorized), order)::Int
     UnrollSpecification(nu₁, nu₂, nv, u₁, u₂)
 end
+
+# function getunrolled(ls::LoopSet)
+#     order = names(ls)
+#     us = ls.unrollspecification[]
+#     @unpack u₁loopnum, u₂loopnum = us
+#     order[u₁loopnum], order[u₂loopnum]
+# end
+

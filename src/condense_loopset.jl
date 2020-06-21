@@ -157,17 +157,23 @@ end
 function loopset_return_value(ls::LoopSet, ::Val{extract}) where {extract}
     @assert !iszero(length(ls.outer_reductions))
     if isone(length(ls.outer_reductions))
+        op = getop(ls, ls.outer_reductions[1])
         if extract
-            Expr(:call, :extract_data, Symbol(mangledvar(getop(ls, ls.outer_reductions[1])), 0))
+            if (isu₁unrolled(op) | isu₂unrolled(op))
+                Expr(:call, :extract_data, Symbol(mangledvar(op), 0))
+            else
+                Expr(:call, :extract_data, mangledvar(op))
+            end
         else
-            Symbol(mangledvar(getop(ls, ls.outer_reductions[1])), 0)
+            Symbol(mangledvar(op), 0)
         end
     else#if length(ls.outer_reductions) > 1
         ret = Expr(:tuple)
         ops = operations(ls)
         for or ∈ ls.outer_reductions
+            op = ops[or]
             if extract
-                push!(ret.args, Expr(:call, :extract_data, Symbol(mangledvar(ops[or]), 0)))
+                push!(ret.args, Expr(:call, :extract_data, Symbol(mangledvar(op), 0)))
             else
                 push!(ret.args, Symbol(mangledvar(ops[or]), 0))
             end

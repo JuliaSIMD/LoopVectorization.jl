@@ -5,7 +5,7 @@ using Test
 @testset "Miscellaneous" begin
 
     # Unum, Tnum = LoopVectorization.VectorizationBase.REGISTER_COUNT == 16 ? (3, 4) : (4, 4)
-    Unum, Tnum = LoopVectorization.REGISTER_COUNT == 16 ? (2, 6) : (2, 10)
+    Unum, Tnum = LoopVectorization.REGISTER_COUNT == 16 ? (1, 6) : (1, 10)
     dot3q = :(for m ∈ 1:M, n ∈ 1:N
               s += x[m] * A[m,n] * y[n]
               end);
@@ -69,9 +69,12 @@ using Test
                 B[j,i] = A[j,i] - x[j]
                 end)
     lssubcol = LoopVectorization.LoopSet(subcolq);
-    if LoopVectorization.REGISTER_COUNT != 8
-        @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, :i, :j, Unum, Tnum)
-    end
+    # if LoopVectorization.REGISTER_COUNT != 8
+    #     # @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, :i, :j, Unum, Tnum)
+    #     @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, :i, :j, 1, 1)
+    # end
+    @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :i, Symbol("##undefined##"), :j, 4, -1)
+    # @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, Symbol("##undefined##"), :j, 4, -1)
     ## @avx is SLOWER!!!!
     ## need to fix!
     function mysubcol!(B, A, x)
@@ -96,9 +99,11 @@ using Test
                 x[j] += A[j,i] - 0.25
                 end)
     lscolsum = LoopVectorization.LoopSet(colsumq);
-    if LoopVectorization.REGISTER_COUNT != 8
-        @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, :i, :j, Unum, Tnum)
-    end
+    # if LoopVectorization.REGISTER_COUNT != 8
+    #     # @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, :i, :j, Unum, Tnum)
+    #     @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, :i, :j, 1, 1)
+    # end
+    @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, Symbol("##undefined##"), :j, 8, -1)
     # my colsum is wrong (by 0.25), but slightly more interesting
     function mycolsum!(x, A)
         @. x = 0
@@ -133,11 +138,13 @@ using Test
              end)
     lsvar = LoopVectorization.LoopSet(varq);
     # LoopVectorization.choose_order(lsvar)
-    if LoopVectorization.REGISTER_COUNT == 32
-        @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, 2, 10)
-    elseif LoopVectorization.REGISTER_COUNT == 16
-        @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, 2, 6)
-    end
+    # @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, Unum, Tnum)
+    @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, Symbol("##undefined##"), :j, 8, -1)
+    # if LoopVectorization.REGISTER_COUNT == 32
+    #     @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, 2, 10)
+    # elseif LoopVectorization.REGISTER_COUNT == 16
+    #     @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, 2, 6)
+    # end
     
     function myvar!(s², A, x̄)
         @. s² = 0
@@ -686,8 +693,8 @@ using Test
         basis = rand(r, (dim, nbasis));
         coeffs = rand(T, nbasis);
         P = rand(T, dim, maxdeg+1);
-        mvp(P, basis, coeffs)
-        mvpavx(P, basis, coeffs)
+        # mvp(P, basis, coeffs)
+        # mvpavx(P, basis, coeffs)
         mvpv = mvp(P, basis, coeffs)
         @test mvpv ≈ mvpavx(P, basis, coeffs)
         if VERSION > v"1.1"

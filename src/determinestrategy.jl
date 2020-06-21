@@ -67,7 +67,6 @@ function cost(ls::LoopSet, op::Operation, vectorized::Symbol, Wshift::Int, size_
     srt, sl, srp = opisvectorized ? vector_cost(instr, Wshift, size_T) : scalar_cost(instr)
     if accesses_memory(op)
         # either vbroadcast/reductionstore, vmov(a/u)pd, or gather/scatter
-        # @show instr, vectorized, loopdependencies(op), unitstride(op, vectorized)
         if opisvectorized
             if !unitstride(ls, op, vectorized)# || !isdense(op) # need gather/scatter
                 r = (1 << Wshift)
@@ -131,12 +130,11 @@ function evaluate_cost_unroll(
             rd = reduceddependencies(op)
             hasintersection(rd, @view(nested_loop_syms[1:end-length(rd)])) && return Inf
             included_vars[id] = true
-            # @show op first(cost(op, vectorized, Wshift, size_T)), iter
             total_cost += iter * first(cost(ls, op, vectorized, Wshift, size_T))
             total_cost > max_cost && return total_cost # abort if more expensive; we only want to know the cheapest
         end
     end
-    total_cost + stride_penalty(ls, order)
+    total_cost + stride_penalty(ls, order) - 1.0 # -1.0 to place finger on scale in its favor
 end
 
 # only covers vectorized ops; everything else considered lifted?
@@ -163,13 +161,16 @@ function parentsnotreduction(op::Operation)
     end
     return true
 end
-function roundpow2(i::Integer)
-    u = VectorizationBase.nextpow2(i)
-    l = u >>> 1
-    ud = u - i
-    ld = i - l
-    ud > ld ? l : u
-end
+# function roundpow2(i::Integer)
+#     u = VectorizationBase.nextpow2(i)
+#     l = u >>> 1
+#     ud = u - i
+#     ld = i - l
+#     ud > ld ? l : u
+# end
+# function roundpow2(x::Float64)
+    # 1 << round(Int, log2(x))
+# end
 function unroll_no_reductions(ls, order, vectorized)
     size_T = biggest_type_size(ls)
     W, Wshift = VectorizationBase.pick_vector_width_shift(length(ls, vectorized), size_T)::Tuple{Int,Int}
@@ -190,10 +191,10 @@ function unroll_no_reductions(ls, order, vectorized)
         end
     end
     # heuristic guess
-    # @show compute_rt, load_rt
     # roundpow2(min(4, round(Int, (compute_rt + load_rt + 1) / compute_rt)))
     rt = max(compute_rt, load_rt)
-    (iszero(rt) ? 4 : max(1, roundpow2( min( 4, round(Int, 16 / rt) ) ))), unrolled
+    # (iszero(rt) ? 4 : max(1, roundpow2( min( 4, round(Int, 16 / rt) ) ))), unrolled
+    (iszero(rt) ? 4 : max(1, VectorizationBase.nextpow2( min( 4, round(Int, 16 / rt) ) ))), unrolled
 end
 function determine_unroll_factor(
     ls::LoopSet, order::Vector{Symbol}, unrolled::Symbol, vectorized::Symbol
@@ -204,17 +205,24 @@ function determine_unroll_factor(
     # So if num_reductions > 0, we set the unroll factor to be high enough so that the CPU can be kept busy
     # if there are, U = max(1, round(Int, max(latency) * throughput / num_reductions)) = max(1, round(Int, latency / (recip_throughput * num_reductions)))
     # We also make sure register pressure is not too high.
-    latency = 0
+    latency = 1
+    # compute_recip_throughput_u = 0.0
     compute_recip_throughput = 0.0
     visited_nodes = fill(false, length(operations(ls)))
     load_recip_throughput = 0.0
     store_recip_throughput = 0.0
     for op ∈ operations(ls)
-        dependson(op, unrolled) || continue
+        # dependson(op, unrolled) || continue
         if isreduction(op)
             rt, sl = depchain_cost!(ls, visited_nodes, op, vectorized, Wshift, size_T)
-            latency = max(sl, latency)
+            if isouterreduction(op) != -1 || unrolled ∉ reduceddependencies(op)
+                latency = max(sl, latency)
+            end
+            # if unrolled ∈ loopdependencies(op)
+            #     compute_recip_throughput_u += rt
+            # else
             compute_recip_throughput += rt
+            # end
         elseif isload(op)
             load_recip_throughput += first(cost(ls, op, vectorized, Wshift, size_T))
         elseif isstore(op)
@@ -247,11 +255,11 @@ function determine_unroll_factor(ls::LoopSet, order::Vector{Symbol}, vectorized:
         # if more than 1 loop, there is some cost. Picking 2 here as a heuristic.
         return unroll_no_reductions(ls, order, vectorized)
     end
-
+    innermost_loop = last(order)
     rt = Inf; rtcomp = Inf; latency = Inf; best_unrolled = Symbol("")
     for unrolled ∈ order
         rttemp, ltemp = determine_unroll_factor(ls, order, unrolled, vectorized)
-        rtcomptemp = rttemp + (0.01 * (vectorized === unrolled))
+        rtcomptemp = rttemp + (0.01 * ((vectorized === unrolled) + (unrolled === innermost_loop) - latency))
         if rtcomptemp < rtcomp
             rt = rttemp
             rtcomp = rtcomptemp
@@ -259,7 +267,8 @@ function determine_unroll_factor(ls::LoopSet, order::Vector{Symbol}, vectorized:
             best_unrolled = unrolled
         end
     end
-    min(8, roundpow2(max(1, round(Int, latency / (rt * num_reductions) ) ))), best_unrolled
+    # min(8, roundpow2(max(1, round(Int, latency / (rt * num_reductions) ) ))), best_unrolled
+    min(8, VectorizationBase.nextpow2(max(1, round(Int, latency / (rt * num_reductions) ) ))), best_unrolled
 end
 
 function unroll_cost(X, u₁, u₂, u₁L, u₂L)
@@ -273,7 +282,6 @@ end
 #     u₁b = 1; u₂b = 1
 #     for u₁ ∈ 1:4, u₂ ∈ 1:4
 #         c = unroll_cost(X, u₁, u₂, u₁L, u₂L)
-#         @show u₁, u₂, c
 #         if cb > c
 #             cb = c
 #             u₁b = u₁; u₂b = u₂
@@ -679,7 +687,6 @@ function evaluate_cost_tile(
     # cost_mat[2] / ( u₂loopsym)
     # cost_mat[3] / ( unrolled)
     # cost_mat[4]
-    # @show order
     cost_vec = cost_vec_buf(ls)
     reg_pressure = reg_pres_buf(ls)
     # @inbounds reg_pressure[2] = 1
@@ -708,8 +715,6 @@ function evaluate_cost_tile(
             included_vars[id] && continue
             # it must also be a subset of defined symbols
             all(ld -> ld ∈ nested_loop_syms, loopdependencies(op)) || continue
-            # # @show nested_loop_syms
-            # # @show reduceddependencies(op)
             rd = reduceddependencies(op)
             hasintersection(rd, @view(nested_loop_syms[1:end-length(rd)])) && return 0,0,Inf,false
             included_vars[id] = true
@@ -720,7 +725,6 @@ function evaluate_cost_tile(
             # reduced_by_unrolling[2,id] = (u₂reached | depends_on_u₁) & !depends_on_u₂
             reduced_by_unrolling[1,id] = (u₁reached) & !depends_on_u₁
             reduced_by_unrolling[2,id] = (u₂reached) & !depends_on_u₂
-            # @show op iter, unrolledu₂loopsym[:,id]
             iters[id] = iter
             innerloop ∈ loopdependencies(op) && set_upstream_family!(descendentsininnerloop, op, true)
         end
@@ -730,7 +734,6 @@ function evaluate_cost_tile(
         opisininnerloop = descendentsininnerloop[id]
         
         u₁reduces, u₂reduces = reduced_by_unrolling[1,id], reduced_by_unrolling[2,id]
-        # @show op, u₁reduces, u₂reduces
         if isload(op)
             if add_constant_offset_load_elmination_cost!(cost_vec, reg_pressure, choose_to_inline, ls, op, iters[id], unrollsyms, u₁reduces, u₂reduces, Wshift, size_T, opisininnerloop)
                 continue
@@ -743,34 +746,26 @@ function evaluate_cost_tile(
             rt += 0.5VectorizationBase.REGISTER_SIZE / VectorizationBase.CACHELINE_SIZE
             prefetch_good_idea = true
         end
-        # @show isunrolled₁, isunrolled₂, op rt, lat, rp
         rp = (opisininnerloop && !(loadintostore(ls, op))) ? rp : zero(rp) # we only care about register pressure within the inner most loop
         # rp = opisininnerloop ? rp : zero(rp) # we only care about register pressure within the inner most loop
         rto = rt
         rt *= iters[id]
         if u₁reduces & u₂reduces
-            # @show op 4, rto, iters[id], lat, rp
             cost_vec[4] += rt
             reg_pressure[4] += rp
         elseif u₂reduces # cost decreased by unrolling u₂loop
-            # @show op 2, rto, iters[id], lat, rp
             cost_vec[2] += rt
             reg_pressure[2] += rp
         elseif u₁reduces # cost decreased by unrolling u₁loop
-            # @show op 3, rto, iters[id], lat, rp
             cost_vec[3] += rt
             reg_pressure[3] += rp
         else # no cost decrease; cost must be repeated
-            # @show op 1, rto, iters[id], lat, rp
             cost_vec[1] += rt
             reg_pressure[1] += rp
         end
     end
     # @inbounds ((cost_vec[4] > 0) || ((cost_vec[2] > 0) & (cost_vec[3] > 0))) || return 0,0,Inf,false
-    # @show cost_vec reg_pressure
     costpenalty = (sum(reg_pressure) > REGISTER_COUNT) ? 2 : 1
-    # @show order, vectorized cost_vec reg_pressure
-    # @show solve_unroll(ls, u₁loopsym, u₂loopsym, cost_vec, reg_pressure)
     u₁v = vectorized === u₁loopsym; u₂v = vectorized === u₂loopsym
     round_uᵢ = prefetch_good_idea ? (u₁v ? 1 : (u₂v ? 2 : 0)) : 0
     u₁, u₂, ucost = solve_unroll(ls, u₁loopsym, u₂loopsym, cost_vec, reg_pressure, W, vectorized, round_uᵢ)
@@ -820,7 +815,6 @@ end
 # that I could come up with.
 function Base.iterate(lo::LoopOrders, state)
     advance_state!(state) || return nothing
-    # # @show state
     syms = copyto!(lo.buff, lo.syms)
     for i ∈ eachindex(state)
         sᵢ = state[i]
