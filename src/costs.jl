@@ -18,14 +18,17 @@ struct Instruction
 end
 # lower(instr::Instruction) = Expr(:(.), instr.mod, QuoteNode(instr.instr))
 # Base.convert(::Type{Expr}, instr::Instruction) = Expr(:(.), instr.mod, QuoteNode(instr.instr))
-function Base.Expr(instr::Instruction, args...)
+function callexpr(instr::Instruction)
     if instr.mod === :LoopVectorization
-        Expr(:call, lv(instr.instr), args...)::Expr
+        Expr(:call, lv(instr.instr))
     else#if instr.mod === :Main
-        Expr(:call, instr.instr, args...)::Expr
-    # else
-        # Expr(:call, convert(Expr, instr), args...)::Expr
+        Expr(:call, instr.instr)
     end
+end
+function callexpr(instr::Instruction, arg)
+    ce = callexpr(instr)
+    append!(ce.args, arg)
+    ce
 end
 Base.hash(instr::Instruction, h::UInt64) = hash(instr.instr, hash(instr.mod, h))
 # function Base.isless(instr1::Instruction, instr2::Instruction)

@@ -241,7 +241,9 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
             # Expr(:block, loopiteratesatleastonce(loop, true), Expr(:while, expect(tc), body))
         Expr(:block, Expr(:while, isstatic ? tc : expect(tc), body))
     elseif isstatic && length(loop) ≤ 8
-        Expr(:block, (body for _ ∈ 1:length(loop))...)
+        bodyq = Expr(:block)
+        foreach(_ -> push!(bodyq.args, body), 1:length(loop))
+        bodyq
     else
         termcond = gensym(:maybeterm)
         push!(body.args, Expr(:(=), termcond, isstatic ? tc : expect(tc)))

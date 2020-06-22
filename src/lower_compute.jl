@@ -200,7 +200,7 @@ function lower_compute!(
     isvectorized = vectorized ∈ loopdependencies(op)
     modsuffix = 0
     for u ∈ 0:Uiter
-        instrcall = Expr(instr) # Expr(:call, instr)
+        instrcall = callexpr(instr)
         varsym = if tiledouterreduction > 0 # then suffix !== nothing
             modsuffix = ((u + suffix*(Uiter + 1)) & 3)
             # modsuffix = u

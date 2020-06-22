@@ -128,7 +128,8 @@ function LowDimArray{D}(data::A) where {D,T,N,A <: AbstractArray{T,N}}
 end
 function extract_all_1_array!(ls::LoopSet, bcname::Symbol, N::Int, elementbytes::Int)
     refextract = gensym(bcname)
-    pushpreamble!(ls, Expr(:(=), refextract, Expr(:ref, bcname, [1 for n ∈ 1:N]...)))
+    ref = Expr(:ref, bcname); append!(ref.args, [1 for n ∈ 1:N])
+    pushpreamble!(ls, Expr(:(=), refextract, ref))
     return add_constant!(ls, refextract, elementbytes) # or replace elementbytes with sizeof(T) ? u
 end
 function add_broadcast!(

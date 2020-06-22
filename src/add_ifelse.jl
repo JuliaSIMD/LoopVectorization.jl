@@ -59,7 +59,7 @@ function add_andblock!(ls::LoopSet, condexpr::Expr, condeval::Expr, elementbytes
     if condeval.head === :call
         @assert first(condeval.args) === :setindex!
         array, raw_indices = ref_from_setindex!(ls, condeval)
-        ref = Expr(:ref, array, raw_indices...)
+        ref = Expr(:ref, array); append!(ref.args, raw_indices)
         return add_andblock!(ls, condop, ref, condeval.args[3], elementbytes, position)
     end
     @assert condeval.head === :(=)    
@@ -100,7 +100,8 @@ function add_orblock!(ls::LoopSet, condexpr::Expr, condeval::Expr, elementbytes:
     if condeval.head === :call
         @assert first(condeval.args) === :setindex!
         array, raw_indices = ref_from_setindex!(ls, condeval)
-        return add_orblock!(ls, condop, Expr(:ref, array, raw_indices...), condeval.args[3], elementbytes, position)
+        ref = Expr(:ref, array); append!(ref.args, raw_indices)
+        return add_orblock!(ls, condop, ref, condeval.args[3], elementbytes, position)
     end
     @assert condeval.head === :(=)
     @assert length(condeval.args) == 2
