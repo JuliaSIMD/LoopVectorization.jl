@@ -299,7 +299,7 @@ function solve_unroll_iter(X, R, u₁L, u₂L, u₁range, u₂range)
         for u₂temp ∈ u₂range
             RR ≥ u₁temp*u₂temp*R₁ + u₁temp*R₂ + u₂temp*R₅ || continue
             tempcost = unroll_cost(X, u₁temp, u₂temp, u₁L, u₂L)
-            if tempcost < bestcost
+            if tempcost ≤ bestcost
                 bestcost = tempcost
                 u₁best, u₂best = u₁temp, u₂temp
             end
@@ -329,6 +329,11 @@ function solve_unroll(X, R, u₁L, u₂L, u₁step, u₂step)
     u₂low = max(u₂step, floor(Int, u₂float)) # must be at least 1
     u₁high = solve_unroll_constT(R, u₂low) + u₁step
     u₂high = solve_unroll_constU(R, u₁low) + u₂step
+    maxunroll = REGISTER_COUNT == 32 ? 10 : 6
+    u₁low = min(u₁low, maxunroll)
+    u₂low = min(u₂low, maxunroll)
+    u₁high = min(u₁high, maxunroll)
+    u₂high = min(u₂high, maxunroll)
     solve_unroll_iter(X, R, u₁L, u₂L, u₁low:u₁step:u₁high, u₂low:u₂step:u₂high)
 end
 
@@ -658,6 +663,17 @@ function add_constant_offset_load_elmination_cost!(
     end
 end
 
+function update_costs!(costs, cost, u₁reduces, u₂reduces)
+    if u₁reduces & u₂reduces
+        costs[4] += cost
+    elseif u₂reduces # cost decreased by unrolling u₂loop
+        costs[2] += cost
+    elseif u₁reduces # cost decreased by unrolling u₁loop
+        costs[3] += cost
+    else # no cost decrease; cost must be repeated
+        costs[1] += cost
+    end
+end
 
 # Just tile outer two loops?
 # But optimal order within tile must still be determined
@@ -674,7 +690,7 @@ function evaluate_cost_tile(
     ops = operations(ls)
     nops = length(ops)
     included_vars = fill!(resize!(ls.included_vars, nops), false)
-    reduced_by_unrolling = fill(false, 2, nops)
+    reduced_by_unrolling = fill(false, 2, 2, nops)
     descendentsininnerloop = fill!(resize!(ls.place_after_loop, nops), false)
     innerloop = last(order)
     iters = fill(-99.9, nops)
@@ -718,13 +734,19 @@ function evaluate_cost_tile(
             rd = reduceddependencies(op)
             hasintersection(rd, @view(nested_loop_syms[1:end-length(rd)])) && return 0,0,Inf,false
             included_vars[id] = true
-            depends_on_u₁ = isu₁unrolled(op)
-            depends_on_u₂ = isu₂unrolled(op)
+            if isconstant(op)
+                depends_on_u₁, depends_on_u₂ = isunrolled_sym(op, u₁loopsym, u₂loopsym)
+                reduced_by_unrolling[1,1,id] = !depends_on_u₁
+                reduced_by_unrolling[2,1,id] = !depends_on_u₂
+            else
+                depends_on_u₁ = isu₁unrolled(op)
+                depends_on_u₂ = isu₂unrolled(op)
+                reduced_by_unrolling[1,1,id] = (u₁reached) & !depends_on_u₁
+                reduced_by_unrolling[2,1,id] = (u₂reached) & !depends_on_u₂
+            end
             # cost is reduced by unrolling u₁ if it is interior to u₁loop (true if either u₁reached, or if depends on u₂ [or u₁]) and doesn't depend on u₁
-            # reduced_by_unrolling[1,id] = (u₁reached | depends_on_u₂) & !depends_on_u₁
-            # reduced_by_unrolling[2,id] = (u₂reached | depends_on_u₁) & !depends_on_u₂
-            reduced_by_unrolling[1,id] = (u₁reached) & !depends_on_u₁
-            reduced_by_unrolling[2,id] = (u₂reached) & !depends_on_u₂
+            reduced_by_unrolling[1,2,id] = (u₁reached | depends_on_u₂) & !depends_on_u₁
+            reduced_by_unrolling[2,2,id] = (u₂reached | depends_on_u₁) & !depends_on_u₂
             iters[id] = iter
             innerloop ∈ loopdependencies(op) && set_upstream_family!(descendentsininnerloop, op, true)
         end
@@ -733,13 +755,15 @@ function evaluate_cost_tile(
         iters[id] == -99.9 && continue
         opisininnerloop = descendentsininnerloop[id]
         
-        u₁reduces, u₂reduces = reduced_by_unrolling[1,id], reduced_by_unrolling[2,id]
+        u₁reducesrt, u₂reducesrt = reduced_by_unrolling[1,1,id], reduced_by_unrolling[2,1,id]
+        u₁reducesrp, u₂reducesrp = reduced_by_unrolling[1,2,id], reduced_by_unrolling[2,2,id]
         if isload(op)
-            if add_constant_offset_load_elmination_cost!(cost_vec, reg_pressure, choose_to_inline, ls, op, iters[id], unrollsyms, u₁reduces, u₂reduces, Wshift, size_T, opisininnerloop)
+            if add_constant_offset_load_elmination_cost!(cost_vec, reg_pressure, choose_to_inline, ls, op, iters[id], unrollsyms, u₁reducesrp, u₂reducesrp, Wshift, size_T, opisininnerloop)
                 continue
             elseif load_elimination_cost_factor!(cost_vec, reg_pressure, choose_to_inline, ls, op, iters[id], unrollsyms, Wshift, size_T)
                 continue
-            end                
+            end
+        elseif isconstant(op)
         end
         rt, lat, rp = cost(ls, op, vectorized, Wshift, size_T)
         if isload(op) && !iszero(prefetchisagoodidea(ls, op, UnrollArgs(4, unrollsyms, 4, 0)))
@@ -750,19 +774,8 @@ function evaluate_cost_tile(
         # rp = opisininnerloop ? rp : zero(rp) # we only care about register pressure within the inner most loop
         rto = rt
         rt *= iters[id]
-        if u₁reduces & u₂reduces
-            cost_vec[4] += rt
-            reg_pressure[4] += rp
-        elseif u₂reduces # cost decreased by unrolling u₂loop
-            cost_vec[2] += rt
-            reg_pressure[2] += rp
-        elseif u₁reduces # cost decreased by unrolling u₁loop
-            cost_vec[3] += rt
-            reg_pressure[3] += rp
-        else # no cost decrease; cost must be repeated
-            cost_vec[1] += rt
-            reg_pressure[1] += rp
-        end
+        update_costs!(cost_vec, rt, u₁reducesrt, u₂reducesrt)
+        update_costs!(reg_pressure, rp, u₁reducesrp, u₂reducesrp)
     end
     # @inbounds ((cost_vec[4] > 0) || ((cost_vec[2] > 0) & (cost_vec[3] > 0))) || return 0,0,Inf,false
     costpenalty = (sum(reg_pressure) > REGISTER_COUNT) ? 2 : 1

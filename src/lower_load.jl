@@ -99,9 +99,7 @@ function prefetchisagoodidea(ls::LoopSet, op::Operation, td::UnrollArgs)
     0
 end
 function add_prefetches!(q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, prefetchind::Int, umin::Int)
-
     @unpack u₁, u₁loopsym, u₂loopsym, vectorized, u₂max = td
-    
     dontskip = (64 ÷ VectorizationBase.REGISTER_SIZE) - 1
     ptr = vptr(op)
     innermostloopsym = first(names(ls))
@@ -117,8 +115,8 @@ function add_prefetches!(q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, pr
     offsets[prefetchind] = inner_offset
     ptr = vptr(op)
     gptr = Symbol(ptr, "##GESPEDPREFETCH##")
-    for i ∈ eachindex(gespinds.args)
-        gespinds.args[i] = Expr(:call, lv(:extract_data), gespinds.args[i])
+    for i ∈ eachindex(gespinds.args) 
+       gespinds.args[i] = Expr(:call, lv(:extract_data), gespinds.args[i])
     end    
     push!(q.args, Expr(:(=), gptr, Expr(:call, lv(:gesp), ptr, gespinds)))
 

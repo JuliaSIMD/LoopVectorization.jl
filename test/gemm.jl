@@ -578,6 +578,19 @@
     # end)
     # lsmul2x2q = LoopVectorization.LoopSet(mul2x2q)
 
+    lsAtmulBt8 = :(for m ∈ 1:8, n ∈ 1:8
+    ΔCₘₙ = zero(eltype(C))
+    for k ∈ 1:8
+    ΔCₘₙ += A[k,m] * B[n,k]
+    end
+    C[m,n] = ΔCₘₙ
+    end) |> LoopVectorization.LoopSet;
+    if LoopVectorization.VectorizationBase.REGISTER_COUNT == 32
+        @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 1, 8)
+    else
+        # @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 2, 4)
+    end
+    
     struct SizedMatrix{M,N,T} <: DenseMatrix{T}
         data::Matrix{T}
     end

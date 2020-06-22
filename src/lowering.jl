@@ -185,24 +185,48 @@ end
 #         Expr(:block, loopiteratesatleastonce(loop), q)
 #     end
 # end
-# function lower_unroll_for_throughput(ls::LoopSet, us::UnrollSpecification, n::Int, loop::Loop, loopsym::Symbol)
-#     sl = startloop(loop, false, loopsym)
-#     UF = 4
-#     tcc = terminatecondition(loop, us, n, loopsym, false, 1)
-#     tcu = terminatecondition(loop, us, n, loopsym, false, UF)
-#     body = lower_block(ls, us, n, false, 1)
-#     # loopisstatic = isstaticloop(loop)
-#     unrolledlabel = gensym(:unrolled)
-#     cleanuplabel = gensym(:cleanup)
-#     gotounrolled = Expr(:macrocall, Symbol("@goto"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), unrolledlabel)
-#     gotocleanup = Expr(:macrocall, Symbol("@goto"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), cleanuplabel)
-#     branch = Expr(:if, tcu, gotounrolled, gotocleanup)
-#     unrolled = Expr(:block, Expr(:macrocall, Symbol("@label"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), unrolledlabel))
-#     foreach(_ -> push!(unrolled.args, body), 1:UF)
-#     push!(unrolled.args, Expr(:if, tcu, gotounrolled, Expr(:if, tcc, gotocleanup)))
-#     cleanup = Expr(:block, Expr(:macrocall, Symbol("@label"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), cleanuplabel), body, Expr(:if, tcc, gotocleanup))
-#     Expr(:let, sl, Expr(:block, branch, unrolled, cleanup))
-# end
+function lower_unroll_for_throughput(ls::LoopSet, us::UnrollSpecification, loop::Loop, loopsym::Symbol)
+    UF = 4
+    sl = startloop(ls, us, 1, UF)
+    tcc = terminatecondition(ls, us, 1, false, 1)
+    tcu = terminatecondition(ls, us, 1, false, UF)
+    body = lower_block(ls, us, 1, false, 1)
+    loopisstatic = isstaticloop(loop)
+    tcu = loopisstatic ? tcu : expect(tcu)
+    termcondu = gensym(:maybetermu)
+    unrolledbody = Expr(:block)
+    foreach(_ -> push!(unrolledbody.args, body), 1:UF)
+
+    # q = Expr(
+    #     :block,
+    #     Expr(:while, tcu, unrolledbody),
+    #     Expr(:while, tcc, body)
+    # )
+    # return Expr(:let, sl, q)
+    
+    push!(unrolledbody.args, Expr(:(=), termcondu, tcu))
+
+    unrolledloop = Expr(
+        :block,
+        Expr(:while, termcondu, unrolledbody),
+        Expr(:while, tcc, body)
+    )
+
+    termcond = gensym(:maybeterm)
+    singleloop = Expr(
+        :block,
+        Expr(:(=), termcond, true),
+        Expr(:while, termcond, Expr(:block, body, Expr(:(=), termcond, tcc)))
+    )
+    
+    q = Expr(
+        :block,
+        assume(tcc),
+        Expr(:(=), termcondu, tcu),
+        Expr(:if, termcondu, unrolledloop, singleloop)
+    )
+    Expr(:let, sl, q)
+end
 
 function assume(ex)
     Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:SIMDPirates)), QuoteNode(:assume)), ex)
@@ -228,25 +252,29 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
     nisvectorized = isvectorized(us, n)
     loopsym = names(ls)[n]
     loop = getloop(ls, loopsym)
-    # if !nisvectorized && !inclmask && isone(n) && !ls.loadelimination[] && (us.u₁ > 1) && (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && length(loop) > 7
-    #     # return lower_unroll_for_throughput(ls, us, n, loop, loopsym)
-    #     return lower_llvm_unroll(ls, us, n, loop)
+    # if !nisvectorized && !inclmask && isone(n) && !iszero(ls.lssm[].terminators[1]) && !ls.loadelimination[] && (us.u₁ > 1) && (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && length(loop) > 15
+    #     return lower_unroll_for_throughput(ls, us, loop, loopsym)
+    #     # return lower_llvm_unroll(ls, us, n, loop)
     # end
     # sl = startloop(loop, nisvectorized, loopsym)
     sl = startloop(ls, us, n)
     tc = terminatecondition(ls, us, n, inclmask, 1)
     body = lower_block(ls, us, n, inclmask, 1)
     isstatic = isstaticloop(loop)
+
+    if !isstatic && (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !inclmask
+        tc = expect(tc)
+    end
     q = if nisvectorized
             # Expr(:block, loopiteratesatleastonce(loop, true), Expr(:while, expect(tc), body))
-        Expr(:block, Expr(:while, isstatic ? tc : expect(tc), body))
+        Expr(:block, Expr(:while, tc, body))
     elseif isstatic && length(loop) ≤ 8
         bodyq = Expr(:block)
         foreach(_ -> push!(bodyq.args, body), 1:length(loop))
         bodyq
     else
         termcond = gensym(:maybeterm)
-        push!(body.args, Expr(:(=), termcond, isstatic ? tc : expect(tc)))
+        push!(body.args, Expr(:(=), termcond, tc))
         Expr(:block, Expr(:(=), termcond, true), Expr(:while, termcond, body))
         # Expr(:block, Expr(:while, expect(tc), body))
         # Expr(:block, assume(tc), Expr(:while, tc, body))

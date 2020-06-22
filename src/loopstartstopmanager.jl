@@ -201,7 +201,19 @@ function defpointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, is
     Expr(:(=), maxsym(vptr(ar), sub), pointermax(ls, ar, n, sub, isvectorized))
 end
 
-function startloop(ls::LoopSet, us::UnrollSpecification, n::Int)
+function maxunroll(us::UnrollSpecification, n)
+    @unpack u₁loopnum, u₂loopnum, u₁, u₂ = us
+    if n == u₁loopnum# && u₁ > 1
+        u₁
+    elseif n == u₂loopnum# && u₂ > 1
+        u₂
+    else
+        1
+    end
+end
+    
+
+function startloop(ls::LoopSet, us::UnrollSpecification, n::Int, submax = maxunroll(us, n))
     @unpack u₁loopnum, u₂loopnum, vectorizedloopnum, u₁, u₂ = us
     lssm = ls.lssm[]
     termind = lssm.terminators[n]
@@ -217,17 +229,6 @@ function startloop(ls::LoopSet, us::UnrollSpecification, n::Int)
         push!(loopstart.args, startloop(getloop(ls, loopsym), loopsym))
     else
         isvectorized = n == vectorizedloopnum
-        submax = if n == u₁loopnum# && u₁ > 1
-            # push!(loopstart.args, defpointermax(ls, ptrdefs[termind], n, u₁ - 1, isvectorized))
-            u₁
-        elseif n == u₂loopnum# && u₂ > 1
-            u₂
-            # push!(loopstart.args, defpointermax(ls, ptrdefs[termind], n, u₂ - 1, isvectorized))
-            # elseif isvectorized
-            # push!(loopstart.args, defpointermax(ls, ptrdefs[termind], n, 1, isvectorized))
-        else
-            1
-        end
         for sub ∈ 0:submax
             push!(loopstart.args, defpointermax(ls, ptrdefs[termind], n, sub, isvectorized))
         end
