@@ -21,7 +21,7 @@ function lower!(
     elseif isload(op)
         lower_load!(q, op, ls, unrollargs, mask)
     elseif iscompute(op)
-        lower_compute!(q, op, unrollargs, mask)
+        lower_compute!(q, op, ls, unrollargs, mask)
     elseif isstore(op)
         lower_store!(q, ls, op, unrollargs, mask)
     # elseif isloopvalue(op)
@@ -45,7 +45,7 @@ function lower!(
         elseif isload(op)
             lower_load!(q, op, ls, unrollargs, mask)
         elseif iscompute(op)
-            lower_compute!(q, op, unrollargs, mask)
+            lower_compute!(q, op, ls, unrollargs, mask)
         end
     end
 end
@@ -317,13 +317,26 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
         1
     end
     remfirst = loopisstatic & (UFt > 0) & !(unsigned(Ureduct) < unsigned(UF))
+#    @show remfirst, loopsym
     tc = terminatecondition(ls, us, n, inclmask, remfirst ? 1 : UF)
     usorig = ls.unrollspecification[]
 
     # tc = (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !loopisstatic && !inclmask && !ls.loadelimination[] ? expect(tc) : tc
 
     body = lower_block(ls, us, n, inclmask, UF)
-    q = Expr(:while, tc, body)
+    
+    q = if loopisstatic
+        iters = length(loop) ÷ UF
+        if iters ≤ 4
+            q = Expr(:block)
+            foreach(_ -> push!(q.args, body), 1:iters)
+            q
+        else
+            Expr(:while, tc, body)
+        end
+    else
+        Expr(:while, tc, body)
+    end
     remblock = init_remblock(loop, ls.lssm[], n)#loopsym)
     q = if unsigned(Ureduct) < unsigned(UF) # unsigned(-1) == typemax(UInt); is logic relying on twos-complement bad?
         UF_cleanup = UF - Ureduct
@@ -579,7 +592,7 @@ function setup_preamble!(ls::LoopSet, us::UnrollSpecification)
     lower_licm_constants!(ls)
     isone(num_loops(ls)) || pushpreamble!(ls, definemask(getloop(ls, vectorized)))#, u₁ > 1 && u₁loopnum == vectorizedloopnum))
     for op ∈ operations(ls)
-        (iszero(length(loopdependencies(op))) && iscompute(op)) && lower_compute!(ls.preamble, op, UnrollArgs(u₁, u₁loopsym, u₂loopsym, vectorized, u₂, nothing), nothing)
+        (iszero(length(loopdependencies(op))) && iscompute(op)) && lower_compute!(ls.preamble, op, ls, UnrollArgs(u₁, u₁loopsym, u₂loopsym, vectorized, u₂, nothing), nothing)
     end
     # define_remaining_ops!( ls, vectorized, W, u₁loop, u₂loop, u₁ )
 end

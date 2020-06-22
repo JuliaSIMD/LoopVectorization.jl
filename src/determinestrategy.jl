@@ -378,11 +378,7 @@ function solve_unroll(X, R, u₁max, u₂max, u₁L, u₂L, u₁step, u₂step)
     u₁, u₂, cost
 end
 function maybedemotesize(U::Int, N::Int)
-    # U > 1 || return 1
-    Um1 = U - 1
-    urep = num_iterations(N, U)
-    um1rep = num_iterations(N, Um1)
-    um1rep > urep ? U : Um1
+    num_iterations(N, num_iterations(N, U))
 end
 function maybedemotesize(u₂::Int, N::Int, U::Int, Uloop::Loop, maxu₂base::Int)
     u₂ > 1 || return 1

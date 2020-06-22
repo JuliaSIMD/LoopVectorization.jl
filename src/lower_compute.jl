@@ -19,6 +19,23 @@ function load_constrained(op, u₁loop, u₂loop, forprefetch = false)
     dependsonu₂ && push!(unrolleddeps, u₂loop)
     any(opp -> isload(opp) && all(in(loopdependencies(opp)), unrolleddeps), parents(op))
 end
+function check_if_remfirst(ls, ua)
+    usorig = ls.unrollspecification[]
+    @unpack u₁, u₁loopsym, u₂loopsym, u₂max = ua
+    u₁loop = getloop(ls, u₁loopsym)
+    u₂loop = getloop(ls, u₂loopsym)
+    if isstaticloop(u₁loop) && (usorig.u₁ != u₁)
+        return true
+    end
+    if isstaticloop(u₂loop) && (usorig.u₂ != u₂max)
+        return true
+    end
+    false
+end
+function sub_fmas(ls::LoopSet, op::Operation, ua::UnrollArgs)
+    @unpack u₁, u₁loopsym, u₂loopsym, u₂max = ua
+    !(load_constrained(op, u₁loopsym, u₂loopsym) || check_if_remfirst(ls, ua))
+end
 
 struct FalseCollection end
 Base.getindex(::FalseCollection, i...) = false
@@ -106,7 +123,7 @@ function add_loopvalue!(instrcall::Expr, loopval, ua::UnrollArgs, u::Int)
 end
 
 function lower_compute!(
-    q::Expr, op::Operation, ua::UnrollArgs, mask::Union{Nothing,Symbol,Unsigned} = nothing,
+    q::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs, mask::Union{Nothing,Symbol,Unsigned} = nothing,
 )
     @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = ua
     var = name(op)
@@ -176,8 +193,8 @@ function lower_compute!(
         instrfid = findfirst(isequal(instr.instr), (:vfmadd_fast, :vfnmadd_fast, :vfmsub_fast, :vfnmsub_fast))
         # want to instcombine when parent load's deps are superset
         # also make sure opp is unrolled
-        if instrfid !== nothing && (opunrolled && u₁ > 1) && !load_constrained(op, u₁loopsym, u₂loopsym)
-            specific_fmas = Base.libllvm_version > v"11.0.0" ? (:vfmadd, :vfnmadd, :vfmsub, :vfnmsub) : (:vfmadd231, :vfnmadd231, :vfmsub231, :vfnmsub231)
+        if !isnothing(instrfid) && (opunrolled && u₁ > 1) && sub_fmas(ls, op, ua)
+            specific_fmas = Base.libllvm_version >= v"11.0.0" ? (:vfmadd, :vfnmadd, :vfmsub, :vfnmsub) : (:vfmadd231, :vfnmadd231, :vfmsub231, :vfnmsub231)
             # specific_fmas = (:vfmadd231, :vfnmadd231, :vfmsub231, :vfnmsub231)
             instr = Instruction(specific_fmas[instrfid])
         end
@@ -185,7 +202,7 @@ function lower_compute!(
     # @show instr.instr
     reduceddeps = reduceddependencies(op)
     vecinreduceddeps = isreduct && vectorized ∈ reduceddeps
-    maskreduct = mask !== nothing && vecinreduceddeps #any(opp -> opp.variable === var, parents_op)
+    maskreduct = !isnothing(mask) && vecinreduceddeps #any(opp -> opp.variable === var, parents_op)
     # if vecinreduceddeps && vectorized ∉ loopdependencies(op) # screen parent opps for those needing a reduction to scalar
     #     # parents_op = reduce_vectorized_parents!(q, op, parents_op, U, u₁loopsym, u₂loopsym, vectorized, suffix)
     #     isreducingidentity!(q, op, parents_op, U, u₁loopsym, u₂loopsym, vectorized, suffix) && return
