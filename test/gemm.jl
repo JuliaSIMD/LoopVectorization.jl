@@ -585,7 +585,7 @@
     end
     C[m,n] = ΔCₘₙ
     end) |> LoopVectorization.LoopSet;
-    if LoopVectorization.VectorizationBase.REGISTER_COUNT == 32
+    if LoopVectorization.REGISTER_COUNT == 32
         @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 1, 8)
     else
         # @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 2, 4)
