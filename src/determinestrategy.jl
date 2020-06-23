@@ -939,7 +939,7 @@ function choose_tile(ls::LoopSet)
         end
     end
     ls.loadelimination[] = shouldinline
-    best_order, bestu₁, bestu₂, best_vec, u₁, u₂, lowest_cost, false#shouldinline
+    best_order, bestu₁, bestu₂, best_vec, u₁, u₂, lowest_cost, prod(length, ls.loops) < 4097
 end
 # Last in order is the inner most loop
 function choose_order_cost(ls::LoopSet)

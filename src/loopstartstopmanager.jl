@@ -271,8 +271,7 @@ end
 function terminatecondition(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask::Bool, UF::Int)
     lssm = ls.lssm[]
     termind = lssm.terminators[n]
-    loop = getloop(ls, names(ls)[n])
-    iszero(termind) && return terminatecondition(loop, us, n, loop.itersymbol, inclmask, UF)
+    iszero(termind) && return terminatecondition(getloop(ls, names(ls)[n]), us, n, loop.itersymbol, inclmask, UF)
     
     termar = lssm.incrementedptrs[n][termind]
     ptr = vptr(termar)
