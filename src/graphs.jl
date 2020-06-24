@@ -112,20 +112,6 @@ function vec_looprange(loopmax, UF::Int, mangledname, W)
     Expr(:call, :<, mangledname, compexpr)
 end
 
-# function looprange(stopcon, incr::Int, mangledname::Symbol, ptrcomp::Bool, verbose)
-#     if ptrcomp
-#         looprange(stopcon, Expr(:call, lv(:vsub), staticmulincr(mangledname, incr), 1), callpointer(mangledname), verbose)
-#     else
-#         looprange(stopcon, incr - 1, mangledname)
-#     end
-# end
-# function looprange(stopcon, incr, mangledname, verbose)
-#     if verbose
-#         Expr(:call, :<, :(@show $mangledname), :(@show $(subexpr(stopcon, incr))))
-#     else
-#         Expr(:call, :<, mangledname, subexpr(stopcon, incr))
-#     end
-# end
 function looprange(stopcon, incr::Int, mangledname)
     if iszero(incr)
         Expr(:call, :≤, mangledname, stopcon)
@@ -562,6 +548,25 @@ function instruction!(ls::LoopSet, x::Expr)
 end
 instruction!(ls::LoopSet, x::Symbol) = instruction(x)
 
+
+function maybe_const_compute!(ls::LoopSet, op::Operation, elementbytes::Int, position::Int)
+    if iscompute(op) && iszero(length(loopdependencies(op)))
+        add_constant!(ls, mangledvar(op), ls.loopsymbols[1:position], gensym(instruction(op).instr), elementbytes, :numericconstant)
+    else
+        op
+    end
+end
+function strip_op_linenumber_nodes(q::Expr)
+    non_lnn_ind = 0
+    for i ∈ eachindex(q.args)
+        if !(q.args[i] isa LineNumberNode)
+            @assert iszero(non_lnn_ind) "There should only be one non-LineNumberNode in the expression."
+            non_lnn_ind = i
+        end
+    end
+    q.args[non_lnn_ind]
+end
+
 function add_operation!(
     ls::LoopSet, LHS::Symbol, RHS::Expr, elementbytes::Int, position::Int
 )
@@ -581,12 +586,16 @@ function add_operation!(
             end
             op
         else
+            # maybe_const_compute!(ls, add_compute!(ls, LHS, RHS, elementbytes, position), elementbytes, position)
             add_compute!(ls, LHS, RHS, elementbytes, position)
         end
     elseif RHS.head === :if
         add_if!(ls, LHS, RHS, elementbytes, position)
+    elseif RHS.head === :block
+        add_operation!(ls, LHS, strip_op_linenumber_nodes(RHS), elementbytes, position)
     else
-        throw("Expression not recognized:\n$RHS")
+        println(RHS)
+        throw("Expression not recognized.")
     end
 end
 add_operation!(ls::LoopSet, RHS::Expr, elementbytes::Int, position::Int) = add_operation!(ls, gensym(:LHS), RHS, elementbytes, position)
@@ -606,6 +615,7 @@ function add_operation!(
         elseif f === :zero || f === :one
             c = gensym(f)
             op = add_constant!(ls, c, ls.loopsymbols[1:position], LHS_sym, elementbytes, :numericconstant)
+            # op = add_constant!(ls, c, Symbol[], LHS_sym, elementbytes, :numericconstant)
             if f === :zero
                 push!(ls.preamble_zeros, (identifier(op), IntOrFloat))
             else
@@ -617,8 +627,11 @@ function add_operation!(
         end
     elseif RHS.head === :if
         add_if!(ls, LHS_sym, RHS, elementbytes, position, LHS_ref)
+    elseif RHS.head === :block
+        add_operation!(ls, LHS, strip_op_linenumber_nodes(RHS), elementbytes, position)
     else
-        throw("Expression not recognized:\n$x")
+        println(RHS)
+        throw("Expression not recognized.")
     end
 end
 
@@ -652,7 +665,7 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
         RHS = ex.args[2]
         if LHS isa Symbol
             if RHS isa Expr
-                add_operation!(ls, LHS, RHS, elementbytes, position)
+                maybe_const_compute!(ls, add_operation!(ls, LHS, RHS, elementbytes, position), elementbytes, position)
             else
                 add_constant!(ls, RHS, ls.loopsymbols[1:position], LHS, elementbytes)
             end
@@ -669,7 +682,8 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
                 add_store_ref!(ls, RHS, LHS, elementbytes)
             end
         else
-            throw("LHS not understood:\n$LHS")
+            println(LHS)
+            throw("LHS not understood.")
         end
     elseif ex.head === :block
         add_block!(ls, ex, elementbytes, position)
@@ -692,7 +706,8 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
             add_compute!(ls, LHS, :identity, [RHS], elementbytes)
         end
     else
-        throw("Don't know how to handle expression:\n$ex")
+        println(ex)
+        throw("Don't know how to handle expression.")
     end
 end
 
