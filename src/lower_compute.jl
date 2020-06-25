@@ -166,7 +166,6 @@ function lower_compute!(
                 newparentname = Symbol(newparentname, suffix_)
             end
             if isconstant(newparentop)
-                # @show i, parentstiled[i], newparentname, parentname
                 push!(q.args, Expr(:(=), newparentname, Symbol(parentname, 0)))
             else
                 for u ∈ 0:u₁-1
@@ -183,11 +182,6 @@ function lower_compute!(
     # parentsyms = [opp.variable for opp ∈ parents(op)]
     Uiter = opunrolled ? u₁ - 1 : 0
     isreduct = isreduction(op)
-    # @show op opunrolled, optiled, isreduct, unrollsym
-    # if instr.instr === :vfmadd_fast
-        # diffdeps = !any(opp -> isload(opp) && all(in(loopdependencies(opp)), loopdependencies(op)), parents(op)) # want to instcombine when parent load's deps are superset
-        # @show suffix, !isnothing(suffix), isreduct, diffdeps
-    # end
     if !isnothing(suffix) && isreduct# && (iszero(suffix) || (ls.unrollspecification[].u₂ - 1 == suffix))
         # instrfid = findfirst(isequal(instr.instr), (:vfmadd, :vfnmadd, :vfmsub, :vfnmsub))
         instrfid = findfirst(isequal(instr.instr), (:vfmadd_fast, :vfnmadd_fast, :vfmsub_fast, :vfnmsub_fast))
@@ -199,7 +193,6 @@ function lower_compute!(
             instr = Instruction(specific_fmas[instrfid])
         end
     end
-    # @show instr.instr
     reduceddeps = reduceddependencies(op)
     vecinreduceddeps = isreduct && vectorized ∈ reduceddeps
     maskreduct = !isnothing(mask) && vecinreduceddeps #any(opp -> opp.variable === var, parents_op)
@@ -234,7 +227,6 @@ function lower_compute!(
                 add_loopvalue!(instrcall, loopval, ua, u)
             else
                 parent = mangledvar(parents_op[n])
-                # @show n, tiledouterreduction, parent
                 if n == tiledouterreduction
                     parent = Symbol(parent, modsuffix)
                 else

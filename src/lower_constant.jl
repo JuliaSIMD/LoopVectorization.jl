@@ -56,7 +56,7 @@ function lower_constant!(
     instruction = op.instruction
     constsym = instruction.instr
     reducedchildvectorized = vectorized ∈ reducedchildren(op)
-    if reducedchildvectorized || vectorized ∈ loopdependencies(op)  || vectorized ∈ reduceddependencies(op)
+    if reducedchildvectorized || vectorized ∈ loopdependencies(op) || vectorized ∈ reduceddependencies(op)
         # call = Expr(:call, lv(:vbroadcast), W, Expr(:call, lv(:maybeconvert), typeT, constsym))
         call = if reducedchildvectorized && vectorized ∉ loopdependencies(op)
             instrclass = getparentsreductzero(ls, op)

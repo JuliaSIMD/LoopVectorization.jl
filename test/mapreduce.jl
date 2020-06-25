@@ -8,6 +8,13 @@
         end
         s
     end
+    function minimum_avx(x)
+        s = typemax(eltype(x))
+        @avx for i in eachindex(x)
+            s = min(s, x[i])
+        end
+        s
+    end
     for T ∈ (Int32, Int64, Float32, Float64)
         @show T, @__LINE__
         if T <: Integer
@@ -38,6 +45,7 @@
         @test vmapreduce(log, +, x) ≈ sum(log, x)
         @test vmapreduce(abs2, +, x) ≈ sum(abs2, x)
         @test maximum(x) == vreduce(max, x) == maximum_avx(x)
+        @test minimum(x) == vreduce(min, x) == minimum_avx(x)
 
         @test vreduce(max, vec(x); dims = 1) == maximum(vec(x); dims = 1)
         @test vreduce(min, vec(x); dims = 1) == minimum(vec(x); dims = 1)

@@ -253,6 +253,7 @@ Base.convert(::Type{Instruction}, instr::Symbol) = Instruction(instr)
 # instruction(f::Symbol, m) = f ∈ keys(COST) ? Instruction(f) : Instruction(m, f)
 # instruction(f::Symbol) = f ∈ keys(COST) ? Instruction(:LoopVectorization, f) : Instruction(Symbol(""), f)
 function instruction(f::Symbol)
+    f === :ifelse && return Instruction(:LoopVectorization, :vifelse)
     # @assert f ∈ keys(COST)
     f ∈ keys(COST) ? Instruction(:LoopVectorization, f) : Instruction(Symbol(""), f)
 end

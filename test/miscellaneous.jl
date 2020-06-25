@@ -643,6 +643,18 @@ using Test
         end
         τ
     end
+function maxavx!(R::AbstractArray{T}, Q, keep=nothing) where T
+    @avx for i in axes(Q,1)
+        # acc = -999 # works fine
+        acc = ifelse(isnothing(keep), typemin(T), R[i])
+        for j in axes(Q,2), k in axes(Q,3)
+            acc = max(acc, Q[i, j, k])
+        end
+        R[i] = acc
+    end
+    R
+end
+
 
 
     for T ∈ (Float32, Float64)
@@ -842,6 +854,11 @@ using Test
         MatCalcWtDW!(mh)
         @test mh.Wt_D_W ≈ mh.Wt * Diagonal(mh.d) * mh.Wt'
 
+        Q = rand(T, 43, 47, 51);
+        R = rand(T, 43);
+        @test maxavx!(R, Q) == vec(maximum(Q, dims=(2,3)))
+        R .+= randn.(T); Rc = copy(R);
+        @test maxavx!(R, Q, true) == max.(vec(maximum(Q, dims=(2,3))), Rc)
    
     end
     for T ∈ [Int16, Int32, Int64]

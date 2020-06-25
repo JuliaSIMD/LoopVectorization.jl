@@ -80,7 +80,11 @@ T = Float32
     end
     function addormulavx!(c, a, b)
         @avx for i ∈ eachindex(c,a,b)
-            c[i] = a[i] > b[i] ? a[i] + b[i] : a[i] * b[i]
+            c[i] = if a[i] > b[i]
+                a[i] + b[i]
+            else
+                a[i] * b[i]
+            end
         end
     end
     function addormulp1!(c, a, b)

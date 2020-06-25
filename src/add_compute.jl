@@ -255,7 +255,7 @@ function add_compute!(
         mergesetv!(newreduceddeps, reduceddeps)
         deps = newloopdeps; reduceddeps = newreduceddeps
     end
-    if reduction || search_tree(vparents, var)
+    op = if reduction || search_tree(vparents, var)
         parent = ls.opdict[var]
         setdiffv!(reduceddeps, deps, loopdependencies(parent))
         # parent = getop(ls, var, elementbytes)
@@ -272,6 +272,8 @@ function add_compute!(
         op = Operation(length(operations(ls)), var, elementbytes, instr, compute, deps, reduceddeps, vparents)
         pushop!(ls, op, var)
     end
+    # maybe_const_compute!(ls, op, elementbytes, position)
+    op
 end
 
 function add_compute!(
