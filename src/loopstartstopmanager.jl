@@ -197,7 +197,13 @@ function pointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvec
     end
     @show ar, loopsym
 end
+# @inline function assume_a_greater_than_b_ret_a(a::Ptr, b::VectorizationBase.AbstractStridedPointer)
+#     SIMDPirates.assume(pointer(b) < a)
+#     a
+# end
+# @inline assume_a_greater_than_b_ret_a(a, b) = a
 function defpointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvectorized::Bool)::Expr
+    # Expr(:(=), maxsym(vptr(ar), sub), Expr(:call, lv(:assume_a_greater_than_b_ret_a), pointermax(ls, ar, n, sub, isvectorized), vptr(ar)))
     Expr(:(=), maxsym(vptr(ar), sub), pointermax(ls, ar, n, sub, isvectorized))
 end
 

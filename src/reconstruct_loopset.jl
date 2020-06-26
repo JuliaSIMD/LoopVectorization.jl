@@ -157,6 +157,11 @@ function add_mref!(
     add_mref!(ls, ar, i, P, name)
 end
 function add_mref!(
+    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{VectorizationBase.ZeroInitializedStridedPointer{T,P}}, name
+) where {T,P}
+    add_mref!(ls, ar, i, P, name)
+end
+function add_mref!(
     ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name
 ) where {T, X <: Tuple, S <: AbstractStaticStridedPointer{T,X}}
     if last(X.parameters)::Int == 1

@@ -19,9 +19,12 @@ function symbolind(ind::Symbol, op::Operation, td::UnrollArgs)
     Expr(:call, lv(:staticm1), ex)
 end
 
-
+staticexpr(x::Integer) = Expr(:call, Expr(:curly, lv(:Static), convert(Int, x)))
+staticexpr(x) = Expr(:call, lv(:Static), x)
+maybestatic(x::Integer) = staticexpr(x)
+maybestatic(x) = x
 _MMind(ind) = Expr(:call, lv(:_MM), VECTORWIDTHSYMBOL, ind)
-_MMind(ind::Integer) = Expr(:call, lv(:_MM), VECTORWIDTHSYMBOL, convert(Int, ind))
+_MMind(ind::Integer) = Expr(:call, lv(:_MM), VECTORWIDTHSYMBOL, staticexpr(ind))
 function addoffset!(ret::Expr, ex, offset::Integer, _mm::Bool = false)
     if iszero(offset)
         if _mm
@@ -31,20 +34,15 @@ function addoffset!(ret::Expr, ex, offset::Integer, _mm::Bool = false)
             return
         end
     elseif _mm
-        ind = _MMind(Expr(:call, lv(:vadd), ex, convert(Int, offset)))
+        ind = _MMind(Expr(:call, lv(:vadd), ex, staticexpr(offset)))
     else
-        ind = Expr(:call, lv(:vadd), ex, convert(Int, offset))
+        ind = Expr(:call, lv(:vadd), ex, staticexpr(offset))
     end
     push!(ret.args, ind)
     nothing
 end
 function addoffset!(ret::Expr, offset::Int, _mm::Bool = false)
-    ex = Expr(:call, Expr(:curly, lv(:Static), offset))
-    if _mm
-        push!(ret.args, _MMind(ex))
-    else
-        push!(ret.args, ex)
-    end        
+    push!(ret.args, _mm ? _MMind(offset) : staticexpr(offset))
     nothing
 end
 
@@ -83,9 +81,9 @@ end
 function add_vectorized_offset!(ret::Expr, ind, offset, incr)
     if isone(incr)
         if iszero(offset)
-            push!(ret.args, _MMind(Expr(:call, lv(:valadd), VECTORWIDTHSYMBOL, ind)))
+            push!(ret.args, _MMind(Expr(:call, lv(:valadd), VECTORWIDTHSYMBOL, maybestatic(ind))))
         else
-            push!(ret.args, _MMind(Expr(:call, lv(:vadd), ind, Expr(:call, lv(:valadd), VECTORWIDTHSYMBOL, convert(Int, offset)))))
+            push!(ret.args, _MMind(Expr(:call, lv(:vadd), ind, Expr(:call, lv(:valadd), VECTORWIDTHSYMBOL, staticexpr(offset)))))
         end
     elseif iszero(incr)
         if iszero(offset)
@@ -94,28 +92,28 @@ function add_vectorized_offset!(ret::Expr, ind, offset, incr)
             addoffset!(ret, ind, offset, true)
         end
     elseif iszero(offset)
-        push!(ret.args, _MMind(Expr(:call, lv(:valmuladd), VECTORWIDTHSYMBOL, incr, ind)))
+        push!(ret.args, _MMind(Expr(:call, lv(:staticmuladd), VECTORWIDTHSYMBOL, maybestatic(incr), maybestatic(ind))))
     else
-        push!(ret.args, _MMind(Expr(:call, lv(:vadd), ind, Expr(:call, lv(:valmuladd), VECTORWIDTHSYMBOL, incr, convert(Int, offset)))))
+        push!(ret.args, _MMind(Expr(:call, lv(:vadd), ind, Expr(:call, lv(:staticmuladd), VECTORWIDTHSYMBOL, maybestatic(incr), staticexpr(offset)))))
     end
 end
 function add_vectorized_offset_unrolled!(ret::Expr, offset, incr)
     if isone(incr)
         if iszero(offset)
-            push!(ret.args, _MMind(Expr(:call, lv(:unwrap), VECTORWIDTHSYMBOL)))
+            push!(ret.args, _MMind(Expr(:call, lv(:Static), VECTORWIDTHSYMBOL)))
         else
-            push!(ret.args, _MMind(Expr(:call, lv(:valadd), VECTORWIDTHSYMBOL, convert(Int, offset))))
+            push!(ret.args, _MMind(Expr(:call, lv(:valadd), VECTORWIDTHSYMBOL, staticexpr(offset))))
         end
     elseif iszero(incr)
         if iszero(offset)
             push!(ret.args, _MMind(Expr(:call, lv(:Zero))))
         else
-            push!(ret.args, _MMind(convert(Int, offset)))
+            push!(ret.args, _MMind(staticexpr(offset)))
         end
     elseif iszero(offset)
-        push!(ret.args, _MMind(Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, incr)))
+        push!(ret.args, _MMind(Expr(:call, lv(:staticmul), VECTORWIDTHSYMBOL, maybestatic(incr))))
     else
-        push!(ret.args, _MMind(Expr(:call, lv(:valmuladd), VECTORWIDTHSYMBOL, incr, convert(Int, offset))))
+        push!(ret.args, _MMind(Expr(:call, lv(:staticmuladd), VECTORWIDTHSYMBOL, maybestatic(incr), staticexpr(offset))))
     end
 end
 function add_vectorized_offset!(ret::Expr, ind, offset, incr, unrolled)
