@@ -66,6 +66,8 @@ function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, alla
     end
     isbroadcast = ls.isbroadcast[]
     gespinds = Expr(:tuple)
+    offsetprecalc_descript = Expr(:tuple)
+    use_offsetprecalc = false
     for i ∈ eachindex(li)
         ii = i + offset
         ind = indices[ii]
@@ -78,9 +80,12 @@ function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, alla
         if (!li[i])
             uliv[i] = 0
             push!(gespinds.args, Expr(:call, lv(:Zero)))
+            push!(offsetprecalc_descript.args, 0)
         elseif isbroadcast || ((isone(ii) && (last(looporder) === ind)) && !(otherindexunrolled(ls, ind, ar)) || multiple_with_name(vptr(ar), allarrayrefs)) || isstaticloop(getloop(ls, ind))
+            # Not doing normal offset indexing
             uliv[i] = -findfirst(isequal(ind), looporder)::Int
             push!(gespinds.args, Expr(:call, lv(:Zero)))
+            push!(offsetprecalc_descript.args, 0) # not doing offset indexing, so push 0
         else
             uliv[i] = findfirst(isequal(ind), looporder)::Int
             loop = getloop(ls, ind)
@@ -89,9 +94,24 @@ function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, alla
             else
                 push!(gespinds.args, Expr(:call, lv(:staticm1), loop.startsym))
             end
+            if ind === names(ls)[us.vectorizedloopnum]
+                push!(offsetprecalc_descript.args, 0)
+            elseif (ind === names(ls)[us.u₁loopnum]) & (us.u₁ > 3)
+                use_offsetprecalc = true
+                push!(offsetprecalc_descript.args, us.u₁)
+            elseif (ind === names(ls)[us.u₂loopnum]) & (us.u₂ > 3)
+                use_offsetprecalc = true
+                push!(offsetprecalc_descript.args, us.u₂)
+            else
+                push!(offsetprecalc_descript.args, 0)
+            end
         end
     end
-    push!(q.args, Expr(:(=), vptr(ar), Expr(:call, lv(:gesp), vptr(ar), gespinds)))
+    if use_offsetprecalc
+        push!(q.args, Expr(:(=), vptr(ar), Expr(:call, lv(:offsetprecalc), Expr(:call, lv(:gesp), vptr(ar), gespinds), Expr(:call, Expr(:curly, :Val, offsetprecalc_descript)))))
+    else
+        push!(q.args, Expr(:(=), vptr(ar), Expr(:call, lv(:gesp), vptr(ar), gespinds)))
+    end    
     uliv
 end
 
@@ -197,13 +217,8 @@ function pointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvec
     end
     @show ar, loopsym
 end
-# @inline function assume_a_greater_than_b_ret_a(a::Ptr, b::VectorizationBase.AbstractStridedPointer)
-#     SIMDPirates.assume(pointer(b) < a)
-#     a
-# end
-# @inline assume_a_greater_than_b_ret_a(a, b) = a
+
 function defpointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvectorized::Bool)::Expr
-    # Expr(:(=), maxsym(vptr(ar), sub), Expr(:call, lv(:assume_a_greater_than_b_ret_a), pointermax(ls, ar, n, sub, isvectorized), vptr(ar)))
     Expr(:(=), maxsym(vptr(ar), sub), pointermax(ls, ar, n, sub, isvectorized))
 end
 
