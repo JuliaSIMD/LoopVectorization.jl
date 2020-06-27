@@ -587,8 +587,10 @@
     end) |> LoopVectorization.LoopSet;
     if LoopVectorization.REGISTER_COUNT == 32
         @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 1, 8)
-    else
+    elseif LoopVectorization.REGISTER_COUNT == 16
         @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 2, 4)
+    elseif LoopVectorization.REGISTER_COUNT == 8
+        @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :n, :m, :n, 2, 2)
     end
     
     struct SizedMatrix{M,N,T} <: DenseMatrix{T}
