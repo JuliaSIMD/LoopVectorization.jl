@@ -830,19 +830,11 @@
             fill!(Cs, 9999.999); AmulB2x2_avx!(Cs, Ats', Bs)
             @test Cs ≈ C2
             fill!(Cs, 9999.999); AtmulB_avx1!(Cs, Ats, Bs)
-            if LoopVectorization.VectorizationBase.SIMD_NATIVE_INTEGERS || Base.libllvm_version > v"7"
-                @test Cs ≈ C2
-            else #TODO: why is this broken???
-                @test_broken Cs ≈ C2
-            end
+            @test Cs ≈ C2
             fill!(Cs, 9999.999); AtmulB_avx1!(Cs, As', Bs)
             @test Cs ≈ C2
             fill!(Cs, 9999.999); AtmulB_avx2!(Cs, Ats, Bs);
-            if LoopVectorization.VectorizationBase.SIMD_NATIVE_INTEGERS || Base.libllvm_version > v"7"
-                @test Cs ≈ C2
-            else #TODO: why is this broken???
-                @test_broken Cs ≈ C2
-            end
+            @test Cs ≈ C2
             fill!(Cs, 9999.999); AtmulB_avx2!(Cs, As', Bs);
             @test Cs ≈ C2
             fill!(Cs, 9999.999); mulCAtB_2x2block_avx!(Cs, Ats, Bs);
