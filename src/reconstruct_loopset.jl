@@ -443,7 +443,8 @@ function avx_loopset(instr, ops, arf, AM, LPSYM, LB, @nospecialize(vargs))
     ls
 end
 function avx_body(ls, UNROLL)
-    inline, u₁, u₂ = UNROLL
+    inline, u₁, u₂, W = UNROLL
+    ls.vector_width[] = W
     q = iszero(u₁) ? lower_and_split_loops(ls, inline % Int) : lower(ls, u₁ % Int, u₂ % Int, inline % Int)
     iszero(length(ls.outer_reductions)) ? push!(q.args, nothing) : push!(q.args, loopset_return_value(ls, Val(true)))
     # @show q
@@ -484,7 +485,7 @@ Execute an `@avx` block. The block's code is represented via the arguments:
 - `vargs...` holds the encoded pointers of all the arrays (see `VectorizationBase`'s various pointer types).
 """
 @generated function _avx_!(::Val{UNROLL}, ::Type{OPS}, ::Type{ARF}, ::Type{AM}, ::Type{LPSYM}, lb::LB, vargs...) where {UNROLL, OPS, ARF, AM, LPSYM, LB}
-    # 1 + 1 # Irrelevant line you can comment out/in to force recompilation...
+    1 + 1 # Irrelevant line you can comment out/in to force recompilation...
     ls = _avx_loopset(OPS.parameters, ARF.parameters, AM.parameters, LPSYM.parameters, LB.parameters, vargs)
     # @show avx_body(ls, UNROLL)
     avx_body(ls, UNROLL)

@@ -61,9 +61,9 @@ function matmul_bench!(br, C, A, B, i)
     @assert C ≈ Cblas "Fort builtin gemm wrong?"; fill!(C, NaN)
     br[10,i] = n_gflop / @belapsed ifgemm_builtin!($C, $A, $B)
     @assert C ≈ Cblas "ifort builtin gemm wrong?"; fill!(C, NaN)
-    br[11,i] = n_gflop / @belapsed dgemmopenblas!($C, $A, $B);
+    br[11,i] = n_gflop / @belapsed gemmopenblas!($C, $A, $B);
     @assert C ≈ Cblas "OpenBLAS gemm wrong?"
-    br[12,i] = n_gflop / @belapsed dgemmmkl!($C, $A, $B)
+    br[12,i] = n_gflop / @belapsed gemmmkl!($C, $A, $B)
     @assert C ≈ Cblas "MKL gemm wrong?"
     # br[12,i] = n_gflop / @belapsed gemmavx!($C, $A, $B)
 end

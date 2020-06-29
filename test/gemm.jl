@@ -618,6 +618,7 @@
     LoopVectorization.maybestaticsize(::LinearAlgebra.Transpose{T,SizedMatrix{M,N,T}}, ::Val{2}) where {M,N,T} = LoopVectorization.Static{M}()
     
     for T ∈ (Float32, Float64, Int32, Int64)
+    # let T = Int32
         # exceeds_time_limit() && break
         @show T, @__LINE__
         # M, K, N = 128, 128, 128;
@@ -828,16 +829,19 @@
             @test Cs ≈ C2
             fill!(Cs, 9999.999); AmulB2x2_avx!(Cs, Ats', Bs)
             @test Cs ≈ C2
-            #TODO: remove these checks
+            fill!(Cs, 9999.999); AtmulB_avx1!(Cs, Ats, Bs)
             if LoopVectorization.VectorizationBase.SIMD_NATIVE_INTEGERS || Base.libllvm_version > v"7"
-                fill!(Cs, 9999.999); AtmulB_avx1!(Cs, Ats, Bs)
                 @test Cs ≈ C2
+            else #TODO: why is this broken???
+                @test_broken Cs ≈ C2
             end
             fill!(Cs, 9999.999); AtmulB_avx1!(Cs, As', Bs)
             @test Cs ≈ C2
+            fill!(Cs, 9999.999); AtmulB_avx2!(Cs, Ats, Bs);
             if LoopVectorization.VectorizationBase.SIMD_NATIVE_INTEGERS || Base.libllvm_version > v"7"
-                fill!(Cs, 9999.999); AtmulB_avx2!(Cs, Ats, Bs);
                 @test Cs ≈ C2
+            else #TODO: why is this broken???
+                @test_broken Cs ≈ C2
             end
             fill!(Cs, 9999.999); AtmulB_avx2!(Cs, As', Bs);
             @test Cs ≈ C2

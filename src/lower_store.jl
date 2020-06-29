@@ -202,18 +202,36 @@ function lower_store!(
     q::Expr, ls::LoopSet, op::Operation, ua::UnrollArgs, mask::Union{Nothing,Symbol,Unsigned} = nothing
 )
     @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = ua
-    isunrolled = u₁loopsym ∈ loopdependencies(op)
+    isunrolled₁ = isu₁unrolled(op) #u₁loopsym ∈ loopdependencies(op)
+    # isunrolled₂ = isu₂unrolled(op)
     inds_calc_by_ptr_offset = indices_calculated_by_pointer_offsets(ls, op.ref)
-    ua = UnrollArgs(ua, isunrolled ? u₁ : 1)
+    # if isunrolled₁ & ((!isnothing(suffix)) && isu₂unrolled(op))
+    #     u₁ind = findfirst(isequal(u₁loopsym), loopdependencies(op))::Int
+    #     u₂ind = findfirst(isequal(u₁loopsym), loopdependencies(op))::Int
+    #     if inds_calc_by_ptr_offset[u₁ind] && inds_calc_by_ptr_offset[u₂ind]
+    #         if u₁ind < u₂ind
+    #             zero_offset = u₂ind
+    #             gespind = gensym("gesp")
+    #             # gesp by suffix
+    #         else
+    #             zero_offset = u₁ind
+    #             if iszero(suffix) # gesp for each
+
+    #             end
+    #         end
+    #     end
+    # else        
+    # end
+    ua = UnrollArgs(ua, isunrolled₁ ? u₁ : 1)
     if instruction(op).instr !== :conditionalstore!
         if vectorized ∈ loopdependencies(op)
-            lower_store_vectorized!(q, op, ua, mask, isunrolled, inds_calc_by_ptr_offset)
+            lower_store_vectorized!(q, op, ua, mask, isunrolled₁, inds_calc_by_ptr_offset)
         else
             lower_store_scalar!(q, op, ua, mask, inds_calc_by_ptr_offset)
         end
     else
         if vectorized ∈ loopdependencies(op)
-            lower_conditionalstore_vectorized!(q, op, ua, mask, isunrolled, inds_calc_by_ptr_offset)
+            lower_conditionalstore_vectorized!(q, op, ua, mask, isunrolled₁, inds_calc_by_ptr_offset)
         else
             lower_conditionalstore_scalar!(q, op, ua, mask, inds_calc_by_ptr_offset)
         end

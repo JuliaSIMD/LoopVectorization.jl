@@ -24,7 +24,7 @@ end
 ffile = joinpath(LOOPVECBENCHDIR, "looptests.f90")
 if !isfile(LIBFTEST) || mtime(ffile) > mtime(LIBFTEST)
     # --param max-unroll-times defaults to ≥8, which is generally excessive
-    run(`gfortran -Ofast -march=native -funroll-loops -mprefer-vector-width=$(8REGISTER_SIZE) -shared -fPIC $ffile -o $LIBFTEST`)
+    run(`gfortran -Ofast -march=native -funroll-loops -mprefer-vector-width=$(8REGISTER_SIZE) -fvariable-expansion-in-unroller --param max-variable-expansions-in-unroller=4 -shared -fPIC $ffile -o $LIBFTEST`)
     # run(`gfortran -Ofast -march=native -funroll-loops -floop-nest-optimize -mprefer-vector-width=$(8REGISTER_SIZE) -shared -fPIC $ffile -o $LIBFTEST`)
 end
 if !isfile(LIBIFTEST) || mtime(ffile) > mtime(LIBIFTEST)

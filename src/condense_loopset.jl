@@ -227,7 +227,7 @@ function generate_call(ls::LoopSet, inline_unroll::NTuple{3,Int8}, debug::Bool =
     func = debug ? lv(:_avx_loopset_debug) : lv(:_avx_!)
     lbarg = debug ? Expr(:call, :typeof, loop_bounds) : loop_bounds
     q = Expr(
-        :call, func, Expr(:call, Expr(:curly, :Val, (inline, u₁, u₂))),
+        :call, func, Expr(:call, Expr(:curly, :Val, Expr(:tuple, inline, u₁, u₂, Expr(:call, lv(:unwrap), VECTORWIDTHSYMBOL)))),
         operation_descriptions, arrayref_descriptions, argmeta, loop_syms, lbarg
     )
     debug && deleteat!(q.args, 2)
@@ -237,7 +237,10 @@ function generate_call(ls::LoopSet, inline_unroll::NTuple{3,Int8}, debug::Bool =
     append!(q.args, arraysymbolinds)
     add_reassigned_syms!(q, ls)
     add_external_functions!(q, ls)
-    q
+    debug && return q
+    vecwidthdefq = Expr(:block)
+    define_eltype_vec_width!(vecwidthdefq, ls, nothing)
+    Expr(:block, vecwidthdefq, q)
 end
 
 
@@ -317,6 +320,7 @@ function setup_call_inline(ls::LoopSet, inline::Int8 = zero(Int8), U::Int8 = zer
 end
 function setup_call_debug(ls::LoopSet)
     # avx_loopset(instr, ops, arf, AM, LB, vargs)
+    
     pushpreamble!(ls, generate_call(ls, (zero(Int8),zero(Int8),zero(Int8)), true))
     Expr(:block, ls.prepreamble, ls.preamble)
 end

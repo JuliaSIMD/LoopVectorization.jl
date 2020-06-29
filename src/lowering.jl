@@ -303,31 +303,24 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     vectorized = order[vectorizedloopnum]
     nisunrolled = isunrolled1(us, n)
     nisvectorized = isvectorized(us, n)
-    loopisstatic = isstaticloop(loop) & (!nisvectorized)
-
+    W = nisvectorized ? ls.vector_width[] : 1
+    loopisstatic = isstaticloop(loop) & (!iszero(W))
+    UFW = UF * W
 
     remmask = inclmask | nisvectorized
     Ureduct = (n == num_loops(ls) && (u₂ == -1)) ? calc_Ureduct(ls, us) : -1
     # sl = startloop(loop, nisvectorized, loopsym)
     sl = startloop(ls, us, n)
-
-    UFt = if loopisstatic
-        length(loop) % UF
-    else
-        1
-    end
-    remfirst = loopisstatic & (UFt > 0) & !(unsigned(Ureduct) < unsigned(UF))
-#    @show remfirst, loopsym
+    UFt = loopisstatic ? cld(length(loop) % UFW, W) : 1
+    # Don't place remainder first if we're going to have to mask this loop (i.e., if this loop is vectorized)
+    remfirst = loopisstatic & (!nisvectorized) & (UFt > 0) & !(unsigned(Ureduct) < unsigned(UF))
     tc = terminatecondition(ls, us, n, inclmask, remfirst ? 1 : UF)
     usorig = ls.unrollspecification[]
-
     # tc = (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !loopisstatic && !inclmask && !ls.loadelimination[] ? expect(tc) : tc
-
     body = lower_block(ls, us, n, inclmask, UF)
-    
     q = if loopisstatic
-        iters = length(loop) ÷ UF
-        if iters ≤ 4
+        iters = length(loop) ÷ UFW
+        if iters*UF ≤ 16 # Let's set a limit on total unrolling
             q = Expr(:block)
             foreach(_ -> push!(q.args, body), 1:iters)
             q
@@ -364,6 +357,17 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
         end
     elseif iszero(UFt)
         Expr( :block, q )
+    # elseif !nisvectorized && !loopisstatic && UF ≥ 8
+    #     rem_uf = UF - 1
+    #     UF = rem_uf >> 1
+    #     UFt = rem_uf - UF
+    #     ust = nisunrolled ? UnrollSpecification(us, UFt, u₂) : UnrollSpecification(us, u₁, UFt)
+    #     newblock = lower_block(ls, ust, n, remmask, UFt)
+    #     # comparison = unrollremcomparison(ls, loop, UFt, n, nisvectorized, remfirst)
+    #     comparison = terminatecondition(ls, us, n, inclmask, UFt)
+    #     UFt = 1
+    #     UF += 1 - iseven(rem_uf)
+    #     Expr( :block, q, Expr(iseven(rem_uf) ? :while : :if, comparison, newblock), remblock )
     else
         # if (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !isstaticloop(loop) && !inclmask# && !ls.loadelimination[]
         #     # Expr(:block, sl, assumeloopiteratesatleastonce(loop), Expr(:while, tc, body))
@@ -523,12 +527,14 @@ function determine_eltype(ls::LoopSet)
     promote_q
 end
 function determine_width(
-    ls::LoopSet, vectorized::Symbol
+    ls::LoopSet, vectorized::Union{Symbol,Nothing}
 )
-    vloop = getloop(ls, vectorized)
     vwidth_q = Expr(:call, lv(:pick_vector_width_val))
-    if isstaticloop(vloop)
-        push!(vwidth_q.args, Expr(:call, Expr(:curly, :Val, length(vloop))))
+    if !isnothing(vectorized)
+        vloop = getloop(ls, vectorized)
+        if isstaticloop(vloop)
+            push!(vwidth_q.args, Expr(:call, Expr(:curly, :Val, length(vloop))))
+        end
     end
     # push!(vwidth_q.args, ls.T)
     if length(ls.includedactualarrays) < 2
@@ -578,23 +584,23 @@ function definemask(loop::Loop)
         maskexpr(lexpr)
     end
 end
-
+function define_eltype_vec_width!(q::Expr, ls::LoopSet, vectorized)
+    push!(q.args, Expr(:(=), ELTYPESYMBOL, determine_eltype(ls)))
+    push!(q.args, Expr(:(=), VECTORWIDTHSYMBOL, determine_width(ls, vectorized)))
+end
 function setup_preamble!(ls::LoopSet, us::UnrollSpecification)
     @unpack u₁loopnum, u₂loopnum, vectorizedloopnum, u₁, u₂ = us
     order = names(ls)
     u₁loopsym = order[u₁loopnum]
     u₂loopsym = order[u₂loopnum]
     vectorized = order[vectorizedloopnum]
-    if length(ls.includedactualarrays) > 0
-        push!(ls.preamble.args, Expr(:(=), ELTYPESYMBOL, determine_eltype(ls)))
-        push!(ls.preamble.args, Expr(:(=), VECTORWIDTHSYMBOL, determine_width(ls, vectorized)))
-    end
+    set_vector_width!(ls, vectorized)
+    iszero(length(ls.includedactualarrays)) || define_eltype_vec_width!(ls.preamble, ls, vectorized)
     lower_licm_constants!(ls)
     isone(num_loops(ls)) || pushpreamble!(ls, definemask(getloop(ls, vectorized)))#, u₁ > 1 && u₁loopnum == vectorizedloopnum))
     for op ∈ operations(ls)
         (iszero(length(loopdependencies(op))) && iscompute(op)) && lower_compute!(ls.preamble, op, ls, UnrollArgs(u₁, u₁loopsym, u₂loopsym, vectorized, u₂, nothing), nothing)
     end
-    # define_remaining_ops!( ls, vectorized, W, u₁loop, u₂loop, u₁ )
 end
 function lsexpr(ls::LoopSet, q)
     Expr(:block, ls.preamble, q)

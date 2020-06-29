@@ -101,6 +101,24 @@ function hasintersection(a, b)
 end
 const num_iterations = cld
 
+function set_vector_width!(ls::LoopSet, vectorized::Symbol)
+    W = ls.vector_width[]
+    if !iszero(W)
+        ls.vector_width[] = min(W, VectorizationBase.nextpow2(length(ls, vectorized)))
+    end
+    nothing
+end
+function lsvecwidthshift(ls::LoopSet, vectorized::Symbol, size_T = nothing)
+    W = ls.vector_width[]
+    lvec = length(ls, vectorized)
+    if iszero(W)
+        VectorizationBase.pick_vector_width_shift(lvec, isnothing(size_T) ? biggest_type_size(ls) : size_T)::Tuple{Int,Int}
+    else
+        W = min(W, VectorizationBase.nextpow2(lvec))
+        W, VectorizationBase.intlog2(W)
+    end
+end
+
 # evaluates cost of evaluating loop in given order
 # heuristically, could simplify analysis by just unrolling outer loop?
 function evaluate_cost_unroll(
@@ -110,9 +128,9 @@ function evaluate_cost_unroll(
     nested_loop_syms = Symbol[]#Set{Symbol}()
     total_cost = 0.0
     iter = 1.0
-    # Need to check if fusion is possible
     size_T = biggest_type_size(ls)
-    W, Wshift = VectorizationBase.pick_vector_width_shift(length(ls, vectorized), size_T)::Tuple{Int,Int}
+    W, Wshift = lsvecwidthshift(ls, vectorized, size_T)
+    # Need to check if fusion is possible
     for itersym ∈ order
         # Add to set of defined symbles
         push!(nested_loop_syms, itersym)
@@ -173,7 +191,8 @@ end
 # end
 function unroll_no_reductions(ls, order, vectorized)
     size_T = biggest_type_size(ls)
-    W, Wshift = VectorizationBase.pick_vector_width_shift(length(ls, vectorized), size_T)::Tuple{Int,Int}
+    W, Wshift = lsvecwidthshift(ls, vectorized, size_T)
+    # W, Wshift = VectorizationBase.pick_vector_width_shift(length(ls, vectorized), size_T)::Tuple{Int,Int}
 
     compute_rt = 0.0
     load_rt = 0.0
@@ -200,7 +219,7 @@ function determine_unroll_factor(
     ls::LoopSet, order::Vector{Symbol}, unrolled::Symbol, vectorized::Symbol
 )
     size_T = biggest_type_size(ls)
-    W, Wshift = VectorizationBase.pick_vector_width_shift(length(ls, vectorized), size_T)::Tuple{Int,Int}
+    W, Wshift = lsvecwidthshift(ls, vectorized, size_T)
 
     # So if num_reductions > 0, we set the unroll factor to be high enough so that the CPU can be kept busy
     # if there are, U = max(1, round(Int, max(latency) * throughput / num_reductions)) = max(1, round(Int, latency / (recip_throughput * num_reductions)))
@@ -693,7 +712,8 @@ function evaluate_cost_tile(
     nested_loop_syms = Symbol[]# Set{Symbol}()
     # Need to check if fusion is possible
     size_T = biggest_type_size(ls)
-    W, Wshift = VectorizationBase.pick_vector_width_shift(length(ls, vectorized), size_T)::Tuple{Int,Int}
+    W, Wshift = lsvecwidthshift(ls, vectorized, size_T)
+    # W, Wshift = VectorizationBase.pick_vector_width_shift(length(ls, vectorized), size_T)::Tuple{Int,Int}
     # costs =
     # cost_mat[1] / ( unrolled * u₂loopsym)
     # cost_mat[2] / ( u₂loopsym)
@@ -977,3 +997,4 @@ function register_pressure(ls::LoopSet)
     order, unroll, tile, vec, u₁, u₂ = choose_order(ls)
     register_pressure(ls, u₁, u₂)
 end
+

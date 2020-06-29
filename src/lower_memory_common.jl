@@ -140,10 +140,10 @@ function mem_offset_u(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Ve
         for (n,ind) ∈ enumerate(indices)
             ind_by_offset = inds_calc_by_ptr_offset[n]
             offset = convert(Int, offsets[n])
-            # if ind isa Int # impossible
-                # push!(ret.args, ind + offset)
-            # else
             indvectorized = ind === vectorized
+            # if n == zero_offset
+                # addoffset!(ret, 0)
+            # elseif ind === u₁loopsym
             if ind === u₁loopsym
                 if indvectorized
                     add_vectorized_offset!(ret, ind, offset, incr₁, ind_by_offset)

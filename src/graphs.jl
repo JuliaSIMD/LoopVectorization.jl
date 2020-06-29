@@ -137,7 +137,7 @@ function terminatecondition(
 end
 function incrementloopcounter(us::UnrollSpecification, n::Int, mangledname::Symbol, UF::Int = unrollfactor(us, n))
     if isvectorized(us, n)
-        if UF == 1
+        if isone(UF)
             Expr(:(=), mangledname, Expr(:call, lv(:valadd), VECTORWIDTHSYMBOL, mangledname))
         else
             Expr(:(=), mangledname, Expr(:call, lv(:valmuladd), VECTORWIDTHSYMBOL, UF, mangledname))
@@ -148,15 +148,13 @@ function incrementloopcounter(us::UnrollSpecification, n::Int, mangledname::Symb
 end
 function incrementloopcounter!(q, us::UnrollSpecification, n::Int, UF::Int = unrollfactor(us, n))
     if isvectorized(us, n)
-        if UF == 1
-            push!(q.args, Expr(:call, lv(:unwrap), VECTORWIDTHSYMBOL))
+        if isone(UF)
+            push!(q.args, Expr(:call, lv(:Static), VECTORWIDTHSYMBOL))
         else
-            push!(q.args, Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, UF))
+            push!(q.args, Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, Expr(:call, Expr(:curly, lv(:Static), UF))))
         end
-    elseif isone(UF)
-        push!(q.args, Expr(:call, Expr(:curly, lv(:Static), UF)))
     else
-        push!(q.args, UF)
+        push!(q.args, Expr(:call, Expr(:curly, lv(:Static), UF)))
     end
 end
 function looplengthexpr(loop::Loop)
@@ -253,6 +251,7 @@ struct LoopSet
     loadelimination::Base.RefValue{Bool}
     lssm::Base.RefValue{LoopStartStopManager}
     isbroadcast::Base.RefValue{Bool}
+    vector_width::Base.RefValue{Int}
     mod::Symbol
 end
 
@@ -341,7 +340,7 @@ function LoopSet(mod::Symbol)
         Matrix{Float64}(undef, 5, 2),
         Bool[], Bool[], Ref{UnrollSpecification}(),
         Ref(false), Ref{LoopStartStopManager}(),
-        Ref(false), mod
+        Ref(false), Ref(0), mod
     )
 end
 
