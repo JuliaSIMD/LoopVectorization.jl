@@ -480,39 +480,43 @@ function set_upstream_family!(adal::Vector{T}, op::Operation, val::T) where {T}
         set_upstream_family!(adal, opp, val)
     end
 end
-function stride_penalty_opdependent(ls::LoopSet, op::Operation, order::Vector{Symbol}, contigsym::Symbol)
-    num_loops = length(order)
-    firstloopdeps = loopdependencies(findparent(ls, contigsym))
-    iter = 1
-    for i ∈ 0:num_loops - 1
-        loopsym = order[num_loops - i]
-        loopsym ∈ firstloopdeps && return iter
-        iter *= length(getloop(ls, loopsym))
+function stride_penalty(ls::LoopSet, op::Operation, order::Vector{Symbol}, loopfreqs)
+    loopdeps = @view(loopdependencies(op.ref)[1:end])
+    if !first(op.ref.loopedindex)
+        loopdeps = @view(loopdependencies(findparent(ls, first(loopdeps)))[1:end])
     end
-    iter
-end
-function stride_penalty(ls::LoopSet, op::Operation, order::Vector{Symbol})
-    num_loops = length(order)
-    contigsym = first(loopdependencies(op.ref))
-    contigsym == Symbol("##DISCONTIGUOUSSUBARRAY##") && return 0
-    first(op.ref.loopedindex) || return stride_penalty_opdependent(ls, op, order, contigsym)
-    iter = 1
-    for i ∈ 0:num_loops - 1
-        loopsym = order[num_loops - i]
-        if loopsym === contigsym
-            return iter
-        elseif loopsym ∈ loopdependencies(op)
-            iter *= length(getloop(ls, loopsym))
+    opstrides = Vector{Int}(undef, length(loopdeps))
+    # very minor stride assumption here, because we don't really want to base optimization decisions on it...
+    if first(loopdeps) == Symbol("##DISCONTIGUOUSSUBARRAY##")
+        loopdeps = @view(parent(loopdeps)[2:end])
+        opstrides[1] = 2.0
+    else
+        opstrides[1] = 1.0
+    end
+    # loops = map(s -> getloop(ls, s), loopdeps)
+    for i ∈ 2:length(loopdeps)
+        opstrides[i] = opstrides[i-1] * length(getloop(ls, loopdeps[i-1]))
+        # opstrides[i] = opstrides[i-1] * length(loops[i-1])
+    end
+    penalty = 0.0
+    for i ∈ eachindex(order)
+        id = findfirst(isequal(order[i]), loopdeps)
+        if !isnothing(id)
+            penalty += loopfreqs[i] * opstrides[id]
         end
     end
-    iter
+    penalty
 end
 function stride_penalty(ls::LoopSet, order::Vector{Symbol})
-    stridepenalty = 0
-    total_iter = prod(length, ls.loops)
+    stridepenalty = 0.0
+    loopfreqs = Vector{Int}(undef, length(order))
+    loopfreqs[1] = 1
+    for i ∈ 2:length(order)
+        loopfreqs[i] = loopfreqs[i-1] * length(getloop(ls, order[i]))
+    end
     for op ∈ operations(ls)
         if accesses_memory(op)
-            stridepenalty += stride_penalty(ls, op, order)
+            stridepenalty += stride_penalty(ls, op, order, loopfreqs)
         end
     end
     stridepenalty# * 1e-9

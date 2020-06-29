@@ -72,7 +72,12 @@ using Test
     #     # @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, :i, :j, Unum, Tnum)
     #     @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, :i, :j, 1, 1)
     # end
-    @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :i, Symbol("##undefined##"), :j, 4, -1)
+    # @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :i, Symbol("##undefined##"), :j, 4, -1)
+    if LoopVectorization.REGISTER_COUNT == 32
+        @test LoopVectorization.choose_order(lssubcol) == (Symbol[:i,:j], :j, :i, :j, 2, 10)
+    elseif LoopVectorization.REGISTER_COUNT == 16
+        @test LoopVectorization.choose_order(lssubcol) == (Symbol[:i,:j], :j, :i, :j, 2, 6)
+    end
     # @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, Symbol("##undefined##"), :j, 4, -1)
     ## @avx is SLOWER!!!!
     ## need to fix!

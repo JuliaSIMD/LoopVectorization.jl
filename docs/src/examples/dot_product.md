@@ -28,7 +28,8 @@ Double precision benchmarks pitting Julia's builtin dot product (named `MKL` her
 What we just described is the core of the approach used by all these compilers. The variation in results is explained mostly by how they handle vectors with lengths that are not an integer multiple of `W`. I ran these on a computer with AVX512 so that `W = 8`. LLVM, the backend compiler of both Julia and Clang, shows rapid performance degredation as `N % 4W` increases, where `N` is the length of the vectors.
 This is because, to handle the remainder, it uses a scalar loop that runs as written: multiply and add single elements, one after the other. 
 
-GCC (gfortran) stumbles in throughput, because it does not use separate accumulation vectors.
+Initially, GCC (gfortran) stumbled in throughput, because it does not use separate accumulation vectors by default except on Power, even with `-funroll-loops`.
+I compiled with the flags `-fvariable-expansion-in-unroller --param max-variable-expansions-in-unroller=4` to allow for 4 accumulation vectors, yielding good performance.
 
 The Intel compilers have a secondary vectorized loop without any additional unrolling that masks off excess lanes beyond `N` (for when `N` isn't an integer multiple of `W`).
 LoopVectorization uses `if/ifelse` checks to determine how many extra vectors are needed, the last of which is masked.
