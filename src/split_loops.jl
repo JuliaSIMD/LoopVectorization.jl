@@ -20,8 +20,7 @@ end
 function append_if_included!(vnew, vold, included)
     for (i, v) ∈ vold
         id = included[i]
-        iszero(id) && continue
-        push!(vnew, (id, v))
+        iszero(id) || push!(vnew, (id, v))
     end
 end
 
@@ -44,6 +43,18 @@ function split_loopset(ls::LoopSet, ids)
     append_if_included!(ls_new.preamble_symfloat, ls.preamble_symfloat, included)
     append_if_included!(ls_new.preamble_zeros, ls.preamble_zeros, included)
     append_if_included!(ls_new.preamble_funcofeltypes, ls.preamble_funcofeltypes, included)
+    for i ∈ ls.outer_reductions
+        id = included[i]
+        iszero(id) || push!(ls_new.outer_reductions, id)
+    end
+    # TODO: allow them to differ. E.g., non-AVX2 x86 cpus don't have efficient integer calculations
+    # Therefore, it would be profitable to split for this reason.
+    # However, currently the default assumption in vector width will be wrong, so we should calculate
+    # it correctly (like ls.vector_width[]); wrong (too high) value will encourage splitting when
+    # it shouldn't.
+    # Current behavior is incorrect when VECWIDTH chosen does actually differ between
+    # split loops and the loops are statically sized, because code gen will then assume it is correct...
+    ls_new.vector_width[] = ls.vector_width[] 
     ls_new
 end
 
