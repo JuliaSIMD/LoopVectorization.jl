@@ -499,8 +499,11 @@ function stride_penalty(ls::LoopSet, op::Operation, order::Vector{Symbol})
     iter = 1
     for i ∈ 0:num_loops - 1
         loopsym = order[num_loops - i]
-        loopsym === contigsym && return iter
-        iter *= length(getloop(ls, loopsym))
+        if loopsym === contigsym
+            return iter
+        elseif loopsym ∈ loopdependencies(op)
+            iter *= length(getloop(ls, loopsym))
+        end
     end
     iter
 end

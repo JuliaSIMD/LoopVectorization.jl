@@ -5,6 +5,21 @@ function add_operation!(ls_new::LoopSet, included::Vector{Int}, ls::LoopSet, op:
     iszero(newid) || return operations(ls_new)[newid]
     vparents = Operation[]
     for opp ∈ parents(op)
+        # TODO: get it so that
+        # a[i] = f(a[i]) will split into one loop computing and storing f(a[i]), and the other loading from that storage if it needs it.
+        # if iscompute(opp) && (!isstore(op)) # search for stores
+        #     found = false
+        #     for oppp ∈ operations(ls)
+        #         isstore(oppp) || continue
+        #         if first(parents(oppp)) === op
+        #             found = true
+                    
+        #             push!(vparents, add_operation!(ls_new, included, ls, opppp))
+        #             break
+        #         end
+        #     end
+        #     found && continue
+        # end
         push!(vparents, add_operation!(ls_new, included, ls, opp))
     end
     opnew = Operation(
@@ -84,7 +99,7 @@ function lower_and_split_loops(ls::LoopSet, inline::Int)
         order_2, unrolled_2, tiled_2, vectorized_2, U_2, T_2, cost_2, shouldinline_2 = choose_order_cost(ls_2)
         # U_1 = T_1 = U_2 = T_2 = 2
         if cost_1 + cost_2 ≤ cost_fused
-            # @show cost_1, cost_2 cost_fused
+            @show cost_1, cost_2 cost_fused
             ls_2_lowered = if length(remaining_ops) > 1
                 inline = iszero(inline) ? (shouldinline_1 % Int) : inline
                 lower_and_split_loops(ls_2, inline)
