@@ -303,6 +303,37 @@
         end
         ent
     end
+
+    function vsincos(x)
+        y = Matrix{eltype(x)}(undef, length(x), 2)
+        for i = eachindex(x)
+            y[i,1], y[i,2] = sincos(x[i])
+        end
+        return y
+    end
+    function vsincosavx(x)
+        y = Matrix{eltype(x)}(undef, length(x), 2)
+        @avx for i = eachindex(x)
+            y[i,1], y[i,2] = sincos(x[i])
+        end
+        return y
+    end
+    function sincosdot(x)
+        a = zero(eltype(x))
+        for i ∈ eachindex(x)
+            s, c = sincos(x[i])
+            a += s * c
+        end
+        a
+    end
+    function sincosdotavx(x)
+        a = zero(eltype(x))
+        @avx for i ∈ eachindex(x)
+            s, c = sincos(x[i])
+            a += s * c
+        end
+        a
+    end
     
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
@@ -320,6 +351,9 @@
         @test s ≈ myvexp_avx(a)
         @test b1 ≈ @avx exp.(a)
 
+        @test vsincos(a) ≈ vsincosavx(a)
+        @test sincosdot(a) ≈ sincosdotavx(a)
+        
         A = rand(T, 73, 73);
         ld = logdet(UpperTriangular(A))
         @test ld ≈ trianglelogdetavx(A)

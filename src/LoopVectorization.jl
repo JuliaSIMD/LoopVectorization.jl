@@ -45,6 +45,7 @@ If you want good performance, DO NOT use a 32-bit build of Julia if you don't ha
 """
 const REGISTER_COUNT = Sys.ARCH === :i686 ? 8 : VectorizationBase.REGISTER_COUNT
 
+include("getconstindexes.jl")
 include("vectorizationbase_extensions.jl")
 include("predicates.jl")
 include("map.jl")

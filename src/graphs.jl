@@ -669,16 +669,39 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
                 add_constant!(ls, RHS, ls.loopsymbols[1:position], LHS, elementbytes)
             end
         elseif LHS isa Expr
-            @assert LHS.head === :ref
-            if RHS isa Symbol
-                add_store_ref!(ls, RHS, LHS, elementbytes)
-            elseif RHS isa Expr
-                # need to check if LHS appears in RHS
-                # assign RHS to lrhs
-                array, rawindices = ref_from_expr!(ls, LHS)
-                prepare_rhs_for_storage!(ls, RHS, array, rawindices, elementbytes, position)
+            if LHS.head === :ref
+                if RHS isa Symbol
+                    add_store_ref!(ls, RHS, LHS, elementbytes)
+                elseif RHS isa Expr
+                    # need to check if LHS appears in RHS
+                    # assign RHS to lrhs
+                    array, rawindices = ref_from_expr!(ls, LHS)
+                    prepare_rhs_for_storage!(ls, RHS, array, rawindices, elementbytes, position)
+                else
+                    add_store_ref!(ls, RHS, LHS, elementbytes)
+                end
+            elseif LHS.head === :tuple
+                @assert length(LHS.args) ≤ 9 "Functions returning more than 9 values aren't currently supported."
+                lhstemp = gensym(:lhstuple)
+                vparents = Operation[maybe_const_compute!(ls, add_operation!(ls, lhstemp, RHS, elementbytes, position), elementbytes, position)]
+                for i ∈ eachindex(LHS.args)
+                    f = (:first,:second,:third,:fourth,:fifth,:sixth,:seventh,:eigth,:ninth)[i]
+                    lhsi = LHS.args[i]
+                    if lhsi isa Symbol
+                        add_compute!(ls, lhsi, f, vparents, elementbytes)
+                    elseif lhsi isa Expr && lhsi.head === :ref
+                        tempunpacksym = gensym(:tempunpack)
+                        add_compute!(ls, tempunpacksym, f, vparents, elementbytes)
+                        add_store_ref!(ls, tempunpacksym, lhsi, elementbytes)
+                    else
+                        println(lhsi)
+                        throw("Unpacking the above expression in the left hand side was not understood/supported.")
+                    end
+                end
+                first(vparents)
             else
-                add_store_ref!(ls, RHS, LHS, elementbytes)
+                println(LHS)
+                throw("LHS not understood; only `:ref`s and `:tuple`s are currently supported.")
             end
         else
             println(LHS)
