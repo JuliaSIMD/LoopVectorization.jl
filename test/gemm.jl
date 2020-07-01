@@ -333,7 +333,7 @@
                Cₘₙ += (Aₘ[m,1]*Aₖ[1,k]+Aₘ[m,2]*Aₖ[2,k]) * B[k,n]
                end
                C[m,n] = Cₘₙ
-               end)
+               end);
     lsr2amb = LoopVectorization.LoopSet(r2ambq);
     if LoopVectorization.REGISTER_COUNT == 32
         @test LoopVectorization.choose_order(lsr2amb) == ([:n, :m, :k], :n, :m, :m, 7, 3)

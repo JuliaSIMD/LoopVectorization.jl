@@ -38,7 +38,9 @@ function indices_calculated_by_pointer_offsets(ls::LoopSet, ar::ArrayReferenceMe
         #     out[i] = out[j - offset]
         #     continue
         # end
-        if (!li[i]) || multiple_with_name(vptr(ar), ls.lssm[].uniquearrayrefs) || (iszero(ls.vector_width[]) && isstaticloop(getloop(ls, ind)))
+        if (!li[i]) || multiple_with_name(vptr(ar), ls.lssm[].uniquearrayrefs) ||
+            (iszero(ls.vector_width[]) && isstaticloop(getloop(ls, ind)))# ||
+            # ((ls.align_loops[] > 0) && (first(names(ls)) == ind))
             out[i] = false
         elseif (isone(ii) && (first(looporder) === ind))
             out[i] = otherindexunrolled(ls, ind, ar)
@@ -82,7 +84,12 @@ function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, alla
             uliv[i] = 0
             push!(gespinds.args, Expr(:call, lv(:Zero)))
             push!(offsetprecalc_descript.args, 0)
-        elseif isbroadcast || ((isone(ii) && (last(looporder) === ind)) && !(otherindexunrolled(ls, ind, ar)) || multiple_with_name(vptr(ar), allarrayrefs)) ||  (iszero(ls.vector_width[]) && isstaticloop(getloop(ls, ind)))
+        elseif isbroadcast ||
+            ((isone(ii) && (last(looporder) === ind)) && !(otherindexunrolled(ls, ind, ar)) ||
+             multiple_with_name(vptr(ar), allarrayrefs)) ||
+             (iszero(ls.vector_width[]) && isstaticloop(getloop(ls, ind)))# ||
+             # ((ls.align_loops[] > 0) && (first(names(ls)) == ind))
+
             # Not doing normal offset indexing
             uliv[i] = -findfirst(isequal(ind), looporder)::Int
             push!(gespinds.args, Expr(:call, lv(:Zero)))

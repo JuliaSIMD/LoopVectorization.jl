@@ -144,7 +144,12 @@ function lower_block(
     # loopsym = mangletiledsym(order[n], us, n)
     loopsym = order[n]
     # push!(blockq.args, incrementloopcounter(us, n, loopsym, UF))
+    # if n > 1 || iszero(ls.align_loops[])
     push!(blockq.args, incrementloopcounter(ls, us, n, UF))
+    # else
+    #     loopsym = names(ls)[n]
+    #     push!(blockq.args, Expr(:(=), loopsym, Expr(:call, lv(:vadd), loopsym, Symbol("##ALIGNMENT#STEP##"))))
+    # end
     blockq
 end
 
@@ -185,48 +190,43 @@ end
 #         Expr(:block, loopiteratesatleastonce(loop), q)
 #     end
 # end
-function lower_unroll_for_throughput(ls::LoopSet, us::UnrollSpecification, loop::Loop, loopsym::Symbol)
-    UF = 4
-    sl = startloop(ls, us, 1, UF)
-    tcc = terminatecondition(ls, us, 1, false, 1)
-    tcu = terminatecondition(ls, us, 1, false, UF)
-    body = lower_block(ls, us, 1, false, 1)
-    loopisstatic = isstaticloop(loop)
-    tcu = loopisstatic ? tcu : expect(tcu)
-    termcondu = gensym(:maybetermu)
-    unrolledbody = Expr(:block)
-    foreach(_ -> push!(unrolledbody.args, body), 1:UF)
-
-    # q = Expr(
-    #     :block,
-    #     Expr(:while, tcu, unrolledbody),
-    #     Expr(:while, tcc, body)
-    # )
-    # return Expr(:let, sl, q)
-    
-    push!(unrolledbody.args, Expr(:(=), termcondu, tcu))
-
-    unrolledloop = Expr(
-        :block,
-        Expr(:while, termcondu, unrolledbody),
-        Expr(:while, tcc, body)
-    )
-
-    termcond = gensym(:maybeterm)
-    singleloop = Expr(
-        :block,
-        Expr(:(=), termcond, true),
-        Expr(:while, termcond, Expr(:block, body, Expr(:(=), termcond, tcc)))
-    )
-    
-    q = Expr(
-        :block,
-        assume(tcc),
-        Expr(:(=), termcondu, tcu),
-        Expr(:if, termcondu, unrolledloop, singleloop)
-    )
-    Expr(:let, sl, q)
-end
+# function lower_unroll_for_throughput(ls::LoopSet, us::UnrollSpecification, loop::Loop, loopsym::Symbol)
+#     UF = 4
+#     sl = startloop(ls, us, 1, UF)
+#     tcc = terminatecondition(ls, us, 1, false, 1)
+#     tcu = terminatecondition(ls, us, 1, false, UF)
+#     body = lower_block(ls, us, 1, false, 1)
+#     loopisstatic = isstaticloop(loop)
+#     tcu = loopisstatic ? tcu : expect(tcu)
+#     termcondu = gensym(:maybetermu)
+#     unrolledbody = Expr(:block)
+#     foreach(_ -> push!(unrolledbody.args, body), 1:UF)
+#     # q = Expr(
+#     #     :block,
+#     #     Expr(:while, tcu, unrolledbody),
+#     #     Expr(:while, tcc, body)
+#     # )
+#     # return Expr(:let, sl, q)
+#     push!(unrolledbody.args, Expr(:(=), termcondu, tcu))
+#     unrolledloop = Expr(
+#         :block,
+#         Expr(:while, termcondu, unrolledbody),
+#         Expr(:while, tcc, body)
+#     )
+#     termcond = gensym(:maybeterm)
+#     singleloop = Expr(
+#         :block,
+#         Expr(:(=), termcond, true),
+#         Expr(:while, termcond, Expr(:block, body, Expr(:(=), termcond, tcc)))
+#     )
+#     q = Expr(
+#         :block,
+#         assume(tcc),
+#         Expr(:(=), termcondu, tcu),
+#         Expr(:if, termcondu, unrolledloop, singleloop)
+#     )
+#     Expr(:let, sl, q)
+# end
 
 function assume(ex)
     Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:SIMDPirates)), QuoteNode(:assume)), ex)
@@ -247,6 +247,22 @@ function loopiteratesatleastonce(loop::Loop, as::Bool = true)
     # as ? assume(comp) : expect(comp)
     assume(comp)
 end
+# @inline step_to_align(x, ::Val{W}) where {W} = step_to_align(pointer(x), Val{W}())
+# @inline step_to_align(x::Ptr{T}, ::Val{W}) where {W,T} = vsub(W, reinterpret(Int, x) & (W - 1))
+# function align_inner_loop_expr(ls::LoopSet, us::UnrollSpecification, loop::Loop)
+#     alignincr = Symbol("##ALIGNMENT#STEP##")
+#     looplength = gensym(:inner_loop_length)
+#     pushpreamble!(ls, Expr(:(=), looplength, looplengthexpr(loop)))
+#     vp = vptr(operations(ls)[ls.align_loops[]])
+#     align_step = Expr(:call, :min, Expr(:call, lv(:step_to_align), vp, VECTORWIDTHSYMBOL), looplength)
+#     Expr(
+#         :block,
+#         Expr(:(=), alignincr, align_step),
+#         maskexpr(alignincr),
+#         lower_block(ls, us, 1, true, 1)
+#     )
+# end
+
 function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask::Bool)
     usorig = ls.unrollspecification[]
     nisvectorized = isvectorized(us, n)
@@ -260,11 +276,14 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
     sl = startloop(ls, us, n)
     tc = terminatecondition(ls, us, n, inclmask, 1)
     body = lower_block(ls, us, n, inclmask, 1)
-    isstatic = isstaticloop(loop)
-
+    # align_loop = isone(n) & (ls.align_loops[] > 0)
+    isstatic = isstaticloop(loop)# & (!align_loop)
     if !isstatic && (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !inclmask
         tc = expect(tc)
     end
+    # q = if align_loop
+    #     Expr(:block, align_inner_loop_expr(ls, us, loop), Expr(:while, tc, body))
+    # elseif nisvectorized
     q = if nisvectorized
             # Expr(:block, loopiteratesatleastonce(loop, true), Expr(:while, expect(tc), body))
         Expr(:block, Expr(:while, tc, body))
@@ -283,12 +302,15 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
         # push!(body.args, Expr(:||, expect(tc), Expr(:break)))
         # Expr(:block, Expr(:while, true, body))
     end
-
     if nisvectorized
         # tc = terminatecondition(loop, us, n, loopsym, true, 1)
         tc = terminatecondition(ls, us, n, true, 1)
         body = lower_block(ls, us, n, true, 1)
-        isone(num_loops(ls)) && pushfirst!(body.args, definemask(loop))
+        if isone(num_loops(ls))
+            pushfirst!(body.args, definemask(loop))
+        # elseif align_loop
+        #     pushfirst!(body.args, definemask_for_alignment_cleanup(loop))
+        end
         push!(q.args, Expr(:if, tc, body))
     end
     Expr(:block, Expr(:let, sl, q))
@@ -571,7 +593,7 @@ end
 function definemask(loop::Loop)
     if isstaticloop(loop)
         maskexpr(length(loop))
-    elseif loop.startexact && loop.starthint == 1
+    elseif loop.startexact && isone(loop.starthint)
         maskexpr(loop.stopsym)
     else
         lexpr = if loop.startexact
@@ -583,6 +605,14 @@ function definemask(loop::Loop)
         end
         maskexpr(lexpr)
     end
+end
+function definemask_for_alignment_cleanup(loop::Loop)
+    lexpr = if loop.stopexact
+        Expr(:call, lv(:vsub), loop.stophint + 1, loop.itersym)
+    else
+        Expr(:call, lv(:vsub), Expr(:call, lv(:vadd), loop.stopsym, 1), loop.itersymbol)
+    end
+    maskexpr(lexpr)
 end
 function define_eltype_vec_width!(q::Expr, ls::LoopSet, vectorized)
     push!(q.args, Expr(:(=), ELTYPESYMBOL, determine_eltype(ls)))

@@ -228,9 +228,9 @@ sse_totwotuple(s::Integer) = ((3s) >> 1, s >> 1)
 
 function sse_bench!(br, s, i)
     N, P = sse_totwotuple(s)
-    y = rand(N); β = rand(P)
-    X = randn(N, P)
-    Xβ = similar(y)
+    y = rand(N); β = rand(P);
+    X = randn(N, P);
+    Xβ = similar(y);
     lpblas = sse!(Xβ, y, X, β)
     n_gflop = 2e-9*(P*N + 2N)
     br[1,i] = n_gflop / @belapsed jOLSlp_avx($y, $X, $β)

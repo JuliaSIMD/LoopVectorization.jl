@@ -147,6 +147,12 @@ function evaluate_cost_unroll(
             # hasintersection(reduceddependencies(op), nested_loop_syms) && return Inf
             rd = reduceddependencies(op)
             hasintersection(rd, @view(nested_loop_syms[1:end-length(rd)])) && return Inf
+            if isstore(op) #TODO: DRY (this is repeated in evaluate_cost_tile)
+                loadstoredeps = store_load_deps(op)
+                if !isnothing(loadstoredeps)
+                    any(s -> (s ∉ loadstoredeps), nested_loop_syms) && return Inf
+                end
+            end
             included_vars[id] = true
             total_cost += iter * first(cost(ls, op, vectorized, Wshift, size_T))
             total_cost > max_cost && return total_cost # abort if more expensive; we only want to know the cheapest
@@ -196,6 +202,7 @@ function unroll_no_reductions(ls, order, vectorized)
 
     compute_rt = 0.0
     load_rt = 0.0
+    store_rt = 0.0
     unrolled = last(order)
     if unrolled === vectorized && length(order) > 1
         unrolled = order[end-1]
@@ -207,13 +214,31 @@ function unroll_no_reductions(ls, order, vectorized)
             compute_rt += first(cost(ls, op, vectorized, Wshift, size_T))
         elseif isload(op)
             load_rt += first(cost(ls, op, vectorized, Wshift, size_T))
+        elseif isstore(op)
+            store_rt += first(cost(ls, op, vectorized, Wshift, size_T))
         end
     end
+    # @show compute_rt, load_rt, store_rt
     # heuristic guess
     # roundpow2(min(4, round(Int, (compute_rt + load_rt + 1) / compute_rt)))
-    rt = max(compute_rt, load_rt)
-    # (iszero(rt) ? 4 : max(1, roundpow2( min( 4, round(Int, 16 / rt) ) ))), unrolled
-    (iszero(rt) ? 4 : max(1, VectorizationBase.nextpow2( min( 4, round(Int, 16 / rt) ) ))), unrolled
+    memory_rt = load_rt + store_rt
+    u = if compute_rt > memory_rt
+        max(1, VectorizationBase.nextpow2( min( 4, round(Int, 8 / compute_rt) ) ))
+    elseif iszero(compute_rt)
+        4
+    else
+        max(1, min(4, round(Int, 2compute_rt / memory_rt)))
+    end
+    # commented out here is to decide to align loops
+    # if memory_rt > compute_rt && isone(u) && (length(order) > 1) && (last(order) === vectorized) && length(getloop(ls, last(order))) > 8W
+    #     ls.align_loops[] = findfirst(operations(ls)) do op
+    #         isstore(op) && dependson(op, unrolled)
+    #     end
+    # end
+    u, unrolled
+    # rt = max(compute_rt, load_rt + store_rt)
+    # # (iszero(rt) ? 4 : max(1, roundpow2( min( 4, round(Int, 16 / rt) ) ))), unrolled
+    # (iszero(rt) ? 4 : max(1, VectorizationBase.nextpow2( min( 4, round(Int, 8 / rt) ) ))), unrolled
 end
 function determine_unroll_factor(
     ls::LoopSet, order::Vector{Symbol}, unrolled::Symbol, vectorized::Symbol
@@ -341,7 +366,8 @@ function solve_unroll(X, R, u₁L, u₂L, u₁step, u₂step)
     u₂float = (RR - u₁float*R₂)/(u₁float*R₁)
     if !(isfinite(u₂float) & isfinite(u₁float)) # brute force
         u₁low = u₂low = 1
-        u₁high = u₂high = REGISTER_COUNT == 32 ? 10 : 6#8
+        u₁high = iszero(X₂) ? 2 : (REGISTER_COUNT == 32 ? 8 : 6)
+        u₂high = iszero(X₃) ? 2 : (REGISTER_COUNT == 32 ? 8 : 6)
         return solve_unroll_iter(X, R, u₁L, u₂L, u₁low:u₁step:u₁high, u₂low:u₂step:u₂high)
     end
     u₁low = floor(Int, u₁float)
@@ -632,12 +658,29 @@ function load_elimination_cost_factor!(
         false
     end
 end
-function loadintostore(ls::LoopSet, op::Operation)
-    # isload(op) || return false # leads to bad behavior more than it helps
-    # for opp ∈ operations(ls)
-    #     isstore(opp) && opp.ref == op.ref && return true
-    # end
+# function loadintostore(ls::LoopSet, op::Operation)
+#     isload(op) || return false # leads to bad behavior more than it helps
+#     for opp ∈ operations(ls)
+#         isstore(opp) && opp.ref == op.ref && return true
+#     end
+#     false
+# end
+function store_load_deps!(deps::Vector{Symbol}, op::Operation, compref = op.ref)
+    for opp ∈ parents(op)
+        foreach(ld -> ((ld ∈ deps) || push!(deps, ld)), loopdependencies(opp))
+        foreach(ld -> ((ld ∈ deps) || push!(deps, ld)), reduceddependencies(opp))
+        if isload(opp)
+            (opp.ref == compref) && return true
+        else
+            store_load_deps!(deps, opp, compref) && return true
+        end
+    end
     false
+end
+function store_load_deps(op::Operation)
+    isstore(op) || return nothing
+    deps = copy(loopdependencies(op))
+    store_load_deps!(deps, op) ? deps : nothing
 end
 function add_constant_offset_load_elmination_cost!(
     X, R, choose_to_inline, ls::LoopSet, op::Operation, iters, unrollsyms::UnrollSymbols, u₁reduces::Bool, u₂reduces::Bool, Wshift::Int, size_T::Int, opisininnerloop::Bool
@@ -755,7 +798,16 @@ function evaluate_cost_tile(
             # it must also be a subset of defined symbols
             all(ld -> ld ∈ nested_loop_syms, loopdependencies(op)) || continue
             rd = reduceddependencies(op)
-            hasintersection(rd, @view(nested_loop_syms[1:end-length(rd)])) && return 0,0,Inf,false
+            if hasintersection(rd, @view(nested_loop_syms[1:end-length(rd)]))
+                # @show rd, op itersym, nested_loop_syms @view(nested_loop_syms[1:end-length(rd)])
+                return 0,0,Inf,false
+            end
+            if isstore(op)
+                loadstoredeps = store_load_deps(op)
+                if !isnothing(loadstoredeps)
+                    any(s -> (s ∉ loadstoredeps), nested_loop_syms) && return 0,0,Inf,false
+                end
+            end
             included_vars[id] = true
             if isconstant(op)
                 depends_on_u₁, depends_on_u₂ = isunrolled_sym(op, u₁loopsym, u₂loopsym)
@@ -774,6 +826,7 @@ function evaluate_cost_tile(
             innerloop ∈ loopdependencies(op) && set_upstream_family!(descendentsininnerloop, op, true)
         end
     end
+    irreducible_storecosts = 0.0
     for (id, op) ∈ enumerate(ops)
         iters[id] == -99.9 && continue
         opisininnerloop = descendentsininnerloop[id]
@@ -793,10 +846,13 @@ function evaluate_cost_tile(
             rt += 0.5VectorizationBase.REGISTER_SIZE / VectorizationBase.CACHELINE_SIZE
             prefetch_good_idea = true
         end
-        rp = (opisininnerloop && !(loadintostore(ls, op))) ? rp : zero(rp) # we only care about register pressure within the inner most loop
-        # rp = opisininnerloop ? rp : zero(rp) # we only care about register pressure within the inner most loop
+        # rp = (opisininnerloop && !(loadintostore(ls, op))) ? rp : zero(rp) # we only care about register pressure within the inner most loop
+        rp = opisininnerloop ? rp : zero(rp) # we only care about register pressure within the inner most loop
         rto = rt
         rt *= iters[id]
+        if isstore(op) & (!u₁reducesrt) & (!u₂reducesrt)
+            irreducible_storecosts += rt
+        end
         update_costs!(cost_vec, rt, u₁reducesrt, u₂reducesrt)
         update_costs!(reg_pressure, rp, u₁reducesrp, u₂reducesrp)
     end
@@ -804,7 +860,12 @@ function evaluate_cost_tile(
     costpenalty = (sum(reg_pressure) > REGISTER_COUNT) ? 2 : 1
     u₁v = vectorized === u₁loopsym; u₂v = vectorized === u₂loopsym
     round_uᵢ = prefetch_good_idea ? (u₁v ? 1 : (u₂v ? 2 : 0)) : 0
-    u₁, u₂, ucost = solve_unroll(ls, u₁loopsym, u₂loopsym, cost_vec, reg_pressure, W, vectorized, round_uᵢ)
+    if irreducible_storecosts / sum(cost_vec) ≥ 0.25
+        u₁, u₂ = (1, 1)
+        ucost = unroll_cost(cost_vec, 1, 1, length(getloop(ls, u₁loopsym)), length(getloop(ls, u₂loopsym)))
+    else
+        u₁, u₂, ucost = solve_unroll(ls, u₁loopsym, u₂loopsym, cost_vec, reg_pressure, W, vectorized, round_uᵢ)
+    end
     outer_reduct_penalty = length(ls.outer_reductions) * (u₁ + isodd(u₁))
     favor_bigger_u₂ = u₁ - u₂
     favor_smaller_vectorized = u₁v ? ( u₁ - u₂ )  : (u₂v ?  ( u₂ - u₁ ) : 0 )
