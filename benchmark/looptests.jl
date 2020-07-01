@@ -208,8 +208,8 @@ function jvaravx!(𝐬², 𝐀, x̄)
         𝐬²[j] = 𝐬²ⱼ
     end
 end
-japlucBc!(d, a, B, c) =      @. d = a + B * c';
-japlucBcavx!(d, a, B, c) = @avx @. d = a + B * c';
+japlucBc!(D, a, B, c) =      @. D = a + B * c';
+japlucBcavx!(D, a, B, c) = @avx @. D = a + B * c';
 
 function jOLSlp(y, X, β)
     lp = zero(eltype(y))
