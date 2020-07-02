@@ -28,7 +28,7 @@ Base.@propagate_inbounds Base.getindex(A::FallbackArrayWrapper, i::Vararg{Int, N
 Base.@propagate_inbounds Base.setindex!(A::FallbackArrayWrapper, v, i::Vararg{Int, N}) where {N} = setindex!(A.data, v, i...)
 Base.IndexStyle(::Type{<:FallbackArrayWrapper}) = IndexLinear()
 
-@show LoopVectorization.VectorizationBase.REGISTER_COUNT
+@show LoopVectorization.REGISTER_COUNT
 
 @time @testset "LoopVectorization.jl" begin
 
