@@ -519,8 +519,11 @@ function stride_penalty(ls::LoopSet, op::Operation, order::Vector{Symbol}, loopf
         opstrides[1] = 1.0
     end
     # loops = map(s -> getloop(ls, s), loopdeps)
+    l = length(getloop(ls, first(loopdeps)))
     for i ∈ 2:length(loopdeps)
-        opstrides[i] = opstrides[i-1] * length(getloop(ls, loopdeps[i-1]))
+        looplength = length(getloop(ls, loopdeps[i-1]))
+        opstrides[i] = opstrides[i-1] * looplength
+        l *= looplength
         # opstrides[i] = opstrides[i-1] * length(loops[i-1])
     end
     penalty = 0.0
@@ -530,7 +533,7 @@ function stride_penalty(ls::LoopSet, op::Operation, order::Vector{Symbol}, loopf
             penalty += loopfreqs[i] * opstrides[id]
         end
     end
-    penalty
+    penalty * l
 end
 function stride_penalty(ls::LoopSet, order::Vector{Symbol})
     stridepenaltydict = Dict{Symbol,Vector{Float64}}()
@@ -545,7 +548,7 @@ function stride_penalty(ls::LoopSet, order::Vector{Symbol})
             push!(v, stride_penalty(ls, op, order, loopfreqs))
         end
     end
-    sum(maximum, values(stridepenaltydict)) #* prod(length, ls.loops) / 1024^length(order)
+    sum(maximum, values(stridepenaltydict)) * 10 / 1024^length(order) #* prod(length, ls.loops)
 end
 function isoptranslation(ls::LoopSet, op::Operation, unrollsyms::UnrollSymbols)
     @unpack u₁loopsym, u₂loopsym, vectorized = unrollsyms

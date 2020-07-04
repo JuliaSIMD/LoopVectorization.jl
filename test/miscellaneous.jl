@@ -4,7 +4,7 @@ using Test
 
 @testset "Miscellaneous" begin
 
-    Unum, Tnum = LoopVectorization.REGISTER_COUNT == 16 ? (2, 6) : (2, 10)
+    Unum, Tnum = LoopVectorization.REGISTER_COUNT == 16 ? (2, 6) : (2, 8)
     dot3q = :(for m ∈ 1:M, n ∈ 1:N
               s += x[m] * A[m,n] * y[n]
               end);
