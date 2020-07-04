@@ -45,6 +45,8 @@ For simple loops like a dot product, LoopVectorization.jl's most important optim
 <details>
  <summaryClick me! ></summary>
 <p>
+ 
+ ```julia
 julia> using LoopVectorization, BenchmarkTools
 
 julia> function mydot(a, b)
@@ -84,6 +86,7 @@ julia> @btime mydot($a, $b) # with loops shorter by 1, the remainder is now 32, 
 julia> @btime mydotavx($a, $b) # performance remains mostly unchanged.
   12.226 ns (0 allocations: 0 bytes)
 61.250562444235776
+```
 </p>
 </details>
 
