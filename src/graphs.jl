@@ -742,6 +742,11 @@ function UnrollSpecification(ls::LoopSet, u₁loop::Symbol, u₂loop::Symbol, ve
     UnrollSpecification(nu₁, nu₂, nv, u₁, u₂)
 end
 
+"""
+Convert to `Float64` for the sake of non-64 bit platforms.
+"""
+looplengthprod(ls::LoopSet) = prod(Float64 ∘ length, ls.loops)
+
 # function getunrolled(ls::LoopSet)
 #     order = names(ls)
 #     us = ls.unrollspecification[]

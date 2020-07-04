@@ -548,7 +548,8 @@ function stride_penalty(ls::LoopSet, order::Vector{Symbol})
             push!(v, stride_penalty(ls, op, order, loopfreqs))
         end
     end
-    sum(maximum, values(stridepenaltydict)) * 10 / 1024^length(order) #* prod(length, ls.loops)
+    # 1 / 1024 = 0.0009765625
+    10.0sum(maximum, values(stridepenaltydict)) * Base.power_by_squaring(0.0009765625, length(order))
 end
 function isoptranslation(ls::LoopSet, op::Operation, unrollsyms::UnrollSymbols)
     @unpack u₁loopsym, u₂loopsym, vectorized = unrollsyms
@@ -649,7 +650,7 @@ function load_elimination_cost_factor!(
         # end
         # # (0.25, REGISTER_COUNT == 32 ? 1.2 : 1.0)
         # (0.25, 1.0)
-        cost_vec[1] -= 0.1prod(length, ls.loops)
+        cost_vec[1] -= 0.1looplengthprod(ls)
         reg_pressure[1] += 0.25rp
         cost_vec[2] += rt
         reg_pressure[2] += rp
@@ -1030,7 +1031,7 @@ function choose_tile(ls::LoopSet)
         end
     end
     ls.loadelimination[] = shouldinline
-    best_order, bestu₁, bestu₂, best_vec, u₁, u₂, lowest_cost, prod(length, ls.loops) < 4097
+    best_order, bestu₁, bestu₂, best_vec, u₁, u₂, lowest_cost, looplengthprod(ls) < 4097.0
 end
 # Last in order is the inner most loop
 function choose_order_cost(ls::LoopSet)
