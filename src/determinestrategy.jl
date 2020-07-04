@@ -519,7 +519,7 @@ function stride_penalty(ls::LoopSet, op::Operation, order::Vector{Symbol}, loopf
         opstrides[1] = 1.0
     end
     # loops = map(s -> getloop(ls, s), loopdeps)
-    l = length(getloop(ls, first(loopdeps)))
+    l = Float64(length(getloop(ls, first(loopdeps))))
     for i ∈ 2:length(loopdeps)
         looplength = length(getloop(ls, loopdeps[i-1]))
         opstrides[i] = opstrides[i-1] * looplength
