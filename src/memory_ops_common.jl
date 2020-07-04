@@ -85,19 +85,26 @@ function subset_vptr!(ls::LoopSet, vptr::Symbol, indnum::Int, ind, previndices, 
 end
 
 function addoffset!(ls, indices, offsets, loopedindex, loopdependencies, ind, offset)
-    if typemin(Int8) ≤ offset ≤ typemax(Int8)
-        push!(indices, ind);
-        push!(offsets, offset % Int8)
-        push!(loopedindex, true)
-        push!(loopdependencies, ind)
-        true
-    else
-        false
-    end
+    (typemin(Int8) ≤ offset ≤ typemax(Int8)) || return false
+    push!(indices, ind);
+    push!(offsets, offset % Int8)
+    push!(loopedindex, true)
+    push!(loopdependencies, ind)
+    true
+end
+function addoffsetexpr!(ls, parents, indices, offsets, loopedindex, loopdependencies, reduceddeps, ind, offset, elementbytes)
+    (typemin(Int8) ≤ offset ≤ typemax(Int8)) || return false
+    parent = add_operation!(ls, gensym(:indexpr), ind, elementbytes, length(ls.loopsymbols))
+    pushparent!(parents, loopdependencies, reduceddeps, parent)
+    push!(indices, name(parent)); 
+    push!(offsets, offset % Int8)
+    push!(loopedindex, false)
+    true
 end
 
 function checkforoffset!(
-    ls::LoopSet, indices::Vector{Symbol}, offsets::Vector{Int8}, loopedindex::Vector{Bool}, loopdependencies::Vector{Symbol}, ind::Expr
+    ls::LoopSet, parents::Vector{Operation}, indices::Vector{Symbol}, offsets::Vector{Int8}, loopedindex::Vector{Bool},
+    loopdependencies::Vector{Symbol}, reduceddeps::Vector{Symbol}, ind::Expr, elementbytes::Int
 )
     ind.head === :call || return false
     f = first(ind.args)
@@ -105,15 +112,19 @@ function checkforoffset!(
     factor = f === :+ ? 1 : -1
     arg1 = ind.args[2]
     arg2 = ind.args[3]
-    if arg1 isa Integer && isone(factor)
+    if arg1 isa Integer# && isone(factor)
         if arg2 isa Symbol && arg2 ∈ ls.loopsymbols
             addoffset!(ls, indices, offsets, loopedindex, loopdependencies, arg2, arg1 * factor)
+        elseif arg2 isa Expr
+            addoffsetexpr!(ls, parents, indices, offsets, loopedindex, loopdependencies, reduceddeps, arg2, arg1 * factor, elementbytes)
         else
             false
         end
     elseif arg2 isa Integer
         if arg1 isa Symbol && arg1 ∈ ls.loopsymbols
             addoffset!(ls, indices, offsets, loopedindex, loopdependencies, arg1, arg2 * factor)
+        elseif arg1 isa Expr
+            addoffsetexpr!(ls, parents, indices, offsets, loopedindex, loopdependencies, reduceddeps, arg1, arg2 * factor, elementbytes)
         else
             false
         end
@@ -158,7 +169,7 @@ function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementby
             length(indices) == 0 && push!(indices, DISCONTIGUOUS)
         elseif ind isa Expr
             #FIXME: position (in loopnest) wont be length(ls.loopsymbols) in general
-            if !checkforoffset!(ls, indices, offsets, loopedindex, loopdependencies, ind)
+            if !checkforoffset!(ls, parents, indices, offsets, loopedindex, loopdependencies, reduceddeps, ind, elementbytes)
                 parent = add_operation!(ls, gensym(:indexpr), ind, elementbytes, length(ls.loopsymbols))
                 pushparent!(parents, loopdependencies, reduceddeps, parent)
                 push!(indices, name(parent)); 

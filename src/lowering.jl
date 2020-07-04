@@ -379,17 +379,17 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
         end
     elseif iszero(UFt)
         Expr( :block, q )
-    # elseif !nisvectorized && !loopisstatic && UF ≥ 8
-    #     rem_uf = UF - 1
-    #     UF = rem_uf >> 1
-    #     UFt = rem_uf - UF
-    #     ust = nisunrolled ? UnrollSpecification(us, UFt, u₂) : UnrollSpecification(us, u₁, UFt)
-    #     newblock = lower_block(ls, ust, n, remmask, UFt)
-    #     # comparison = unrollremcomparison(ls, loop, UFt, n, nisvectorized, remfirst)
-    #     comparison = terminatecondition(ls, us, n, inclmask, UFt)
-    #     UFt = 1
-    #     UF += 1 - iseven(rem_uf)
-    #     Expr( :block, q, Expr(iseven(rem_uf) ? :while : :if, comparison, newblock), remblock )
+    elseif !nisvectorized && !loopisstatic && UF ≥ 10
+        rem_uf = UF - 1
+        UF = rem_uf >> 1
+        UFt = rem_uf - UF
+        ust = nisunrolled ? UnrollSpecification(us, UFt, u₂) : UnrollSpecification(us, u₁, UFt)
+        newblock = lower_block(ls, ust, n, remmask, UFt)
+        # comparison = unrollremcomparison(ls, loop, UFt, n, nisvectorized, remfirst)
+        comparison = terminatecondition(ls, us, n, inclmask, UFt)
+        UFt = 1
+        UF += 1 - iseven(rem_uf)
+        Expr( :block, q, Expr(iseven(rem_uf) ? :while : :if, comparison, newblock), remblock )
     else
         # if (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !isstaticloop(loop) && !inclmask# && !ls.loadelimination[]
         #     # Expr(:block, sl, assumeloopiteratesatleastonce(loop), Expr(:while, tc, body))

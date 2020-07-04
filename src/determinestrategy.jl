@@ -26,10 +26,10 @@ function unitstride(ls::LoopSet, op::Operation, s::Symbol)
     fi = first(inds)
     if fi === Symbol("##DISCONTIGUOUSSUBARRAY##")
         return false
-    elseif !first(li)
-        # We must check if this
-        parent = findparent(ls, fi)
-        indexappearences(parent, s) > 1 && return false
+    # elseif !first(li)
+    #     # We must check if this
+    #     parent = findparent(ls, fi)
+    #     indexappearences(parent, s) > 1 && return false
     end
     for i ∈ 2:length(inds)
         if li[i]
@@ -217,8 +217,7 @@ function unroll_no_reductions(ls, order, vectorized)
         elseif isstore(op)
             store_rt += first(cost(ls, op, vectorized, Wshift, size_T))
         end
-    end
-    # @show compute_rt, load_rt, store_rt
+    end 
     # heuristic guess
     # roundpow2(min(4, round(Int, (compute_rt + load_rt + 1) / compute_rt)))
     memory_rt = load_rt + store_rt
@@ -374,7 +373,7 @@ function solve_unroll(X, R, u₁L, u₂L, u₁step, u₂step)
     u₂low = max(u₂step, floor(Int, u₂float)) # must be at least 1
     u₁high = solve_unroll_constT(R, u₂low) + u₁step
     u₂high = solve_unroll_constU(R, u₁low) + u₂step
-    maxunroll = REGISTER_COUNT == 32 ? 10 : 6
+    maxunroll = REGISTER_COUNT == 32 ? (((X₂ > 0) & (X₃ > 0)) ? 10 : 8) : 6
     u₁low = min(u₁low, maxunroll)
     u₂low = min(u₂low, maxunroll)
     u₁high = min(u₁high, maxunroll)
@@ -534,7 +533,7 @@ function stride_penalty(ls::LoopSet, op::Operation, order::Vector{Symbol}, loopf
     penalty
 end
 function stride_penalty(ls::LoopSet, order::Vector{Symbol})
-    stridepenalty = 0.0
+    stridepenaltydict = Dict{Symbol,Vector{Float64}}()
     loopfreqs = Vector{Int}(undef, length(order))
     loopfreqs[1] = 1
     for i ∈ 2:length(order)
@@ -542,10 +541,11 @@ function stride_penalty(ls::LoopSet, order::Vector{Symbol})
     end
     for op ∈ operations(ls)
         if accesses_memory(op)
-            stridepenalty += stride_penalty(ls, op, order, loopfreqs)
+            v = get!(() -> Float64[], stridepenaltydict, op.ref.ref.array)
+            push!(v, stride_penalty(ls, op, order, loopfreqs))
         end
     end
-    stridepenalty# * 1e-9
+    sum(maximum, values(stridepenaltydict)) #* prod(length, ls.loops) / 1024^length(order)
 end
 function isoptranslation(ls::LoopSet, op::Operation, unrollsyms::UnrollSymbols)
     @unpack u₁loopsym, u₂loopsym, vectorized = unrollsyms
@@ -627,6 +627,7 @@ function load_elimination_cost_factor!(
     @unpack u₁loopsym, u₂loopsym, vectorized = unrollsyms
     if !iszero(first(isoptranslation(ls, op, unrollsyms)))
         rt, lat, rp = cost(ls, op, vectorized, Wshift, size_T)
+        rto = rt
         rt *= iters
             # rt *= factor1; rp *= factor2;
         choose_to_inline[] = true
@@ -645,8 +646,8 @@ function load_elimination_cost_factor!(
         # end
         # # (0.25, REGISTER_COUNT == 32 ? 1.2 : 1.0)
         # (0.25, 1.0)
-        cost_vec[1] += 0.1rt
-        reg_pressure[1] += 0.51rp
+        cost_vec[1] -= 0.1prod(length, ls.loops)
+        reg_pressure[1] += 0.25rp
         cost_vec[2] += rt
         reg_pressure[2] += rp
         cost_vec[3] += rt
@@ -658,13 +659,13 @@ function load_elimination_cost_factor!(
         false
     end
 end
-# function loadintostore(ls::LoopSet, op::Operation)
-#     isload(op) || return false # leads to bad behavior more than it helps
-#     for opp ∈ operations(ls)
-#         isstore(opp) && opp.ref == op.ref && return true
-#     end
-#     false
-# end
+function loadintostore(ls::LoopSet, op::Operation)
+    isload(op) || return false # leads to bad behavior more than it helps
+    for opp ∈ operations(ls)
+        isstore(opp) && opp.ref == op.ref && return true
+    end
+    false
+end
 function store_load_deps!(deps::Vector{Symbol}, op::Operation, compref = op.ref)
     for opp ∈ parents(op)
         foreach(ld -> ((ld ∈ deps) || push!(deps, ld)), loopdependencies(opp))
@@ -799,7 +800,6 @@ function evaluate_cost_tile(
             all(ld -> ld ∈ nested_loop_syms, loopdependencies(op)) || continue
             rd = reduceddependencies(op)
             if hasintersection(rd, @view(nested_loop_syms[1:end-length(rd)]))
-                # @show rd, op itersym, nested_loop_syms @view(nested_loop_syms[1:end-length(rd)])
                 return 0,0,Inf,false
             end
             if isstore(op)
@@ -860,7 +860,7 @@ function evaluate_cost_tile(
     costpenalty = (sum(reg_pressure) > REGISTER_COUNT) ? 2 : 1
     u₁v = vectorized === u₁loopsym; u₂v = vectorized === u₂loopsym
     round_uᵢ = prefetch_good_idea ? (u₁v ? 1 : (u₂v ? 2 : 0)) : 0
-    if irreducible_storecosts / sum(cost_vec) ≥ 0.25
+    if (irreducible_storecosts / sum(cost_vec) ≥ 0.25) && !any(op -> loadintostore(ls, op), operations(ls))
         u₁, u₂ = (1, 1)
         ucost = unroll_cost(cost_vec, 1, 1, length(getloop(ls, u₁loopsym)), length(getloop(ls, u₂loopsym)))
     else
