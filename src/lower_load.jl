@@ -67,6 +67,7 @@ end
 function prefetchisagoodidea(ls::LoopSet, op::Operation, td::UnrollArgs)
     # return false
     @unpack u₁, u₁loopsym, u₂loopsym, vectorized, u₂max, suffix = td
+    length(loopdependencies(op)) ≤ 1 && return 0
     vectorized ∈ loopdependencies(op) || return 0
     u₂loopsym === Symbol("##undefined##") && return 0
     dontskip = (VectorizationBase.CACHELINE_SIZE ÷ VectorizationBase.REGISTER_SIZE) - 1
@@ -78,7 +79,7 @@ function prefetchisagoodidea(ls::LoopSet, op::Operation, td::UnrollArgs)
     loopedindex = op.ref.loopedindex
     if length(loopedindex) > 1 && first(loopedindex)
         indices = getindices(op)
-        if first(indices) === vectorized && last(indices) === innermostloopsym
+        if first(indices) === vectorized && first(indices) !== innermostloopsym
             # We want at least 4 reuses per load
             uses = ifelse(isu₁unrolled(op), 1, u₁)
             uses = ifelse(isu₂unrolled(op), uses, uses * u₂max)
