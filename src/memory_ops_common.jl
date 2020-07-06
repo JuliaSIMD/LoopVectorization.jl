@@ -72,7 +72,9 @@ function subset_vptr!(ls::LoopSet, vptr::Symbol, indnum::Int, ind, previndices, 
             if loopindex[i]
                 append_loop_valdims!(valcall, getloop(ls, previndices[i+offset]))
             else
-                for loopdep ∈ loopdependencies(ls.opdict[previndices[i+offset]])
+                # assumes all valdims will be of equal length once expanded...
+                # A[I + J, constindex], I and J may be CartesianIndices. This requires they all be of same number of dims
+                let loopdep = first(loopdependencies(ls.opdict[previndices[i+offset]]))
                     append_loop_valdims!(valcall, getloop(ls, loopdep))
                 end
             end

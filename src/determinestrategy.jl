@@ -472,7 +472,7 @@ function solve_unroll(
     if isstaticloop(u₂loop)
         if u₂loopsym !== vectorized && u₂L ≤ 4
             u₁ = max(1, solve_unroll_constT(reg_pressure, u₂L))
-            u₁ = isstaticloop(u₁loop) ? min(u₁, u₁L) : u₁
+            u₁ = isstaticloop(u₁loop) ? maybedemotesize(u₁, u₁L) : u₁
             return u₁, u₂L, unroll_cost(cost_vec, u₁, u₂L, u₁L, u₂L)
         end
         u₂L = u₂loopsym === vectorized ? cld(u₂L,W) : u₂L
@@ -481,7 +481,7 @@ function solve_unroll(
     if isstaticloop(u₁loop)
         if u₁loopsym !== vectorized && u₁L ≤ 4
             u₂ = max(1, solve_unroll_constU(reg_pressure, u₁L))
-            u₂ = isstaticloop(u₂loop) ? min(u₂, u₂L) : u₂
+            u₂ = isstaticloop(u₂loop) ? maybedemotesize(u₂, u₂L) : u₂
             return u₁L, u₂, unroll_cost(cost_vec, u₁L, u₂, u₁L, u₂L)
         end
         u₁L = u₁loopsym === vectorized ? cld(u₁L,W) : u₁L
