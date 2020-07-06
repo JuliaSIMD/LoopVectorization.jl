@@ -692,6 +692,35 @@ function splitintonoloop_reference(U = randn(2,2), E1 = randn(2))
     end
     U, E1
 end
+function findreducedparentfornonvecstoreavx!(U::AbstractMatrix{T}, E1::AbstractVector{T}) where T
+    n,k = size(U)
+    _s = zero(T)
+    a = 1.0
+    @avx for j = 1:k
+        for i = 1:n
+            t = tanh(a * U[i,j])
+            U[i,j] = t
+            _s += a * (1 - t^2)
+        end
+        E1[j] = _s / n
+    end
+    U,E1
+end
+function findreducedparentfornonvecstore!(U::AbstractMatrix{T}, E1::AbstractVector{T}) where T
+    n,k = size(U)
+    _s = zero(T)
+    a = 1.0
+    for j = 1:k
+        for i = 1:n
+            t = tanh(a * U[i,j])
+            U[i,j] = t
+            _s += a * (1 - t^2)
+        end
+        E1[j] = _s / n
+    end
+    U,E1
+end
+
 
 
 
@@ -898,11 +927,15 @@ end
         R .+= randn.(T); Rc = copy(R);
         @test maxavx!(R, Q, true) == max.(vec(maximum(Q, dims=(2,3))), Rc)
 
-        U1 = randn(5,7); E1 = randn(7);
-        U2, E2 = splitintonoloop_reference(copy(U1), copy(E1));
-        splitintonoloop(U1, E1);
+        U0 = randn(5,7); E0 = randn(7);
+        U1, E1 = splitintonoloop_reference(copy(U0), copy(E0));
+        U2, E2 = splitintonoloop(copy(U0), copy(E0));
         @test U1 ≈ U2
         @test E1 ≈ E2
+        U3, E3 = findreducedparentfornonvecstoreavx!(copy(U0), copy(E0));
+        findreducedparentfornonvecstore!(U0, E0);
+        @test U0 ≈ U3
+        @test E0 ≈ E3        
     end
     for T ∈ [Int16, Int32, Int64]
         n = 8sizeof(T) - 1
