@@ -1,6 +1,6 @@
 using LoopVectorization, OffsetArrays, Test
 using LoopVectorization.VectorizationBase: StaticUnitRange
-T = Float64
+# T = Float64
 # T = Float32
 
 @testset "OffsetArrays" begin
@@ -205,7 +205,7 @@ T = Float64
             @show r
             fr = first(r); lr = last(r); 
             kern = OffsetArray(rand(T, length(r), length(r)), r, r);
-            out1 = OffsetArray(view(similar(A, size(A) .+ 32), (fr:100-lr) .+ 32, (fr:100-lr) .+ 32), lr, lr);   # stay away from the edges of A
+            out1 = OffsetArray(view(similar(A, size(A) .+ 32), (1+lr:100-lr) .+ 32, (1+lr:100-lr) .+ 32), lr, lr);   # stay away from the edges of A
             # out1 = OffsetArray(similar(A, size(A).-2), 1, 1);   # stay away from the edges of A
             out2 = similar(out1); out3 = similar(out1); out4 = similar(out1);
             skern = SizedOffsetMatrix{T,fr,lr,fr,lr}(parent(kern));
@@ -232,15 +232,17 @@ T = Float64
             fill!(out3, NaN); avx2douter!(out3, A, skern);
             @test out1 ≈ out3
 
-            fill!(out3, NaN); avx2dunrolled!(out3, A, skern);
-            @test out1 ≈ out3
+            if r == -1:1
+                fill!(out3, NaN); avx2dunrolled!(out3, A, skern);
+                @test out1 ≈ out3
 
-            fill!(out3, NaN); avx2dunrolled2x2!(out3, A, skern);
-            @test out1 ≈ out3
+                fill!(out3, NaN); avx2dunrolled2x2!(out3, A, skern);
+                @test out1 ≈ out3
 
-            fill!(out3, NaN); avx2dunrolled3x3!(out3, A, skern);
-            @test out1 ≈ out3
-
+                fill!(out3, NaN); avx2dunrolled3x3!(out3, A, skern);
+                @test out1 ≈ out3
+            end
+            
             @test avxgeneric!(out4, A, kern) ≈ out1
             fill!(out4, NaN);
             @test avxgeneric!(out4, A, skern) ≈ out1
