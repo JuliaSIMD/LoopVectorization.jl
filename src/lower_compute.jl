@@ -251,7 +251,7 @@ function lower_compute!(
             if last(instrcall.args) == varsym
                 pushfirst!(instrcall.args, lv(:vifelse))
                 insert!(instrcall.args, 3, mask)
-            else
+            elseif all(in(loopdependencies(op)), reduceddeps) || any(opp -> mangledvar(opp) === mangledvar(op), parents_op)
                 push!(q.args, Expr(:(=), varsym, Expr(:call, lv(:vifelse), mask, instrcall, varsym)))
                 continue
             end

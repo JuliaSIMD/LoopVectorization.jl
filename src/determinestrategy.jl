@@ -548,8 +548,11 @@ function stride_penalty(ls::LoopSet, order::Vector{Symbol})
             push!(v, stride_penalty(ls, op, order, loopfreqs))
         end
     end
-    # 1 / 1024 = 0.0009765625
-    10.0sum(maximum, values(stridepenaltydict)) * Base.power_by_squaring(0.0009765625, length(order))
+    if iszero(length(values(stridepenaltydict)))
+        0.0
+    else # 1 / 1024 = 0.0009765625
+        10.0sum(maximum, values(stridepenaltydict)) * Base.power_by_squaring(0.0009765625, length(order))
+    end
 end
 function isoptranslation(ls::LoopSet, op::Operation, unrollsyms::UnrollSymbols)
     @unpack u₁loopsym, u₂loopsym, vectorized = unrollsyms

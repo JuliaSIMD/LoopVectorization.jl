@@ -157,10 +157,11 @@ function add_loop_start_stop_manager!(ls::LoopSet)
             end
         end
         loopstarts[i] = loopstartᵢ
-        terminators[i] = if (loopsym ∈ loopinductvars) || (any(r -> any(isequal(-i), r), use_livs))
+        terminators[i] = if (loopsym ∈ loopinductvars) || (any(r -> any(isequal(-i), r), use_livs)) || iszero(length(loopstartᵢ))
             0
         else
-            @assert !iszero(length(loopstartᵢ))
+            # @show i, loopsym loopdependencies.(operations(ls)) operations(ls)
+            # @assert !iszero(length(loopstartᵢ))
             last(ric[argmin(first.(ric))]) # index corresponds to array ref's position in loopstart
         end
     end

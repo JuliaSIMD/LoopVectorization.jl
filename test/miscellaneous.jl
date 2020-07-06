@@ -660,6 +660,38 @@ function maxavx!(R::AbstractArray{T}, Q, keep=nothing) where T
     end
     R
 end
+function splitintonoloop(U = randn(2,2), E1 = randn(2))
+    t = 1
+    a = 1.0
+    _s = 0.0
+    n, k = size(U)
+    @avx for j = 1:k
+        for i = 1:n
+            u = tanh(a * U[i,j])
+            v = a * (1 - t * t)
+            U[i,j] = u
+            _s += v
+        end
+        E1[j] = _s / n
+    end
+    U, E1
+end
+function splitintonoloop_reference(U = randn(2,2), E1 = randn(2))
+    t = 1
+    a = 1.0
+    _s = 0.0
+    n, k = size(U)
+    for j = 1:k
+        for i = 1:n
+            u = tanh(a * U[i,j])
+            v = a * (1 - t * t)
+            U[i,j] = u
+            _s += v
+        end
+        E1[j] = _s / n
+    end
+    U, E1
+end
 
 
 
@@ -865,7 +897,12 @@ end
         @test maxavx!(R, Q) == vec(maximum(Q, dims=(2,3)))
         R .+= randn.(T); Rc = copy(R);
         @test maxavx!(R, Q, true) == max.(vec(maximum(Q, dims=(2,3))), Rc)
-   
+
+        U1 = randn(5,7); E1 = randn(7);
+        U2, E2 = splitintonoloop_reference(copy(U1), copy(E1));
+        splitintonoloop(U1, E1);
+        @test U1 ≈ U2
+        @test E1 ≈ E2
     end
     for T ∈ [Int16, Int32, Int64]
         n = 8sizeof(T) - 1
