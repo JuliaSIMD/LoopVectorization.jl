@@ -203,12 +203,12 @@ T = Float64
         A = rand(T, 100, 100); At = copy(A');
         for r ∈ (-1:1, -2:2)
             @show r
-            kernsize = length(r)
-            kern = OffsetArray(rand(T, kernsize, kernsize), r, r);
-            out1 = OffsetArray(view(similar(A, size(A) .+ 32), (1:101-kernsize) .+ 32, (1:101-kernsize) .+ 32), last(r), last(r));   # stay away from the edges of A
+            fr = first(r); lr = last(r); 
+            kern = OffsetArray(rand(T, length(r), length(r)), r, r);
+            out1 = OffsetArray(view(similar(A, size(A) .+ 32), (fr:100-lr) .+ 32, (fr:100-lr) .+ 32), lr, lr);   # stay away from the edges of A
             # out1 = OffsetArray(similar(A, size(A).-2), 1, 1);   # stay away from the edges of A
             out2 = similar(out1); out3 = similar(out1); out4 = similar(out1);
-            skern = SizedOffsetMatrix{T,first(r),last(r),first(r),last(r)}(parent(kern));
+            skern = SizedOffsetMatrix{T,fr,lr,fr,lr}(parent(kern));
 
             old2d!(out1, A, kern);
             avx2d!(out2, A, kern);
