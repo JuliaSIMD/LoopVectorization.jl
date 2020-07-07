@@ -28,7 +28,7 @@
         fill!(c2, 99999);
         @avx @. c2 = a + bl;
         @test c1 ≈ c2
-        br = reshape(rand(99), (1,99,1));
+        br = reshape(rand(R,99), (1,99,1));
         bl = LowDimArray{(false,)}(br);
         @. c1 = a + br;
         fill!(c2, 99999);
