@@ -116,10 +116,19 @@ struct LowDimArray{D,T,N,A<:DenseArray{T,N}} <: DenseArray{T,N}
 end
 @inline Base.pointer(A::LowDimArray) = pointer(A.data)
 Base.@propagate_inbounds Base.getindex(A::LowDimArray, i...) = getindex(A.data, i...)
-Base.size(A::LowDimArray) = Base.size(A.data)
+@inline Base.size(A::LowDimArray) = Base.size(A.data)
+@inline Base.size(A::LowDimArray, i) = Base.size(A.data, i)
 @generated function VectorizationBase.stridedpointer(A::LowDimArray{D,T,N}) where {D,T,N}
     smul = Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:VectorizationBase)), QuoteNode(:staticmul))
-    s = Expr(:call, smul, T, Expr(:tuple, [Expr(:ref, :strideA, n) for n ∈ 1+D[1]:N if ((length(D) < n) || D[n])]...))
+    multup = Expr(:tuple)
+    for n ∈ 1:N
+        if length(D) < n
+            push!(multup.args, Expr(:call, :ifelse, :(isone(size(A,$n))), 0, Expr(:ref, :strideA, n)))
+        elseif D[n]
+            push!(multup.args, Expr(:ref, :strideA, n))
+        end
+    end
+    s = Expr(:call, smul, T, multup)
     f = D[1] ? :PackedStridedPointer : :SparseStridedPointer
     Expr(:block, Expr(:meta,:inline), Expr(:(=), :strideA, Expr(:call, :strides, Expr(:(.), :A, QuoteNode(:data)))),
          Expr(:call, Expr(:(.), :VectorizationBase, QuoteNode(f)), Expr(:call, :pointer, Expr(:(.), :A, QuoteNode(:data))), s))

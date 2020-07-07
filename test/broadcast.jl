@@ -28,6 +28,12 @@
         fill!(c2, 99999);
         @avx @. c2 = a + bl;
         @test c1 ≈ c2
+        br = reshape(rand(99), (1,99,1));
+        bl = LowDimArray{(false,)}(br);
+        @. c1 = a + br;
+        fill!(c2, 99999);
+        @avx @. c2 = a + bl;
+        @test c1 ≈ c2
 
         xs = rand(T, M);
         max_ = maximum(xs, dims=1)
