@@ -121,7 +121,7 @@ Base.@propagate_inbounds Base.getindex(A::LowDimArray, i...) = getindex(A.data, 
 @generated function VectorizationBase.stridedpointer(A::LowDimArray{D,T,N}) where {D,T,N}
     smul = Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:VectorizationBase)), QuoteNode(:staticmul))
     multup = Expr(:tuple)
-    for n ∈ 1:N
+    for n ∈ D[1]+1:N
         if length(D) < n
             push!(multup.args, Expr(:call, :ifelse, :(isone(size(A,$n))), 0, Expr(:ref, :strideA, n)))
         elseif D[n]
