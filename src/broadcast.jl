@@ -118,7 +118,8 @@ end
 Base.@propagate_inbounds Base.getindex(A::LowDimArray, i...) = getindex(A.data, i...)
 Base.size(A::LowDimArray) = Base.size(A.data)
 @generated function VectorizationBase.stridedpointer(A::LowDimArray{D,T,N}) where {D,T,N}
-    s = Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:VectorizationBase)), QuoteNode(:staticmul)), T, Expr(:tuple, [Expr(:ref, :strideA, n) for n ∈ 1+D[1]:N if D[n]]...))
+    smul = Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:VectorizationBase)), QuoteNode(:staticmul))
+    s = Expr(:call, smul, T, Expr(:tuple, [Expr(:ref, :strideA, n) for n ∈ 1+D[1]:N if ((length(D) < n) || D[n])]...))
     f = D[1] ? :PackedStridedPointer : :SparseStridedPointer
     Expr(:block, Expr(:meta,:inline), Expr(:(=), :strideA, Expr(:call, :strides, Expr(:(.), :A, QuoteNode(:data)))),
          Expr(:call, Expr(:(.), :VectorizationBase, QuoteNode(f)), Expr(:call, :pointer, Expr(:(.), :A, QuoteNode(:data))), s))
@@ -137,10 +138,11 @@ function add_broadcast!(
     @nospecialize(LDA::Type{<:LowDimArray}), elementbytes::Int
 )
     D,T,N::Int,_ = LDA.parameters
-    if !any(D)
+    Dlen = length(D)
+    if Dlen == N && !any(D)
         return extract_all_1_array!(ls, bcname, N, elementbytes)
     end
-    fulldims = Symbol[loopsyms[n] for n ∈ 1:N if D[n]::Bool]
+    fulldims = Symbol[loopsyms[n] for n ∈ 1:N if ((Dlen < n) || D[n]::Bool)]
     ref = ArrayReference(bcname, fulldims)
     add_simple_load!(ls, destname, ref, elementbytes, true, false )::Operation
 end

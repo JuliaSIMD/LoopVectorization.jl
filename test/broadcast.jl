@@ -23,7 +23,7 @@
         fill!(c2, 99999); @avx @. c2 = a + br;
         @test c1 ≈ c2
         br = reshape(b, (1,99,99));
-        bl = LowDimArray{(false,true,true)}(br);
+        bl = LowDimArray{(false,)}(br);
         @. c1 = a + br;
         fill!(c2, 99999);
         @avx @. c2 = a + bl;
