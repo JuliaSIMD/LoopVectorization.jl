@@ -80,7 +80,6 @@ function subset_vptr!(ls::LoopSet, vptr::Symbol, indnum::Int, ind, previndices, 
             end
         end
     end
-    # @show valcall
     indm1 = ind isa Integer ? ind - 1 : Expr(:call, :-, ind, 1)
     pushpreamble!(ls, Expr(:(=), subsetvptr, Expr(:call, lv(:subsetview), vptr, valcall, indm1)))
     subsetvptr
@@ -96,7 +95,11 @@ function addoffset!(ls, indices, offsets, loopedindex, loopdependencies, ind, of
 end
 function addoffsetexpr!(ls, parents, indices, offsets, loopedindex, loopdependencies, reduceddeps, ind, offset, elementbytes)
     (typemin(Int8) ≤ offset ≤ typemax(Int8)) || return false
-    parent = add_operation!(ls, gensym(:indexpr), ind, elementbytes, length(ls.loopsymbols))
+    parent = if ind isa Expr
+        add_operation!(ls, gensym(:indexpr), ind, elementbytes, length(ls.loopsymbols))
+    else
+        ls.opdict[ind]
+    end
     pushparent!(parents, loopdependencies, reduceddeps, parent)
     push!(indices, name(parent)); 
     push!(offsets, offset % Int8)
@@ -115,16 +118,24 @@ function checkforoffset!(
     arg1 = ind.args[2]
     arg2 = ind.args[3]
     if arg1 isa Integer && isone(factor) # we want to return false when we're subtracting the index, e.g. A[3 - i] 
-        if arg2 isa Symbol && arg2 ∈ ls.loopsymbols
-            addoffset!(ls, indices, offsets, loopedindex, loopdependencies, arg2, arg1 * factor)
+        if arg2 isa Symbol
+            if arg2 ∈ ls.loopsymbols
+                addoffset!(ls, indices, offsets, loopedindex, loopdependencies, arg2, arg1 * factor)
+            else
+                addoffsetexpr!(ls, parents, indices, offsets, loopedindex, loopdependencies, reduceddeps, arg2, arg1 * factor, elementbytes)
+            end
         elseif arg2 isa Expr
             addoffsetexpr!(ls, parents, indices, offsets, loopedindex, loopdependencies, reduceddeps, arg2, arg1 * factor, elementbytes)
         else
             false
         end
     elseif arg2 isa Integer
-        if arg1 isa Symbol && arg1 ∈ ls.loopsymbols
-            addoffset!(ls, indices, offsets, loopedindex, loopdependencies, arg1, arg2 * factor)
+        if arg1 isa Symbol
+            if arg1 ∈ ls.loopsymbols
+                addoffset!(ls, indices, offsets, loopedindex, loopdependencies, arg1, arg2 * factor)
+            else
+                addoffsetexpr!(ls, parents, indices, offsets, loopedindex, loopdependencies, reduceddeps, arg1, arg2 * factor, elementbytes)
+            end
         elseif arg1 isa Expr
             addoffsetexpr!(ls, parents, indices, offsets, loopedindex, loopdependencies, reduceddeps, arg1, arg2 * factor, elementbytes)
         else

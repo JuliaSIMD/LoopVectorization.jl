@@ -25,7 +25,7 @@ function findindoradd!(v::Vector{T}, s::T) where {T}
     push!(v, s)
     length(v)
 end
-function ArrayRefStruct(ls::LoopSet, mref::ArrayReferenceMeta, arraysymbolinds::Vector{Symbol})
+function ArrayRefStruct(ls::LoopSet, mref::ArrayReferenceMeta, arraysymbolinds::Vector{Symbol}, ids::Vector{Int})
     index_types = zero(UInt64)
     indices = zero(UInt64)
     offsets = zero(UInt64)
@@ -43,13 +43,13 @@ function ArrayRefStruct(ls::LoopSet, mref::ArrayReferenceMeta, arraysymbolinds::
             indices |= getloopid(ls, ind)
         else
             parent = get(ls.opdict, ind, nothing)
-            @assert !isnothing(parent) # Symbolic indices should have been subset
+            @assert !isnothing(parent) "Index $ind not found in array."
             # if parent === nothing
             #     index_types |= SymbolicIndex
             #     indices |= findindoradd!(arraysymbolinds, ind)
             # else
             index_types |= ComputedIndex
-            indices |= identifier(parent)
+            indices |= ids[identifier(parent)]
             # end
         end
     end
@@ -108,15 +108,16 @@ function parents_uint(ls::LoopSet, op::Operation)
     end
     p
 end
-function OperationStruct!(varnames::Vector{Symbol}, ls::LoopSet, op::Operation)
+function OperationStruct!(varnames::Vector{Symbol}, ids::Vector{Int}, ls::LoopSet, op::Operation)
     instr = instruction(op)
     ld = loopdeps_uint(ls, op)
     rd = reduceddeps_uint(ls, op)
     cd = childdeps_uint(ls, op)
     p = parents_uint(ls, op)
     array = accesses_memory(op) ? findmatchingarray(ls, op.ref) : 0x00
+    ids[identifier(op)] = id = findindoradd!(varnames, name(op))
     OperationStruct(
-        ld, rd, cd, p, op.node_type, array, findindoradd!(varnames, name(op))
+        ld, rd, cd, p, op.node_type, array, id
     )
 end
 ## turn a LoopSet into a type object which can be used to reconstruct the LoopSet.
@@ -209,16 +210,16 @@ end
 # Try to condense in type stable manner
 function generate_call(ls::LoopSet, inline_unroll::NTuple{3,Int8}, debug::Bool = false)
     operation_descriptions = Expr(:curly, :Tuple)
-    varnames = Symbol[]
+    varnames = Symbol[]; ids = Vector{Int}(undef, length(operations(ls))) 
     for op ∈ operations(ls)
         instr = instruction(op)
         push!(operation_descriptions.args, QuoteNode(instr.mod))
         push!(operation_descriptions.args, QuoteNode(instr.instr))
-        push!(operation_descriptions.args, OperationStruct!(varnames, ls, op))
+        push!(operation_descriptions.args, OperationStruct!(varnames, ids, ls, op))
     end
     arraysymbolinds = Symbol[]
     arrayref_descriptions = Expr(:curly, :Tuple)
-    foreach(ref -> push!(arrayref_descriptions.args, ArrayRefStruct(ls, ref, arraysymbolinds)), ls.refs_aliasing_syms)
+    foreach(ref -> push!(arrayref_descriptions.args, ArrayRefStruct(ls, ref, arraysymbolinds, ids)), ls.refs_aliasing_syms)
     argmeta = argmeta_and_consts_description(ls, arraysymbolinds)
     loop_bounds = loop_boundaries(ls)
     loop_syms = Expr(:curly, :Tuple, map(QuoteNode, ls.loopsymbols)...)

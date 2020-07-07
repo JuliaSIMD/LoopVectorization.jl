@@ -185,6 +185,27 @@ using Test
         end
     end
 
+    function tuplemul!(out::Vector{Tuple{T,T}}, A::Matrix{Tuple{T,T}}, b::Vector{T}) where {T}
+        rA, rout = reinterpret(T, A), reinterpret(T, out)
+        fill!(rout, 0)
+        for j in axes(A, 2), i in axes(A, 1)
+            ii = 2*(i-1) + 1
+            rout[ii] += rA[ii,j]*b[j]
+            rout[ii+1] += rA[ii+1,j]*abs(b[j])
+        end
+        return out
+    end
+    function tuplemulavx!(out::Vector{Tuple{T,T}}, A::Matrix{Tuple{T,T}}, b::Vector{T}) where {T}
+        rA, rout = reinterpret(T, A), reinterpret(T, out)
+        fill!(rout, 0)
+        @avx for j in axes(A, 2), i in axes(A, 1)
+            ii = 2*(i-1) + 1
+            rout[ii] += rA[ii,j]*b[j]
+            rout[ii+1] += rA[ii+1,j]*abs(b[j])
+        end
+        return out
+    end
+    
     M, K, N = 51, 49, 61
     for T ∈ (Float32, Float64, Int32, Int64)
         @show T, @__LINE__
@@ -255,6 +276,10 @@ using Test
         @test C1 ≈ C2
         @test A1 ≈ A2
 
+        A = [(rand(R), rand(R)) for i = 1:11, j = 1:13];
+        b = rand(R, 13);
+        out1 = similar(A, 11); out2 = similar(out1);
+        @test reinterpret(T,tuplemul!(out1, A, b)) ≈ reinterpret(T,tuplemulavx!(out2, A, b))
         
     end
 end

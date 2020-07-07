@@ -454,7 +454,6 @@ function avx_body(ls, UNROLL)
     ls.vector_width[] = W
     q = iszero(u₁) ? lower_and_split_loops(ls, inline % Int) : lower(ls, u₁ % Int, u₂ % Int, inline % Int)
     iszero(length(ls.outer_reductions)) ? push!(q.args, nothing) : push!(q.args, loopset_return_value(ls, Val(true)))
-    # @show q
     q
 end
 
