@@ -200,10 +200,14 @@ using LoopVectorization.VectorizationBase: StaticUnitRange
 
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
-        A = rand(T, 100, 100); At = copy(A');
+        Abase = fill(T(NaN), 200, 200);
+        A = view(Abase, 51:150, 51:150);
+        A .= rand.();
+        Atbase = copy(Abase');
+        At = view(Atbase, 51:150, 51:150);
         for r ∈ (-1:1, -2:2)
             @show r
-            fr = first(r); lr = last(r); 
+            fr = first(r); lr = last(r);
             kern = OffsetArray(rand(T, length(r), length(r)), r, r);
             out1 = OffsetArray(view(similar(A, size(A) .+ 32), (1+lr:100-lr) .+ 32, (1+lr:100-lr) .+ 32), lr, lr);   # stay away from the edges of A
             # out1 = OffsetArray(similar(A, size(A).-2), 1, 1);   # stay away from the edges of A
