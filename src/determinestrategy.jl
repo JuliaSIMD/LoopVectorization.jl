@@ -505,21 +505,32 @@ function set_upstream_family!(adal::Vector{T}, op::Operation, val::T) where {T}
         set_upstream_family!(adal, opp, val)
     end
 end
-function stride_penalty(ls::LoopSet, op::Operation, order::Vector{Symbol}, loopfreqs)
-    loopdeps = @view(loopdependencies(op.ref)[1:end])
-    if !first(op.ref.loopedindex)
-        loopdeps = @view(loopdependencies(findparent(ls, first(loopdeps)))[1:end])
+function loopdepindices(ls::LoopSet, op::Operation)
+    loopdeps = loopdependencies(op.ref)
+    isdiscontig = first(loopdeps) === Symbol("##DISCONTIGUOUSSUBARRAY##")
+    if !isdiscontig && all(op.ref.loopedindex)
+        return loopdeps
     end
+    loopdepsret = Symbol[]
+    for i ∈ eachindex(op.ref.loopedindex)
+        if op.ref.loopedindex[i]
+            push!(loopdepsret, loopdeps[i+isdiscontig])
+        else
+            oploopdeps = loopdependencies(findparent(ls, loopdeps[i+isdiscontig]))
+            for ld ∈ oploopdeps
+                (ld ∉ loopdepsret) && push!(loopdepsret, ld)
+            end
+        end
+    end
+    loopdepsret
+end
+function stride_penalty(ls::LoopSet, op::Operation, order::Vector{Symbol}, loopfreqs)
+    loopdeps = loopdepindices(ls, op)
     opstrides = Vector{Int}(undef, length(loopdeps))
     # very minor stride assumption here, because we don't really want to base optimization decisions on it...
-    if first(loopdeps) == Symbol("##DISCONTIGUOUSSUBARRAY##")
-        loopdeps = @view(parent(loopdeps)[2:end])
-        opstrides[1] = 2.0
-    else
-        opstrides[1] = 1.0
-    end
+    opstrides[1] = 1.0 + (first(loopdependencies(op.ref)) === Symbol("##DISCONTIGUOUSSUBARRAY##"))
     # loops = map(s -> getloop(ls, s), loopdeps)
-    l = Float64(length(getloop(ls, first(loopdeps))))
+    l = Float64(length(getloop(ls, first(loopdeps)))) 
     for i ∈ 2:length(loopdeps)
         looplength = length(getloop(ls, loopdeps[i-1]))
         opstrides[i] = opstrides[i-1] * looplength
