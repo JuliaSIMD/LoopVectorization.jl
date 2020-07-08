@@ -28,7 +28,7 @@ using Base.FastMath: add_fast, sub_fast, mul_fast, div_fast
 
 export LowDimArray, stridedpointer,
     @avx, @_avx, *ˡ, _avx_!,
-    vmap, vmap!, vmapnt, vmapnt!, vmapntt, vmapntt!,
+    vmap, vmap!, vmapt, vmapt!, vmapnt, vmapnt!, vmapntt, vmapntt!,
     vfilter, vfilter!, vmapreduce, vreduce
 
 const VECTORWIDTHSYMBOL, ELTYPESYMBOL = Symbol("##Wvecwidth##"), Symbol("##Tloopeltype##")

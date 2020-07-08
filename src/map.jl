@@ -1,37 +1,8 @@
-# Expression-generator for vmap!
-function vmap_quote(N, ::Type{T}) where {T}
-    W, Wshift = VectorizationBase.pick_vector_width_shift(T)
-    val = Expr(:call, Expr(:curly, :Val, W))
-    q = Expr(:block, Expr(:(=), :M, Expr(:call, :length, :dest)), Expr(:(=), :vdest, Expr(:call, :pointer, :dest)), Expr(:(=), :m, 0))
-    fcall = Expr(:call, :f)
-    loopbody = Expr(:block, Expr(:call, :vstore!, Expr(:call, :gep, :vdest, :m), fcall), Expr(:(+=), :m, W))
-    fcallmask = Expr(:call, :f)
-    bodymask = Expr(:block, Expr(:(=), :__mask__, Expr(:call, :mask, val, Expr(:call, :&, :M, W-1))), Expr(:call, :vstore!, Expr(:call, :gep, :vdest, :m), fcallmask, :__mask__))
-    for n ∈ 1:N
-        arg_n = Symbol(:varg_,n)
-        push!(q.args, Expr(:(=), arg_n, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), Expr(:call, :pointer, Expr(:ref, :args, n)))))
-        push!(fcall.args, Expr(:call, :vload, val, Expr(:call, :gep, arg_n, :m)))
-        push!(fcallmask.args, Expr(:call, :vload, val, Expr(:call, :gep, arg_n, :m), :__mask__))
-    end
-    loop = Expr(:for, Expr(:(=), :_, Expr(:call, :(:), 0, Expr(:call, :-, Expr(:call, :(>>>), :M, Wshift), 1))), loopbody)
-    push!(q.args, loop)
-    ifmask = Expr(:if, Expr(:call, :(!=), :m, :M), bodymask)
-    push!(q.args, ifmask)
-    push!(q.args, :dest)
-    q
-end
-"""
-    vmap!(f, destination, a::AbstractArray)
-    vmap!(f, destination, a::AbstractArray, b::AbstractArray, ...)
 
-Vectorized-`map!`, applying `f` to each element of `a` (or paired elements of `a`, `b`, ...)
-and storing the result in `destination`.
 """
-@generated function vmap!(f::F, dest::AbstractArray{T}, args::Vararg{<:AbstractArray,N}) where {F,T,N}
-    # do not change argnames here without compensatory changes in vmap_quote
-    vmap_quote(N, T)
-end
-
+`vstorent!` (non-temporal store) requires data to be aligned.
+`alignstores!` will align `y` in preparation for the non-temporal maps.
+"""
 function alignstores!(f::F, y::AbstractVector{T}, args::Vararg{<:Any,A}) where {F,T,A}
     N = length(y)
     ptry = pointer(y)
@@ -46,12 +17,128 @@ function alignstores!(f::F, y::AbstractVector{T}, args::Vararg{<:Any,A}) where {
         if N < i
             m &= mask(T, N & (W - 1))
         end
-        vstore!(ptry, extract_data(f(vload.(V, ptrargs, m)...)), m)
+        vnoaliasstore!(ptry, extract_data(f(vload.(V, ptrargs, m)...)), m)
         gep(ptry, i), gep.(ptrargs, i), N - i
     else
         ptry, ptrargs, N
     end
 end
+
+function vmap_singlethread!(f::F, y::AbstractVector{T}, ::Val{NonTemporal}, args::Vararg{<:Any,A}) where {F,T,A,NonTemporal}
+    if NonTemporal
+        ptry, ptrargs, N = alignstores!(f, y, args...)
+    else
+        N = length(y)
+        ptry = pointer(y)
+        ptrargs = pointer.(args)
+    end
+    i = 0
+    W = VectorizationBase.pick_vector_width(T)
+    V = VectorizationBase.pick_vector_width_val(T)
+    while i < N - ((W << 2) - 1)
+        v₁ = extract_data(f(vload.(V, gep.(ptrargs,      i     ))...))
+        v₂ = extract_data(f(vload.(V, gep.(ptrargs, vadd(i,  W)))...))
+        v₃ = extract_data(f(vload.(V, gep.(ptrargs, vadd(i, 2W)))...))
+        v₄ = extract_data(f(vload.(V, gep.(ptrargs, vadd(i, 3W)))...))
+        if NonTemporal
+            vstorent!(gep(ptry,      i     ), v₁)
+            vstorent!(gep(ptry, vadd(i,  W)), v₂)
+            vstorent!(gep(ptry, vadd(i, 2W)), v₃)
+            vstorent!(gep(ptry, vadd(i, 3W)), v₄)
+        else
+            vnoaliasstore!(gep(ptry,      i     ), v₁)
+            vnoaliasstore!(gep(ptry, vadd(i,  W)), v₂)
+            vnoaliasstore!(gep(ptry, vadd(i, 2W)), v₃)
+            vnoaliasstore!(gep(ptry, vadd(i, 3W)), v₄)
+        end
+        i = vadd(i, 4W)
+    end
+    while i < N - (W - 1) # stops at 16 when
+        vᵢ = extract_data(f(vload.(V, gep.(ptrargs, i))...))
+        if NonTemporal
+            vstorent!(gep(ptry, i), vᵢ)
+        else
+            vnoaliasstore!(gep(ptry, i), vᵢ)
+        end
+        i = vadd(i, W)
+    end
+    if i < N
+        m = mask(T, N & (W - 1))
+        vnoaliasstore!(gep(ptry, i), extract_data(f(vload.(V, gep.(ptrargs, i), m)...)), m)
+    end
+    y
+end
+
+function vmap_multithreaded!(f::F, y::AbstractVector{T}, ::Val{NonTemporal}, args::Vararg{<:Any,A}) where {F,T,A,NonTemporal}
+    if NonTemporal
+        ptry, ptrargs, N = alignstores!(f, y, args...)
+    else
+        N = length(y)
+        ptry = pointer(y)
+        ptrargs = pointer.(args)
+    end
+    N > 0 || return y
+    W, Wshift = VectorizationBase.pick_vector_width_shift(T)
+    V = VectorizationBase.pick_vector_width_val(T)
+    Wsh = Wshift + 2
+    Niter = N >>> Wsh
+    Base.Threads.@threads for j ∈ 0:Niter-1
+        i = j << Wsh
+        v₁ = extract_data(f(vload.(V, gep.(ptrargs,      i     ))...))
+        v₂ = extract_data(f(vload.(V, gep.(ptrargs, vadd(i,  W)))...))
+        v₃ = extract_data(f(vload.(V, gep.(ptrargs, vadd(i, 2W)))...))
+        v₄ = extract_data(f(vload.(V, gep.(ptrargs, vadd(i, 3W)))...))
+        if NonTemporal
+            vstorent!(gep(ptry,      i     ), v₁)
+            vstorent!(gep(ptry, vadd(i,  W)), v₂)
+            vstorent!(gep(ptry, vadd(i, 2W)), v₃)
+            vstorent!(gep(ptry, vadd(i, 3W)), v₄)
+        else
+            vnoaliasstore!(gep(ptry,      i     ), v₁)
+            vnoaliasstore!(gep(ptry, vadd(i,  W)), v₂)
+            vnoaliasstore!(gep(ptry, vadd(i, 2W)), v₃)
+            vnoaliasstore!(gep(ptry, vadd(i, 3W)), v₄)
+        end
+    end
+    ii = Niter << Wsh
+    while ii < N - (W - 1) # stops at 16 when
+        vᵢ = extract_data(f(vload.(V, gep.(ptrargs, ii))...))
+        if NonTemporal
+            vstorent!(gep(ptry, ii), vᵢ)
+        else
+            vnoaliasstore!(gep(ptry, ii), vᵢ)
+        end
+        ii = vadd(ii, W)
+    end
+    if ii < N
+        m = mask(T, N & (W - 1))
+        vnoaliasstore!(gep(ptry, ii), extract_data(f(vload.(V, gep.(ptrargs, ii), m)...)), m)
+    end
+    y
+end
+
+
+"""
+    vmap!(f, destination, a::AbstractArray)
+    vmap!(f, destination, a::AbstractArray, b::AbstractArray, ...)
+
+Vectorized-`map!`, applying `f` to each element of `a` (or paired elements of `a`, `b`, ...)
+and storing the result in `destination`.
+"""
+function vmap!(f::F, y::AbstractVector{T}, args::Vararg{<:Any,A}) where {F,T,A}
+    vmap_singlethread!(f, y, Val{false}(), args...)
+end
+
+
+"""
+    vmapt!(::Function, dest, args...)
+
+Like `vmap!` (see `vmap!`), but uses `Threads.@threads` for parallel execution.
+"""
+function vmapt!(f::F, y::AbstractVector{T}, args::Vararg{<:Any,A}) where {F,T,A}
+    vmap_multithreaded!(f, y, Val{false}(), args...)
+end
+
 
 """
     vmapnt!(::Function, dest, args...)
@@ -109,24 +196,7 @@ BenchmarkTools.Trial:
 ```
 """
 function vmapnt!(f::F, y::AbstractVector{T}, args::Vararg{<:Any,A}) where {F,T,A}
-    ptry, ptrargs, N = alignstores!(f, y, args...)
-    i = 0
-    W = VectorizationBase.pick_vector_width(T)
-    V = VectorizationBase.pick_vector_width_val(T)
-    while i < N - ((W << 2) - 1)
-        vstorent!(gep(ptry, i), extract_data(f(vload.(V, gep.(ptrargs, i))...))); i += W
-        vstorent!(gep(ptry, i), extract_data(f(vload.(V, gep.(ptrargs, i))...))); i += W
-        vstorent!(gep(ptry, i), extract_data(f(vload.(V, gep.(ptrargs, i))...))); i += W
-        vstorent!(gep(ptry, i), extract_data(f(vload.(V, gep.(ptrargs, i))...))); i += W
-    end
-    while i < N - (W - 1) # stops at 16 when
-        vstorent!(gep(ptry, i), extract_data(f(vload.(V, gep.(ptrargs, i))...))); i += W
-    end
-     if i < N
-        m = mask(T, N & (W - 1))
-        vstore!(gep(ptry, i), extract_data(f(vload.(V, gep.(ptrargs, i), m)...)), m)
-    end
-    y
+    vmap_singlethread!(f, y, Val{true}(), args...)
 end
 
 """
@@ -135,28 +205,7 @@ end
 Like `vmapnt!` (see `vmapnt!`), but uses `Threads.@threads` for parallel execution.
 """
 function vmapntt!(f::F, y::AbstractVector{T}, args::Vararg{<:Any,A}) where {F,T,A}
-    ptry, ptrargs, N = alignstores!(f, y, args...)
-    N > 0 || return y
-    W, Wshift = VectorizationBase.pick_vector_width_shift(T)
-    V = VectorizationBase.pick_vector_width_val(T)
-    Wsh = Wshift + 2
-    Niter = N >>> Wsh
-    Base.Threads.@threads for j ∈ 0:Niter-1
-        i = j << Wsh
-        vstorent!(gep(ptry, i), extract_data(f(vload.(V, gep.(ptrargs, i))...))); i += W
-        vstorent!(gep(ptry, i), extract_data(f(vload.(V, gep.(ptrargs, i))...))); i += W
-        vstorent!(gep(ptry, i), extract_data(f(vload.(V, gep.(ptrargs, i))...))); i += W
-        vstorent!(gep(ptry, i), extract_data(f(vload.(V, gep.(ptrargs, i))...)))
-    end
-    ii = Niter << Wsh
-    while ii < N - (W - 1) # stops at 16 when
-        vstorent!(gep(ptry, ii), extract_data(f(vload.(V, gep.(ptrargs, ii))...))); ii += W
-    end
-    if ii < N
-        m = mask(T, N & (W - 1))
-        vstore!(gep(ptry, ii), extract_data(f(vload.(V, gep.(ptrargs, ii), m)...)), m)
-    end
-    y
+    vmap_multithreaded!(f, y, Val{true}(), args...)
 end
 
 function vmap_call(f::F, vm!::V, args::Vararg{<:Any,N}) where {V,F,N}
@@ -173,6 +222,14 @@ SIMD-vectorized `map`, applying `f` to each element of `a` (or paired elements o
 and returning a new array.
 """
 vmap(f::F, args::Vararg{<:Any,N}) where {F,N} = vmap_call(f, vmap!, args...)
+
+"""
+    vmapt(f, a::AbstractArray)
+    vmapt(f, a::AbstractArray, b::AbstractArray, ...)
+
+A threaded variant of [`vmap`](@ref).
+"""
+vmapt(f::F, args::Vararg{<:Any,N}) where {F,N} = vmap_call(f, vmapt!, args...)
 
 """
     vmapnt(f, a::AbstractArray)

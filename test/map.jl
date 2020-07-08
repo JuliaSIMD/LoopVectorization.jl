@@ -7,6 +7,8 @@
             c1 = map(foo, a, b);
             c2 = vmap(foo, a, b);
             @test c1 ≈ c2
+            c2 = vmapt(foo, a, b);
+            @test c1 ≈ c2
             c2 = vmapnt(foo, a, b);
             @test c1 ≈ c2
             c2 = vmapntt(foo, a, b);
@@ -21,6 +23,5 @@
         map!(xᵢ -> clenshaw(xᵢ, c), y1, x)
         vmap!(xᵢ -> clenshaw(xᵢ, c), y2, x)
         @test y1 ≈ y2
-        
     end
 end
