@@ -3,7 +3,10 @@
 `vstorent!` (non-temporal store) requires data to be aligned.
 `alignstores!` will align `y` in preparation for the non-temporal maps.
 """
-function alignstores!(f::F, y::AbstractVector{T}, args::Vararg{<:Any,A}) where {F,T,A}
+function alignstores!(
+    f::F, y::DenseArray{T},
+    args::Vararg{<:DenseArray{<:NativeTypes},A}
+) where {F, T <: NativeTypes, A}
     N = length(y)
     ptry = pointer(y)
     ptrargs = pointer.(args)
@@ -24,7 +27,11 @@ function alignstores!(f::F, y::AbstractVector{T}, args::Vararg{<:Any,A}) where {
     end
 end
 
-function vmap_singlethread!(f::F, y::AbstractVector{T}, ::Val{NonTemporal}, args::Vararg{<:Any,A}) where {F,T,A,NonTemporal}
+function vmap_singlethread!(
+    f::F, y::DenseArray{T},
+    ::Val{NonTemporal},
+    args::Vararg{<:DenseArray{<:NativeTypes},A}
+) where {F,T <: NativeTypes, A, NonTemporal}
     if NonTemporal
         ptry, ptrargs, N = alignstores!(f, y, args...)
     else
@@ -69,7 +76,12 @@ function vmap_singlethread!(f::F, y::AbstractVector{T}, ::Val{NonTemporal}, args
     y
 end
 
-function vmap_multithreaded!(f::F, y::AbstractVector{T}, ::Val{NonTemporal}, args::Vararg{<:Any,A}) where {F,T,A,NonTemporal}
+function vmap_multithreaded!(
+    f::F,
+    y::DenseArray{T},
+    ::Val{NonTemporal},
+    args::Vararg{<:DenseArray{<:NativeTypes},A}
+) where {F,T,A,NonTemporal}
     if NonTemporal
         ptry, ptrargs, N = alignstores!(f, y, args...)
     else
@@ -125,7 +137,9 @@ end
 Vectorized-`map!`, applying `f` to each element of `a` (or paired elements of `a`, `b`, ...)
 and storing the result in `destination`.
 """
-function vmap!(f::F, y::AbstractVector{T}, args::Vararg{<:Any,A}) where {F,T,A}
+function vmap!(
+    f::F, y::DenseArray{T}, args::Vararg{<:DenseArray{<:NativeTypes},A}
+) where {F,T<:NativeTypes,A}
     vmap_singlethread!(f, y, Val{false}(), args...)
 end
 
@@ -135,7 +149,9 @@ end
 
 Like `vmap!` (see `vmap!`), but uses `Threads.@threads` for parallel execution.
 """
-function vmapt!(f::F, y::AbstractVector{T}, args::Vararg{<:Any,A}) where {F,T,A}
+function vmapt!(
+    f::F, y::DenseArray{T}, args::Vararg{<:DenseArray{<:NativeTypes},A}
+) where {F,T<:NativeTypes,A}
     vmap_multithreaded!(f, y, Val{false}(), args...)
 end
 
@@ -195,7 +211,9 @@ BenchmarkTools.Trial:
   evals/sample:     1
 ```
 """
-function vmapnt!(f::F, y::AbstractVector{T}, args::Vararg{<:Any,A}) where {F,T,A}
+function vmapnt!(
+    f::F, y::DenseArray{T}, args::Vararg{<:DenseArray{<:NativeTypes},A}
+) where {F,T<:NativeTypes,A}
     vmap_singlethread!(f, y, Val{true}(), args...)
 end
 
@@ -204,9 +222,17 @@ end
 
 Like `vmapnt!` (see `vmapnt!`), but uses `Threads.@threads` for parallel execution.
 """
-function vmapntt!(f::F, y::AbstractVector{T}, args::Vararg{<:Any,A}) where {F,T,A}
+function vmapntt!(
+    f::F, y::DenseArray{T}, args::Vararg{<:DenseArray{<:NativeTypes},A}
+) where {F,T<:NativeTypes,A}
     vmap_multithreaded!(f, y, Val{true}(), args...)
 end
+
+# generic fallbacks
+vmap!(f, args...) = map!(f, args...)
+vmapt!(f, args...) = map!(f, args...)
+vmapnt!(f, args...) = map!(f, args...)
+vmapntt!(f, args...) = map!(f, args...)
 
 function vmap_call(f::F, vm!::V, args::Vararg{<:Any,N}) where {V,F,N}
     T = Base._return_type(f, Base.Broadcast.eltypes(args))
