@@ -229,10 +229,10 @@ function vmapntt!(
 end
 
 # generic fallbacks
-vmap!(f, args...) = map!(f, args...)
-vmapt!(f, args...) = map!(f, args...)
-vmapnt!(f, args...) = map!(f, args...)
-vmapntt!(f, args...) = map!(f, args...)
+@inline vmap!(f, args...) = map!(f, args...)
+@inline vmapt!(f, args...) = map!(f, args...)
+@inline vmapnt!(f, args...) = map!(f, args...)
+@inline vmapntt!(f, args...) = map!(f, args...)
 
 function vmap_call(f::F, vm!::V, args::Vararg{<:Any,N}) where {V,F,N}
     T = Base._return_type(f, Base.Broadcast.eltypes(args))
