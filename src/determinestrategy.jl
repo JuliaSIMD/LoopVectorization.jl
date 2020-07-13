@@ -72,7 +72,7 @@ function cost(ls::LoopSet, op::Operation, vectorized::Symbol, Wshift::Int, size_
                 r = (1 << Wshift)
                 srt *= r
                 sl *= r
-            elseif isload(op) & length(loopdependencies(op)) > 1# vmov(a/u)pd
+            elseif isload(op) & (length(loopdependencies(op)) > 1)# vmov(a/u)pd
                 # penalize vectorized loads with more than 1 loopdep
                 # heuristic; more than 1 loopdep means that many loads will not be aligned
                 # Roughly corresponds to double-counting loads crossing cacheline boundaries
