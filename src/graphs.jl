@@ -178,10 +178,10 @@ end
 use_expect() = true
 function looplengthexpr(loop, n)
     le = looplengthexpr(loop)
-    if false && use_expect() && isone(n) && !isstaticloop(loop)
-        le = expect(le)
-        push!(le.args, Expr(:call, Expr(:curly, :Val, length(loop))))
-    end
+    # if false && use_expect() && isone(n) && !isstaticloop(loop)
+    #     le = expect(le)
+    #     push!(le.args, Expr(:call, Expr(:curly, :Val, length(loop))))
+    # end
     le
 end
 
@@ -251,7 +251,6 @@ struct LoopSet
     loadelimination::Base.RefValue{Bool}
     lssm::Base.RefValue{LoopStartStopManager}
     vector_width::Base.RefValue{Int}
-    # align_loops::Base.RefValue{Int}
     isbroadcast::Base.RefValue{Bool}
     mod::Symbol
 end
@@ -341,7 +340,7 @@ function LoopSet(mod::Symbol)
         Matrix{Float64}(undef, 5, 2),
         Bool[], Bool[], Ref{UnrollSpecification}(),
         Ref(false), Ref{LoopStartStopManager}(),
-        Ref(0), #=Ref(0),=# Ref(false), mod
+        Ref(0), Ref(false), mod
     )
 end
 
@@ -393,16 +392,6 @@ function Operation(ls::LoopSet, variable, elementbytes, instr, optype, mpref::Ar
     Operation(length(operations(ls)), variable, elementbytes, instr, optype, mpref)
 end
 
-# load_operations(ls::LoopSet) = ls.loadops
-# compute_operations(ls::LoopSet) = ls.computeops
-# store_operations(ls::LoopSet) = ls.storeops
-# function operations(ls::LoopSet)
-    # Base.Iterators.flatten((
-        # load_operations(ls),
-        # compute_operations(ls),
-        # store_operations(ls)
-    # ))
-# end
 operations(ls::LoopSet) = ls.operations
 function pushop!(ls::LoopSet, op::Operation, var::Symbol = name(op))
     for opp ∈ operations(ls)
@@ -686,7 +675,7 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
                 lhstemp = gensym(:lhstuple)
                 vparents = Operation[maybe_const_compute!(ls, add_operation!(ls, lhstemp, RHS, elementbytes, position), elementbytes, position)]
                 for i ∈ eachindex(LHS.args)
-                    f = (:first,:second,:third,:fourth,:fifth,:sixth,:seventh,:eigth,:ninth)[i]
+                    f = (:first,:second,:third,:fourth,:fifth,:sixth,:seventh,:eighth,:ninth)[i]
                     lhsi = LHS.args[i]
                     if lhsi isa Symbol
                         add_compute!(ls, lhsi, f, vparents, elementbytes)

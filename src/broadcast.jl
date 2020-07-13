@@ -236,10 +236,6 @@ function add_broadcast!(
         parent = add_broadcast!(ls, gensym(:temp), argname, loopsyms, arg, elementbytes)::Operation
         push!(parents, parent)
         mergesetdiffv!(deps, loopdependencies(parent), reduceddependencies(parent))
-        # if !(isload(parent) || isconstant(parent))# && parent.instruction.instr ∉ (:reduced_add, :reduced_prod, :reduce_to_add, :reduce_to_prod)
-            # mergesetv!(reduceddeps, reduceddependencies(parent))
-        # end
-        # pushparent!(parents, deps, reduceddeps, parent)
     end
     op = Operation(
         length(operations(ls)), destname, elementbytes, instr, compute, deps, NOPARENTS, parents

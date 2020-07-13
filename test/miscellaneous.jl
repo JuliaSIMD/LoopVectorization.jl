@@ -721,7 +721,23 @@ function findreducedparentfornonvecstore!(U::AbstractMatrix{T}, E1::AbstractVect
     U,E1
 end
 
-
+ninereturns(x) = (0.25x, 0.5x, 0.75, 1.0x, 1.25x, 1.5x, 1.75x, 2.0x, 2.25x)
+function manyreturntest(x)
+    s = zero(eltype(x))
+    for j ∈ eachindex(x)
+        a, b, c, d, e, f, g, h, i = ninereturns(x[j])
+        s += a * i + b * h + c * g - d
+    end
+    s
+end
+function manyreturntestavx(x)
+    s = zero(eltype(x))
+    @avx for j ∈ eachindex(x)
+        a, b, c, d, e, f, g, h, i = ninereturns(x[j])
+        s += a * i + b * h + c * g - d
+    end
+    s
+end
 
 
     for T ∈ (Float32, Float64)
@@ -927,7 +943,9 @@ end
         R .+= randn.(T); Rc = copy(R);
         @test maxavx!(R, Q, true) == max.(vec(maximum(Q, dims=(2,3))), Rc)
 
-        U0 = randn(5,7); E0 = randn(7);
+        @test manyreturntest(R) ≈ manyreturntestavx(R)
+        
+        U0 = randn(T, 5, 7); E0 = randn(T, 7);
         U1, E1 = splitintonoloop_reference(copy(U0), copy(E0));
         U2, E2 = splitintonoloop(copy(U0), copy(E0));
         @test U1 ≈ U2
