@@ -25,11 +25,11 @@ if (Base.libllvm_version ≥ v"7" && VectorizationBase.AVX512F) || Base.libllvm_
         end
         x
     end
-    vfilter!(f, x::Vector{T}) where {T<:NativeTypes} = vfilter!(f, x, x)
-    vfilter(f, y::AbstractArray{T}) where {T<:NativeTypes} = vfilter!(f, Vector{T}(undef, length(y)), y)
+    vfilter!(f::F, x::Vector{T}) where {F, T<:NativeTypes} = vfilter!(f, x, x)
+    vfilter(f::F, y::AbstractArray{T}) where {F, T<:NativeTypes} = vfilter!(f, Vector{T}(undef, length(y)), y)
 end
-vfilter(f, y) = filter(f, y)
-vfilter!(f, y) = filter!(f, y)
+vfilter(f::F, y) where {F} = filter(f, y)
+vfilter!(f::F, y) where {F} = filter!(f, y)
 
 """
     vfilter(f, a::AbstractArray)

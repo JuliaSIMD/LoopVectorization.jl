@@ -203,7 +203,7 @@ function add_broadcast!(
 end
 function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
-    ::Type{SubArray{T,N,A,S,B}}, elementbytes::Int
+    @nospecialize(::Type{SubArray{T,N,A,S,B}}), elementbytes::Int
 ) where {T,N,N2,A<:AbstractArray{T,N2},B,N3,S <: Tuple{Int,Vararg{Any,N3}}}
     inds = Vector{Symbol}(undef, N+1)
     inds[1] = Symbol("##DISCONTIGUOUSSUBARRAY##")
