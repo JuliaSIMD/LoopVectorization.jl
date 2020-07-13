@@ -66,9 +66,9 @@ function add_broadcast!(
     K = gensym(:K)
     mA = gensym(:Aₘₖ)
     mB = gensym(:Bₖₙ)
-    pushpreamble!(ls, Expr(:(=), mA, Expr(:(.), bcname, QuoteNode(:a))))
-    pushpreamble!(ls, Expr(:(=), mB, Expr(:(.), bcname, QuoteNode(:b))))
-    pushpreamble!(ls, Expr(:(=), K, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), Expr(:ref, Expr(:call, :size, mB), 1))))
+    pushprepreamble!(ls, Expr(:(=), mA, Expr(:(.), bcname, QuoteNode(:a))))
+    pushprepreamble!(ls, Expr(:(=), mB, Expr(:(.), bcname, QuoteNode(:b))))
+    pushprepreamble!(ls, Expr(:(=), K, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), Expr(:ref, Expr(:call, :size, mB), 1))))
     k = gensym(:k)
     add_loop!(ls, Loop(k, 1, K), k)
     m = loopsyms[1];
@@ -139,7 +139,7 @@ end
 function extract_all_1_array!(ls::LoopSet, bcname::Symbol, N::Int, elementbytes::Int)
     refextract = gensym(bcname)
     ref = Expr(:ref, bcname); append!(ref.args, [1 for n ∈ 1:N])
-    pushpreamble!(ls, Expr(:(=), refextract, ref))
+    pushprepreamble!(ls, Expr(:(=), refextract, ref))
     return add_constant!(ls, refextract, elementbytes) # or replace elementbytes with sizeof(T) ? u
 end
 function add_broadcast!(
@@ -159,7 +159,7 @@ function add_broadcast_adjoint_array!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{A}, elementbytes::Int
 ) where {T,N,A<:AbstractArray{T,N}}
     parent = gensym(:parent)
-    pushpreamble!(ls, Expr(:(=), parent, Expr(:call, :parent, bcname)))
+    pushprepreamble!(ls, Expr(:(=), parent, Expr(:call, :parent, bcname)))
     # isone(length(loopsyms)) && return extract_all_1_array!(ls, bcname, N, elementbytes)
     ref = ArrayReference(parent, Symbol[loopsyms[N + 1 - n] for n ∈ 1:N])
     add_simple_load!( ls, destname, ref, elementbytes, true, true )::Operation
@@ -198,7 +198,7 @@ function add_broadcast!(
     ls::LoopSet, ::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{Base.RefValue{T}}, elementbytes::Int
 ) where {T}
     refextract = gensym(bcname)
-    pushpreamble!(ls, Expr(:(=), refextract, Expr(:ref, bcname)))
+    pushprepreamble!(ls, Expr(:(=), refextract, Expr(:ref, bcname)))
     add_constant!(ls, refextract, elementbytes) # or replace elementbytes with sizeof(T) ? u
 end
 function add_broadcast!(
@@ -210,7 +210,7 @@ function add_broadcast!(
     inds[2:end] .= @view(loopsyms[1:N])
     add_simple_load!(ls, destname, ArrayReference(bcname, inds), elementbytes, true, true)
 end
-BroadcastedArray{S<:Broadcast.AbstractArrayStyle,F,A} = Broadcasted{S,Nothing,F,A}
+const BroadcastedArray{S<:Broadcast.AbstractArrayStyle,F,A} = Broadcasted{S,Nothing,F,A}
 function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
     @nospecialize(B::Type{<:BroadcastedArray}),
@@ -219,7 +219,7 @@ function add_broadcast!(
     S,_,F,A = B.parameters
     instr = get(FUNCTIONSYMBOLS, F) do
         f = gensym(:func)
-        pushpreamble!(ls, Expr(:(=), f, Expr(:(.), bcname, QuoteNode(:f))))
+        pushprepreamble!(ls, Expr(:(=), f, Expr(:(.), bcname, QuoteNode(:f))))
         Instruction(bcname, f)
     end
     args = A.parameters
@@ -231,7 +231,7 @@ function add_broadcast!(
     # reduceddeps = Symbol[]
     for (i,arg) ∈ enumerate(args)
         argname = gensym(:arg)
-        pushpreamble!(ls, Expr(:(=), argname, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), Expr(:ref, bcargs, i))))
+        pushprepreamble!(ls, Expr(:(=), argname, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), Expr(:ref, bcargs, i))))
         # dynamic dispatch
         parent = add_broadcast!(ls, gensym(:temp), argname, loopsyms, arg, elementbytes)::Operation
         push!(parents, parent)
@@ -272,8 +272,10 @@ end
     # return ls
     q = lower(ls)
     push!(q.args, :dest)
-    pushfirst!(q.args, Expr(:meta,:inline))
     # @show q
+    # q
+    q = Expr(:block, ls.prepreamble, Expr(:if, check_args_call(ls), q, :(Base.Broadcast.materialize!(dest, bc))))
+    isone(N) && pushfirst!(q.args, Expr(:meta,:inline))
     q
      # ls
 end
@@ -285,7 +287,7 @@ end
     loopsyms = [gensym(:n) for n ∈ 1:N]
     ls = LoopSet(Mod)
     ls.isbroadcast[] = true
-    pushpreamble!(ls, Expr(:(=), :dest, Expr(:call, :parent, :dest′)))
+    pushprepreamble!(ls, Expr(:(=), :dest, Expr(:call, :parent, :dest′)))
     sizes = Expr(:tuple)
     for (n,itersym) ∈ enumerate(loopsyms)
         Nsym = gensym(:N)
@@ -299,7 +301,8 @@ end
     resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
     q = lower(ls)
     push!(q.args, :dest′)
-    pushfirst!(q.args, Expr(:meta,:inline))
+    q = Expr(:block, ls.prepreamble, Expr(:if, check_args_call(ls), q, :(Base.Broadcast.materialize!(dest′, bc))))
+    isone(N) && pushfirst!(q.args, Expr(:meta,:inline))
     q
     # ls
 end
@@ -329,4 +332,4 @@ end
 end
 
 vmaterialize!(dest, bc, ::Val{mod}) where {mod} = Base.Broadcast.materialize!(dest, bc)
-    
+

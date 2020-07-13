@@ -1,5 +1,5 @@
 
-function load_constrained(op, u₁loop, u₂loop, forprefetch = false)
+function load_constrained(op, u₁loop, u₂loop, innermost_loop, forprefetch = false)
     loopdeps = loopdependencies(op)
     dependsonu₁ = u₁loop ∈ loopdeps
     if u₂loop === Symbol("##undefined##")
@@ -17,7 +17,10 @@ function load_constrained(op, u₁loop, u₂loop, forprefetch = false)
     unrolleddeps = Symbol[]
     dependsonu₁ && push!(unrolleddeps, u₁loop)
     dependsonu₂ && push!(unrolleddeps, u₂loop)
-    any(opp -> isload(opp) && all(in(loopdependencies(opp)), unrolleddeps), parents(op))
+    forprefetch && push!(unrolleddeps, innermost_loop)
+    any(parents(op)) do opp
+        isload(opp) && all(in(loopdependencies(opp)), unrolleddeps)
+    end
 end
 function check_if_remfirst(ls, ua)
     usorig = ls.unrollspecification[]
@@ -34,7 +37,7 @@ function check_if_remfirst(ls, ua)
 end
 function sub_fmas(ls::LoopSet, op::Operation, ua::UnrollArgs)
     @unpack u₁, u₁loopsym, u₂loopsym, u₂max = ua
-    !(load_constrained(op, u₁loopsym, u₂loopsym) || check_if_remfirst(ls, ua))
+    !(load_constrained(op, u₁loopsym, u₂loopsym, first(names(ls))) || check_if_remfirst(ls, ua))
 end
 
 struct FalseCollection end
@@ -212,7 +215,8 @@ function lower_compute!(
     for u ∈ 0:Uiter
         instrcall = callexpr(instr)
         varsym = if tiledouterreduction > 0 # then suffix !== nothing
-            modsuffix = ((u + suffix*(Uiter + 1)) & 3)
+            modsuffix = ((u + suffix*(Uiter + 1)) & 7)
+            # modsuffix = suffix::Int#((u + suffix*(Uiter + 1)) & 7)
             # modsuffix = u
             # modsuffix = suffix # (suffix & 3)
             Symbol(mangledvar(op), modsuffix)

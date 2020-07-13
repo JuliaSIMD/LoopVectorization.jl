@@ -165,21 +165,6 @@ T = Float32
             a[i] > b[i] || (c[i] = a[i] ^ b[i])
         end
     end
-    function maybewriteor!(c, a, b)
-        @inbounds for i ∈ eachindex(c,a,b)
-            a[i] > b[i] || (c[i] = a[i] ^ b[i])
-        end
-    end
-    function maybewriteor_avx!(c, a, b)
-        @_avx for i ∈ eachindex(c,a,b)
-            a[i] > b[i] || (c[i] = a[i] ^ b[i])
-        end
-    end
-    function maybewriteoravx!(c, a, b)
-        @avx for i ∈ eachindex(c,a,b)
-            a[i] > b[i] || (c[i] = a[i] ^ b[i])
-        end
-    end
     function maybewriteor!(c::AbstractVector{<:Integer}, a, b)
         @inbounds for i ∈ eachindex(c,a,b)
             a[i] > b[i] || (c[i] = a[i] & b[i])

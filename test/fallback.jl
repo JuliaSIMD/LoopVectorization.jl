@@ -36,5 +36,9 @@
     @test msdavx(FallbackArrayWrapper(x)) == 1e18
     @test msd(x) == msdavx(FallbackArrayWrapper(x))
     @test msdavx(x) != msdavx(FallbackArrayWrapper(x))
+
+    x = rand(1000); # should be long enough to make zero differences incredibly unlikely
+    @test exp.(x) != (@avx exp.(x))
+    @test exp.(x) == (@avx exp.(FallbackArrayWrapper(x)))
 end
 

@@ -72,7 +72,15 @@ function cost(ls::LoopSet, op::Operation, vectorized::Symbol, Wshift::Int, size_
                 r = (1 << Wshift)
                 srt *= r
                 sl *= r
-            # else # vmov(a/u)pd
+            elseif isload(op) & length(loopdependencies(op)) > 1# vmov(a/u)pd
+                # penalize vectorized loads with more than 1 loopdep
+                # heuristic; more than 1 loopdep means that many loads will not be aligned
+                # Roughly corresponds to double-counting loads crossing cacheline boundaries
+                # TODO: apparently the new ARM A64FX CPU (with 512 bit vectors) is NOT penalized for unaligned loads
+                #       would be nice to add a check for this CPU, to see if such a penalty is still appropriate.
+                #       Also, once more SVE (scalable vector extension) CPUs are released, would be nice to know if
+                #       this feature is common to all of them.
+                srt += 0.5VectorizationBase.REGISTER_SIZE / VectorizationBase.CACHELINE_SIZE
             end
         elseif instr === :setindex! # broadcast or reductionstore; if store we want to penalize reduction
             srt *= 3
@@ -857,12 +865,14 @@ function evaluate_cost_tile(
             elseif load_elimination_cost_factor!(cost_vec, reg_pressure, choose_to_inline, ls, op, iters[id], unrollsyms, Wshift, size_T)
                 continue
             end
-        elseif isconstant(op)
+        #elseif isconstant(op)
         end
         rt, lat, rp = cost(ls, op, vectorized, Wshift, size_T)
-        if isload(op) && !iszero(prefetchisagoodidea(ls, op, UnrollArgs(4, unrollsyms, 4, 0)))
-            rt += 0.5VectorizationBase.REGISTER_SIZE / VectorizationBase.CACHELINE_SIZE
-            prefetch_good_idea = true
+        if isload(op)
+            if !iszero(prefetchisagoodidea(ls, op, UnrollArgs(4, unrollsyms, 4, 0)))
+                # rt += 0.5VectorizationBase.REGISTER_SIZE / VectorizationBase.CACHELINE_SIZE
+                prefetch_good_idea = true
+            end
         end
         # rp = (opisininnerloop && !(loadintostore(ls, op))) ? rp : zero(rp) # we only care about register pressure within the inner most loop
         rp = opisininnerloop ? rp : zero(rp) # we only care about register pressure within the inner most loop
@@ -871,9 +881,11 @@ function evaluate_cost_tile(
         if isstore(op) & (!u₁reducesrt) & (!u₂reducesrt)
             irreducible_storecosts += rt
         end
+        # @show u₁reducesrt, u₂reducesrt, op, rt, rto, rp
         update_costs!(cost_vec, rt, u₁reducesrt, u₂reducesrt)
         update_costs!(reg_pressure, rp, u₁reducesrp, u₂reducesrp)
     end
+    # reg_pressure[1] = max(reg_pressure[1], length(ls.outer_reductions))
     # @inbounds ((cost_vec[4] > 0) || ((cost_vec[2] > 0) & (cost_vec[3] > 0))) || return 0,0,Inf,false
     costpenalty = (sum(reg_pressure) > REGISTER_COUNT) ? 2 : 1
     u₁v = vectorized === u₁loopsym; u₂v = vectorized === u₂loopsym
@@ -886,10 +898,12 @@ function evaluate_cost_tile(
     end
     outer_reduct_penalty = length(ls.outer_reductions) * (u₁ + isodd(u₁))
     favor_bigger_u₂ = u₁ - u₂
-    favor_smaller_vectorized = u₁v ? ( u₁ - u₂ )  : (u₂v ?  ( u₂ - u₁ ) : 0 )
+    # favor_smaller_vectorized = (u₁v ? u₁ : -u₁) + (u₂v ?  u₂ : -u₂)
+    favor_smaller_vectorized = (u₁v ⊻ u₂v) ? (u₁v ? u₁ - u₂ : u₂ - u₁) : 0
     favor_u₁_vectorized = -0.2u₁v
     favoring_heuristics = favor_bigger_u₂ + 0.5favor_smaller_vectorized + favor_u₁_vectorized
-    u₁, u₂, costpenalty * ucost + stride_penalty(ls, order) + outer_reduct_penalty + favoring_heuristics, choose_to_inline[]
+    costpenalty = costpenalty * ucost + stride_penalty(ls, order) + outer_reduct_penalty + favoring_heuristics
+    u₁, u₂, costpenalty, choose_to_inline[]
 end
 
 

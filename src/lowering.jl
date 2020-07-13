@@ -643,7 +643,7 @@ function calc_Ureduct(ls::LoopSet, us::UnrollSpecification)
     elseif u₂ == -1
         min(u₁, 4)
     else
-        4#u₁
+        8#u₂#u₁
     # elseif num_loops(ls) == u₁loopnum
     #     min(u₁, 4)
     # else
