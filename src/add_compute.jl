@@ -79,6 +79,13 @@ function search_tree(opv::Vector{Operation}, var::Symbol) # relies on cycles bei
     end
     false
 end
+function search_tree(opv::Vector{Operation}, var::Operation) # relies on cycles being forbidden
+    for opp ∈ opv
+        opp === var && return true
+        search_tree(parents(opp), var) && return true
+    end
+    false
+end
 function update_reduction_status!(parentvec::Vector{Operation}, deps::Vector{Symbol}, parent::Symbol)
     for opp ∈ parentvec
         if name(opp) === parent

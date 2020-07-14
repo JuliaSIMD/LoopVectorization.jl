@@ -181,6 +181,36 @@ T = Float32
         end
     end
 
+    function notacondload!(C, A, b)
+        @inbounds for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
+            C[m,n] = A[m,n] * (b[n] > 0 ? b[n] : -b[n])
+        end
+    end
+    function notacondloadavx!(C, A, b)
+        @avx for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
+            C[m,n] = A[m,n] * (b[n] > 0 ? b[n] : -b[n])
+        end
+    end
+    function condloadscalar!(C, A, c, b)
+        @inbounds for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
+            C[m,n] = A[m,n] * (c[n] > 0 ? b[n] : 1) + c[n]
+        end
+    end
+    function condloadscalaravx!(C, A, c, b)
+        @avx for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
+            C[m,n] = A[m,n] * (c[n] > 0 ? b[n] : 1) + c[n]
+        end
+    end
+    function maskedloadscalar!(C, A, b)
+        @inbounds for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
+            C[m,n] = A[m,n] * (A[m,n] > 0 ? b[n] : 1)
+        end
+    end
+    function maskedloadscalaravx!(C, A, b)
+        @avx for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
+            C[m,n] = A[m,n] * (A[m,n] > 0 ? b[n] : 1)
+        end
+    end
     function AtmulBpos!(C, A, B)
         @inbounds for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
             Cₘₙ = zero(eltype(C))
@@ -368,10 +398,14 @@ T = Float32
             A = rand(T(-100):T(100), K, M);
             B = rand(T(-100):T(100), K, N);
             C1 = rand(T(-100):T(100), M, N);
+            b = rand(T(-100):T(100), N);
+            d = rand(T(-100):T(100), N);
         else
             A = randn(T, K, M);
             B = randn(T, K, N);
             C1 = randn(T, M, N);
+            b = randn(T, N);
+            d = randn(T, N);
         end;
         C2 = copy(C1); C3 = copy(C1);
         AtmulBpos!(C1, A, B)
@@ -379,6 +413,17 @@ T = Float32
         AtmulBpos_avx!(C3, A, B)
         @test C1 ≈ C2
         @test C1 ≈ C3
+        C1 = similar(B);
+        C2 = similar(B);
+        notacondload!(C1, B, b)
+        notacondloadavx!(C2, B, b)
+        @test C1 ≈ C2
+        maskedloadscalar!(C1, B, b)
+        maskedloadscalaravx!(C2, B, b)
+        @test C1 ≈ C2
+        condloadscalar!(C1, B, b, d)
+        condloadscalaravx!(C2, B, b, d)
+        @test C1 ≈ C2
     end
     
     

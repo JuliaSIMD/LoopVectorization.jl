@@ -8,7 +8,7 @@ function add_if!(ls::LoopSet, LHS::Symbol, RHS::Expr, elementbytes::Int, positio
     # for now, just simple 1-liners
     @assert length(RHS.args) == 3 "if statements without an else cannot be assigned to a variable."
     condition = first(RHS.args)
-    condop = if mpref === nothing
+    condop = if isnothing(mpref)
         add_operation!(ls, gensym(:mask), condition, elementbytes, position)
     else
         add_operation!(ls, gensym(:mask), condition, mpref, elementbytes, position)
@@ -16,7 +16,7 @@ function add_if!(ls::LoopSet, LHS::Symbol, RHS::Expr, elementbytes::Int, positio
     iftrue = RHS.args[2]
     if iftrue isa Expr
         trueop = add_operation!(ls, Symbol(:iftrue), iftrue, elementbytes, position)
-        if iftrue.head === :ref && all(ld -> ld ∈ loopdependencies(trueop), loopdependencies(condop))
+        if iftrue.head === :ref && all(ld -> ld ∈ loopdependencies(trueop), loopdependencies(condop)) && !search_tree(parents(condop), trueop)
             trueop.instruction = Instruction(:conditionalload)
             push!(parents(trueop), condop)
         end
@@ -26,7 +26,7 @@ function add_if!(ls::LoopSet, LHS::Symbol, RHS::Expr, elementbytes::Int, positio
     iffalse = RHS.args[3]
     if iffalse isa Expr
         falseop = add_operation!(ls, Symbol(:iffalse), iffalse, elementbytes, position)
-        if iffalse.head === :ref && all(ld -> ld ∈ loopdependencies(falseop), loopdependencies(condop))
+        if iffalse.head === :ref && all(ld -> ld ∈ loopdependencies(falseop), loopdependencies(condop)) && !search_tree(parents(condop), falseop)
             falseop.instruction = Instruction(:conditionalload)
             push!(parents(falseop), negateop!(ls, condop, elementbytes))
         end
