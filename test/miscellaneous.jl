@@ -144,12 +144,13 @@ using Test
     lsvar = LoopVectorization.LoopSet(varq);
     # LoopVectorization.choose_order(lsvar)
     # @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, Unum, Tnum)
-    @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, Symbol("##undefined##"), :j, 4, -1)
-    # if LoopVectorization.REGISTER_COUNT == 32
+    if LoopVectorization.REGISTER_COUNT == 32
+        @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, Symbol("##undefined##"), :j, 4, -1)
     #     @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, 2, 10)
-    # elseif LoopVectorization.REGISTER_COUNT == 16
+    else#if LoopVectorization.REGISTER_COUNT == 16
+        @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, Symbol("##undefined##"), :j, 8, -1)
     #     @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, 2, 6)
-    # end
+    end
     
     function myvar!(s², A, x̄)
         @. s² = 0
@@ -721,10 +722,10 @@ function findreducedparentfornonvecstore!(U::AbstractMatrix{T}, E1::AbstractVect
     U,E1
 end
 
-ninereturns(x) = (0.25x, 0.5x, 0.75, 1.0x, 1.25x, 1.5x, 1.75x, 2.0x, 2.25x)
+@inline ninereturns(x) = (0.25x, 0.5x, 0.75, 1.0x, 1.25x, 1.5x, 1.75x, 2.0x, 2.25x)
 function manyreturntest(x)
     s = zero(eltype(x))
-    for j ∈ eachindex(x)
+    @fastmath for j ∈ eachindex(x)
         a, b, c, d, e, f, g, h, i = ninereturns(x[j])
         s += a * i + b * h + c * g - d
     end
@@ -943,7 +944,7 @@ end
         R .+= randn.(T); Rc = copy(R);
         @test maxavx!(R, Q, true) == max.(vec(maximum(Q, dims=(2,3))), Rc)
 
-        @test manyreturntest(R) ≈ manyreturntestavx(R)
+        @test manyreturntest(Q) ≈ manyreturntestavx(Q)
         
         U0 = randn(T, 5, 7); E0 = randn(T, 7);
         U1, E1 = splitintonoloop_reference(copy(U0), copy(E0));
