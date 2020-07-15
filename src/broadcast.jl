@@ -247,7 +247,7 @@ end
 # function vmaterialize!(
 @generated function vmaterialize!(
     dest::StridedArray{T,N}, bc::BC, ::Val{Mod}
-) where {T <: NativeTypes, N, BC <: Broadcasted, Mod}
+) where {T <: NativeTypes, N, BC <: Union{Broadcasted,Product}, Mod}
     # we have an N dimensional loop.
     # need to construct the LoopSet
     # @show typeof(dest)
@@ -277,7 +277,7 @@ end
 end
 @generated function vmaterialize!(
     dest′::Union{Adjoint{T,A},Transpose{T,A}}, bc::BC, ::Val{Mod}
-) where {T <: NativeTypes, N, A <: StridedArray{T,N}, BC <: Broadcasted, Mod}
+) where {T <: NativeTypes, N, A <: StridedArray{T,N}, BC <: Union{Broadcasted,Product}, Mod}
     # we have an N dimensional loop.
     # need to construct the LoopSet
     loopsyms = [gensym(:n) for n ∈ 1:N]
