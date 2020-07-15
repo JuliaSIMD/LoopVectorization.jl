@@ -5,7 +5,7 @@ using LinearAlgebra
 # const START_TIME = time()
 # exceeds_time_limit() = (time() - START_TIME) > 35 * 60
 
-function clenshaw(x,coeff)
+function clenshaw(x, coeff)
     len_c = length(coeff)
     tmp = zero(x)
     ret = zero(x)

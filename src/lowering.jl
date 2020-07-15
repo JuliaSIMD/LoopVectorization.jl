@@ -340,19 +340,19 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     usorig = ls.unrollspecification[]
     # tc = (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !loopisstatic && !inclmask && !ls.loadelimination[] ? expect(tc) : tc
     body = lower_block(ls, us, n, inclmask, UF)
-    q = if loopisstatic
+    if loopisstatic
         iters = length(loop) ÷ UFW
         if iters*UF ≤ 16 # Let's set a limit on total unrolling
             q = Expr(:block)
             foreach(_ -> push!(q.args, body), 1:iters)
-            q
         else
-            Expr(:while, tc, body)
+            q = Expr(:while, tc, body)
         end
+        remblock = Expr(:block)
     else
-        Expr(:while, tc, body)
+        remblock = init_remblock(loop, ls.lssm[], n)#loopsym)
+        q = Expr(:while, tc, body)
     end
-    remblock = init_remblock(loop, ls.lssm[], n)#loopsym)
     q = if unsigned(Ureduct) < unsigned(UF) # unsigned(-1) == typemax(UInt); is logic relying on twos-complement bad?
         UF_cleanup = UF - Ureduct
         us_cleanup = nisunrolled ? UnrollSpecification(us, UF_cleanup, u₂) : UnrollSpecification(us, u₁, UF_cleanup)
