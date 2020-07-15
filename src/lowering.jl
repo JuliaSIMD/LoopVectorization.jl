@@ -277,24 +277,25 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
     tc = terminatecondition(ls, us, n, inclmask, 1)
     body = lower_block(ls, us, n, inclmask, 1)
     # align_loop = isone(n) & (ls.align_loops[] > 0)
-    isstatic = isstaticloop(loop)# & (!align_loop)
-    if !isstatic && (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !inclmask
+    loopisstatic = isstaticloop(loop)
+    if !loopisstatic && (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !inclmask
         tc = expect(tc)
     end
+    W = nisvectorized ? ls.vector_width[] : 1
+    loopisstatic &= (!iszero(W))
     # q = if align_loop
     #     Expr(:block, align_inner_loop_expr(ls, us, loop), Expr(:while, tc, body))
     # elseif nisvectorized
-    q = if nisvectorized
+    if loopisstatic && length(loop) ≤ 8W
+        q = Expr(:block)
+        foreach(_ -> push!(q.args, body), 1:(length(loop) ÷ W))
+    elseif nisvectorized
             # Expr(:block, loopiteratesatleastonce(loop, true), Expr(:while, expect(tc), body))
-        Expr(:block, Expr(:while, tc, body))
-    elseif isstatic && length(loop) ≤ 8
-        bodyq = Expr(:block)
-        foreach(_ -> push!(bodyq.args, body), 1:length(loop))
-        bodyq
+        q = Expr(:block, Expr(:while, tc, body))
     else
         termcond = gensym(:maybeterm)
         push!(body.args, Expr(:(=), termcond, tc))
-        Expr(:block, Expr(:(=), termcond, true), Expr(:while, termcond, body))
+        q = Expr(:block, Expr(:(=), termcond, true), Expr(:while, termcond, body))
         # Expr(:block, Expr(:while, expect(tc), body))
         # Expr(:block, assume(tc), Expr(:while, tc, body))
         # push!(body.args, Expr(:&&, expect(Expr(:call, :!, tc)), Expr(:break)))
@@ -302,16 +303,20 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
         # push!(body.args, Expr(:||, expect(tc), Expr(:break)))
         # Expr(:block, Expr(:while, true, body))
     end
-    if nisvectorized
+    if nisvectorized && !(loopisstatic && iszero(length(loop) & (W - 1)))
         # tc = terminatecondition(loop, us, n, loopsym, true, 1)
-        tc = terminatecondition(ls, us, n, true, 1)
         body = lower_block(ls, us, n, true, 1)
         if isone(num_loops(ls))
             pushfirst!(body.args, definemask(loop))
         # elseif align_loop
         #     pushfirst!(body.args, definemask_for_alignment_cleanup(loop))
         end
-        push!(q.args, Expr(:if, tc, body))
+        if loopisstatic
+            push!(q.args, body)
+        else
+            tc = terminatecondition(ls, us, n, true, 1)
+            push!(q.args, Expr(:if, tc, body))
+        end
     end
     Expr(:block, Expr(:let, sl, q))
 end
@@ -353,6 +358,7 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
         remblock = init_remblock(loop, ls.lssm[], n)#loopsym)
         q = Expr(:while, tc, body)
     end
+    # @show loopsym, loopisstatic, UFW
     q = if unsigned(Ureduct) < unsigned(UF) # unsigned(-1) == typemax(UInt); is logic relying on twos-complement bad?
         UF_cleanup = UF - Ureduct
         us_cleanup = nisunrolled ? UnrollSpecification(us, UF_cleanup, u₂) : UnrollSpecification(us, u₁, UF_cleanup)
