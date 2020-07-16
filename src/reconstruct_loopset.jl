@@ -138,8 +138,6 @@ function add_mref!(
     ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name
 ) where {S1, S2, T, P, S <: VectorizationBase.PermutedDimsStridedPointer{S1,S2,T,P}}
     gensymname = gensym(name)
-    add_mref!(ls, ar, i, P, gensymname)
-    pushpreamble!(ls, Expr(:(=), name, Expr(:(.), gensymname, QuoteNode(:ptr))))
     li = ar.loopedindex; inds = getindices(ar)
     lib = similar(li); indsb = similar(inds)
     for i ∈ eachindex(li, inds)
@@ -147,9 +145,11 @@ function add_mref!(
         indsb[i] = inds[i]
     end
     for i ∈ eachindex(li, inds)
-        li[i] = lib[S1[i]]
-        inds[i] = indsb[S1[i]]
+        li[i] = lib[S2[i]]
+        inds[i] = indsb[S2[i]]
     end
+    add_mref!(ls, ar, i, P, gensymname)
+    pushpreamble!(ls, Expr(:(=), name, Expr(:(.), gensymname, QuoteNode(:ptr))))
 end
 function add_mref!(
     ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{OffsetStridedPointer{T,N,P}}, name

@@ -24,6 +24,7 @@ using LoopVectorization, Test#, OffsetArrays
 
     A = rand(12,13,14,15);
     pA = PermutedDimsArray(A, (3,1,4,2));
+    @test addone!(similar(pA), pA) == pA .+ 1
     ppA = PermutedDimsArray(pA, (4,2,3,1));
     @test LoopVectorization.check_args(ppA)
     @test addone!(similar(ppA), ppA) == ppA .+ 1
