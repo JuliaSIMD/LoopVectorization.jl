@@ -1,18 +1,11 @@
 
+
 function load_constrained(op, u₁loop, u₂loop, innermost_loop, forprefetch = false)
     loopdeps = loopdependencies(op)
     dependsonu₁ = u₁loop ∈ loopdeps
-    if u₂loop === Symbol("##undefined##")
-        if forprefetch
-            dependsonu₁ || return false
-        end
-        # unrolleddeps = [ u₁loop ]
-    else        
-        dependsonu₂ = u₂loop ∈ loopdeps
-        if forprefetch
-            (dependsonu₁ & dependsonu₂) || return false
-        end
-        # unrolleddeps = [ u₁loop, u₂loop ]
+    dependsonu₂ = u₂loop ∈ loopdeps
+    if forprefetch
+        (dependsonu₁ & dependsonu₂) || return false
     end
     unrolleddeps = Symbol[]
     dependsonu₁ && push!(unrolleddeps, u₁loop)

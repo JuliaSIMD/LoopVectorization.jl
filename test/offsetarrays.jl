@@ -110,18 +110,19 @@ using LoopVectorization.VectorizationBase: StaticUnitRange
         # Manually unpack the OffsetArray
         @avx for j in rng2, i in rng1
             tmp_0 = zero(eltype(out))
-            Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> tmp_{ik+(jk-1)*3} = A[(ik-2)+i,(jk-2)+j] * kern_ik_jk + tmp_{ik+(jk-1)*3-1}
+            Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> tmp_{ik+(jk-1)*3} = A[(ik-2)+i,(jk-2) + j*1] * kern_ik_jk + tmp_{ik+(jk-1)*3-1}
             out[i,j] = tmp_9
         end
         out
     end
     function avx2dunrolled2x2!(out::AbstractMatrix, A::AbstractMatrix, kern::SizedOffsetMatrix{T,-1,1,-1,1}) where {T}
         rng1,  rng2  = axes(out)
-        Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> kern_ik_jk = kern[ik-2,jk-2]
         # Manually unpack the OffsetArray
         @avx unroll=(2,2) for j in rng2, i in rng1
+            Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> kern_ik_jk = kern[ik - 2, jk + (-2)]
             tmp_0 = zero(eltype(out))
-            Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> tmp_{ik+(jk-1)*3} = A[i+(ik-2),j+(jk-2)] * kern_ik_jk + tmp_{ik+(jk-1)*3-1}
+            j1 = j * 1
+            Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> tmp_{ik+(jk-1)*3} = A[i + (ik-2), (jk-2) + j1] * kern_ik_jk + tmp_{ik+(jk-1)*3-1}
             out[i,j] = tmp_9
         end
         out
@@ -132,7 +133,7 @@ using LoopVectorization.VectorizationBase: StaticUnitRange
         # Manually unpack the OffsetArray
         @avx unroll=(3,3) for j in rng2, i in rng1
             tmp_0 = zero(eltype(out))
-            Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> tmp_{ik+(jk-1)*3} = A[i+(ik-2),j+(jk-2)] * kern_ik_jk + tmp_{ik+(jk-1)*3-1}
+            Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> tmp_{ik+(jk-1)*3} = A[(ik-2) + i, j*1 + (jk-2)] * kern_ik_jk + tmp_{ik+(jk-1)*3-1}
             out[i,j] = tmp_9
         end
         out

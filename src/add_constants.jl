@@ -1,7 +1,8 @@
 function add_constant!(ls::LoopSet, var::Symbol, elementbytes::Int)
     op = Operation(length(operations(ls)), var, elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS)
-    pushpreamble!(ls, op, var)
-    pushop!(ls, op, var)
+    rop = pushop!(ls, op, var)
+    rop === op && pushpreamble!(ls, op, var)
+    rop
 end
 # function add_constant!(ls::LoopSet, var, elementbytes::Int = 8)
 #     sym = gensym(:loopconstant)
@@ -12,6 +13,8 @@ function add_constant!(ls::LoopSet, var::Number, elementbytes::Int = 8)
     op = Operation(length(operations(ls)), gensym(:loopconstnumber), elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS)
     ops = operations(ls)
     typ = var isa Integer ? HardInt : HardFloat
+    rop = pushop!(ls, op)
+    rop !== op && return rop
     if iszero(var)
         for (id,typ_) ∈ ls.preamble_zeros
             (instruction(ops[id]) === LOOPCONSTANT && typ == typ_) && return ops[id]
@@ -28,7 +31,7 @@ function add_constant!(ls::LoopSet, var::Number, elementbytes::Int = 8)
         end
         push!(ls.preamble_symfloat, (identifier(op), var))
     end
-    pushop!(ls, op)
+    rop
 end
 function add_constant!(ls::LoopSet, mpref::ArrayReferenceMetaPosition, elementbytes::Int)
     op = Operation(length(operations(ls)), varname(mpref), elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS, mpref.mref)

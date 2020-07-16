@@ -23,7 +23,7 @@ end
 function add_load!(
     ls::LoopSet, mpref::ArrayReferenceMetaPosition, elementbytes::Int
 )
-    length(mpref.loopdependencies) == 0 && return add_constant!(ls, mpref, elementbytes)
+    iszero(length(mpref.loopdependencies)) && return add_constant!(ls, mpref, elementbytes)
     op = Operation( ls, varname(mpref), elementbytes, :getindex, memload, mpref )
     add_load!(ls, op, true, false)
 end

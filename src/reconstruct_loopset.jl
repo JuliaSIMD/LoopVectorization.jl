@@ -306,7 +306,7 @@ function add_op!(
     # If it's a CartesianIndex add or subtract, we may have to add multiple operations
     expanded = expandedv[i]# isexpanded(ls, ops, nopsv, i)
     opoffsets = ls.operation_offsets
-    offsets = ls.loopsymbol_offsets
+    # offsets = ls.loopsymbol_offsets
     optyp = optype(os)
     if !expanded
         op = Operation(

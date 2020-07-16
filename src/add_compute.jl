@@ -51,7 +51,14 @@ function add_parent!(
     vparents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet, var, elementbytes::Int, position::Int
 )
     parent = if var isa Symbol
+        # if var === :kern_1_1
+        #     @show operations(ls) ls.preamble_symsym
+        # end
         opp = getop(ls, var, elementbytes)
+        # if var === :kern_1_1
+        #     @show operations(ls) ls.preamble_symsym
+        # end 
+        # @show var opp first(operations(ls)) opp === first(operations(ls))
         if iscompute(opp) && instruction(opp).instr === :identity && length(loopdependencies(opp)) < position && isone(length(parents(opp))) && name(opp) === name(first(parents(opp)))
             first(parents(opp))
         else
@@ -220,6 +227,7 @@ function add_compute!(
     deps = Symbol[]
     reduceddeps = Symbol[]
     reduction_ind = 0
+    # @show ex first(operations(ls)) === getop(ls, :kern_1_1, elementbytes) first(operations(ls)) getop(ls, :kern_1_1, elementbytes)
     for (ind,arg) ∈ enumerate(args)
         if var === arg
             reduction_ind = ind

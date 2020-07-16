@@ -522,9 +522,9 @@ function add_loop!(ls::LoopSet, loop::Loop, itersym::Symbol = loop.itersymbol)
     nothing
 end
 
-function instruction(x)
-    x isa Symbol ? x : last(x.args).value
-end
+# function instruction(x)
+#     x isa Symbol ? x : last(x.args).value
+# end
 # instruction(ls::LoopSet, f::Symbol) = instruction!(ls, f)
 function instruction!(ls::LoopSet, x::Expr)
     x isa Symbol && return x

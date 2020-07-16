@@ -47,7 +47,22 @@
     if LoopVectorization.REGISTER_COUNT != 8
         @test LoopVectorization.choose_order(lsAmulB3) == (Symbol[:n,:m,:k], :m, :n, :m, Unum, Tnum)
     end
-    
+    if LoopVectorization.REGISTER_COUNT != 8
+        for (fA,fB,v,Un,Tn) ∈ [(identity,identity,:m,Unum,Tnum),(adjoint,identity,:k,Unumt,Tnumt),(identity,adjoint,:m,Unum,Tnum),(adjoint,adjoint,:n,Unum,Tnum)]
+            A = fA(rand(2,2))
+            B = fB(rand(2,2))
+            C = similar(A)
+            ls = LoopVectorization.@avx_debug for m ∈ axes(A,1), n ∈ axes(B,2)
+                ΔCₘₙ = zero(eltype(C))
+                for k ∈ axes(A,2)
+                    ΔCₘₙ += A[m,k] * B[k,n]
+                end
+                C[m,n] += ΔCₘₙ
+            end
+            (m, n) = v === :n ? (:n, :m) : (:m, :n)
+            @test LoopVectorization.choose_order(ls) == (Symbol[:n,:m,:k], m, n, v, Un, Tn)
+        end
+    end
     function AmulB!(C, A, B)
         C .= 0
         for k ∈ axes(A,2), j ∈ axes(B,2)
