@@ -277,12 +277,11 @@ vptr(x::Symbol) = Symbol("##vptr##_", x)
 vptr(x::ArrayReference) = vptr(x.array)
 vptr(x::ArrayReferenceMeta) = x.ptr
 vptr(x::Operation) = x.ref.ptr
-vptrbase(x) = Symbol(vptr(x), "##BASE##")
+# vptrbase(x) = Symbol(vptr(x), "##BASE##")
 name(x::ArrayReference) = x.array
 name(x::ArrayReferenceMeta) = x.ref.array
 name(op::Operation) = op.variable
 instruction(op::Operation) = op.instruction
-isreductionzero(op::Operation, instr::Symbol) = op.instruction.mod === REDUCTION_ZERO[instr]
 isreductcombineinstr(op::Operation) = iscompute(op) && isreductcombineinstr(instruction(op))
 """
     mvar = mangledvar(op)
@@ -327,9 +326,9 @@ mutable struct ArrayReferenceMetaPosition
     reduceddeps::Vector{Symbol}
     varname::Symbol
 end
-function ArrayReferenceMetaPosition(parents::Vector{Operation}, ldref::Vector{Symbol}, reduceddeps::Vector{Symbol}, varname::Symbol)
-    ArrayReferenceMetaPosition( NOTAREFERENCE, parents, ldref, reduceddeps, varname )
-end
+# function ArrayReferenceMetaPosition(parents::Vector{Operation}, ldref::Vector{Symbol}, reduceddeps::Vector{Symbol}, varname::Symbol)
+#     ArrayReferenceMetaPosition( NOTAREFERENCE, parents, ldref, reduceddeps, varname )
+# end
 function Operation(id::Int, var::Symbol, elementbytes::Int, instr, optype::OperationType, mpref::ArrayReferenceMetaPosition)
     Operation( id, var, elementbytes, instr, optype, mpref.loopdependencies, mpref.reduceddeps, mpref.parents, mpref.mref )
 end

@@ -25,7 +25,8 @@ using Test
     function mydot_avx(a, b)
         s = zero(eltype(a))
         @_avx for i ∈ eachindex(a,b)
-            s += a[i]*b[i]
+            aᵢ = getindex(a, i)
+            s += aᵢ*b[i]
         end
         s
     end

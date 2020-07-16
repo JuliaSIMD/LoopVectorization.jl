@@ -22,8 +22,8 @@ function UnrollArgs(ua::UnrollArgs, u::Int)
 end
 # UnrollSymbols(ua::UnrollArgs) = UnrollSymbols(ua.u₁loopsym, ua.u₂loopsym, ua.vectorized)
 
-isfirst(ua::UnrollArgs{Nothing}) = iszero(ua.u₁)
-isfirst(ua::UnrollArgs{Int}) = iszero(ua.u₁) & iszero(ua.suffix)
+# isfirst(ua::UnrollArgs{Nothing}) = iszero(ua.u₁)
+# isfirst(ua::UnrollArgs{Int}) = iszero(ua.u₁) & iszero(ua.suffix)
 
 struct UnrollSpecification
     u₁loopnum::Int
@@ -191,12 +191,12 @@ struct LoopOrder <: AbstractArray{Vector{Operation},5}
     loopnames::Vector{Symbol}
     bestorder::Vector{Symbol}
 end
-function LoopOrder(N::Int)
-    LoopOrder(
-        [ Operation[] for _ ∈ 1:8N ],
-        Vector{Symbol}(undef, N), Vector{Symbol}(undef, N)
-    )
-end
+# function LoopOrder(N::Int)
+#     LoopOrder(
+#         [ Operation[] for _ ∈ 1:8N ],
+#         Vector{Symbol}(undef, N), Vector{Symbol}(undef, N)
+#     )
+# end
 LoopOrder() = LoopOrder(Vector{Operation}[],Symbol[],Symbol[])
 Base.empty!(lo::LoopOrder) = foreach(empty!, lo.oporder)
 function Base.resize!(lo::LoopOrder, N::Int)
@@ -300,18 +300,18 @@ function pushpreamble!(ls::LoopSet, op::Operation, v::Number)
     end
 end
 pushpreamble!(ls::LoopSet, ex::Expr) = push!(ls.preamble.args, ex)
-function pushpreamble!(ls::LoopSet, op::Operation, RHS::Expr)
-    c = gensym(:licmconst)
-    if RHS.head === :call && first(RHS.args) === :zero
-        push!(ls.preamble_zeros, (identifier(op), IntOrFloat))
-    elseif RHS.head === :call && first(RHS.args) === :one
-        push!(ls.preamble_funcofeltypes, (identifier(op), :one))
-    else
-        pushpreamble!(ls, Expr(:(=), c, RHS))
-        pushpreamble!(ls, op, c)
-    end
-    nothing
-end
+# function pushpreamble!(ls::LoopSet, op::Operation, RHS::Expr)
+#     c = gensym(:licmconst)
+#     if RHS.head === :call && first(RHS.args) === :zero
+#         push!(ls.preamble_zeros, (identifier(op), IntOrFloat))
+#     elseif RHS.head === :call && first(RHS.args) === :one
+#         push!(ls.preamble_funcofeltypes, (identifier(op), :one))
+#     else
+#         pushpreamble!(ls, Expr(:(=), c, RHS))
+#         pushpreamble!(ls, op, c)
+#     end
+#     nothing
+# end
 function zerotype(ls::LoopSet, op::Operation)
     opid = identifier(op)
     for (id,typ) ∈ ls.preamble_zeros
@@ -363,9 +363,9 @@ getloop(ls::LoopSet, s::Symbol) = ls.loops[getloopid(ls, s)]
 getloopsym(ls::LoopSet, i::Integer) = ls.loopsymbols[i]
 Base.length(ls::LoopSet, s::Symbol) = length(getloop(ls, s))
 
-isstaticloop(ls::LoopSet, s::Symbol) = isstaticloop(getloop(ls,s))
-looprangehint(ls::LoopSet, s::Symbol) = length(getloop(ls, s))
-looprangesym(ls::LoopSet, s::Symbol) = getloop(ls, s).rangesym
+# isstaticloop(ls::LoopSet, s::Symbol) = isstaticloop(getloop(ls,s))
+# looprangehint(ls::LoopSet, s::Symbol) = length(getloop(ls, s))
+# looprangesym(ls::LoopSet, s::Symbol) = getloop(ls, s).rangesym
 getop(ls::LoopSet, var::Number, elementbytes) = add_constant!(ls, var, elementbytes)
 function getop(ls::LoopSet, var::Symbol, elementbytes::Int)
     get!(ls.opdict, var) do
@@ -546,14 +546,13 @@ function maybe_const_compute!(ls::LoopSet, op::Operation, elementbytes::Int, pos
     end
 end
 function strip_op_linenumber_nodes(q::Expr)
-    non_lnn_ind = 0
-    for i ∈ eachindex(q.args)
-        if !(q.args[i] isa LineNumberNode)
-            @assert iszero(non_lnn_ind) "There should only be one non-LineNumberNode in the expression."
-            non_lnn_ind = i
-        end
+    filtered = filter(x -> !isa(x, LineNumberNode), q.args)
+    if VERSION ≥ v"1.4"
+        only(filtered)
+    else
+        @assert isone(length(filtered))
+        first(filtered)
     end
-    q.args[non_lnn_ind]
 end
 
 function add_operation!(
