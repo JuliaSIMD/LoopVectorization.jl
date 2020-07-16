@@ -80,7 +80,7 @@
         D1 = C .+ A * B;
         D2 = @avx C .+ A .*ˡ B;
         @test D1 ≈ D2
-        fill!(D2, -999999); D2 = @avx C .+ At' .*ˡ B;
+        fill!(D2, -999999); D2 = @avx C .+ At' *ˡ B;
         @test D1 ≈ D2
         fill!(D2, -999999); @test A * B ≈ (@avx @. D2 = A *ˡ B)
         D1 .= view(C, 1, :)' .+ A * B;

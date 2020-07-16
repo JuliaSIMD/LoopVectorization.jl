@@ -44,9 +44,9 @@ function pushparent!(parents::Vector{Operation}, deps::Vector{Symbol}, reducedde
     push!(parents, parent)
     update_deps!(deps, reduceddeps, parent)
 end
-function pushparent!(mpref::ArrayReferenceMetaPosition, parent::Operation)
-    pushparent!(mpref.parents, mpref.loopdependencies, mpref.reduceddeps, parent)
-end
+# function pushparent!(mpref::ArrayReferenceMetaPosition, parent::Operation)
+#     pushparent!(mpref.parents, mpref.loopdependencies, mpref.reduceddeps, parent)
+# end
 function add_parent!(
     vparents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet, var, elementbytes::Int, position::Int
 )

@@ -500,16 +500,19 @@ function add_upper_outer_reductions(ls::LoopSet, loopq::Expr, Ulow::Int, Uhigh::
     initialize_outer_reductions!(ifq, ls, Ulow, Uhigh, vectorized)
     push!(ifq.args, loopq)
     reduce_range!(ifq, ls, Ulow, Uhigh)
+    loopbuffer = Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, Uhigh)
     comparison = if isstaticloop(unrolledloop)
-        Expr(:call, lv(:scalar_less), length(unrolledloop), Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, Uhigh))
-    elseif unrolledloop.starthint == 1
-        Expr(:call, lv(:scalar_less), unrolledloop.stopsym, Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, Uhigh))
+        Expr(:call, lv(:scalar_less), length(unrolledloop), loopbuffer)
     elseif unrolledloop.startexact
-        Expr(:call, lv(:scalar_less), Expr(:call, lv(:vsub), unrolledloop.stopsym, unrolledloop.starthint-1), Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, Uhigh))
+        if isone(unrolledloop.starthint)
+            Expr(:call, lv(:scalar_less), unrolledloop.stopsym, loopbuffer)
+        else
+            Expr(:call, lv(:scalar_less), Expr(:call, lv(:vsub), unrolledloop.stopsym, unrolledloop.starthint-1), loopbuffer)
+        end
     elseif unrolledloop.stopexact
-        Expr(:call, lv(:scalar_less), Expr(:call, lv(:vsub), unrolledloop.stophint+1, unrolledloop.sartsym), Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, Uhigh))
+        Expr(:call, lv(:scalar_less), Expr(:call, lv(:vsub), unrolledloop.stophint+1, unrolledloop.sartsym), loopbuffer)
     else# both are given by symbols
-        Expr(:call, lv(:scalar_less), Expr(:call, lv(:vsub), unrolledloop.stopsym, Expr(:call,lv(:vsub),unrolledloop.startsym)), Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, Uhigh))
+        Expr(:call, lv(:scalar_less), Expr(:call, lv(:vsub), unrolledloop.stopsym, Expr(:call,lv(:vsub),unrolledloop.startsym, Expr(:call,lv(:Static),1))), loopbuffer)
     end
     ncomparison = Expr(:call, :!, comparison)
     Expr(:if, ncomparison, ifq)
@@ -612,14 +615,14 @@ function definemask(loop::Loop)
         maskexpr(lexpr)
     end
 end
-function definemask_for_alignment_cleanup(loop::Loop)
-    lexpr = if loop.stopexact
-        Expr(:call, lv(:vsub), loop.stophint + 1, loop.itersym)
-    else
-        Expr(:call, lv(:vsub), Expr(:call, lv(:vadd), loop.stopsym, 1), loop.itersymbol)
-    end
-    maskexpr(lexpr)
-end
+# function definemask_for_alignment_cleanup(loop::Loop)
+#     lexpr = if loop.stopexact
+#         Expr(:call, lv(:vsub), loop.stophint + 1, loop.itersym)
+#     else
+#         Expr(:call, lv(:vsub), Expr(:call, lv(:vadd), loop.stopsym, 1), loop.itersymbol)
+#     end
+#     maskexpr(lexpr)
+# end
 function define_eltype_vec_width!(q::Expr, ls::LoopSet, vectorized)
     push!(q.args, Expr(:(=), ELTYPESYMBOL, determine_eltype(ls)))
     push!(q.args, Expr(:(=), VECTORWIDTHSYMBOL, determine_width(ls, vectorized)))
@@ -700,7 +703,7 @@ function lower(ls::LoopSet, u₁::Int, u₂::Int, inline::Int)
     lower(ls, order, u₁loop, u₂loop, vectorized, u₁, u₂, doinline)
 end
 
-Base.convert(::Type{Expr}, ls::LoopSet) = lower(ls)
+# Base.convert(::Type{Expr}, ls::LoopSet) = lower(ls)
 Base.show(io::IO, ls::LoopSet) = println(io, lower(ls))
 
 

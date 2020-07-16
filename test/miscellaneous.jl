@@ -722,6 +722,20 @@ function findreducedparentfornonvecstore!(U::AbstractMatrix{T}, E1::AbstractVect
     U,E1
 end
 
+
+function powcseliteral!(x)
+    @avx for i ∈ eachindex(x)
+        x[i] = 3^4
+    end
+    x
+end
+function powcsesymbol!(x, a = 3)
+    @avx for i ∈ eachindex(x)
+        x[i] = a^4
+    end
+    x
+end
+
 @inline ninereturns(x) = (0.25x, 0.5x, 0.75, 1.0x, 1.25x, 1.5x, 1.75x, 2.0x, 2.25x)
 function manyreturntest(x)
     s = zero(eltype(x))
@@ -954,7 +968,10 @@ end
         U3, E3 = findreducedparentfornonvecstoreavx!(copy(U0), copy(E0));
         findreducedparentfornonvecstore!(U0, E0);
         @test U0 ≈ U3
-        @test E0 ≈ E3        
+        @test E0 ≈ E3
+
+        @test all(isequal(81), powcseliteral!(E0))
+        @test all(isequal(81), powcsesymbol!(E3))
     end
     for T ∈ [Int16, Int32, Int64]
         n = 8sizeof(T) - 1

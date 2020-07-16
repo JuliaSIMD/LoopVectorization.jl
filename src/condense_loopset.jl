@@ -81,7 +81,7 @@ function findmatchingarray(ls::LoopSet, mref::ArrayReferenceMeta)
     end
     0x00
 end
-filled_4byte_chunks(u::UInt64) = 16 - (leading_zeros(u) >>> 2)
+# filled_4byte_chunks(u::UInt64) = 16 - (leading_zeros(u) >>> 2)
 filled_8byte_chunks(u::UInt64) = 8 - (leading_zeros(u) >>> 3)
 
 # num_loop_deps(os::OperationStruct) = filled_4byte_chunks(os.loopdeps)

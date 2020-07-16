@@ -20,15 +20,7 @@ struct ArrayReference
 end
 ArrayReference(array, indices) = ArrayReference(array, indices, zeros(Int8, length(indices)))
 function sameref(x::ArrayReference, y::ArrayReference)
-    x.array === y.array || return false
-    xinds = x.indices
-    yinds = y.indices
-    nrefs = length(xinds)
-    nrefs == length(yinds) || return false
-    for n ∈ 1:nrefs
-        xinds[n] === yinds[n] || return false
-    end
-    true
+    (x.array === y.array) && (x.indices == y.indices)
 end
 function Base.isequal(x::ArrayReference, y::ArrayReference)
     sameref(x, y) || return false

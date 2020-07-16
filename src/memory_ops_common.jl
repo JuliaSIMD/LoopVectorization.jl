@@ -47,7 +47,7 @@ function add_vptr!(ls::LoopSet, array::Symbol, vptrarray::Symbol, actualarray::B
     nothing
 end
 
-@inline valsum() = Val{0}()
+# @inline valsum() = Val{0}()
 @inline valsum(::Val{M}) where {M} = Val{M}()
 @generated valsum(::Val{M}, ::Val{N}) where {M,N} = Val{M+N}()
 @inline valsum(::Val{M}, ::Val{N}, ::Val{K}, args...) where {M,N,K} = valsum(valsum(Val{M}(), Val{N}()), Val{K}(), args...)
@@ -69,15 +69,14 @@ function subset_vptr!(ls::LoopSet, vptr::Symbol, indnum::Int, ind, previndices, 
         offset = first(previndices) === DISCONTIGUOUS
         valcall = Expr(:call, lv(:valsum), valcall)
         for i ∈ 1:indnum-1
-            if loopindex[i]
-                append_loop_valdims!(valcall, getloop(ls, previndices[i+offset]))
+            loopdep = if loopindex[i]
+                previndices[i+offset]
             else
                 # assumes all valdims will be of equal length once expanded...
                 # A[I + J, constindex], I and J may be CartesianIndices. This requires they all be of same number of dims
-                let loopdep = first(loopdependencies(ls.opdict[previndices[i+offset]]))
-                    append_loop_valdims!(valcall, getloop(ls, loopdep))
-                end
+                first(loopdependencies(ls.opdict[previndices[i+offset]]))
             end
+            append_loop_valdims!(valcall, getloop(ls, loopdep))
         end
     end
     indm1 = ind isa Integer ? ind - 1 : Expr(:call, :-, ind, 1)

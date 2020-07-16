@@ -1,19 +1,19 @@
 
-function indexappearences(op::Operation, s::Symbol)
-    s ∉ loopdependencies(op) && return 0
-    appearences = 0
-    if isloopvalue(op)
-        return s === first(loopdependencies(op)) ? 1 : 0
-    elseif isload(op)
-        return 100
-    end
-    newapp = 0
-    for opp ∈ parents(op)
-        newapp += indexappearences(opp, s)
-    end
-    factor = instruction(op).instr ∈ (:+, :vadd, :add_fast, :evadd) ? 1 : 10
-    newapp * factor
-end
+# function indexappearences(op::Operation, s::Symbol)
+#     s ∉ loopdependencies(op) && return 0
+#     appearences = 0
+#     if isloopvalue(op)
+#         return s === first(loopdependencies(op)) ? 1 : 0
+#     elseif isload(op)
+#         return 100
+#     end
+#     newapp = 0
+#     for opp ∈ parents(op)
+#         newapp += indexappearences(opp, s)
+#     end
+#     factor = instruction(op).instr ∈ (:+, :vadd, :add_fast, :evadd) ? 1 : 10
+#     newapp * factor
+# end
 function findparent(ls::LoopSet, s::Symbol)#opdict isn't filled when reconstructing
     id = findfirst(op -> name(op) === s, operations(ls))
     id === nothing && throw("$s not found")
@@ -42,13 +42,13 @@ function unitstride(ls::LoopSet, op::Operation, s::Symbol)
     true
 end
 
-function register_pressure(op::Operation)
-    if isconstant(op) || isloopvalue(op)
-        0
-    else
-        instruction_cost(instruction(op)).register_pressure
-    end
-end
+# function register_pressure(op::Operation)
+#     if isconstant(op) || isloopvalue(op)
+#         0
+#     else
+#         instruction_cost(instruction(op)).register_pressure
+#     end
+# end
 function cost(ls::LoopSet, op::Operation, vectorized::Symbol, Wshift::Int, size_T::Int = op.elementbytes)
     isconstant(op) && return 0.0, 0, Float64(length(loopdependencies(op)) > 0)
     isloopvalue(op) && return 0.0, 0, 0.0
@@ -82,7 +82,7 @@ function cost(ls::LoopSet, op::Operation, vectorized::Symbol, Wshift::Int, size_
                 #       this feature is common to all of them.
                 srt += 0.5VectorizationBase.REGISTER_SIZE / VectorizationBase.CACHELINE_SIZE
             end
-        elseif instr === :setindex! # broadcast or reductionstore; if store we want to penalize reduction
+        elseif isstore(op) # broadcast or reductionstore; if store we want to penalize reduction
             srt *= 3
             sl *= 3
         end
@@ -95,12 +95,12 @@ end
 function biggest_type_size(ls::LoopSet)
     maximum(elsize, operations(ls))
 end
-function VectorizationBase.pick_vector_width(ls::LoopSet, u::Symbol)
-    VectorizationBase.pick_vector_width(length(ls, u), biggest_type_size(ls))
-end
-function VectorizationBase.pick_vector_width_shift(ls::LoopSet, u::Symbol)
-    VectorizationBase.pick_vector_width_shift(length(ls, u), biggest_type_size(ls))
-end
+# function VectorizationBase.pick_vector_width(ls::LoopSet, u::Symbol)
+#     VectorizationBase.pick_vector_width(length(ls, u), biggest_type_size(ls))
+# end
+# function VectorizationBase.pick_vector_width_shift(ls::LoopSet, u::Symbol)
+#     VectorizationBase.pick_vector_width_shift(length(ls, u), biggest_type_size(ls))
+# end
 function hasintersection(a, b)
     for aᵢ ∈ a, bᵢ ∈ b
         aᵢ === bᵢ && return true
@@ -208,9 +208,7 @@ function unroll_no_reductions(ls, order, vectorized)
     W, Wshift = lsvecwidthshift(ls, vectorized, size_T)
     # W, Wshift = VectorizationBase.pick_vector_width_shift(length(ls, vectorized), size_T)::Tuple{Int,Int}
 
-    compute_rt = 0.0
-    load_rt = 0.0
-    store_rt = 0.0
+    compute_rt = load_rt = store_rt = 0.0
     unrolled = last(order)
     if unrolled === vectorized && length(order) > 1
         unrolled = order[end-1]
@@ -399,12 +397,12 @@ function solve_unroll_constT(R::AbstractVector, u₂::Int)
     iszero(denom) && return 8
     floor(Int, (REGISTER_COUNT - R[3] - R[4] - u₂*R[5]) / denom)
 end
-function solve_unroll_constT(ls::LoopSet, u₂::Int)
-    R = @view ls.reg_pres[:,1]
-    denom = u₂ * R[1] + R[2]
-    iszero(denom) && return 8
-    floor(Int, (REGISTER_COUNT - R[3] - R[4] - u₂*R[5]) / (u₂ * R[1] + R[2]))
-end
+# function solve_unroll_constT(ls::LoopSet, u₂::Int)
+#     R = @view ls.reg_pres[:,1]
+#     denom = u₂ * R[1] + R[2]
+#     iszero(denom) && return 8
+#     floor(Int, (REGISTER_COUNT - R[3] - R[4] - u₂*R[5]) / (u₂ * R[1] + R[2]))
+# end
 # Tiling here is about alleviating register pressure for the UxT
 function solve_unroll(X, R, u₁max, u₂max, u₁L, u₂L, u₁step, u₂step)
     # iszero(first(R)) && return -1,-1,Inf #solve_smalltilesize(X, R, u₁max, u₂max)
@@ -414,11 +412,10 @@ function solve_unroll(X, R, u₁max, u₂max, u₁L, u₂L, u₁step, u₂step)
     u₁_too_large = u₁ > u₁max
     u₂_too_large = u₂ > u₂max
     if u₁_too_large
+        u₁ = u₁max
         if u₂_too_large
-            u₁ = u₁max
             u₂ = u₂max
         else # u₁ too large, resolve u₂
-            u₁ = u₁max
             u₂ = min(u₂max, max(1,solve_unroll_constU(R, u₁)))
         end
         cost = unroll_cost(X, u₁, u₂, u₁L, u₂L)
@@ -609,10 +606,6 @@ function maxnegativeoffset(ls::LoopSet, op::Operation, u::Symbol)
         # opploopi = oppmref.loopedindex
         mnonew = typemin(Int)
         for i ∈ eachindex(opinds)
-            if opinds[i] !== oppinds[i]
-                mnonew = 1
-                break
-            end
             if opinds[i] === u
                 mnonew = (opoffs[i] - oppoffs[i])
             elseif opoffs[i] != oppoffs[i]
@@ -727,20 +720,12 @@ function add_constant_offset_load_elmination_cost!(
         # we treat this as the unrolled loop getting eliminated is split into 2 parts:
         # 1 a non-cost-reduced part, with factor udependent_reduction
         # 2 a cost-reduced part, with factor uindependent_increase
-        if uid == 1 # u₁reduces was false
+        (r, i) = if uid == 1 # u₁reduces was false
             @assert !u₁reduces
-            if u₂reduces
-                r, i = 4, 2
-            else
-                r, i = 3, 1
-            end
+            u₂reduces ? (4, 2) : (3, 1)
         elseif uid == 2 # u₂reduces was false
             @assert !u₂reduces
-            if u₁reduces
-                r, i = 4, 3
-            else
-                r, i = 2, 1
-            end
+            u₁reduces ? (4, 3) : (2, 1)
         else
             throw("uid somehow did not return 1 or 2, even though offset > -4.")
         end
@@ -1085,16 +1070,16 @@ function choose_order(ls::LoopSet)
     order, unroll, tile, vec, u₁, u₂
 end
 
-function register_pressure(ls::LoopSet, u₁, u₂)
-    if u₂ == -1
-        sum(register_pressure, operations(ls))
-    else
-        rp = @view ls.reg_pres[:,1]
-        u₁ * u₂ * rp[1] + u₁ * rp[2] + rp[3] + rp[4]
-    end
-end
-function register_pressure(ls::LoopSet)
-    order, unroll, tile, vec, u₁, u₂ = choose_order(ls)
-    register_pressure(ls, u₁, u₂)
-end
+# function register_pressure(ls::LoopSet, u₁, u₂)
+#     if u₂ == -1
+#         sum(register_pressure, operations(ls))
+#     else
+#         rp = @view ls.reg_pres[:,1]
+#         u₁ * u₂ * rp[1] + u₁ * rp[2] + rp[3] + rp[4]
+#     end
+# end
+# function register_pressure(ls::LoopSet)
+#     order, unroll, tile, vec, u₁, u₂ = choose_order(ls)
+#     register_pressure(ls, u₁, u₂)
+# end
 

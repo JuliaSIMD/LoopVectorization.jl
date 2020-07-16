@@ -110,7 +110,7 @@ using LoopVectorization.VectorizationBase: StaticUnitRange
         # Manually unpack the OffsetArray
         @avx for j in rng2, i in rng1
             tmp_0 = zero(eltype(out))
-            Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> tmp_{ik+(jk-1)*3} = A[i+(ik-2),j+(jk-2)] * kern_ik_jk + tmp_{ik+(jk-1)*3-1}
+            Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> tmp_{ik+(jk-1)*3} = A[(ik-2)+i,(jk-2)+j] * kern_ik_jk + tmp_{ik+(jk-1)*3-1}
             out[i,j] = tmp_9
         end
         out

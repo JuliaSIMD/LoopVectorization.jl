@@ -131,7 +131,7 @@ Base.@propagate_inbounds Base.getindex(A::LowDimArray, i...) = getindex(A.data, 
     s = Expr(:call, smul, T, multup)
     f = D[1] ? :PackedStridedPointer : :SparseStridedPointer
     Expr(:block, Expr(:meta,:inline), Expr(:(=), :strideA, Expr(:call, :strides, Expr(:(.), :A, QuoteNode(:data)))),
-         Expr(:call, Expr(:(.), :VectorizationBase, QuoteNode(f)), Expr(:call, :pointer, Expr(:(.), :A, QuoteNode(:data))), s))
+         Expr(:call, Expr(:(.), :VectorizationBase, QuoteNode(f)), Expr(:call, :pointer, :A), s))
 end
 function LowDimArray{D}(data::A) where {D,T,N,A <: AbstractArray{T,N}}
     LowDimArray{D,T,N,A}(data)

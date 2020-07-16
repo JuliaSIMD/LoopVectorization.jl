@@ -36,8 +36,16 @@
         end;
         @test vreduce(+, x7) ≈ sum(x7)
         @test vreduce(+, x) ≈ sum(x)
+        if T === Int32
+            @test vreduce(*, x7) == (prod(x7) % Int32)
+            @test vreduce(*, x) == (prod(x) % Int32)
+        else
+            @test vreduce(*, x7) ≈ prod(x7)
+            @test vreduce(*, x) ≈ prod(x)
+        end
         @test vmapreduce(abs2, max, x) ≈ mapreduce(abs2, max, x)
         @test vmapreduce(abs2, min, x) ≈ mapreduce(abs2, min, x)
+        @test vmapreduce(sqrt, *, x) ≈ mapreduce(sqrt, *, x)
         @test_throws AssertionError vmapreduce(hypot, +, x7, x)
         if VERSION ≥ v"1.4"
             @test vmapreduce(a -> 2a, *, x) ≈ mapreduce(a -> 2a, *, x)
