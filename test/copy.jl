@@ -108,7 +108,13 @@ using LoopVectorization, OffsetArrays, Test
         end
         B
     end
-
+    function copy3!(B, A)
+        @assert (length(B) ≥ 3) && (length(A) ≥ 3)
+        @avx for i in 1:3
+            B[i] = A[i]
+        end
+        B
+    end
 
     for T ∈ (Float32, Float64, Int32, Int64)
         @show T, @__LINE__
@@ -179,5 +185,8 @@ using LoopVectorization, OffsetArrays, Test
 
         @test reversecopy1!(zeros(T, 10), collect(1:10)) == reversecopy1avx!(zeros(T, 10), collect(1:10))
         @test reversecopy2!(zeros(T, 10), OffsetArray(collect(1:10), -10:-1)) == reversecopy2avx!(zeros(T, 10), OffsetArray(collect(1:10), -10:-1))
+
+        x = rand(R, 3); y = similar(x);
+        @test copy3!(y, x) == x
     end
 end

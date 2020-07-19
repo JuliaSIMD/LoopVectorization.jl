@@ -322,7 +322,7 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
 end
 function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask::Bool)
     UF = unrollfactor(us, n)
-    UF == 1 && return lower_no_unroll(ls, us, n, inclmask)
+    isone(UF) && return lower_no_unroll(ls, us, n, inclmask)
     @unpack u₁loopnum, vectorizedloopnum, u₁, u₂ = us
     order = names(ls)
     loopsym = order[n]
@@ -354,6 +354,7 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
             q = Expr(:while, tc, body)
         end
         remblock = Expr(:block)
+        (nisvectorized && (UFt > 0) && isone(num_loops(ls))) && push!(remblock.args, definemask(loop))
     else
         remblock = init_remblock(loop, ls.lssm[], n)#loopsym)
         q = Expr(:while, tc, body)
