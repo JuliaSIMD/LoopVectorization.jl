@@ -333,16 +333,22 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     W = nisvectorized ? ls.vector_width[] : 1
     loopisstatic = isstaticloop(loop) & (!iszero(W))
     UFW = UF * W
-
+    looplength = length(loop)
+    if loopisstatic & (UFW > looplength)
+        UFWnew = cld(looplength, cld(looplength, UFW))
+        UF = cld(UFWnew, W)
+        UFW = UF * W
+        us = nisunrolled ? UnrollSpecification(us, UF, u₂) : UnrollSpecification(us, u₁, UF)
+    end
     remmask = inclmask | nisvectorized
     Ureduct = (n == num_loops(ls) && (u₂ == -1)) ? calc_Ureduct(ls, us) : -1
     # sl = startloop(loop, nisvectorized, loopsym)
     sl = startloop(ls, us, n)
-    UFt = loopisstatic ? cld(length(loop) % UFW, W) : 1
+    UFt = loopisstatic ? cld(looplength % UFW, W) : 1
     # Don't place remainder first if we're going to have to mask this loop (i.e., if this loop is vectorized)
     remfirst = loopisstatic & (!nisvectorized) & (UFt > 0) & !(unsigned(Ureduct) < unsigned(UF))
     tc = terminatecondition(ls, us, n, inclmask, remfirst ? 1 : UF)
-    usorig = ls.unrollspecification[]
+    # usorig = ls.unrollspecification[]
     # tc = (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !loopisstatic && !inclmask && !ls.loadelimination[] ? expect(tc) : tc
     body = lower_block(ls, us, n, inclmask, UF)
     if loopisstatic
@@ -359,7 +365,6 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
         remblock = init_remblock(loop, ls.lssm[], n)#loopsym)
         q = Expr(:while, tc, body)
     end
-    # @show loopsym, loopisstatic, UFW
     q = if unsigned(Ureduct) < unsigned(UF) # unsigned(-1) == typemax(UInt); is logic relying on twos-complement bad?
         UF_cleanup = UF - Ureduct
         us_cleanup = nisunrolled ? UnrollSpecification(us, UF_cleanup, u₂) : UnrollSpecification(us, u₁, UF_cleanup)

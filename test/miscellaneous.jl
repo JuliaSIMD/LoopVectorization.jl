@@ -628,7 +628,7 @@ using Test
     function MatCalcWtDW!(m)
         l, n = size(m.Wt)
         fill!(m.Wt_D_W, 0)
-        @avx for k in 1: n
+        @avx for k in 1:n
             for j in 1:l
                 for i in 1:l
                     m.Wt_D_W[i, j] += m.Wt[i, k] * m.Wt[j, k] * m.d[k]
@@ -930,15 +930,15 @@ end
         @test X1 ≈ X2
         @test Y1 ≈ Y2
 
-        a_re, a_im = rand(T, 2, 2, 2), rand(T, 2, 2, 2);
-        b_re, b_im = rand(T, 2, 2), rand(T, 2, 2);
-        c_re_1 = ones(T, 2, 2); c_re_2 = ones(T, 2, 2);
-        multiple_unrolls_split_depchains!(c_re_1, a_re, b_re, a_im, b_im, true) # [1 1; 1 1]
-        multiple_unrolls_split_depchains_avx!(c_re_2, a_re, b_re, a_im, b_im, true) # [1 1; 1 1]
-        @test c_re_1 ≈ c_re_2
-        multiple_unrolls_split_depchains!(c_re_1, a_re, b_re, a_im, b_im) # [1 1; 1 1]
-        multiple_unrolls_split_depchains_avx!(c_re_2, a_re, b_re, a_im, b_im) # [1 1; 1 1]
-        @test c_re_1 ≈ c_re_2
+        # a_re, a_im = rand(T, 2, 2, 2), rand(T, 2, 2, 2);
+        # b_re, b_im = rand(T, 2, 2), rand(T, 2, 2);
+        # c_re_1 = ones(T, 2, 2); c_re_2 = ones(T, 2, 2);
+        # multiple_unrolls_split_depchains!(c_re_1, a_re, b_re, a_im, b_im, true) # [1 1; 1 1]
+        # multiple_unrolls_split_depchains_avx!(c_re_2, a_re, b_re, a_im, b_im, true) # [1 1; 1 1]
+        # @test c_re_1 ≈ c_re_2
+        # multiple_unrolls_split_depchains!(c_re_1, a_re, b_re, a_im, b_im) # [1 1; 1 1]
+        # multiple_unrolls_split_depchains_avx!(c_re_2, a_re, b_re, a_im, b_im) # [1 1; 1 1]
+        # @test c_re_1 ≈ c_re_2
 
         @test loopinductvardivision(X1) ≈ loopinductvardivisionavx(X2)
         
@@ -947,7 +947,6 @@ end
             Wt = rand(T, 181, 191),
             d = rand(T, 191)
         );
-        Wt_D_W = similar(mh.Wt_D_W);
 
         MatCalcWtDW!(mh)
         @test mh.Wt_D_W ≈ mh.Wt * Diagonal(mh.d) * mh.Wt'

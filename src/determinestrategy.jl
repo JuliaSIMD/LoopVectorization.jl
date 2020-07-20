@@ -128,7 +128,6 @@ function lsvecwidthshift(ls::LoopSet, vectorized::Symbol, size_T = nothing)
 end
 
 # evaluates cost of evaluating loop in given order
-# heuristically, could simplify analysis by just unrolling outer loop?
 function evaluate_cost_unroll(
     ls::LoopSet, order::Vector{Symbol}, vectorized::Symbol, max_cost = typemax(Float64)
 )
@@ -166,7 +165,7 @@ function evaluate_cost_unroll(
             total_cost > max_cost && return total_cost # abort if more expensive; we only want to know the cheapest
         end
     end
-    total_cost + stride_penalty(ls, order) - 1.0 # -1.0 to place finger on scale in its favor
+    0.999total_cost + stride_penalty(ls, order) # 0.999 to place finger on scale in its favor
 end
 
 # only covers vectorized ops; everything else considered lifted?
@@ -240,6 +239,9 @@ function unroll_no_reductions(ls, order, vectorized)
     #         isstore(op) && dependson(op, unrolled)
     #     end
     # end
+    if unrolled === vectorized
+        u = demote_unroll_factor(ls, u, vectorized)
+    end
     u, unrolled
     # rt = max(compute_rt, load_rt + store_rt)
     # # (iszero(rt) ? 4 : max(1, roundpow2( min( 4, round(Int, 16 / rt) ) ))), unrolled
@@ -295,6 +297,16 @@ function count_reductions(ls::LoopSet)
     num_reductions
 end
 
+demote_unroll_factor(ls::LoopSet, UF, loop::Symbol) = demote_unroll_factor(ls, UF, getloop(ls, loop))
+function demote_unroll_factor(ls::LoopSet, UF, loop::Loop)
+    W = ls.vector_width[] 
+    if !iszero(W) && isstaticloop(loop)
+        UFW = maybedemotesize(UF*W, length(loop))
+        UF = cld(UFW, W)
+    end
+    UF
+end
+
 function determine_unroll_factor(ls::LoopSet, order::Vector{Symbol}, vectorized::Symbol)
     num_reductions = count_reductions(ls)
     # The strategy is to use an unroll factor of 1, unless there appears to be loop carried dependencies (ie, num_reductions > 0)
@@ -317,7 +329,11 @@ function determine_unroll_factor(ls::LoopSet, order::Vector{Symbol}, vectorized:
         end
     end
     # min(8, roundpow2(max(1, round(Int, latency / (rt * num_reductions) ) ))), best_unrolled
-    min(8, VectorizationBase.nextpow2(max(1, round(Int, latency / (rt * num_reductions) ) ))), best_unrolled
+    UF = min(8, VectorizationBase.nextpow2(max(1, round(Int, latency / (rt * num_reductions) ) )))
+    if best_unrolled === vectorized
+        UF = demote_unroll_factor(ls, UF, vectorized)
+    end
+    UF, best_unrolled
 end
 
 function unroll_cost(X, u₁, u₂, u₁L, u₂L)

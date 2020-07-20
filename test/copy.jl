@@ -115,6 +115,15 @@ using LoopVectorization, OffsetArrays, Test
         end
         B
     end
+    function copyselfdot!(s, x)
+        m = zero(eltype(x))
+        @avx for i ∈ 1:2
+            sᵢ = x[i]
+            s[i] = sᵢ
+            m += sᵢ * sᵢ
+        end
+        m
+    end
 
     for T ∈ (Float32, Float64, Int32, Int64)
         @show T, @__LINE__
@@ -188,5 +197,8 @@ using LoopVectorization, OffsetArrays, Test
 
         x = rand(R, 3); y = similar(x);
         @test copy3!(y, x) == x
+        fill!(y,0);
+        @test copyselfdot!(y, x) ≈ x[1]^2 + x[2]^2
+        @test view(x, 1:2) == y
     end
 end
