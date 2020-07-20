@@ -199,6 +199,6 @@ using LoopVectorization, OffsetArrays, Test
         @test copy3!(y, x) == x
         fill!(y,0);
         @test copyselfdot!(y, x) ≈ x[1]^2 + x[2]^2
-        @test view(x, 1:2) == y
+        @test view(x, 1:2) == view(y, 1:2)
     end
 end
