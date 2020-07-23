@@ -19,19 +19,17 @@ using Test
         dot3(x, A, y) = dot(x, A, y)
     end
     function dot3avx(x, A, y)
-        M, N = size(A)
         s = zero(promote_type(eltype(x), eltype(A), eltype(y)))
-        @avx for m ∈ 1:M, n ∈ 1:N
+        @avx for m ∈ axes(A,1), n ∈ axes(A,2)
             s += x[m] * A[m,n] * y[n]
         end
         s
     end
     function dot3v2avx(x, A, y)
-        M, N = size(A)
         s = zero(promote_type(eltype(x), eltype(A), eltype(y)))
-        @avx for n ∈ 1:N
+        @avx for n ∈ axes(A,2)
             t = zero(s)
-            for m ∈ 1:M
+            for m ∈ axes(A,1)
                 t += x[m] * A[m,n]
             end
             s += t * y[n]
@@ -788,8 +786,9 @@ end
         M, N = 47, 73;
         x = rand(T, M); A = rand(T, M, N); y = rand(T, N);
         d3 = dot3(x, A, y)
-        @test dot3avx(x, A, y) ≈ d3
-        @test dot3v2avx(x, A, y) ≈ d3
+        @test dot3avx(LoopVectorization.stridedpointer(x), A, y) ≈ d3
+        @test dot3v2avx(x, A, LoopVectorization.stridedpointer(y)) ≈ d3
+        @test dot3avx24(x, A, y) ≈ d3
         @test dot3_avx(x, A, y) ≈ d3
 
         A2 = similar(A);
@@ -930,15 +929,15 @@ end
         @test X1 ≈ X2
         @test Y1 ≈ Y2
 
-        # a_re, a_im = rand(T, 2, 2, 2), rand(T, 2, 2, 2);
-        # b_re, b_im = rand(T, 2, 2), rand(T, 2, 2);
-        # c_re_1 = ones(T, 2, 2); c_re_2 = ones(T, 2, 2);
-        # multiple_unrolls_split_depchains!(c_re_1, a_re, b_re, a_im, b_im, true) # [1 1; 1 1]
-        # multiple_unrolls_split_depchains_avx!(c_re_2, a_re, b_re, a_im, b_im, true) # [1 1; 1 1]
-        # @test c_re_1 ≈ c_re_2
-        # multiple_unrolls_split_depchains!(c_re_1, a_re, b_re, a_im, b_im) # [1 1; 1 1]
-        # multiple_unrolls_split_depchains_avx!(c_re_2, a_re, b_re, a_im, b_im) # [1 1; 1 1]
-        # @test c_re_1 ≈ c_re_2
+        a_re, a_im = rand(T, 2, 2, 2), rand(T, 2, 2, 2);
+        b_re, b_im = rand(T, 2, 2), rand(T, 2, 2);
+        c_re_1 = ones(T, 2, 2); c_re_2 = ones(T, 2, 2);
+        multiple_unrolls_split_depchains!(c_re_1, a_re, b_re, a_im, b_im, true) # [1 1; 1 1]
+        multiple_unrolls_split_depchains_avx!(c_re_2, a_re, b_re, a_im, b_im, true) # [1 1; 1 1]
+        @test c_re_1 ≈ c_re_2
+        multiple_unrolls_split_depchains!(c_re_1, a_re, b_re, a_im, b_im) # [1 1; 1 1]
+        multiple_unrolls_split_depchains_avx!(c_re_2, a_re, b_re, a_im, b_im) # [1 1; 1 1]
+        @test c_re_1 ≈ c_re_2
 
         @test loopinductvardivision(X1) ≈ loopinductvardivisionavx(X2)
         

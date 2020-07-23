@@ -275,6 +275,7 @@ Additionally, define `pointer` and `stride` methods.
         check_args(parent(A)) # PermutedDimsArray, NamedDimsArray
     end
 end
+@inline check_args(A::VectorizationBase.AbstractStridedPointer{T}) where {T} = check_type(T)
 @inline check_args(A, Bs...) = check_args(A) && check_args(Bs...)
 """
     check_type(::Type{T}) where {T}
