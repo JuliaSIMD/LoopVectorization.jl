@@ -230,6 +230,8 @@ function unroll_no_reductions(ls, order, vectorized)
         max(1, VectorizationBase.nextpow2( min( 4, round(Int, 8 / compute_rt) ) ))
     elseif iszero(compute_rt)
         4
+    elseif iszero(load_rt)
+        iszero(store_rt) ? 4 : max(1, min(4, round(Int, 2compute_rt / store_rt)))
     else
         max(1, min(4, round(Int, 2compute_rt / load_rt)))
     end
