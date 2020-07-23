@@ -231,7 +231,7 @@ function unroll_no_reductions(ls, order, vectorized)
     elseif iszero(compute_rt)
         4
     else
-        max(1, min(4, round(Int, 2compute_rt / memory_rt)))
+        max(1, min(4, round(Int, 2compute_rt / load_rt)))
     end
     # commented out here is to decide to align loops
     # if memory_rt > compute_rt && isone(u) && (length(order) > 1) && (last(order) === vectorized) && length(getloop(ls, last(order))) > 8W
