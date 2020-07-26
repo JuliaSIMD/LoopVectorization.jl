@@ -293,7 +293,6 @@ end
 
 make_fast(q) = Expr(:macrocall, Symbol("@fastmath"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), q)
 make_crashy(q) = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), q)
-make_fast_and_crashy(q) = q |> make_fast |> make_crashy
 
 function setup_call_inline(ls::LoopSet, inline::Int8 = zero(Int8), U::Int8 = zero(Int8), T::Int8 = zero(Int8))
     call = generate_call(ls, (inline,U,T))
@@ -335,5 +334,5 @@ function setup_call(ls::LoopSet, q = nothing, inline::Int8 = zero(Int8), check_e
     call = setup_call_inline(ls, inline, u₁, u₂)
     call = check_empty ? check_if_empty(ls, call) : call
     isnothing(q) && return Expr(:block, ls.prepreamble, call)
-    Expr(:block, ls.prepreamble, Expr(:if, check_args_call(ls), call, make_fast_and_crashy(q)))
+    Expr(:block, ls.prepreamble, Expr(:if, check_args_call(ls), call, make_crashy(make_fast(q))))
 end

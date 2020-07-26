@@ -1059,3 +1059,38 @@ end
 end
 
 
+function mul1!(y::Vector{T}, A::Matrix{UInt8}, x::Vector{T}) where T 
+    packedstride = size(A, 1)
+    m, n = size(A)
+    @avx for j ∈ eachindex(x)
+        for i ∈ eachindex(y)
+            k = 2 * ((i-1) & 3)
+            block = A[(j-1) * packedstride + ((i-1) >> 2) + 1]
+            Aij = (block >> k) & 3
+            y[i] += (((Aij >= 2) + (Aij >= 3))) * x[j]
+        end
+    end
+    y
+end
+function mul2!(y::Vector{T}, A::Matrix{UInt8}, x::Vector{T}) where T 
+    packedstride = size(A, 1)
+    m, n = size(A)
+    for j ∈ eachindex(x)
+        for i ∈ eachindex(y)
+            k = 2 * ((i-1) & 3)
+            block = A[(j-1) * packedstride + ((i-1) >> 2) + 1]
+            Aij = (block >> k) & 3
+            y[i] += (((Aij >= 2) + (Aij >= 3))) * x[j]
+        end
+    end
+    y
+end
+@testset "UInt8 mul" begin
+    for n in 1:200
+        v1 = rand(n); v3 =copy(v1);
+        v2 = rand(n);
+        A = rand(UInt8, (length(v1)>>2) + (length(v1)%4 != 0), length(v2))
+        @test mul1!(v1, A, v2) ≈ mul2!(v3, A, v2)
+    end
+end
+

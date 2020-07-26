@@ -652,11 +652,13 @@ function lsexpr(ls::LoopSet, q)
 end
 
 function calc_Ureduct(ls::LoopSet, us::UnrollSpecification)
-    @unpack u₁loopnum, u₁, u₂ = us
+    @unpack u₁loopnum, u₁, u₂, vectorizedloopnum = us
     if iszero(length(ls.outer_reductions))
         -1
     elseif u₂ == -1
-        min(u₁, 4)
+        loopisstatic = isstaticloop(getloop(ls, names(ls)[u₁loopnum]))
+        loopisstatic &= ((vectorizedloopnum != u₁loopnum) | (!iszero(ls.vector_width[])))
+        loopisstatic ? u₁ : min(u₁, 4)
     else
         8#u₂#u₁
     # elseif num_loops(ls) == u₁loopnum

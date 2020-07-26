@@ -210,6 +210,20 @@ using Test
         end
         s
     end
+    function dot33(a,b)
+        s = zero(eltype(a))
+        @avx for i ∈ 1:33
+            s += a[i] * b[i]
+        end
+        s
+    end
+    function dot17(a,b)
+        s = zero(eltype(a))
+        @avx for i ∈ 1:17
+            s += a[i] * b[i]
+        end
+        s
+    end
     # @macroexpand @_avx for i = 1:length(a_re) - 1
     #     c_re[i] = b_re[i] * a_re[i + 1] - b_im[i] * a_im[i + 1]
     #     c_im[i] = b_re[i] * a_im[i + 1] + b_im[i] * a_re[i + 1]
@@ -238,6 +252,9 @@ using Test
         @test myselfdotavx_range(a) ≈ s
         @test myselfdot_avx(a) ≈ s
         @test myselfdotavx(a) ≈ s
+
+        @test dot17(a,b) ≈ @view(a[1:17])' * @view(b[1:17])
+        @test dot33(a,b) ≈ @view(a[1:33])' * @view(b[1:33])
 
         if T <: Union{Float32,Float64}
             πest = pi(a, b)

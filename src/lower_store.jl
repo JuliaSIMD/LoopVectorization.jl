@@ -57,7 +57,7 @@ function reduce_range!(q::Expr, toreduct::Symbol, instr::Instruction, Uh::Int, U
             push!(q.args, Expr(:(=), Symbol(toreduct, (u>>>1)), instrexpr))
         end
     else
-        for u ∈ Uh:Uh2-1
+        for u ∈ Uh:Uh2-2
             tru = Symbol(toreduct, u - Uh)
             instrexpr = callexpr(instr)
             push!(instrexpr.args, tru)
