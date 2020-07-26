@@ -1085,12 +1085,14 @@ function mul2!(y::Vector{T}, A::Matrix{UInt8}, x::Vector{T}) where T
     end
     y
 end
-@testset "UInt8 mul" begin
-    for n in 1:200
-        v1 = rand(n); v3 =copy(v1);
-        v2 = rand(n);
-        A = rand(UInt8, (length(v1)>>2) + (length(v1)%4 != 0), length(v2))
-        @test mul1!(v1, A, v2) ≈ mul2!(v3, A, v2)
+if Base.libllvm_version ≥ v"8" || LoopVectorization.VectorizationBase.SIMD_NATIVE_INTEGERS
+    @testset "UInt8 mul" begin
+        for n in 1:200
+            v1 = rand(n); v3 =copy(v1);
+            v2 = rand(n);
+            A = rand(UInt8, (length(v1)>>2) + (length(v1)%4 != 0), length(v2))
+            @test mul1!(v1, A, v2) ≈ mul2!(v3, A, v2)
+        end
     end
 end
 
