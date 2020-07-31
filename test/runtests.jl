@@ -45,7 +45,7 @@ Base.IndexStyle(::Type{<:FallbackArrayWrapper}) = IndexLinear()
 
     @time include("check_empty.jl")
 
-    if isnothing(get(ENV, "TRAVIS_BRANCH", nothing)) || LoopVectorization.REGISTER_COUNT != 32 || VERSION >= v"1.4"
+    if isnothing(get(ENV, "TRAVIS_BRANCH", nothing)) || LoopVectorization.REGISTER_COUNT ≠ 32 || VERSION ≥ v"1.4"
         @time include("offsetarrays.jl")
     end
 
@@ -72,7 +72,7 @@ Base.IndexStyle(::Type{<:FallbackArrayWrapper}) = IndexLinear()
     @time include("broadcast.jl")
 
     # I test  locally on master; times out on Travis.
-    if isnothing(get(ENV, "TRAVIS_BRANCH", nothing)) || LoopVectorization.REGISTER_COUNT != 32 || VERSION.minor == 4
+    if isnothing(get(ENV, "TRAVIS_BRANCH", nothing)) || LoopVectorization.REGISTER_COUNT ≠ 32 || VERSION ≥ v"1.4"
         @time include("gemm.jl")
     end
 end
