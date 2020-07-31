@@ -73,14 +73,16 @@ function gemmavx!(𝐂, 𝐀, 𝐁)
 end
 function jdot(a, b)
     s = zero(eltype(a))
-    @inbounds @simd ivdep for i ∈ eachindex(a, b)
+    # @inbounds @simd ivdep for i ∈ eachindex(a,b)
+    @inbounds @simd ivdep for i ∈ eachindex(a)
         s += a[i] * b[i]
     end
     s
 end
 function jdotavx(a, b)
     s = zero(eltype(a))
-    @avx for i ∈ eachindex(a, b)
+    # @avx for i ∈ eachindex(a,b)
+    @avx for i ∈ eachindex(a)
         s += a[i] * b[i]
     end
     s

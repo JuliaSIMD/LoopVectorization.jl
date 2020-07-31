@@ -45,7 +45,8 @@ function getparentsreductzero(ls::LoopSet, op::Operation)::Float64
             return reduction_instruction_class(instruction(opp))
         end
     end
-    throw("Reduct zero not found.")
+    @show identifier(op)
+    throw("Reduct zero not found for operation $(name(op)).")
 end
 function lower_constant!(
     q::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs

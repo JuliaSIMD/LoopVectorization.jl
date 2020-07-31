@@ -9,7 +9,8 @@ include(joinpath(LOOPVECBENCHDIR, "benchmarkflops.jl"))
 include(joinpath(LOOPVECBENCHDIR, "plotbenchmarks.jl"))
 
 
-nprocs_to_add() = (Sys.CPU_THREADS >> 1) - 1
+# nprocs_to_add() = (Sys.CPU_THREADS >> 1) - 1
+nprocs_to_add() = (Sys.CPU_THREADS >> 1)
 start_worker(wid) = remotecall(include, wid, joinpath(LOOPVECBENCHDIR, "setup_worker.jl"))
 function start_workers()
     addprocs(nprocs_to_add())
