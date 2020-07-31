@@ -72,7 +72,7 @@
         end
     end
     function AmulBavx1!(C, A, B)
-        @avx for m ∈ 1:size(A,1), n ∈ axes(B,2)
+        @avx unroll=(1,2) for m ∈ 1:size(A,1), n ∈ axes(B,2)
             Cₘₙ = zero(eltype(C))
             for k ∈ 1:size(A,2)
                 Cₘₙ += A[m,k] * B[k,n]
@@ -82,7 +82,7 @@
     end
     function AmulBavx2!(C, A, B)
         z = zero(eltype(C))
-        @avx for m ∈ axes(A,1), n ∈ axes(B,2)
+        @avx unroll=(2,1) for m ∈ axes(A,1), n ∈ axes(B,2)
             C[m,n] = z
             for k ∈ axes(A,2)
                 C[m,n] += A[m,k] * B[k,n]
@@ -90,7 +90,7 @@
         end
     end
     function AmulBavx3!(C, A, B)
-        @avx for m ∈ axes(A,1), n ∈ axes(B,2)
+        @avx unroll=(2,2) for m ∈ axes(A,1), n ∈ axes(B,2)
             C[m,n] = zero(eltype(C))
             for k ∈ axes(A,2)
                 C[m,n] += A[m,k] * B[k,n]
@@ -115,7 +115,7 @@
     #         C[m,n] += ΔCₘₙ * factor
     #     end;
     function AmuladdBavx!(C, A, B, α = one(eltype(C)))
-        @avx for m ∈ axes(A,1), n ∈ axes(B,2)
+        @avx unroll=(2,2) for m ∈ axes(A,1), n ∈ axes(B,2)
             ΔCₘₙ = zero(eltype(C))
             for k ∈ axes(A,2)
                 ΔCₘₙ += A[m,k] * B[k,n]
@@ -124,7 +124,7 @@
         end
     end
     function AmuladdBavx!(C, A, B, α, β)# = zero(eltype(C)))
-        @avx for m ∈ axes(A,1), n ∈ axes(B,2)
+        @avx unroll=(1,1) for m ∈ axes(A,1), n ∈ axes(B,2)
             ΔCₘₙ = zero(eltype(C))
             for k ∈ axes(A,2)
                 ΔCₘₙ += A[m,k] * B[k,n]
@@ -160,7 +160,7 @@
     end
 
     function AmulB_avx1!(C, A, B)
-        @_avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+        @_avx unroll=(2,2) for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
             Cₘₙ = zero(eltype(C))
             for k ∈ axes(A,2)
                 Cₘₙ += A[m,k] * B[k,n]
@@ -182,7 +182,7 @@
     #         A = rand(M, M); B = rand(M, M); C = similar(A);
     function AmulB_avx2!(C, A, B)
         z = zero(eltype(C))
-        @_avx for m ∈ axes(A,1), n ∈ axes(B,2)
+        @_avx unroll=(2,2) for m ∈ axes(A,1), n ∈ axes(B,2)
             C[m,n] = z
             for k ∈ axes(A,2)
                 C[m,n] += A[m,k] * B[k,n]
@@ -201,7 +201,7 @@
     # ls.operations[1]
     function AmulB_avx3!(C, A, B)
         Kmin = firstindex(axes(A,2)); Kmax = lastindex(axes(A,2))
-        @_avx for m ∈ axes(A,1), n ∈ axes(B,2)
+        @_avx unroll=(2,2) for m ∈ axes(A,1), n ∈ axes(B,2)
             C[m,n] = zero(eltype(C))
             for k ∈ Kmin:Kmax
                 C[m,n] += A[m,k] * B[k,n]
@@ -224,7 +224,7 @@
     #       end)
     # ls = LoopVectorization.LoopSet(q);
     function AmuladdB_avx!(C, A, B, factor = 1)
-        @_avx for m ∈ axes(A,1), n ∈ axes(B,2)
+        @_avx unroll=(2,2) for m ∈ axes(A,1), n ∈ axes(B,2)
             ΔCₘₙ = zero(eltype(C))
             for k ∈ axes(A,2)
                 ΔCₘₙ += A[m,k] * B[k,n]
@@ -293,7 +293,7 @@
     # LoopVectorization.loopdependencies.(operations(atls))
     # LoopVectorization.reduceddependencies.(operations(atls))
     function AtmulB_avx1!(C, A, B)
-        @_avx for n ∈ axes(C,2), m ∈ axes(C,1)
+        @_avx unroll=(2,2) for n ∈ axes(C,2), m ∈ axes(C,1)
             Cₘₙ = zero(eltype(C))
             for k ∈ axes(A,1)
                 Cₘₙ += A[k,m] * B[k,n]
@@ -308,7 +308,7 @@
         @assert size(A, 1) == size(B, 1)
         # When the @avx macro is available, this code is faster:
         z = zero(eltype(C))
-        @avx for n in axes(C,2), m in axes(C,1)
+        @avx unroll=(2,2) for n in axes(C,2), m in axes(C,1)
             Cmn = z
             for k in axes(A,1)
                 Cmn += A[k,m] * B[k,n]
