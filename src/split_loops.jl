@@ -101,7 +101,6 @@ function lower_and_split_loops(ls::LoopSet, inline::Int)
         # U_1 = T_1 = U_2 = T_2 = 2
         # @show cost_1 + cost_2 ≤ cost_fused, cost_1, cost_2, cost_fused
         if cost_1 + cost_2 ≤ cost_fused
-            # @show cost_1, cost_2, cost_fused
             ls_2_lowered = if length(remaining_ops) > 1
                 inline = iszero(inline) ? (shouldinline_1 % Int) : inline
                 lower_and_split_loops(ls_2, inline)

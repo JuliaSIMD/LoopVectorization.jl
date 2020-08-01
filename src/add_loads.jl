@@ -1,15 +1,22 @@
+function maybeaddref!(ls::LoopSet, op, ref)
+    id = findfirst(r -> r == ref, ls.refs_aliasing_syms)
+    # try to CSE
+    if isnothing(id)
+        push!(ls.syms_aliasing_refs, name(op))
+        push!(ls.refs_aliasing_syms, ref)
+        0
+    else
+        id
+    end    
+end
+
 function add_load!(ls::LoopSet, op::Operation, actualarray::Bool = true, broadcast::Bool = false)
     @assert isload(op)
     ref = op.ref
-    id = findfirst(r -> r == ref, ls.refs_aliasing_syms)
-    # try to CSE
-    if id === nothing
-        push!(ls.syms_aliasing_refs, name(op))
-        push!(ls.refs_aliasing_syms, ref)
-    else
+    if (id = maybeaddref!(ls, op, ref)) > 0 # try to CSE
         opp = ls.opdict[ls.syms_aliasing_refs[id]] # throw an error if not found.
         return isstore(opp) ? getop(ls, first(parents(opp))) : opp
-    end    
+    end
     add_vptr!(ls, op.ref.ref.array, vptr(op), actualarray, broadcast)
     pushop!(ls, op, name(op))
 end

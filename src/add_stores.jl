@@ -7,7 +7,7 @@ function cse_store!(ls::LoopSet, op::Operation)
     ls.operations[id] = op
     ls.opdict[op.variable] = op
 end
-function add_store!(ls::LoopSet, op::Operation, add_pvar::Bool = name(first(parents(op))) ∉ ls.syms_aliasing_refs)
+function add_store!(ls::LoopSet, op::Operation, add_pvar::Bool = !any(r -> r == op.ref, ls.refs_aliasing_syms))
     @assert isstore(op)
     if add_pvar
         push!(ls.syms_aliasing_refs, name(first(parents(op))))
