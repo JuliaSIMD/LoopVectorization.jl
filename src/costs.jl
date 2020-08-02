@@ -130,6 +130,7 @@ const COST = Dict{Symbol,InstructionCost}(
     :(*) => InstructionCost(4,0.5),
     :(/) => InstructionCost(13,4.0,-2.0),
     :vadd => InstructionCost(4,0.5),
+    :vadd1 => InstructionCost(4,0.5),
     :add_fast => InstructionCost(4,0.5),
     :vsub => InstructionCost(4,0.5),
     :sub_fast => InstructionCost(4,0.5),

@@ -1,4 +1,5 @@
-function maybeaddref!(ls::LoopSet, op, ref)
+function maybeaddref!(ls::LoopSet, op)
+    ref = op.ref
     id = findfirst(r -> r == ref, ls.refs_aliasing_syms)
     # try to CSE
     if isnothing(id)
@@ -12,8 +13,7 @@ end
 
 function add_load!(ls::LoopSet, op::Operation, actualarray::Bool = true, broadcast::Bool = false)
     @assert isload(op)
-    ref = op.ref
-    if (id = maybeaddref!(ls, op, ref)) > 0 # try to CSE
+    if (id = maybeaddref!(ls, op)) > 0 # try to CSE
         opp = ls.opdict[ls.syms_aliasing_refs[id]] # throw an error if not found.
         return isstore(opp) ? getop(ls, first(parents(opp))) : opp
     end
