@@ -79,16 +79,10 @@ end
 function vmap_multithreaded!(
     f::F,
     y::DenseArray{T},
-    ::Val{NonTemporal},
+    ::Val{true},
     args::Vararg{<:DenseArray{<:NativeTypes},A}
-) where {F,T,A,NonTemporal}
-    if NonTemporal
-        ptry, ptrargs, N = alignstores!(f, y, args...)
-    else
-        N = length(y)
-        ptry = pointer(y)
-        ptrargs = pointer.(args)
-    end
+) where {F,T,A}
+    ptry, ptrargs, N = alignstores!(f, y, args...)
     N > 0 || return y
     W, Wshift = VectorizationBase.pick_vector_width_shift(T)
     V = VectorizationBase.pick_vector_width_val(T)
@@ -100,26 +94,52 @@ function vmap_multithreaded!(
         v₂ = extract_data(f(vload.(V, gep.(ptrargs, vadd(i,  W)))...))
         v₃ = extract_data(f(vload.(V, gep.(ptrargs, vadd(i, 2W)))...))
         v₄ = extract_data(f(vload.(V, gep.(ptrargs, vadd(i, 3W)))...))
-        if NonTemporal
-            vstorent!(gep(ptry,      i     ), v₁)
-            vstorent!(gep(ptry, vadd(i,  W)), v₂)
-            vstorent!(gep(ptry, vadd(i, 2W)), v₃)
-            vstorent!(gep(ptry, vadd(i, 3W)), v₄)
-        else
-            vnoaliasstore!(gep(ptry,      i     ), v₁)
-            vnoaliasstore!(gep(ptry, vadd(i,  W)), v₂)
-            vnoaliasstore!(gep(ptry, vadd(i, 2W)), v₃)
-            vnoaliasstore!(gep(ptry, vadd(i, 3W)), v₄)
-        end
+        vstorent!(gep(ptry,      i     ), v₁)
+        vstorent!(gep(ptry, vadd(i,  W)), v₂)
+        vstorent!(gep(ptry, vadd(i, 2W)), v₃)
+        vstorent!(gep(ptry, vadd(i, 3W)), v₄)
     end
     ii = Niter << Wsh
     while ii < N - (W - 1) # stops at 16 when
         vᵢ = extract_data(f(vload.(V, gep.(ptrargs, ii))...))
-        if NonTemporal
-            vstorent!(gep(ptry, ii), vᵢ)
-        else
-            vnoaliasstore!(gep(ptry, ii), vᵢ)
-        end
+        vstorent!(gep(ptry, ii), vᵢ)
+        ii = vadd(ii, W)
+    end
+    if ii < N
+        m = mask(T, N & (W - 1))
+        vnoaliasstore!(gep(ptry, ii), extract_data(f(vload.(V, gep.(ptrargs, ii), m)...)), m)
+    end
+    y
+end
+function vmap_multithreaded!(
+    f::F,
+    y::DenseArray{T},
+    ::Val{false},
+    args::Vararg{<:DenseArray{<:NativeTypes},A}
+) where {F,T,A}
+    N = length(y)
+    ptry = pointer(y)
+    ptrargs = pointer.(args)
+    N > 0 || return y
+    W, Wshift = VectorizationBase.pick_vector_width_shift(T)
+    V = VectorizationBase.pick_vector_width_val(T)
+    Wsh = Wshift + 2
+    Niter = N >>> Wsh
+    Base.Threads.@threads for j ∈ 0:Niter-1
+        i = j << Wsh
+        v₁ = extract_data(f(vload.(V, gep.(ptrargs,      i     ))...))
+        v₂ = extract_data(f(vload.(V, gep.(ptrargs, vadd(i,  W)))...))
+        v₃ = extract_data(f(vload.(V, gep.(ptrargs, vadd(i, 2W)))...))
+        v₄ = extract_data(f(vload.(V, gep.(ptrargs, vadd(i, 3W)))...))
+        vnoaliasstore!(gep(ptry,      i     ), v₁)
+        vnoaliasstore!(gep(ptry, vadd(i,  W)), v₂)
+        vnoaliasstore!(gep(ptry, vadd(i, 2W)), v₃)
+        vnoaliasstore!(gep(ptry, vadd(i, 3W)), v₄)
+    end
+    ii = Niter << Wsh
+    while ii < N - (W - 1) # stops at 16 when
+        vᵢ = extract_data(f(vload.(V, gep.(ptrargs, ii))...))
+        vnoaliasstore!(gep(ptry, ii), vᵢ)
         ii = vadd(ii, W)
     end
     if ii < N
