@@ -631,7 +631,19 @@
     LoopVectorization.maybestaticsize(::LinearAlgebra.Adjoint{T,SizedMatrix{M,N,T}}, ::Val{2}) where {M,N,T} = LoopVectorization.Static{M}()
     LoopVectorization.maybestaticsize(::LinearAlgebra.Transpose{T,SizedMatrix{M,N,T}}, ::Val{1}) where {M,N,T} = LoopVectorization.Static{N}()
     LoopVectorization.maybestaticsize(::LinearAlgebra.Transpose{T,SizedMatrix{M,N,T}}, ::Val{2}) where {M,N,T} = LoopVectorization.Static{M}()
-    
+
+struct ZeroInitializedArray{T,N,A<:DenseArray{T,N}} <: DenseArray{T,N}
+    data::A
+end
+Base.size(A::ZeroInitializedArray) = size(A.data)
+Base.length(A::ZeroInitializedArray) = length(A.data)
+Base.axes(A::ZeroInitializedArray, i) = axes(A.data, i)
+@inline Base.getindex(A::ZeroInitializedArray{T}) where {T} = zero(T)
+Base.@propagate_inbounds Base.setindex!(A::ZeroInitializedArray, v, i...) = setindex!(A.data, v, i...)
+function LoopVectorization.VectorizationBase.stridedpointer(A::ZeroInitializedArray)
+    LoopVectorization.VectorizationBase.ZeroInitializedStridedPointer(LoopVectorization.VectorizationBase.stridedpointer(A.data))
+end
+
     for T ∈ (Float32, Float64, Int32, Int64)
     # let T = Int32
         # exceeds_time_limit() && break
@@ -683,6 +695,8 @@
             AmuladdBavx!(C, At', B, 1, 0) 
             @test C ≈ C2
             AmuladdBavx!(C, At', Bt', 2, -1)
+            @test C ≈ C2
+            fill!(C, 9999.999); AmuladdBavx!(ZeroInitializedArray(C), At', Bt')
             @test C ≈ C2
             fill!(C, 9999.999); AmulB2x2avx!(C, A, B);
             @test C ≈ C2
