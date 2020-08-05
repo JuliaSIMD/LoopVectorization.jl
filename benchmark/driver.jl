@@ -212,7 +212,7 @@ selfdot_bench = benchmark_selfdot(longsizes); println("a' * a benchmark results:
 
 sse_bench = benchmark_sse(sizes); println("Benchmark resutls of summing squared error:"); println(sse_bench)
 aplusBc_bench = benchmark_aplusBc(sizes); println("Benchmark results of a .+ B .* c':"); println(aplusBc_bench)
-AplusAt_bench = benchmark_AplusAt(sizes); println("Benchmark results of A * A':"); println(AplusAt_bench)
+AplusAt_bench = benchmark_AplusAt(sizes); println("Benchmark results of A .+ A':"); println(AplusAt_bench)
 
 filter2d_dynamic_bench = benchmark_filter2ddynamic(sizes); println("Benchmark results for dynamically sized 3x3 convolution:"); println(filter2d_dynamic_bench)
 filter2d_3x3_bench = benchmark_filter2d3x3(sizes); println("Benchmark results for statically sized 3x3 convolution:"); println(filter2d_3x3_bench)
