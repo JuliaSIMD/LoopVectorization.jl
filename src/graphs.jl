@@ -70,6 +70,8 @@ function Loop(itersymbol::Symbol, start::Union{Int,Symbol}, stop::Union{Int,Symb
 end
 Base.length(loop::Loop) = 1 + loop.stophint - loop.starthint
 isstaticloop(loop::Loop) = loop.startexact & loop.stopexact
+
+
 function startloop(loop::Loop, itersymbol)
     startexact = loop.startexact
     if startexact
@@ -353,11 +355,12 @@ function oporder(ls::LoopSet)
 end
 names(ls::LoopSet) = ls.loop_order.loopnames
 reversenames(ls::LoopSet) = ls.loop_order.bestorder
-function getloopid(ls::LoopSet, s::Symbol)::Int
+function getloopid_or_nothing(ls::LoopSet, s::Symbol)
     for (loopnum,sym) ∈ enumerate(ls.loopsymbols)
         s === sym && return loopnum
     end
 end
+getloopid(ls::LoopSet, s::Symbol) = getloopid_or_nothing(ls, s)::Int
 getloop(ls::LoopSet, s::Symbol) = ls.loops[getloopid(ls, s)]
 # getloop(ls::LoopSet, i::Integer) = ls.loops[i]
 getloopsym(ls::LoopSet, i::Integer) = ls.loopsymbols[i]
@@ -366,6 +369,10 @@ Base.length(ls::LoopSet, s::Symbol) = length(getloop(ls, s))
 # isstaticloop(ls::LoopSet, s::Symbol) = isstaticloop(getloop(ls,s))
 # looprangehint(ls::LoopSet, s::Symbol) = length(getloop(ls, s))
 # looprangesym(ls::LoopSet, s::Symbol) = getloop(ls, s).rangesym
+
+"""
+getop only works while construction a LoopSet object. You cannot use it while lowering.
+"""
 getop(ls::LoopSet, var::Number, elementbytes) = add_constant!(ls, var, elementbytes)
 function getop(ls::LoopSet, var::Symbol, elementbytes::Int)
     get!(ls.opdict, var) do
@@ -378,6 +385,16 @@ function getop(ls::LoopSet, var::Symbol, deps, elementbytes::Int)
     end
 end
 getop(ls::LoopSet, i::Int) = ls.operations[i]
+
+# """ 
+# Returns an operation with the same name as `s`.
+# """
+# function getoperation(ls::LoopSet, s::Symbol)
+#     for op ∈ Iterators.Reverse(operations(ls))
+#         name(op) === s && return op
+#     end
+#     throw("Symbol $s not found among operations(ls).")
+# end
 
 function Operation(
     ls::LoopSet, variable, elementbytes, instruction,
@@ -731,9 +748,38 @@ function UnrollSpecification(ls::LoopSet, u₁loop::Symbol, u₂loop::Symbol, ve
 end
 
 """
+  looplengthprod(ls::LoopSet)
+
 Convert to `Float64` for the sake of non-64 bit platforms.
 """
 looplengthprod(ls::LoopSet) = prod(Float64 ∘ length, ls.loops)
+
+
+function looplength(ls::LoopSet, s::Symbol)
+    # search_tree(parents(operations(ls)[i]), name(op)) && return true
+    id = getloopid_or_nothing(ls, s)
+    if isnothing(id)
+        l = 0.0
+        # TODO: we could double count a loop.
+        for op ∈ operations(ls)
+            name(op) === s || continue
+            for opp ∈ parents(op)
+                if isloopvalue(opp)
+                    oppname = first(loopdependencies(opp))
+                    l += looplength(ls, oppname)
+                elseif iscompute(opp)
+                    oppname = name(opp)
+                    l += looplength(ls, oppname)
+                    # TODO elseif isconstant(opp)
+                end
+            end
+            l += 1 - length(parents(op))
+        end
+        l
+    else
+        Float64(length(ls.loops[id]))
+    end
+end
 
 # function getunrolled(ls::LoopSet)
 #     order = names(ls)

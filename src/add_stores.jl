@@ -57,15 +57,14 @@ function add_store!(
     mpref = array_reference_meta!(ls, array, rawindices, elementbytes, var)
     add_store!(ls, mpref, elementbytes)
 end
-function add_simple_store!(ls::LoopSet, parent::Operation, ref::ArrayReference, elementbytes::Int)
-    mref = ArrayReferenceMeta(
-        ref, fill(true, length(getindices(ref)))
-    )
-    op = Operation( ls, name(mref), elementbytes, :setindex!, memstore, getindices(ref), NODEPENDENCY, [parent], mref )
+function add_simple_store!(ls::LoopSet, parent::Operation, mref::ArrayReferenceMeta, elementbytes::Int)
+    op = Operation( ls, name(mref), elementbytes, :setindex!, memstore, getindices(mref.ref), NODEPENDENCY, [parent], mref )
     add_unique_store!(ls, op)
 end
-function add_simple_store!(ls::LoopSet, var::Symbol, ref::ArrayReference, elementbytes::Int)
-    add_simple_store!(ls, getop(ls, var, elementbytes), ref, elementbytes)
+function add_simple_store!(ls::LoopSet, var::Union{Symbol,Operation}, ref::Union{ArrayReference,ArrayReferenceMeta}, elementbytes::Int)
+    parent = isa(var, Symbol) ? getop(ls, var, elementbytes) : var
+    mref = isa(ref, ArrayReference) ? ArrayReferenceMeta(ref, fill(true, length(getindices(ref)))) : ref
+    add_simple_store!(ls, parent, mref, elementbytes)
 end
 function add_store_ref!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int)
     array, raw_indices = ref_from_ref!(ls, ex)

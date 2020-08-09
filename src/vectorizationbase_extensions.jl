@@ -23,6 +23,13 @@ end
         Boff.offsets
     )
 end
+
+@inline function VectorizationBase.stridedpointer_for_broadcast(A::OffsetArrays.OffsetArray)
+    OffsetStridedPointer(
+        VectorizationBase.stridedpointer_for_broadcast(parent(A)),
+        VectorizationBase.staticmul(T, VectorizationBase.filter_strides_by_dimequal1(Base.tail(size(A)), VectorizationBase.tailstrides(A)))
+    )
+end
 @inline function Base.transpose(A::OffsetStridedPointer)
     OffsetStridedPointer(
         transpose(A.ptr), A.offsets

@@ -671,6 +671,7 @@ end
 function lower_unrollspec(ls::LoopSet)
     us = ls.unrollspecification[]
     @unpack vectorizedloopnum, u₁, u₂ = us
+    # @show u₁, u₂
     order = names(ls)
     vectorized = order[vectorizedloopnum]
     setup_preamble!(ls, us)

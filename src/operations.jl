@@ -242,7 +242,7 @@ function Base.show(io::IO, op::Operation)
         ref = Expr(:ref, name(op.ref)); append!(ref.args, getindices(op))
         print(io, Expr(:(=), ref, name(first(parents(op)))))
     elseif isloopvalue(op)
-        print(io, Expr(:(=), op.variable, op.variable))
+        print(io, Expr(:(=), op.variable, first(loopdependencies(op))))
     end
 end
 
