@@ -164,12 +164,26 @@ end
 function add_mref!(
     ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name
 ) where {T, X <: Tuple, S <: AbstractStaticStridedPointer{T,X}}
-    if last(X.parameters)::Int == 1
-        pushvarg′!(ls, ar, i, name)
-    else
-        pushvarg!(ls, ar, i, name)
-        first(X.parameters)::Int == 1 || makediscontiguous!(getindices(ar))
+    li = ar.loopedindex; lic = copy(li);
+    inds = getindices(ar); indsc = copy(inds);
+    Xv = Int[]; foreach(x -> push!(Xv, x), X.parameters)
+    sp = sortperm(Xv)
+    Xperm = Expr(:curly, :Tuple)
+    for (i,p) ∈ enumerate(sp)
+        li[i] = lic[p]
+        inds[i] = indsc[p]
+        push!(Xperm.args, Xv[p])
     end
+    isone(Xv[first(sp)]) || makediscontiguous!(getindices(ar))
+    ginds = Expr(:tuple); foreach(_ -> push!(ginds.args, Expr(:call, lv(:Zero))), eachindex(li))
+    sptr = if S <: VectorizationBase.StaticStridedPointer
+        Expr(:call, Expr(:curly, lv(:StaticStridedPointer), T, Xperm), Expr(:call, lv(:gep), extract_varg(i), ginds))
+    elseif S <: VectorizationBase.StaticStridedBitPointer
+        Expr(:call, Expr(:curly, lv(:StaticStridedBitPointer), Xperm), Expr(:call, lv(:gep), extract_varg(i), ginds))
+    else
+        throw("AbstractStaticStridedPointer type $S not recognized.")
+    end
+    pushpreamble!(ls, Expr(:(=), name, sptr))
 end
 function add_mref!(
     ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name
