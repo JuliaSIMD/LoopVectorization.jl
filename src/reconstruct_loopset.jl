@@ -120,10 +120,6 @@ function extract_varg(i)
 end
 
 pushvarg!(ls::LoopSet, ar::ArrayReferenceMeta, i, name) = pushpreamble!(ls, Expr(:(=), name, extract_varg(i)))
-function pushvarg′!(ls::LoopSet, ar::ArrayReferenceMeta, i, name)
-    reverse!(ar.loopedindex); reverse!(getindices(ar)) # reverse the listed indices here, and transpose it to make it column major
-    pushpreamble!(ls, Expr(:(=), name, Expr(:call, lv(:transpose), extract_varg(i))))
-end
 function add_mref!(
     ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name
 ) where {T, N, S <: AbstractColumnMajorStridedPointer{T,N}}
@@ -132,21 +128,19 @@ end
 function add_mref!(
     ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name
 ) where {T, N, S <: AbstractRowMajorStridedPointer{T, N}}
-    pushvarg′!(ls, ar, i, name)
+    reverse!(ar.loopedindex); reverse!(getindices(ar)); reverse!(ar.ref.offsets); # reverse the listed indices here, and transpose it to make it column major
+    pushpreamble!(ls, Expr(:(=), name, Expr(:call, lv(:transpose), extract_varg(i))))
 end
 function add_mref!(
     ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name
 ) where {S1, S2, T, P, S <: VectorizationBase.PermutedDimsStridedPointer{S1,S2,T,P}}
     gensymname = gensym(name)
-    li = ar.loopedindex; inds = getindices(ar)
-    lib = similar(li); indsb = similar(inds)
-    for i ∈ eachindex(li, inds)
-        lib[i] = li[i]
-        indsb[i] = inds[i]
-    end
+    li = ar.loopedindex; inds = getindices(ar); offsets = ar.ref.offsets
+    lib = copy(li); indsb = copy(inds); offsetsb = copy(offsets);
     for i ∈ eachindex(li, inds)
         li[i] = lib[S2[i]]
         inds[i] = indsb[S2[i]]
+        offsets[i] = offsetsb[S2[i]]
     end
     add_mref!(ls, ar, i, P, gensymname)
     pushpreamble!(ls, Expr(:(=), name, Expr(:(.), gensymname, QuoteNode(:ptr))))
@@ -165,13 +159,15 @@ function add_mref!(
     ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name
 ) where {T, X <: Tuple, S <: AbstractStaticStridedPointer{T,X}}
     li = ar.loopedindex; lic = copy(li);
-    inds = getindices(ar); indsc = copy(inds);
+    inds = getindices(ar); indsc = copy(inds); 
+    offsets = ar.ref.offsets; offsetsc = copy(offsets);
     Xv = Int[]; foreach(x -> push!(Xv, x), X.parameters)
     sp = sortperm(Xv)
     Xperm = Expr(:curly, :Tuple)
     for (i,p) ∈ enumerate(sp)
         li[i] = lic[p]
         inds[i] = indsc[p]
+        offsets[i] = offsetsc[p]
         push!(Xperm.args, Xv[p])
     end
     isone(Xv[first(sp)]) || makediscontiguous!(getindices(ar))

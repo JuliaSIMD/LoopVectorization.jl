@@ -263,6 +263,16 @@ end
 #     )
 # end
 
+function allinteriorunrolled(ls::LoopSet, us::UnrollSpecification, N)
+    for n ∈ 1:N-1
+        loop = getloop(ls, names(ls)[n])
+        nisvectorized = isvectorized(us, n)
+        W = nisvectorized ? ls.vector_width[] : 1
+        ((length(loop) ≤ 8W) && (isstaticloop(loop) & (!iszero(W)))) || return false
+    end
+    true
+end
+
 function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask::Bool)
     usorig = ls.unrollspecification[]
     nisvectorized = isvectorized(us, n)
@@ -286,7 +296,7 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
     # q = if align_loop
     #     Expr(:block, align_inner_loop_expr(ls, us, loop), Expr(:while, tc, body))
     # elseif nisvectorized
-    if loopisstatic && length(loop) ≤ 8W
+    if loopisstatic && length(loop) ≤ 8W && allinteriorunrolled(ls, us, n)
         q = Expr(:block)
         foreach(_ -> push!(q.args, body), 1:(length(loop) ÷ W))
     elseif nisvectorized
@@ -353,7 +363,7 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     body = lower_block(ls, us, n, inclmask, UF)
     if loopisstatic
         iters = length(loop) ÷ UFW
-        if iters*UF ≤ 16 # Let's set a limit on total unrolling
+        if iters*UF ≤ 16 && allinteriorunrolled(ls, us, n)# Let's set a limit on total unrolling
             q = Expr(:block)
             foreach(_ -> push!(q.args, body), 1:iters)
         else
