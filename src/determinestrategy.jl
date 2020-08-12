@@ -402,7 +402,7 @@ function solve_unroll(X, R, u₁L, u₂L, u₁step, u₂step)
     u₂low = min(u₂low, maxunroll)
     u₁high = min(u₁high, maxunroll)
     u₂high = min(u₂high, maxunroll)
-    solve_unroll_iter(X, R, u₁L, u₂L, u₁low:u₁step:u₁high, u₂low:u₂step:u₂high)
+    solve_unroll_iter(X, R, u₁L, u₂L, u₁high:-u₁step:u₁low, u₂high:-u₂step:u₂low)
 end
 
 function solve_unroll_constU(R::AbstractVector, u₁::Int)

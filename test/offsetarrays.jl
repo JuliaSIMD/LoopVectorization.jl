@@ -87,9 +87,10 @@ using LoopVectorization.VectorizationBase: StaticUnitRange
     end
 
 
-    struct SizedOffsetMatrix{T,LR,UR,LC,RC} <: DenseMatrix{T}
+    struct SizedOffsetMatrix{T,LR,UR,LC,UC} <: DenseMatrix{T}
         data::Matrix{T}
     end
+    Base.size(::SizedOffsetMatrix{<:Any,LR,UR,LC,UC}) where {LR,UR,LC,UC} = (UR-LR+1,UC-LC+1)
     Base.axes(::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (StaticUnitRange{LR,UR}(),StaticUnitRange{LC,UC}())
     Base.parent(A::SizedOffsetMatrix) = A.data
     @generated function LoopVectorization.stridedpointer(A::SizedOffsetMatrix{T,LR,UR,LC,RC}) where {T,LR,UR,LC,RC}
