@@ -398,11 +398,11 @@ function solve_unroll(X, R, u₁L, u₂L, u₁step, u₂step)
     u₁high = solve_unroll_constT(R, u₂low) + u₁step
     u₂high = solve_unroll_constU(R, u₁low) + u₂step
     maxunroll = REGISTER_COUNT == 32 ? (((X₂ > 0) & (X₃ > 0)) ? 10 : 8) : 6
-    u₁low = min(u₁low, maxunroll)
-    u₂low = min(u₂low, maxunroll)
+    u₁low = (min(u₁low, maxunroll) ÷ u₁step) * u₁step
+    u₂low = (min(u₂low, maxunroll) ÷ u₂step) * u₂step
     u₁high = min(u₁high, maxunroll)
     u₂high = min(u₂high, maxunroll)
-    solve_unroll_iter(X, R, u₁L, u₂L, u₁high:-u₁step:u₁low, u₂high:-u₂step:u₂low)
+    solve_unroll_iter(X, R, u₁L, u₂L, reverse(u₁low:u₁step:u₁high), reverse(u₂low:u₂step:u₂high))
 end
 
 function solve_unroll_constU(R::AbstractVector, u₁::Int)
