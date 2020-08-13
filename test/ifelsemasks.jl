@@ -99,7 +99,8 @@ T = Float32
     end
     function addormulp1avx!(c, a, b)
         @avx for i ∈ eachindex(c,a,b)
-            c[i] = 1 + (a[i] > b[i] ? a[i] + b[i] : a[i] * b[i])
+            a_greater_than_b = a[i] > b[i]
+            c[i] = 1 + (a_greater_than_b ? a[i] + b[i] : a[i] * b[i])
         end
     end
     function addifelsemul_avx!(c, a, b)

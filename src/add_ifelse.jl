@@ -8,7 +8,9 @@ function add_if!(ls::LoopSet, LHS::Symbol, RHS::Expr, elementbytes::Int, positio
     # for now, just simple 1-liners
     @assert length(RHS.args) == 3 "if statements without an else cannot be assigned to a variable."
     condition = first(RHS.args)
-    condop = if isnothing(mpref)
+    condop = if condition isa Symbol
+        getop(ls, condition, elementbytes)
+    elseif isnothing(mpref)
         add_operation!(ls, gensym(:mask), condition, elementbytes, position)
     else
         add_operation!(ls, gensym(:mask), condition, mpref, elementbytes, position)
