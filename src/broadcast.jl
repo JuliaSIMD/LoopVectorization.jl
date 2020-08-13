@@ -6,15 +6,15 @@ end
     M = @inbounds size(p.a)[1]
     (M, Base.tail(size(p.b))...)
 end
-# @inline function Base.size(p::Product, i::Integer)
-#     i == 1 && return @inbounds size(p.a)[1]
-#     @inbounds size(p.b)[i]
-# end
-# @inline Base.length(p::Product) = prod(size(p))
-# @inline Base.broadcastable(p::Product) = p
+@inline function Base.size(p::Product, i::Integer)
+    i == 1 && return @inbounds size(p.a)[1]
+    @inbounds size(p.b)[i]
+end
+@inline Base.length(p::Product) = prod(size(p))
+@inline Base.broadcastable(p::Product) = p
 @inline numdims(A) = ndims(A) # fallback
-# @inline numdims(::Type{Product{A,B}}) where {A,B} = numdims(B)
-# @inline Base.ndims(::Type{Product{A,B}}) where {A,B} = numdims(B)
+@inline numdims(::Type{Product{A,B}}) where {A,B} = numdims(B)
+@inline Base.ndims(::Type{Product{A,B}}) where {A,B} = numdims(B)
 # This numdims nonsense is a hack to avoid type piracy in defining:
 @inline numdims(::Type{B}) where {N, S <: Base.Broadcast.AbstractArrayStyle{N}, B <: Base.Broadcast.Broadcasted{S}} = N
 
