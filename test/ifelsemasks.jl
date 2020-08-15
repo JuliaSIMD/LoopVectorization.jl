@@ -317,6 +317,36 @@ T = Float32
             x[i] = yᵢ * zᵢ
         end
     end
+    
+    function twoifelses!(res, half, m, keep=nothing, final=true)
+        𝒶𝓍j=axes(half,1)
+        for j in 𝒶𝓍j
+            𝓇𝒽𝓈 = if isnothing(keep)
+                log(half[j]) + m[j]
+            else
+                res[j] + (log(half[j]) + m[j])
+            end
+            res[j] = isnothing(final) ? 𝓇𝒽𝓈 : exp(𝓇𝒽𝓈)
+        end
+        res
+    end
+    function twoifelses_avx!(res, half, m, keep=nothing, final=true)
+        𝒶𝓍j=axes(half,1)
+        @avx for j in 𝒶𝓍j
+            𝓇𝒽𝓈 = if isnothing(keep)
+                log(half[j]) + m[j]
+            else
+                res[j] + (log(half[j]) + m[j])
+            end
+            res[j] = if isnothing(final)
+                𝓇𝒽𝓈
+            else
+                exp(𝓇𝒽𝓈)
+            end
+        end
+        res
+    end
+    
     N = 117
     for T ∈ (Float32, Float64, Int32, Int64)
         @show T, @__LINE__
@@ -425,6 +455,25 @@ T = Float32
         condloadscalar!(C1, B, b, d)
         condloadscalaravx!(C2, B, b, d)
         @test C1 ≈ C2
+
+        if T <: Integer
+            half = rand(T(1):T(100), 7);
+            m = rand(T(-10):T(10), 7);
+        else
+            half = rand(T, 7); m = rand(T, 7);
+        end;
+        if sizeof(T) == 4
+            res1 = Vector{Float32}(undef, 7);
+            res2 = Vector{Float32}(undef, 7);
+        else
+            res1 = Vector{Float64}(undef, 7);
+            res2 = Vector{Float64}(undef, 7);
+        end
+
+        for keep ∈ (nothing,true), final ∈ (nothing,true)
+            @test twoifelses!(res1, half, m) ≈ twoifelses_avx!(res2, half, m)
+        end
+
     end
     
     

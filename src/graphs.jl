@@ -555,9 +555,10 @@ end
 instruction!(ls::LoopSet, x::Symbol) = instruction(x)
 
 
-function maybe_const_compute!(ls::LoopSet, op::Operation, elementbytes::Int, position::Int)
+function maybe_const_compute!(ls::LoopSet, LHS::Symbol, op::Operation, elementbytes::Int, position::Int)
+    # return op
     if iscompute(op) && iszero(length(loopdependencies(op)))
-        add_constant!(ls, mangledvar(op), ls.loopsymbols[1:position], gensym(instruction(op).instr), elementbytes, :numericconstant)
+        ls.opdict[LHS] = add_constant!(ls, LHS, ls.loopsymbols[1:position], gensym(instruction(op).instr), elementbytes, :numericconstant)
     else
         op
     end
@@ -572,6 +573,9 @@ function strip_op_linenumber_nodes(q::Expr)
     end
 end
 
+function add_operation!(ls::LoopSet, LHS::Symbol, RHS::Symbol, elementbytes::Int, position::Int)
+    add_constant!(ls, RHS, ls.loopsymbols[1:position], LHS, elementbytes)
+end
 function add_operation!(
     ls::LoopSet, LHS::Symbol, RHS::Expr, elementbytes::Int, position::Int
 )
@@ -670,7 +674,7 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
         RHS = ex.args[2]
         if LHS isa Symbol
             if RHS isa Expr
-                maybe_const_compute!(ls, add_operation!(ls, LHS, RHS, elementbytes, position), elementbytes, position)
+                maybe_const_compute!(ls, LHS, add_operation!(ls, LHS, RHS, elementbytes, position), elementbytes, position)
             else
                 add_constant!(ls, RHS, ls.loopsymbols[1:position], LHS, elementbytes)
             end
@@ -689,7 +693,7 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
             elseif LHS.head === :tuple
                 @assert length(LHS.args) ≤ 9 "Functions returning more than 9 values aren't currently supported."
                 lhstemp = gensym(:lhstuple)
-                vparents = Operation[maybe_const_compute!(ls, add_operation!(ls, lhstemp, RHS, elementbytes, position), elementbytes, position)]
+                vparents = Operation[maybe_const_compute!(ls, lhstemp, add_operation!(ls, lhstemp, RHS, elementbytes, position), elementbytes, position)]
                 for i ∈ eachindex(LHS.args)
                     f = (:first,:second,:third,:fourth,:fifth,:sixth,:seventh,:eighth,:ninth)[i]
                     lhsi = LHS.args[i]

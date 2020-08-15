@@ -1,9 +1,19 @@
 
 ### This file contains convenience functions for constructing LoopSets.
 
+# function strip_unneeded_const_deps!(ls::LoopSet)
+#     for op ∈ operations(ls)
+#         if isconstant(op) && iszero(length(reducedchildren(op)))
+#             op.dependencies = NODEPENDENCY
+#         end
+#     end
+#     ls
+# end
+
 function Base.copyto!(ls::LoopSet, q::Expr)
     q.head === :for || throw("Expression must be a for loop.")
     add_loop!(ls, q, 8)
+    # strip_unneeded_const_deps!(ls)
 end
 
 function add_ci_call!(q::Expr, @nospecialize(f), args, syms, i, mod = nothing)

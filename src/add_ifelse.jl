@@ -17,7 +17,7 @@ function add_if!(ls::LoopSet, LHS::Symbol, RHS::Expr, elementbytes::Int, positio
     end
     iftrue = RHS.args[2]
     if iftrue isa Expr
-        trueop = add_operation!(ls, Symbol(:iftrue), iftrue, elementbytes, position)
+        trueop = add_operation!(ls, gensym(:iftrue), iftrue, elementbytes, position)
         if iftrue.head === :ref && all(ld -> ld ∈ loopdependencies(trueop), loopdependencies(condop)) && !search_tree(parents(condop), trueop)
             trueop.instruction = Instruction(:conditionalload)
             push!(parents(trueop), condop)
@@ -27,7 +27,7 @@ function add_if!(ls::LoopSet, LHS::Symbol, RHS::Expr, elementbytes::Int, positio
     end
     iffalse = RHS.args[3]
     if iffalse isa Expr
-        falseop = add_operation!(ls, Symbol(:iffalse), iffalse, elementbytes, position)
+        falseop = add_operation!(ls, gensym(:iffalse), iffalse, elementbytes, position)
         if iffalse.head === :ref && all(ld -> ld ∈ loopdependencies(falseop), loopdependencies(condop)) && !search_tree(parents(condop), falseop)
             falseop.instruction = Instruction(:conditionalload)
             push!(parents(falseop), negateop!(ls, condop, elementbytes))

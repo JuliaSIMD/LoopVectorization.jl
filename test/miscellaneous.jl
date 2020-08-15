@@ -752,6 +752,38 @@ function manyreturntestavx(x)
     s
 end
 
+function maybe_const_issue144!(𝛥mat, 𝛥ℛ, mat, ℛ)
+    𝛥ℛ_value = 𝛥ℛ.value
+    for j in axes(mat,2)
+        for i in axes(mat,1)
+            ℰ𝓍1 = conj(𝛥ℛ_value) # could be outside both loops
+            ℰ𝓍2 = -(ℛ[j])        # could be outside i loop
+            ℰ𝓍3 = exp(ℰ𝓍2)       # could be outside i loop
+            ℰ𝓍4 = exp(mat[i, j])
+            ℰ𝓍5 = ℰ𝓍3 * ℰ𝓍4
+            ℰ𝓍6 = ℰ𝓍1 * ℰ𝓍5
+            ℰ𝓍7 = conj(ℰ𝓍6)
+            𝛥mat[i, j] = 𝛥mat[i, j] + ℰ𝓍7
+        end
+    end
+    𝛥mat
+end
+function maybe_const_issue144_avx!(𝛥mat, 𝛥ℛ, mat, ℛ)
+    𝛥ℛ_value = 𝛥ℛ.value
+    @avx for j in axes(mat,2)
+        for i in axes(mat,1)
+            ℰ𝓍1 = conj(𝛥ℛ_value)
+            ℰ𝓍2 = -(ℛ[j])
+            ℰ𝓍3 = exp(ℰ𝓍2)
+            ℰ𝓍4 = exp(mat[i, j])
+            ℰ𝓍5 = ℰ𝓍3 * ℰ𝓍4
+            ℰ𝓍6 = ℰ𝓍1 * ℰ𝓍5
+            ℰ𝓍7 = conj(ℰ𝓍6)
+            𝛥mat[i, j] = 𝛥mat[i, j] + ℰ𝓍7
+        end
+    end
+    𝛥mat
+end
 
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
@@ -970,6 +1002,10 @@ end
 
         @test all(isequal(81), powcseliteral!(E0))
         @test all(isequal(81), powcsesymbol!(E3))
+
+        @test maybe_const_issue144!(zeros(T, 3,4), (value=one(T),), collect(reshape(1:12, 3,4)), ones(T, 4)) ≈ maybe_const_issue144_avx!(zeros(T,3,4), (value=one(T),), collect(reshape(1:12, 3,4)), ones(T,4))
+
+
     end
     for T ∈ [Int16, Int32, Int64]
         n = 8sizeof(T) - 1
