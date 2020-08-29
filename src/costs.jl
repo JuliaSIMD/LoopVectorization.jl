@@ -256,16 +256,6 @@ const COST = Dict{Symbol,InstructionCost}(
     :prefetch1 => InstructionCost(0,0.0,0.0,0),
     :prefetch2 => InstructionCost(0,0.0,0.0,0)
 )
-@inline prefetch0(x, i) = SIMDPirates.prefetch(gep(stridedpointer(x), (extract_data(i),)), Val{3}(), Val{0}())
-@inline prefetch0(x, I::Tuple) = SIMDPirates.prefetch(gep(stridedpointer(x), extract_data.(I)), Val{3}(), Val{0}())
-@inline prefetch0(x, i, j) = SIMDPirates.prefetch(gep(stridedpointer(x), (extract_data(i), extract_data(j))), Val{3}(), Val{0}())
-# @inline prefetch0(x, i, j, oi, oj) = SIMDPirates.prefetch(gep(stridedpointer(x), (extract_data(i) + extract_data(oi) - 1, extract_data(j) + extract_data(oj) - 1)), Val{3}(), Val{0}())
-@inline prefetch1(x, i) = SIMDPirates.prefetch(gep(stridedpointer(x), (extract_data(i),)), Val{2}(), Val{0}())
-@inline prefetch1(x, i, j) = SIMDPirates.prefetch(gep(stridedpointer(x), (extract_data(i), extract_data(j))), Val{2}(), Val{0}())
-# @inline prefetch1(x, i, j, oi, oj) = SIMDPirates.prefetch(gep(stridedpointer(x), (extract_data(i) + extract_data(oi) - 1, extract_data(j) + extract_data(oj) - 1)), Val{2}(), Val{0}())
-@inline prefetch2(x, i) = SIMDPirates.prefetch(gep(stridedpointer(x), (extract_data(i),)), Val{1}(), Val{0}())
-@inline prefetch2(x, i, j) = SIMDPirates.prefetch(gep(stridedpointer(x), (extract_data(i), extract_data(j))), Val{1}(), Val{0}())
-# @inline prefetch2(x, i, j, oi, oj) = SIMDPirates.prefetch(gep(stridedpointer(x), (extract_data(i) + extract_data(oi) - 1, extract_data(j) + extract_data(oj) - 1)), Val{1}(), Val{0}())
 
 Base.convert(::Type{Instruction}, instr::Symbol) = Instruction(instr)
 # instruction(f::Symbol, m) = f ∈ keys(COST) ? Instruction(f) : Instruction(m, f)
