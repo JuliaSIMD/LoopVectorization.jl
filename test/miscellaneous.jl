@@ -1007,7 +1007,7 @@ end
         @test isapprox(
             maybe_const_issue144!(zeros(T, 3,4), (value=one(T),), collect(reshape(1:12, 3,4)), ones(T, 4)),
             maybe_const_issue144_avx!(zeros(T,3,4), (value=one(T),), collect(reshape(1:12, 3,4)), ones(T,4)),
-            rtol = sqrt(eps(T))
+            rtol = ∛(eps(T))
         )
 
     end
