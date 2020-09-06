@@ -643,7 +643,7 @@ function define_eltype_vec_width!(q::Expr, ls::LoopSet, vectorized)
     push!(q.args, Expr(:(=), ELTYPESYMBOL, determine_eltype(ls)))
     push!(q.args, Expr(:(=), VECTORWIDTHSYMBOL, determine_width(ls, vectorized)))
 end
-function setup_preamble!(ls::LoopSet, us::UnrollSpecification)
+function setup_preamble!(ls::LoopSet, us::UnrollSpecification, Ureduct::Int)
     @unpack u₁loopnum, u₂loopnum, vectorizedloopnum, u₁, u₂ = us
     order = names(ls)
     u₁loopsym = order[u₁loopnum]
@@ -653,6 +653,7 @@ function setup_preamble!(ls::LoopSet, us::UnrollSpecification)
     iszero(length(ls.includedactualarrays)) || define_eltype_vec_width!(ls.preamble, ls, vectorized)
     lower_licm_constants!(ls)
     isone(num_loops(ls)) || pushpreamble!(ls, definemask(getloop(ls, vectorized)))#, u₁ > 1 && u₁loopnum == vectorizedloopnum))
+    initialize_outer_reductions!(ls, 0, Ureduct, vectorized)
     for op ∈ operations(ls)
         (iszero(length(loopdependencies(op))) && iscompute(op)) && lower_compute!(ls.preamble, op, ls, UnrollArgs(u₁, u₁loopsym, u₂loopsym, vectorized, u₂, nothing), nothing)
     end
@@ -684,9 +685,8 @@ function lower_unrollspec(ls::LoopSet)
     # @show u₁, u₂
     order = names(ls)
     vectorized = order[vectorizedloopnum]
-    setup_preamble!(ls, us)
     Ureduct = calc_Ureduct(ls, us)
-    initialize_outer_reductions!(ls, 0, Ureduct, vectorized)
+    setup_preamble!(ls, us, Ureduct)
     initgesps = add_loop_start_stop_manager!(ls)
     q = Expr(:let, initgesps, lower_unrolled_dynamic(ls, us, num_loops(ls), false))
     q = gc_preserve( ls, Expr(:block, q) )

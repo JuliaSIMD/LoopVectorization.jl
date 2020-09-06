@@ -346,7 +346,15 @@ function LoopSet(mod::Symbol)
     )
 end
 
-cacheunrolled!(ls::LoopSet, u₁loop, u₂loop, vectorized) = foreach(op -> setunrolled!(op, u₁loop, u₂loop, vectorized), operations(ls))
+function cacheunrolled!(ls::LoopSet, u₁loop, u₂loop, vectorized)
+    foreach(op -> setunrolled!(op, u₁loop, u₂loop, vectorized), operations(ls))
+    foreach(empty! ∘ children, operations(ls))
+    for op ∈ operations(ls)
+        for opp ∈ parents(op)
+            push!(children(opp), op)
+        end
+    end    
+end
 
 num_loops(ls::LoopSet) = length(ls.loops)
 function oporder(ls::LoopSet)
