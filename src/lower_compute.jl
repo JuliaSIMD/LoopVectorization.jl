@@ -255,7 +255,7 @@ function lower_compute!(
         end
         if instr.instr === :identity && isone(length(parents_op))
             push!(q.args, Expr(:(=), varsym, instrcall.args[2]))
-        elseif should_broadcast_op(op)
+        elseif identifier(op) ∉ ls.outer_reductions && should_broadcast_op(op)
             push!(q.args, Expr(:(=), varsym, Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, instrcall)))
         else
             push!(q.args, Expr(:(=), varsym, instrcall))

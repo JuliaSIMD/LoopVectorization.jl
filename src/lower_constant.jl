@@ -1,6 +1,6 @@
 
 function should_broadcast_op(op::Operation)
-    isvectorized(op) && return false
+    (isvectorized(op) || iszero(length(children(op)))) && return false
     for opc ∈ children(op)
         (!isvectorized(op) || accesses_memory(op)) && return false
     end
