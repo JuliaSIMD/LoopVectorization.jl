@@ -94,7 +94,7 @@ function vector_cost(ic::InstructionCost, Wshift, sizeof_T)
     srt, sl, srp
 end
 
-const OPAQUE_INSTRUCTION = InstructionCost(-1.0, 50, 50.0, REGISTER_COUNT)
+const OPAQUE_INSTRUCTION = InstructionCost(-1.0, 40, 40.0, REGISTER_COUNT)
 
 instruction_cost(instruction::Instruction) = instruction.mod === :LoopVectorization ? COST[instruction.instr] : OPAQUE_INSTRUCTION
 instruction_cost(instruction::Symbol) = get(COST, instruction, OPAQUE_INSTRUCTION)
@@ -219,8 +219,10 @@ const COST = Dict{Symbol,InstructionCost}(
     :vdivlog10add! =>InstructionCost(13,4.0,-2.0),
     :sqrt => InstructionCost(15,4.0,-2.0),
     :sqrt_fast => InstructionCost(15,4.0,-2.0),
-    :log => InstructionCost(20,20.0,40.0,20),
+    :log => InstructionCost(20,20.0,20.0,20),
+    :log1p => InstructionCost(20,25.0,25.0,20), # FIXME
     :exp => InstructionCost(20,20.0,20.0,18),
+    :expm1 => InstructionCost(20,25.0,25.0,18), # FIXME
     :(^) => InstructionCost(40,40.0,40.0,26), # FIXME
     :sin => InstructionCost(18,15.0,68.0,23),
     :cos => InstructionCost(18,15.0,68.0,26),

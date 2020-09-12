@@ -764,7 +764,14 @@ end
 
 Convert to `Float64` for the sake of non-64 bit platforms.
 """
-looplengthprod(ls::LoopSet) = prod(Float64 ∘ length, ls.loops)
+function looplengthprod(ls::LoopSet)
+    l = 1.0
+    for loop ∈ ls.loops
+        l *= Float64(length(loop))
+    end
+    l
+end
+    # prod(Float64 ∘ length, ls.loops)
 
 
 function looplength(ls::LoopSet, s::Symbol)
