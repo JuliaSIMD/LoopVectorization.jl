@@ -155,6 +155,8 @@ mutable struct Operation <: AbstractLoopOperation
     reduced_deps::Vector{Symbol}
     "Operations whose result this operation depends on"
     parents::Vector{Operation}
+    "Operations who depend on this result"
+    children::Vector{Operation}
     "For `memload` or `memstore`, encodes the array location"
     ref::ArrayReferenceMeta
     "`gensymmed` name of result."
@@ -184,7 +186,7 @@ mutable struct Operation <: AbstractLoopOperation
             identifier, variable, elementbytes, instruction, node_type,
             convert(Vector{Symbol},dependencies),
             convert(Vector{Symbol},reduced_deps),
-            convert(Vector{Operation},parents),
+            convert(Vector{Operation},parents), Operation[],
             ref, Symbol("##", variable, :_),
             reduced_children
         )
@@ -260,7 +262,7 @@ accesses_memory(op::AbstractLoopOperation) = isload(op) | isstore(op)
 elsize(op::Operation) = op.elementbytes
 dependson(op::Operation, sym::Symbol) = sym ∈ op.dependencies
 parents(op::Operation) = op.parents
-# children(op::Operation) = op.children
+children(op::Operation) = op.children
 loopdependencies(op::Operation) = op.dependencies
 reduceddependencies(op::Operation) = op.reduced_deps
 reducedchildren(op::Operation) = op.reduced_children

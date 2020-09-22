@@ -70,7 +70,7 @@ function cost(ls::LoopSet, op::Operation, vectorized::Symbol, Wshift::Int, size_
         if opisvectorized
             if !unitstride(ls, op, vectorized)# || !isdense(op) # need gather/scatter
                 r = (1 << Wshift)
-                srt *= r
+                srt *= r# * 2
                 sl *= r
             elseif isload(op) & (length(loopdependencies(op)) > 1)# vmov(a/u)pd
                 # penalize vectorized loads with more than 1 loopdep
@@ -258,7 +258,7 @@ function determine_unroll_factor(
     # So if num_reductions > 0, we set the unroll factor to be high enough so that the CPU can be kept busy
     # if there are, U = max(1, round(Int, max(latency) * throughput / num_reductions)) = max(1, round(Int, latency / (recip_throughput * num_reductions)))
     # We also make sure register pressure is not too high.
-    latency = 1
+    latency = 1.0
     # compute_recip_throughput_u = 0.0
     compute_recip_throughput = 0.0
     visited_nodes = fill(false, length(operations(ls)))
@@ -341,6 +341,8 @@ end
 function unroll_cost(X, u₁, u₂, u₁L, u₂L)
     u₂factor = (num_iterations(u₂L, u₂)/u₂L)
     u₁factor = (num_iterations(u₁L, u₁)/u₁L)
+    # @show num_iterations(u₂L, u₂)/u₂L, u₂, u₂L
+    # @show num_iterations(u₁L, u₁)/u₁L, u₁, u₁L
     # X[1]*u₂factor*u₁factor + X[4] + X[2] * u₂factor + X[3] * u₁factor
     X[1] + X[2] * u₂factor + X[3] * u₁factor + X[4] * u₁factor * u₂factor
 end
@@ -366,6 +368,7 @@ function solve_unroll_iter(X, R, u₁L, u₂L, u₁range, u₂range)
         for u₂temp ∈ u₂range
             RR ≥ u₁temp*u₂temp*R₁ + u₁temp*R₂ + u₂temp*R₅ || continue
             tempcost = unroll_cost(X, u₁temp, u₂temp, u₁L, u₂L)
+            # @show u₁temp, u₂temp, tempcost
             if tempcost ≤ bestcost
                 bestcost = tempcost
                 u₁best, u₂best = u₁temp, u₂temp
@@ -394,7 +397,7 @@ function solve_unroll(X, R, u₁L, u₂L, u₁step, u₂step)
         return solve_unroll_iter(X, R, u₁L, u₂L, u₁low:u₁step:u₁high, u₂low:u₂step:u₂high)
     end
     u₁low = floor(Int, u₁float)
-    u₂low = max(u₂step, floor(Int, u₂float)) # must be at least 1
+    u₂low = max(u₂step, floor(Int, 0.8u₂float)) # must be at least 1
     u₁high = solve_unroll_constT(R, u₂low) + u₁step
     u₂high = solve_unroll_constU(R, u₁low) + u₂step
     maxunroll = REGISTER_COUNT == 32 ? (((X₂ > 0) & (X₃ > 0)) ? 10 : 8) : 6
@@ -498,8 +501,8 @@ function solve_unroll(
             u₁ = isstaticloop(u₁loop) ? maybedemotesize(u₁, u₁L) : u₁
             return u₁, u₂L, unroll_cost(cost_vec, u₁, u₂L, u₁L, u₂L)
         end
-        u₂L = u₂loopsym === vectorized ? cld(u₂L,W) : u₂L
-        maxu₂ = min(4maxu₂, u₂L)
+        u₂Ltemp = u₂loopsym === vectorized ? cld(u₂L, W) : u₂L
+        maxu₂ = min(4maxu₂, u₂Ltemp)
     end
     if isstaticloop(u₁loop)
         if u₁loopsym !== vectorized && u₁L ≤ 4
@@ -507,10 +510,21 @@ function solve_unroll(
             u₂ = isstaticloop(u₂loop) ? maybedemotesize(u₂, u₂L) : u₂
             return u₁L, u₂, unroll_cost(cost_vec, u₁L, u₂, u₁L, u₂L)
         end
-        u₁L = u₁loopsym === vectorized ? cld(u₁L,W) : u₁L
-        maxu₁ = min(4maxu₁, u₁L)
+        u₁Ltemp = u₁loopsym === vectorized ? cld(u₁L, W) : u₁L
+        maxu₁ = min(4maxu₁, u₁Ltemp)
     end
-    u₁, u₂, cost = solve_unroll(cost_vec, reg_pressure, maxu₁, maxu₂, length(u₁loop), length(u₂loop), u₁step, u₂step)
+    if u₁loopsym === vectorized
+        u₁Lf = u₁L / W
+    else
+        u₁Lf = Float64(u₁L)
+    end
+    if u₂loopsym === vectorized
+        u₂Lf = u₂L / W
+    else
+        u₂Lf = Float64(u₂L)
+    end
+    # @show u₁Lf, u₂Lf, u₁L, length(u₁loop)
+    u₁, u₂, cost = solve_unroll(cost_vec, reg_pressure, maxu₁, maxu₂, u₁Lf, u₂Lf, u₁step, u₂step)
     # heuristic to more evenly divide small numbers of iterations
     if isstaticloop(u₂loop)
         u₂ = maybedemotesize(u₂, length(u₂loop), u₁, u₁loop, maxu₂base)
@@ -884,7 +898,7 @@ function evaluate_cost_tile(
         if isstore(op) & (!u₁reducesrt) & (!u₂reducesrt)
             irreducible_storecosts += rt
         end
-        # @show u₁reducesrt, u₂reducesrt, op, rt, rto, rp
+        # iiter = convert(Int, iters[id]); @show u₁reducesrt, u₂reducesrt, op, rt, rto, rp, iiter
         update_costs!(cost_vec, rt, u₁reducesrt, u₂reducesrt)
         update_costs!(reg_pressure, rp, u₁reducesrp, u₂reducesrp)
     end
@@ -1070,6 +1084,9 @@ function choose_order_cost(ls::LoopSet)
     if num_loops(ls) > 1
         torder, tunroll, ttile, tvec, tU, tT, tc, shouldinline = choose_tile(ls)
     else
+        torder = names(ls) # dummy
+        tunroll = ttile = tvec = Symbol("##undefined##") # dummy
+        tU = tT = 0 # dummy
         tc = Inf
     end
     uorder, uvec, uc = choose_unroll_order(ls, tc)

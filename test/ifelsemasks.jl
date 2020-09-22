@@ -346,7 +346,21 @@ T = Float32
         end
         res
     end
-    
+    function testfunction!(f::Matrix{<:AbstractFloat}, v, d, g, s, θ)
+        @inbounds @simd for j in 1:size(f,1)
+            x = v[j, s] + v[j, d] - v[j, g] + f[j, g] + θ
+            _x = ifelse(isnan(x), typemin(eltype(f)), x)
+            f[j, d] = _x 
+        end
+    end
+    function testfunctionavx!(f::Matrix{<:AbstractFloat}, v, d, g, s, θ)
+        @avx for j in 1:size(f,1)
+            x = v[j, s] + v[j, d] - v[j, g] + f[j, g] + θ
+            _x = ifelse(isnan(x), typemin(eltype(f)), x)
+            f[j, d] = _x 
+        end
+    end
+
     N = 117
     for T ∈ (Float32, Float64, Int32, Int64)
         @show T, @__LINE__
@@ -503,4 +517,13 @@ T = Float32
     @test (a .& b) == (@avx a .& b)
     @test (a .| b) == (@avx a .| b)
     @test (a .⊻ b) == (@avx a .⊻ b)
+
+    s, d, g = 3, 1, 2; f = rand(N,2); v = rand(N,3); θ = 0.78;
+    v[rand(eachindex(v), length(v) >> 3)] .= NaN;
+    fc = copy(f);
+    testfunction!(fc, v, d, g, s, θ);
+    # fc2 = copy(f);
+    testfunctionavx!(f, v, d, g, s, θ)    
+    @test f ≈ fc
+    
 end

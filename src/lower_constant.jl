@@ -1,9 +1,16 @@
 
+function should_broadcast_op(op::Operation)
+    (isvectorized(op) || iszero(length(children(op)))) && return false
+    for opc ∈ children(op)
+        (!isvectorized(op) || accesses_memory(op)) && return false
+    end
+    true
+end
+
 # @inline onefloat(::Type{T}) where {T} = one(sizeequivalentfloat(T))
 # @inline oneinteger(::Type{T}) where {T} = one(sizeequivalentint(T))
 @inline zerofloat(::Type{T}) where {T} = zero(sizeequivalentfloat(T))
 @inline zerointeger(::Type{T}) where {T} = zero(sizeequivalentint(T))
-
 
 function lower_zero!(
     q::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs, zerotyp::NumberType = zerotype(ls, op)
@@ -21,7 +28,8 @@ function lower_zero!(
         pushpreamble!(ls, Expr(:(=), newtypeT, Expr(:call, lv(:sizeequivalentfloat), ELTYPESYMBOL)))
         typeT = newtypeT
     end
-    if vectorized ∈ loopdependencies(op) || vectorized ∈ reducedchildren(op) || vectorized ∈ reduceddependencies(op)
+    # TODO: make should_broadcast_op handle everything.
+    if isvectorized(op) || vectorized ∈ reducedchildren(op) || vectorized ∈ reduceddependencies(op) || should_broadcast_op(op)
         call = Expr(:call, lv(:vzero), VECTORWIDTHSYMBOL, typeT)
     else
         call = Expr(:call, :zero, typeT)
@@ -57,7 +65,7 @@ function lower_constant!(
     instruction = op.instruction
     constsym = instruction.instr
     reducedchildvectorized = vectorized ∈ reducedchildren(op)
-    if reducedchildvectorized || vectorized ∈ loopdependencies(op) || vectorized ∈ reduceddependencies(op)
+    if reducedchildvectorized || isvectorized(op) || vectorized ∈ reduceddependencies(op) || should_broadcast_op(op)
         # call = Expr(:call, lv(:vbroadcast), W, Expr(:call, lv(:maybeconvert), typeT, constsym))
         call = if reducedchildvectorized && vectorized ∉ loopdependencies(op)
             instrclass = getparentsreductzero(ls, op)

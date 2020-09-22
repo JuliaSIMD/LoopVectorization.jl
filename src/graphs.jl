@@ -346,7 +346,15 @@ function LoopSet(mod::Symbol)
     )
 end
 
-cacheunrolled!(ls::LoopSet, u₁loop, u₂loop, vectorized) = foreach(op -> setunrolled!(op, u₁loop, u₂loop, vectorized), operations(ls))
+function cacheunrolled!(ls::LoopSet, u₁loop, u₂loop, vectorized)
+    foreach(op -> setunrolled!(op, u₁loop, u₂loop, vectorized), operations(ls))
+    foreach(empty! ∘ children, operations(ls))
+    for op ∈ operations(ls)
+        for opp ∈ parents(op)
+            push!(children(opp), op)
+        end
+    end    
+end
 
 num_loops(ls::LoopSet) = length(ls.loops)
 function oporder(ls::LoopSet)
@@ -756,7 +764,14 @@ end
 
 Convert to `Float64` for the sake of non-64 bit platforms.
 """
-looplengthprod(ls::LoopSet) = prod(Float64 ∘ length, ls.loops)
+function looplengthprod(ls::LoopSet)
+    l = 1.0
+    for loop ∈ ls.loops
+        l *= Float64(length(loop))
+    end
+    l
+end
+    # prod(Float64 ∘ length, ls.loops)
 
 
 function looplength(ls::LoopSet, s::Symbol)

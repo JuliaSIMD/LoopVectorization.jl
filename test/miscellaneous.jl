@@ -1003,8 +1003,12 @@ end
         @test all(isequal(81), powcseliteral!(E0))
         @test all(isequal(81), powcsesymbol!(E3))
 
-        @test maybe_const_issue144!(zeros(T, 3,4), (value=one(T),), collect(reshape(1:12, 3,4)), ones(T, 4)) ≈ maybe_const_issue144_avx!(zeros(T,3,4), (value=one(T),), collect(reshape(1:12, 3,4)), ones(T,4))
-
+        
+        @test isapprox(
+            maybe_const_issue144!(zeros(T, 3,4), (value=one(T),), collect(reshape(1:12, 3,4)), ones(T, 4)),
+            maybe_const_issue144_avx!(zeros(T,3,4), (value=one(T),), collect(reshape(1:12, 3,4)), ones(T,4)),
+            rtol = ∛(eps(T))
+        )
 
     end
     for T ∈ [Int16, Int32, Int64]

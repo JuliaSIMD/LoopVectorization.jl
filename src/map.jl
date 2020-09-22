@@ -5,8 +5,8 @@
 """
 function alignstores!(
     f::F, y::DenseArray{T},
-    args::Vararg{<:DenseArray{<:NativeTypes},A}
-) where {F, T <: NativeTypes, A}
+    args::Vararg{<:DenseArray{<:Base.HWReal},A}
+) where {F, T <: Base.HWReal, A}
     N = length(y)
     ptry = pointer(y)
     ptrargs = pointer.(args)
@@ -20,7 +20,7 @@ function alignstores!(
         if N < i
             m &= mask(T, N & (W - 1))
         end
-        vnoaliasstore!(ptry, extract_data(f(vload.(V, ptrargs, m)...)), m)
+        vnoaliasstore!(ptry, f(vload.(V, ptrargs, m)...), m)
         gep(ptry, i), gep.(ptrargs, i), N - i
     else
         ptry, ptrargs, N
@@ -30,8 +30,8 @@ end
 function vmap_singlethread!(
     f::F, y::DenseArray{T},
     ::Val{NonTemporal},
-    args::Vararg{<:DenseArray{<:NativeTypes},A}
-) where {F,T <: NativeTypes, A, NonTemporal}
+    args::Vararg{<:DenseArray{<:Base.HWReal},A}
+) where {F,T <: Base.HWReal, A, NonTemporal}
     if NonTemporal
         ptry, ptrargs, N = alignstores!(f, y, args...)
     else
@@ -43,10 +43,10 @@ function vmap_singlethread!(
     W = VectorizationBase.pick_vector_width(T)
     V = VectorizationBase.pick_vector_width_val(T)
     while i < N - ((W << 2) - 1)
-        v₁ = extract_data(f(vload.(V, gep.(ptrargs,      i     ))...))
-        v₂ = extract_data(f(vload.(V, gep.(ptrargs, vadd(i,  W)))...))
-        v₃ = extract_data(f(vload.(V, gep.(ptrargs, vadd(i, 2W)))...))
-        v₄ = extract_data(f(vload.(V, gep.(ptrargs, vadd(i, 3W)))...))
+        v₁ = f(vload.(V, gep.(ptrargs,      i     ))...)
+        v₂ = f(vload.(V, gep.(ptrargs, vadd(i,  W)))...)
+        v₃ = f(vload.(V, gep.(ptrargs, vadd(i, 2W)))...)
+        v₄ = f(vload.(V, gep.(ptrargs, vadd(i, 3W)))...)
         if NonTemporal
             vstorent!(gep(ptry,      i     ), v₁)
             vstorent!(gep(ptry, vadd(i,  W)), v₂)
@@ -61,7 +61,7 @@ function vmap_singlethread!(
         i = vadd(i, 4W)
     end
     while i < N - (W - 1) # stops at 16 when
-        vᵢ = extract_data(f(vload.(V, gep.(ptrargs, i))...))
+        vᵢ = f(vload.(V, gep.(ptrargs, i))...)
         if NonTemporal
             vstorent!(gep(ptry, i), vᵢ)
         else
@@ -71,7 +71,7 @@ function vmap_singlethread!(
     end
     if i < N
         m = mask(T, N & (W - 1))
-        vnoaliasstore!(gep(ptry, i), extract_data(f(vload.(V, gep.(ptrargs, i), m)...)), m)
+        vnoaliasstore!(gep(ptry, i), f(vload.(V, gep.(ptrargs, i), m)...), m)
     end
     y
 end
@@ -80,7 +80,7 @@ function vmap_multithreaded!(
     f::F,
     y::DenseArray{T},
     ::Val{true},
-    args::Vararg{<:DenseArray{<:NativeTypes},A}
+    args::Vararg{<:DenseArray{<:Base.HWReal},A}
 ) where {F,T,A}
     ptry, ptrargs, N = alignstores!(f, y, args...)
     N > 0 || return y
@@ -90,10 +90,10 @@ function vmap_multithreaded!(
     Niter = N >>> Wsh
     Base.Threads.@threads for j ∈ 0:Niter-1
         i = j << Wsh
-        v₁ = extract_data(f(vload.(V, gep.(ptrargs,      i     ))...))
-        v₂ = extract_data(f(vload.(V, gep.(ptrargs, vadd(i,  W)))...))
-        v₃ = extract_data(f(vload.(V, gep.(ptrargs, vadd(i, 2W)))...))
-        v₄ = extract_data(f(vload.(V, gep.(ptrargs, vadd(i, 3W)))...))
+        v₁ = f(vload.(V, gep.(ptrargs,      i     ))...)
+        v₂ = f(vload.(V, gep.(ptrargs, vadd(i,  W)))...)
+        v₃ = f(vload.(V, gep.(ptrargs, vadd(i, 2W)))...)
+        v₄ = f(vload.(V, gep.(ptrargs, vadd(i, 3W)))...)
         vstorent!(gep(ptry,      i     ), v₁)
         vstorent!(gep(ptry, vadd(i,  W)), v₂)
         vstorent!(gep(ptry, vadd(i, 2W)), v₃)
@@ -101,13 +101,13 @@ function vmap_multithreaded!(
     end
     ii = Niter << Wsh
     while ii < N - (W - 1) # stops at 16 when
-        vᵢ = extract_data(f(vload.(V, gep.(ptrargs, ii))...))
+        vᵢ = f(vload.(V, gep.(ptrargs, ii))...)
         vstorent!(gep(ptry, ii), vᵢ)
         ii = vadd(ii, W)
     end
     if ii < N
         m = mask(T, N & (W - 1))
-        vnoaliasstore!(gep(ptry, ii), extract_data(f(vload.(V, gep.(ptrargs, ii), m)...)), m)
+        vnoaliasstore!(gep(ptry, ii), f(vload.(V, gep.(ptrargs, ii), m)...), m)
     end
     y
 end
@@ -115,7 +115,7 @@ function vmap_multithreaded!(
     f::F,
     y::DenseArray{T},
     ::Val{false},
-    args::Vararg{<:DenseArray{<:NativeTypes},A}
+    args::Vararg{<:DenseArray{<:Base.HWReal},A}
 ) where {F,T,A}
     N = length(y)
     ptry = pointer(y)
@@ -127,10 +127,10 @@ function vmap_multithreaded!(
     Niter = N >>> Wsh
     Base.Threads.@threads for j ∈ 0:Niter-1
         i = j << Wsh
-        v₁ = extract_data(f(vload.(V, gep.(ptrargs,      i     ))...))
-        v₂ = extract_data(f(vload.(V, gep.(ptrargs, vadd(i,  W)))...))
-        v₃ = extract_data(f(vload.(V, gep.(ptrargs, vadd(i, 2W)))...))
-        v₄ = extract_data(f(vload.(V, gep.(ptrargs, vadd(i, 3W)))...))
+        v₁ = f(vload.(V, gep.(ptrargs,      i     ))...)
+        v₂ = f(vload.(V, gep.(ptrargs, vadd(i,  W)))...)
+        v₃ = f(vload.(V, gep.(ptrargs, vadd(i, 2W)))...)
+        v₄ = f(vload.(V, gep.(ptrargs, vadd(i, 3W)))...)
         vnoaliasstore!(gep(ptry,      i     ), v₁)
         vnoaliasstore!(gep(ptry, vadd(i,  W)), v₂)
         vnoaliasstore!(gep(ptry, vadd(i, 2W)), v₃)
@@ -138,13 +138,13 @@ function vmap_multithreaded!(
     end
     ii = Niter << Wsh
     while ii < N - (W - 1) # stops at 16 when
-        vᵢ = extract_data(f(vload.(V, gep.(ptrargs, ii))...))
+        vᵢ = f(vload.(V, gep.(ptrargs, ii))...)
         vnoaliasstore!(gep(ptry, ii), vᵢ)
         ii = vadd(ii, W)
     end
     if ii < N
         m = mask(T, N & (W - 1))
-        vnoaliasstore!(gep(ptry, ii), extract_data(f(vload.(V, gep.(ptrargs, ii), m)...)), m)
+        vnoaliasstore!(gep(ptry, ii), f(vload.(V, gep.(ptrargs, ii), m)...), m)
     end
     y
 end
@@ -158,8 +158,8 @@ Vectorized-`map!`, applying `f` to each element of `a` (or paired elements of `a
 and storing the result in `destination`.
 """
 function vmap!(
-    f::F, y::DenseArray{T}, args::Vararg{<:DenseArray{<:NativeTypes},A}
-) where {F,T<:NativeTypes,A}
+    f::F, y::DenseArray{T}, args::Vararg{<:DenseArray{<:Base.HWReal},A}
+) where {F,T<:Base.HWReal,A}
     vmap_singlethread!(f, y, Val{false}(), args...)
 end
 
@@ -170,8 +170,8 @@ end
 Like `vmap!` (see `vmap!`), but uses `Threads.@threads` for parallel execution.
 """
 function vmapt!(
-    f::F, y::DenseArray{T}, args::Vararg{<:DenseArray{<:NativeTypes},A}
-) where {F,T<:NativeTypes,A}
+    f::F, y::DenseArray{T}, args::Vararg{<:DenseArray{<:Base.HWReal},A}
+) where {F,T<:Base.HWReal,A}
     vmap_multithreaded!(f, y, Val{false}(), args...)
 end
 
@@ -232,8 +232,8 @@ BenchmarkTools.Trial:
 ```
 """
 function vmapnt!(
-    f::F, y::DenseArray{T}, args::Vararg{<:DenseArray{<:NativeTypes},A}
-) where {F,T<:NativeTypes,A}
+    f::F, y::DenseArray{T}, args::Vararg{<:DenseArray{<:Base.HWReal},A}
+) where {F,T<:Base.HWReal,A}
     vmap_singlethread!(f, y, Val{true}(), args...)
 end
 
@@ -243,8 +243,8 @@ end
 Like `vmapnt!` (see `vmapnt!`), but uses `Threads.@threads` for parallel execution.
 """
 function vmapntt!(
-    f::F, y::DenseArray{T}, args::Vararg{<:DenseArray{<:NativeTypes},A}
-) where {F,T<:NativeTypes,A}
+    f::F, y::DenseArray{T}, args::Vararg{<:DenseArray{<:Base.HWReal},A}
+) where {F,T<:Base.HWReal,A}
     vmap_multithreaded!(f, y, Val{true}(), args...)
 end
 
