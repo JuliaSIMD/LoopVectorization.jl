@@ -1,38 +1,34 @@
 const NOpsType = Int#Union{Int,Vector{Int}}
 
-function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{<:AbstractUnitRange})
-    ssym = String(sym)
-    start = gensym(ssym*"_loopstart"); stop = gensym(ssym*"_loopstop"); loopsym = gensym(ssym * "_loop")
-    pushpreamble!(ls, Expr(:(=), loopsym, ex))
-    pushpreamble!(ls, Expr(:(=), start, Expr(:call, :first, loopsym)))
-    pushpreamble!(ls, Expr(:(=), stop, Expr(:call, :last, loopsym)))
-    loop = Loop(sym, 1, 1024, start, stop, false, false)::Loop
-    pushpreamble!(ls, loopiteratesatleastonce(loop))
-    loop
-end
-function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{StaticUpperUnitRange{U}}) where {U}
-    start = gensym(String(sym)*"_loopstart")
-    pushpreamble!(ls, Expr(:(=), start, Expr(:(.), ex, QuoteNode(:L))))
-    loop = Loop(sym, U - 1024, U, start, Symbol(""), false, true)::Loop
-    pushpreamble!(ls, loopiteratesatleastonce(loop))
-    loop
-end
-function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{StaticLowerUnitRange{L}}) where {L}
-    stop = gensym(String(sym)*"_loopstop")
-    pushpreamble!(ls, Expr(:(=), stop, Expr(:(.), ex, QuoteNode(:U))))
-    loop = Loop(sym, L, L + 1024, Symbol(""), stop, true, false)::Loop
-    pushpreamble!(ls, loopiteratesatleastonce(loop))
-    loop
-end
-# Is there any likely way to generate such a range?
-# function Loop(ls::LoopSet, l::Int, ::Type{StaticLengthUnitRange{N}}) where {N}
-#     start = gensym(:loopstart); stop = gensym(:loopstop)
-#     pushpreamble!(ls, Expr(:(=), start, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:(.), Expr(:ref, :lb, l), QuoteNode(:L)))))
-#     pushpreamble!(ls, Expr(:(=), stop, Expr(:call, :(+), start, N - 1)))
-#     Loop(gensym(:n), 0, N, start, stop, false, false)::Loop
-# end
-function Loop(::LoopSet, ::Expr, sym::Symbol, ::Type{StaticUnitRange{L,U}}) where {L,U}
-    Loop(sym, L, U, Symbol(""), Symbol(""), true, true)::Loop
+function Loop(ls::LoopSet, ex::Expr, sym::Symbol, @nospecialize(_::Type{R})) where {R <:AbstractUnitRange}
+    F = ArrayInterface.known_first(R)
+    S = ArrayInterface.known_step(R)
+    L = ArrayInterface.known_last(R)
+    @assert isone(S) # for now
+    if isnothing(F) && isnothing(L)
+        ssym = String(sym)
+        start = gensym(ssym*"_loopstart"); stop = gensym(ssym*"_loopstop"); loopsym = gensym(ssym * "_loop")
+        pushpreamble!(ls, Expr(:(=), loopsym, ex))
+        pushpreamble!(ls, Expr(:(=), start, Expr(:call, :first, loopsym)))
+        pushpreamble!(ls, Expr(:(=), stop, Expr(:call, :last, loopsym)))
+        loop = Loop(sym, 1, 1024, start, stop, false, false)
+        pushpreamble!(ls, loopiteratesatleastonce(loop))
+        loop
+    elseif isnothing(F)
+        start = gensym(String(sym)*"_loopstart")
+        pushpreamble!(ls, Expr(:(=), start, Expr(:call, :first, loopsym)))
+        loop = Loop(sym, L - 1024, L, start, Symbol(""), false, true)::Loop
+        pushpreamble!(ls, loopiteratesatleastonce(loop))
+        loop
+    elseif isnothing(L)
+        stop = gensym(String(sym)*"_loopstop")
+        pushpreamble!(ls, Expr(:(=), stop, Expr(:call, :last, loopsym)))
+        loop = Loop(sym, F, F + 1024, Symbol(""), stop, true, false)::Loop
+        pushpreamble!(ls, loopiteratesatleastonce(loop))
+        loop
+    else
+        Loop(sym, F, L, Symbol(""), Symbol(""), true, true)::Loop
+    end        
 end
 
 function extract_loop(l)
