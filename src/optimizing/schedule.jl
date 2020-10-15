@@ -12,3 +12,4 @@ isu₁unrolled(s::Schedule) = s.u === ParallelUnrolled
 isu₂unrolled(s::Schedule) = s.u === TemporalUnrolled
 
 
+
