@@ -14,9 +14,21 @@ end
 # NTuple{4,Float64} # costs # reduced by neither, reduced by u₁, reduced by u₂, reduced by both
 # NTuple{4,Float64} # reg pressure: reg remaining, 1 per u₁, 1 per u₂, 1 per u₁ * u₂
 # reg remaining is minus for normal u₂ and minus for things depending on neither
+#
+# TODO add fields indicating unrolled loop sizes, and whether they're triangular
+# How to handle vectorized loop with respect to triangles?
+struct CostSummary
+    costs::NTuple{4,Float64}
+    reg_pres::NTuple{4,Float64}
+end
+function CostSummary
+    costs = (0.0,0.0,0.0,0.0)
+    reg_pres = (0.0,0.0,0.0,0.0)
+    CostSummary(costs, reg_pres)
+end
 
 # remaining loops vector with element per separable statement, each element a vector of indices for remaining loops
-function determine_cost_looporder(ls::LoopSet, separable_statements, remaining_loops, v, u₁, u₂)
+function determine_cost_looporder(ls::LoopSet, separable_statements, remaining_loops, v, u₁, u₂, cost_summary)
     # isvalid() || return Inf
     n_statements = length(separable_statements)
     nest_depth = ByteVector{UInt64}()

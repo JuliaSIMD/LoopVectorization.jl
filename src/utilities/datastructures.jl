@@ -50,6 +50,8 @@ Base.size(v::AbstractLimitedRangeVector) = (length(v),)
 # Base.size(v::AbstractLimitedRangeVector) = (length(v),)
 Base.getindex(v::AbstractLimitedRangeVector{T}, i) where {T} = (v.data >>> unsigned(sizeof(T)*8*(i-1))) % T
 
+allzero(x::AbstractLimitedRangeVector) = iszero(x.data)
+
 # ByteVector() = ByteVector(typemins(ByteVector), 0)
 # WordVector() = WordVector(typemins(WordVector), 0)
 ByteVector() = ByteVector(zero(UInt64), 0)
