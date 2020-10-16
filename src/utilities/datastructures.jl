@@ -7,12 +7,14 @@ Length is not a compile time constant, but limited to a maximum of 8.
 """
 struct ByteVector{U<:Unsigned} <: AbstractLimitedRangeVector{Int8}
     data::U
-    len::Int
+    len::Int8
 end
-# struct HalfByteVector{U<:Unsigned} <: AbstractLimitedRangeVector{Int8}
-#     data::U
-#     len::Int
-# end
+"""
+Can only hold values from 0 to 15
+"""
+struct HalfByteVector{U<:Unsigned} <: AbstractLimitedRangeVector{UInt8}
+    data::U
+end
 
 """
 Can hold values between `typemin(Int16)` and `typemax(Int16)`, i.e. `(-32768, 32767)`.
@@ -36,8 +38,12 @@ lastelem(x) = lastelem(x, x)
 trailing_byte(x::UInt64) = lastelem_mask(x) & x
 trailing_byte(x) = trailing_byte(x % UInt64)
 # Base.length(v::AbstractLimitedRangeVector) = lastelem(data(v)) % Int
-Base.length(v::AbstractLimitedRangeVector) = v.len
-Base.size(v::AbstractLimitedRangeVector) = (v.len,)
+Base.length(v::AbstractLimitedRangeVector) = v.len % Int
+lasthalfelem_mask(::Type{UInt16}) = 0x000f
+lasthalfelem_mask(::Type{UInt32}) = 0x0000000f
+lasthalfelem_mask(::Type{UInt64}) = 0x000000000000000f
+Base.length(v::HalfByteVector{U}) where {U} = (lasthalfelem_mask(U) & v.data) % Int
+Base.size(v::AbstractLimitedRangeVector) = (length(v),)
 # typemins(::Type{ByteVector}) = 0x8080808080808080
 # typemins(::Type{WordVector}) = 0x80008000800080008000800080008000
 # Base.length(v::V) where {T, V <: AbstractLimitedRangeVector{T}} = 8 - (leading_zeros(v.data ⊻ typemins(V)) ÷ (8sizeof(T)))
