@@ -84,8 +84,36 @@ nvars(p::Polyhedra) = length(p.loops)
 # end
 
 function poploop(p::Polyhedra, i)
-    nloops_in_popped = length(p.A) - 1
-    pout = p.preallocated_subsets[nloops_in_popped]
+    loop = p.loops[i]
+    nloops = length(p.loops)
+    if isone(nloops)
+        return p, loop
+    end
+    @unpack A, B, c = loop
+    A₁, A₂ = A
+    zA₁ = allzero(A₁); zA₂ = allzero(A₂)
+    pout = p.preallocated_subsets[nloops - 1]
+    if zA₁
+        if zA₂
+            for n ∈ 1:i-1
+                pout.loops[n] = p.loops[n]
+            end
+            for n ∈ i+1:nloops
+                pout.loops[n-1] = p.loops[n]
+            end
+            return pout, loop
+        else
+            B₁, B₂ = B
+
+        end
+    elseif zA₂
+
+    else
+
+    end
+
+
+
     
 end
 
