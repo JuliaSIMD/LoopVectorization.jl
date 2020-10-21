@@ -37,7 +37,7 @@ struct StaticRectangularLoop <: AbstractLoop
     nloops::Int8
     loopid::Int8 # id of this loop
 end
-
+# const RectangularLoop = Union{}
 
 function UnPack.unpack(l::AbstractLoop, ::Val{:A})
     A₁, A₂ = l.A

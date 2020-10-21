@@ -83,66 +83,57 @@ nvars(p::Polyhedra) = length(p.loops)
 #     prealloc[end] = Polyhedra(A, b, parameters, dynamicid, affinepair, prealloc)
 # end
 
+"""
+# upper bound is affine func of other loop inds, A*x
+# [1  0   [ i     [ c₁
+#  -1 0     j ] ≥   c₂
+#  0  1             c₃
+#  1 -1]            c₄ ]
+#  i ∈ c₁:-c₂
+#  j ∈ c₃:i-c₄
+#  to
+# [1 -1   [ i     [ c₄
+#  -1 0     j ] ≥   c₂
+#  0  1             c₃
+#  0 -1]            c₂ + c₄ ]
+#  i ∈ max(c₄+j,c₁):-c₂
+#  j ∈ c₃:-c₂-c₄
+#  What if c₁ ≠ c₃ + c₄?
+#  if c₁ < c₃ + c₄, inner loop doesn't run
+#  if c₁ > c₃ + c₄, we need max
+#  TODO: handle this well
+#  for now, assume c₁ == c₃ + c₄ while optimizing, but generate correct code?
+#  Difficulty is that data structure would need to be able to handle this
+#  Perhaps split loop?
+"""
+function swap_bounds!(loops::AbstractVector, loop::AbstractLoop)
+    @unpack A = loop
+    A₁, A₂ = A
+    zA₁ = allzero(A₁); zA₂ = allzero(A₂)
+    if zA₁
+    end
+    if zA₂
+    end
+
+end
+swap_bounds!(::AbstractVector{StaticRectangularLoop}, ::StaticRectangularLoop) = nothing
+
+
 function poploop(p::Polyhedra, i)
     loop = p.loops[i]
     nloops = length(p.loops)
     if isone(nloops)
         return p, loop
     end
-    @unpack A = loop
-    A₁, A₂ = A
-    zA₁ = allzero(A₁); zA₂ = allzero(A₂)
     pout = p.preallocated_subsets[nloops - 1]
-    if zA₁
-        if zA₂
-            for n ∈ 1:i-1
-                pout.loops[n] = p.loops[n]
-            end
-            for n ∈ i+1:nloops
-                pout.loops[n-1] = p.loops[n]
-            end
-            return pout, loop
-        else
-            # upper bound is affine func of other loop inds, A*x
-            # [1  0   [ i     [ c₁
-            #  -1 0     j ] ≥   c₂
-            #  0  1             c₃
-            #  1 -1]            c₄ ]
-            #  i ∈ c₁:-c₂
-            #  j ∈ c₃:i-c₄
-            #  to
-            # [1 -1   [ i     [ c₄
-            #  -1 0     j ] ≥   c₂
-            #  0  1             c₃
-            #  0 -1]            c₂ + c₄ ]
-            #  i ∈ max(c₄+j,c₁):-c₂
-            #  j ∈ c₃:-c₂-c₄
-            #  What if c₁ ≠ c₃ + c₄?
-            #  if c₁ < c₃ + c₄, inner loop doesn't run
-            #  if c₁ > c₃ + c₄, we need max
-            #  TODO: handle this well
-            #  for now, assume c₁ == c₃ + c₄ while optimizing, but generate correct code?
-            #  Difficulty is that data structure would need to be able to handle this
-            #  Perhaps split loop?
-            # B₁, B₂ = B
-            for n ∈ 1:i-1
-                pout.loops[n] = p.loops[n]
-            end
-            for n ∈ i+1:nloops
-                pout.loops[n-1] = p.loops[n]
-            end
-            return pout, loop
-
-        end
-    elseif zA₂
-
-    else
-
+    for n ∈ 1:i-1
+        pout.loops[n] = p.loops[n]
     end
-
-
-
-    
+    for n ∈ i+1:nloops
+        pout.loops[n-1] = p.loops[n]
+    end
+    swap_bounds!(pout.loops, loop)
+    return pout, loop
 end
 
 # """
