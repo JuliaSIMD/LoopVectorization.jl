@@ -16,14 +16,14 @@
 #     preallocated_subsets::Vector{Polyhedra}
 # end
 
-struct Polyhedra
-    loops::Vector{Loop}
-    preallocated_subsets::Vector{Polyhedra}
+struct Polyhedra{L <: AbstractLoop}
+    loops::Vector{L}
+    preallocated_subsets::Vector{Polyhedra{L}}
 end
-function Polyhedra(N::Int)
-    ps = Vector{Polyhedra}(undef, N)
+function Polyhedra{L}(N::Int) where {L <: AbstractLoop}
+    ps = Vector{Polyhedra{L}}(undef, N)
     for n ∈ 1:N
-        ps[n] = Polyhedra(Vector{Loop}(undef, n), ps)
+        ps[n] = Polyhedra(Vector{L}(undef, n), ps)
     end
     last(ps)
 end
@@ -89,7 +89,7 @@ function poploop(p::Polyhedra, i)
     if isone(nloops)
         return p, loop
     end
-    @unpack A, B, c = loop
+    @unpack A = loop
     A₁, A₂ = A
     zA₁ = allzero(A₁); zA₂ = allzero(A₂)
     pout = p.preallocated_subsets[nloops - 1]
@@ -103,7 +103,35 @@ function poploop(p::Polyhedra, i)
             end
             return pout, loop
         else
-            B₁, B₂ = B
+            # upper bound is affine func of other loop inds, A*x
+            # [1  0   [ i     [ c₁
+            #  -1 0     j ] ≥   c₂
+            #  0  1             c₃
+            #  1 -1]            c₄ ]
+            #  i ∈ c₁:-c₂
+            #  j ∈ c₃:i-c₄
+            #  to
+            # [1 -1   [ i     [ c₄
+            #  -1 0     j ] ≥   c₂
+            #  0  1             c₃
+            #  0 -1]            c₂ + c₄ ]
+            #  i ∈ max(c₄+j,c₁):-c₂
+            #  j ∈ c₃:-c₂-c₄
+            #  What if c₁ ≠ c₃ + c₄?
+            #  if c₁ < c₃ + c₄, inner loop doesn't run
+            #  if c₁ > c₃ + c₄, we need max
+            #  TODO: handle this well
+            #  for now, assume c₁ == c₃ + c₄ while optimizing, but generate correct code?
+            #  Difficulty is that data structure would need to be able to handle this
+            #  Perhaps split loop?
+            # B₁, B₂ = B
+            for n ∈ 1:i-1
+                pout.loops[n] = p.loops[n]
+            end
+            for n ∈ i+1:nloops
+                pout.loops[n-1] = p.loops[n]
+            end
+            return pout, loop
 
         end
     elseif zA₂
