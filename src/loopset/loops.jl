@@ -22,6 +22,7 @@ struct StaticLoop <: AbstractLoop
     A::NTuple{2,UInt64} # A is a ByteVector in practice, see unpack(::Loop, ::Val{:A})
     nloops::Int8 # A * x ≥ c
     loopid::Int8 # id of this loop
+    actuallystatic::Bool
 end
 # struct RectangularLoop <: AbstractLoop
 #     # loopids::ByteVector{UInt64} # up to 8 loop ids for loops in A
@@ -36,17 +37,18 @@ struct StaticRectangularLoop <: AbstractLoop
     c::NTuple{2,Float64}
     nloops::Int8
     loopid::Int8 # id of this loop
+    actuallystatic::Bool
 end
 # const RectangularLoop = Union{}
 
 function UnPack.unpack(l::AbstractLoop, ::Val{:A})
     A₁, A₂ = l.A
-    nloops = l.nloops - one(Int8)
+    nloops = l.nloops# - one(Int8)
     ByteVector(A₁, nloops), ByteVector(A₂, nloops)
 end
 function UnPack.unpack(l::StaticRectangularLoop, ::Val{:A})
     A₁ = A₂ = zero(UInt64)
-    nloops = l.nloops - one(Int8)
+    nloops = l.nloops# - one(Int8)
     ByteVector(A₁, nloops), ByteVector(A₂, nloops)
 end
 
@@ -57,8 +59,12 @@ assume_static(l::StaticLoop) = l
 function assume_static(l::Loop)
     cₗ, cᵤ = l.c
     Bₗ, Bᵤ = l.B
-    pₗ, pᵤ = l.p
-    cₗ -= Bₗ * pₗ
-    cᵤ -= Bᵤ * pᵤ
-    StaticLoop( (cₗ, cᵤ), l.A, l.nloops, l.loopid )
+    if Bₗ == Bᵤ == zero(Bₗ)
+        StaticLoop( (cₗ, cᵤ), l.A, l.nloops, l.loopid, true )
+    else
+        pₗ, pᵤ = l.p
+        cₗ -= Bₗ * pₗ
+        cᵤ -= Bᵤ * pᵤ
+        StaticLoop( (cₗ, cᵤ), l.A, l.nloops, l.loopid, false )
+    end
 end

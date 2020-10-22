@@ -21,7 +21,7 @@ struct CostSummary
     costs::NTuple{4,Float64}
     reg_pres::NTuple{4,Float64}
 end
-function CostSummary
+function CostSummary()
     costs = (0.0,0.0,0.0,0.0)
     reg_pres = (0.0,0.0,0.0,0.0)
     CostSummary(costs, reg_pres)

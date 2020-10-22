@@ -35,10 +35,10 @@ import LinearAlgebra # for check_args
 const VECTORWIDTHSYMBOL, ELTYPESYMBOL = Symbol("##Wvecwidth##"), Symbol("##Tloopeltype##")
 
 include("utilities/datastructures.jl")
-include("polyhedra/polyhedra.jl")
 include("loopset/arrayreferences.jl")
 include("loopset/dependencies.jl")
 include("loopset/loops.jl")
+include("loopset/polyhedra.jl")
 include("loopset/operations.jl")
 include("loopset/loopset.jl")
 include("optimizing/costs.jl")

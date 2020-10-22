@@ -54,7 +54,7 @@ allzero(x::AbstractLimitedRangeVector) = iszero(x.data)
 
 @inline function Base.iterate(v::AbstractLimitedRangeVector{T}, state = (v.data, v.len)) where {T}
     d, l = state
-    iszero(l) ? nothing : d % T, (d >>> (8sizeof(T)), l - one(l))
+    iszero(l) ? nothing : (d % T, (d >>> (8sizeof(T)), l - one(l)))
 end
 
 
@@ -72,8 +72,8 @@ function filluint(data, ::Type{T}, x::Vararg{Integer,N}) where {T,N}
         data <<= 8*sizeof(T)
     end
 end
-ByteVector(x...) = ByteVector(filluint(zero(UInt64), UInt8, x...), length(x))
-WordVector(x...) = WordVector(filluint(zero(UInt128), UInt16, x...), length(x))
+ByteVector(x...) = ByteVector(filluint(zero(UInt64), UInt8, x...), length(x) % Int8)
+WordVector(x...) = WordVector(filluint(zero(UInt128), UInt16, x...), length(x) % Int8)
 function push(v::V, x) where {T, V <: AbstractLimitedRangeVector{T}}
     data = v.data
     shifter = 8*sizeof(T)*length(v)

@@ -108,33 +108,53 @@ nvars(p::Polyhedra) = length(p.loops)
 """
 function unconditional_loop_iters!(loops::AbstractVector, loop::StaticLoop)
     @unpack c, A, nloops, loopid = loop
-    A₁, A₂ = A
-    c₁, c₂ = c
+    A₃, A₄ = A
+    c₃, c₄ = c
     len = A₂.len
     istriangle = false
-    while !allzero(A₁)
-
+    while !allzero(A₃)
+        
     end
-    while !allzero(A₂)
+    while !allzero(A₄)
         for (n,a) ∈ enumerate(A₂)
-            if !iszero(a)
-                i = findfirst(l -> l.loopid == n, loops)::Int
-                loopₙ = loops[i]
-                @unpack c, A = loopₙ
-                cn₁, cn₂ = c
-                An₁, An₂ = A
-                A₁i
-                loops[n] = StaticLoop( (c₂,cn₂), (A₁i, An₂), loopₙ.nloops, loopₙ.loopid )
-                c₂ += cn₂
-            end
+            iszero(a) && continue
+            i = findfirst(l -> l.loopid == n, loops)::Int
+            loopₙ = loops[i]
+            @unpack c, A = loopₙ
+            newid = loopₙ.loopid
+            c₁, c₂ = c
+            A₁, A₂ = A
+            # in A₄, loopid is implicitly -1; make it explicit
+            # in A₄, loopid is explicitly A₄[newid]; make it implicit
+            A₄val = A₄[newid]
+            if A₄val == (0x01 % Int8)
+                (c₁ == c₃ + c₄) || return loop, Inf
+                A₁new = setindex(setindex(A₄, (0xff % Int8), loopid), zero(Int8), newid)
+                A₂new = A₂
+                A₃new = A₃
+                A₄new = 
+                c₁new = c₄
+                c₂new = c₂
+                c₃new = c₃
+                c₄new = c₂ + c₄
+            elseif A₄val == (0xff % Int8)
+            else# reject
+                return loop, Inf
+            end                
+            loops[n] = StaticLoop( (c₁new, c₂new), (A₁new, A₂new), nloops, newid )
+            A₃ = A₃new
+            A₄ = A₄new
+            c₃ = c₃new
+            c₄ = c₄new
+            break
         end
     end
     if (!istriangle) & (!isone(vecf))
-        m₁ = 0x00000000000000ff << (8*(loopid-1))
-        m₂ = 0x00000000000000ff << (8*(loopid-2))
-        for n ∈ OneTo(nloops-1)
+        m = 0x00000000000000ff << (8*(loopid-1))
+        # m₂ = 0x00000000000000ff << (8*(loopid-2))
+        for n ∈ eachindex(loops)
             l = loops[n]
-            m = l.loopid > loopid > m₂ : m₁
+            # m = l.loopid > loopid > m₂ : m₁
             Au₁, Au₂ = l.A
             if (!iszero(Au₁ & m)) | (!iszero(Au₂ & m))
                 istriangle = true
@@ -188,66 +208,46 @@ end
 
 # should make this iterable, transforming stepwise for determine_cost_looporder and scheduling...
 # this function is used for code gen?
-function loopbounds(p::Polyhedra, order)
-    @unpack A, b, affinepair = p
-    np = length(p.paramet
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-es)
-    nv = nvar(p)
-    vrange = Base.OneTo(nv)
-    prange = 1+nv:size(A,1)
-    loops_lower = Vector{Union{Int,Symbol,Expr}}(undef, nv)
-    loops_upper = Vector{Union{Int,Symbol,Expr}}(undef, nv)
-    completed = ntuple(_ -> false, Val(8))
-    isaffinefunc
-    for (i,j) ∈ enumerate(order)
-        ls = us = Symbol("")
+# function loopbounds(p::Polyhedra, order)
+#     @unpack A, b, affinepair = p
+#     np = length(p.parameters)
+#     nv = nvar(p)
+#     vrange = Base.OneTo(nv)
+#     prange = 1+nv:size(A,1)
+#     loops_lower = Vector{Union{Int,Symbol,Expr}}(undef, nv)
+#     loops_upper = Vector{Union{Int,Symbol,Expr}}(undef, nv)
+#     completed = ntuple(_ -> false, Val(8))
+#     isaffinefunc
+#     for (i,j) ∈ enumerate(order)
+#         ls = us = Symbol("")
         
-        for k in axes(A,1)
-            Aₖⱼ = A[k,j]
-            if Aₖⱼ > 0 # then we have the lower bound
-                pair, l = affinepair[j] # index of paired, row that contains both
-                if pair > 0
-                    if completed[pair] # now we're a func of it
-                        if l == k
-                        else
-                        end
-                    elseif l == k
-                    else
-                    end
-                elseif l > 0 && l ≠ k
+#         for k in axes(A,1)
+#             Aₖⱼ = A[k,j]
+#             if Aₖⱼ > 0 # then we have the lower bound
+#                 pair, l = affinepair[j] # index of paired, row that contains both
+#                 if pair > 0
+#                     if completed[pair] # now we're a func of it
+#                         if l == k
+#                         else
+#                         end
+#                     elseif l == k
+#                     else
+#                     end
+#                 elseif l > 0 && l ≠ k
                     
-                else
-                end
-            elseif Aₖⱼ < 0 # then we have the upper bound
-                pair, l = affinepair[j]
-                if pair > 0 && completed[pair] # now we're a func of it
-                else
-                end
-            end
-        end
-        completed = setindex(completed, true, j)
-    end
-    loops_lower, loops_upper
-end
+#                 else
+#                 end
+#             elseif Aₖⱼ < 0 # then we have the upper bound
+#                 pair, l = affinepair[j]
+#                 if pair > 0 && completed[pair] # now we're a func of it
+#                 else
+#                 end
+#             end
+#         end
+#         completed = setindex(completed, true, j)
+#     end
+#     loops_lower, loops_upper
+# end
 
 function vertices(p::Polyhedra)
     
