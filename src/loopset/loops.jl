@@ -41,12 +41,12 @@ end
 
 function UnPack.unpack(l::AbstractLoop, ::Val{:A})
     A₁, A₂ = l.A
-    nloops = l.nloops
+    nloops = l.nloops - one(Int8)
     ByteVector(A₁, nloops), ByteVector(A₂, nloops)
 end
 function UnPack.unpack(l::StaticRectangularLoop, ::Val{:A})
     A₁ = A₂ = zero(UInt64)
-    nloops = l.nloops
+    nloops = l.nloops - one(Int8)
     ByteVector(A₁, nloops), ByteVector(A₂, nloops)
 end
 

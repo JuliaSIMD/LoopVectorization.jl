@@ -46,6 +46,12 @@ Base.getindex(v::AbstractLimitedRangeVector{T}, i) where {T} = (v.data >>> unsig
 
 allzero(x::AbstractLimitedRangeVector) = iszero(x.data)
 
+@inline function Base.iterate(v::AbstractLimitedRangeVector{T}, state = (v.data, v.len)) where {T}
+    d, l = state
+    iszero(l) ? nothing : d % T, (d >>> (8sizeof(T)), l - one(l))
+end
+
+
 # ByteVector() = ByteVector(typemins(ByteVector), 0)
 # WordVector() = WordVector(typemins(WordVector), 0)
 ByteVector() = ByteVector(zero(UInt64), 0)
