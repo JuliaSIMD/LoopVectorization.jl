@@ -17,6 +17,7 @@ using VectorizationBase: NativeTypes, REGISTER_SIZE, MM
     # vadd!, vsub!, vmul!, vfdiv!, vfmadd!, vfnmadd!, vfmsub!, vfnmsub!,
     # vmullog2, vmullog10, vdivlog2, vdivlog10, vmullog2add!, vmullog10add!, vdivlog2add!, vdivlog10add!, vfmaddaddone, vadd1
 # using SLEEFPirates: pow # why?
+using Base: OneTo
 using Base.Broadcast: Broadcasted, DefaultArrayStyle
 using LinearAlgebra: Adjoint, Transpose
 using Base.Meta: isexpr

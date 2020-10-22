@@ -16,14 +16,14 @@
 #     preallocated_subsets::Vector{Polyhedra}
 # end
 
-struct Polyhedra
-    loops::Vector{Loop}
-    preallocated_subsets::Vector{Polyhedra}
+struct Polyhedra{L <: AbstractLoop}
+    loops::Vector{L}
+    preallocated_subsets::Vector{Polyhedra{L}}
 end
-function Polyhedra(N::Int)
-    ps = Vector{Polyhedra}(undef, N)
+function Polyhedra{L}(N::Int) where {L <: AbstractLoop}
+    ps = Vector{Polyhedra{L}}(undef, N)
     for n ∈ 1:N
-        ps[n] = Polyhedra(Vector{Loop}(undef, n), ps)
+        ps[n] = Polyhedra(Vector{L}(undef, n), ps)
     end
     last(ps)
 end
@@ -83,38 +83,100 @@ nvars(p::Polyhedra) = length(p.loops)
 #     prealloc[end] = Polyhedra(A, b, parameters, dynamicid, affinepair, prealloc)
 # end
 
-function poploop(p::Polyhedra, i)
+"""
+# upper bound is affine func of other loop inds, A*x
+# [1  0   [ i     [ c₁
+#  -1 0     j ] ≥   c₂
+#  0  1             c₃
+#  1 -1]            c₄ ]
+#  i ∈ c₁:-c₂
+#  j ∈ c₃:i-c₄
+#  to
+# [1 -1   [ i     [ c₄
+#  -1 0     j ] ≥   c₂
+#  0  1             c₃
+#  0 -1]            c₂ + c₄ ]
+#  i ∈ max(c₄+j,c₁):-c₂
+#  j ∈ c₃:-c₂-c₄
+#  What if c₁ ≠ c₃ + c₄?
+#  if c₁ < c₃ + c₄, inner loop doesn't run
+#  if c₁ > c₃ + c₄, we need max(c₄+j,c₁)
+#  TODO: handle this well
+#  for now, assume c₁ == c₃ + c₄ while optimizing, but generate correct code?
+#  Difficulty is that data structure would need to be able to handle this
+#  Perhaps split loop?
+"""
+function unconditional_loop_iters!(loops::AbstractVector, loop::StaticLoop)
+    @unpack c, A, nloops, loopid = loop
+    A₁, A₂ = A
+    c₁, c₂ = c
+    len = A₂.len
+    istriangle = false
+    while !allzero(A₁)
+
+    end
+    while !allzero(A₂)
+        for (n,a) ∈ enumerate(A₂)
+            if !iszero(a)
+                i = findfirst(l -> l.loopid == n, loops)::Int
+                loopₙ = loops[i]
+                @unpack c, A = loopₙ
+                cn₁, cn₂ = c
+                An₁, An₂ = A
+                A₁i
+                loops[n] = StaticLoop( (c₂,cn₂), (A₁i, An₂), loopₙ.nloops, loopₙ.loopid )
+                c₂ += cn₂
+            end
+        end
+    end
+    if (!istriangle) & (!isone(vecf))
+        m₁ = 0x00000000000000ff << (8*(loopid-1))
+        m₂ = 0x00000000000000ff << (8*(loopid-2))
+        for n ∈ OneTo(nloops-1)
+            l = loops[n]
+            m = l.loopid > loopid > m₂ : m₁
+            Au₁, Au₂ = l.A
+            if (!iszero(Au₁ & m)) | (!iszero(Au₂ & m))
+                istriangle = true
+                break
+            end
+        end
+    end
+
+    if istriangle & (!isone(vecf))
+        # compare ratio of triangle of vec-sized blocks to triangle of individual iters
+        iters = 1.0 - c₁ - c₂
+        itersdiv = round(vecf * iters, RoundUp)
+        vecf⁻² = inv(vecf*vecf)
+        r = vecf⁻² * (itersdiv*(itersdiv + 1.0)) / (iters*(iters + 1.0))
+        iters = itersdiv * r
+    else
+        iters = round(muladd(-vecf, c₁ + c₂, vecf), RoundUp)
+    end
+    StaticLoop( (c₁,c₂), (A₁, A₂), nloops, loopid ), iters
+end
+function unconditional_loop_iters!(::AbstractVector{StaticRectangularLoop}, loop::StaticRectangularLoop, vecf)
+    c₁, c₂ = loop.c
+    loop, round(muladd(-vecf, c₁ + c₂, vecf), RoundUp)
+end
+
+
+
+function poploop(p::Polyhedra, i, vecf)
     loop = p.loops[i]
     nloops = length(p.loops)
     if isone(nloops)
         return p, loop
     end
-    @unpack A, B, c = loop
-    A₁, A₂ = A
-    zA₁ = allzero(A₁); zA₂ = allzero(A₂)
     pout = p.preallocated_subsets[nloops - 1]
-    if zA₁
-        if zA₂
-            for n ∈ 1:i-1
-                pout.loops[n] = p.loops[n]
-            end
-            for n ∈ i+1:nloops
-                pout.loops[n-1] = p.loops[n]
-            end
-            return pout, loop
-        else
-            B₁, B₂ = B
-
-        end
-    elseif zA₂
-
-    else
-
+    for n ∈ 1:i-1
+        pout.loops[n] = p.loops[n]
     end
-
-
-
-    
+    for n ∈ i+1:nloops
+        pout.loops[n-1] = p.loops[n]
+    end
+    loop, iters = unconditional_loop_iters!(pout.loops, loop, vecf)
+    return pout, loop, iters
 end
 
 # """
@@ -128,7 +190,27 @@ end
 # this function is used for code gen?
 function loopbounds(p::Polyhedra, order)
     @unpack A, b, affinepair = p
-    np = length(p.parametes)
+    np = length(p.paramet
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+es)
     nv = nvar(p)
     vrange = Base.OneTo(nv)
     prange = 1+nv:size(A,1)
