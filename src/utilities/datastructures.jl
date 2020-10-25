@@ -92,12 +92,15 @@ function ArrayInterface.deleteat(v::V, i) where {T, V <: AbstractLimitedRangeVec
     d = (dlead & leadmask) | (dtrail & trailmask)
     V(d, length(v) - 1)
 end
-@inline function Base.setindex(v::V, x, i::Int) where {V <: AbstractLimitedRangeVector}
-    m1 = lastelem_mask(v)
-    shift = ((i - 1)*8sizeof(eltype(v)))
-    m = ~(m1 << shift)
-    x1 = (x % eltype(m1)) << shift
-    V((v.data & m) | x1, length(v))
+# @inline function Base.setindex(v::V, x, i::Int) where {V <: AbstractLimitedRangeVector}
+#     m1 = lastelem_mask(v)
+#     shift = ((i - 1)*8sizeof(eltype(v)))
+#     m = ~(m1 << shift)
+#     x1 = (x % eltype(m1)) << shift
+#     V((v.data & m) | x1, length(v))
+# end
+function Base.setindex(v::V, x, i::Int) where {V <: AbstractLimitedRangeVector}
+    V(VectorizationBase.fuseint(VectorizationBase.insertelement(VectorizationBase.splitint(v.data, unsigned(eltype(v))), x % eltype(v), i)), length(v))
 end
 
 struct ShortDynamicVector{T,N} <: AbstractVector{T}

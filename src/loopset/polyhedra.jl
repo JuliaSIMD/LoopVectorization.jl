@@ -106,7 +106,7 @@ nvars(p::Polyhedra) = length(p.loops)
 #  Difficulty is that data structure would need to be able to handle this
 #  Perhaps split loop?
 """
-function unconditional_loop_iters!(loops::AbstractVector, loop::StaticLoop)
+function unconditional_loop_iters!(loops::AbstractVector, loop::Loop)
     @unpack c, A, nloops, loopid = loop
     A₃, A₄ = A
     c₃, c₄ = c
@@ -120,10 +120,12 @@ function unconditional_loop_iters!(loops::AbstractVector, loop::StaticLoop)
             iszero(a) && continue
             i = findfirst(l -> l.loopid == n, loops)::Int
             loopₙ = loops[i]
-            @unpack c, A = loopₙ
+            @unpack c, A, B, p = loopₙ
             newid = loopₙ.loopid
             c₁, c₂ = c
             A₁, A₂ = A
+            B₁, B₂ = B
+            p₁, p₂ = p
             # in A₄, loopid is implicitly -1; make it explicit
             # in A₄, loopid is explicitly A₄[newid]; make it implicit
             A₄val = A₄[newid]
@@ -173,9 +175,9 @@ function unconditional_loop_iters!(loops::AbstractVector, loop::StaticLoop)
     else
         iters = round(muladd(-vecf, c₁ + c₂, vecf), RoundUp)
     end
-    StaticLoop( (c₁,c₂), (A₁, A₂), nloops, loopid ), iters
+    Loop( (c₁,c₂), (A₁, A₂), nloops, loopid ), iters
 end
-function unconditional_loop_iters!(::AbstractVector{StaticRectangularLoop}, loop::StaticRectangularLoop, vecf)
+function unconditional_loop_iters!(::AbstractVector{RectangularLoop}, loop::RectangularLoop, vecf)
     c₁, c₂ = loop.c
     loop, round(muladd(-vecf, c₁ + c₂, vecf), RoundUp)
 end
