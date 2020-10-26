@@ -16,17 +16,154 @@
 #     preallocated_subsets::Vector{Polyhedra}
 # end
 
-struct Polyhedra{L <: AbstractLoop}
-    loops::Vector{L}
-    preallocated_subsets::Vector{Polyhedra{L}}
+# """
+# A' + (I ⊗ [1, -1]) ≥ c[:,1] + d[:,2]
+# """
+# struct Polyhedra
+#     A::Matrix{Int8}
+#     c::Matrix{Float64}
+#     paramids::Vector{UInt8}
+# end
+abstract type AbstractPolyhedra end
+
+struct RectangularPolyhedra <: AbstractPolyhedra
+    c::NTuple{2,NTuple{8,Float64}}
+    d::NTuple{2,NTuple{8,Float64}}
+    paramids::NTuple{2,UInt64} # zero indicates no param
+    # nparams::NTuple{2,Int8}
+    nloops::Int8
 end
-function Polyhedra{L}(N::Int) where {L <: AbstractLoop}
-    ps = Vector{Polyhedra{L}}(undef, N)
-    for n ∈ 1:N
-        ps[n] = Polyhedra(Vector{L}(undef, n), ps)
+
+"""
+A' + (I ⊗ [1, -1]) ≥ c[:,1] + d[:,2]
+"""
+struct Polyhedra <: AbstractPolyhedra
+    A::NTuple{2,NTuple{8,UInt64}}
+    p::RectangularPolyhedra
+end
+
+UnPack.unpack(p::Polyhedra, ::Val{S}) where {S} = UnPack.unpack(p.p, Val{S}())
+function UnPack.unpack(p::Polyhedra, ::Val{:A})
+    nloops = p.p.nloops
+    A₁, A₂ = p.A
+    A₁v = Base.Cartesian.@ntuple 8 i -> ByteVector(A₁[i], nloops)
+    A₂v = Base.Cartesian.@ntuple 8 i -> ByteVector(A₂[i], nloops)
+    (A₁v, A₂v)
+end
+function UnPack.unpack(p::RectangularPolyhedra, ::Val{:paramids})
+    nloops = p.nloops
+    pid₁, pid₂ = p.paramids
+    ByteVector(pid₁, nloops), ByteVector(pid₂, nloops)
+end
+
+# @generated function pow_by_square(n, ::Val{P}) where {P}
+#     q = Expr(:block, :(x = one(n)))
+#     while !iszero(P)
+#         tz = trailing_zeros(P);
+#         for i ∈ 1:tz
+#             push!(q.args, :(n = Base.FastMath.mul_fast(n, n)))
+#         end
+#         push!(q.args, :(x = Base.FastMath.mul_fast(x, n)));
+#         push!(q.args, :(n = Base.FastMath.mul_fast(n, n)));
+#         P >>>= (tz+1)
+#     end
+#     push!(q.args, :x)
+#     q
+# end
+function falling_factorial(p, K)
+    x = p
+    for i ∈ 1:K-1
+        x *= p - i
     end
-    last(ps)
+    x
 end
+faulhaber(n, ::Val{0}) = n
+faulhaber(n, ::Val{1}) = @fastmath 0.5 * n * (n + one(n))
+@generated function faulhaber(n, ::Val{P}) where {P}
+    @assert 2 ≤ P ≤ 8
+    B = (  0.5, 0.08333333333333333, 0.0, -0.001388888888888889, 0.0, 3.3068783068783064e-5, 0.0, -8.267195767195768e-7 )
+    fm = :(Base.FastMath.mul_fast)
+    fa = :(Base.FastMath.add_fast)
+    q = Expr(:block, :(n² = $fm(n,n)), :(norig = n))#, :(x = $fm($(B[P] * falling_factorial(P, P-1)), n)))
+    xinitialized = false
+    # B = (1/2, 1/6, 0.0, -1/30, 0.0, 1/42, 0.0, -1/30)
+    iszero(B[P]) && push!(q.args, :(n = n²))
+    for k ∈ P:-1:2
+        Bₖ = B[k]
+        iszero(Bₖ) && continue
+        Bₖ *= falling_factorial(P, k-1)
+        xadd = Expr(:call, fm, Bₖ, :n)
+        if xinitialized
+            xadd = Expr(:call, fa, :x, xadd)
+        else
+            xinitialized = true
+        end
+        push!(q.args, Expr(:(=), :x, xadd))
+        if iszero(B[k-1])
+            push!(q.args, :(n = $fm(n,n²)))
+        else
+            push!(q.args, :(n = $fm(n,norig)))
+        end
+    end
+    push!(q.args, :(x = $fa(x, $fm(0.5, n))))
+    push!(q.args, :(n = $fm(n,norig)))
+    push!(q.args, :($fa(x, $fm(n, $(1/(P+1))))))
+    q
+end
+
+getloop(p::Polyhedra, v::ByteVector, vecf, citers) = getloop(p::Polyhedra, v::ByteVector, vecf)
+function getloop(p::Polyhedra, v::ByteVector, vecf)
+    @unpack A, c, d, paramids, nloops = p
+    citers = 1.0
+    A₁, A₂ = A
+    A₁ᵢ = A₁[i]; A₂ᵢ = A₂[i];
+    for i ∈ v
+        
+    end
+    c₁, c₂ = c
+    d₁, d₂ = d
+    pid₁, pid₂ = paramids
+    i = last(v)
+    Loop(
+        (A₁[i], A₂[i]),
+        RectangularLoop(
+            (c₁[i], c₂[i]),
+            (d₁[i], d₂[i]),
+            (pid₁[i], pid₂[i]),
+            nloops,
+            i
+        )
+    )
+end
+function getloopiters(p::RectangularPolyhedra, v::ByteVector, vecf, citers)
+    @unpack c, d, paramids, nloops = p
+    c₁, c₂ = c
+    c₁ᵢ = c₁[i]; c₂ᵢ = c₂[i];
+    d₁, d₂ = d
+    pid₁, pid₂ = paramids
+    i = last(v)
+    loop = RectangularLoop(
+        (c₁ᵢ, c₂ᵢ),
+        (d₁[i], d₂[i]),
+        (pid₁[i], pid₂[i]),
+        nloops,
+        i
+    )
+    citers *= round(muladd(-vecf, c₁ᵢ + c₂ᵢ, vecf), RoundUp)
+    loop, citers
+end
+
+# struct Polyhedra{L <: AbstractLoop}
+#     loops::Vector{L}
+#     preallocated_subsets::Vector{Polyhedra{L}}
+# end
+# function Polyhedra{L}(N::Int) where {L <: AbstractLoop}
+#     ps = Vector{Polyhedra{L}}(undef, N)
+#     for n ∈ 1:N
+#         ps[n] = Polyhedra(Vector{L}(undef, n), ps)
+#     end
+#     last(ps)
+# end
 
 # struct Polyhedra
 #     A::Matrix{Int} # A * x + B * p ≥ c
@@ -39,7 +176,7 @@ end
 #     # dynamicsyms::Vector{Symbol}
 #     # nvar::Int = size(A,1) - length(parameters)
 # end
-nvars(p::Polyhedra) = length(p.loops)
+# nvars(p::Polyhedra) = length(p.loops)
 # function prealloc_polyhedra_chain(A, params)
 #     L = length(A)
 #     c = Vector{Polyhedra}(undef, L)

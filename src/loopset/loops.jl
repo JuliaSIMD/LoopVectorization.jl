@@ -2,20 +2,6 @@
 # canonicalization should move `i` into indexing expression in `i+j:i+k` ?
 #
 abstract type AbstractLoop end
-"""
-Supports loop depth of up to 9.
-`A` holds 8 loops; the actual loop itself is omitted, with
-(1, -1) being inserted into A₁, A₂ and `loopid`.
-"""
-struct Loop <: AbstractLoop
-    # loopids::ByteVector{UInt64} # up to 8 loop ids for loops in A
-    c::NTuple{2,Float64} # constants for knowns
-    d::NTuple{2,Float64} # A * x ≥ c + d # d are dynamics
-    A::NTuple{2,UInt64} # A is a ByteVector in practice, see unpack(::Loop, ::Val{:A})
-    paramids::NTuple{2,Int16} # ids of the dynamics
-    nloops::Int8
-    loopid::Int8 # id of this loop
-end
 struct RectangularLoop <: AbstractLoop
     # loopids::ByteVector{UInt64} # up to 8 loop ids for loops in A
     c::NTuple{2,Float64} # constants for knowns
@@ -23,6 +9,15 @@ struct RectangularLoop <: AbstractLoop
     paramids::NTuple{2,Int16} # ids of the dynamics
     nloops::Int8
     loopid::Int8 # id of this loop
+end
+"""
+Supports loop depth of up to 9.
+`A` holds 8 loops; the actual loop itself is omitted, with
+(1, -1) being inserted into A₁, A₂ and `loopid`.
+"""
+struct Loop <: AbstractLoop
+    A::NTuple{2,UInt64} # A is a ByteVector in practice, see unpack(::Loop, ::Val{:A})
+    l::RectangularLoop
 end
 function isstatic(loop::AbstractLoop)
     pid = loop.paramids
@@ -59,9 +54,10 @@ function UnPack.unpack(l::AbstractLoop, ::Val{:A})
 end
 function UnPack.unpack(l::RectangularLoop, ::Val{:A})
     A₁ = A₂ = zero(UInt64)
-    nloops = l.nloops# - one(Int8)
+    nloops = l.l.nloops# - one(Int8)
     ByteVector(A₁, nloops), ByteVector(A₂, nloops)
 end
+UnPack.unpack(l::Loop, ::Val{S}) where {S} = UnPack.unpack(l.l, Val{S}())
 
 # UnPack.unpack(l::AbstractLoop, ::Val{cₗ}) = l.c[1]
 # UnPack.unpack(l::AbstractLoop, ::Val{cᵤ}) = l.c[2]

@@ -48,7 +48,10 @@ Base.size(v::AbstractLimitedRangeVector) = (length(v),)
 # typemins(::Type{WordVector}) = 0x80008000800080008000800080008000
 # Base.length(v::V) where {T, V <: AbstractLimitedRangeVector{T}} = 8 - (leading_zeros(v.data ⊻ typemins(V)) ÷ (8sizeof(T)))
 # Base.size(v::AbstractLimitedRangeVector) = (length(v),)
-Base.getindex(v::AbstractLimitedRangeVector{T}, i) where {T} = (v.data >>> unsigned(sizeof(T)*8*(i-1))) % T
+# Base.getindex(v::AbstractLimitedRangeVector{T}, i) where {T} = (v.data >>> unsigned(sizeof(T)*8*(i-1))) % T
+@inline function Base.getindex(v::AbstractLimitedRangeVector, i)
+    VectorizationBase.extractelement(VectorizationBase.splitint(v.data, eltype(v)), i - one(i))
+end
 
 allzero(x::AbstractLimitedRangeVector) = iszero(x.data)
 
@@ -100,7 +103,7 @@ end
 #     V((v.data & m) | x1, length(v))
 # end
 function Base.setindex(v::V, x, i::Int) where {V <: AbstractLimitedRangeVector}
-    V(VectorizationBase.fuseint(VectorizationBase.insertelement(VectorizationBase.splitint(v.data, unsigned(eltype(v))), x % eltype(v), i)), length(v))
+    V(VectorizationBase.fuseint(VectorizationBase.insertelement(VectorizationBase.splitint(v.data, unsigned(eltype(v))), x % eltype(v), i - one(i))), length(v))
 end
 
 struct ShortDynamicVector{T,N} <: AbstractVector{T}
