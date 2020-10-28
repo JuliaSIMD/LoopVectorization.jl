@@ -60,12 +60,18 @@ allzero(x::AbstractLimitedRangeVector) = iszero(x.data)
     iszero(l) ? nothing : (d % T, (d >>> (8sizeof(T)), l - one(l)))
 end
 
+function Base.in(x::Integer, v::ByteVector)
+    T = unsigned(eltype(v))
+    VectorizationBase.vany(VectorizationBase.splitint(v.data, T) == (x % T))
+end
+
+Base.:(+)(v1::ByteVector, v2::ByteVector) = ByteVector(v1.data + v2.data, v1.len + v2.len) # Overflow???
 
 # ByteVector() = ByteVector(typemins(ByteVector), 0)
 # WordVector() = WordVector(typemins(WordVector), 0)
-ByteVector() = ByteVector(zero(UInt64), 0)
-ByteVector{U}() where {U} = ByteVector(zero(U), 0)
-WordVector() = WordVector(zero(UInt128), 0)
+ByteVector() = ByteVector(zero(UInt64), zero(Int8))
+ByteVector{U}() where {U} = ByteVector(zero(U), zero(Int8))
+WordVector() = WordVector(zero(UInt128), zero(Int8))
 function filluint(data, ::Type{T}, x::Vararg{Integer,N}) where {T,N}
     n = 0
     while true

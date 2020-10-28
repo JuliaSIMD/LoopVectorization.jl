@@ -27,8 +27,8 @@
 abstract type AbstractPolyhedra end
 
 struct RectangularPolyhedra <: AbstractPolyhedra
-    c::NTuple{2,NTuple{8,Float64}}
-    d::NTuple{2,NTuple{8,Float64}}
+    c::NTuple{2,NTuple{8,Int64}}
+    d::NTuple{2,NTuple{8,Int64}}
     paramids::NTuple{2,UInt64} # zero indicates no param
     # nparams::NTuple{2,Int8}
     nloops::Int8
@@ -79,9 +79,10 @@ function falling_factorial(p, K)
 end
 faulhaber(n, ::Val{0}) = n
 faulhaber(n, ::Val{1}) = @fastmath 0.5 * n * (n + one(n))
+bin(n, x) = binomial(round(Int64, n), round(Int64, x))
 @generated function faulhaber(n, ::Val{P}) where {P}
     @assert 2 ≤ P ≤ 8
-    B = (  0.5, 0.08333333333333333, 0.0, -0.001388888888888889, 0.0, 3.3068783068783064e-5, 0.0, -8.267195767195768e-7 )
+    B = ( 0.5, 0.08333333333333333, 0.0, -0.001388888888888889, 0.0, 3.3068783068783064e-5, 0.0, -8.267195767195768e-7 )
     fm = :(Base.FastMath.mul_fast)
     fa = :(Base.FastMath.add_fast)
     q = Expr(:block, :(n² = $fm(n,n)), :(norig = n))#, :(x = $fm($(B[P] * falling_factorial(P, P-1)), n)))
@@ -106,14 +107,95 @@ faulhaber(n, ::Val{1}) = @fastmath 0.5 * n * (n + one(n))
         end
     end
     push!(q.args, :(x = $fa(x, $fm(0.5, n))))
-    push!(q.args, :(n = $fm(n,norig)))
+    push!(q.args, :(n = $fm(n, norig)))
     push!(q.args, :($fa(x, $fm(n, $(1/(P+1))))))
     q
 end
 
-getloop(p::Polyhedra, v::ByteVector, vecf, citers) = getloop(p::Polyhedra, v::ByteVector, vecf)
-function getloop(p::Polyhedra, v::ByteVector, vecf)
+struct BinomialFunc
+    a::ByteVector{UInt64}
+    b::Int32
+    n::Int8
+    coef::Int8
+end
+BinomialFunc() = BinomialFunc(ByteVector(zero(UInt64),zero(Int8)),zero(Int32),zero(Int8),zero(Int8))
+# """
+# Polyhedra must be sorted so that no loops ∈ `loops` depend on loops ∉ `loops`.
+# Counts the lattice points in `last(loops)`.
+# """
+# function calculate_lattice_points(p::Polyhedra, loops::ByteVector)
+
+#     lp
+# end
+
+# getloop(p::Polyhedra, v::ByteVector, vecf, veci, citers) = getloop(p::Polyhedra, v::ByteVector, vecf, veci)
+function getloop(p::Polyhedra, v::ByteVector, vecf, veci, citers)
     @unpack A, c, d, paramids, nloops = p
+    Aₗ, Aᵤ = A
+    cₗ, cᵤ = c
+    dₗ, dᵤ = d
+    polydim = length(v)
+    outid = v[polydim]
+    A₁ₗ = A₁ₗoriginal = Aₗ[outid]
+    A₁ᵤ = A₁ᵤoriginal = Aᵤ[outid]
+    A₂ₗ = A₂ᵤ = A₃ₗ = A₃ᵤ = A₄ₗ = A₄ᵤ = ByteVector()
+    Asum = A₁ᵤ + A₁ₗ
+    cdsum = cₗ[outid] + cᵤ[outid] + dₗ[outid] + dᵤ[outid]
+    az = allzero(Asum)
+    if !az
+        # maybe it is only a function of loops ∉ v
+        az = true
+        for i ∈ eachindex(Asum)
+            Asᵢ = Asum[i]
+            if !iszero(Asᵢ)
+                if i ∉ v # eliminate
+                    # TODO: Must we disallow `for m ∈ 1:M, n ∈ 1+m:2m, k ∈ 1:n`
+                    # due to the dependence of `k` on `n`, which has a `+m` on lower and upper bounds?
+                    if Asᵢ < 0 # i ∈ j:upper
+                        ctemp, dtemp = minimum(p, i, v)
+                    else#if Asᵢ > 0 # guaranteed by `!iszero(Asᵢ); # i ∈ lower:j
+                        ctemp, dtemp = maximum(p, i, v)                        
+                    end
+                    A₁ₗₜ = A₁ₗ[i]
+                    A₁ᵤₜ = A₁ᵤ[i]
+                    cₗ₁ -= ctemp * A₁ₗₜ
+                    cᵤ₁ -= ctemp * A₁ᵤₜ
+                    dₗ₁ -= dtemp * A₁ₗₜ
+                    dᵤ₁ -= dtemp * A₁ᵤₜ
+                    A₁ₗ = setindex(A₁ₗ, 0x00, i)
+                    A₁ᵤ = setindex(A₁ᵤ, 0x00, i)
+                else
+                    az = false
+                end
+            end
+        end
+    end
+    noinnerdefs = true
+    for i ∈ 1:polydim-1
+        noinnerdefs = 0x00 == Aₗ[v[i]] == Aᵤ[v[i]]
+        noinnerdefs || break
+    end
+    if az & noinnerdefs
+        # then this loop's iteration count is independent of the loops proceding it.
+        vecf = veci == polydim ? vecf : one(vecf)
+        citers *= round(muladd(-vecf, cdsum, vecf), RoundUp)
+        loop = Loop(
+            (Aₗ.data, Aᵤ.data, zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64)),
+            (cₗ[outid], cᵤ[outid], zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64)),
+            (dₗ[outid], dᵤ[outid], zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64)),
+            (paramids[1][outid], paramids[2][outid], zero(Int16), zero(Int16), zero(Int16), zero(Int16), zero(Int16), zero(Int16)),
+            nloops, outid, one(Int8)
+        )
+        return citers, loop
+    end
+    # if we get here, then there is a non-zero in A₁ₗ, A₁ᵤ, there is an innerdef, or both
+    lp = 0.0
+    binomials = ntuple(_ -> BinomialFunc(), Val(8))
+    coefs1 = ntuple(zero, Val(8))
+    coefs2 = ntuple(zero, Val(8))
+    coefs3 = ntuple(zero, Val(8))
+
+    
     citers = 1.0
     A₁, A₂ = A
     A₁ᵢ = A₁[i]; A₂ᵢ = A₂[i];
@@ -135,23 +217,28 @@ function getloop(p::Polyhedra, v::ByteVector, vecf)
         )
     )
 end
-function getloopiters(p::RectangularPolyhedra, v::ByteVector, vecf, citers)
+function getloopiters(p::RectangularPolyhedra, v::ByteVector, vecf, veci, citers)
     @unpack c, d, paramids, nloops = p
+    vecf = veci == length(v) ? vecf : one(vecf)
     c₁, c₂ = c
     c₁ᵢ = c₁[i]; c₂ᵢ = c₂[i];
     d₁, d₂ = d
+    d₁ᵢ = d₁[i]; d₂ᵢ = d₂[i];
     pid₁, pid₂ = paramids
     i = last(v)
     loop = RectangularLoop(
         (c₁ᵢ, c₂ᵢ),
-        (d₁[i], d₂[i]),
+        (d₁ᵢ, d₂ᵢ),
         (pid₁[i], pid₂[i]),
         nloops,
         i
     )
-    citers *= round(muladd(-vecf, c₁ᵢ + c₂ᵢ, vecf), RoundUp)
+    citers *= round(muladd(-vecf, c₁ᵢ + c₂ᵢ + d₁ᵢ + d₂ᵢ, vecf), RoundUp)
     loop, citers
 end
+
+
+
 
 # struct Polyhedra{L <: AbstractLoop}
 #     loops::Vector{L}
