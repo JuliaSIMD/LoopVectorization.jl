@@ -128,6 +128,37 @@ BinomialFunc() = BinomialFunc(ByteVector(zero(UInt64),zero(Int8)),zero(Int32),ze
 #     lp
 # end
 
+function remove_outer_bounds(p, A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, dᵤ₁, v, Asum = A₁ᵤ + A₁ₗ)
+    az = true
+    failure = false
+    for i ∈ eachindex(Asum)
+        Asᵢ = Asum[i]
+        if !iszero(Asᵢ)
+            if i ∉ v # eliminate
+                # TODO: Must we disallow `for m ∈ 1:M, n ∈ 1+m:2m, k ∈ 1:n`
+                # due to the dependence of `k` on `n`, which has a `+m` on lower and upper bounds?
+                if Asᵢ < 0 # i ∈ j:upper
+                    ctemp, dtemp = minimum(p, i, v)
+                else#if Asᵢ > 0 # guaranteed by `!iszero(Asᵢ); # i ∈ lower:j
+                    ctemp, dtemp = maximum(p, i, v)
+                end
+                A₁ₗₜ = A₁ₗ[i]
+                A₁ᵤₜ = A₁ᵤ[i]
+                cₗ₁ -= ctemp * A₁ₗₜ
+                cᵤ₁ -= ctemp * A₁ᵤₜ
+                dₗ₁ -= dtemp * A₁ₗₜ
+                dᵤ₁ -= dtemp * A₁ᵤₜ
+                A₁ₗ = setindex(A₁ₗ, 0x00, i)
+                A₁ᵤ = setindex(A₁ᵤ, 0x00, i)
+            else
+                az = false
+            end
+        end
+    end
+    A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, dᵤ₁, az, failure
+end
+
+
 # getloop(p::Polyhedra, v::ByteVector, vecf, veci, citers) = getloop(p::Polyhedra, v::ByteVector, vecf, veci)
 function getloop(p::Polyhedra, v::ByteVector, vecf, veci, citers)
     @unpack A, c, d, paramids, nloops = p
@@ -140,60 +171,120 @@ function getloop(p::Polyhedra, v::ByteVector, vecf, veci, citers)
     A₁ᵤ = A₁ᵤoriginal = Aᵤ[outid]
     A₂ₗ = A₂ᵤ = A₃ₗ = A₃ᵤ = A₄ₗ = A₄ᵤ = ByteVector()
     Asum = A₁ᵤ + A₁ₗ
-    cdsum = cₗ[outid] + cᵤ[outid] + dₗ[outid] + dᵤ[outid]
+    cₗ₁ = cₗ[outid]; cᵤ₁ = cᵤ[outid]; dₗ₁ = dₗ[outid]; dᵤ₁ = dᵤ[outid];
     az = allzero(Asum)
     if !az
         # maybe it is only a function of loops ∉ v
-        az = true
-        for i ∈ eachindex(Asum)
-            Asᵢ = Asum[i]
-            if !iszero(Asᵢ)
-                if i ∉ v # eliminate
-                    # TODO: Must we disallow `for m ∈ 1:M, n ∈ 1+m:2m, k ∈ 1:n`
-                    # due to the dependence of `k` on `n`, which has a `+m` on lower and upper bounds?
-                    if Asᵢ < 0 # i ∈ j:upper
-                        ctemp, dtemp = minimum(p, i, v)
-                    else#if Asᵢ > 0 # guaranteed by `!iszero(Asᵢ); # i ∈ lower:j
-                        ctemp, dtemp = maximum(p, i, v)                        
-                    end
-                    A₁ₗₜ = A₁ₗ[i]
-                    A₁ᵤₜ = A₁ᵤ[i]
-                    cₗ₁ -= ctemp * A₁ₗₜ
-                    cᵤ₁ -= ctemp * A₁ᵤₜ
-                    dₗ₁ -= dtemp * A₁ₗₜ
-                    dᵤ₁ -= dtemp * A₁ᵤₜ
-                    A₁ₗ = setindex(A₁ₗ, 0x00, i)
-                    A₁ᵤ = setindex(A₁ᵤ, 0x00, i)
-                else
-                    az = false
-                end
-            end
-        end
+        A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, dᵤ₁, az, failure = remove_outer_bounds(p, A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, dᵤ₁, v, Asum)
+        failure && return Inf, nullloop()
     end
+    # innerdefs = 0x00
+    # for i ∈ 1:polydim-1
+    #     noinnerdef = 0x00 == Aₗ[v[i]] == Aᵤ[v[i]]
+    #     innerdefs |= !noinnerdef
+    #     innerdefs <<= 1
+    # end
+    # # TODO: support >1 innerdef
+    # count_ones(innerdefs) > 1 && return Inf, nullloop()
     noinnerdefs = true
     for i ∈ 1:polydim-1
-        noinnerdefs = 0x00 == Aₗ[v[i]] == Aᵤ[v[i]]
+        vᵢ = v[i]
+        noinnerdefs = 0x00 == Aₗ[vᵢ][outid] == Aᵤ[vᵢ][outid]
         noinnerdefs || break
     end
-    if az & noinnerdefs
+    if az & (noinnerdefs)#(innerdefs === 0x00)
         # then this loop's iteration count is independent of the loops proceding it.
         vecf = veci == polydim ? vecf : one(vecf)
+        cdsum = cₗ[outid] + cᵤ[outid] + dₗ[outid] + dᵤ[outid]
         citers *= round(muladd(-vecf, cdsum, vecf), RoundUp)
         loop = Loop(
             (Aₗ.data, Aᵤ.data, zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64)),
-            (cₗ[outid], cᵤ[outid], zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64)),
-            (dₗ[outid], dᵤ[outid], zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64)),
+            (cₗ₁, cᵤ₁, zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64)),
+            (dₗ₁, dᵤ₁, zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64)),
             (paramids[1][outid], paramids[2][outid], zero(Int16), zero(Int16), zero(Int16), zero(Int16), zero(Int16), zero(Int16)),
             nloops, outid, one(Int8)
         )
         return citers, loop
     end
     # if we get here, then there is a non-zero in A₁ₗ, A₁ᵤ, there is an innerdef, or both
-    lp = 0.0
+    citers = 0.0
     binomials = ntuple(_ -> BinomialFunc(), Val(8))
-    coefs1 = ntuple(zero, Val(8))
-    coefs2 = ntuple(zero, Val(8))
-    coefs3 = ntuple(zero, Val(8))
+    coef⁰ = 0
+    coefs¹ = ntuple(zero, Val(8))
+    coefs² = ntuple(zero, Val(8))
+    # coefs³ = ntuple(zero, Val(8))
+    # Perhaps the strategy should be to pick a `!az` to start with when counting iters
+    # and then proceed backwards through the deps until they're all covered?
+    # we need to return a `!az` loop here anyway...
+    # but it's probably simplest to do these in two separate steps.
+    # 1. calculate iters
+    # 2. determine loop
+    # remove outers and check for `!az`
+    nazᵢ = az ? 0 : outid
+    for _i ∈ 1:polydim-1
+        i = v[_i]
+        Aᵢₗ = Aₗ[i]; Aᵢᵤ = Aᵤ[i]; cᵢₗ = cₗ[i]; cᵢᵤ = cᵤ[i]; dᵢₗ = dₗ[i]; dᵢᵤ = dᵤ[i];
+        Aᵢₗ, Aᵢᵤ, cᵢₗ, cᵢᵤ, dᵢₗ, dᵢᵤ, azᵢ, failure = remove_outer_bounds(p, Aᵢₗ, Aᵢᵤ, cᵢₗ, cᵢᵤ, dᵢₗ, dᵢᵤ, v)
+        failure && return Inf, nullloop()
+        if !azᵢ
+            # TODO: check that no other loop is a func of this one
+            nazᵢ = i
+        end
+    end
+    # start counting iters from nazᵢ
+    # determining loop
+    constraints = 2
+    if !az
+        # Asum = A₁ᵤ + A₁ₗ
+        for i ∈ 1:polydim-1
+            vᵢ = v[i]
+            uz = iszero(A₁ᵤ[vᵢ])
+            lz = iszero(A₁ₗ[vᵢ])
+            if lz
+            end
+            if uz
+            end
+        end
+    end
+    if az # must have innerdefs
+        coef⁰ = cₗ[outid] + cᵤ[outid] + dₗ[outid] + dᵤ[outid]
+    elseif noinnerdefs
+        for i ∈ 1:polydim-1
+            vᵢ = v[i]
+            # setindex into coefs1
+            coefs¹ = setindex(coefs¹, A₁ₗ[vᵢ] + A₁ᵤ[vᵢ], vᵢ)
+        end
+    else # both innerdefs and triangle deps
+        # TODO: support this
+        return Inf, nullloop()
+    end
+    # for m ∈ 1:M, n ∈ m:N, k ∈ 1:m+n
+    # v = [3, 1, 2]
+    # ∑_{m=1}ᴹ
+
+    # for m ∈ 1:M, n ∈ 1:m
+    # v = [2, 1]
+    #  1  0   m ≥  1
+    # -1  0   n   -M
+    #  0  1        1
+    #  1 -1        0
+    # inner defs for `1`
+    # if innerdefs !== 0x00
+    #     innerdef = polydim - trailing_zeros(innerdefs)
+    #     # The inner definition constraining loop
+    #     Aₗc = Aₗ[innerdef]
+    #     Aᵤc = Aᵤ[innerdef]
+    #     Asumc = Aₗc + Aᵤc
+    #     # TODO accept more complicated affine transform here
+    #     isone(count_ones(Asumc)) || return Inf, nullloop()
+    # end
+    isvecₒ = outid == veci
+    # Here, we move through those inner loops,
+    # updating coefs and binomials
+    for _i ∈ 1:polydim - 1
+        i = v[polydim - _i]
+        isvecᵢ = isvecₒ | (i == veci) # need to consider if it's SIMD
+    end
 
     
     citers = 1.0
