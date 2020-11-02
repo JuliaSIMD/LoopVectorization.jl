@@ -78,7 +78,7 @@ function falling_factorial(p, K)
     x
 end
 faulhaber(n, ::Val{0}) = n
-faulhaber(n, ::Val{1}) = @fastmath 0.5 * n * (n + one(n))
+faulhaber(n, ::Val{1}) = (n * (n + one(n))) >>> 1
 bin(n, x) = binomial(round(Int64, n), round(Int64, x))
 @generated function faulhaber(n, ::Val{P}) where {P}
     @assert 2 ≤ P ≤ 8
@@ -108,7 +108,7 @@ bin(n, x) = binomial(round(Int64, n), round(Int64, x))
     end
     push!(q.args, :(x = $fa(x, $fm(0.5, n))))
     push!(q.args, :(n = $fm(n, norig)))
-    push!(q.args, :($fa(x, $fm(n, $(1/(P+1))))))
+    push!(q.args, :(round(Int64, $fa(x, $fm(n, $(1/(P+1)))))))
     q
 end
 
@@ -308,9 +308,6 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
                     cd * coefs²[j][k] + coefs¹_old[k] * Asum[j]
                 end
             end
-            if !iszero(coefs¹ᵢ)
-                
-            end
             nbinrange = OneTo(nbinomials)
             for b ∈ nbinrange # hockey stick
                 bb = binomials[b]
@@ -357,11 +354,24 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
             for j ∈ 1:polydim
                 coefs²ᵢⱼ = coefs²ᵢ[j]
                 iszero(coefs²ᵢⱼ) && continue
+                if j == i
+                    fh2 = faulhaber(cdmax, Val(2))
+                    if cdmin > 0
+                        fh2 -= faulhaber(cdmin - 1, Val(2))
+                    else
+                        fh2 += faulhaber(cdmin, Val(2))
+                    end
+                    coef⁰ += coefs²ᵢⱼ * fh2
+                elseif VectorizationBase.splitint(not_visited_mask, Bool)[j]
+                    coefs¹ = setindex(coefs¹, cd * coefs²ᵢⱼ, j)
+                end
             end
             
         end
         (not_visited_mask === zero(UInt64)) && break
     end
+    # coefs⁰ should now be the number of iterations
+    # this leaves us with determining the loop bounds, required for fusion checks (and used for lowering?)
     if !az
         # Asum = A₁ᵤ + A₁ₗ
         for i ∈ 1:polydim-1
