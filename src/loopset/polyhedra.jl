@@ -114,11 +114,24 @@ end
 
 struct BinomialFunc
     a::ByteVector{UInt64}
-    b::Int32
-    n::Int8
-    coef::Int8
+    cd::Int64
+    coef::Int64
+    b::UInt8
+    active::Bool
 end
-BinomialFunc() = BinomialFunc(ByteVector(zero(UInt64),zero(Int8)),zero(Int32),zero(Int8),zero(Int8))
+BinomialFunc() = BinomialFunc(ByteVector(), 0.0, 0.0, 0x00, false)
+isactive(b::BinomialFunc) = b.active
+
+struct VectorLength
+    Wm1::Int
+    shifter::Int
+end
+VectorLength(n) = VectorLength(n, VectorizationBase.intlog2(n))
+VectorLength() = VectorLength(0, 0)
+Base.div(n, vl::VectorLength) = n >>> vl.shifter
+Base.cld(n, vl::VectorLength) = (n + vl.Wm1) ÷ vl
+Base.:(*)(a::Integer, b::VectorLength) = a * b.Wm1 + a
+Base.:(*)(b::VectorLength, a::Integer) = a * b.Wm1 + a
 # """
 # Polyhedra must be sorted so that no loops ∈ `loops` depend on loops ∉ `loops`.
 # Counts the lattice points in `last(loops)`.
@@ -160,7 +173,7 @@ end
 
 
 # getloop(p::Polyhedra, v::ByteVector, vecf, veci, citers) = getloop(p::Polyhedra, v::ByteVector, vecf, veci)
-function getloop(p::Polyhedra, v::ByteVector, vecf, veci, citers)
+function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
     @unpack A, c, d, paramids, nloops = p
     Aₗ, Aᵤ = A
     cₗ, cᵤ = c
@@ -206,13 +219,14 @@ function getloop(p::Polyhedra, v::ByteVector, vecf, veci, citers)
         )
         return citers, loop
     end
+    
+    Aₗ = setindex(Aₗ, A₁ₗ, outid)
+    Aᵤ = setindex(Aᵤ, A₁ᵤ, outid)
+    cₗ = setindex(cₗ, cₗ₁, outid)
+    cᵤ = setindex(cᵤ, cᵤ₁, outid)
+    dₗ = setindex(dₗ, dₗ₁, outid)
+    dᵤ = setindex(dᵤ, dᵤ₁, outid)
     # if we get here, then there is a non-zero in A₁ₗ, A₁ᵤ, there is an innerdef, or both
-    citers = 0.0
-    binomials = ntuple(_ -> BinomialFunc(), Val(8))
-    coef⁰ = 0
-    coefs¹ = ntuple(zero, Val(8))
-    coefs² = ntuple(zero, Val(8))
-    # coefs³ = ntuple(zero, Val(8))
     # Perhaps the strategy should be to pick a `!az` to start with when counting iters
     # and then proceed backwards through the deps until they're all covered?
     # we need to return a `!az` loop here anyway...
@@ -220,20 +234,121 @@ function getloop(p::Polyhedra, v::ByteVector, vecf, veci, citers)
     # 1. calculate iters
     # 2. determine loop
     # remove outers and check for `!az`
-    nazᵢ = az ? 0 : outid
+    naz = az ? 0 : outid
+    Aᵤ′ = Aₗ′ = Base.Cartesian.@ntuple 8 _ -> VectorizationBase.splitint(0x0000000000000000, Int8)
+    Aᵤ′ᵢ = Aₗ′ᵢ = Aₗ′[1]; # just to define scope here.
+    for j ∈ eachindex(Aᵢₗ)
+        Aₗ′ = setindex(masksₗ, insertelement(Aₗ′[j], A₁ₗ[j], polydim-1), j)
+        Aᵤ′ = setindex(masksᵤ, insertelement(Aᵤ′[j], A₁ᵤ[j], polydim-1), j)
+    end
     for _i ∈ 1:polydim-1
         i = v[_i]
         Aᵢₗ = Aₗ[i]; Aᵢᵤ = Aᵤ[i]; cᵢₗ = cₗ[i]; cᵢᵤ = cᵤ[i]; dᵢₗ = dₗ[i]; dᵢᵤ = dᵤ[i];
         Aᵢₗ, Aᵢᵤ, cᵢₗ, cᵢᵤ, dᵢₗ, dᵢᵤ, azᵢ, failure = remove_outer_bounds(p, Aᵢₗ, Aᵢᵤ, cᵢₗ, cᵢᵤ, dᵢₗ, dᵢᵤ, v)
         failure && return Inf, nullloop()
-        if !azᵢ
-            # TODO: check that no other loop is a func of this one
-            nazᵢ = i
+        # try and have naz point to a loop that's an affine combination of others
+        if !azᵢ && (iszero(naz) || (!(iszero(Aᵢₗ[naz]) & iszero(Aᵢᵤ[naz]))))
+            naz = i
         end
+        for j ∈ eachindex(Aᵢₗ)
+            Aₗ′ = setindex(masksₗ, insertelement(Aₗ′[j], Aᵢₗ[j], i-1), j)
+            Aᵤ′ = setindex(masksᵤ, insertelement(Aᵤ′[j], Aᵢᵤ[j], i-1), j)
+        end
+        Aₗ = setindex(Aₗ, Aᵢₗ, i)
+        Aᵤ = setindex(Aᵤ, Aᵢᵤ, i)
+        cₗ = setindex(cₗ, cᵢₗ, i)
+        cᵤ = setindex(cᵤ, cᵢᵤ, i)
+        dₗ = setindex(dₗ, dᵢₗ, i)
+        dᵤ = setindex(dᵤ, dᵢᵤ, i)
     end
-    # start counting iters from nazᵢ
+    # We've removed dependencies on external loops, and found one that's a function of others. We
+    # start counting iters from naz
     # determining loop
+    binomials = ntuple(_ -> BinomialFunc(), Val(8))
+    nbinomials = 0
+    coef⁰ = 0
+    coefs¹ = Base.Cartesian.@ntuple 8 i -> 0
+    coefs² = Base.Cartesian.@ntuple 8 i -> coefs¹
+    # visited_mask = (0x0101010101010101)
+    # visited_mask = VectorizationBase.splitint(0x0101010101010101 >> ((8 - polydim)*8), Bool)
+    not_visited_mask = 0x0101010101010101 >> ((8 - polydim)*8)
+    # coefs³ = ntuple(zero, Val(8))
     constraints = 2
+    first_iter = true
+    while true
+        i, not_visited_mask = depending_ind(Aₗ′, Aᵤ′, not_visited_mask) # no others not yet visited depend on `i`
+        Aₗᵢ = Aₗ[i] # others it depends on
+        Aᵤᵢ = Aᵤ[i] # others it depends on
+        Aₗᵢzero = allzero(Aₗᵢ)
+        Aᵤᵢzero = allzero(Aᵤᵢ)
+        cdmax = -cᵤ[i] - dᵤ[i]
+        cdmin =  cₗ[i] + dₗ[i]
+        cd = 1 + cdmax - cdmin
+        Asum = Aᵤᵢ + Aₗᵢ
+        if first_iter # initialize
+            first_iter = false
+            citers = cd
+            coefs¹ = Base.Cartesian.@ntuple 8 j -> Asum[j]
+        else
+            coefs¹ᵢ = coefs¹[i]
+            coefs²ᵢ = coefs²[i]
+            coefs²ᵢ = Base.Cartesian.@ntuple 8 j -> coefs²ᵢ[j] + (i == j ? 0 : coefs²[j][i])
+            
+            coef⁰_old = coef⁰
+            coefs¹_old = coefs¹
+            coef⁰ *= cd
+            coefs¹ = Base.Cartesian.@ntuple 8 j -> coefs¹[j] * cd# + Asum[j] * coef⁰_old
+            # now need to update the iᵗʰ.
+            if iszero(Asum)
+                coefs² = Base.Cartesian.@ntuple 8 j -> Base.Cartesian.@ntuple k -> cd * coefs²[j][k]
+            else
+                coefs¹ = Base.Cartesian.@ntuple 8 j -> coefs¹[j] + Asum[j] * coef⁰_old
+                coefs² = Base.Cartesian.@ntuple 8 j -> Base.Cartesian.@ntuple k -> begin
+                    cd * coefs²[j][k] + coefs¹_old[k] * Asum[j]
+                end
+            end
+            if !iszero(coefs¹ᵢ)
+                
+            end
+            for b ∈ 1:nbinomials # hockey stick
+                bb = binomials[b]
+                isactive(bb) || continue
+                a = bb.a
+                aᵢ = a[i]
+                a = setindex(a, zero(Int8), i)
+                if allzero(Asum)
+                    if allzero(a)
+                        binomials = setindex(binomials, BinomialFunc(bb.a, bb.cd, bb.coef, bb.b, false), b)
+                        coef⁰ += bb.coef * (binomial(cdmax + 1 + bb.cd, bb.b + 1) - binomial(cdmin + bb.cd, bb.b + 1))
+                    else
+                    end
+                else
+                end
+            end
+            for j ∈ 1:polydim
+                coefs²ᵢⱼ = coefs²ᵢ[j]
+                iszero(coefs²ᵢⱼ) && continue
+                if Aᵤᵢzero
+                    if (i == veci) | (j == veci)
+                        coef⁰ += coefs²ᵢⱼ * binomial(cld(cdmax, vl) + 1, 2) * vl
+                    else
+                        coef⁰ += coefs²ᵢⱼ * binomial(cdmax + 1, 2)
+                    end
+                else
+                    nbinomials += 1
+                    binomials = setindex(binomials, BinomialFunc(Aᵤᵢ, cdmax + 1, coefs²ᵢⱼ, 0x02, true), nbinomials)
+                end
+                if Aₗᵢzero
+                    coef⁰ -= coefs²ᵢⱼ * binomial(cdmin, 2)
+                else
+                    nbinomials += 1
+                    binomials = setindex(binomials, BinomialFunc(Aᵤᵢ, cdmin, -coefs²ᵢⱼ, 0x02, true), nbinomials)
+                end
+            end
+            
+        end
+        (not_visited_mask === zero(UInt64)) && break
+    end
     if !az
         # Asum = A₁ᵤ + A₁ₗ
         for i ∈ 1:polydim-1

@@ -84,3 +84,23 @@ end
 #         StaticLoop( (cₗ, cᵤ), l.A, l.nloops, l.loopid, false )
 #     end
 # end
+
+function depending_ind(Aₗ′, Aᵤ′, not_visited_mask)
+    i = trailing_zeros(not_visited_mask)
+    # Aₗ′ᵢ = Aₗ′[(i>>>3)+1] & not_visited_mask # gives all that depend on i
+    # Aᵤ′ᵢ = Aᵤ′[(i>>>3)+1] & not_visited_mask # gives all that depend on i
+    # while !(allzero(Aₗ′ᵢ) & allzero(Aᵤ′ᵢ))
+    A′ᵢ = (Aₗ′[(i>>>3)+1] + Aᵤ′[(i>>>3)+1]) & not_visited_mask # gives all that depend on i
+    while !allzero(A′ᵢ)
+        nvm = (not_visited_mask >>> (i+1))
+        @assert !iszero(nvm)
+        i += 1 + trailing_zeros(nvm)
+        A′ᵢ = (Aₗ′[(i>>>3)+1] + Aᵤ′[(i>>>3)+1]) & not_visited_mask # gives all that depend on i
+        # Aₗ′ᵢ = Aₗ′[(i>>>3)+1] & not_visited_mask
+        # Aᵤ′ᵢ = Aᵤ′[(i>>>3)+1] & not_visited_mask
+    end
+    i = (i >>> 3) + 1
+    not_visited_mask = VectorizationBase.fuseint(setindex(VectorizationBase.splitint(not_visited_mask, Bool), false, i))
+    i, not_visited_mask
+end
+
