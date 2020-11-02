@@ -78,8 +78,9 @@ function falling_factorial(p, K)
     x
 end
 faulhaber(n, ::Val{0}) = n
-faulhaber(n, ::Val{1}) = (n * (n + one(n))) >>> 1
-bin(n, x) = binomial(round(Int64, n), round(Int64, x))
+faulhaber(n, ::Val{1}) = (n * (n + one(n))) >> 1
+bin(n, p) = binomial(round(Int64, n), round(Int64, p))
+bin2(n) = faulhaber(n - one(n), Val(1))
 @generated function faulhaber(n, ::Val{P}) where {P}
     @assert 2 ≤ P ≤ 8
     B = ( 0.5, 0.08333333333333333, 0.0, -0.001388888888888889, 0.0, 3.3068783068783064e-5, 0.0, -8.267195767195768e-7 )
@@ -118,8 +119,13 @@ struct BinomialFunc
     coef::Int64
     b::UInt8
     active::Bool
+    isvec::Bool
 end
-BinomialFunc() = BinomialFunc(ByteVector(), 0.0, 0.0, 0x00, false)
+function BinomialFunc(a, cd, coef, b, active, vecid::Int)
+    isvec = a[vecid] != 0
+    BinomialFunc(a, cd, coef, b, active, isvec)
+end
+BinomialFunc() = BinomialFunc(ByteVector(), 0.0, 0.0, 0x00, false, false)
 isactive(b::BinomialFunc) = b.active
 
 struct VectorLength
@@ -128,7 +134,8 @@ struct VectorLength
 end
 VectorLength(n) = VectorLength(n, VectorizationBase.intlog2(n))
 VectorLength() = VectorLength(0, 0)
-Base.div(n, vl::VectorLength) = n >>> vl.shifter
+Base.rem(n, vl::VectorLength) = n & vl.Wm1
+Base.div(n, vl::VectorLength) = n >> vl.shifter
 Base.cld(n, vl::VectorLength) = (n + vl.Wm1) ÷ vl
 Base.:(*)(a::Integer, b::VectorLength) = a * b.Wm1 + a
 Base.:(*)(b::VectorLength, a::Integer) = a * b.Wm1 + a
@@ -284,6 +291,7 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
         cdmax = -cᵤ[i] - dᵤ[i]
         cdmin =  cₗ[i] + dₗ[i]
         cd = 1 + cdmax - cdmin
+        cd = veci == i ? cld(cd, vl) : cd
         Asum = Aᵤᵢ + Aₗᵢ
         allzeroAsum = allzero(Asum)
         if first_iter # initialize
@@ -318,34 +326,45 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
                 allzeroa = allzero(a)
                 if allzeroAsum & iszero(aᵢ)
                     if allzeroa
-                        binomials = setindex(binomials, BinomialFunc(bb.a, bb.cd, bb.coef, bb.b, false), b)
+                        isvec = bb.isvec
                         coef⁰ += bb.coef * (binomial(cdmax + 1 + bb.cd, bb.b + 1) - binomial(cdmin + bb.cd, bb.b + 1))
+                        binomials = setindex(binomials, BinomialFunc(bb.a, bb.cd, bb.coef, bb.b, false, bb.isvec), b)
                     else#if iszero(aᵢ)
-                        binomials = setindex(binomials, BinomialFunc(bb.a, bb.cd, bb.coef * cd, bb.b, true), b)
+                        binomials = setindex(binomials, BinomialFunc(bb.a, bb.cd, bb.coef * cd, bb.b, true, bb.isvec), b)
                     end
                 elseif iszero(aᵢ)
                     # products of binomials not currently supported
                     return Inf, nullloop()
                     # binomials = setindex(binomials, BinomialFunc(bb.a, bb.cd, bb.coef * cd, bb.b, true), b)
                 else
-                    binomials = setindex(binomials, BinomialFunc(a + Aᵤᵢ, cdmax + 1 + bb.cd, bb.coef, bb.b + 1, true), b)
+                    binomials = setindex(binomials, BinomialFunc(a + Aᵤᵢ, cdmax + 1 + bb.cd, bb.coef, bb.b + 1, true, bb.isvec), b)
                     nbinomials += 1
-                    binomials = setindex(binomials, BinomialFunc(a - Aₗᵢ, cdmin + bb.cd, -bb.coef, bb.b + 1, true), nbinomials)
+                    binomials = setindex(binomials, BinomialFunc(a - Aₗᵢ, cdmin + bb.cd, -bb.coef, bb.b + 1, true, bb.isvec), nbinomials)
                 end
             end
             if !iszero(coefs¹ᵢ)
                 if Aᵤᵢzero
                     if (i == veci) | (j == veci)
-                        coef⁰ += coefs¹ᵢ * binomial(cld(cdmax, vl) + 1, 2) * vl
+                        divvec, remvec = divrem(cdmax, vl)
+                        divvec + remvec > 0
+                        itersbin = bin2(divvec) * vl + remvec * divvec
                     else
-                        coef⁰ += coefs¹ᵢ * binomial(cdmax + 1, 2)
+                        itersbin = bin2(cdmax + 1)
                     end
+                    coef⁰ += coefs¹ᵢ * itersbin
                 else
                     nbinomials += 1
                     binomials = setindex(binomials, BinomialFunc(Aᵤᵢ, cdmax + 1, coefs¹ᵢ, 0x02, true), nbinomials)
                 end
                 if Aₗᵢzero
-                    coef⁰ -= coefs¹ᵢ * binomial(cdmin, 2)
+                    if (i == veci) | (j == veci)
+                        divvec, remvec = divrem(cdmin, vl)
+                        divvec += remvec > 0
+                        itersbin = bin2(divvec) * vl + remvec * divvec
+                    else
+                        itersbin = bin2(cdmin)
+                    end
+                    coef⁰ -= coefs¹ᵢ * itersbin
                 else
                     nbinomials += 1
                     binomials = setindex(binomials, BinomialFunc(-Aₗᵢ, cdmin, -coefs¹ᵢ, 0x02, true), nbinomials)
@@ -361,7 +380,7 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
                     else
                         fh2 += faulhaber(cdmin, Val(2))
                     end
-                    coef⁰ += coefs²ᵢⱼ * fh2
+                    coef⁰ += coefs²ᵢⱼ * (veci == i ? cld(fh2, vl) : fh2)
                 elseif VectorizationBase.splitint(not_visited_mask, Bool)[j]
                     coefs¹ = setindex(coefs¹, cd * coefs²ᵢⱼ, j)
                 end
