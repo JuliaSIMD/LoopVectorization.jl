@@ -65,7 +65,9 @@ function Base.in(x::Integer, v::ByteVector)
     VectorizationBase.vany(VectorizationBase.splitint(v.data, T) == (x % T))
 end
 
-Base.:(+)(v1::ByteVector, v2::ByteVector) = ByteVector(v1.data + v2.data, v1.len + v2.len) # Overflow???
+Base.:(+)(v1::ByteVector, v2::ByteVector) = ByteVector(v1.data + v2.data, v1.len) # Overflow???
+Base.:(-)(v1::ByteVector, v2::ByteVector) = ByteVector(v1.data - v2.data, v1.len) # Overflow???
+Base.:(-)(v::ByteVector) = ByteVector( - VectorizationBase.fuseint(-VectorizationBase.splitint(v.data, Int8)), v.len)
 
 # ByteVector() = ByteVector(typemins(ByteVector), 0)
 # WordVector() = WordVector(typemins(WordVector), 0)

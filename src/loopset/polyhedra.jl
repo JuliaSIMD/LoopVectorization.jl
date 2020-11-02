@@ -285,6 +285,7 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
         cdmin =  cₗ[i] + dₗ[i]
         cd = 1 + cdmax - cdmin
         Asum = Aᵤᵢ + Aₗᵢ
+        allzeroAsum = allzero(Asum)
         if first_iter # initialize
             first_iter = false
             citers = cd
@@ -310,40 +311,52 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
             if !iszero(coefs¹ᵢ)
                 
             end
-            for b ∈ 1:nbinomials # hockey stick
+            nbinrange = OneTo(nbinomials)
+            for b ∈ nbinrange # hockey stick
                 bb = binomials[b]
                 isactive(bb) || continue
                 a = bb.a
                 aᵢ = a[i]
                 a = setindex(a, zero(Int8), i)
-                if allzero(Asum)
-                    if allzero(a)
+                allzeroa = allzero(a)
+                if allzeroAsum & iszero(aᵢ)
+                    if allzeroa
                         binomials = setindex(binomials, BinomialFunc(bb.a, bb.cd, bb.coef, bb.b, false), b)
                         coef⁰ += bb.coef * (binomial(cdmax + 1 + bb.cd, bb.b + 1) - binomial(cdmin + bb.cd, bb.b + 1))
+                    else#if iszero(aᵢ)
+                        binomials = setindex(binomials, BinomialFunc(bb.a, bb.cd, bb.coef * cd, bb.b, true), b)
+                    end
+                elseif iszero(aᵢ)
+                    # products of binomials not currently supported
+                    return Inf, nullloop()
+                    # binomials = setindex(binomials, BinomialFunc(bb.a, bb.cd, bb.coef * cd, bb.b, true), b)
+                else
+                    binomials = setindex(binomials, BinomialFunc(a + Aᵤᵢ, cdmax + 1 + bb.cd, bb.coef, bb.b + 1, true), b)
+                    nbinomials += 1
+                    binomials = setindex(binomials, BinomialFunc(a - Aₗᵢ, cdmin + bb.cd, -bb.coef, bb.b + 1, true), nbinomials)
+                end
+            end
+            if !iszero(coefs¹ᵢ)
+                if Aᵤᵢzero
+                    if (i == veci) | (j == veci)
+                        coef⁰ += coefs¹ᵢ * binomial(cld(cdmax, vl) + 1, 2) * vl
                     else
+                        coef⁰ += coefs¹ᵢ * binomial(cdmax + 1, 2)
                     end
                 else
+                    nbinomials += 1
+                    binomials = setindex(binomials, BinomialFunc(Aᵤᵢ, cdmax + 1, coefs¹ᵢ, 0x02, true), nbinomials)
+                end
+                if Aₗᵢzero
+                    coef⁰ -= coefs¹ᵢ * binomial(cdmin, 2)
+                else
+                    nbinomials += 1
+                    binomials = setindex(binomials, BinomialFunc(-Aₗᵢ, cdmin, -coefs¹ᵢ, 0x02, true), nbinomials)
                 end
             end
             for j ∈ 1:polydim
                 coefs²ᵢⱼ = coefs²ᵢ[j]
                 iszero(coefs²ᵢⱼ) && continue
-                if Aᵤᵢzero
-                    if (i == veci) | (j == veci)
-                        coef⁰ += coefs²ᵢⱼ * binomial(cld(cdmax, vl) + 1, 2) * vl
-                    else
-                        coef⁰ += coefs²ᵢⱼ * binomial(cdmax + 1, 2)
-                    end
-                else
-                    nbinomials += 1
-                    binomials = setindex(binomials, BinomialFunc(Aᵤᵢ, cdmax + 1, coefs²ᵢⱼ, 0x02, true), nbinomials)
-                end
-                if Aₗᵢzero
-                    coef⁰ -= coefs²ᵢⱼ * binomial(cdmin, 2)
-                else
-                    nbinomials += 1
-                    binomials = setindex(binomials, BinomialFunc(Aᵤᵢ, cdmin, -coefs²ᵢⱼ, 0x02, true), nbinomials)
-                end
             end
             
         end
