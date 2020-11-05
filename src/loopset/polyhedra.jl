@@ -148,7 +148,7 @@ Base.:(*)(b::VectorLength, a::Integer) = a * b.Wm1 + a
 #     lp
 # end
 
-function remove_outer_bounds(p, A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, dᵤ₁, v, Asum = A₁ᵤ + A₁ₗ)
+function remove_outer_bounds(p, A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, dᵤ₁, v, pidₗ, pidᵤ, pwₗ, pwᵤ, Asum = A₁ᵤ + A₁ₗ)
     az = true
     failure = false
     for i ∈ eachindex(Asum)
@@ -166,8 +166,12 @@ function remove_outer_bounds(p, A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, d�
                 A₁ᵤₜ = A₁ᵤ[i]
                 cₗ₁ -= ctemp * A₁ₗₜ
                 cᵤ₁ -= ctemp * A₁ᵤₜ
-                dₗ₁ -= dtemp * A₁ₗₜ
-                dᵤ₁ -= dtemp * A₁ᵤₜ
+                if !iszero(dtemp)
+                    dₗ₁ -= dtemp * A₁ₗₜ
+                    dᵤ₁ -= dtemp * A₁ᵤₜ
+                    pwₗ = setindex(pwₗ, dtemp, pidₗ[i])
+                    pwᵤ = setindex(pwᵤ, dtemp, pidᵤ[i])
+                end
                 A₁ₗ = setindex(A₁ₗ, 0x00, i)
                 A₁ᵤ = setindex(A₁ᵤ, 0x00, i)
             else
@@ -175,7 +179,7 @@ function remove_outer_bounds(p, A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, d�
             end
         end
     end
-    A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, dᵤ₁, az, failure
+    A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, dᵤ₁, pwₗ, pwᵤ, az, failure
 end
 
 
@@ -185,6 +189,7 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
     Aₗ, Aᵤ = A
     cₗ, cᵤ = c
     dₗ, dᵤ = d
+    pidₗ, pidᵤ = paramids
     polydim = length(v)
     outid = v[polydim]
     A₁ₗ = A₁ₗoriginal = Aₗ[outid]
@@ -193,10 +198,11 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
     Asum = A₁ᵤ + A₁ₗ
     cₗ₁ = cₗ[outid]; cᵤ₁ = cᵤ[outid]; dₗ₁ = dₗ[outid]; dᵤ₁ = dᵤ[outid];
     az = allzero(Asum)
+    pwₗ = ByteVector(); pwᵤ = ByteVector();
     if !az
         # maybe it is only a function of loops ∉ v
-        A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, dᵤ₁, az, failure = remove_outer_bounds(p, A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, dᵤ₁, v, Asum)
-        failure && return Inf, nullloop()
+        A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, dᵤ₁, pwₗ, pwᵤ, az, failure = remove_outer_bounds(p, A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, dᵤ₁, v, pidₗ, pidᵤ, pwₗ, pwᵤ, Asum)
+        failure && return 9223372036854775807, nullloop()
     end
     # innerdefs = 0x00
     # for i ∈ 1:polydim-1
@@ -205,7 +211,7 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
     #     innerdefs <<= 1
     # end
     # # TODO: support >1 innerdef
-    # count_ones(innerdefs) > 1 && return Inf, nullloop()
+    # count_ones(innerdefs) > 1 && return 9223372036854775807, nullloop()
     noinnerdefs = true
     for i ∈ 1:polydim-1
         vᵢ = v[i]
@@ -225,8 +231,7 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
             nloops, outid, one(Int8)
         )
         return citers, loop
-    end
-    
+    end    
     Aₗ = setindex(Aₗ, A₁ₗ, outid)
     Aᵤ = setindex(Aᵤ, A₁ᵤ, outid)
     cₗ = setindex(cₗ, cₗ₁, outid)
@@ -251,8 +256,8 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
     for _i ∈ 1:polydim-1
         i = v[_i]
         Aᵢₗ = Aₗ[i]; Aᵢᵤ = Aᵤ[i]; cᵢₗ = cₗ[i]; cᵢᵤ = cᵤ[i]; dᵢₗ = dₗ[i]; dᵢᵤ = dᵤ[i];
-        Aᵢₗ, Aᵢᵤ, cᵢₗ, cᵢᵤ, dᵢₗ, dᵢᵤ, azᵢ, failure = remove_outer_bounds(p, Aᵢₗ, Aᵢᵤ, cᵢₗ, cᵢᵤ, dᵢₗ, dᵢᵤ, v)
-        failure && return Inf, nullloop()
+        Aᵢₗ, Aᵢᵤ, cᵢₗ, cᵢᵤ, dᵢₗ, dᵢᵤ, pwₗ, pwᵤ, azᵢ, failure = remove_outer_bounds(p, Aᵢₗ, Aᵢᵤ, cᵢₗ, cᵢᵤ, dᵢₗ, dᵢᵤ, v, pwₗ, pwᵤ)
+        failure && return 9223372036854775807, nullloop()
         # try and have naz point to a loop that's an affine combination of others
         if !azᵢ && (iszero(naz) || (!(iszero(Aᵢₗ[naz]) & iszero(Aᵢᵤ[naz]))))
             naz = i
@@ -298,172 +303,105 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
             first_iter = false
             citers = cd
             coefs¹ = Base.Cartesian.@ntuple 8 j -> Asum[j]
+            continue
+        end
+        coefs¹ᵢ = coefs¹[i]
+        coefs²ᵢ = coefs²[i]
+        coefs²ᵢ = Base.Cartesian.@ntuple 8 j -> coefs²ᵢ[j] + (i == j ? 0 : coefs²[j][i])
+        
+        coef⁰_old = coef⁰
+        coefs¹_old = coefs¹
+        coef⁰ *= cd
+        coefs¹ = Base.Cartesian.@ntuple 8 j -> coefs¹[j] * cd# + Asum[j] * coef⁰_old
+        # now need to update the iᵗʰ.
+        if iszero(Asum)
+            coefs² = Base.Cartesian.@ntuple 8 j -> Base.Cartesian.@ntuple k -> cd * coefs²[j][k]
         else
-            coefs¹ᵢ = coefs¹[i]
-            coefs²ᵢ = coefs²[i]
-            coefs²ᵢ = Base.Cartesian.@ntuple 8 j -> coefs²ᵢ[j] + (i == j ? 0 : coefs²[j][i])
-            
-            coef⁰_old = coef⁰
-            coefs¹_old = coefs¹
-            coef⁰ *= cd
-            coefs¹ = Base.Cartesian.@ntuple 8 j -> coefs¹[j] * cd# + Asum[j] * coef⁰_old
-            # now need to update the iᵗʰ.
-            if iszero(Asum)
-                coefs² = Base.Cartesian.@ntuple 8 j -> Base.Cartesian.@ntuple k -> cd * coefs²[j][k]
+            coefs¹ = Base.Cartesian.@ntuple 8 j -> coefs¹[j] + Asum[j] * coef⁰_old
+            coefs² = Base.Cartesian.@ntuple 8 j -> Base.Cartesian.@ntuple k -> begin
+                cd * coefs²[j][k] + coefs¹_old[k] * Asum[j]
+            end
+        end
+        nbinrange = OneTo(nbinomials)
+        for b ∈ nbinrange # hockey stick
+            bb = binomials[b]
+            isactive(bb) || continue
+            a = bb.a
+            aᵢ = a[i]
+            a = setindex(a, zero(Int8), i)
+            allzeroa = allzero(a)
+            if allzeroAsum & iszero(aᵢ)
+                if allzeroa
+                    isvec = bb.isvec
+                    coef⁰ += bb.coef * (binomial(cdmax + 1 + bb.cd, bb.b + 1) - binomial(cdmin + bb.cd, bb.b + 1))
+                    binomials = setindex(binomials, BinomialFunc(bb.a, bb.cd, bb.coef, bb.b, false, bb.isvec), b)
+                else#if iszero(aᵢ)
+                    binomials = setindex(binomials, BinomialFunc(bb.a, bb.cd, bb.coef * cd, bb.b, true, bb.isvec), b)
+                end
+            elseif iszero(aᵢ)
+                # products of binomials not currently supported
+                return 9223372036854775807, nullloop()
+                # binomials = setindex(binomials, BinomialFunc(bb.a, bb.cd, bb.coef * cd, bb.b, true), b)
             else
-                coefs¹ = Base.Cartesian.@ntuple 8 j -> coefs¹[j] + Asum[j] * coef⁰_old
-                coefs² = Base.Cartesian.@ntuple 8 j -> Base.Cartesian.@ntuple k -> begin
-                    cd * coefs²[j][k] + coefs¹_old[k] * Asum[j]
-                end
+                binomials = setindex(binomials, BinomialFunc(a + Aᵤᵢ, cdmax + 1 + bb.cd, bb.coef, bb.b + 1, true, bb.isvec), b)
+                nbinomials += 1
+                binomials = setindex(binomials, BinomialFunc(a - Aₗᵢ, cdmin + bb.cd, -bb.coef, bb.b + 1, true, bb.isvec), nbinomials)
             end
-            nbinrange = OneTo(nbinomials)
-            for b ∈ nbinrange # hockey stick
-                bb = binomials[b]
-                isactive(bb) || continue
-                a = bb.a
-                aᵢ = a[i]
-                a = setindex(a, zero(Int8), i)
-                allzeroa = allzero(a)
-                if allzeroAsum & iszero(aᵢ)
-                    if allzeroa
-                        isvec = bb.isvec
-                        coef⁰ += bb.coef * (binomial(cdmax + 1 + bb.cd, bb.b + 1) - binomial(cdmin + bb.cd, bb.b + 1))
-                        binomials = setindex(binomials, BinomialFunc(bb.a, bb.cd, bb.coef, bb.b, false, bb.isvec), b)
-                    else#if iszero(aᵢ)
-                        binomials = setindex(binomials, BinomialFunc(bb.a, bb.cd, bb.coef * cd, bb.b, true, bb.isvec), b)
-                    end
-                elseif iszero(aᵢ)
-                    # products of binomials not currently supported
-                    return Inf, nullloop()
-                    # binomials = setindex(binomials, BinomialFunc(bb.a, bb.cd, bb.coef * cd, bb.b, true), b)
+        end
+        if !iszero(coefs¹ᵢ)
+            if Aᵤᵢzero
+                if (i == veci) | (j == veci)
+                    divvec, remvec = divrem(cdmax, vl)
+                    divvec + remvec > 0
+                    itersbin = bin2(divvec) * vl + remvec * divvec
                 else
-                    binomials = setindex(binomials, BinomialFunc(a + Aᵤᵢ, cdmax + 1 + bb.cd, bb.coef, bb.b + 1, true, bb.isvec), b)
-                    nbinomials += 1
-                    binomials = setindex(binomials, BinomialFunc(a - Aₗᵢ, cdmin + bb.cd, -bb.coef, bb.b + 1, true, bb.isvec), nbinomials)
+                    itersbin = bin2(cdmax + 1)
                 end
+                coef⁰ += coefs¹ᵢ * itersbin
+            else
+                nbinomials += 1
+                binomials = setindex(binomials, BinomialFunc(Aᵤᵢ, cdmax + 1, coefs¹ᵢ, 0x02, true), nbinomials)
             end
-            if !iszero(coefs¹ᵢ)
-                if Aᵤᵢzero
-                    if (i == veci) | (j == veci)
-                        divvec, remvec = divrem(cdmax, vl)
-                        divvec + remvec > 0
-                        itersbin = bin2(divvec) * vl + remvec * divvec
-                    else
-                        itersbin = bin2(cdmax + 1)
-                    end
-                    coef⁰ += coefs¹ᵢ * itersbin
+            if Aₗᵢzero
+                if (i == veci) | (j == veci)
+                    divvec, remvec = divrem(cdmin, vl)
+                    divvec += remvec > 0
+                    itersbin = bin2(divvec) * vl + remvec * divvec
                 else
-                    nbinomials += 1
-                    binomials = setindex(binomials, BinomialFunc(Aᵤᵢ, cdmax + 1, coefs¹ᵢ, 0x02, true), nbinomials)
+                    itersbin = bin2(cdmin)
                 end
-                if Aₗᵢzero
-                    if (i == veci) | (j == veci)
-                        divvec, remvec = divrem(cdmin, vl)
-                        divvec += remvec > 0
-                        itersbin = bin2(divvec) * vl + remvec * divvec
-                    else
-                        itersbin = bin2(cdmin)
-                    end
-                    coef⁰ -= coefs¹ᵢ * itersbin
+                coef⁰ -= coefs¹ᵢ * itersbin
+            else
+                nbinomials += 1
+                binomials = setindex(binomials, BinomialFunc(-Aₗᵢ, cdmin, -coefs¹ᵢ, 0x02, true), nbinomials)
+            end
+        end
+        for j ∈ 1:polydim
+            coefs²ᵢⱼ = coefs²ᵢ[j]
+            iszero(coefs²ᵢⱼ) && continue
+            if j == i
+                fh2 = faulhaber(cdmax, Val(2))
+                if cdmin > 0
+                    fh2 -= faulhaber(cdmin - 1, Val(2))
                 else
-                    nbinomials += 1
-                    binomials = setindex(binomials, BinomialFunc(-Aₗᵢ, cdmin, -coefs¹ᵢ, 0x02, true), nbinomials)
+                    fh2 += faulhaber(cdmin, Val(2))
                 end
-            end
-            for j ∈ 1:polydim
-                coefs²ᵢⱼ = coefs²ᵢ[j]
-                iszero(coefs²ᵢⱼ) && continue
-                if j == i
-                    fh2 = faulhaber(cdmax, Val(2))
-                    if cdmin > 0
-                        fh2 -= faulhaber(cdmin - 1, Val(2))
-                    else
-                        fh2 += faulhaber(cdmin, Val(2))
-                    end
-                    coef⁰ += coefs²ᵢⱼ * (veci == i ? cld(fh2, vl) : fh2)
-                elseif VectorizationBase.splitint(not_visited_mask, Bool)[j]
-                    coefs¹ = setindex(coefs¹, cd * coefs²ᵢⱼ, j)
-                end
-            end
-            
+                coef⁰ += coefs²ᵢⱼ * (veci == i ? cld(fh2, vl) : fh2)
+            elseif VectorizationBase.splitint(not_visited_mask, Bool)[j]
+                coefs¹ = setindex(coefs¹, cd * coefs²ᵢⱼ, j)
+            end            
         end
         (not_visited_mask === zero(UInt64)) && break
     end
-    # coefs⁰ should now be the number of iterations
+    # coef⁰ should now be the number of iterations
     # this leaves us with determining the loop bounds, required for fusion checks (and used for lowering?)
-    if !az
-        # Asum = A₁ᵤ + A₁ₗ
-        for i ∈ 1:polydim-1
-            vᵢ = v[i]
-            uz = iszero(A₁ᵤ[vᵢ])
-            lz = iszero(A₁ₗ[vᵢ])
-            if lz
-            end
-            if uz
-            end
-        end
-    end
-    if az # must have innerdefs
-        coef⁰ = cₗ[outid] + cᵤ[outid] + dₗ[outid] + dᵤ[outid]
-    elseif noinnerdefs
-        for i ∈ 1:polydim-1
-            vᵢ = v[i]
-            # setindex into coefs1
-            coefs¹ = setindex(coefs¹, A₁ₗ[vᵢ] + A₁ᵤ[vᵢ], vᵢ)
-        end
-    else # both innerdefs and triangle deps
-        # TODO: support this
-        return Inf, nullloop()
-    end
-    # for m ∈ 1:M, n ∈ m:N, k ∈ 1:m+n
-    # v = [3, 1, 2]
-    # ∑_{m=1}ᴹ
-
-    # for m ∈ 1:M, n ∈ 1:m
-    # v = [2, 1]
-    #  1  0   m ≥  1
-    # -1  0   n   -M
-    #  0  1        1
-    #  1 -1        0
-    # inner defs for `1`
-    # if innerdefs !== 0x00
-    #     innerdef = polydim - trailing_zeros(innerdefs)
-    #     # The inner definition constraining loop
-    #     Aₗc = Aₗ[innerdef]
-    #     Aᵤc = Aᵤ[innerdef]
-    #     Asumc = Aₗc + Aᵤc
-    #     # TODO accept more complicated affine transform here
-    #     isone(count_ones(Asumc)) || return Inf, nullloop()
-    # end
-    isvecₒ = outid == veci
-    # Here, we move through those inner loops,
-    # updating coefs and binomials
-    for _i ∈ 1:polydim - 1
-        i = v[polydim - _i]
-        isvecᵢ = isvecₒ | (i == veci) # need to consider if it's SIMD
-    end
-
-    
-    citers = 1.0
-    A₁, A₂ = A
-    A₁ᵢ = A₁[i]; A₂ᵢ = A₂[i];
-    for i ∈ v
-        
-    end
-    c₁, c₂ = c
-    d₁, d₂ = d
-    pid₁, pid₂ = paramids
-    i = last(v)
-    Loop(
-        (A₁[i], A₂[i]),
-        RectangularLoop(
-            (c₁[i], c₂[i]),
-            (d₁[i], d₂[i]),
-            (pid₁[i], pid₂[i]),
-            nloops,
-            i
+    if az
+        coef⁰, Loop(
+            (A₁ₗ.data, A₁ᵤ.data, zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64)),
+            (cₗ₁, cᵤ₁, zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64)),
+            (dₗ₁, dᵤ₁, zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64)),
         )
-    )
+    end
 end
 function getloopiters(p::RectangularPolyhedra, v::ByteVector, vecf, veci, citers)
     @unpack c, d, paramids, nloops = p
@@ -602,7 +540,7 @@ function unconditional_loop_iters!(loops::AbstractVector, loop::Loop)
             # in A₄, loopid is explicitly A₄[newid]; make it implicit
             A₄val = A₄[newid]
             if A₄val == (0x01 % Int8)
-                (c₁ == c₃ + c₄) || return loop, Inf
+                (c₁ == c₃ + c₄) || return 9223372036854775807, loop
                 A₁new = setindex(setindex(A₄, (0xff % Int8), loopid), zero(Int8), newid)
                 A₂new = A₂
                 A₃new = A₃
@@ -613,7 +551,7 @@ function unconditional_loop_iters!(loops::AbstractVector, loop::Loop)
                 c₄new = c₂ + c₄
             elseif A₄val == (0xff % Int8)
             else# reject
-                return loop, Inf
+                return 9223372036854775807, loop
             end                
             loops[n] = StaticLoop( (c₁new, c₂new), (A₁new, A₂new), nloops, newid )
             A₃ = A₃new

@@ -6,12 +6,12 @@ struct RectangularLoop <: AbstractLoop
     # loopids::ByteVector{UInt64} # up to 8 loop ids for loops in A
     c::NTuple{2,Int64} # constants for knowns
     d::NTuple{2,Int16} # A * x ≥ c + d # d are dynamics
-    paramids::NTuple{2,Int16} # ids of the dynamics
+    paramids::NTuple{2,Int8} # ids of the dynamics
     nloops::Int8
     loopid::Int8 # id of this loop
 end
 """
-Supports loop depth of up to 9.
+Supports loop depth of up to 8.
 `A` holds 8 loops; the actual loop itself is omitted, with
 (1, -1) being inserted into A₁, A₂ and `loopid`.
 """
@@ -19,7 +19,9 @@ struct Loop <: AbstractLoop
     A::NTuple{8,UInt64} # A is a ByteVector in practice, see unpack(::Loop, ::Val{:A})
     c::NTuple{8,Int64}
     d::NTuple{8,Int64}
-    paramids::NTuple{8,Int16}
+    paramweights::NTuple{8,UInt64}
+    paramids::NTuple{2,UInt64}
+    nparamweights::NTuple{8,Int8}
     nloops::Int8
     loopid::Int8
     nconstraints::Int8
@@ -29,8 +31,16 @@ function isstatic(loop::AbstractLoop)
     iszero(VectorizationBase.fuseint(Vec(pid[1],pid[2])))
 end
 
-nullrectangularloop() = RectangularLoop((zero(Int64),zero(Int64)),(zero(Int16),zero(Int16)),(zero(Int16),zero(Int16)),zero(Int8),zero(Int8))
-nullloop() = Loop((zero(UInt64),zero(UInt64)),nullrectangularloop())
+UnPack.unpack(l::Loop, ::Val{:paramweights}) = Base.Cartesian.@ntuple 8 i -> ByteVector(l.paramweights[i], l.nparamweights[i])
+UnPack.unpack(l::Loop, ::Val{:paramids}) = (ByteVector(l.paramids[1], l.nloops), ByteVector(l.paramids[2], l.nloops))
+
+
+# function Loop(A::NTuple{2,ByteVector{UInt64}},)
+
+# end
+
+nullrectangularloop() = RectangularLoop((zero(Int64),zero(Int64)),(zero(Int16),zero(Int16)),(zero(Int8),zero(Int8)),zero(Int8),zero(Int8))
+nullloop() = Loop(ntuple(_ -> zero(UInt64), Val(8)), ntuple(zero, Val(8)), ntuple(zero, Val(8)), ntuple(_ -> zero(Int16), Val(8)), zero(Int8), zero(Int8), zero(Int8))
 
 # struct StaticLoop <: AbstractLoop
 #     c::NTuple{2,Float64} # constants for knowns
