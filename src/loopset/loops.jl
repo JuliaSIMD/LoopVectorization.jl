@@ -21,7 +21,7 @@ struct Loop <: AbstractLoop
     d::NTuple{8,Int64}
     paramweights::NTuple{8,UInt64}
     paramids::NTuple{2,UInt64}
-    nparamweights::NTuple{8,Int8}
+    # nparamweights::NTuple{8,Int8}
     nloops::Int8
     loopid::Int8
     nconstraints::Int8

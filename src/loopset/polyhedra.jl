@@ -318,9 +318,10 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
     end
     if az & (noinnerdefs)#(innerdefs === 0x00)
         # then this loop's iteration count is independent of the loops proceding it.
-        vecf = veci == polydim ? vecf : one(vecf)
-        cdsum = cₗ[outid] + cᵤ[outid] + dₗ[outid] + dᵤ[outid]
-        citers *= round(muladd(-vecf, cdsum, vecf), RoundUp)
+        # vecf = veci == polydim ? vecf : one(vecf)
+        cdsum = 1 - (cₗ[outid] + cᵤ[outid] + dₗ[outid] + dᵤ[outid])
+        # citers *= round(muladd(-vecf, cdsum, vecf), RoundUp)
+        citers *= veci == polydim ? cld(cdsum, vl) : cdsum
         loop = Loop(
             (Aₗ.data, Aᵤ.data, zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64)),
             (cₗ₁, cᵤ₁, zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64)),
@@ -346,6 +347,7 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
     # remove outers and check for `!az`
     naz = az ? 0 : outid
     Aᵤ′ = Aₗ′ = Base.Cartesian.@ntuple 8 _ -> VectorizationBase.splitint(0x0000000000000000, Int8)
+    pwᵤᵥ = pwₗᵥ = Base.Cartesian.@ntuple 8 _ -> zero(UInt64)
     Aᵤ′ᵢ = Aₗ′ᵢ = Aₗ′[1]; # just to define scope here.
     for j ∈ eachindex(Aᵢₗ)
         Aₗ′ = setindex(masksₗ, insertelement(Aₗ′[j], A₁ₗ[j], polydim-1), j)
@@ -354,7 +356,7 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
     for _i ∈ 1:polydim-1
         i = v[_i]
         Aᵢₗ = Aₗ[i]; Aᵢᵤ = Aᵤ[i]; cᵢₗ = cₗ[i]; cᵢᵤ = cᵤ[i]; dᵢₗ = dₗ[i]; dᵢᵤ = dᵤ[i];
-        Aᵢₗ, Aᵢᵤ, cᵢₗ, cᵢᵤ, dᵢₗ, dᵢᵤ, pwₗ, pwᵤ, azᵢ, failure = remove_outer_bounds(p, Aᵢₗ, Aᵢᵤ, cᵢₗ, cᵢᵤ, dᵢₗ, dᵢᵤ, v, pwₗ, pwᵤ)
+        Aᵢₗ, Aᵢᵤ, cᵢₗ, cᵢᵤ, dᵢₗ, dᵢᵤ, pwₗᵢ, pwᵤᵢ, azᵢ, failure = remove_outer_bounds(p, Aᵢₗ, Aᵢᵤ, cᵢₗ, cᵢᵤ, dᵢₗ, dᵢᵤ, v)
         failure && return 9223372036854775807, nullloop()
         # try and have naz point to a loop that's an affine combination of others
         if !azᵢ && (iszero(naz) || (!(iszero(Aᵢₗ[naz]) & iszero(Aᵢᵤ[naz]))))
@@ -370,6 +372,8 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
         cᵤ = setindex(cᵤ, cᵢᵤ, i)
         dₗ = setindex(dₗ, dᵢₗ, i)
         dᵤ = setindex(dᵤ, dᵢᵤ, i)
+        pwₗᵥ = setindex(pwₗᵥ, pwₗᵢ.data, i)
+        pwᵤᵥ = setindex(pwᵤᵥ, pwₗᵢ.data, i)
     end
     # We've removed dependencies on external loops, and found one that's a function of others. We
     # start counting iters from naz
@@ -494,16 +498,34 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
     # coef⁰ should now be the number of iterations
     # this leaves us with determining the loop bounds, required for fusion checks (and used for lowering?)
     if az
-        coef⁰, Loop(
+        return coef⁰, Loop(
             (A₁ₗ.data, A₁ᵤ.data, zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64)),
             (cₗ₁, cᵤ₁, zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64)),
             (dₗ₁, dᵤ₁, zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64)),
         )
     end
+    Aₒᵤₜ = Base.Cartesian.@ntuple 8 i -> (i == 1 ? A₁ₗ.data : (i == 2 ? A₁ᵤ.data : zero(UInt64)))
+    cₒᵤₜ = Base.Cartesian.@ntuple 8 i -> (i == 1 ? cₗ₁ : (i == 2 ? cᵤ₁ : zero(Int64)))
+    dₒᵤₜ = Base.Cartesian.@ntuple 8 i -> (i == 1 ? dₗ₁ : (i == 2 ? dᵤ₁ : zero(Int64)))
+    pwₒᵤₜ = Base.Cartesian.@ntuple 8 i -> (i == 1 ? pwₗ.data : (i == 2 ?  pwᵤ.data : zero(UInt64)))
+    i = 2
+    for (_Anz′, _A, _c, _d, _pw) ∈ ((Aₗ′[outid], Aₗ, cₗ, dₗ, pwₗᵥ), (Aᵤ′[outid], Aᵤ, cᵤ, dᵤ, pwᵤᵥ))
+        Anz = ByteVector(fuseint(_Anz′), nloops)
+        while !(allzero(Anz))
+            j = firstnonzeroind(Aᵤ)
+            Anz = setindex(Anz, zero(eltype(Anz)), j)
+            i += 1            
+            Aₒᵤₜ = setindex(Aₒᵤₜ, _A[j], i)
+            cₒᵤₜ = setindex(cₒᵤₜ, _c[j], i)
+            dₒᵤₜ = setindex(dₒᵤₜ, _d[j], i)
+            pwₒᵤₜ = setindex(pwₒᵤₜ, _pw[j], i)
+        end
+    end
+    coef⁰, Loop( Aₒᵤₜ, cₒᵤₜ, dₒᵤₜ, pwₒᵤₜ, paramids, nloops, outid, i % Int8 )
 end
-function getloopiters(p::RectangularPolyhedra, v::ByteVector, vecf, veci, citers)
+function getloopiters(p::RectangularPolyhedra, v::ByteVector, vl, veci, citers)
     @unpack c, d, paramids, nloops = p
-    vecf = veci == length(v) ? vecf : one(vecf)
+    # vecf = veci == length(v) ? vecf : one(vecf)
     c₁, c₂ = c
     c₁ᵢ = c₁[i]; c₂ᵢ = c₂[i];
     d₁, d₂ = d
@@ -517,8 +539,9 @@ function getloopiters(p::RectangularPolyhedra, v::ByteVector, vecf, veci, citers
         nloops,
         i
     )
-    citers *= round(muladd(-vecf, c₁ᵢ + c₂ᵢ + d₁ᵢ + d₂ᵢ, vecf), RoundUp)
-    loop, citers
+    cdsum = 1 - (c₁ᵢ + c₂ᵢ + d₁ᵢ + d₂ᵢ)
+    citers *= veci == length(v) ? cld(cdsum, vl) : cdsum
+    citers, loop
 end
 
 
