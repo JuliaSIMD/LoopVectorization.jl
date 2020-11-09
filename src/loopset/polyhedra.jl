@@ -148,7 +148,92 @@ Base.:(*)(b::VectorLength, a::Integer) = a * b.Wm1 + a
 #     lp
 # end
 
+# pws need to be interpreted with respect to originally paramid vector of `p`
+
+# """
+#     extreme_bound
+
+# For loop `i` of Polyhedra `p`, where `i ∉ v`, returns the extreme bound.
+
+# Returns
+# cₗ, cᵤ, dᵤ, dₗ, pwₗ, pwᵤ
+# """
+# function extreme_bound(
+#     p::Polyhedra, i, lower::Bool, pwₗ = ByteVector(zero(UInt64), p.nloops), pwᵤ = ByteVector(zero(UInt64), p.nloops)
+# )
+#     if lower
+#         extreme_bound_lower(p, i, pwₗ, pwᵤ)
+#     else
+#         extreme_bound_upper(p, i, pwₗ, pwᵤ)
+#     end
+# end
+function extreme_bound_lower(
+    p::Polyhedra, i, pwₗ = ByteVector(zero(UInt64), p.nloops)
+)
+    @unpack A, c, d, paramids, nloops = p
+    Aₗ, Aᵤ = A
+    cₗ, cᵤ = c
+    dₗ, dᵤ = d
+    # pidₗ, pidᵤ = paramids
+    cₗᵢ = cₗ[i];# cᵤᵢ = cᵤ[i];
+    dₗᵢ = dₗ[i];# dᵤᵢ = dᵤ[i];
+    Aₗᵢ = Aₗ[i]
+    while !(allzero(Aₗᵢ))
+        j = firstnonzeroind(Aₗ)
+        # cₗⱼ, cᵤⱼ, dₗⱼ, dᵤⱼ, pwₗ, pwᵤ = extreme_bound_lower(p, j, pwₗ, pwᵤ)
+        Aₗᵢⱼ = Aₗᵢ[j]
+        if Aₗᵢⱼ < 0
+            Aₗᵢⱼ = -Aₗᵢⱼ
+            cₗⱼ, dₗⱼ, pwₗ = extreme_bound_lower(p, j, pwₗ)
+        else
+            cₗⱼ, dₗⱼ, pwₗ = extreme_bound_upper(p, j, pwₗ)
+        end
+        Aₗᵢ = setindex(Aₗᵢ, zero(Int8), j)
+        cₗᵢ += cₗⱼ * Aₗᵢⱼ
+        dₗᵢ += dₗⱼ * Aₗᵢⱼ
+        pwₗ = setindex(pwₗ, pwₗ[i] + Aₗᵢⱼ, i)
+    end
+    # cₗᵢ, cᵤᵢ, dₗᵢ, dᵤᵢ, pwₗ, pwᵤ
+    cₗᵢ, dₗᵢ, pwₗ
+end
+function extreme_bound_upper(
+    p::Polyhedra, i, pwᵤ = ByteVector(zero(UInt64), p.nloops)
+)
+    @unpack A, c, d, paramids, nloops = p
+    Aₗ, Aᵤ = A
+    cₗ, cᵤ = c
+    dₗ, dᵤ = d
+    # pidₗ, pidᵤ = paramids
+    # cₗᵢ = cₗ[i];
+    cᵤᵢ = cᵤ[i];
+    # dₗᵢ = dₗ[i];
+    dᵤᵢ = dᵤ[i];
+    while !(allzero(Aᵤ))
+        j = firstnonzeroind(Aᵤ)
+        # cₗⱼ, cᵤⱼ, dₗⱼ, dᵤⱼ, pwₗ, pwᵤ = extreme_bound_upper(p, j, lower, pwₗ, pwᵤ)
+        Aᵤᵢⱼ = Aᵤᵢ[j]
+        if Aᵤᵢⱼ < 0
+            Aᵤᵢⱼ = -Aᵤᵢⱼ
+            cᵤⱼ, dᵤⱼ, pwᵤ = extreme_bound_lower(p, j, pwᵤ)
+        else
+            cᵤⱼ, dᵤⱼ, pwᵤ = extreme_bound_upper(p, j, pwᵤ)
+        end
+        Aᵤᵢ = setindex(Aᵤᵢ, zero(Int8), j)
+        cᵤᵢ += cᵤⱼ * Aᵤᵢⱼ
+        dᵤᵢ += dᵤⱼ * Aᵤᵢⱼ
+        pwᵤ = setindex(pwᵤ, pwᵤ[i] + Aᵤᵢⱼ, i)
+    end    
+    # cₗᵢ, cᵤᵢ, dₗᵢ, dᵤᵢ, pwₗ, pwᵤ
+    cᵤᵢ, dᵤᵢ, pwᵤ
+end
+
 function remove_outer_bounds(p, A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, dᵤ₁, v, pidₗ, pidᵤ, pwₗ, pwᵤ, Asum = A₁ᵤ + A₁ₗ)
+    @unpack A, c, d, paramids, nloops = p
+    Aₗ, Aᵤ = A
+    cₗ, cᵤ = c
+    dₗ, dᵤ = d
+    pidₗ, pidᵤ = paramids
+
     az = true
     failure = false
     for i ∈ eachindex(Asum)
@@ -157,20 +242,22 @@ function remove_outer_bounds(p, A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, d�
             if i ∉ v # eliminate
                 # TODO: Must we disallow `for m ∈ 1:M, n ∈ 1+m:2m, k ∈ 1:n`
                 # due to the dependence of `k` on `n`, which has a `+m` on lower and upper bounds?
-                if Asᵢ < 0 # i ∈ j:upper
-                    ctemp, dtemp = minimum(p, i, v)
-                else#if Asᵢ > 0 # guaranteed by `!iszero(Asᵢ); # i ∈ lower:j
-                    ctemp, dtemp = maximum(p, i, v)
+                # cₗᵢ, cᵤ, dₗ, dᵤ, pwₗ, pwᵤ = extreme_bound(p, i, Asᵢ < 0)
+                if Asᵢ < 0 # lower
+                    Asᵢ = -Asᵢ
+                    ctemp, dtemp, pwₗ = extreme_bound_lower(p, i, pwₗ)
+                else
+                    ctemp, dtemp, pwᵤ = extreme_bound_upper(p, i, pwᵤ)
                 end
                 A₁ₗₜ = A₁ₗ[i]
                 A₁ᵤₜ = A₁ᵤ[i]
-                cₗ₁ -= ctemp * A₁ₗₜ
-                cᵤ₁ -= ctemp * A₁ᵤₜ
+                cₗ₁ += ctemp * A₁ₗₜ
+                cᵤ₁ += ctemp * A₁ᵤₜ
                 if !iszero(dtemp)
-                    dₗ₁ -= dtemp * A₁ₗₜ
-                    dᵤ₁ -= dtemp * A₁ᵤₜ
-                    pwₗ = setindex(pwₗ, dtemp, pidₗ[i])
-                    pwᵤ = setindex(pwᵤ, dtemp, pidᵤ[i])
+                    dₗ₁ += dtemp * A₁ₗₜ
+                    dᵤ₁ += dtemp * A₁ᵤₜ
+                    pwₗ = setindex(pwₗ, pwₗ[i] + A₁ₗₜ, i)#pidₗ[i])
+                    pwᵤ = setindex(pwᵤ, pwᵤ[i] + A₁ᵤₜ, i)#pidᵤ[i])
                 end
                 A₁ₗ = setindex(A₁ₗ, 0x00, i)
                 A₁ᵤ = setindex(A₁ᵤ, 0x00, i)
@@ -184,6 +271,17 @@ end
 
 
 # getloop(p::Polyhedra, v::ByteVector, vecf, veci, citers) = getloop(p::Polyhedra, v::ByteVector, vecf, veci)
+"""
+    getloop(p::AbstractPolyhedra, v, vl, veci, citers)
+
+Arguments:
+
+ - p::AbstractPolyhedra : the polyhedra representing the loop nest.
+ - v::ByteVector : vector of loops from outer-most to current-loop.
+ - vl::VectorLength : length of the SIMD Vvector
+ - veci : Index of SIMD loop.
+ - citers : iterations at the previous loop nest depth.
+"""
 function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
     @unpack A, c, d, paramids, nloops = p
     Aₗ, Aᵤ = A
@@ -198,7 +296,7 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
     Asum = A₁ᵤ + A₁ₗ
     cₗ₁ = cₗ[outid]; cᵤ₁ = cᵤ[outid]; dₗ₁ = dₗ[outid]; dᵤ₁ = dᵤ[outid];
     az = allzero(Asum)
-    pwₗ = ByteVector(); pwᵤ = ByteVector();
+    pwₗ = ByteVector(zero(UInt64), nloops); pwᵤ = ByteVector(zero(UInt64), nloops);
     if !az
         # maybe it is only a function of loops ∉ v
         A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, dᵤ₁, pwₗ, pwᵤ, az, failure = remove_outer_bounds(p, A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, dᵤ₁, v, pidₗ, pidᵤ, pwₗ, pwᵤ, Asum)
@@ -315,10 +413,10 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
         coefs¹ = Base.Cartesian.@ntuple 8 j -> coefs¹[j] * cd# + Asum[j] * coef⁰_old
         # now need to update the iᵗʰ.
         if iszero(Asum)
-            coefs² = Base.Cartesian.@ntuple 8 j -> Base.Cartesian.@ntuple k -> cd * coefs²[j][k]
+            coefs² = Base.Cartesian.@ntuple 8 j -> (Base.Cartesian.@ntuple 8 k -> cd * coefs²[j][k])
         else
             coefs¹ = Base.Cartesian.@ntuple 8 j -> coefs¹[j] + Asum[j] * coef⁰_old
-            coefs² = Base.Cartesian.@ntuple 8 j -> Base.Cartesian.@ntuple k -> begin
+            coefs² = Base.Cartesian.@ntuple 8 j -> Base.Cartesian.@ntuple 8 k -> begin
                 cd * coefs²[j][k] + coefs¹_old[k] * Asum[j]
             end
         end

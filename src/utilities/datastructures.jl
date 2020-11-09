@@ -201,3 +201,7 @@ half(::Type{Int32}) = Int16
 half(::Type{Int64}) = Int32
 splitint(x::T) where {T<:Integer} = (S = half(T); ((x >>> 4sizeof(T)) % S, x % S))
 
+function firstnonzeroind(v::AbstractLimitedRangeVector)
+    (trailing_zeros(v.data) ÷ (8sizeof(eltype(v)))) + 1
+end
+
