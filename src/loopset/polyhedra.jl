@@ -33,6 +33,24 @@ struct RectangularPolyhedra <: AbstractPolyhedra
     # nparams::NTuple{2,Int8}
     nloops::Int8
 end
+function RectangularPolyhedra(
+    c::NTuple{2,NTuple{N,I}},
+    d::NTuple{2,NTuple{N,I}},
+    paramids::NTuple{2,ByteVector{UInt64}}    
+) where {N, I <: Integer}
+    cₗ, cᵤ = c
+    dₗ, dᵤ = d
+    RectangularPolyhedra(
+        (
+            (Base.Cartesian.@ntuple 8 i -> i > N ? zero(Int64) : cₗ[i] % Int64),
+            (Base.Cartesian.@ntuple 8 i -> i > N ? zero(Int64) : cᵤ[i] % Int64)
+        ), (
+            (Base.Cartesian.@ntuple 8 i -> i > N ? zero(Int64) : dₗ[i] % Int64),
+            (Base.Cartesian.@ntuple 8 i -> i > N ? zero(Int64) : dᵤ[i] % Int64)
+        ),
+        (paramids[1].data, paramids[2].data), N % Int8
+    )
+end
 
 """
 A' + (I ⊗ [1, -1]) ≥ c[:,1] + d[:,2]
@@ -40,6 +58,16 @@ A' + (I ⊗ [1, -1]) ≥ c[:,1] + d[:,2]
 struct Polyhedra <: AbstractPolyhedra
     A::NTuple{2,NTuple{8,UInt64}}
     p::RectangularPolyhedra
+end
+
+function Polyhedra(A::NTuple{2,NTuple{N,ByteVector{UInt64}}}, p::RectangularPolyhedra) where {N}
+    Aₗ, Aᵤ = A
+    Polyhedra(
+        (
+            (Base.Cartesian.@ntuple 8 i -> i > N ? zero(UInt64) : Aₗ[i].data),
+            (Base.Cartesian.@ntuple 8 i -> i > N ? zero(UInt64) : Aᵤ[i].data)
+        ), p
+    )
 end
 
 UnPack.unpack(p::Polyhedra, ::Val{S}) where {S} = UnPack.unpack(p.p, Val{S}())
@@ -109,7 +137,7 @@ bin2(n) = faulhaber(n - one(n), Val(1))
     end
     push!(q.args, :(x = $fa(x, $fm(0.5, n))))
     push!(q.args, :(n = $fm(n, norig)))
-    push!(q.args, :(round(Int64, $fa(x, $fm(n, $(1/(P+1)))))))
+    push!(q.args, :(Base.fptosi(Int64, $fa(x, $fm(n, $(1/(P+1)))))))
     q
 end
 
@@ -129,16 +157,21 @@ BinomialFunc() = BinomialFunc(ByteVector(), 0.0, 0.0, 0x00, false, false)
 isactive(b::BinomialFunc) = b.active
 
 struct VectorLength
-    Wm1::Int
+    W::Int
     shifter::Int
 end
 VectorLength(n) = VectorLength(n, VectorizationBase.intlog2(n))
 VectorLength() = VectorLength(0, 0)
-Base.rem(n, vl::VectorLength) = n & vl.Wm1
-Base.div(n, vl::VectorLength) = n >> vl.shifter
-Base.cld(n, vl::VectorLength) = (n + vl.Wm1) ÷ vl
-Base.:(*)(a::Integer, b::VectorLength) = a * b.Wm1 + a
-Base.:(*)(b::VectorLength, a::Integer) = a * b.Wm1 + a
+Base.rem(n, vl::VectorLength) = n & (vl.W - 1)
+Base.div(n::Integer, vl::VectorLength) = (n >> vl.shifter) % typeof(n)
+Base.cld(n::Integer, vl::VectorLength) = ((n + vl.W - 1) ÷ vl) % typeof(n)
+Base.:(*)(a::Integer, b::VectorLength) = a * b.W
+Base.:(*)(b::VectorLength, a::Integer) = a * b.W
+function Base.inv(vl::VectorLength)
+    x = (one(Int64) << 10) - 1
+    reinterpret(Float64, (x - vl.shifter) << 52)
+end
+Base.:(/)(a, b::VectorLength) = a * inv(b)
 # """
 # Polyhedra must be sorted so that no loops ∈ `loops` depend on loops ∉ `loops`.
 # Counts the lattice points in `last(loops)`.
@@ -179,7 +212,7 @@ function extreme_bound_lower(
     dₗᵢ = dₗ[i];# dᵤᵢ = dᵤ[i];
     Aₗᵢ = Aₗ[i]
     while !(allzero(Aₗᵢ))
-        j = firstnonzeroind(Aₗ)
+        j = firstnonzeroind(Aₗᵢ)
         # cₗⱼ, cᵤⱼ, dₗⱼ, dᵤⱼ, pwₗ, pwᵤ = extreme_bound_lower(p, j, pwₗ, pwᵤ)
         Aₗᵢⱼ = Aₗᵢ[j]
         if Aₗᵢⱼ < 0
@@ -208,8 +241,9 @@ function extreme_bound_upper(
     cᵤᵢ = cᵤ[i];
     # dₗᵢ = dₗ[i];
     dᵤᵢ = dᵤ[i];
-    while !(allzero(Aᵤ))
-        j = firstnonzeroind(Aᵤ)
+    Aᵤᵢ = Aᵤ[i];
+    while !(allzero(Aᵤᵢ))
+        j = firstnonzeroind(Aᵤᵢ)
         # cₗⱼ, cᵤⱼ, dₗⱼ, dᵤⱼ, pwₗ, pwᵤ = extreme_bound_upper(p, j, lower, pwₗ, pwᵤ)
         Aᵤᵢⱼ = Aᵤᵢ[j]
         if Aᵤᵢⱼ < 0
@@ -227,12 +261,13 @@ function extreme_bound_upper(
     cᵤᵢ, dᵤᵢ, pwᵤ
 end
 
-function remove_outer_bounds(p, A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, dᵤ₁, v, pidₗ, pidᵤ, pwₗ, pwᵤ, Asum = A₁ᵤ + A₁ₗ)
+# function remove_outer_bounds(p, A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, dᵤ₁, v, pidₗ, pidᵤ, pwₗ, pwᵤ, Asum = A₁ᵤ + A₁ₗ)
+function remove_outer_bounds(p, A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, dᵤ₁, v, pwₗ, pwᵤ, Asum = A₁ᵤ + A₁ₗ)
     @unpack A, c, d, paramids, nloops = p
     Aₗ, Aᵤ = A
     cₗ, cᵤ = c
     dₗ, dᵤ = d
-    pidₗ, pidᵤ = paramids
+    # pidₗ, pidᵤ = paramids
 
     az = true
     failure = false
@@ -284,6 +319,7 @@ Arguments:
 """
 function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
     @unpack A, c, d, paramids, nloops = p
+    @inbounds begin
     Aₗ, Aᵤ = A
     cₗ, cᵤ = c
     dₗ, dᵤ = d
@@ -299,7 +335,8 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
     pwₗ = ByteVector(zero(UInt64), nloops); pwᵤ = ByteVector(zero(UInt64), nloops);
     if !az
         # maybe it is only a function of loops ∉ v
-        A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, dᵤ₁, pwₗ, pwᵤ, az, failure = remove_outer_bounds(p, A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, dᵤ₁, v, pidₗ, pidᵤ, pwₗ, pwᵤ, Asum)
+        # A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, dᵤ₁, pwₗ, pwᵤ, az, failure = remove_outer_bounds(p, A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, dᵤ₁, v, pidₗ, pidᵤ, pwₗ, pwᵤ, Asum)
+        A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, dᵤ₁, pwₗ, pwᵤ, az, failure = remove_outer_bounds(p, A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, dᵤ₁, v, pwₗ, pwᵤ, Asum)
         failure && return 9223372036854775807, nullloop()
     end
     # innerdefs = 0x00
@@ -323,14 +360,14 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
         # citers *= round(muladd(-vecf, cdsum, vecf), RoundUp)
         citers *= veci == polydim ? cld(cdsum, vl) : cdsum
         loop = Loop(
-            (Aₗ.data, Aᵤ.data, zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64)),
+            (A₁ₗ.data, A₁ᵤ.data, zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64)),
             (cₗ₁, cᵤ₁, zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64)),
             (dₗ₁, dᵤ₁, zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64)),
-            (paramids[1][outid], paramids[2][outid], zero(Int16), zero(Int16), zero(Int16), zero(Int16), zero(Int16), zero(Int16)),
-            nloops, outid, one(Int8)
+            (pwₗ.data, pwᵤ.data, zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64)),
+            (pidₗ.data, pidᵤ.data), nloops, outid, Int8(2)
         )
         return citers, loop
-    end    
+    end
     Aₗ = setindex(Aₗ, A₁ₗ, outid)
     Aᵤ = setindex(Aᵤ, A₁ᵤ, outid)
     cₗ = setindex(cₗ, cₗ₁, outid)
@@ -345,26 +382,28 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
     # 1. calculate iters
     # 2. determine loop
     # remove outers and check for `!az`
-    naz = az ? 0 : outid
+    naz = az ? zero(Int32) : outid % Int32
     Aᵤ′ = Aₗ′ = Base.Cartesian.@ntuple 8 _ -> VectorizationBase.splitint(0x0000000000000000, Int8)
     pwᵤᵥ = pwₗᵥ = Base.Cartesian.@ntuple 8 _ -> zero(UInt64)
     Aᵤ′ᵢ = Aₗ′ᵢ = Aₗ′[1]; # just to define scope here.
-    for j ∈ eachindex(Aᵢₗ)
-        Aₗ′ = setindex(masksₗ, insertelement(Aₗ′[j], A₁ₗ[j], polydim-1), j)
-        Aᵤ′ = setindex(masksᵤ, insertelement(Aᵤ′[j], A₁ᵤ[j], polydim-1), j)
+    # for j ∈ eachindex(Aᵢₗ)
+    for j ∈ eachindex(A₁ₗ)
+        Aₗ′ = setindex(Aₗ′, insertelement(Aₗ′[j], A₁ₗ[j], polydim-1), j)
+        Aᵤ′ = setindex(Aᵤ′, insertelement(Aᵤ′[j], A₁ᵤ[j], polydim-1), j)
     end
     for _i ∈ 1:polydim-1
-        i = v[_i]
+        i = (v[_i]) % Int64
         Aᵢₗ = Aₗ[i]; Aᵢᵤ = Aᵤ[i]; cᵢₗ = cₗ[i]; cᵢᵤ = cᵤ[i]; dᵢₗ = dₗ[i]; dᵢᵤ = dᵤ[i];
-        Aᵢₗ, Aᵢᵤ, cᵢₗ, cᵢᵤ, dᵢₗ, dᵢᵤ, pwₗᵢ, pwᵤᵢ, azᵢ, failure = remove_outer_bounds(p, Aᵢₗ, Aᵢᵤ, cᵢₗ, cᵢᵤ, dᵢₗ, dᵢᵤ, v)
+        # A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, dᵤ₁, pwₗ, pwᵤ, az, failure = remove_outer_bounds(p, A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, dᵤ₁, v, pidₗ, pidᵤ, pwₗ, pwᵤ, Asum)
+        Aᵢₗ, Aᵢᵤ, cᵢₗ, cᵢᵤ, dᵢₗ, dᵢᵤ, pwₗᵢ, pwᵤᵢ, azᵢ, failure = remove_outer_bounds(p, Aᵢₗ, Aᵢᵤ, cᵢₗ, cᵢᵤ, dᵢₗ, dᵢᵤ, v, ByteVector(pwₗᵥ[i],nloops), ByteVector(pwᵤᵥ[i],nloops), Asum)
         failure && return 9223372036854775807, nullloop()
         # try and have naz point to a loop that's an affine combination of others
         if !azᵢ && (iszero(naz) || (!(iszero(Aᵢₗ[naz]) & iszero(Aᵢᵤ[naz]))))
-            naz = i
+            naz = i % Int32
         end
         for j ∈ eachindex(Aᵢₗ)
-            Aₗ′ = setindex(masksₗ, insertelement(Aₗ′[j], Aᵢₗ[j], i-1), j)
-            Aᵤ′ = setindex(masksᵤ, insertelement(Aᵤ′[j], Aᵢᵤ[j], i-1), j)
+            Aₗ′ = setindex(Aₗ′, insertelement(Aₗ′[j], Aᵢₗ[j], i-1), j)
+            Aᵤ′ = setindex(Aᵤ′, insertelement(Aᵤ′[j], Aᵢᵤ[j], i-1), j)
         end
         Aₗ = setindex(Aₗ, Aᵢₗ, i)
         Aᵤ = setindex(Aᵤ, Aᵢᵤ, i)
@@ -381,7 +420,8 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
     binomials = ntuple(_ -> BinomialFunc(), Val(8))
     nbinomials = 0
     coef⁰ = 0
-    coefs¹ = Base.Cartesian.@ntuple 8 i -> 0
+    coefs¹ = Base.Cartesian.@ntuple 8 i -> zero(Int64)
+    coefs¹v = Base.Cartesian.@ntuple 8 i -> false
     coefs² = Base.Cartesian.@ntuple 8 i -> coefs¹
     # visited_mask = (0x0101010101010101)
     # visited_mask = VectorizationBase.splitint(0x0101010101010101 >> ((8 - polydim)*8), Bool)
@@ -404,7 +444,10 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
         if first_iter # initialize
             first_iter = false
             citers = cd
-            coefs¹ = Base.Cartesian.@ntuple 8 j -> Asum[j]
+            coefs¹ = Base.Cartesian.@ntuple 8 j -> begin
+                Asumⱼ = Asum[j] % Int64
+                iszero(Asumⱼ) ? Asumⱼ : cld(Asumⱼ, vl)
+            end
             continue
         end
         coefs¹ᵢ = coefs¹[i]
@@ -420,6 +463,7 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
             coefs² = Base.Cartesian.@ntuple 8 j -> (Base.Cartesian.@ntuple 8 k -> cd * coefs²[j][k])
         else
             coefs¹ = Base.Cartesian.@ntuple 8 j -> coefs¹[j] + Asum[j] * coef⁰_old
+            coefs¹v = Base.Cartesian.@ntuple 8 j -> (coefs¹v[j]) | ((veci == i) & !(iszero(Asum[j])))
             coefs² = Base.Cartesian.@ntuple 8 j -> Base.Cartesian.@ntuple 8 k -> begin
                 cd * coefs²[j][k] + coefs¹_old[k] * Asum[j]
             end
@@ -452,30 +496,32 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
         end
         if !iszero(coefs¹ᵢ)
             if Aᵤᵢzero
-                if (i == veci) | (j == veci)
+                if (i == veci) | coefs¹v[i]
                     divvec, remvec = divrem(cdmax, vl)
-                    divvec + remvec > 0
-                    itersbin = bin2(divvec) * vl + remvec * divvec
+                    # divvec += remvec > 0
+                    # itersbin = bin2(divvec) * vl + remvec * divvec
+                    itersbin = bin2(divvec) * vl + remvec * (divvec + one(divvec))
                 else
                     itersbin = bin2(cdmax + 1)
                 end
                 coef⁰ += coefs¹ᵢ * itersbin
             else
                 nbinomials += 1
-                binomials = setindex(binomials, BinomialFunc(Aᵤᵢ, cdmax + 1, coefs¹ᵢ, 0x02, true), nbinomials)
+                binomials = setindex(binomials, BinomialFunc(Aᵤᵢ, cdmax + 1, coefs¹ᵢ, 0x02, true, (i == veci) | coefs¹v[i]), nbinomials)
             end
             if Aₗᵢzero
-                if (i == veci) | (j == veci)
+                if (i == veci) | coefs¹v[i]
                     divvec, remvec = divrem(cdmin, vl)
-                    divvec += remvec > 0
-                    itersbin = bin2(divvec) * vl + remvec * divvec
+                    # divvec += remvec > 0
+                    # itersbin = bin2(divvec) * vl + remvec * divvec
+                    itersbin = bin2(divvec) * vl + remvec * (divvec + one(divvec))
                 else
                     itersbin = bin2(cdmin)
                 end
                 coef⁰ -= coefs¹ᵢ * itersbin
             else
                 nbinomials += 1
-                binomials = setindex(binomials, BinomialFunc(-Aₗᵢ, cdmin, -coefs¹ᵢ, 0x02, true), nbinomials)
+                binomials = setindex(binomials, BinomialFunc(-Aₗᵢ, cdmin, -coefs¹ᵢ, 0x02, true, (i == veci) | coefs¹v[i]), nbinomials)
             end
         end
         for j ∈ 1:polydim
@@ -502,6 +548,8 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
             (A₁ₗ.data, A₁ᵤ.data, zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64)),
             (cₗ₁, cᵤ₁, zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64)),
             (dₗ₁, dᵤ₁, zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64)),
+            (pwₗ.data, pwᵤ.data, zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64)),
+            (pidₗ.data, pidᵤ.data), nloops, outid, Int8(2)
         )
     end
     Aₒᵤₜ = Base.Cartesian.@ntuple 8 i -> (i == 1 ? A₁ₗ.data : (i == 2 ? A₁ᵤ.data : zero(UInt64)))
@@ -509,19 +557,21 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
     dₒᵤₜ = Base.Cartesian.@ntuple 8 i -> (i == 1 ? dₗ₁ : (i == 2 ? dᵤ₁ : zero(Int64)))
     pwₒᵤₜ = Base.Cartesian.@ntuple 8 i -> (i == 1 ? pwₗ.data : (i == 2 ?  pwᵤ.data : zero(UInt64)))
     i = 2
-    for (_Anz′, _A, _c, _d, _pw) ∈ ((Aₗ′[outid], Aₗ, cₗ, dₗ, pwₗᵥ), (Aᵤ′[outid], Aᵤ, cᵤ, dᵤ, pwᵤᵥ))
-        Anz = ByteVector(fuseint(_Anz′), nloops)
+        for (_Anz′, _A, _c, _d, _pw) ∈ ((Aₗ′[outid], Aₗ, cₗ, dₗ, pwₗᵥ), (Aᵤ′[outid], Aᵤ, cᵤ, dᵤ, pwᵤᵥ))
+        Anz = ByteVector(unsigned(VectorizationBase.fuseint(_Anz′)), nloops)
         while !(allzero(Anz))
-            j = firstnonzeroind(Aᵤ)
+            j = firstnonzeroind(Anz)#Aᵤ
             Anz = setindex(Anz, zero(eltype(Anz)), j)
-            i += 1            
-            Aₒᵤₜ = setindex(Aₒᵤₜ, _A[j], i)
+            i += 1
+            # @show i, Anz, _A
+            Aₒᵤₜ = setindex(Aₒᵤₜ, _A[j].data, i)
             cₒᵤₜ = setindex(cₒᵤₜ, _c[j], i)
             dₒᵤₜ = setindex(dₒᵤₜ, _d[j], i)
             pwₒᵤₜ = setindex(pwₒᵤₜ, _pw[j], i)
         end
     end
-    coef⁰, Loop( Aₒᵤₜ, cₒᵤₜ, dₒᵤₜ, pwₒᵤₜ, paramids, nloops, outid, i % Int8 )
+    end
+    coef⁰, Loop( Aₒᵤₜ, cₒᵤₜ, dₒᵤₜ, pwₒᵤₜ, (pidₗ.data, pidᵤ.data), nloops, outid, i % Int8 )
 end
 function getloopiters(p::RectangularPolyhedra, v::ByteVector, vl, veci, citers)
     @unpack c, d, paramids, nloops = p

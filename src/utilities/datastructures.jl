@@ -54,6 +54,7 @@ Base.size(v::AbstractLimitedRangeVector) = (length(v),)
 end
 
 allzero(x::AbstractLimitedRangeVector) = iszero(x.data)
+allzero(x::VectorizationBase.AbstractSIMD{W,T}) where {W,T} = VectorizationBase.vall(x == zero(T))
 
 @inline function Base.iterate(v::AbstractLimitedRangeVector{T}, state = (v.data, v.len)) where {T}
     d, l = state
@@ -111,7 +112,7 @@ end
 #     V((v.data & m) | x1, length(v))
 # end
 function Base.setindex(v::V, x, i::Int) where {V <: AbstractLimitedRangeVector}
-    V(VectorizationBase.fuseint(VectorizationBase.insertelement(VectorizationBase.splitint(v.data, unsigned(eltype(v))), x % eltype(v), i - one(i))), length(v))
+    V(VectorizationBase.fuseint(VectorizationBase.insertelement(VectorizationBase.splitint(v.data, eltype(v)), x % eltype(v), i - one(i))), length(v))
 end
 
 struct ShortDynamicVector{T,N} <: AbstractVector{T}

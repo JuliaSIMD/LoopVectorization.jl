@@ -40,7 +40,13 @@ UnPack.unpack(l::Loop, ::Val{:paramids}) = (ByteVector(l.paramids[1], l.nloops),
 # end
 
 nullrectangularloop() = RectangularLoop((zero(Int64),zero(Int64)),(zero(Int16),zero(Int16)),(zero(Int8),zero(Int8)),zero(Int8),zero(Int8))
-nullloop() = Loop(ntuple(_ -> zero(UInt64), Val(8)), ntuple(zero, Val(8)), ntuple(zero, Val(8)), ntuple(_ -> zero(Int16), Val(8)), zero(Int8), zero(Int8), zero(Int8))
+function nullloop()
+    A = paramweights = ntuple(_ -> zero(UInt64), Val(8))
+    c = d = ntuple(zero, Val(8))
+    Loop(
+        A, c, d, paramweights, (zero(UInt64), zero(UInt64)), zero(Int8), zero(Int8), zero(Int8)
+    )
+end
 
 # struct StaticLoop <: AbstractLoop
 #     c::NTuple{2,Float64} # constants for knowns
@@ -100,7 +106,9 @@ function depending_ind(Aₗ′, Aᵤ′, not_visited_mask)
     # Aₗ′ᵢ = Aₗ′[(i>>>3)+1] & not_visited_mask # gives all that depend on i
     # Aᵤ′ᵢ = Aᵤ′[(i>>>3)+1] & not_visited_mask # gives all that depend on i
     # while !(allzero(Aₗ′ᵢ) & allzero(Aᵤ′ᵢ))
-    A′ᵢ = (Aₗ′[(i>>>3)+1] + Aᵤ′[(i>>>3)+1]) & not_visited_mask # gives all that depend on i
+    # A′ᵢ = (Aₗ′[(i>>>3)+1] + Aᵤ′[(i>>>3)+1]) & not_visited_mask # gives all that depend on i
+    A′ᵢ = (Aₗ′[(i>>>3)+1] + Aᵤ′[(i>>>3)+1]) & VectorizationBase.splitint(not_visited_mask, Int8) # gives all that depend on i
+    # @show A′ᵢ, not_visited_mask
     while !allzero(A′ᵢ)
         nvm = (not_visited_mask >>> (i+1))
         @assert !iszero(nvm)
@@ -109,8 +117,8 @@ function depending_ind(Aₗ′, Aᵤ′, not_visited_mask)
         # Aₗ′ᵢ = Aₗ′[(i>>>3)+1] & not_visited_mask
         # Aᵤ′ᵢ = Aᵤ′[(i>>>3)+1] & not_visited_mask
     end
-    i = (i >>> 3) + 1
-    not_visited_mask = VectorizationBase.fuseint(setindex(VectorizationBase.splitint(not_visited_mask, Bool), false, i))
-    i, not_visited_mask
+    i = (i >>> 3)
+    not_visited_mask = VectorizationBase.fuseint(insertelement(VectorizationBase.splitint(not_visited_mask, Bool), false, i))
+    i + 1, not_visited_mask
 end
 

@@ -31,48 +31,49 @@ Base.IndexStyle(::Type{<:FallbackArrayWrapper}) = IndexLinear()
 @show LoopVectorization.REGISTER_COUNT
 
 @time @testset "LoopVectorization.jl" begin
-
     
     @test isempty(detect_unbound_args(LoopVectorization))
 
-    @time include("printmethods.jl")
+    @time include("polyhedra.jl")
 
-    @time include("fallback.jl")
+    # @time include("printmethods.jl")
 
-    @time include("utils.jl")
+    # @time include("fallback.jl")
 
-    @time include("arraywrappers.jl")
+    # @time include("utils.jl")
 
-    @time include("check_empty.jl")
+    # @time include("arraywrappers.jl")
 
-    if isnothing(get(ENV, "TRAVIS_BRANCH", nothing)) || LoopVectorization.REGISTER_COUNT ≠ 32 || VERSION ≥ v"1.4"
-        @time include("offsetarrays.jl")
-    end
+    # @time include("check_empty.jl")
 
-    @time include("tensors.jl")
+    # if isnothing(get(ENV, "TRAVIS_BRANCH", nothing)) || LoopVectorization.REGISTER_COUNT ≠ 32 || VERSION ≥ v"1.4"
+    #     @time include("offsetarrays.jl")
+    # end
 
-    @time include("map.jl")
+    # @time include("tensors.jl")
 
-    @time include("filter.jl")
+    # @time include("map.jl")
+
+    # @time include("filter.jl")
     
-    @time include("mapreduce.jl")
+    # @time include("mapreduce.jl")
 
-    @time include("ifelsemasks.jl")
+    # @time include("ifelsemasks.jl")
 
-    @time include("dot.jl")
+    # @time include("dot.jl")
 
-    @time include("special.jl")
+    # @time include("special.jl")
 
-    @time include("gemv.jl")
+    # @time include("gemv.jl")
 
-    @time include("miscellaneous.jl")
+    # @time include("miscellaneous.jl")
 
-    @time include("copy.jl")
+    # @time include("copy.jl")
 
-    @time include("broadcast.jl")
+    # @time include("broadcast.jl")
 
-    # I test  locally on master; times out on Travis.
-    if isnothing(get(ENV, "TRAVIS_BRANCH", nothing)) || LoopVectorization.REGISTER_COUNT ≠ 32 || VERSION ≥ v"1.4"
-        @time include("gemm.jl")
-    end
+    # # I test  locally on master; times out on Travis.
+    # if isnothing(get(ENV, "TRAVIS_BRANCH", nothing)) || LoopVectorization.REGISTER_COUNT ≠ 32 || VERSION ≥ v"1.4"
+    #     @time include("gemm.jl")
+    # end
 end

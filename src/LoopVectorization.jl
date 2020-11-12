@@ -5,7 +5,7 @@ if (!isnothing(get(ENV, "TRAVIS_BRANCH", nothing)) || !isnothing(get(ENV, "APPVE
 end
 
 using VectorizationBase, SLEEFPirates, UnPack, OffsetArrays, ArrayInterface
-using VectorizationBase: NativeTypes, REGISTER_SIZE, MM
+using VectorizationBase: NativeTypes, REGISTER_SIZE, MM, insertelement, extractelement
 # using VectorizationBase: num_vector_load_expr,
 #     mask, pick_vector_width_val, MM, vzero, stridedpointer_for_broadcast,
 #     Zero, unwrap, maybestaticrange, REGISTER_COUNT,
@@ -17,7 +17,7 @@ using VectorizationBase: NativeTypes, REGISTER_SIZE, MM
     # vadd!, vsub!, vmul!, vfdiv!, vfmadd!, vfnmadd!, vfmsub!, vfnmsub!,
     # vmullog2, vmullog10, vdivlog2, vdivlog10, vmullog2add!, vmullog10add!, vdivlog2add!, vdivlog10add!, vfmaddaddone, vadd1
 # using SLEEFPirates: pow # why?
-using Base: OneTo
+using Base: OneTo, setindex
 using Base.Broadcast: Broadcasted, DefaultArrayStyle
 using LinearAlgebra: Adjoint, Transpose
 using Base.Meta: isexpr
