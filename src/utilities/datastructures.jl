@@ -68,14 +68,14 @@ end
 
 Base.:(+)(v1::ByteVector, v2::ByteVector) = ByteVector(v1.data + v2.data, v1.len) # Overflow???
 Base.:(-)(v1::ByteVector, v2::ByteVector) = ByteVector(v1.data - v2.data, v1.len) # Overflow???
-Base.:(-)(v::ByteVector) = ByteVector( - VectorizationBase.fuseint(-VectorizationBase.splitint(v.data, Int8)), v.len)
+Base.:(-)(v::ByteVector) = ByteVector( unsigned(VectorizationBase.fuseint(-VectorizationBase.splitint(v.data, Int8))), v.len)
 
 # ByteVector() = ByteVector(typemins(ByteVector), 0)
 # WordVector() = WordVector(typemins(WordVector), 0)
 ByteVector() = ByteVector(zero(UInt64), zero(Int8))
 ByteVector{U}() where {U} = ByteVector(zero(U), zero(Int8))
 WordVector() = WordVector(zero(UInt128), zero(Int8))
-function filluint(data, ::Type{T}, x::Vararg{Integer,N}) where {T,N}
+function filluint(data, ::Type{T}, x::Vararg{I,N}) where {T,I<:Integer,N}
     n = 0
     while true
         data |= x[N - n] % T
@@ -112,7 +112,7 @@ end
 #     V((v.data & m) | x1, length(v))
 # end
 function Base.setindex(v::V, x, i::Int) where {V <: AbstractLimitedRangeVector}
-    V(VectorizationBase.fuseint(VectorizationBase.insertelement(VectorizationBase.splitint(v.data, eltype(v)), x % eltype(v), i - one(i))), length(v))
+    V(unsigned(VectorizationBase.fuseint(VectorizationBase.insertelement(VectorizationBase.splitint(v.data, eltype(v)), x % eltype(v), i - one(i)))), length(v)%Int8)
 end
 
 struct ShortDynamicVector{T,N} <: AbstractVector{T}

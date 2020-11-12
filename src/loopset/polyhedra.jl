@@ -153,7 +153,7 @@ function BinomialFunc(a, cd, coef, b, active, vecid::Int)
     isvec = a[vecid] != 0
     BinomialFunc(a, cd, coef, b, active, isvec)
 end
-BinomialFunc() = BinomialFunc(ByteVector(), 0.0, 0.0, 0x00, false, false)
+BinomialFunc() = BinomialFunc(ByteVector(), 0, 0, 0x00, false, false)
 isactive(b::BinomialFunc) = b.active
 
 struct VectorLength
@@ -356,9 +356,9 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
     if az & (noinnerdefs)#(innerdefs === 0x00)
         # then this loop's iteration count is independent of the loops proceding it.
         # vecf = veci == polydim ? vecf : one(vecf)
-        cdsum = 1 - (cₗ[outid] + cᵤ[outid] + dₗ[outid] + dᵤ[outid])
+        cdsum = 1 - (cₗ₁ + cᵤ₁ + dₗ₁ + dᵤ₁)
         # citers *= round(muladd(-vecf, cdsum, vecf), RoundUp)
-        citers *= veci == polydim ? cld(cdsum, vl) : cdsum
+        citers *= veci == outid ? cld(cdsum, vl) : cdsum
         loop = Loop(
             (A₁ₗ.data, A₁ᵤ.data, zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64), zero(UInt64)),
             (cₗ₁, cᵤ₁, zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64), zero(Int64)),
@@ -448,6 +448,7 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
                 Asumⱼ = Asum[j] % Int64
                 iszero(Asumⱼ) ? Asumⱼ : cld(Asumⱼ, vl)
             end
+            coefs¹v = Base.Cartesian.@ntuple 8 j -> (coefs¹v[j]) | ((veci == i) & !(iszero(Asum[j])))
             continue
         end
         coefs¹ᵢ = coefs¹[i]
@@ -489,15 +490,18 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
                 return 9223372036854775807, nullloop()
                 # binomials = setindex(binomials, BinomialFunc(bb.a, bb.cd, bb.coef * cd, bb.b, true), b)
             else
-                binomials = setindex(binomials, BinomialFunc(a + Aᵤᵢ, cdmax + 1 + bb.cd, bb.coef, bb.b + 1, true, bb.isvec), b)
+                binomials = setindex(binomials, BinomialFunc(a + Aᵤᵢ, cdmax + 1 + bb.cd, bb.coef, bb.b + one(bb.b), true, bb.isvec), b)
                 nbinomials += 1
-                binomials = setindex(binomials, BinomialFunc(a - Aₗᵢ, cdmin + bb.cd, -bb.coef, bb.b + 1, true, bb.isvec), nbinomials)
+                binomials = setindex(binomials, BinomialFunc(a - Aₗᵢ, cdmin + bb.cd, -bb.coef, bb.b + one(bb.b), true, bb.isvec), nbinomials)
             end
         end
+        # @show coef⁰ coefs¹v
         if !iszero(coefs¹ᵢ)
             if Aᵤᵢzero
                 if (i == veci) | coefs¹v[i]
+                    # @show cdmax
                     divvec, remvec = divrem(cdmax, vl)
+                    divvec += one(divvec)
                     # divvec += remvec > 0
                     # itersbin = bin2(divvec) * vl + remvec * divvec
                     itersbin = bin2(divvec) * vl + remvec * (divvec + one(divvec))
@@ -505,20 +509,24 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
                     itersbin = bin2(cdmax + 1)
                 end
                 coef⁰ += coefs¹ᵢ * itersbin
+                # @show 1, coef⁰
             else
                 nbinomials += 1
                 binomials = setindex(binomials, BinomialFunc(Aᵤᵢ, cdmax + 1, coefs¹ᵢ, 0x02, true, (i == veci) | coefs¹v[i]), nbinomials)
             end
             if Aₗᵢzero
                 if (i == veci) | coefs¹v[i]
-                    divvec, remvec = divrem(cdmin, vl)
+                    # FIXME: is cdmin-1 correct ?!?
+                    divvec, remvec = divrem(cdmin-1, vl)
                     # divvec += remvec > 0
                     # itersbin = bin2(divvec) * vl + remvec * divvec
                     itersbin = bin2(divvec) * vl + remvec * (divvec + one(divvec))
+                    # @show cdmin, itersbin
                 else
                     itersbin = bin2(cdmin)
                 end
                 coef⁰ -= coefs¹ᵢ * itersbin
+                # @show 2, coef⁰
             else
                 nbinomials += 1
                 binomials = setindex(binomials, BinomialFunc(-Aₗᵢ, cdmin, -coefs¹ᵢ, 0x02, true, (i == veci) | coefs¹v[i]), nbinomials)
