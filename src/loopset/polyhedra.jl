@@ -518,8 +518,8 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
                         # itersbin = bin2(divvec) * vl + remvec * divvec
                         itersbin = bin2(divvec) * vl + remvec * divvec
                     elseif i == veci
-                        r = (1 + cdmax - cdmin) % vl
-                        divvec, remvec = divrem(1 + cdmax - r, vl)
+                        r = (cdmax - cdmin) % vl
+                        divvec, remvec = divrem(cdmax - r, vl)
                         divvec += one(divvec)
                         itersbin = bin2(divvec) * vl + remvec * divvec
                     else
@@ -529,7 +529,7 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
                         # divvec += remvec > 0
                         # itersbin = bin2(divvec) * vl + remvec * divvec
                         # itersbin = bin2(divvec) * vl + remvec * divvec
-                        divvec = div(cdmax, vl, RoundNearestTiesAway)
+                        divvec = div(cdmax + one(cdmax), vl, RoundNearestTiesAway)
                         itersbin = bin2(divvec) * vl# + divvec * (i == veci)
                     end
                 else
