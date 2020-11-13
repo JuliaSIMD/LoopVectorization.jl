@@ -125,7 +125,7 @@ ShortDynamicVector{T,N}() where {T,N} = ShortDynamicVector(ntuple(_ -> zero(T), 
 ShortDynamicVector{T}() where {T} = ShortDynamicVector{T,8}()
 ShortDynamicVector(x::Vararg{T,N}) where {T,N} = ShortDynamicVector(ntuple(n -> n > N ? zero(T) : (x[n]), Val(8)), N)
 function push(v::ShortDynamicVector{T,N}, x) where {T,N}
-    data = let N = length(v), d = v.data
+    data = let d = v.data
         ntuple(Val{N}()) do n
             if n ≤ N
                 d[n]
@@ -139,7 +139,7 @@ function push(v::ShortDynamicVector{T,N}, x) where {T,N}
     ShortDynamicVector(data, length(v)+1)
 end
 function pushfirst(v::ShortDynamicVector{T,N}, x) where {T,N}
-    data = let N = length(v), d = v.data
+    data = let d = v.data
         ntuple(Val{N}()) do n
             if isone(n)
                 T(x)
