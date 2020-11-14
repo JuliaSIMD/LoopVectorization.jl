@@ -101,7 +101,7 @@ end
 #     end
 # end
 
-@inline function depending_ind(Aₗ′, Aᵤ′, not_visited_mask)
+function depending_ind(Aₗ′, Aᵤ′, not_visited_mask)
     i = trailing_zeros(not_visited_mask)
     # Aₗ′ᵢ = Aₗ′[(i>>>3)+1] & not_visited_mask # gives all that depend on i
     # Aᵤ′ᵢ = Aᵤ′[(i>>>3)+1] & not_visited_mask # gives all that depend on i

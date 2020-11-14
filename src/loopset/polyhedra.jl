@@ -445,7 +445,7 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
         cd = veci == i ? div(cd, vl, RoundNearestTiesAway) : cd
         Asum = Aᵤᵢ + Aₗᵢ
         allzeroAsum = allzero(Asum)
-        @show Asum, cd, cdmax, cdmin
+        # @show Asum, cd, cdmax, cdmin
         if first_iter # initialize
             first_iter = false
             coef⁰ = cd# - (i == veci)
@@ -455,14 +455,14 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
                 # j == veci ? Asumⱼ : (coef⁰ -= one(coef⁰); div(Asumⱼ, vl, RoundNearestTiesAway))
                 j == veci ? Asumⱼ : (div(Asumⱼ, vl, RoundNearestTiesAway))
             end
-            @show coefs¹
+            # @show coefs¹
             coefs¹v = Base.Cartesian.@ntuple 8 j -> (coefs¹v[j]) | ((veci == i) & !(iszero(Asum[j])))
             continue
         end
         coefs¹ᵢ = coefs¹[i]
         coefs²ᵢ = coefs²[i]
         coefs²ᵢ = Base.Cartesian.@ntuple 8 j -> coefs²ᵢ[j] + (i == j ? 0 : coefs²[j][i])
-        @show cd, coef⁰
+        # @show cd, coef⁰
         coef⁰_old = coef⁰
         coefs¹_old = coefs¹
         coef⁰ *= cd
@@ -503,9 +503,9 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
                 binomials = setindex(binomials, BinomialFunc(a - Aₗᵢ, cdmin + bb.cd, -bb.coef, bb.b + one(bb.b), true, bb.isvec), nbinomials)
             end
         end
-        @show coef⁰ coefs¹ᵢ coefs¹ coefs¹v Aᵤᵢzero, Aₗᵢzero
+        # @show coef⁰ coefs¹ᵢ coefs¹ coefs¹v Aᵤᵢzero, Aₗᵢzero
         if !iszero(coefs¹ᵢ)
-            @show cdmin, cdmax, (i == veci), coefs¹v[i]
+            # @show cdmin, cdmax, (i == veci), coefs¹v[i]
             if Aᵤᵢzero
                 if (i == veci) | coefs¹v[i]
                     # if true
@@ -536,7 +536,7 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
                     itersbin = bin2(cdmax + 1)
                 end
                 coef⁰ += coefs¹ᵢ * itersbin
-                @show 1, coef⁰, itersbin
+                # @show 1, coef⁰, itersbin
             else
                 nbinomials += 1
                 binomials = setindex(binomials, BinomialFunc(Aᵤᵢ, cdmax + 1, coefs¹ᵢ, 0x02, true, (i == veci) | coefs¹v[i]), nbinomials)
@@ -576,7 +576,7 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
                     itersbin = bin2(cdmin)
                 end
                 coef⁰ -= coefs¹ᵢ * itersbin
-                @show 2, coef⁰, itersbin
+                # @show 2, coef⁰, itersbin
             else
                 nbinomials += 1
                 binomials = setindex(binomials, BinomialFunc(-Aₗᵢ, cdmin, -coefs¹ᵢ, 0x02, true, (i == veci) | coefs¹v[i]), nbinomials)
