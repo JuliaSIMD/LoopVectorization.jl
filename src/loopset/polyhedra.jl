@@ -162,8 +162,8 @@ struct VectorLength
 end
 VectorLength(n) = VectorLength(n, VectorizationBase.intlog2(n))
 VectorLength() = VectorLength(0, 0)
-Base.rem(n, vl::VectorLength) = n & (vl.W - 1)
-Base.div(n::Integer, vl::VectorLength) = (n >> vl.shifter) % typeof(n)
+Base.rem(n, vl::VectorLength) = copysign(abs(n) & (vl.W - 1), n)
+Base.div(n::Integer, vl::VectorLength) = copysign((abs(n) >> vl.shifter) % typeof(n), n)
 Base.div(n::Integer, vl::VectorLength, ::RoundingMode{:NearestTiesAway}) = copysign(((abs(n) + vl.W - one(n)) >> vl.shifter) % typeof(n), n)
 Base.cld(n::Integer, vl::VectorLength) = ((n + vl.W - 1) ÷ vl) % typeof(n)
 Base.:(*)(a::Integer, b::VectorLength) = a * b.W
@@ -307,7 +307,7 @@ function remove_outer_bounds(p, A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, d�
     A₁ₗ, A₁ᵤ, cₗ₁, cᵤ₁, dₗ₁, dᵤ₁, pwₗ, pwᵤ, az, failure
 end
 
-
+verbose_getloop() = false
 # getloop(p::Polyhedra, v::ByteVector, vecf, veci, citers) = getloop(p::Polyhedra, v::ByteVector, vecf, veci)
 """
     getloop(p::AbstractPolyhedra, v, vl, veci, citers)
@@ -360,7 +360,7 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
         # then this loop's iteration count is independent of the loops proceding it.
         # vecf = veci == polydim ? vecf : one(vecf)
         cdsum = 1 - (cₗ₁ + cᵤ₁ + dₗ₁ + dᵤ₁)
-        # @show cdsum, cₗ₁, cᵤ₁, dₗ₁, dᵤ₁
+         # @show cdsum, cₗ₁, cᵤ₁, dₗ₁, dᵤ₁
         # citers *= round(muladd(-vecf, cdsum, vecf), RoundUp)
         citers *= veci == outid ? div(cdsum, vl, RoundNearestTiesAway) : cdsum
         loop = Loop(
@@ -425,12 +425,18 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
     nbinomials = 0
     coef⁰ = 0
     coefs¹ = Base.Cartesian.@ntuple 8 i -> zero(Int64)
-    coefs¹v = Base.Cartesian.@ntuple 8 i -> false
+    coefs¹v = Base.Cartesian.@ntuple 8 i -> zero(Int64)
+    # coefs¹v = Aₗ[veci] + Aᵤ[i]
+        # coefs¹vₗ = Base.Cartesian.@ntuple 8 i -> zero(Int64)
+        # coefs¹vᵤ = Base.Cartesian.@ntuple 8 i -> zero(Int64)
+    # coefs¹v = Base.Cartesian.@ntuple 8 i -> false
     coefs² = Base.Cartesian.@ntuple 8 i -> coefs¹
     # visited_mask = (0x0101010101010101)
     # visited_mask = VectorizationBase.splitint(0x0101010101010101 >> ((8 - polydim)*8), Bool)
     not_visited_mask = 0x0101010101010101 >> ((8 - polydim)*8)
-    # coefs³ = ntuple(zero, Val(8))
+        # coefs³ = ntuple(zero, Val(8))
+    cdₗ = cₗ .+ dₗ
+    cdᵤ = cᵤ .+ dᵤ
     constraints = 2
     first_iter = true
     while true
@@ -439,42 +445,59 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
         Aᵤᵢ = Aᵤ[i] # others it depends on
         Aₗᵢzero = allzero(Aₗᵢ)
         Aᵤᵢzero = allzero(Aᵤᵢ)
-        cdmax = -cᵤ[i] - dᵤ[i]
-        cdmin =  cₗ[i] + dₗ[i]
+        cdmax = -cdᵤ[i]#-cᵤ[i] - dᵤ[i]
+        cdmin =  cdₗ[i]# cₗ[i] + dₗ[i]
+        verbose_getloop() && @show cdmax, cdmin, veci, i
         cd = 1 + cdmax - cdmin
         cd = veci == i ? div(cd, vl, RoundNearestTiesAway) : cd
+        # cd = max(zero(cd), cd)
         Asum = Aᵤᵢ + Aₗᵢ
         allzeroAsum = allzero(Asum)
-        # @show Asum, cd, cdmax, cdmin
+         # @show Asum, cd, cdmax, cdmin
         if first_iter # initialize
             first_iter = false
             coef⁰ = cd# - (i == veci)
-            coefs¹ = Base.Cartesian.@ntuple 8 j -> begin
-                Asumⱼ = Asum[j] % Int64
-                # iszero(Asumⱼ) ? Asumⱼ : div(Asumⱼ, vl, RoundNearestTiesAway)
-                # j == veci ? Asumⱼ : (coef⁰ -= one(coef⁰); div(Asumⱼ, vl, RoundNearestTiesAway))
-                j == veci ? Asumⱼ : (div(Asumⱼ, vl, RoundNearestTiesAway))
+            if i != veci
+                coefs¹ = Base.Cartesian.@ntuple 8 j -> begin
+                    Asumⱼ = Asum[j] % Int64
+                    # iszero(Asumⱼ) ? Asumⱼ : div(Asumⱼ, vl, RoundNearestTiesAway)
+                    # j == veci ? Asumⱼ : (coef⁰ -= one(coef⁰); div(Asumⱼ, vl, RoundNearestTiesAway))
+                    # FIXME: what the heck is this for again? reduced coefficient, unless vectorized? Why would this make sense?
+                    # j == veci ? Asumⱼ : (div(Asumⱼ, vl, RoundNearestTiesAway))
+                    # commented out for now, to just return Asumⱼ...
+                end
+            else
+                coefs¹v = Base.Cartesian.@ntuple 8 j -> (Asum[j] % Int64) # if j == veci, then j == i, and we won't visit again
+                # coefs¹vᵤ = Base.Cartesian.@ntuple 8 j -> zero(Int64) # 
+                # coefs¹vₗ = Base.Cartesian.@ntuple 8 j -> zero(Int64) # 
             end
-            # @show coefs¹
-            coefs¹v = Base.Cartesian.@ntuple 8 j -> (coefs¹v[j]) | ((veci == i) & !(iszero(Asum[j])))
+            verbose_getloop() && @show coef⁰ coefs¹
+            # coefs¹v = Base.Cartesian.@ntuple 8 j -> (coefs¹v[j]) | ((veci == i) & !(iszero(Asum[j])))
             continue
         end
         coefs¹ᵢ = coefs¹[i]
+        coefs¹vᵢ = coefs¹v[i]
         coefs²ᵢ = coefs²[i]
         coefs²ᵢ = Base.Cartesian.@ntuple 8 j -> coefs²ᵢ[j] + (i == j ? 0 : coefs²[j][i])
         # @show cd, coef⁰
         coef⁰_old = coef⁰
         coefs¹_old = coefs¹
+        coefs¹v_old = coefs¹v
         coef⁰ *= cd
+        # @show cd, coef⁰
         coefs¹ = Base.Cartesian.@ntuple 8 j -> coefs¹[j] * cd# + Asum[j] * coef⁰_old
+        coefs¹v = Base.Cartesian.@ntuple 8 j -> coefs¹v[j] * cd# + Asum[j] * coef⁰_old
         # now need to update the iᵗʰ.
         if iszero(Asum)
             coefs² = Base.Cartesian.@ntuple 8 j -> (Base.Cartesian.@ntuple 8 k -> cd * coefs²[j][k])
         else
-            coefs¹ = Base.Cartesian.@ntuple 8 j -> coefs¹[j] + Asum[j] * coef⁰_old
-            coefs¹v = Base.Cartesian.@ntuple 8 j -> (coefs¹v[j]) | ((veci == i) & !(iszero(Asum[j])))
+            if veci == i
+                coefs¹v = Base.Cartesian.@ntuple 8 j -> (Asum[j] % Int64) * coef⁰_old#coefs¹v[j] + Asum[j]# | ((veci == i) & !(iszero(Asum[j])))
+            else
+                coefs¹ = Base.Cartesian.@ntuple 8 j -> coefs¹[j] + Asum[j] * coef⁰_old
+            end
             coefs² = Base.Cartesian.@ntuple 8 j -> Base.Cartesian.@ntuple 8 k -> begin
-                cd * coefs²[j][k] + coefs¹_old[k] * Asum[j]
+                cd * coefs²[j][k] + (coefs¹_old[k]+coefs¹v_old[k]) * Asum[j]
             end
         end
         nbinrange = OneTo(nbinomials)
@@ -503,11 +526,47 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
                 binomials = setindex(binomials, BinomialFunc(a - Aₗᵢ, cdmin + bb.cd, -bb.coef, bb.b + one(bb.b), true, bb.isvec), nbinomials)
             end
         end
-        # @show coef⁰ coefs¹ᵢ coefs¹ coefs¹v Aᵤᵢzero, Aₗᵢzero
+        verbose_getloop() && @show coef⁰ coefs¹ᵢ coefs¹ coefs¹v Aᵤᵢzero, Aₗᵢzero
         if !iszero(coefs¹ᵢ)
-            # @show cdmin, cdmax, (i == veci), coefs¹v[i]
+            verbose_getloop() && @show cdmin, cdmax, (i == veci), coefs¹v[i]
+            # if false#coefs¹ᵢ > 0
+            #     if Aᵤᵢzero & Aᵤᵢzero
+            #         if (i == veci) | coefs¹v[i]
+            #             len = cdmax - cdmin + 1
+            #             divvec, remvec = divrem(cdmax - cdmin + 1, vl)
+            #             divvec += one(divvec)
+            #             suboff = if veci == i
+            #                 (cdmin - 1) * div(len, vl, RoundNearestTiesAway)
+            #             else
+            #                 len * div(cdmin - 1, vl, RoundNearestTiesAway)
+            #             end
+            #             verbose_getloop() && @show bin2(divvec) * vl, remvec * divvec, suboff
+            #             itersbin = bin2(divvec) * vl + remvec * divvec + suboff
+            #         else
+            #             itersbin = bin2(cdmax + 1) - bin2(cdmin)
+            #         end
+            #         coef⁰ += coefs¹ᵢ * itersbin
+            #         if coefs¹ᵢ > 0
+            #             if i == veci # rem is leftmost
+            #             elseif coefs¹v[i] # rem is rightmost
+            #             else # no vectorization
+            #             end
+            #         else
+            #             if i == veci # rem is rightmost
+            #             elseif coefs¹v[i] # rem is leftmost
+            #             else
+            #             end
+            #         end
+            #     elseif !(Aᵤᵢzero | Aᵤᵢzero) # both false
+            #         nbinomials += 1
+            #         binomials = setindex(binomials, BinomialFunc(Aᵤᵢ, cdmax + 1, coefs¹ᵢ, 0x02, true, (i == veci) | coefs¹v[i]), nbinomials)
+            #         nbinomials += 1
+            #         binomials = setindex(binomials, BinomialFunc(-Aₗᵢ, cdmin, -coefs¹ᵢ, 0x02, true, (i == veci) | coefs¹v[i]), nbinomials)
+            #     else
+            #     end
+            # else
             if Aᵤᵢzero
-                if (i == veci) | coefs¹v[i]
+                if (i == veci)# | coefs¹v[i]
                     # if true
                     if coefs¹ᵢ > 0
                         # @show cdmax
@@ -517,69 +576,208 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
                         # divvec += remvec > 0
                         # itersbin = bin2(divvec) * vl + remvec * divvec
                         itersbin = bin2(divvec) * vl + remvec * divvec
-                    elseif i == veci
+                    else#if i == veci
                         r = (cdmax - cdmin) % vl
                         divvec, remvec = divrem(cdmax - r, vl)
                         divvec += one(divvec)
                         itersbin = bin2(divvec) * vl + remvec * divvec
-                    else
+                        # else
                         # divvec, remvec = divrem(cdmax, vl)
                         # divvec += one(divvec)
                         # divvec += coefs¹ᵢ > 0
                         # divvec += remvec > 0
                         # itersbin = bin2(divvec) * vl + remvec * divvec
                         # itersbin = bin2(divvec) * vl + remvec * divvec
-                        divvec = div(cdmax + one(cdmax), vl, RoundNearestTiesAway)
-                        itersbin = bin2(divvec) * vl# + divvec * (i == veci)
+                        # divvec = div(cdmax + one(cdmax), vl, RoundNearestTiesAway)
+                        # itersbin = bin2(divvec) * vl# + divvec * (i == veci)
                     end
                 else
                     itersbin = bin2(cdmax + 1)
                 end
                 coef⁰ += coefs¹ᵢ * itersbin
-                # @show 1, coef⁰, itersbin
+                verbose_getloop() && @show 1, coef⁰, itersbin
             else
                 nbinomials += 1
                 binomials = setindex(binomials, BinomialFunc(Aᵤᵢ, cdmax + 1, coefs¹ᵢ, 0x02, true, (i == veci) | coefs¹v[i]), nbinomials)
             end
             if Aₗᵢzero
-                if (i == veci) | coefs¹v[i]
+                if (i == veci)# | coefs¹v[i]
                     if coefs¹ᵢ > 0
                         # FIXME: is cdmin-1 correct ?!?
-                        divvec, remvec = divrem(cdmin-1, vl)
-                        divvec += one(divvec)
-                        # divvec += remvec > 0
-                        # itersbin = bin2(divvec) * vl + remvec * divvec
-                        itersbin = bin2(divvec) * vl + remvec * (divvec + one(divvec))
-                    elseif i == veci#FIXME
+                        # divvec, remvec = divrem(cdmin - 1, vl)
+                        # divvec += one(divvec)
+                        # itersbin = bin2(divvec) * vl + remvec * (divvec + one(divvec))
+                        maxrem = cdmax % vl
+                        if cdmin > 0 # FIXME: broken at 117, W=4, veci=1, l1=1, l2=1
+                            # distrem = (1 + cdmax - cdmin) % vl
+                            divvec, remvec = divrem(cdmin - maxrem - 1, vl)
+                            verbose_getloop() && @show divvec, remvec, cdmin - 1 - maxrem
+                            # itersbin = divvec*vl + maxrem
+                            # itersbin = cdmin ≥ 0 ? maxrem : vl.W - maxrem
+                            divvec += one(divvec)
+                            bin2divvec = bin2(divvec)
+                            verbose_getloop() && @show divvec, bin2divvec, maxrem#, distrem
+                            itersbin = bin2divvec * vl + (divvec)*maxrem*(remvec ≥ 0)#remvec * (divvec + one(divvec))
+                        else
+                            maxrem = cdmax % vl
+                            # distrem = (1 + cdmax - cdmin) % vl
+                            divvec, remvec = divrem(maxrem - cdmin, vl)
+                            verbose_getloop() && @show divvec, remvec, cdmin - 1 - maxrem
+                            # itersbin = divvec*vl + maxrem
+                            # itersbin = cdmin ≥ 0 ? maxrem : vl.W - maxrem
+                            maxrem = vl.W - maxrem
+                            #divvec += one(divvec)
+                            bin2divvec = bin2(divvec)
+                            verbose_getloop() && @show divvec, bin2divvec, maxrem#, distrem
+                            itersbin = bin2divvec * vl + divvec*maxrem#remvec * (divvec + one(divvec))
+                        end
+                    else#if i == veci#FIXME
                         # r = (1 + cdmax - cdmin) % vl
                         divvec, remvec = divrem(cdmin, vl)
                         # divvec += one(divvec)
                         itersbin = bin2(divvec) * vl + remvec * divvec
                         #     divvec, remvec = divrem(cdmin-1, vl)
+                        #     divvec += one(divvec)
+                        #     # divvec += remvec > 0
+                        #     # itersbin = bin2(divvec) * vl + remvec * divvec
+                        #     itersbin = bin2(divvec) * vl + remvec * (divvec + one(divvec))
+                    # else#FIXME
+                    #     divvec, remvec = divrem(cdmin - 1 - (cdmax % vl), vl)#, RoundNearestTiesAway)
                     #     divvec += one(divvec)
-                    #     # divvec += remvec > 0
-                    #     # itersbin = bin2(divvec) * vl + remvec * divvec
-                    #     itersbin = bin2(divvec) * vl + remvec * (divvec + one(divvec))
-                    else#FIXME
-                        divvec, remvec = divrem(cdmin - 1 - (cdmax % vl), vl)#, RoundNearestTiesAway)
-                        divvec += one(divvec)
-                        itersbin = bin2(divvec) * vl + remvec * divvec
-                        # itersbin = bin2(divvec) * vl + divvec * (i == veci)
-                        # divvec, remvec = divrem(cdmin-1, vl)
-                        # divvec += one(divvec)
-                        # # divvec += remvec > 0
-                        # # itersbin = bin2(divvec) * vl + remvec * divvec
-                        # itersbin = bin2(divvec) * vl + remvec * (divvec + one(divvec))                        
+                    #     itersbin = bin2(divvec) * vl + remvec * divvec
+                    #     # itersbin = bin2(divvec) * vl + divvec * (i == veci)
+                    #     # divvec, remvec = divrem(cdmin-1, vl)
+                    #     # divvec += one(divvec)
+                    #     # # divvec += remvec > 0
+                    #     # # itersbin = bin2(divvec) * vl + remvec * divvec
+                    #     # itersbin = bin2(divvec) * vl + remvec * (divvec + one(divvec))                        
                     end
                     # @show cdmin, itersbin
                 else
                     itersbin = bin2(cdmin)
                 end
                 coef⁰ -= coefs¹ᵢ * itersbin
-                # @show 2, coef⁰, itersbin
+                verbose_getloop() && @show 2, coef⁰, itersbin
             else
                 nbinomials += 1
                 binomials = setindex(binomials, BinomialFunc(-Aₗᵢ, cdmin, -coefs¹ᵢ, 0x02, true, (i == veci) | coefs¹v[i]), nbinomials)
+            end
+        end
+        if !iszero(coefs¹vᵢ)
+            # verbose_getloop() && @show cdmin, cdmax, (i == veci), coefs¹v[i]
+            cdminₒ = cdₗ[veci]
+            cdmaxₒ = cdᵤ[veci]
+            minrem = cdminₒ % vl
+            minovershoot = minrem + vl.W - one(vl.W)
+            if Aᵤᵢzero
+                if coefs¹vᵢ > 0
+                    cdrem = cd % vl
+                    itersbin = cdrem * div(cdmax - minrem, vl.W, RoundDown) #TODO: implement optimized version
+                    @show itersbin
+                    if cdmax > cdrem
+                        cddiff = cdmax - cdrem
+                        divvec, remvec = divrem(cddiff, vl.W, RoundUp) #TODO: implement optimized version
+                        
+                        
+                        # if cdmax > maxrem
+                        # divvec, remvec = divrem(cdmax - maxrem, vl)
+                        _d = divvec
+                        divvec += one(divvec)
+                        # divvec += coefs¹ᵢ > 0
+                        # divvec += remvec > 0
+                        # itersbin = bin2(divvec) * vl + remvec * divvec
+                        itersbin += bin2(divvec) * vl + remvec - cddiff * (minovershoot ≥ 0)
+                        verbose_getloop() && @show bin2(divvec), divvec, remvec, minrem, cdrem, cdmax
+                        verbose_getloop() && @show bin2(divvec) * vl, remvec * divvec, - cddiff, (minovershoot ≥ 0)
+                    else
+                        divvec, remvec = divrem(cdrem - cdmax, vl)
+                        # divvec += one(divvec)
+                        itersbin += bin2(divvec) * vl + remvec * divvec# - maxrem * cdmax
+                        verbose_getloop() && @show bin2(divvec), divvec, remvec, minrem, cdrem, cdmax
+                    end
+                    # else
+
+                    # end
+                    # excess = (cdmax - cdminₒ) % vl
+                    # # @show cdmax
+                    # # r = (1 + cdmax - cdmin) % vl
+                    # # r = (1 - cdmin) % vl
+                    # _excess = ((one(cdminₒ) - cdminₒ) % vl)
+                    # # excess = iszero(_excess) ? zero(vl.W) : vl.W - _excess
+                    # divvec, remvec = divrem(cdmax, vl)
+                    # excess = (!iszero(_excess)) & (_excess ≥ remvec)
+                    
+                    # vld = divvec * vl
+                    # verbose_getloop() && @show divvec, remvec, bin2(divvec+one(divvec)), excess
+                    # divvec += one(divvec)
+                    # verbose_getloop() && @show bin2(divvec) * vl, remvec, vld, - excess * (vld + remvec)
+                    # # itersbin = bin2(divvec) * vl + remvec + vld - excess * (vld + remvec)
+                    # itersbin = bin2(divvec) * vl + remvec - excess * (vld + remvec)
+                else
+                    # divvec, remvec = divrem(cdmax, vl)
+                    # divvec += one(divvec)
+                    # divvec += coefs¹ᵢ > 0
+                    # divvec += remvec > 0
+                    # itersbin = bin2(divvec) * vl + remvec * divvec
+                    # itersbin = bin2(divvec) * vl + remvec * divvec
+                    divvec = div(cdmax + one(cdmax), vl, RoundNearestTiesAway)
+                    itersbin = bin2(divvec) * vl# + divvec * (i == veci)
+                end
+                coef⁰ += coefs¹vᵢ * itersbin
+                verbose_getloop() && @show 3, coef⁰, itersbin
+            else
+                nbinomials += 1
+                binomials = setindex(binomials, BinomialFunc(Aᵤᵢ, cdmax + 1, coefs¹vᵢ, 0x02, true, (i == veci) | coefs¹v[i]), nbinomials)
+            end
+            if Aₗᵢzero
+                if coefs¹vᵢ > 0
+                    # FIXME: is cdmin-1 correct ?!?
+                    # divvec, remvec = divrem(cdmin - 1, vl)
+                    # divvec += one(divvec)
+                    # itersbin = bin2(divvec) * vl + remvec * (divvec + one(divvec))
+                    maxrem = cdmax % vl
+                    if cdmin > 0 # FIXME: broken at 117, W=4, veci=1, l1=1, l2=1
+                        # distrem = (1 + cdmax - cdmin) % vl
+                        divvec, remvec = divrem(cdmin - maxrem - 1, vl)
+                        verbose_getloop() && @show divvec, remvec, cdmin - 1 - maxrem
+                        # itersbin = divvec*vl + maxrem
+                        # itersbin = cdmin ≥ 0 ? maxrem : vl.W - maxrem
+                        divvec += one(divvec)
+                        bin2divvec = bin2(divvec)
+                        verbose_getloop() && @show divvec, bin2divvec, maxrem#, distrem
+                        itersbin = bin2divvec * vl + (divvec)*maxrem*(remvec ≥ 0)#remvec * (divvec + one(divvec))
+                    else
+                        # maxrem = cdmax % vl
+                        # distrem = (1 + cdmax - cdmin) % vl
+                        # divvec, remvec = divrem(maxrem - cdmin, vl)
+                        divvec, remvec = divrem(cdmin, vl)
+                        verbose_getloop() && @show divvec, remvec, cdmin - 1 - maxrem
+                        # itersbin = divvec*vl + maxrem
+                        # itersbin = cdmin ≥ 0 ? maxrem : vl.W - maxrem
+                        maxrem = vl.W - maxrem
+                        #divvec += one(divvec)
+                        bin2divvec = bin2(divvec)
+                        verbose_getloop() && @show divvec, bin2divvec, maxrem#, distrem
+                        # @show bin2divvec * vl
+                        itersbin = bin2divvec * vl# + divvec*maxrem#remvec * (divvec + one(divvec))
+                    end
+                else#FIXME
+                    divvec, remvec = divrem(cdmin - 1 - (cdmax % vl), vl)#, RoundNearestTiesAway)
+                    divvec += one(divvec)
+                    itersbin = bin2(divvec) * vl + remvec * divvec
+                    # itersbin = bin2(divvec) * vl + divvec * (i == veci)
+                    # divvec, remvec = divrem(cdmin-1, vl)
+                    # divvec += one(divvec)
+                    # # divvec += remvec > 0
+                    # # itersbin = bin2(divvec) * vl + remvec * divvec
+                    # itersbin = bin2(divvec) * vl + remvec * (divvec + one(divvec))                        
+                end
+                # @show cdmin, itersbin
+                coef⁰ -= coefs¹vᵢ * itersbin
+                verbose_getloop() && @show 4, coef⁰, itersbin
+            else
+                nbinomials += 1
+                binomials = setindex(binomials, BinomialFunc(-Aₗᵢ, cdmin, -coefs¹vᵢ, 0x02, true, (i == veci) | coefs¹v[i]), nbinomials)
             end
         end
         for j ∈ 1:polydim
@@ -594,7 +792,11 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
                 end
                 coef⁰ += coefs²ᵢⱼ * (veci == i ? div(fh2, vl, RoundNearestTiesAway) : fh2)
             elseif VectorizationBase.splitint(not_visited_mask, Bool)[j]
-                coefs¹ = setindex(coefs¹, cd * coefs²ᵢⱼ, j)
+                if j == veci
+                    coefs¹v = setindex(coefs¹v, cd * coefs²ᵢⱼ, j)
+                else
+                    coefs¹ = setindex(coefs¹, cd * coefs²ᵢⱼ, j)
+                end
             end            
         end
         (not_visited_mask === zero(UInt64)) && break
@@ -621,7 +823,7 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
             j = firstnonzeroind(Anz)#Aᵤ
             Anz = setindex(Anz, zero(eltype(Anz)), j)
             i += 1
-            # @show i, Anz, _A
+             # @show i, Anz, _A
             Aₒᵤₜ = setindex(Aₒᵤₜ, _A[j].data, i)
             cₒᵤₜ = setindex(cₒᵤₜ, _c[j], i)
             dₒᵤₜ = setindex(dₒᵤₜ, _d[j], i)
@@ -629,7 +831,7 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
         end
     end
     end
-    # @show Aₒᵤₜ
+     # @show Aₒᵤₜ
     coef⁰, Loop( Aₒᵤₜ, cₒᵤₜ, dₒᵤₜ, pwₒᵤₜ, (pidₗ.data, pidᵤ.data), nloops, outid, i % Int8 )
 end
 function getloopiters(p::RectangularPolyhedra, v::ByteVector, vl, veci, citers)
