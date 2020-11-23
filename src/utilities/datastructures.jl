@@ -206,3 +206,34 @@ function firstnonzeroind(v::AbstractLimitedRangeVector)
     (trailing_zeros(v.data) ÷ (8sizeof(eltype(v)))) + 1
 end
 
+mutable struct MVector{N,T} <: DenseVector{T}
+    data::NTuple{N,T}
+    function MVector{N,T}(::UndefInitializer) where {N,T}
+        @assert isbitstype(T) "Only isbits types are suppoted."
+        new()
+    end
+end
+Base.zeros(::Type{MVector{N,T}}) where {N,T} = MVector{N,T}(undef) .= zero(T)
+Base.size(::MVector{N}) where {N} = (N,)
+Base.length(::MVector{N}) where {N} = N
+Base.strides(::MVector) = (1,)
+Base.IndexStyle(::Type{MVector{N,T}}) where {N,T} = IndexLinear()
+Base.similar(::MVector{N,T}) where {N,T} = MVector{N,T}(undef)
+@inline Base.unsafe_convert(::Type{Ptr{T}}, x::MVector{N,T}) where {N,T} = Base.unsafe_convert(Ptr{T}, Base.pointer_from_objref(x))
+@inline function Base.getindex(x::MVector{N,T}, i) where {N, T <: Union{NativeTypes,VectorizationBase.AbstractSIMD}}
+    Base.@boundscheck checkbounds(x, i)
+    GC.@preserve x VectorizationBase.vload(pointer(x), VectorizationBase.lazymul(VectorizationBase.static_sizeof(Float64), i - one(i)))
+end
+@inline function Base.setindex!(x::MVector{N,T}, v, i) where {N, T <: Union{NativeTypes,VectorizationBase.AbstractSIMD}}
+    Base.@boundscheck checkbounds(x, i)
+    GC.@preserve x VectorizationBase.vstore!(pointer(x), convert(T, v), VectorizationBase.lazymul(VectorizationBase.static_sizeof(Float64), i - one(i)))
+end
+@inline function Base.getindex(x::MVector{N,T}, i) where {N, T}
+    Base.@boundscheck checkbounds(x, i)
+    GC.@preserve x unsafe_load(pointer(x), i)
+end
+@inline function Base.setindex!(x::MVector{N,T}, v, i) where {N, T}
+    Base.@boundscheck checkbounds(x, i)
+    GC.@preserve x unsafe_store!(pointer(x), convert(T, v), i)
+end
+
