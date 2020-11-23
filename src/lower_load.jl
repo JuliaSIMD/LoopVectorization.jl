@@ -117,7 +117,7 @@ function add_prefetches!(q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, pr
     ptr = vptr(op)
     gptr = Symbol(ptr, "##GESPEDPREFETCH##")
     for i ∈ eachindex(gespinds.args) 
-       gespinds.args[i] = Expr(:call, lv(:extract_data), gespinds.args[i])
+       gespinds.args[i] = Expr(:call, lv(:data), gespinds.args[i])
     end    
     push!(q.args, Expr(:(=), gptr, Expr(:call, lv(:gesp), ptr, gespinds)))
 
@@ -190,7 +190,7 @@ end
 #     gptr = Symbol(ptr, "##GESPED##")
 #     for i ∈ eachindex(gespinds.args)
 #         if i != translationind
-#             gespinds.args[i] = Expr(:call, lv(:extract_data), gespinds.args[i])
+#             gespinds.args[i] = Expr(:call, lv(:data), gespinds.args[i])
 #         end
 #     end    
 #     push!(q.args, Expr(:(=), gptr, Expr(:call, lv(:gesp), ptr, gespinds)))
@@ -247,7 +247,7 @@ function lower_load_for_optranslation!(
     gptr = Symbol(ptr, "##GESPED##")
     for i ∈ eachindex(gespinds.args)
         if i != translationind
-            gespinds.args[i] = Expr(:call, lv(:extract_data), gespinds.args[i])
+            gespinds.args[i] = Expr(:call, lv(:data), gespinds.args[i])
         end
     end    
     push!(q.args, Expr(:(=), gptr, Expr(:call, lv(:gesp), ptr, gespinds)))

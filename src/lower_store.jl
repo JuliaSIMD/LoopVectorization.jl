@@ -3,16 +3,16 @@ using VectorizationBase: vnoaliasstore!
 
 @inline vstoreadditivereduce!(args...) = vnoaliasstore!(args...)
 @inline vstoremultiplicativevereduce!(args...) = vnoaliasstore!(args...)
-@inline function vstoreadditivereduce!(ptr::VectorizationBase.AbstractStridedPointer, v::VectorizationBase.SVec, i::Tuple{Vararg{Union{Integer,Static}}})
+@inline function vstoreadditivereduce!(ptr::VectorizationBase.AbstractStridedPointer, v::VectorizationBase.Vec, i::Tuple{Vararg{Union{Integer,Static}}})
     vnoaliasstore!(ptr, SIMDPirates.vsum(v), i)
 end
-@inline function vstoreadditivereduce!(ptr::VectorizationBase.AbstractStridedPointer, v::VectorizationBase.SVec, i::Tuple{Vararg{Union{Integer,Static}}}, m::VectorizationBase.Mask)
+@inline function vstoreadditivereduce!(ptr::VectorizationBase.AbstractStridedPointer, v::VectorizationBase.Vec, i::Tuple{Vararg{Union{Integer,Static}}}, m::VectorizationBase.Mask)
     vnoaliasstore!(ptr, SIMDPirates.vsum(v), i, m)
 end
-@inline function vstoremultiplicativevereduce!(ptr::VectorizationBase.AbstractStridedPointer, v::VectorizationBase.SVec, i::Tuple{Vararg{Union{Integer,Static}}})
+@inline function vstoremultiplicativevereduce!(ptr::VectorizationBase.AbstractStridedPointer, v::VectorizationBase.Vec, i::Tuple{Vararg{Union{Integer,Static}}})
     vnoaliasstore!(ptr, SIMDPirates.vprod(v), i)
 end
-@inline function vstoremultiplicativevereduce!(ptr::VectorizationBase.AbstractStridedPointer, v::VectorizationBase.SVec, i::Tuple{Vararg{Union{Integer,Static}}}, m::VectorizationBase.Mask)
+@inline function vstoremultiplicativevereduce!(ptr::VectorizationBase.AbstractStridedPointer, v::VectorizationBase.Vec, i::Tuple{Vararg{Union{Integer,Static}}}, m::VectorizationBase.Mask)
     vnoaliasstore!(ptr, SIMDPirates.vprod(v), i, m)
 end
 

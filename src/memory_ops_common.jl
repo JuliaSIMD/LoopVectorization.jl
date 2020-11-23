@@ -32,7 +32,7 @@ end
 
 add_vptr!(ls::LoopSet, op::Operation) = add_vptr!(ls, op.ref)
 add_vptr!(ls::LoopSet, mref::ArrayReferenceMeta) = add_vptr!(ls, mref.ref.array, vptr(mref))
-using VectorizationBase: noaliasstridedpointer
+# using VectorizationBase: noaliasstridedpointer
 function add_vptr!(ls::LoopSet, array::Symbol, vptrarray::Symbol, actualarray::Bool = true, broadcast::Bool = false)
     if !includesarray(ls, array)
         push!(ls.includedarrays, array)

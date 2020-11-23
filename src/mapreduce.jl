@@ -4,8 +4,8 @@
 @inline vreduce(::typeof(max), v::VectorizationBase.AbstractSIMDVector) = vmaximum(v)
 @inline vreduce(::typeof(min), v::VectorizationBase.AbstractSIMDVector) = vminimum(v)
 @inline vreduce(op, v::VectorizationBase.AbstractSIMDVector) = _vreduce(op, v)
-@inline _vreduce(op, v::VectorizationBase.AbstractSIMDVector) = _reduce(op, SVec(v))
-@inline function _vreduce(op, v::SVec)
+@inline _vreduce(op, v::VectorizationBase.AbstractSIMDVector) = _reduce(op, Vec(v))
+@inline function _vreduce(op, v::Vec)
     isone(length(v)) && return v[1]
     a = op(v[1], v[2])
     for i ∈ 3:length(v)

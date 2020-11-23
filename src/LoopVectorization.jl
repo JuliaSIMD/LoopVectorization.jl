@@ -1,22 +1,25 @@
 module LoopVectorization
 
-if (!isnothing(get(ENV, "TRAVIS_BRANCH", nothing)) || !isnothing(get(ENV, "APPVEYOR", nothing))) && isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@optlevel"))
-    @eval Base.Experimental.@optlevel 1
-end
+# if (!isnothing(get(ENV, "TRAVIS_BRANCH", nothing)) || !isnothing(get(ENV, "APPVEYOR", nothing))) && isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@optlevel"))
+    # @eval Base.Experimental.@optlevel 1
+# end
 
-using VectorizationBase, SIMDPirates, SLEEFPirates, UnPack, OffsetArrays
-using VectorizationBase: REGISTER_SIZE, extract_data, num_vector_load_expr,
-    mask, masktable, pick_vector_width_val, valmul, valrem, valmuladd, valmulsub, valadd, valsub, _MM,
-    maybestaticlength, maybestaticsize, staticm1, staticp1, staticmul, subsetview, vzero, stridedpointer_for_broadcast,
-    Static, Zero, StaticUnitRange, StaticLowerUnitRange, StaticUpperUnitRange, unwrap, maybestaticrange,
-    AbstractColumnMajorStridedPointer, AbstractRowMajorStridedPointer, AbstractSparseStridedPointer, AbstractStaticStridedPointer,
-    PackedStridedPointer, SparseStridedPointer, RowMajorStridedPointer, StaticStridedPointer, StaticStridedStruct, offsetprecalc,
-    maybestaticfirst, maybestaticlast, scalar_less, scalar_greater, noalias!, gesp, gepbyte, pointerforcomparison, NativeTypes, staticmul, staticmuladd
-using SIMDPirates: VECTOR_SYMBOLS, evadd, evsub, evmul, evfdiv, vrange, 
-    reduced_add, reduced_prod, reduce_to_add, reduced_max, reduced_min, vsum, vprod, vmaximum, vminimum,
-    sizeequivalentfloat, sizeequivalentint, vadd!, vsub!, vmul!, vfdiv!, vfmadd!, vfnmadd!, vfmsub!, vfnmsub!,
-    vfmadd231, vfmsub231, vfnmadd231, vfnmsub231, sizeequivalentfloat, sizeequivalentint, #prefetch,
-    vmullog2, vmullog10, vdivlog2, vdivlog10, vmullog2add!, vmullog10add!, vdivlog2add!, vdivlog10add!, vfmaddaddone, vadd1, relu
+using VectorizationBase, SLEEFPirates, UnPack, OffsetArrays
+using VectorizationBase: REGISTER_SIZE, data,
+    mask, pick_vector_width_val, MM,
+    maybestaticlength, maybestaticsize, staticm1, staticp1, staticmul, vzero,
+    Zero, maybestaticrange, offsetprecalc,
+    maybestaticfirst, maybestaticlast, scalar_less, gesp, pointerforcomparison, NativeTypes, staticmul,
+    relu
+using IfElse: ifelse
+
+const Static = StaticInt
+# missing: subsetview, stridedpointer_for_broadcast, unwrap, StaticUnitRange, stridedpointers, noalias!, gepbyte, 
+# using SIMDPirates: VECTOR_SYMBOLS, evadd, evsub, evmul, evfdiv, vrange, 
+#     reduced_add, reduced_prod, reduce_to_add, reduced_max, reduced_min, vsum, vprod, vmaximum, vminimum,
+#     sizeequivalentfloat, sizeequivalentint, vadd!, vsub!, vmul!, vfdiv!, vfmadd!, vfnmadd!, vfmsub!, vfnmsub!,
+#     vfmadd231, vfmsub231, vfnmadd231, vfnmsub231, sizeequivalentfloat, sizeequivalentint, #prefetch,
+#     vmullog2, vmullog10, vdivlog2, vdivlog10, vmullog2add!, vmullog10add!, vdivlog2add!, vdivlog10add!, vfmaddaddone, vadd1, relu
 using SLEEFPirates: pow
 using Base.Broadcast: Broadcasted, DefaultArrayStyle
 using LinearAlgebra: Adjoint, Transpose
@@ -46,7 +49,7 @@ If you want good performance, DO NOT use a 32-bit build of Julia if you don't ha
 const REGISTER_COUNT = Sys.ARCH === :i686 ? 8 : VectorizationBase.REGISTER_COUNT
 
 include("getconstindexes.jl")
-include("vectorizationbase_extensions.jl")
+# include("vectorizationbase_extensions.jl")
 include("predicates.jl")
 include("map.jl")
 include("filter.jl")
@@ -89,7 +92,7 @@ loop-reordering so as to improve performance:
 """
 LoopVectorization
 
-include("precompile.jl")
-_precompile_()
+# include("precompile.jl")
+# _precompile_()
 
 end # module
