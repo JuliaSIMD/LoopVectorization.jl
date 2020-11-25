@@ -12,14 +12,14 @@ if (Base.libllvm_version ≥ v"7" && VectorizationBase.AVX512F) || Base.libllvm_
             for _ ∈ 1:Nrep
                 vy = vload(Vec{W,T}, ptr_y)
                 mask = f(Vec(vy))
-                SIMDPirates.compressstore!(gep(ptr_x, j), vy, mask)
+                VectorizationBase.compressstore!(gep(ptr_x, j), vy, mask)
                 ptr_y = gepbyte(ptr_y, VectorizationBase.REGISTER_SIZE)
                 j = vadd(j, count_ones(mask))
             end
             rem_mask = VectorizationBase.mask(T, Nrem)
             vy = vload(Vec{W,T}, ptr_y, rem_mask)
             mask = rem_mask & f(Vec(vy))
-            SIMDPirates.compressstore!(gep(ptr_x, j), vy, mask)
+            VectorizationBase.compressstore!(gep(ptr_x, j), vy, mask)
             j = vadd(j, count_ones(mask))
             Base._deleteend!(x, N-j) # resize!(x, j)
         end

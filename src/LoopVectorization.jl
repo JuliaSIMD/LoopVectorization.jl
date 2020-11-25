@@ -5,12 +5,12 @@ module LoopVectorization
 # end
 
 using VectorizationBase, SLEEFPirates, UnPack, OffsetArrays
-using VectorizationBase: REGISTER_SIZE, data,
+using VectorizationBase: REGISTER_SIZE, REGISTER_COUNT, data,
     mask, pick_vector_width_val, MM,
     maybestaticlength, maybestaticsize, staticm1, staticp1, staticmul, vzero,
     Zero, maybestaticrange, offsetprecalc,
-    maybestaticfirst, maybestaticlast, scalar_less, gesp, pointerforcomparison, NativeTypes, staticmul,
-    relu
+    maybestaticfirst, maybestaticlast, scalar_less, gep, gesp, pointerforcomparison, NativeTypes, staticmul,
+    relu, stridedpointer, StridedPointer
 using IfElse: ifelse
 
 const Static = StaticInt
@@ -29,25 +29,21 @@ import LinearAlgebra # for check_args
 
 using Base.FastMath: add_fast, sub_fast, mul_fast, div_fast
 
+using ArrayInterface
+using ArrayInterface: OptionallyStaticUnitRange, Zero
+const Static = ArrayInterface.StaticInt
+
 export LowDimArray, stridedpointer,
     @avx, @_avx, *ˡ, _avx_!,
     vmap, vmap!, vmapt, vmapt!, vmapnt, vmapnt!, vmapntt, vmapntt!,
     vfilter, vfilter!, vmapreduce, vreduce
 
+
 const VECTORWIDTHSYMBOL, ELTYPESYMBOL = Symbol("##Wvecwidth##"), Symbol("##Tloopeltype##")
 
-"""
-REGISTER_COUNT defined in VectorizationBase is supposed to correspond to the actual number of floating point registers on the system.
-It is hardcoded into a file at build time.
-However, someone may have multiple builds of Julia on the same system, some 32-bit and some 64-bit (e.g., they use 64-bit primarilly,
-but keep a 32-bit build on hand to debug test failures on Appveyor's 32-bit build). Thus, we don't want REGISTER_COUNT to be hardcoded
-in such a fashion. 
-32-bit builds are limited to only 8 floating point registers, so we take care of that here.
 
-If you want good performance, DO NOT use a 32-bit build of Julia if you don't have to.
-"""
-const REGISTER_COUNT = Sys.ARCH === :i686 ? 8 : VectorizationBase.REGISTER_COUNT
-
+include("vectorizationbase_compat/contract_pass.jl")
+include("vectorizationbase_compat/subsetview.jl")
 include("getconstindexes.jl")
 # include("vectorizationbase_extensions.jl")
 include("predicates.jl")

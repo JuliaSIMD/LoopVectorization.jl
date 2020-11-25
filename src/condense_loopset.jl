@@ -126,11 +126,11 @@ function loop_boundary(loop::Loop)
     startexact = loop.startexact
     stopexact = loop.stopexact
     if startexact & stopexact
-        Expr(:call, Expr(:curly, lv(:StaticUnitRange), loop.starthint, loop.stophint))
+        Expr(:call, lv(:OptionallyStaticUnitRange), staticexpr(loop.starthint), staticexpr(loop.stophint))
     elseif startexact
-        Expr(:call, Expr(:curly, lv(:StaticLowerUnitRange), loop.starthint), loop.stopsym)
+        Expr(:call, lv(:OptionallyStaticUnitRange), staticexpr(loop.starthint), loop.stopsym)
     elseif stopexact
-        Expr(:call, Expr(:curly, lv(:StaticUpperUnitRange), loop.stophint), loop.startsym)
+        Expr(:call, lv(:OptionallyStaticUnitRange), loop.startsym, staticexpr(loop.stophint))
     else
         Expr(:call, :(:), loop.startsym, loop.stopsym)
     end

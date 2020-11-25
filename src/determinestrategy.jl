@@ -1,4 +1,6 @@
 
+const CACHELINE_SIZE = VectorizationBase.L₁CACHE.linesize
+
 # function indexappearences(op::Operation, s::Symbol)
 #     s ∉ loopdependencies(op) && return 0
 #     appearences = 0
@@ -80,7 +82,7 @@ function cost(ls::LoopSet, op::Operation, vectorized::Symbol, Wshift::Int, size_
                 #       would be nice to add a check for this CPU, to see if such a penalty is still appropriate.
                 #       Also, once more SVE (scalable vector extension) CPUs are released, would be nice to know if
                 #       this feature is common to all of them.
-                srt += 0.5VectorizationBase.REGISTER_SIZE / VectorizationBase.CACHELINE_SIZE
+                srt += 0.5VectorizationBase.REGISTER_SIZE / CACHELINE_SIZE
             end
         elseif isstore(op) # broadcast or reductionstore; if store we want to penalize reduction
             srt *= 3
@@ -469,9 +471,9 @@ function solve_unroll(
     W::Int, vectorized::Symbol, rounduᵢ::Int
 )
     (u₁step, u₂step) = if rounduᵢ == 1 # max is to safeguard against some weird arch I've never heard of.
-        (max(1,VectorizationBase.CACHELINE_SIZE ÷ VectorizationBase.REGISTER_SIZE), 1)
+        (max(1,CACHELINE_SIZE ÷ VectorizationBase.REGISTER_SIZE), 1)
     elseif rounduᵢ == 2
-        (1, max(1,VectorizationBase.CACHELINE_SIZE ÷ VectorizationBase.REGISTER_SIZE))
+        (1, max(1,CACHELINE_SIZE ÷ VectorizationBase.REGISTER_SIZE))
     else
         (1, 1)
     end
@@ -887,7 +889,7 @@ function evaluate_cost_tile(
         rt, lat, rp = cost(ls, op, vectorized, Wshift, size_T)
         if isload(op)
             if !iszero(prefetchisagoodidea(ls, op, UnrollArgs(4, unrollsyms, 4, 0)))
-                # rt += 0.5VectorizationBase.REGISTER_SIZE / VectorizationBase.CACHELINE_SIZE
+                # rt += 0.5VectorizationBase.REGISTER_SIZE / CACHELINE_SIZE
                 prefetch_good_idea = true
             end
         end

@@ -70,7 +70,7 @@ function prefetchisagoodidea(ls::LoopSet, op::Operation, td::UnrollArgs)
     length(loopdependencies(op)) ≤ 1 && return 0
     vectorized ∈ loopdependencies(op) || return 0
     u₂loopsym === Symbol("##undefined##") && return 0
-    dontskip = (VectorizationBase.CACHELINE_SIZE ÷ VectorizationBase.REGISTER_SIZE) - 1
+    dontskip = (CACHELINE_SIZE ÷ VectorizationBase.REGISTER_SIZE) - 1
     # u₂loopsym is vectorized
     # u₁vectorized = vectorized === u₁loopsym
     u₂vectorized = vectorized === u₂loopsym

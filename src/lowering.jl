@@ -229,12 +229,12 @@ end
 # end
 
 function assume(ex)
-    Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:SIMDPirates)), QuoteNode(:assume)), ex)
+    Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:VectorizationBase)), QuoteNode(:assume)), ex)
 end
 function expect(ex)
-    use_expect() || return ex
-    Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:SIMDPirates)), QuoteNode(:expect)), ex)
-    # ex
+    # use_expect() || return ex
+    # Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:VectorizationBase)), QuoteNode(:expect)), ex)
+    ex
 end
 function loopiteratesatleastonce(loop::Loop, as::Bool = true)
     comp = if loop.startexact # requires !loop.stopexact

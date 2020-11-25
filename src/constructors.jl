@@ -57,7 +57,7 @@ end
 
 
 function LoopSet(q::Expr, mod::Symbol = :Main)
-    SIMDPirates.contract_pass!(q)
+    contract_pass!(q)
     ls = LoopSet(mod)
     copyto!(ls, q)
     resize!(ls.loop_order, num_loops(ls))
@@ -136,7 +136,7 @@ and `uᵢ=-1` disables unrolling for the correspond loop.
 
 The `@avx` macro also checks the array arguments using `LoopVectorization.check_args` to try and determine
 if they are compatible with the macro. If `check_args` returns false, a fall back loop annotated with `@inbounds`
-and `@fastmath` is generated. Note that `SIMDPirates` provides functions such as `evadd` and `evmul` that will
+and `@fastmath` is generated. Note that `VectorizationBase` provides functions such as `vadd` and `vmul` that will
 ignore `@fastmath`, preserving IEEE semantics both within `@avx` and `@fastmath`.
 `check_args` currently returns false for some wrapper types like `LinearAlgebra.UpperTriangular`, requiring you to
 use their `parent`. Triangular loops aren't yet supported.

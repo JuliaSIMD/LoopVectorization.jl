@@ -10,14 +10,16 @@ function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{<:AbstractUnitRange})
     pushpreamble!(ls, loopiteratesatleastonce(loop))
     loop
 end
-function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{StaticUpperUnitRange{U}}) where {U}
+
+
+function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{OptionallyStaticUnitRange{I, Static{U}}}) where {I<:Integer, U}
     start = gensym(String(sym)*"_loopstart")
     pushpreamble!(ls, Expr(:(=), start, Expr(:(.), ex, QuoteNode(:L))))
     loop = Loop(sym, U - 1024, U, start, Symbol(""), false, true)::Loop
     pushpreamble!(ls, loopiteratesatleastonce(loop))
     loop
 end
-function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{StaticLowerUnitRange{L}}) where {L}
+function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{OptionallyStaticUnitRange{Static{L}, I}}) where {I <: Integer, L}
     stop = gensym(String(sym)*"_loopstop")
     pushpreamble!(ls, Expr(:(=), stop, Expr(:(.), ex, QuoteNode(:U))))
     loop = Loop(sym, L, L + 1024, Symbol(""), stop, true, false)::Loop
@@ -31,7 +33,7 @@ end
 #     pushpreamble!(ls, Expr(:(=), stop, Expr(:call, :(+), start, N - 1)))
 #     Loop(gensym(:n), 0, N, start, stop, false, false)::Loop
 # end
-function Loop(::LoopSet, ::Expr, sym::Symbol, ::Type{StaticUnitRange{L,U}}) where {L,U}
+function Loop(::LoopSet, ::Expr, sym::Symbol, ::Type{OptionallyStaticUnitRange{Static{L}, Static{U}}}) where {L,U}
     Loop(sym, L, U, Symbol(""), Symbol(""), true, true)::Loop
 end
 
@@ -118,82 +120,45 @@ function extract_varg(i)
     sptr = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, :vargs, i))
     Base.libllvm_version ≥ v"10" ? Expr(:call, lv(:noalias!), sptr) : sptr
 end
-
-pushvarg!(ls::LoopSet, ar::ArrayReferenceMeta, i, name) = pushpreamble!(ls, Expr(:(=), name, extract_varg(i)))
-function add_mref!(
-    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name
-) where {T, N, S <: AbstractColumnMajorStridedPointer{T,N}}
-    pushvarg!(ls, ar, i, name)
+# _extract(::Type{Static{N}}) where {N} = N
+function pushvarg!(ls::LoopSet, ar::ArrayReferenceMeta, i, name)
+    pushpreamble!(ls, Expr(:(=), name, Expr(:call, :(VectorizationBase.zero_offsets), extract_varg(i))))
 end
 function add_mref!(
-    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name
-) where {T, N, S <: AbstractRowMajorStridedPointer{T, N}}
-    reverse!(ar.loopedindex); reverse!(getindices(ar)); reverse!(ar.ref.offsets); # reverse the listed indices here, and transpose it to make it column major
-    pushpreamble!(ls, Expr(:(=), name, Expr(:call, lv(:transpose), extract_varg(i))))
-end
-function add_mref!(
-    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name
-) where {S1, S2, T, P, S <: VectorizationBase.PermutedDimsStridedPointer{S1,S2,T,P}}
-    gensymname = gensym(name)
-    li = ar.loopedindex; inds = getindices(ar); offsets = ar.ref.offsets
-    lib = copy(li); indsb = copy(inds); offsetsb = copy(offsets);
-    for i ∈ eachindex(li, inds)
-        li[i] = lib[S2[i]]
-        inds[i] = indsb[S2[i]]
-        offsets[i] = offsetsb[S2[i]]
+    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, @nospecialize(_::Type{S}), name
+) where {T, N, C, B, R, X, O, S <: StridedPointer{T,N,C,B,R,X,O}}
+    @assert B ≤ 0 "Batched arrays not supported yet."
+    sp = ArrayInterface.rank_to_sortperm(R)
+    # maybe no change needed? -- optimize common case
+    column_major = ntuple(identity, N)
+    if sp === column_major
+        return pushvarg!(ls, ar, i, name)
     end
-    add_mref!(ls, ar, i, P, gensymname)
-    pushpreamble!(ls, Expr(:(=), name, Expr(:(.), gensymname, QuoteNode(:ptr))))
-end
-function add_mref!(
-    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{OffsetStridedPointer{T,N,P}}, name
-) where {T,N,P}
-    add_mref!(ls, ar, i, P, name)
-end
-function add_mref!(
-    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{VectorizationBase.ZeroInitializedStridedPointer{T,P}}, name
-) where {T,P}
-    add_mref!(ls, ar, i, P, name)
-end
-function add_mref!(
-    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name
-) where {T, X <: Tuple, S <: AbstractStaticStridedPointer{T,X}}
     li = ar.loopedindex; lic = copy(li);
     inds = getindices(ar); indsc = copy(inds); 
     offsets = ar.ref.offsets; offsetsc = copy(offsets);
-    Xv = Int[]; foreach(x -> push!(Xv, x), X.parameters)
-    sp = sortperm(Xv)
-    Xperm = Expr(:curly, :Tuple)
-    for (i,p) ∈ enumerate(sp)
+
+    # must now sort array's inds, and stack pointer's
+    tmpsp = gensym(name)
+    pushvarg!(ls, ar, i, tempsp)
+    # pushpreamble!(ls, 
+    strd = Expr(:tuple)
+    offsets = Expr(:tuple)
+    for (i, p) ∈ enumerate(sp)
         li[i] = lic[p]
         inds[i] = indsc[p]
         offsets[i] = offsetsc[p]
-        push!(Xperm.args, Xv[p])
+        push!(strd.args, :($tempsp.strd[$p]))
+        push!(offsets.args, :(Zero()))
+        # push!(offsets.args, :(tempsp.offsets[$p]))
     end
-    isone(Xv[first(sp)]) || makediscontiguous!(getindices(ar))
-    ginds = Expr(:tuple); foreach(_ -> push!(ginds.args, Expr(:call, lv(:Zero))), eachindex(li))
-    sptr = if S <: VectorizationBase.StaticStridedPointer
-        Expr(:call, Expr(:curly, lv(:StaticStridedPointer), T, Xperm), Expr(:call, lv(:gep), extract_varg(i), ginds))
-    elseif S <: VectorizationBase.StaticStridedBitPointer
-        Expr(:call, Expr(:curly, lv(:StaticStridedBitPointer), Xperm), Expr(:call, lv(:gep), extract_varg(i), ginds))
-    else
-        throw("AbstractStaticStridedPointer type $S not recognized.")
-    end
+    C == -1 && makediscontiguous!(getindices(ar))
+    sptype = Expr(:curly, lv(:StridedPointer), T, N, (C == -1 ? -1 : 1), 1, column_major)
+    sptr = Expr(:call, sptype, Expr(:call, :pointer, tempsp), strd, offsets)
     pushpreamble!(ls, Expr(:(=), name, sptr))
 end
-function add_mref!(
-    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{S}, name
-) where {T, N, S <: AbstractSparseStridedPointer{T, N}}
-    pushvarg!(ls, ar, i, name)
-    makediscontiguous!(getindices(ar))
-end
-function add_mref!(
-    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{VectorizationBase.MappedStridedPointer{F,T,P}}, name
-) where {F,T,P}
-    add_mref!(ls, ar, i, P, name)
-end
 function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{<:AbstractRange{T}}, name) where {T}
-    pushvarg!(ls, ar, i, name)
+    pushpreamble!(ls, Expr(:(=), name, extract_varg(i)))
 end
 function create_mrefs!(
     ls::LoopSet, arf::Vector{ArrayRefStruct}, as::Vector{Symbol}, os::Vector{Symbol},
@@ -404,7 +369,7 @@ function add_ops!(
 end
 
 # elbytes(::VectorizationBase.AbstractPointer{T}) where {T} = sizeof(T)::Int
-typeeltype(::Type{P}) where {T,P<:VectorizationBase.AbstractPointer{T}} = T
+typeeltype(::Type{P}) where {T,P<:VectorizationBase.AbstractStridedPointer{T}} = T
 typeeltype(::Type{<:AbstractRange{T}}) where {T} = T
 # typeeltype(::Any) = Int8
 
