@@ -106,9 +106,9 @@ function vec_looprange(loopmax, UF::Int, mangledname::Symbol, ptrcomp::Bool)
 end
 function vec_looprange(loopmax, UF::Int, mangledname, W)
     incr = if isone(UF)
-        Expr(:call, lv(:valsub), W, 1)
+        Expr(:call, lv(:vsub), W, :(Static{1}()))
     else
-        Expr(:call, lv(:valmulsub), W, UF, 1)
+        Expr(:call, lv(:vsub), Expr(:call, lv(:vmul), W, UF), :(Static{1}()))
     end
     compexpr = subexpr(loopmax, incr)
     Expr(:call, :<, mangledname, compexpr)
@@ -140,9 +140,9 @@ end
 function incrementloopcounter(us::UnrollSpecification, n::Int, mangledname::Symbol, UF::Int = unrollfactor(us, n))
     if isvectorized(us, n)
         if isone(UF)
-            Expr(:(=), mangledname, Expr(:call, lv(:valadd), VECTORWIDTHSYMBOL, mangledname))
+            Expr(:(=), mangledname, Expr(:call, lv(:vadd), VECTORWIDTHSYMBOL, mangledname))
         else
-            Expr(:(=), mangledname, Expr(:call, lv(:valmuladd), VECTORWIDTHSYMBOL, UF, mangledname))
+            Expr(:(=), mangledname, Expr(:call, lv(:vadd), Expr(:call, lv(:vmul), VECTORWIDTHSYMBOL, :(Static{$UF}())), mangledname))
         end
     else
         Expr(:(=), mangledname, Expr(:call, lv(:vadd), mangledname, UF))
@@ -153,7 +153,7 @@ function incrementloopcounter!(q, us::UnrollSpecification, n::Int, UF::Int = unr
         if isone(UF)
             push!(q.args, Expr(:call, lv(:Static), VECTORWIDTHSYMBOL))
         else
-            push!(q.args, Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, Expr(:call, Expr(:curly, lv(:Static), UF))))
+            push!(q.args, Expr(:call, lv(:vmul), VECTORWIDTHSYMBOL, Expr(:call, Expr(:curly, lv(:Static), UF))))
         end
     else
         push!(q.args, Expr(:call, Expr(:curly, lv(:Static), UF)))

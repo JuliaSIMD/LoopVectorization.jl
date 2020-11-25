@@ -64,7 +64,7 @@ function _vmapreduce(f::F, op::OP, ::Val{W}, N, ::Type{T}, args::Vararg{DenseArr
     end
     if i < N
         m = mask(T, N & (W - 1))
-        a_0 = vifelse(m, op(a_0, f(vload.(Val{W}(), gep.(ptrargs, i))...)), a_0)
+        a_0 = ifelse(m, op(a_0, f(vload.(Val{W}(), gep.(ptrargs, i))...)), a_0)
     end
     vreduce(op, a_0)
 end

@@ -187,12 +187,12 @@ function pointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvec
                 push!(index.args, stophint)
             elseif isvectorized
                 if isone(sub)
-                    push!(index.args, Expr(:call, lv(:valsub), stophint, VECTORWIDTHSYMBOL))
+                    push!(index.args, Expr(:call, lv(:vsub), staticexpr(stophint), VECTORWIDTHSYMBOL))
                 else
-                    push!(index.args, Expr(:call, lv(:vsub), stophint, Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, sub)))
+                    push!(index.args, Expr(:call, lv(:vsub), staticexpr(stophint), Expr(:call, lv(:vmul), VECTORWIDTHSYMBOL, staticexpr(sub))))
                 end
             else
-                push!(index.args, stophint - sub)
+                push!(index.args, staticexpr(stophint - sub))
             end
             ptr = vptr(ar)
             return Expr(:call, lv(:pointerforcomparison), ptr, index)

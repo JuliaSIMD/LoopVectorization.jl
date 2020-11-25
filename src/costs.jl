@@ -138,9 +138,9 @@ const COST = Dict{Symbol,InstructionCost}(
     # :vfdiv => InstructionCost(13,4.0,-2.0),
     # :vfdiv! => InstructionCost(13,4.0,-2.0),
     :div_fast => InstructionCost(13,4.0,-2.0),
-    :evadd => InstructionCost(4,0.5),
-    :evsub => InstructionCost(4,0.5),
-    :evmul => InstructionCost(4,0.5),
+    # :evadd => InstructionCost(4,0.5),
+    # :evsub => InstructionCost(4,0.5),
+    # :evmul => InstructionCost(4,0.5),
     # :evfdiv => InstructionCost(13,4.0,-2.0),
     :vsum => InstructionCost(6,2.0),
     :vprod => InstructionCost(6,2.0),
@@ -293,9 +293,9 @@ const REDUCTION_CLASS = Dict{Symbol,Float64}(
     # :vsub! => ADDITIVE_IN_REDUCTIONS,
     :vmul => MULTIPLICATIVE_IN_REDUCTIONS,
     # :vmul! => MULTIPLICATIVE_IN_REDUCTIONS,
-    :evadd => ADDITIVE_IN_REDUCTIONS,
-    :evsub => ADDITIVE_IN_REDUCTIONS,
-    :evmul => MULTIPLICATIVE_IN_REDUCTIONS,
+    # :evadd => ADDITIVE_IN_REDUCTIONS,
+    # :evsub => ADDITIVE_IN_REDUCTIONS,
+    # :evmul => MULTIPLICATIVE_IN_REDUCTIONS,
     :& => ALL,
     :| => ANY,
     :muladd => ADDITIVE_IN_REDUCTIONS,
@@ -329,7 +329,7 @@ reduction_instruction_class(instr::Symbol) = get(REDUCTION_CLASS, instr, NaN)
 reduction_instruction_class(instr::Instruction) = reduction_instruction_class(instr.instr)
 function reduction_to_single_vector(x::Float64)
     # x == 1.0 ? :evadd : x == 2.0 ? :evmul : x == 3.0 ? :vor : x == 4.0 ? :vand : x == 5.0 ? :max : x == 6.0 ? :min : throw("Reduction not found.")
-    x == ADDITIVE_IN_REDUCTIONS ? :evadd : x == MULTIPLICATIVE_IN_REDUCTIONS ? :evmul : x == MAX ? :max : x == MIN ? :min : throw("Reduction not found.")
+    x == ADDITIVE_IN_REDUCTIONS ? :vadd : x == MULTIPLICATIVE_IN_REDUCTIONS ? :vmul : x == MAX ? :max : x == MIN ? :min : throw("Reduction not found.")
 end
 reduction_to_single_vector(x) = reduction_to_single_vector(reduction_instruction_class(x))
 # function reduction_to_scalar(x::Float64)

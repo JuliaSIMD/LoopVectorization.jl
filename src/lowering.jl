@@ -106,7 +106,7 @@ function lower_block(
                     # if t == 0
                     #     push!(blockq.args, Expr(:(=), u₂loop, tiledsym(u₂loop)))
                     # elseif u₂loopnum == vectorizedloopnum
-                    #     push!(blockq.args, Expr(:(=), u₂loop, Expr(:call, lv(:valadd), VECTORWIDTHSYMBOL, u₂loop)))
+                    #     push!(blockq.args, Expr(:(=), u₂loop, Expr(:call, lv(:vadd), VECTORWIDTHSYMBOL, staticexpr(u₂loop))))
                     # else
                     #     push!(blockq.args, Expr(:+=, u₂loop, 1))
                     # end
@@ -456,9 +456,9 @@ function loopvarremcomparison(loop::Loop, UFt::Int, nisvectorized::Bool, remfirs
     loopsym = loop.itersymbol
     if nisvectorized
         itercount = if loop.stopexact
-            Expr(:call, lv(:vsub), loop.stophint - 1, Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, UFt))
+            Expr(:call, lv(:vsub), loop.stophint - 1, Expr(:call, lv(:vmul), VECTORWIDTHSYMBOL, UFt))
         else
-            Expr(:call, lv(:vsub), loop.stopsym, Expr(:call, lv(:valmuladd), VECTORWIDTHSYMBOL, UFt, 1))
+            Expr(:call, lv(:vsub), loop.stopsym, Expr(:call, lv(:vadd), Expr(:call, lv(:vmul), VECTORWIDTHSYMBOL, UFt), :(Static{1}())))
         end
         Expr(:call, :>, loopsym, itercount)
     elseif remfirst
@@ -516,7 +516,7 @@ function add_upper_outer_reductions(ls::LoopSet, loopq::Expr, Ulow::Int, Uhigh::
     initialize_outer_reductions!(ifq, ls, Ulow, Uhigh, vectorized)
     push!(ifq.args, loopq)
     reduce_range!(ifq, ls, Ulow, Uhigh)
-    loopbuffer = Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, Uhigh)
+    loopbuffer = Expr(:call, lv(:vmul), VECTORWIDTHSYMBOL, Uhigh)
     comparison = if isstaticloop(unrolledloop)
         Expr(:call, lv(:scalar_less), length(unrolledloop), loopbuffer)
     elseif unrolledloop.startexact

@@ -131,7 +131,7 @@ julia> LoopVectorization.operations(lsAmulB)
  C[m, n] = var"##RHS#253"
  var"##tempload#255" = A[m, k]
  var"##tempload#256" = B[k, n]
- var"##RHS#253" = LoopVectorization.vfmadd_fast(var"##tempload#255", var"##tempload#256", var"##RHS#253")
+ var"##RHS#253" = LoopVectorization.vfmadd(var"##tempload#255", var"##tempload#256", var"##RHS#253")
  var"##RHS#253" = LoopVectorization.identity(var"##RHS#253")
 ```
 Each one of these lines is a pretty-printed `Operation`.

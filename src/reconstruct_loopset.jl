@@ -14,14 +14,14 @@ end
 
 function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{OptionallyStaticUnitRange{I, Static{U}}}) where {I<:Integer, U}
     start = gensym(String(sym)*"_loopstart")
-    pushpreamble!(ls, Expr(:(=), start, Expr(:(.), ex, QuoteNode(:L))))
+    pushpreamble!(ls, Expr(:(=), start, Expr(:call, :first, ex)))
     loop = Loop(sym, U - 1024, U, start, Symbol(""), false, true)::Loop
     pushpreamble!(ls, loopiteratesatleastonce(loop))
     loop
 end
 function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{OptionallyStaticUnitRange{Static{L}, I}}) where {I <: Integer, L}
     stop = gensym(String(sym)*"_loopstop")
-    pushpreamble!(ls, Expr(:(=), stop, Expr(:(.), ex, QuoteNode(:U))))
+    pushpreamble!(ls, Expr(:(=), stop, Expr(:call, :last, ex)))
     loop = Loop(sym, L, L + 1024, Symbol(""), stop, true, false)::Loop
     pushpreamble!(ls, loopiteratesatleastonce(loop))
     loop
@@ -118,7 +118,8 @@ end
 # extract_varg(i) = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, :vargs, i))
 function extract_varg(i)
     sptr = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, :vargs, i))
-    Base.libllvm_version ≥ v"10" ? Expr(:call, lv(:noalias!), sptr) : sptr
+    # Base.libllvm_version ≥ v"10" ? Expr(:call, lv(:noalias!), sptr) : sptr
+    sptr
 end
 # _extract(::Type{Static{N}}) where {N} = N
 function pushvarg!(ls::LoopSet, ar::ArrayReferenceMeta, i, name)

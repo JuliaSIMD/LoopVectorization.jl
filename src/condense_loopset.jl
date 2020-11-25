@@ -313,7 +313,7 @@ function setup_call_inline(ls::LoopSet, inline::Int8 = zero(Int8), U::Int8 = zer
         instr = instruction(op)
         out = Symbol(mvar, 0)
         push!(outer_reducts.args, out)
-        push!(q.args, Expr(:(=), var, Expr(:call, lv(reduction_scalar_combine(instr)), out, var)))
+        push!(q.args, Expr(:(=), var, Expr(:call, lv(reduction_scalar_combine(instr)), Expr(:call, lv(:Vec), out), var)))
     end
     pushpreamble!(ls, outer_reducts)
     append!(ls.preamble.args, q.args)

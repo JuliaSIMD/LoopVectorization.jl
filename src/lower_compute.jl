@@ -97,12 +97,12 @@ end
 function add_loopvalue!(instrcall::Expr, loopval::Symbol, vectorized::Symbol, u::Int)
     if loopval === vectorized
         if isone(u)
-            push!(instrcall.args, Expr(:call, lv(:valadd), VECTORWIDTHSYMBOL, _MMind(Expr(:call, lv(:staticp1), loopval))))
+            push!(instrcall.args, Expr(:call, lv(:vadd), VECTORWIDTHSYMBOL, _MMind(Expr(:call, lv(:staticp1), loopval))))
         else
-            push!(instrcall.args, Expr(:call, lv(:valmuladd), VECTORWIDTHSYMBOL, u, _MMind(Expr(:call, lv(:staticp1), loopval))))
+            push!(instrcall.args, Expr(:call, lv(:vadd), Expr(:call, lv(:vmul), VECTORWIDTHSYMBOL, u), _MMind(Expr(:call, lv(:staticp1), loopval))))
         end
     else
-        push!(instrcall.args, Expr(:call, lv(:vadd), loopval, u + 1))
+        push!(instrcall.args, Expr(:call, lv(:vadd), loopval, Expr(:call, Expr(:curly, :Static, u + 1))))
     end
 end
 function add_loopvalue!(instrcall::Expr, loopval, ua::UnrollArgs, u::Int)
@@ -246,10 +246,10 @@ function lower_compute!(
         end
         if maskreduct && (u == Uiter || u₁loopsym !== vectorized) # only mask last
             if last(instrcall.args) == varsym
-                pushfirst!(instrcall.args, lv(:vifelse))
+                pushfirst!(instrcall.args, lv(:ifelse))
                 insert!(instrcall.args, 3, mask)
             elseif all(in(loopdependencies(op)), reduceddeps) || any(opp -> mangledvar(opp) === mangledvar(op), parents_op)
-                push!(q.args, Expr(:(=), varsym, Expr(:call, lv(:vifelse), mask, instrcall, varsym)))
+                push!(q.args, Expr(:(=), varsym, Expr(:call, lv(:ifelse), mask, instrcall, varsym)))
                 continue
             end
         end

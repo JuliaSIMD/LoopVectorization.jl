@@ -9,12 +9,14 @@ using VectorizationBase: REGISTER_SIZE, REGISTER_COUNT, data,
     mask, pick_vector_width_val, MM,
     maybestaticlength, maybestaticsize, staticm1, staticp1, staticmul, vzero,
     Zero, maybestaticrange, offsetprecalc,
-    maybestaticfirst, maybestaticlast, scalar_less, gep, gesp, pointerforcomparison, NativeTypes, staticmul,
-    relu, stridedpointer, StridedPointer
+    maybestaticfirst, maybestaticlast, scalar_less, gep, gesp, pointerforcomparison, NativeTypes,
+    vfmadd, vfmsub, vfnmadd, vfnmsub, vfmadd231, vfmsub231, vfnmadd231, vfnmsub231, vadd, vsub, vmul,
+    relu, stridedpointer, StridedPointer,
+    reduced_add, reduced_prod, reduce_to_add, reduce_to_prod, reduced_max, reduced_min, reduce_to_max, reduce_to_min
+
 using IfElse: ifelse
 
-const Static = StaticInt
-# missing: subsetview, stridedpointer_for_broadcast, unwrap, StaticUnitRange, stridedpointers, noalias!, gepbyte, 
+# missing: stridedpointer_for_broadcast, noalias!, gepbyte, 
 # using SIMDPirates: VECTOR_SYMBOLS, evadd, evsub, evmul, evfdiv, vrange, 
 #     reduced_add, reduced_prod, reduce_to_add, reduced_max, reduced_min, vsum, vprod, vmaximum, vminimum,
 #     sizeequivalentfloat, sizeequivalentint, vadd!, vsub!, vmul!, vfdiv!, vfmadd!, vfnmadd!, vfmsub!, vfnmsub!,
