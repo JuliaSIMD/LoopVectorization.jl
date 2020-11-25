@@ -38,6 +38,8 @@ export LowDimArray, stridedpointer,
     vmap, vmap!, vmapt, vmapt!, vmapnt, vmapnt!, vmapntt, vmapntt!,
     vfilter, vfilter!, vmapreduce, vreduce
 
+@inline unwrap(::Val{N}) where {N} = N
+@inline unwrap(::Static{N}) where {N} = N
 
 const VECTORWIDTHSYMBOL, ELTYPESYMBOL = Symbol("##Wvecwidth##"), Symbol("##Tloopeltype##")
 

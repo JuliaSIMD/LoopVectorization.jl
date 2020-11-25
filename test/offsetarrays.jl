@@ -1,5 +1,5 @@
-using LoopVectorization, OffsetArrays, Test
-using LoopVectorization.VectorizationBase: StaticUnitRange
+using LoopVectorization, ArrayInterface, OffsetArrays, Test
+using LoopVectorization: Static
 # T = Float64
 # T = Float32
 
@@ -91,17 +91,25 @@ using LoopVectorization.VectorizationBase: StaticUnitRange
         data::Matrix{T}
     end
     Base.size(::SizedOffsetMatrix{<:Any,LR,UR,LC,UC}) where {LR,UR,LC,UC} = (UR-LR+1,UC-LC+1)
-    Base.axes(::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (StaticUnitRange{LR,UR}(),StaticUnitRange{LC,UC}())
+    Base.axes(::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (Static{LR}():Static{UR}(),Static{LC}():Static{UC}())
     Base.parent(A::SizedOffsetMatrix) = A.data
-    @generated function LoopVectorization.stridedpointer(A::SizedOffsetMatrix{T,LR,UR,LC,RC}) where {T,LR,UR,LC,RC}
-        quote
-            $(Expr(:meta,:inline))
-            LoopVectorization.OffsetStridedPointer(
-                LoopVectorization.StaticStridedPointer{$T,Tuple{1,$(UR-LR+1)}}(pointer(parent(A))),
-                ($(LR-1), $(LC-1))
-            )
-        end
+    Base.unsafe_convert(::Type{Ptr{T}}, A::SizedOffsetMatrix{T}) where {T} = pointer(A.data)
+    ArrayInterface.contiguous_axis(A::SizedOffsetMatrix) = ArrayInterface.Contiguous{1}()
+    ArrayInterface.contiguous_batch_size(A::SizedOffsetMatrix) = ArrayInterface.ContiguousBatch{0}()
+    ArrayInterface.stride_rank(A::SizedOffsetMatrix) = ArrayInterface.StrideRank{(1,2)}()
+    function ArrayInterface.strides(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC}
+        (Static{1}(), (Static{UR}() - Static{LR}() + Static{1}()))
     end
+    ArrayInterface.offsets(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (Static{LR}(), Static{LC}())
+    # @generated function LoopVectorization.stridedpointer(A::SizedOffsetMatrix{T,LR,UR,LC,RC}) where {T,LR,UR,LC,RC}
+    #     quote
+    #         $(Expr(:meta,:inline))
+    #         LoopVectorization.OffsetStridedPointer(
+    #             LoopVectorization.StaticStridedPointer{$T,Tuple{1,$(UR-LR+1)}}(pointer(parent(A))),
+    #             ($(LR-1), $(LC-1))
+    #         )
+    #     end
+    # end
     # Base.size(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (1 + UR-LR, 1 + UC-LC)
     # Base.CartesianIndices(::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = CartesianIndices((LR:UR,LC:UC))
     Base.getindex(A::SizedOffsetMatrix, i, j) = LoopVectorization.vload(LoopVectorization.stridedpointer(A), (i-1,j-1))
