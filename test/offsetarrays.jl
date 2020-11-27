@@ -1,9 +1,9 @@
 using LoopVectorization, ArrayInterface, OffsetArrays, Test
 using LoopVectorization: Static
-# T = Float64
-# T = Float32
+T = Float64; r = -1:1;
+# T = Float32; r = -1:1;
 
-@testset "OffsetArrays" begin
+# @testset "OffsetArrays" begin
 
      function old2d!(out::AbstractMatrix, A::AbstractMatrix, kern)
         rng1k, rng2k = axes(kern)
@@ -94,9 +94,9 @@ using LoopVectorization: Static
     Base.axes(::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (Static{LR}():Static{UR}(),Static{LC}():Static{UC}())
     Base.parent(A::SizedOffsetMatrix) = A.data
     Base.unsafe_convert(::Type{Ptr{T}}, A::SizedOffsetMatrix{T}) where {T} = pointer(A.data)
-    ArrayInterface.contiguous_axis(A::SizedOffsetMatrix) = ArrayInterface.Contiguous{1}()
-    ArrayInterface.contiguous_batch_size(A::SizedOffsetMatrix) = ArrayInterface.ContiguousBatch{0}()
-    ArrayInterface.stride_rank(A::SizedOffsetMatrix) = ArrayInterface.StrideRank{(1,2)}()
+    ArrayInterface.contiguous_axis(::Type{<:SizedOffsetMatrix}) = ArrayInterface.Contiguous{1}()
+    ArrayInterface.contiguous_batch_size(::Type{<:SizedOffsetMatrix}) = ArrayInterface.ContiguousBatch{0}()
+    ArrayInterface.stride_rank(::Type{<:SizedOffsetMatrix}) = ArrayInterface.StrideRank{(1,2)}()
     function ArrayInterface.strides(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC}
         (Static{1}(), (Static{UR}() - Static{LR}() + Static{1}()))
     end
@@ -112,7 +112,7 @@ using LoopVectorization: Static
     # end
     # Base.size(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (1 + UR-LR, 1 + UC-LC)
     # Base.CartesianIndices(::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = CartesianIndices((LR:UR,LC:UC))
-    Base.getindex(A::SizedOffsetMatrix, i, j) = LoopVectorization.vload(LoopVectorization.stridedpointer(A), (i-1,j-1))
+    Base.getindex(A::SizedOffsetMatrix, i, j) = LoopVectorization.vload(LoopVectorization.stridedpointer(A), (i,j))
     function avx2dunrolled!(out::AbstractMatrix, A::AbstractMatrix, kern::SizedOffsetMatrix{T,-1,1,-1,1}) where {T}
         rng1,  rng2  = axes(out)
         Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> kern_ik_jk = kern[ik-2,jk-2]
@@ -208,15 +208,15 @@ using LoopVectorization: Static
         out
     end
 
-    for T ∈ (Float32, Float64)
+    # for T ∈ (Float32, Float64)
         @show T, @__LINE__
         Abase = fill(T(NaN), 200, 200);
         # out of bounds reads load NaNs, poisoning results leading to test failure.
-        A = view(Abase, 51:150, 51:150);
+        A = view(Abase, 51:152, 51:152);
         A .= rand.();
         Atbase = copy(Abase');
-        At = view(Atbase, 51:150, 51:150);
-        for r ∈ (-1:1, -2:2)
+        At = view(Atbase, 51:152, 51:152);
+        # for r ∈ (-1:1, -2:2)
             @show r
             fr = first(r); lr = last(r);
             kern = OffsetArray(rand(T, length(r), length(r)), r, r);

@@ -36,9 +36,6 @@ using ArrayInterface
 using ArrayInterface: OptionallyStaticUnitRange, Zero
 const Static = ArrayInterface.StaticInt
 
-# TODO: this is type piracy; move this elsewhere!
-VectorizationBase.memory_reference(A::OffsetArray) = VectorizationBase.memory_reference(parent(A))
-# ArrayInterface.parent_type(::Type{O}) where {T,N,A<:AbstractArray{T,N},O<:OffsetArray{T,N,A}} = A
 
 
 export LowDimArray, stridedpointer,
