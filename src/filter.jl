@@ -6,20 +6,21 @@ if (Base.libllvm_version ≥ v"7" && VectorizationBase.AVX512F) || Base.libllvm_
         Nrep = N >>> Wshift
         Nrem = N & (W - 1)
         j = 0
+        st = VectorizationBase.static_sizeof(T)
         GC.@preserve x y begin
             ptr_x = pointer(x)
             ptr_y = pointer(y)
             for _ ∈ 1:Nrep
-                vy = vload(Vec{W,T}, ptr_y)
-                mask = f(Vec(vy))
-                VectorizationBase.compressstore!(gep(ptr_x, j), vy, mask)
-                ptr_y = gepbyte(ptr_y, VectorizationBase.REGISTER_SIZE)
+                vy = vload(ptr_y, MM{W}(Static(0), st))
+                mask = f(vy)
+                VectorizationBase.compressstore!(gep(ptr_x, VectorizationBase.lazymul(st, j)), vy, mask)
+                ptr_y = gep(ptr_y, VectorizationBase.REGISTER_SIZE)
                 j = vadd(j, count_ones(mask))
             end
             rem_mask = VectorizationBase.mask(T, Nrem)
-            vy = vload(Vec{W,T}, ptr_y, rem_mask)
-            mask = rem_mask & f(Vec(vy))
-            VectorizationBase.compressstore!(gep(ptr_x, j), vy, mask)
+            vy = vload(ptr_y, MM{W}(Static(0), st), rem_mask)
+            mask = rem_mask & f(vy)
+            VectorizationBase.compressstore!(gep(ptr_x, VectorizationBase.lazymul(st, j)), vy, mask)
             j = vadd(j, count_ones(mask))
             Base._deleteend!(x, N-j) # resize!(x, j)
         end

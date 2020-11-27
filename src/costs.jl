@@ -152,7 +152,7 @@ const COST = Dict{Symbol,InstructionCost}(
     :reduce_to_prod => InstructionCost(0,0.0,0.0,0),
     :abs => InstructionCost(1, 0.5),
     :abs2 => InstructionCost(4,0.5),
-    :vabs2 => InstructionCost(4,0.5),
+    # :vabs2 => InstructionCost(4,0.5),
     :(==) => InstructionCost(1, 0.5),
     :(!=) => InstructionCost(1, 0.5),
     :(isnan) => InstructionCost(1, 0.5),

@@ -1,3 +1,34 @@
+
+@inline stridedpointer_for_broadcast(A) = stridedpointer_for_broadcast(ArrayInterface.size(A), stridedpointer(A))
+@inline stridedpointer_for_broadcast(s, ptr) = ptr
+function stridedpointer_for_broadcast(s, ptr::VectorizationBase.AbstractStridedPointer)
+     # FIXME: this is unsafe for AbstractStridedPointers
+    throw("Broadcasting not currently supported for arrays where typeof(stridedpointer(A)) === $(typeof(ptr))")
+end
+@generated function stridedpointer_for_broadcast(s::Tuple{Vararg{Any,N}}, ptr::StridedPointer{T,N,C,B,R,X,O}) where {T,N,C,B,R,X,O}
+    q = Expr(:block, Expr(:meta,:inline), :(strd = ptr.strd))
+    strd_tup = Expr(:tuple)
+    for n ∈ 1:N
+        s_type = s.parameters[n]
+        if s_type <: Static
+            if s_type === Static{1}
+                push!(strd_tup.args, Expr(:call, lv(:Zero)))
+            else
+                push!(strd_tup.args, :(strd[$n]))
+            end
+        else
+            Xₙ_type = X.parameters[n]
+            if Xₙ_type <: Static # FIXME; what to do here? Dynamic dispatch? 
+                push!(strd_tup.args, :(strd[$n]))
+            else
+                push!(strd_tup.args, :(Base.ifelse(isone(s[$n]), one($Xₙ_type), strd[$n])))
+            end
+        end
+    end
+    push!(q.args, :(@inbounds StridedPointer{$T,$N,$C,$B,$R}(ptr.p, $strd_tup, ptr.offsets)))
+    q
+end
+
 struct Product{A,B}
     a::A
     b::B
@@ -114,25 +145,44 @@ end
 struct LowDimArray{D,T,N,A<:DenseArray{T,N}} <: DenseArray{T,N}
     data::A
 end
-@inline Base.pointer(A::LowDimArray) = pointer(A.data)
 Base.@propagate_inbounds Base.getindex(A::LowDimArray, i...) = getindex(A.data, i...)
 @inline Base.size(A::LowDimArray) = Base.size(A.data)
 @inline Base.size(A::LowDimArray, i) = Base.size(A.data, i)
-@generated function VectorizationBase.stridedpointer(A::LowDimArray{D,T,N}) where {D,T,N}
-    smul = Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:VectorizationBase)), QuoteNode(:staticmul))
-    multup = Expr(:tuple)
-    for n ∈ D[1]+1:N
-        if length(D) < n
-            push!(multup.args, Expr(:call, :ifelse, :(isone(size(A,$n))), 0, Expr(:ref, :strideA, n)))
-        elseif D[n]
-            push!(multup.args, Expr(:ref, :strideA, n))
+@inline Base.strides(A::LowDimArray) = strides(A.data)
+@inline ArrayInterface.strides(A::LowDimArray) = ArrayInterface.strides(A.data)
+@generated function ArrayInterface.size(A::LowDimArray{D,T,N}) where {D,T,N}
+    t = Expr(:tuple)
+    for n ∈ 1:N
+        if D[n]
+            push!(t.args, Expr(:ref, :s, n))
+        else
+            push!(t.args, Expr(:call, Expr(:curly, lv(:Static), 1)))
         end
     end
-    s = Expr(:call, smul, T, multup)
-    f = D[1] ? :PackedStridedPointer : :SparseStridedPointer
-    Expr(:block, Expr(:meta,:inline), Expr(:(=), :strideA, Expr(:call, :strides, Expr(:(.), :A, QuoteNode(:data)))),
-         Expr(:call, Expr(:(.), :VectorizationBase, QuoteNode(f)), Expr(:call, :pointer, :A), s))
+    Expr(:block, Expr(:meta,:inline), :(s = size(A)), t)
 end
+Base.parent(A::SizedOffsetMatrix) = A.data
+Base.unsafe_convert(::Type{Ptr{T}}, A::LowDimArray{D,T}) where {D,T} = pointer(A.data)
+ArrayInterface.contiguous_axis(A::LowDimArray) = ArrayInterface.contiguous_axis(A.data)
+ArrayInterface.contiguous_batch_size(A::LowDimArray) = ArrayInterface.contiguous_batch_size(A.data)
+ArrayInterface.stride_rank(A::LowDimArray) = ArrayInterface.stride_rank(A.data)
+ArrayInterface.offsets(A::LowDimArray) = ArrayInterface.offsets(A.data)
+
+# @generated function VectorizationBase.stridedpointer(A::LowDimArray{D,T,N}) where {D,T,N}
+#     smul = Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:VectorizationBase)), QuoteNode(:staticmul))
+#     multup = Expr(:tuple)
+#     for n ∈ D[1]+1:N
+#         if length(D) < n
+#             push!(multup.args, Expr(:call, :ifelse, :(isone(size(A,$n))), 0, Expr(:ref, :strideA, n)))
+#         elseif D[n]
+#             push!(multup.args, Expr(:ref, :strideA, n))
+#         end
+#     end
+#     s = Expr(:call, smul, T, multup)
+#     f = D[1] ? :PackedStridedPointer : :SparseStridedPointer
+#     Expr(:block, Expr(:meta,:inline), Expr(:(=), :strideA, Expr(:call, :strides, Expr(:(.), :A, QuoteNode(:data)))),
+#          Expr(:call, Expr(:(.), :VectorizationBase, QuoteNode(f)), Expr(:call, :pointer, :A), s))
+# end
 function LowDimArray{D}(data::A) where {D,T,N,A <: AbstractArray{T,N}}
     LowDimArray{D,T,N,A}(data)
 end

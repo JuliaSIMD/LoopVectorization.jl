@@ -21,11 +21,11 @@ using LoopVectorization: Static
     # out = out1;
     # R=CartesianIndices(out);
     # z=zero(eltype(out));
-    # rng1k, rng2k = axes(skern);
+    # # rng1k, rng2k = axes(skern);
     # rng1,  rng2  = R.indices;
     # tmp = z; i = 2; j = 2;
-    # ls1 = LoopVectorization.@avx_debug for jk in rng2k, ik in rng1k
-    #     tmp += A[i+ik,j+jk]*skern[ik,jk]
+    # ls1 = LoopVectorization.@avx_debug for jk in rng2, ik in rng1
+    #     tmp += A[i+ik,j+jk]*kern[ik,jk]
     # end;
     # ls1
 

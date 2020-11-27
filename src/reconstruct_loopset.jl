@@ -123,7 +123,8 @@ function extract_varg(i)
 end
 # _extract(::Type{Static{N}}) where {N} = N
 function pushvarg!(ls::LoopSet, ar::ArrayReferenceMeta, i, name)
-    pushpreamble!(ls, Expr(:(=), name, Expr(:call, :(VectorizationBase.zero_offsets), extract_varg(i))))
+    # pushpreamble!(ls, Expr(:(=), name, Expr(:call, :(VectorizationBase.zero_offsets), extract_varg(i))))
+    pushpreamble!(ls, Expr(:(=), name, extract_varg(i)))
 end
 function add_mref!(
     ls::LoopSet, ar::ArrayReferenceMeta, i::Int, @nospecialize(_::Type{S}), name
@@ -141,21 +142,21 @@ function add_mref!(
 
     # must now sort array's inds, and stack pointer's
     tmpsp = gensym(name)
-    pushvarg!(ls, ar, i, tempsp)
+    pushvarg!(ls, ar, i, tmpsp)
     # pushpreamble!(ls, 
-    strd = Expr(:tuple)
-    offsets = Expr(:tuple)
+    strd_tup = Expr(:tuple)
+    offsets_tup = Expr(:tuple)
     for (i, p) ∈ enumerate(sp)
         li[i] = lic[p]
         inds[i] = indsc[p]
         offsets[i] = offsetsc[p]
-        push!(strd.args, :($tempsp.strd[$p]))
-        push!(offsets.args, :(Zero()))
-        # push!(offsets.args, :(tempsp.offsets[$p]))
+        push!(strd_tup.args, :($tmpsp.strd[$p]))
+        # push!(offsets_tup.args, Expr(:call, lv(:Zero)))
+        push!(offsets_tup.args, :($tmpsp.offsets[$p]))
     end
     C == -1 && makediscontiguous!(getindices(ar))
     sptype = Expr(:curly, lv(:StridedPointer), T, N, (C == -1 ? -1 : 1), 1, column_major)
-    sptr = Expr(:call, sptype, Expr(:call, :pointer, tempsp), strd, offsets)
+    sptr = Expr(:call, sptype, Expr(:call, :pointer, tmpsp), strd_tup, offsets_tup)
     pushpreamble!(ls, Expr(:(=), name, sptr))
 end
 function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{<:AbstractRange{T}}, name) where {T}

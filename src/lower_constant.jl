@@ -7,6 +7,23 @@ function should_broadcast_op(op::Operation)
     true
 end
 
+
+@inline sizeequivalentfloat(::Type{T}) where {T<:Union{Float16,Float32,Float64}} = T
+@inline sizeequivalentfloat(::Type{T}) where {T <: Union{Int8,UInt8}} = Float32
+@inline sizeequivalentfloat(::Type{T}) where {T <: Union{Int16,UInt16}} = Float16
+@inline sizeequivalentfloat(::Type{T}) where {T <: Union{Int32,UInt32}} = Float32
+@inline sizeequivalentfloat(::Type{T}) where {T <: Union{Int64,UInt64}} = Float64
+@inline sizeequivalentint(::Type{T}) where {T <: Integer} = T
+@inline sizeequivalentint(::Type{Float16}) = Int16
+@inline sizeequivalentint(::Type{Float32}) = Int32
+@inline sizeequivalentfloat(::Type{T}, x) where {T} = sizeequivalentfloat(T)(x)
+@inline sizeequivalentint(::Type{T}, x) where {T} = sizeequivalentint(T)(x)
+if VectorizationBase.AVX512DQ || !((Sys.ARCH === :x86_64) || (Sys.ARCH === :i686))
+    @inline sizeequivalentint(::Type{Float64}) = Int64
+else
+    @inline sizeequivalentint(::Type{Float64}) = Int32
+end
+
 # @inline onefloat(::Type{T}) where {T} = one(sizeequivalentfloat(T))
 # @inline oneinteger(::Type{T}) where {T} = one(sizeequivalentint(T))
 @inline zerofloat(::Type{T}) where {T} = zero(sizeequivalentfloat(T))

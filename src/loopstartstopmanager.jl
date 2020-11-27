@@ -51,6 +51,10 @@ function indices_calculated_by_pointer_offsets(ls::LoopSet, ar::ArrayReferenceMe
     out
 end
 
+@inline onetozeroindexgephack(sptr::AbstractStridedPointer) = gesp(sptr, (Static{-1}(),)) # go backwords 
+@inline onetozeroindexgephack(sptr::AbstractStridedPointer{T,1}) where {T} = sptr
+@inline onetozeroindexgephack(x) = x
+
 """
 Returns a vector of length equal to the number of indices.
 A value > 0 indicates which loop number that index corresponds to when incrementing the pointer.
@@ -82,7 +86,8 @@ function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, alla
         # else
         if (!li[i])
             uliv[i] = 0
-            push!(gespinds.args, Expr(:call, lv(:Zero)))
+            # push!(gespinds.args, Expr(:call, lv(:Zero)))
+            push!(gespinds.args, Expr(:call, Expr(:curly, lv(:Static), 1)))
             push!(offsetprecalc_descript.args, 0)
         elseif isbroadcast ||
             ((isone(ii) && (last(looporder) === ind)) && !(otherindexunrolled(ls, ind, ar)) ||
@@ -92,16 +97,23 @@ function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, alla
 
             # Not doing normal offset indexing
             uliv[i] = -findfirst(isequal(ind), looporder)::Int
-            push!(gespinds.args, Expr(:call, lv(:Zero)))
+            # push!(gespinds.args, Expr(:call, lv(:Zero)))
+            push!(gespinds.args, Expr(:call, Expr(:curly, lv(:Static), 1)))
+            
             push!(offsetprecalc_descript.args, 0) # not doing offset indexing, so push 0
         else
             uliv[i] = findfirst(isequal(ind), looporder)::Int
             loop = getloop(ls, ind)
             if loop.startexact
-                push!(gespinds.args, Expr(:call, Expr(:curly, lv(:Static), loop.starthint - 1)))
+                push!(gespinds.args, Expr(:call, Expr(:curly, lv(:Static), loop.starthint)))
             else
-                push!(gespinds.args, Expr(:call, lv(:staticm1), loop.startsym))
+                push!(gespinds.args, loop.startsym)
             end
+            # if loop.startexact
+            #     push!(gespinds.args, Expr(:call, Expr(:curly, lv(:Static), loop.starthint - 1)))
+            # else
+            #     push!(gespinds.args, Expr(:call, lv(:staticm1), loop.startsym))
+            # end
             if ind === names(ls)[us.vectorizedloopnum]
                 push!(offsetprecalc_descript.args, 0)
             elseif (ind === names(ls)[us.u₁loopnum]) & (us.u₁ > 3)
@@ -115,11 +127,17 @@ function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, alla
             end
         end
     end
-    if use_offsetprecalc
-        push!(q.args, Expr(:(=), vptr(ar), Expr(:call, lv(:offsetprecalc), Expr(:call, lv(:gesp), vptr(ar), gespinds), Expr(:call, Expr(:curly, :Val, offsetprecalc_descript)))))
+    vptr_ar = if isone(length(li))
+        # Workaround for fact that 1-d OffsetArrays are offset when using 1 index, but multi-dim ones are not
+        Expr(:call, lv(:onetozeroindexgephack), vptr(ar))
     else
-        push!(q.args, Expr(:(=), vptr(ar), Expr(:call, lv(:gesp), vptr(ar), gespinds)))
-    end    
+        vptr(ar)
+    end
+    if use_offsetprecalc
+        push!(q.args, Expr(:(=), vptr(ar), Expr(:call, lv(:offsetprecalc), Expr(:call, lv(:gesp), vptr_ar, gespinds), Expr(:call, Expr(:curly, :Val, offsetprecalc_descript)))))
+    else
+        push!(q.args, Expr(:(=), vptr(ar), Expr(:call, lv(:gesp), vptr_ar, gespinds)))
+    end
     uliv
 end
 
@@ -181,8 +199,10 @@ function pointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvec
     # @unpack u₁loopnum, u₂loopnum, vectorizedloopnum, u₁, u₂ = us
     loopsym = names(ls)[n]
     index = Expr(:tuple)
+    found_loop_sym = false
     for i ∈ getindicesonly(ar)
         if i === loopsym
+            found_loop_sym = true
             if iszero(sub)
                 push!(index.args, stophint)
             elseif isvectorized
@@ -195,36 +215,42 @@ function pointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvec
                 push!(index.args, staticexpr(stophint - sub))
             end
             ptr = vptr(ar)
-            return Expr(:call, lv(:pointerforcomparison), ptr, index)
+            # return 
         else
             push!(index.args, Expr(:call, lv(:Zero)))
         end
     end
-    @show ar, loopsym
+    @assert found_loop_sym "Failed to find $loopsym"
+    Expr(:call, lv(:pointerforcomparison), ptr, index)
+    # @show ar, loopsym
 end
 function pointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvectorized::Bool, stopsym)::Expr
     # @unpack u₁loopnum, u₂loopnum, vectorizedloopnum, u₁, u₂ = us
     loopsym = names(ls)[n]
     index = Expr(:tuple)
+    found_loop_sym = false
     for i ∈ getindicesonly(ar)
         if i === loopsym
+            found_loop_sym = true
             if iszero(sub)
                 push!(index.args, stopsym)
             elseif isvectorized
                 if isone(sub)
-                    push!(index.args, Expr(:call, lv(:valsub), stopsym, VECTORWIDTHSYMBOL))
+                    push!(index.args, Expr(:call, lv(:vsub), stopsym, VECTORWIDTHSYMBOL))
                 else
-                    push!(index.args, Expr(:call, lv(:vsub), stopsym, Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, sub)))
+                    push!(index.args, Expr(:call, lv(:vsub), stopsym, Expr(:call, lv(:vmul), VECTORWIDTHSYMBOL, sub)))
                 end
             else
                 push!(index.args, Expr(:call, lv(:vsub), stopsym, sub))
             end
-            return Expr(:call, lv(:pointerforcomparison), vptr(ar), index)
+            # return 
         else
             push!(index.args, Expr(:call, lv(:Zero)))
         end
     end
-    @show ar, loopsym
+    @assert found_loop_sym "Failed to find $loopsym"
+    Expr(:call, lv(:pointerforcomparison), vptr(ar), index)
+    # @show ar, loopsym
 end
 
 function defpointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvectorized::Bool)::Expr
@@ -280,7 +306,7 @@ function offset_ptr(ar::ArrayReferenceMeta, us::UnrollSpecification, loopsym::Sy
         else
             push!(gespinds.args, Expr(:call, lv(:Zero)))
         end
-        ind == loopsym && break
+        # ind == loopsym && break
     end
     Expr(:(=), vptr(ar), Expr(:call, lv(:gesp), vptr(ar), gespinds))
 end

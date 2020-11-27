@@ -544,7 +544,7 @@ function reduce_expr!(q::Expr, ls::LoopSet, U::Int)
         reduce_expr!(q, mvar, instr, U)
         if !iszero(length(ls.opdict))
             if (isu₁unrolled(op) | isu₂unrolled(op))
-                push!(q.args, Expr(:(=), var, Expr(:call, lv(reduction_scalar_combine(instr)), var, Symbol(mvar, 0))))
+                push!(q.args, Expr(:(=), var, Expr(:call, lv(reduction_scalar_combine(instr)), Symbol(mvar, 0), var)))
             else
                 push!(q.args, Expr(:(=), var, mvar))
             end

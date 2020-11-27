@@ -79,8 +79,8 @@ function subset_vptr!(ls::LoopSet, vptr::Symbol, indnum::Int, ind, previndices, 
             append_loop_valdims!(valcall, getloop(ls, loopdep))
         end
     end
-    indm1 = ind isa Integer ? ind - 1 : Expr(:call, :-, ind, 1)
-    pushpreamble!(ls, Expr(:(=), subsetvptr, Expr(:call, lv(:subsetview), vptr, valcall, indm1)))
+    # indm1 = ind isa Integer ? ind - 1 : Expr(:call, :-, ind, 1)
+    pushpreamble!(ls, Expr(:(=), subsetvptr, Expr(:call, lv(:subsetview), vptr, valcall, ind)))
     subsetvptr
 end
 

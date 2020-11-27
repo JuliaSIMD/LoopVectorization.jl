@@ -11,8 +11,9 @@ using VectorizationBase: REGISTER_SIZE, REGISTER_COUNT, data,
     Zero, maybestaticrange, offsetprecalc,
     maybestaticfirst, maybestaticlast, scalar_less, gep, gesp, pointerforcomparison, NativeTypes,
     vfmadd, vfmsub, vfnmadd, vfnmsub, vfmadd231, vfmsub231, vfnmadd231, vfnmsub231, vadd, vsub, vmul,
-    relu, stridedpointer, StridedPointer,
-    reduced_add, reduced_prod, reduce_to_add, reduce_to_prod, reduced_max, reduced_min, reduce_to_max, reduce_to_min
+    relu, stridedpointer, StridedPointer, AbstractStridedPointer,
+    reduced_add, reduced_prod, reduce_to_add, reduce_to_prod, reduced_max, reduced_min, reduce_to_max, reduce_to_min,
+    vsum, vprod, vmaximum, vminimum
 
 using IfElse: ifelse
 
@@ -35,6 +36,11 @@ using ArrayInterface
 using ArrayInterface: OptionallyStaticUnitRange, Zero
 const Static = ArrayInterface.StaticInt
 
+# TODO: this is type piracy; move this elsewhere!
+VectorizationBase.memory_reference(A::OffsetArray) = VectorizationBase.memory_reference(parent(A))
+# ArrayInterface.parent_type(::Type{O}) where {T,N,A<:AbstractArray{T,N},O<:OffsetArray{T,N,A}} = A
+
+
 export LowDimArray, stridedpointer,
     @avx, @_avx, *ˡ, _avx_!,
     vmap, vmap!, vmapt, vmapt!, vmapnt, vmapnt!, vmapntt, vmapntt!,
@@ -42,6 +48,7 @@ export LowDimArray, stridedpointer,
 
 @inline unwrap(::Val{N}) where {N} = N
 @inline unwrap(::Static{N}) where {N} = N
+@inline unwrap(x) = x
 
 const VECTORWIDTHSYMBOL, ELTYPESYMBOL = Symbol("##Wvecwidth##"), Symbol("##Tloopeltype##")
 

@@ -42,7 +42,7 @@ function vmapreduce(f::F, op::OP, arg1::DenseArray{T}, args::Vararg{DenseArray{T
         _vmapreduce(f, op, V, N, T, arg1, args...)
     end
 end
-function _vmapreduce(f::F, op::OP, ::Val{W}, N, ::Type{T}, args::Vararg{DenseArray{<:NativeTypes},A}) where {F,OP,A,W,T}
+function _vmapreduce(f::F, op::OP, ::StaticInt{W}, N, ::Type{T}, args::Vararg{DenseArray{<:NativeTypes},A}) where {F,OP,A,W,T}
     ptrargs = pointer.(args)
     a_0 = f(vload.(Val{W}(), ptrargs)...); i = W
     if N ≥ 4W

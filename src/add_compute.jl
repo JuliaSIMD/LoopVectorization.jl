@@ -340,7 +340,7 @@ function add_pow!(
     elseif pint == 1
         return add_compute!(ls, var, :identity, [xop], elementbytes)
     elseif pint == 2
-        return add_compute!(ls, var, :vabs2, [xop], elementbytes)
+        return add_compute!(ls, var, :abs2, [xop], elementbytes)
     end
 
     # Implementation from https://github.com/JuliaLang/julia/blob/a965580ba7fd0e8314001521df254e30d686afbf/base/intfuncs.jl#L216
@@ -348,14 +348,14 @@ function add_pow!(
     pint >>= t
     while (t -= 1) > 0
         varname = (iszero(pint) && isone(t)) ? var : gensym(:pbs)
-        xop = add_compute!(ls, varname, :vabs2, [xop], elementbytes)
+        xop = add_compute!(ls, varname, :abs2, [xop], elementbytes)
     end
     yop = xop
     while pint > 0
         t = trailing_zeros(pint) + 1
         pint >>= t
         while (t -= 1) >= 0
-            xop = add_compute!(ls, gensym(:pbs), :vabs2, [xop], elementbytes)
+            xop = add_compute!(ls, gensym(:pbs), :abs2, [xop], elementbytes)
         end
         yop = add_compute!(ls, iszero(pint) ? var : gensym(:pbs), :vmul, [xop, yop], elementbytes)
     end

@@ -13,14 +13,16 @@
         push!(newR.args, R[i])
         push!(newstrd.args, :(strd[$i]))
         push!(newoffsets.args, :(offsets[$i]))
-        push!(ind.args, :(Zero()))
+        push!(ind.args, :(offsets[$i]))
+        # push!(ind.args, Expr(:call, lv(:Zero)))
     end
     push!(ind.args, :i)
     for i ∈ I+1:N
         push!(newR.args, R[i])
         push!(newstrd.args, :(strd[$i]))
         push!(newoffsets.args, :(offsets[$i]))
-        push!(ind.args, :(Zero()))
+        push!(ind.args, :(offsets[$i]))
+        # push!(ind.args, Expr(:call, lv(:Zero)))
     end
     gptr = Expr(:call, :gep, :ptr, ind)
     quote
