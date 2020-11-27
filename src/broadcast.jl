@@ -161,7 +161,7 @@ Base.@propagate_inbounds Base.getindex(A::LowDimArray, i...) = getindex(A.data, 
     end
     Expr(:block, Expr(:meta,:inline), :(s = size(A)), t)
 end
-Base.parent(A::SizedOffsetMatrix) = A.data
+Base.parent(A::LowDimArray) = A.data
 Base.unsafe_convert(::Type{Ptr{T}}, A::LowDimArray{D,T}) where {D,T} = pointer(A.data)
 ArrayInterface.contiguous_axis(A::LowDimArray) = ArrayInterface.contiguous_axis(A.data)
 ArrayInterface.contiguous_batch_size(A::LowDimArray) = ArrayInterface.contiguous_batch_size(A.data)
