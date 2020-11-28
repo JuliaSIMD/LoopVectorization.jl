@@ -200,6 +200,7 @@ function pointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvec
     loopsym = names(ls)[n]
     index = Expr(:tuple)
     found_loop_sym = false
+    call = Expr(:call, lv(:pointerforcomparison))
     for i ∈ getindicesonly(ar)
         if i === loopsym
             found_loop_sym = true
@@ -214,14 +215,15 @@ function pointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvec
             else
                 push!(index.args, staticexpr(stophint - sub))
             end
-            ptr = vptr(ar)
+            push!(call.args, vptr(ar))
             # return 
         else
             push!(index.args, Expr(:call, lv(:Zero)))
         end
     end
     @assert found_loop_sym "Failed to find $loopsym"
-    Expr(:call, lv(:pointerforcomparison), ptr, index)
+    push!(call.args, index)
+    call
     # @show ar, loopsym
 end
 function pointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvectorized::Bool, stopsym)::Expr

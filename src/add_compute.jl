@@ -328,9 +328,9 @@ function add_pow!(
         return add_compute!(ls, var, :^, [xop, pop], elementbytes)
     end
     if pint == -1
-        return add_compute!(ls, var, :vinv, [xop], elementbytes)
+        return add_compute!(ls, var, :inv, [xop], elementbytes)
     elseif pint < 0
-        xop = add_compute!(ls, gensym(:inverse), :vinv, [xop], elementbytes)
+        xop = add_compute!(ls, gensym(:inverse), :inv, [xop], elementbytes)
         pint = - pint
     end
     if pint == 0

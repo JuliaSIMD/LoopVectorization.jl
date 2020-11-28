@@ -128,7 +128,7 @@ function pushvarg!(ls::LoopSet, ar::ArrayReferenceMeta, i, name)
 end
 function add_mref!(
     ls::LoopSet, ar::ArrayReferenceMeta, i::Int, @nospecialize(_::Type{S}), name
-) where {T, N, C, B, R, X, O, S <: StridedPointer{T,N,C,B,R,X,O}}
+) where {T, N, C, B, R, X, O, S <: AbstractStridedPointer{T,N,C,B,R,X,O}}
     @assert B ≤ 0 "Batched arrays not supported yet."
     sp = ArrayInterface.rank_to_sortperm(R)
     # maybe no change needed? -- optimize common case
@@ -401,7 +401,7 @@ function sizeofeltypes(v, num_arrays)::Int
         Ttemp = typeeltype(v[i])
         if !VectorizationBase.SIMD_NATIVE_INTEGERS && Ttemp <: Integer # hack
             return VectorizationBase.REGISTER_SIZE
-        end 
+        end
         T = promote_type(T, Ttemp)
     end
     sizeof(T)

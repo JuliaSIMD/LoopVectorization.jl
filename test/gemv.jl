@@ -233,16 +233,21 @@ using Test
         mygemvavx_range!(y2, A, x)
         @test y1full ≈ y2full
 
-        Abit = A .> 0.5;
-        fill!(y2, -9999); mygemv_avx!(y2, Abit, x);
-        @test y2 ≈ Abit * x
-        fill!(y2, -9999); mygemvavx!(y2, Abit, x);
-        @test y2 ≈ Abit * x
-        xbit = x .> 0.5;
-        fill!(y2, -9999); mygemv_avx!(y2, A, xbit);
-        @test y2 ≈ A * xbit
-        fill!(y2, -9999); mygemvavx!(y2, A, xbit);
-        @test y2 ≈ A * xbit
+        let M = 56
+            A = view(Afull, M .+ (1:M), K .+ (1:K)); A .= rand.(Ref(R));
+            y1 = view(y1full, M .+ (1:M));
+            y2 = view(y2full, M .+ (1:M));
+            Abit = A .> 0.5;
+            fill!(y2, -9999); mygemv_avx!(y2, Abit, x);
+            @test y2 ≈ Abit * x
+            fill!(y2, -9999); mygemvavx!(y2, Abit, x);
+            @test y2 ≈ Abit * x
+            xbit = x .> 0.5;
+            fill!(y2, -9999); mygemv_avx!(y2, A, xbit);
+            @test y2 ≈ A * xbit
+            fill!(y2, -9999); mygemvavx!(y2, A, xbit);
+            @test y2 ≈ A * xbit
+        end
 
         # Check for out of bounds stores
         fill!(y1, 0); fill!(y2, 0); @test y1full ≈ y2full
