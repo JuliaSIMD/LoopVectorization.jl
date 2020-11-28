@@ -8,12 +8,12 @@ using VectorizationBase, SLEEFPirates, UnPack, OffsetArrays
 using VectorizationBase: REGISTER_SIZE, REGISTER_COUNT, data,
     mask, pick_vector_width_val, MM,
     maybestaticlength, maybestaticsize, staticm1, staticp1, staticmul, vzero,
-    Zero, maybestaticrange, offsetprecalc,
+    Zero, maybestaticrange, offsetprecalc, lazymul,
     maybestaticfirst, maybestaticlast, scalar_less, gep, gesp, pointerforcomparison, NativeTypes,
     vfmadd, vfmsub, vfnmadd, vfnmsub, vfmadd231, vfmsub231, vfnmadd231, vfnmsub231, vadd, vsub, vmul,
     relu, stridedpointer, StridedPointer, AbstractStridedPointer,
     reduced_add, reduced_prod, reduce_to_add, reduce_to_prod, reduced_max, reduced_min, reduce_to_max, reduce_to_min,
-    vsum, vprod, vmaximum, vminimum
+    vsum, vprod, vmaximum, vminimum, vstorent!
 
 using IfElse: ifelse
 

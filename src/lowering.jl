@@ -458,7 +458,7 @@ function loopvarremcomparison(loop::Loop, UFt::Int, nisvectorized::Bool, remfirs
         itercount = if loop.stopexact
             Expr(:call, lv(:vsub), loop.stophint - 1, Expr(:call, lv(:vmul), VECTORWIDTHSYMBOL, UFt))
         else
-            Expr(:call, lv(:vsub), loop.stopsym, Expr(:call, lv(:vadd), Expr(:call, lv(:vmul), VECTORWIDTHSYMBOL, UFt), :(Static{1}())))
+            Expr(:call, lv(:vsub), loop.stopsym, Expr(:call, lv(:vadd), Expr(:call, lv(:vmul), VECTORWIDTHSYMBOL, UFt), staticexpr(1)))
         end
         Expr(:call, :>, loopsym, itercount)
     elseif remfirst
@@ -528,7 +528,7 @@ function add_upper_outer_reductions(ls::LoopSet, loopq::Expr, Ulow::Int, Uhigh::
     elseif unrolledloop.stopexact
         Expr(:call, lv(:scalar_less), Expr(:call, lv(:vsub), unrolledloop.stophint+1, unrolledloop.sartsym), loopbuffer)
     else# both are given by symbols
-        Expr(:call, lv(:scalar_less), Expr(:call, lv(:vsub), unrolledloop.stopsym, Expr(:call,lv(:vsub),unrolledloop.startsym, Expr(:call,lv(:Static),1))), loopbuffer)
+        Expr(:call, lv(:scalar_less), Expr(:call, lv(:vsub), unrolledloop.stopsym, Expr(:call,lv(:vsub),unrolledloop.startsym, staticexpr(1))), loopbuffer)
     end
     ncomparison = Expr(:call, :!, comparison)
     Expr(:if, ncomparison, ifq)

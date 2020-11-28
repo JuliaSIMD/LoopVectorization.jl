@@ -31,7 +31,6 @@ Base.IndexStyle(::Type{<:FallbackArrayWrapper}) = IndexLinear()
 @show LoopVectorization.REGISTER_COUNT
 
 @time @testset "LoopVectorization.jl" begin
-
     
     @test isempty(detect_unbound_args(LoopVectorization))
 
@@ -45,9 +44,9 @@ Base.IndexStyle(::Type{<:FallbackArrayWrapper}) = IndexLinear()
 
     @time include("check_empty.jl")
 
-    if isnothing(get(ENV, "TRAVIS_BRANCH", nothing)) || LoopVectorization.REGISTER_COUNT ≠ 32 || VERSION ≥ v"1.4"
-        @time include("offsetarrays.jl")
-    end
+    # if isnothing(get(ENV, "TRAVIS_BRANCH", nothing)) || LoopVectorization.REGISTER_COUNT ≠ 32 || VERSION ≥ v"1.4"
+    #     @time include("offsetarrays.jl")
+    # end
 
     @time include("tensors.jl")
 

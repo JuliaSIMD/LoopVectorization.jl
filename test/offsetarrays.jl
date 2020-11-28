@@ -1,9 +1,15 @@
 using LoopVectorization, ArrayInterface, OffsetArrays, Test
 using LoopVectorization: Static
-T = Float64; r = -1:1;
+# T = Float64; r = -1:1;
 # T = Float32; r = -1:1;
 
-# @testset "OffsetArrays" begin
+# We have to commit type piracy until this PR merges: https://github.com/JuliaArrays/OffsetArrays.jl/pull/170
+# We only do so in our test suite
+@inline Base.unsafe_convert(::Type{Ptr{T}}, A::OffsetArray{T}) where {T} = pointer(parent(A))
+
+
+
+@testset "OffsetArrays" begin
 
      function old2d!(out::AbstractMatrix, A::AbstractMatrix, kern)
         rng1k, rng2k = axes(kern)
@@ -30,17 +36,24 @@ T = Float64; r = -1:1;
     # ls1
 
     # out = out1;
-    # rng1,  rng2  = CartesianIndices(out1).indices;
-    # rng1k, rng2k = axes(kern);
-    # # C = At';
-    # ls2d = LoopVectorization.@avx_debug for j in rng2, i in rng1
-    #         tmp = zero(eltype(out))
-    #         for jk in rng2k, ik in rng1k
+    # C = At';
+    # ls2d = LoopVectorization.@avx_debug for j in axes(out1,2), i in axes(out1,1)
+    #         tmp = zero(eltype(out1))
+    #         for jk in axes(kern,2), ik in axes(kern,1)
     #             tmp += A[i+ik,j+jk]*kern[ik,jk]
     #         end
     #         out1[i,j] = tmp
     # end;
     # LoopVectorization.choose_order(ls2d)
+    # ls2ds = LoopVectorization.@avx_debug for j in axes(out1,2), i in axes(out1,1)
+    #         tmp = zero(eltype(out1))
+    #         for jk in axes(skern,2), ik in axes(skern,1)
+    #             tmp += A[i+ik,j+jk]*skern[ik,jk]
+    #         end
+    #         out1[i,j] = tmp
+    # end;
+    # LoopVectorization.choose_order(ls2ds)
+
     
     # q2d = :(for j in rng2, i in rng1
     #         tmp = zero(eltype(out))
@@ -114,10 +127,9 @@ T = Float64; r = -1:1;
     # Base.CartesianIndices(::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = CartesianIndices((LR:UR,LC:UC))
     Base.getindex(A::SizedOffsetMatrix, i, j) = LoopVectorization.vload(LoopVectorization.stridedpointer(A), (i,j))
     function avx2dunrolled!(out::AbstractMatrix, A::AbstractMatrix, kern::SizedOffsetMatrix{T,-1,1,-1,1}) where {T}
-        rng1,  rng2  = axes(out)
         Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> kern_ik_jk = kern[ik-2,jk-2]
         # Manually unpack the OffsetArray
-        @avx for j in rng2, i in rng1
+        @avx for j in axes(out,2), i in axes(out,1)
             tmp_0 = zero(eltype(out))
             Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> tmp_{ik+(jk-1)*3} = A[(ik-2)+i,(jk-2) + j*1] * kern_ik_jk + tmp_{ik+(jk-1)*3-1}
             out[i,j] = tmp_9
@@ -125,9 +137,10 @@ T = Float64; r = -1:1;
         out
     end
     function avx2dunrolled2x2!(out::AbstractMatrix, A::AbstractMatrix, kern::SizedOffsetMatrix{T,-1,1,-1,1}) where {T}
-        rng1,  rng2  = axes(out)
+        # rng1,  rng2  = axes(out)
         # Manually unpack the OffsetArray
-        @avx unroll=(2,2) for j in rng2, i in rng1
+        # @avx for j in rng2, i in rng1
+        @avx unroll=(2,2) for j in axes(out,2), i in axes(out,1)
             Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> kern_ik_jk = kern[ik - 2, jk + (-2)]
             tmp_0 = zero(eltype(out))
             j1 = j * 1
@@ -208,7 +221,7 @@ T = Float64; r = -1:1;
         out
     end
 
-    # for T ∈ (Float32, Float64)
+    for T ∈ (Float32, Float64)
         @show T, @__LINE__
         Abase = fill(T(NaN), 200, 200);
         # out of bounds reads load NaNs, poisoning results leading to test failure.
@@ -216,7 +229,7 @@ T = Float64; r = -1:1;
         A .= rand.();
         Atbase = copy(Abase');
         At = view(Atbase, 51:152, 51:152);
-        # for r ∈ (-1:1, -2:2)
+        for r ∈ (-1:1, -2:2)
             @show r
             fr = first(r); lr = last(r);
             kern = OffsetArray(rand(T, length(r), length(r)), r, r);
