@@ -1,25 +1,24 @@
-using LoopVectorization, LinearAlgebra, OffsetArrays
+using LoopVectorization, LinearAlgebra, OffsetArrays, ArrayInterface
 BLAS.set_num_threads(1)
 
-using LoopVectorization.VectorizationBase: StaticUnitRange
-struct SizedOffsetMatrix{T,LR,UR,LC,RC} <: DenseMatrix{T}
+# TODO: remove this once this PR merges: https://github.com/JuliaArrays/OffsetArrays.jl/pull/170
+@inline Base.unsafe_convert(::Type{Ptr{T}}, A::OffsetArray{T}) where {T} = pointer(parent(A))
+
+struct SizedOffsetMatrix{T,LR,UR,LC,UC} <: DenseMatrix{T}
     data::Matrix{T}
 end
-Base.axes(::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (StaticUnitRange{LR,UR}(),StaticUnitRange{LC,UC}())
+Base.size(::SizedOffsetMatrix{<:Any,LR,UR,LC,UC}) where {LR,UR,LC,UC} = (UR-LR+1,UC-LC+1)
+Base.axes(::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (Static{LR}():Static{UR}(),Static{LC}():Static{UC}())
 Base.parent(A::SizedOffsetMatrix) = A.data
-@generated function LoopVectorization.stridedpointer(A::SizedOffsetMatrix{T,LR,UR,LC,RC}) where {T,LR,UR,LC,RC}
-    quote
-        $(Expr(:meta,:inline))
-        LoopVectorization.OffsetStridedPointer(
-            LoopVectorization.StaticStridedPointer{$T,Tuple{1,$(UR-LR+1)}}(pointer(parent(A))),
-            ($(LR-1), $(LC-1))
-        )
-    end
+Base.unsafe_convert(::Type{Ptr{T}}, A::SizedOffsetMatrix{T}) where {T} = pointer(A.data)
+ArrayInterface.contiguous_axis(::Type{<:SizedOffsetMatrix}) = ArrayInterface.Contiguous{1}()
+ArrayInterface.contiguous_batch_size(::Type{<:SizedOffsetMatrix}) = ArrayInterface.ContiguousBatch{0}()
+ArrayInterface.stride_rank(::Type{<:SizedOffsetMatrix}) = ArrayInterface.StrideRank{(1,2)}()
+function ArrayInterface.strides(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC}
+    (Static{1}(), (Static{UR}() - Static{LR}() + Static{1}()))
 end
-Base.getindex(A::SizedOffsetMatrix, i, j) = LoopVectorization.vload(LoopVectorization.stridedpointer(A), (i-1,j-1))
-Base.axes(::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (StaticUnitRange{LR,UR}(),StaticUnitRange{LC,UC}())
-Base.size(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (1 + UR-LR, 1 + UC-LC)
-Base.unsafe_convert(::Type{Ptr{Float64}}, A::SizedOffsetMatrix) = Base.unsafe_convert(Ptr{Float64}, A.data)
+ArrayInterface.offsets(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (Static{LR}(), Static{LC}())
+Base.getindex(A::SizedOffsetMatrix, i, j) = LoopVectorization.vload(LoopVectorization.stridedpointer(A), (i,j))
 
 
 function jgemm!(𝐂, 𝐀, 𝐁)

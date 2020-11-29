@@ -26,7 +26,7 @@ julia> LoopVectorization.operations(lsAmulB)
  var"##reduction#260" = LoopVectorization.vfmadd_fast(var"##tempload#258", var"##tempload#259", var"##reduction#260")
  var"##RHS#256" = LoopVectorization.reduce_to_add(var"##reduction#260", var"##RHS#256")
 ```
-The act of performing a "reduction" across a loop introduces a few extra operations that manage creating a "zero" with respect to the reduction, and then combining with the specified value using `reduce_to_add`, which performs any necessary type conversions, such as from an `SVec` vector-type to a scalar, if necessary. This simplifies code generation, by making the functions agnostic with respect to the actual vectorization decisions the library makes.
+The act of performing a "reduction" across a loop introduces a few extra operations that manage creating a "zero" with respect to the reduction, and then combining with the specified value using `reduce_to_add`, which performs any necessary type conversions, such as from an `Vec` vector-type to a scalar, if necessary. This simplifies code generation, by making the functions agnostic with respect to the actual vectorization decisions the library makes.
 
 Each operation is listed as depending on a set of loop iteration symbols:
 ```julia

@@ -113,7 +113,7 @@ function add_conditional_store!(ls::LoopSet, LHS, condop::Operation, storeop::Op
     #         prevstore = getop(ls, id + 1)
     #         # @show prevstore prevstore.node_type, loopdependencies(prevstore)
     #         # @show operations(ls)
-    #         storeop = add_compute!(ls, gensym(:combinedstoreop), Instruction(:vifelse), [condop, storeop, first(parents(prevstore))], elementbytes)
+    #         storeop = add_compute!(ls, gensym(:combinedstoreop), Instruction(:ifelse), [condop, storeop, first(parents(prevstore))], elementbytes)
     #         storeparents = [storeop]
     #         storeinstr = if prevstore.instruction.instr === :conditionalstore!
     #             push!(storeparents, add_compute!(ls, gensym(:combinedmask), Instruction(:|), [condop, last(parents(prevstore))], elementbytes))

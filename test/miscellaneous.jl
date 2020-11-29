@@ -3,7 +3,7 @@ using LinearAlgebra
 using Test
 
 @testset "Miscellaneous" begin
-
+# T = Float32
     Unum, Tnum = LoopVectorization.REGISTER_COUNT == 16 ? (1, 6) : (1, 8)
     dot3q = :(for m ∈ 1:M, n ∈ 1:N
               s += x[m] * A[m,n] * y[n]
@@ -568,8 +568,11 @@ using Test
             end
         end
     end
+    # should be:
+    #  3.0  4.0  1.0  2.0  7.0  8.0  5.0  6.0  11.0  12.0  9.0  10.0  15.0  16.0  13.0  …  191.0  192.0  189.0  190.0  195.0  196.0  193.0  194.0  197.0  198.0  199.0
+     # 1.0  4.0  5.0  2.0  3.0  8.0  9.0  6.0  7.0  12.0  13.0  10.0  11.0  16.0  17.0  …  187.0  192.0  193.0  190.0  191.0  196.0  197.0  194.0  195.0  198.0  199.0
     function instruct_x_avx!(r::AbstractVector, loc::Int)
-        @avx for lhs in 0:(length(r) >> 1) - (1 << (loc - 1))
+      @avx for lhs in 0:(length(r) >> 1) - (1 << (loc - 1))
             # mask locations before
             p = lhs + lhs & ~(1 << (loc - 1) - 1)
             q = lhs + lhs & ~(1 << (loc - 1) - 1) + 1 << (loc - 1)
@@ -577,7 +580,7 @@ using Test
             tmp = r[p + 1]
             r[p + 1] = r[q + 1]
             r[q + 1] = tmp
-        end
+        end;
         return r
     end
     function instruct_x!(r::AbstractVector, loc::Int)
@@ -811,6 +814,8 @@ end
         fill!(x2, T(NaN)); myvar_avx!(x2, A, x̄)
         @test x1 ≈ x2
 
+        # x1b = x1; x2b = x2;
+        # x1 = copy(x1b); x2 = copy(x2b); x1 ≈ x2
         @test instruct_x!(x1, 2) ≈ instruct_x_avx!(x2, 2)
         @test instruct_x!(x1, 3) ≈ instruct_x_avx!(x2, 3)
         @test instruct_x!(x1, 4) ≈ instruct_x_avx!(x2, 4)
@@ -1096,7 +1101,6 @@ end
             end
         end
     end
-end
 
 
 function mul1!(y::Vector{T}, A::Matrix{UInt8}, x::Vector{T}) where T 
@@ -1134,5 +1138,6 @@ if Base.libllvm_version ≥ v"8" || LoopVectorization.VectorizationBase.SIMD_NAT
             @test mul1!(v1, A, v2) ≈ mul2!(v3, A, v2)
         end
     end
+end
 end
 

@@ -31,7 +31,6 @@ Base.IndexStyle(::Type{<:FallbackArrayWrapper}) = IndexLinear()
 @show LoopVectorization.REGISTER_COUNT
 
 @time @testset "LoopVectorization.jl" begin
-
     
     @test isempty(detect_unbound_args(LoopVectorization))
 

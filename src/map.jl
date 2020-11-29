@@ -8,20 +8,22 @@ function alignstores!(
     args::Vararg{<:DenseArray{<:Base.HWReal},A}
 ) where {F, T <: Base.HWReal, A}
     N = length(y)
-    ptry = pointer(y)
-    ptrargs = pointer.(args)
-    W = VectorizationBase.pick_vector_width(T)
+    ptry = VectorizationBase.zero_offsets(stridedpointer(y))
+    ptrargs = VectorizationBase.zero_offsets.(stridedpointer.(args))
     V = VectorizationBase.pick_vector_width_val(T)
-    @assert iszero(reinterpret(UInt, ptry) & (sizeof(T) - 1)) "The destination vector (`dest`) must be aligned at least to `sizeof(eltype(dest))`."
-    alignment = reinterpret(UInt, ptry) & (VectorizationBase.REGISTER_SIZE - 1)
+    W = unwrap(V)
+    zero_index = MM{W}(Static(0))
+    uintptry = reinterpret(UInt, pointer(ptry))
+    @assert iszero(uintptry & (sizeof(T) - 1)) "The destination vector (`dest`) must be aligned at least to `sizeof(eltype(dest))`."
+    alignment = uintptry & (VectorizationBase.REGISTER_SIZE - 1)
     if alignment > 0
         i = reinterpret(Int, W - (alignment >>> VectorizationBase.intlog2(sizeof(T))))
         m = mask(T, i)
         if N < i
             m &= mask(T, N & (W - 1))
         end
-        vnoaliasstore!(ptry, f(vload.(V, ptrargs, m)...), m)
-        gep(ptry, i), gep.(ptrargs, i), N - i
+        vnoaliasstore!(ptry, f(vload.(ptrargs, ((zero_index,),), m)...), (zero_index,), m)
+        gesp(ptry, (i,)), gesp.(ptrargs, ((i,),)), N - i
     else
         ptry, ptrargs, N
     end
@@ -32,46 +34,44 @@ function vmap_singlethread!(
     ::Val{NonTemporal},
     args::Vararg{<:DenseArray{<:Base.HWReal},A}
 ) where {F,T <: Base.HWReal, A, NonTemporal}
-    if NonTemporal
+    if NonTemporal # if stores into `y` aren't aligned, we'll get a crash
         ptry, ptrargs, N = alignstores!(f, y, args...)
     else
         N = length(y)
-        ptry = pointer(y)
-        ptrargs = pointer.(args)
+        ptry = VectorizationBase.zero_offsets(stridedpointer(y))
+        ptrargs = VectorizationBase.zero_offsets.(stridedpointer.(args))
     end
     i = 0
-    W = VectorizationBase.pick_vector_width(T)
     V = VectorizationBase.pick_vector_width_val(T)
+    W = unwrap(V)
+    st = VectorizationBase.static_sizeof(T)
+    zero_index = MM{W}(Static(0), st)
     while i < N - ((W << 2) - 1)
-        v₁ = f(vload.(V, gep.(ptrargs,      i     ))...)
-        v₂ = f(vload.(V, gep.(ptrargs, vadd(i,  W)))...)
-        v₃ = f(vload.(V, gep.(ptrargs, vadd(i, 2W)))...)
-        v₄ = f(vload.(V, gep.(ptrargs, vadd(i, 3W)))...)
+
+        # vstore!(stridedpointer(B), VectorizationBase.VecUnroll((v1,v2,v3)), VectorizationBase.Unroll{AU,1,3,AV,W64,zero(UInt)}((i, j, k)))
+        # vload(stridedpointer(B), VectorizationBase.Unroll{1,1,4,1,W,0x0000000000000000}((i,)))
+        
+        index = VectorizationBase.Unroll{1,1,4,1,W,0x0000000000000000}((i,))
+        v = f(vload.(ptrargs, index)...)
         if NonTemporal
-            vstorent!(gep(ptry,      i     ), v₁)
-            vstorent!(gep(ptry, vadd(i,  W)), v₂)
-            vstorent!(gep(ptry, vadd(i, 2W)), v₃)
-            vstorent!(gep(ptry, vadd(i, 3W)), v₄)
+            vstorent!(ptry, v, index)
         else
-            vnoaliasstore!(gep(ptry,      i     ), v₁)
-            vnoaliasstore!(gep(ptry, vadd(i,  W)), v₂)
-            vnoaliasstore!(gep(ptry, vadd(i, 2W)), v₃)
-            vnoaliasstore!(gep(ptry, vadd(i, 3W)), v₄)
+            vnoaliasstore!(ptry, v, index)
         end
         i = vadd(i, 4W)
     end
     while i < N - (W - 1) # stops at 16 when
-        vᵢ = f(vload.(V, gep.(ptrargs, i))...)
+        vᵣ = f(vload.(ptrargs, ((MM{W}(i),),))...)
         if NonTemporal
-            vstorent!(gep(ptry, i), vᵢ)
+            vstorent!(ptry, vᵣ, (MM{W}(i),))
         else
-            vnoaliasstore!(gep(ptry, i), vᵢ)
+            vnoaliasstore!(ptry, vᵣ, (MM{W}(i),))
         end
         i = vadd(i, W)
     end
     if i < N
         m = mask(T, N & (W - 1))
-        vnoaliasstore!(gep(ptry, i), f(vload.(V, gep.(ptrargs, i), m)...), m)
+        vnoaliasstore!(ptry, f(vload.(ptrargs, ((MM{W}(i),),), m)...), (MM{W}(i,),), m)
     end
     y
 end
@@ -89,25 +89,17 @@ function vmap_multithreaded!(
     Wsh = Wshift + 2
     Niter = N >>> Wsh
     Base.Threads.@threads for j ∈ 0:Niter-1
-        i = j << Wsh
-        v₁ = f(vload.(V, gep.(ptrargs,      i     ))...)
-        v₂ = f(vload.(V, gep.(ptrargs, vadd(i,  W)))...)
-        v₃ = f(vload.(V, gep.(ptrargs, vadd(i, 2W)))...)
-        v₄ = f(vload.(V, gep.(ptrargs, vadd(i, 3W)))...)
-        vstorent!(gep(ptry,      i     ), v₁)
-        vstorent!(gep(ptry, vadd(i,  W)), v₂)
-        vstorent!(gep(ptry, vadd(i, 2W)), v₃)
-        vstorent!(gep(ptry, vadd(i, 3W)), v₄)
+        index = VectorizationBase.Unroll{1,1,4,1,W,0x0000000000000000}((j << Wsh,))
+        vstorent!(ptry, f(vload.(ptrargs, index)...), index)
     end
     ii = Niter << Wsh
     while ii < N - (W - 1) # stops at 16 when
-        vᵢ = f(vload.(V, gep.(ptrargs, ii))...)
-        vstorent!(gep(ptry, ii), vᵢ)
+        vstorent!(ptry, f(vload.(ptrargs, ((MM{W}(ii),),))...), (MM{W}(ii),))
         ii = vadd(ii, W)
     end
     if ii < N
         m = mask(T, N & (W - 1))
-        vnoaliasstore!(gep(ptry, ii), f(vload.(V, gep.(ptrargs, ii), m)...), m)
+        vnoaliasstore!(ptry, f(vload.(ptrargs, ((MM{W}(ii),),), m)...), (MM{W}(ii),), m)
     end
     y
 end
@@ -118,33 +110,25 @@ function vmap_multithreaded!(
     args::Vararg{<:DenseArray{<:Base.HWReal},A}
 ) where {F,T,A}
     N = length(y)
-    ptry = pointer(y)
-    ptrargs = pointer.(args)
+    ptry = VectorizationBase.zero_offsets(stridedpointer(y))
+    ptrargs = VectorizationBase.zero_offsets.(stridedpointer.(args))
     N > 0 || return y
     W, Wshift = VectorizationBase.pick_vector_width_shift(T)
     V = VectorizationBase.pick_vector_width_val(T)
     Wsh = Wshift + 2
     Niter = N >>> Wsh
     Base.Threads.@threads for j ∈ 0:Niter-1
-        i = j << Wsh
-        v₁ = f(vload.(V, gep.(ptrargs,      i     ))...)
-        v₂ = f(vload.(V, gep.(ptrargs, vadd(i,  W)))...)
-        v₃ = f(vload.(V, gep.(ptrargs, vadd(i, 2W)))...)
-        v₄ = f(vload.(V, gep.(ptrargs, vadd(i, 3W)))...)
-        vnoaliasstore!(gep(ptry,      i     ), v₁)
-        vnoaliasstore!(gep(ptry, vadd(i,  W)), v₂)
-        vnoaliasstore!(gep(ptry, vadd(i, 2W)), v₃)
-        vnoaliasstore!(gep(ptry, vadd(i, 3W)), v₄)
+        index = VectorizationBase.Unroll{1,1,4,1,W,0x0000000000000000}((j << Wsh,))
+        vnoaliasstore!(ptry, f(vload.(ptrargs, index)...), index)
     end
     ii = Niter << Wsh
     while ii < N - (W - 1) # stops at 16 when
-        vᵢ = f(vload.(V, gep.(ptrargs, ii))...)
-        vnoaliasstore!(gep(ptry, ii), vᵢ)
+        vnoaliasstore!(ptry, f(vload.(ptrargs, ((MM{W}(ii),),))...), (MM{W}(ii),))
         ii = vadd(ii, W)
     end
     if ii < N
         m = mask(T, N & (W - 1))
-        vnoaliasstore!(gep(ptry, ii), f(vload.(V, gep.(ptrargs, ii), m)...), m)
+        vnoaliasstore!(ptry, f(vload.(ptrargs, ((MM{W}(ii),),), m)...), (MM{W}(ii),), m)
     end
     y
 end

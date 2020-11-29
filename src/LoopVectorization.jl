@@ -1,22 +1,28 @@
 module LoopVectorization
 
-if (!isnothing(get(ENV, "TRAVIS_BRANCH", nothing)) || !isnothing(get(ENV, "APPVEYOR", nothing))) && isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@optlevel"))
-    @eval Base.Experimental.@optlevel 1
-end
+# if (!isnothing(get(ENV, "TRAVIS_BRANCH", nothing)) || !isnothing(get(ENV, "APPVEYOR", nothing))) && isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@optlevel"))
+    # @eval Base.Experimental.@optlevel 1
+# end
 
-using VectorizationBase, SIMDPirates, SLEEFPirates, UnPack, OffsetArrays
-using VectorizationBase: REGISTER_SIZE, extract_data, num_vector_load_expr,
-    mask, masktable, pick_vector_width_val, valmul, valrem, valmuladd, valmulsub, valadd, valsub, _MM,
-    maybestaticlength, maybestaticsize, staticm1, staticp1, staticmul, subsetview, vzero, stridedpointer_for_broadcast,
-    Static, Zero, StaticUnitRange, StaticLowerUnitRange, StaticUpperUnitRange, unwrap, maybestaticrange,
-    AbstractColumnMajorStridedPointer, AbstractRowMajorStridedPointer, AbstractSparseStridedPointer, AbstractStaticStridedPointer,
-    PackedStridedPointer, SparseStridedPointer, RowMajorStridedPointer, StaticStridedPointer, StaticStridedStruct, offsetprecalc,
-    maybestaticfirst, maybestaticlast, scalar_less, scalar_greater, noalias!, gesp, gepbyte, pointerforcomparison, NativeTypes, staticmul, staticmuladd
-using SIMDPirates: VECTOR_SYMBOLS, evadd, evsub, evmul, evfdiv, vrange, 
-    reduced_add, reduced_prod, reduce_to_add, reduced_max, reduced_min, vsum, vprod, vmaximum, vminimum,
-    sizeequivalentfloat, sizeequivalentint, vadd!, vsub!, vmul!, vfdiv!, vfmadd!, vfnmadd!, vfmsub!, vfnmsub!,
-    vfmadd231, vfmsub231, vfnmadd231, vfnmsub231, sizeequivalentfloat, sizeequivalentint, #prefetch,
-    vmullog2, vmullog10, vdivlog2, vdivlog10, vmullog2add!, vmullog10add!, vdivlog2add!, vdivlog10add!, vfmaddaddone, vadd1, relu
+using VectorizationBase, SLEEFPirates, UnPack, OffsetArrays
+using VectorizationBase: REGISTER_SIZE, REGISTER_COUNT, data,
+    mask, pick_vector_width_val, MM,
+    maybestaticlength, maybestaticsize, staticm1, staticp1, staticmul, vzero,
+    Zero, maybestaticrange, offsetprecalc, lazymul,
+    maybestaticfirst, maybestaticlast, scalar_less, gep, gesp, pointerforcomparison, NativeTypes,
+    vfmadd, vfmsub, vfnmadd, vfnmsub, vfmadd231, vfmsub231, vfnmadd231, vfnmsub231, vadd, vsub, vmul,
+    relu, stridedpointer, StridedPointer, AbstractStridedPointer,
+    reduced_add, reduced_prod, reduce_to_add, reduce_to_prod, reduced_max, reduced_min, reduce_to_max, reduce_to_min,
+    vsum, vprod, vmaximum, vminimum, vstorent!
+
+using IfElse: ifelse
+
+# missing: stridedpointer_for_broadcast, noalias!, gepbyte, 
+# using SIMDPirates: VECTOR_SYMBOLS, evadd, evsub, evmul, evfdiv, vrange, 
+#     reduced_add, reduced_prod, reduce_to_add, reduced_max, reduced_min, vsum, vprod, vmaximum, vminimum,
+#     sizeequivalentfloat, sizeequivalentint, vadd!, vsub!, vmul!, vfdiv!, vfmadd!, vfnmadd!, vfmsub!, vfnmsub!,
+#     vfmadd231, vfmsub231, vfnmadd231, vfnmsub231, sizeequivalentfloat, sizeequivalentint, #prefetch,
+#     vmullog2, vmullog10, vdivlog2, vdivlog10, vmullog2add!, vmullog10add!, vdivlog2add!, vdivlog10add!, vfmaddaddone, vadd1, relu
 using SLEEFPirates: pow
 using Base.Broadcast: Broadcasted, DefaultArrayStyle
 using LinearAlgebra: Adjoint, Transpose
@@ -26,27 +32,28 @@ import LinearAlgebra # for check_args
 
 using Base.FastMath: add_fast, sub_fast, mul_fast, div_fast
 
+using ArrayInterface
+using ArrayInterface: OptionallyStaticUnitRange, Zero, One
+const Static = ArrayInterface.StaticInt
+
+
+
 export LowDimArray, stridedpointer,
     @avx, @_avx, *ˡ, _avx_!,
     vmap, vmap!, vmapt, vmapt!, vmapnt, vmapnt!, vmapntt, vmapntt!,
     vfilter, vfilter!, vmapreduce, vreduce
 
+@inline unwrap(::Val{N}) where {N} = N
+@inline unwrap(::Static{N}) where {N} = N
+@inline unwrap(x) = x
+
 const VECTORWIDTHSYMBOL, ELTYPESYMBOL = Symbol("##Wvecwidth##"), Symbol("##Tloopeltype##")
 
-"""
-REGISTER_COUNT defined in VectorizationBase is supposed to correspond to the actual number of floating point registers on the system.
-It is hardcoded into a file at build time.
-However, someone may have multiple builds of Julia on the same system, some 32-bit and some 64-bit (e.g., they use 64-bit primarilly,
-but keep a 32-bit build on hand to debug test failures on Appveyor's 32-bit build). Thus, we don't want REGISTER_COUNT to be hardcoded
-in such a fashion. 
-32-bit builds are limited to only 8 floating point registers, so we take care of that here.
 
-If you want good performance, DO NOT use a 32-bit build of Julia if you don't have to.
-"""
-const REGISTER_COUNT = Sys.ARCH === :i686 ? 8 : VectorizationBase.REGISTER_COUNT
-
+include("vectorizationbase_compat/contract_pass.jl")
+include("vectorizationbase_compat/subsetview.jl")
 include("getconstindexes.jl")
-include("vectorizationbase_extensions.jl")
+# include("vectorizationbase_extensions.jl")
 include("predicates.jl")
 include("map.jl")
 include("filter.jl")

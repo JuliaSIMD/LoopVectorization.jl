@@ -32,17 +32,19 @@ end
 
 add_vptr!(ls::LoopSet, op::Operation) = add_vptr!(ls, op.ref)
 add_vptr!(ls::LoopSet, mref::ArrayReferenceMeta) = add_vptr!(ls, mref.ref.array, vptr(mref))
-using VectorizationBase: noaliasstridedpointer
+# using VectorizationBase: noaliasstridedpointer
 function add_vptr!(ls::LoopSet, array::Symbol, vptrarray::Symbol, actualarray::Bool = true, broadcast::Bool = false)
     if !includesarray(ls, array)
         push!(ls.includedarrays, array)
         actualarray && push!(ls.includedactualarrays, array)
-        if broadcast
-            pushpreamble!(ls, Expr(:(=), vptrarray, Expr(:call, lv(:stridedpointer_for_broadcast), array)))
-        else
-            pushpreamble!(ls, Expr(:(=), vptrarray, Expr(:call, lv(:stridedpointer), array)))
-            # pushpreamble!(ls, Expr(:(=), vptrarray, Expr(:call, lv(:noaliasstridedpointer), array)))
-        end
+        func = lv(broadcast ? :stridedpointer_for_broadcast : :stridedpointer)
+        pushpreamble!(ls, Expr(:(=), vptrarray, Expr(:call, func, array)))
+        # if broadcast
+        #     pushpreamble!(ls, Expr(:(=), vptrarray, Expr(:call, lv(:stridedpointer_for_broadcast), array)))
+        # else
+        #     pushpreamble!(ls, Expr(:(=), vptrarray, Expr(:call, lv(:stridedpointer), array)))
+        #     # pushpreamble!(ls, Expr(:(=), vptrarray, Expr(:call, lv(:noaliasstridedpointer), array)))
+        # end
     end
     nothing
 end
@@ -79,8 +81,8 @@ function subset_vptr!(ls::LoopSet, vptr::Symbol, indnum::Int, ind, previndices, 
             append_loop_valdims!(valcall, getloop(ls, loopdep))
         end
     end
-    indm1 = ind isa Integer ? ind - 1 : Expr(:call, :-, ind, 1)
-    pushpreamble!(ls, Expr(:(=), subsetvptr, Expr(:call, lv(:subsetview), vptr, valcall, indm1)))
+    # indm1 = ind isa Integer ? ind - 1 : Expr(:call, :-, ind, 1)
+    pushpreamble!(ls, Expr(:(=), subsetvptr, Expr(:call, lv(:subsetview), vptr, valcall, ind)))
     subsetvptr
 end
 

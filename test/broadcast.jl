@@ -1,3 +1,6 @@
+# using LoopVectorization, Test
+# T = Float32
+
 @testset "broadcast" begin
     M, N = 37, 47
     # M = 77;
@@ -26,8 +29,8 @@
         bl = LowDimArray{(false,)}(br);
         @. c1 = a + br;
         fill!(c2, 99999);
-        @avx @. c2 = a + bl;
-        @test c1 ≈ c2
+        @test c1 ≈ @avx @. c2 = a + bl
+        # @test c1 ≈ c2
         br = reshape(rand(R,99), (1,99,1));
         bl = LowDimArray{(false,)}(br);
         @. c1 = a + br;
@@ -40,13 +43,13 @@
         @test (@avx exp.(xs .- LowDimArray{(false,)}(max_))) ≈ exp.(xs .- LowDimArray{(false,)}(max_))
 
         if T === Int32
-            a = rand(T(1):T(100), 73, 1)
+            a = rand(T(1):T(100), 73, 1);
             @test sqrt.(Float32.(a)) ≈ @avx sqrt.(a)
         elseif T === Int64
-            a = rand(T(1):T(100), 73, 1)
+            a = rand(T(1):T(100), 73, 1);
             @test sqrt.(a) ≈ @avx sqrt.(a)
         else
-            a = rand(T, 73, 1)
+            a = rand(T, 73, 1);
             @test sqrt.(a) ≈ @avx sqrt.(a)
         end
         
@@ -115,14 +118,14 @@
             @test D3 ≈ D4
             
             fill!(D3, -1e3); fill!(D4, 9e9);
-            Bt = Transpose(B);
+            Bt = transpose(B);
             @. D3 = exp(Bt);
             @avx @. D4 = exp(Bt);
             @test D3 ≈ D4
 
             D1 = similar(B); D2 = similar(B);
-            D1t = Transpose(D1);
-            D2t = Transpose(D2);
+            D1t = transpose(D1);
+            D2t = transpose(D2);
             @. D1t = exp(Bt);
             @avx @. D2t = exp(Bt);
             @test D1t ≈ D2t

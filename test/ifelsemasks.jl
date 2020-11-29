@@ -37,7 +37,7 @@ T = Float32
         z
     end
 
-    function Bernoulli_logit(y::BitVector, α::AbstractVector{T}) where {T}
+    function Bernoulli_logit(y, α::AbstractVector{T}) where {T}
         t = zero(promote_type(Float64,T))
         @inbounds for i ∈ eachindex(α)
             invOmP = 1 + exp(α[i])
@@ -47,7 +47,7 @@ T = Float32
         end
         t
     end
-    function Bernoulli_logitavx(y::BitVector, α::AbstractVector{T}) where {T}
+    function Bernoulli_logitavx(y, α::AbstractVector{T}) where {T}
         t = zero(T === Int32 ? Float32 : Float64)
         @avx for i ∈ eachindex(α)
             invOmP = 1 + exp(α[i])
@@ -57,7 +57,7 @@ T = Float32
         end
         t
     end
-    function Bernoulli_logit_avx(y::BitVector, α::AbstractVector{T}) where {T}
+    function Bernoulli_logit_avx(y, α::AbstractVector{T}) where {T}
         t = zero(T === Int32 ? Float32 : Float64)
         @_avx for i ∈ eachindex(α)
             invOmP = 1 + exp(α[i])
@@ -492,15 +492,19 @@ T = Float32
     
     
     a = rand(-10:10, 43);
-    bit = a .> 0.5;
+    bit = a .> 0.5; bool = copyto!(Vector{Bool}(undef, length(bit)), bit);
     t = Bernoulli_logit(bit, a);
     @test isapprox(t, Bernoulli_logitavx(bit, a), atol = Int === Int32 ? 0.1 : 0)
     @test isapprox(t, Bernoulli_logit_avx(bit, a), atol = Int === Int32 ? 0.1 : 0)
+    @test isapprox(t, Bernoulli_logitavx(bool, a), atol = Int === Int32 ? 0.1 : 0)
+    @test isapprox(t, Bernoulli_logit_avx(bool, a), atol = Int === Int32 ? 0.1 : 0)
     a = rand(43);
-    bit = a .> 0.5;
+    bit = a .> 0.5; bool = copyto!(Vector{Bool}(undef, length(bit)), bit);
     t = Bernoulli_logit(bit, a);
     @test t ≈ Bernoulli_logitavx(bit, a)
     @test t ≈ Bernoulli_logit_avx(bit, a)
+    @test t ≈ Bernoulli_logitavx(bool, a)
+    @test t ≈ Bernoulli_logit_avx(bool, a)
 
     ai = [rand(Bool) for _ in 1:71];
     bi = [rand(Bool) for _ in 1:71];

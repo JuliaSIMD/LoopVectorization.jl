@@ -5,6 +5,6 @@ This task is made simpler via multiple dispatch making the lowering of the compo
 ```julia
 vload(vptr_A, (i,j,k))
 ```
-with the behavior of this load determined by the types of the arguments. Vectorization is expressed by making an index a `_MM{W}` type, rather than an integer, and operations with it will either produce another `_MM{W}` when it will still correspond to contiguous loads, or an `SVec{W,<:Integer}` if the resulting loads will be discontiguous, so that a `gather` or `scatter!` will be used. If all indexes are simply integers, then this produces a scalar load or store.
+with the behavior of this load determined by the types of the arguments. Vectorization is expressed by making an index a `_MM{W}` type, rather than an integer, and operations with it will either produce another `_MM{W}` when it will still correspond to contiguous loads, or an `Vec{W,<:Integer}` if the resulting loads will be discontiguous, so that a `gather` or `scatter!` will be used. If all indexes are simply integers, then this produces a scalar load or store.
 
 

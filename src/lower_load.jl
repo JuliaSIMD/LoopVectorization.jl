@@ -70,7 +70,7 @@ function prefetchisagoodidea(ls::LoopSet, op::Operation, td::UnrollArgs)
     length(loopdependencies(op)) ≤ 1 && return 0
     vectorized ∈ loopdependencies(op) || return 0
     u₂loopsym === Symbol("##undefined##") && return 0
-    dontskip = (VectorizationBase.CACHELINE_SIZE ÷ VectorizationBase.REGISTER_SIZE) - 1
+    dontskip = (CACHELINE_SIZE ÷ VectorizationBase.REGISTER_SIZE) - 1
     # u₂loopsym is vectorized
     # u₁vectorized = vectorized === u₁loopsym
     u₂vectorized = vectorized === u₂loopsym
@@ -117,7 +117,7 @@ function add_prefetches!(q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, pr
     ptr = vptr(op)
     gptr = Symbol(ptr, "##GESPEDPREFETCH##")
     for i ∈ eachindex(gespinds.args) 
-       gespinds.args[i] = Expr(:call, lv(:extract_data), gespinds.args[i])
+       gespinds.args[i] = Expr(:call, lv(:data), gespinds.args[i])
     end    
     push!(q.args, Expr(:(=), gptr, Expr(:call, lv(:gesp), ptr, gespinds)))
 
@@ -138,7 +138,7 @@ function add_prefetches!(q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, pr
             if isone(u)
                 inds.args[i] = Expr(:call, lv(:unwrap), VECTORWIDTHSYMBOL)
             else
-                inds.args[i] = Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, u)
+                inds.args[i] = Expr(:call, lv(:vmul), VECTORWIDTHSYMBOL, u)
             end
         else
             inds.args[i] = Expr(:call, Expr(:curly, lv(:Static), u))
@@ -190,7 +190,7 @@ end
 #     gptr = Symbol(ptr, "##GESPED##")
 #     for i ∈ eachindex(gespinds.args)
 #         if i != translationind
-#             gespinds.args[i] = Expr(:call, lv(:extract_data), gespinds.args[i])
+#             gespinds.args[i] = Expr(:call, lv(:data), gespinds.args[i])
 #         end
 #     end    
 #     push!(q.args, Expr(:(=), gptr, Expr(:call, lv(:gesp), ptr, gespinds)))
@@ -247,7 +247,7 @@ function lower_load_for_optranslation!(
     gptr = Symbol(ptr, "##GESPED##")
     for i ∈ eachindex(gespinds.args)
         if i != translationind
-            gespinds.args[i] = Expr(:call, lv(:extract_data), gespinds.args[i])
+            gespinds.args[i] = Expr(:call, lv(:data), gespinds.args[i])
         end
     end    
     push!(q.args, Expr(:(=), gptr, Expr(:call, lv(:gesp), ptr, gespinds)))

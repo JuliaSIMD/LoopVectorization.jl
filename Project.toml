@@ -1,25 +1,27 @@
 name = "LoopVectorization"
 uuid = "bdcacae8-1622-11e9-2a5c-532679323890"
 authors = ["Chris Elrod <elrodc@gmail.com>"]
-version = "0.8.26"
+version = "0.9.0"
 
 [deps]
+ArrayInterface = "4fba245c-0d91-5ea0-9b3e-6abc04ee57a9"
 DocStringExtensions = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
+IfElse = "615f187c-cbe4-4ef1-ba3b-2fcf58d6d173"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
-SIMDPirates = "21efa798-c60a-11e8-04d3-e1a92915a26a"
 SLEEFPirates = "476501e8-09a2-5ece-8869-fb82de89a1fa"
 UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 VectorizationBase = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
 
 [compat]
+ArrayInterface = "2.14"
 DocStringExtensions = "0.8"
+IfElse = "0"
 OffsetArrays = "1"
-SIMDPirates = "0.8.25"
-SLEEFPirates = "0.5.4"
+SLEEFPirates = "0.6"
 UnPack = "0,1"
-VectorizationBase = "0.12.31"
-julia = "1.1"
+VectorizationBase = "0.13"
+julia = "1.4"
 
 [extras]
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"

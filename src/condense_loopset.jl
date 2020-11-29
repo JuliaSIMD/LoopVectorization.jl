@@ -126,11 +126,11 @@ function loop_boundary(loop::Loop)
     startexact = loop.startexact
     stopexact = loop.stopexact
     if startexact & stopexact
-        Expr(:call, Expr(:curly, lv(:StaticUnitRange), loop.starthint, loop.stophint))
+        Expr(:call, lv(:OptionallyStaticUnitRange), staticexpr(loop.starthint), staticexpr(loop.stophint))
     elseif startexact
-        Expr(:call, Expr(:curly, lv(:StaticLowerUnitRange), loop.starthint), loop.stopsym)
+        Expr(:call, lv(:OptionallyStaticUnitRange), staticexpr(loop.starthint), loop.stopsym)
     elseif stopexact
-        Expr(:call, Expr(:curly, lv(:StaticUpperUnitRange), loop.stophint), loop.startsym)
+        Expr(:call, lv(:OptionallyStaticUnitRange), loop.startsym, staticexpr(loop.stophint))
     else
         Expr(:call, :(:), loop.startsym, loop.stopsym)
     end
@@ -161,9 +161,9 @@ function loopset_return_value(ls::LoopSet, ::Val{extract}) where {extract}
         op = getop(ls, ls.outer_reductions[1])
         if extract
             if (isu₁unrolled(op) | isu₂unrolled(op))
-                Expr(:call, :extract_data, Symbol(mangledvar(op), 0))
+                Expr(:call, :data, Symbol(mangledvar(op), 0))
             else
-                Expr(:call, :extract_data, mangledvar(op))
+                Expr(:call, :data, mangledvar(op))
             end
         else
             Symbol(mangledvar(op), 0)
@@ -174,7 +174,7 @@ function loopset_return_value(ls::LoopSet, ::Val{extract}) where {extract}
         for or ∈ ls.outer_reductions
             op = ops[or]
             if extract
-                push!(ret.args, Expr(:call, :extract_data, Symbol(mangledvar(op), 0)))
+                push!(ret.args, Expr(:call, :data, Symbol(mangledvar(op), 0)))
             else
                 push!(ret.args, Symbol(mangledvar(ops[or]), 0))
             end
@@ -294,6 +294,9 @@ end
 make_fast(q) = Expr(:macrocall, Symbol("@fastmath"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), q)
 make_crashy(q) = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), q)
 
+@inline vecmemaybe(x::NativeTypes) = x
+@inline vecmemaybe(x::VectorizationBase._Vec) = Vec(x)
+
 function setup_call_inline(ls::LoopSet, inline::Int8 = zero(Int8), U::Int8 = zero(Int8), T::Int8 = zero(Int8))
     call = generate_call(ls, (inline,U,T))
     noouterreductions = iszero(length(ls.outer_reductions))
@@ -313,7 +316,7 @@ function setup_call_inline(ls::LoopSet, inline::Int8 = zero(Int8), U::Int8 = zer
         instr = instruction(op)
         out = Symbol(mvar, 0)
         push!(outer_reducts.args, out)
-        push!(q.args, Expr(:(=), var, Expr(:call, lv(reduction_scalar_combine(instr)), out, var)))
+        push!(q.args, Expr(:(=), var, Expr(:call, lv(reduction_scalar_combine(instr)), Expr(:call, lv(:vecmemaybe), out), var)))
     end
     pushpreamble!(ls, outer_reducts)
     append!(ls.preamble.args, q.args)
