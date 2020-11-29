@@ -33,7 +33,7 @@ import LinearAlgebra # for check_args
 using Base.FastMath: add_fast, sub_fast, mul_fast, div_fast
 
 using ArrayInterface
-using ArrayInterface: OptionallyStaticUnitRange, Zero
+using ArrayInterface: OptionallyStaticUnitRange, Zero, One
 const Static = ArrayInterface.StaticInt
 
 
@@ -96,7 +96,7 @@ loop-reordering so as to improve performance:
 """
 LoopVectorization
 
-# include("precompile.jl")
-# _precompile_()
+include("precompile.jl")
+_precompile_()
 
 end # module

@@ -204,7 +204,7 @@ const COST = Dict{Symbol,InstructionCost}(
     # :vfmsub_fast => InstructionCost(4,0.5), # - and * will fuse into this, so much of the time they're not twice as expensive
     # :vfnmadd_fast => InstructionCost(4,0.5), # + and -* will fuse into this, so much of the time they're not twice as expensive
     # :vfnmsub_fast => InstructionCost(4,0.5), # - and -* will fuse into this, so much of the time they're not twice as expensive
-    :vfmaddaddone => InstructionCost(4,0.5), # - and -* will fuse into this, so much of the time they're not twice as expensive
+    # :vfmaddaddone => InstructionCost(4,0.5), # - and -* will fuse into this, so much of the time they're not twice as expensive
     # :vmullog2 => InstructionCost(4,0.5),
     # :vmullog2add! => InstructionCost(4,0.5),
     # :vmullog10 => InstructionCost(4,0.5),
@@ -376,6 +376,7 @@ const FUNCTIONSYMBOLS = IdDict{Type{<:Function},Instruction}(
     # typeof(VectorizationBase.vmul!) => :(*),
     typeof(Base.FastMath.mul_fast) => :(*),
     typeof(/) => :(/),
+    typeof(^) => :(^),
     # typeof(VectorizationBase.vfdiv) => :(/),
     # typeof(VectorizationBase.vfdiv!) => :(/),
     typeof(VectorizationBase.vdiv) => :(/),
@@ -432,10 +433,12 @@ const FUNCTIONSYMBOLS = IdDict{Type{<:Function},Instruction}(
     # typeof(VectorizationBase.vsqrt) => :sqrt,
     typeof(log) => :log,
     typeof(Base.FastMath.log_fast) => :log,
+    typeof(log1p) => :log1p,
     # typeof(VectorizationBase.vlog) => :log,
     typeof(SLEEFPirates.log) => :log,
     typeof(exp) => :exp,
     typeof(Base.FastMath.exp_fast) => :exp,
+    typeof(expm1) => :expm1,
     # typeof(VectorizationBase.vexp) => :exp,
     typeof(SLEEFPirates.exp) => :exp,
     typeof(sin) => :sin,
@@ -460,3 +463,8 @@ const FUNCTIONSYMBOLS = IdDict{Type{<:Function},Instruction}(
     typeof(identity) => :identity,
     typeof(conj) => :conj
 )
+
+# implement whitelist for avx_support that package authors may use to conservatively guard `@avx` application
+for f ∈ keys(FUNCTIONSYMBOLS)
+    @eval ArrayInterface.can_avx(::$(typeof(f))) = true
+end

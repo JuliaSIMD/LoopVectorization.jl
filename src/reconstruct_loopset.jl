@@ -159,7 +159,7 @@ function add_mref!(
     sptr = Expr(:call, sptype, Expr(:call, :pointer, tmpsp), strd_tup, offsets_tup)
     pushpreamble!(ls, Expr(:(=), name, sptr))
 end
-function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, ::Type{<:AbstractRange{T}}, name) where {T}
+function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, @nospecialize(_::Type{VectorizationBase.FastRange{T,F,S,O}}), name) where {T,F,S,O}
     pushpreamble!(ls, Expr(:(=), name, extract_varg(i)))
 end
 function create_mrefs!(
@@ -372,7 +372,7 @@ end
 
 # elbytes(::VectorizationBase.AbstractPointer{T}) where {T} = sizeof(T)::Int
 typeeltype(::Type{P}) where {T,P<:VectorizationBase.AbstractStridedPointer{T}} = T
-typeeltype(::Type{<:AbstractRange{T}}) where {T} = T
+typeeltype(::Type{VectorizationBase.FastRange{T,F,S,O}}) where {T,F,S,O} = T
 # typeeltype(::Any) = Int8
 
 function add_array_symbols!(ls::LoopSet, arraysymbolinds::Vector{Symbol}, offset::Int)
@@ -468,7 +468,7 @@ Execute an `@avx` block. The block's code is represented via the arguments:
 - `vargs...` holds the encoded pointers of all the arrays (see `VectorizationBase`'s various pointer types).
 """
 @generated function _avx_!(::Val{UNROLL}, ::Type{OPS}, ::Type{ARF}, ::Type{AM}, ::Type{LPSYM}, lb::LB, vargs...) where {UNROLL, OPS, ARF, AM, LPSYM, LB}
-    1 + 1 # Irrelevant line you can comment out/in to force recompilation...
+    # 1 + 1 # Irrelevant line you can comment out/in to force recompilation...
     ls = _avx_loopset(OPS.parameters, ARF.parameters, AM.parameters, LPSYM.parameters, LB.parameters, vargs)
     # return @show avx_body(ls, UNROLL)
     # @show UNROLL, OPS, ARF, AM, LPSYM, LB

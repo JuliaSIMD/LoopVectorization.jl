@@ -1,15 +1,29 @@
 
 
-
 function uniquearrayrefs(ls::LoopSet)
     uniquerefs = ArrayReferenceMeta[]
+    includeinlet = Bool[]
     # for arrayref ∈ ls.refs_aliasing_syms
     for op ∈ operations(ls)
         arrayref = op.ref
         arrayref === NOTAREFERENCE && continue
-        any(ref -> sameref(arrayref, ref), uniquerefs) || push!(uniquerefs, arrayref)
+        notunique = false
+        isonlyname = true
+        for ref ∈ uniquerefs
+            notunique = sameref(arrayref, ref)
+            isonlyname &= vptr(arrayref) !== vptr(ref)
+            # if they're not the sameref, they may still have the same name
+            # if they have different names, they're definitely not sameref
+            notunique && break
+        end
+        if !notunique
+            push!(uniquerefs, arrayref)
+            push!(includeinlet, isonlyname)
+        end
+        # any(ref -> sameref(arrayref, ref), uniquerefs) || push!(uniquerefs, arrayref)
+        # any(ref -> vptr(ref) === vptr(arrayref), uniquerefs) || push!(uniquerefs, arrayref)
     end
-    uniquerefs
+    uniquerefs, includeinlet
 end
 
 otherindexunrolled(loopsym::Symbol, ind::Symbol, loopdeps::Vector{Symbol}) = (loopsym !== ind) && (loopsym ∈ loopdeps)
@@ -60,7 +74,7 @@ Returns a vector of length equal to the number of indices.
 A value > 0 indicates which loop number that index corresponds to when incrementing the pointer.
 A value < 0 indicates that abs(value) is the corresponding loop, and a `loopvalue` will be used.
 """
-function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, allarrayrefs::Vector{ArrayReferenceMeta})
+function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, allarrayrefs::Vector{ArrayReferenceMeta}, includeinlet::Bool)
     us = ls.unrollspecification[]
     li = ar.loopedindex
     looporder = reversenames(ls)
@@ -127,16 +141,18 @@ function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, alla
             end
         end
     end
-    vptr_ar = if isone(length(li))
-        # Workaround for fact that 1-d OffsetArrays are offset when using 1 index, but multi-dim ones are not
-        Expr(:call, lv(:onetozeroindexgephack), vptr(ar))
-    else
-        vptr(ar)
-    end
-    if use_offsetprecalc
-        push!(q.args, Expr(:(=), vptr(ar), Expr(:call, lv(:offsetprecalc), Expr(:call, lv(:gesp), vptr_ar, gespinds), Expr(:call, Expr(:curly, :Val, offsetprecalc_descript)))))
-    else
-        push!(q.args, Expr(:(=), vptr(ar), Expr(:call, lv(:gesp), vptr_ar, gespinds)))
+    if includeinlet
+        vptr_ar = if isone(length(li))
+            # Workaround for fact that 1-d OffsetArrays are offset when using 1 index, but multi-dim ones are not
+            Expr(:call, lv(:onetozeroindexgephack), vptr(ar))
+        else
+            vptr(ar)
+        end
+        if use_offsetprecalc
+            push!(q.args, Expr(:(=), vptr(ar), Expr(:call, lv(:offsetprecalc), Expr(:call, lv(:gesp), vptr_ar, gespinds), Expr(:call, Expr(:curly, :Val, offsetprecalc_descript)))))
+        else
+            push!(q.args, Expr(:(=), vptr(ar), Expr(:call, lv(:gesp), vptr_ar, gespinds)))
+        end
     end
     uliv
 end
@@ -149,8 +165,8 @@ function add_loop_start_stop_manager!(ls::LoopSet)
     # TODO: replace first with only once you add Compat as a dep or drop support for older Julia versions
     loopinductvars = map(op -> first(loopdependencies(op)), filter(isloopvalue, operations(ls)))
     # Filtered ArrayReferenceMetas, we must increment each
-    arrayrefs = uniquearrayrefs(ls)
-    use_livs = map(ar -> use_loop_induct_var!(ls, q, ar, arrayrefs), arrayrefs)
+    arrayrefs, includeinlet = uniquearrayrefs(ls)
+    use_livs = map((ar,iil) -> use_loop_induct_var!(ls, q, ar, arrayrefs, iil), arrayrefs, includeinlet)
     # loops, sorted from outer-most to inner-most
     looporder = reversenames(ls)
     # For each loop, we need to choose an induction variable

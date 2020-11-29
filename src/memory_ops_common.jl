@@ -37,12 +37,14 @@ function add_vptr!(ls::LoopSet, array::Symbol, vptrarray::Symbol, actualarray::B
     if !includesarray(ls, array)
         push!(ls.includedarrays, array)
         actualarray && push!(ls.includedactualarrays, array)
-        if broadcast
-            pushpreamble!(ls, Expr(:(=), vptrarray, Expr(:call, lv(:stridedpointer_for_broadcast), array)))
-        else
-            pushpreamble!(ls, Expr(:(=), vptrarray, Expr(:call, lv(:stridedpointer), array)))
-            # pushpreamble!(ls, Expr(:(=), vptrarray, Expr(:call, lv(:noaliasstridedpointer), array)))
-        end
+        func = lv(broadcast ? :stridedpointer_for_broadcast : :stridedpointer)
+        pushpreamble!(ls, Expr(:(=), vptrarray, Expr(:call, func, array)))
+        # if broadcast
+        #     pushpreamble!(ls, Expr(:(=), vptrarray, Expr(:call, lv(:stridedpointer_for_broadcast), array)))
+        # else
+        #     pushpreamble!(ls, Expr(:(=), vptrarray, Expr(:call, lv(:stridedpointer), array)))
+        #     # pushpreamble!(ls, Expr(:(=), vptrarray, Expr(:call, lv(:noaliasstridedpointer), array)))
+        # end
     end
     nothing
 end

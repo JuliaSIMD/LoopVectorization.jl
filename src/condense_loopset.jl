@@ -294,6 +294,9 @@ end
 make_fast(q) = Expr(:macrocall, Symbol("@fastmath"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), q)
 make_crashy(q) = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), q)
 
+@inline vecmemaybe(x::NativeTypes) = x
+@inline vecmemaybe(x::VectorizationBase._Vec) = Vec(x)
+
 function setup_call_inline(ls::LoopSet, inline::Int8 = zero(Int8), U::Int8 = zero(Int8), T::Int8 = zero(Int8))
     call = generate_call(ls, (inline,U,T))
     noouterreductions = iszero(length(ls.outer_reductions))
@@ -313,7 +316,7 @@ function setup_call_inline(ls::LoopSet, inline::Int8 = zero(Int8), U::Int8 = zer
         instr = instruction(op)
         out = Symbol(mvar, 0)
         push!(outer_reducts.args, out)
-        push!(q.args, Expr(:(=), var, Expr(:call, lv(reduction_scalar_combine(instr)), Expr(:call, lv(:Vec), out), var)))
+        push!(q.args, Expr(:(=), var, Expr(:call, lv(reduction_scalar_combine(instr)), Expr(:call, lv(:vecmemaybe), out), var)))
     end
     pushpreamble!(ls, outer_reducts)
     append!(ls.preamble.args, q.args)

@@ -1,15 +1,15 @@
 
 @inline stridedpointer_for_broadcast(A) = stridedpointer_for_broadcast(ArrayInterface.size(A), stridedpointer(A))
 @inline stridedpointer_for_broadcast(s, ptr) = ptr
-function stridedpointer_for_broadcast(s, ptr::VectorizationBase.AbstractStridedPointer)
-     # FIXME: this is unsafe for AbstractStridedPointers
-    throw("Broadcasting not currently supported for arrays where typeof(stridedpointer(A)) === $(typeof(ptr))")
-end
-@generated function stridedpointer_for_broadcast(s::Tuple{Vararg{Any,N}}, ptr::StridedPointer{T,N,C,B,R,X,O}) where {T,N,C,B,R,X,O}
+# function stridedpointer_for_broadcast(s, ptr::VectorizationBase.AbstractStridedPointer)
+#      # FIXME: this is unsafe for AbstractStridedPointers
+#     throw("Broadcasting not currently supported for arrays where typeof(stridedpointer(A)) === $(typeof(ptr))")
+# end
+function stridedpointer_for_broadcast_quote(typ, N, S, X)
     q = Expr(:block, Expr(:meta,:inline), :(strd = ptr.strd))
     strd_tup = Expr(:tuple)
     for n ∈ 1:N
-        s_type = s.parameters[n]
+        s_type = S[n]
         if s_type <: Static
             if s_type === Static{1}
                 push!(strd_tup.args, Expr(:call, lv(:Zero)))
@@ -17,16 +17,24 @@ end
                 push!(strd_tup.args, :(strd[$n]))
             end
         else
-            Xₙ_type = X.parameters[n]
+            Xₙ_type = X[n]
             if Xₙ_type <: Static # FIXME; what to do here? Dynamic dispatch? 
                 push!(strd_tup.args, :(strd[$n]))
             else
-                push!(strd_tup.args, :(Base.ifelse(isone(s[$n]), one($Xₙ_type), strd[$n])))
+                push!(strd_tup.args, :(Base.ifelse(isone(s[$n]), zero($Xₙ_type), strd[$n])))
             end
         end
     end
-    push!(q.args, :(@inbounds StridedPointer{$T,$N,$C,$B,$R}(ptr.p, $strd_tup, ptr.offsets)))
+    push!(q.args, :(@inbounds $typ(ptr.p, $strd_tup, ptr.offsets)))
     q
+end
+@generated function stridedpointer_for_broadcast(s::Tuple{Vararg{Any,N}}, ptr::StridedPointer{T,N,C,B,R,X,O}) where {T,N,C,B,R,X,O}
+    typ = Expr(:curly, :StridedPointer, T, N, C, B, R)
+    stridedpointer_for_broadcast_quote(typ, N, s.parameters, X.parameters)
+end
+@generated function stridedpointer_for_broadcast(s::Tuple{Vararg{Any,N}}, ptr::VectorizationBase.StridedBitPointer{N,C,B,R,X,O}) where {N,C,B,R,X,O}
+    typ = Expr(:curly, :StridedBitPointer, N, C, B, R)
+    stridedpointer_for_broadcast_quote(typ, N, s.parameters, X.parameters)
 end
 
 struct Product{A,B}
@@ -132,8 +140,9 @@ function add_broadcast!(
     push!(ls.preamble_zeros, (identifier(setC), IntOrFloat))
     setC.reduced_children = kvec
     # compute Cₘₙ += Aₘₖ * Bₖₙ
+    instrsym = Base.libllvm_version < v"11.0.0" ? :vfmadd231 : :vfmadd
     reductop = Operation(
-        ls, mC, elementbytes, :vfmadd231, compute, reductdeps, kvec, Operation[loadA, loadB, setC]
+        ls, mC, elementbytes, instrsym, compute, reductdeps, kvec, Operation[loadA, loadB, setC]
     )
     reductop = pushop!(ls, reductop, mC)
     reductfinal = Operation(
@@ -149,17 +158,18 @@ Base.@propagate_inbounds Base.getindex(A::LowDimArray, i...) = getindex(A.data, 
 @inline Base.size(A::LowDimArray) = Base.size(A.data)
 @inline Base.size(A::LowDimArray, i) = Base.size(A.data, i)
 @inline Base.strides(A::LowDimArray) = strides(A.data)
+@inline ArrayInterface.parent_type(::Type{LowDimArray{D,T,N,A}}) where {T,D,N,A} = A
 @inline ArrayInterface.strides(A::LowDimArray) = ArrayInterface.strides(A.data)
 @generated function ArrayInterface.size(A::LowDimArray{D,T,N}) where {D,T,N}
     t = Expr(:tuple)
     for n ∈ 1:N
-        if D[n]
+        if n > length(D) || D[n]
             push!(t.args, Expr(:ref, :s, n))
         else
             push!(t.args, Expr(:call, Expr(:curly, lv(:Static), 1)))
         end
     end
-    Expr(:block, Expr(:meta,:inline), :(s = size(A)), t)
+    Expr(:block, Expr(:meta,:inline), :(s = ArrayInterface.size(parent(A))), t)
 end
 Base.parent(A::LowDimArray) = A.data
 Base.unsafe_convert(::Type{Ptr{T}}, A::LowDimArray{D,T}) where {D,T} = pointer(A.data)
@@ -168,6 +178,35 @@ ArrayInterface.contiguous_batch_size(A::LowDimArray) = ArrayInterface.contiguous
 ArrayInterface.stride_rank(A::LowDimArray) = ArrayInterface.stride_rank(A.data)
 ArrayInterface.offsets(A::LowDimArray) = ArrayInterface.offsets(A.data)
 
+@inline function stridedpointer_for_broadcast(A::LowDimArray{D}) where {D}
+    _stridedpointer(stridedpointer_for_broadcast(parent(A)), Val{D}())
+end
+
+@generated function _stridedpointer(p::StridedPointer{T,N,C,B,R}, ::Val{D}) where {T,N,C,B,R,D}
+    lenD = length(D)
+    strd = Expr(:tuple)
+    offsets = Expr(:tuple)
+    Rtup = Expr(:tuple)
+    Cnew = -1
+    Bnew = -1
+    Nnew = 0
+    for n ∈ 1:N
+        ((n ≤ lenD) && (!D[n])) && continue
+        if n == C
+            Cnew = n
+        end
+        if n == B
+            Bnew = n
+        end
+        push!(Rtup.args, R[n])
+        push!(offsets.args, Expr(:ref, :offs, n))
+        push!(strd.args, Expr(:ref, :strd, n))
+        Nnew += 1
+    end
+    typ = Expr(:curly, :StridedPointer, T, Nnew, Cnew, Bnew, Rtup)
+    ptr = Expr(:call, typ, :(pointer(p)), strd, offsets)
+    Expr(:block, Expr(:meta,:inline), :(strd = p.strd), :(offs = p.offsets), ptr)
+end
 # @generated function VectorizationBase.stridedpointer(A::LowDimArray{D,T,N}) where {D,T,N}
 #     smul = Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:VectorizationBase)), QuoteNode(:staticmul))
 #     multup = Expr(:tuple)
@@ -188,22 +227,22 @@ function LowDimArray{D}(data::A) where {D,T,N,A <: AbstractArray{T,N}}
 end
 function extract_all_1_array!(ls::LoopSet, bcname::Symbol, N::Int, elementbytes::Int)
     refextract = gensym(bcname)
-    ref = Expr(:ref, bcname); append!(ref.args, [1 for n ∈ 1:N])
+    ref = Expr(:ref, bcname); foreach(_ -> push!(ref.args, :begin), 1:N)
     pushprepreamble!(ls, Expr(:(=), refextract, ref))
     return add_constant!(ls, refextract, elementbytes) # or replace elementbytes with sizeof(T) ? u
 end
 function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
-    @nospecialize(LDA::Type{<:LowDimArray}), elementbytes::Int
-)
-    D,T,N::Int,_ = LDA.parameters
+    @nospecialize(LDA::Type{LowDimArray{D,T,N,A}}), elementbytes::Int
+) where {D,T,N,A}
+    # D,T,N::Int,_ = LDA.parameters
     Dlen = length(D)
-    if Dlen == N && !any(D)
+    if Dlen == N && !any(D) # array is a scalar, as it is broadcasted on all dimensions
         return extract_all_1_array!(ls, bcname, N, elementbytes)
     end
     fulldims = Symbol[loopsyms[n] for n ∈ 1:N if ((Dlen < n) || D[n]::Bool)]
     ref = ArrayReference(bcname, fulldims)
-    add_simple_load!(ls, destname, ref, elementbytes, true, false )::Operation
+    add_simple_load!(ls, destname, ref, elementbytes, true, true )::Operation
 end
 function add_broadcast_adjoint_array!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{A}, elementbytes::Int
@@ -218,8 +257,11 @@ function add_broadcast_adjoint_array!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{<:AbstractVector}, elementbytes::Int
 )
     # isone(length(loopsyms)) && return extract_all_1_array!(ls, bcname, N, elementbytes)
-    ref = ArrayReference(bcname, Symbol[loopsyms[2]])
-    add_simple_load!( ls, destname, ref, elementbytes, true, true )
+    parent = gensym(:parent)
+    pushprepreamble!(ls, Expr(:(=), parent, Expr(:call, :parent, bcname)))
+
+    ref = ArrayReference(parent, Symbol[loopsyms[2]])
+    add_simple_load!( ls, destname, ref, elementbytes, true, true )::Operation
 end
 function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},

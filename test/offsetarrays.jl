@@ -3,11 +3,8 @@ using LoopVectorization: Static
 # T = Float64; r = -1:1;
 # T = Float32; r = -1:1;
 
-# We have to commit type piracy until this PR merges: https://github.com/JuliaArrays/OffsetArrays.jl/pull/170
-# We only do so in our test suite
+# TODO: remove this once this PR merges: https://github.com/JuliaArrays/OffsetArrays.jl/pull/170
 @inline Base.unsafe_convert(::Type{Ptr{T}}, A::OffsetArray{T}) where {T} = pointer(parent(A))
-
-
 
 @testset "OffsetArrays" begin
 
@@ -114,17 +111,6 @@ using LoopVectorization: Static
         (Static{1}(), (Static{UR}() - Static{LR}() + Static{1}()))
     end
     ArrayInterface.offsets(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (Static{LR}(), Static{LC}())
-    # @generated function LoopVectorization.stridedpointer(A::SizedOffsetMatrix{T,LR,UR,LC,RC}) where {T,LR,UR,LC,RC}
-    #     quote
-    #         $(Expr(:meta,:inline))
-    #         LoopVectorization.OffsetStridedPointer(
-    #             LoopVectorization.StaticStridedPointer{$T,Tuple{1,$(UR-LR+1)}}(pointer(parent(A))),
-    #             ($(LR-1), $(LC-1))
-    #         )
-    #     end
-    # end
-    # Base.size(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (1 + UR-LR, 1 + UC-LC)
-    # Base.CartesianIndices(::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = CartesianIndices((LR:UR,LC:UC))
     Base.getindex(A::SizedOffsetMatrix, i, j) = LoopVectorization.vload(LoopVectorization.stridedpointer(A), (i,j))
     function avx2dunrolled!(out::AbstractMatrix, A::AbstractMatrix, kern::SizedOffsetMatrix{T,-1,1,-1,1}) where {T}
         Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> kern_ik_jk = kern[ik-2,jk-2]

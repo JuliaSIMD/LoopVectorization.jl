@@ -178,7 +178,7 @@ function lower_compute!(
     # parentsyms = [opp.variable for opp ∈ parents(op)]
     Uiter = opunrolled ? u₁ - 1 : 0
     isreduct = isreduction(op)
-    if !isnothing(suffix) && isreduct# && (iszero(suffix) || (ls.unrollspecification[].u₂ - 1 == suffix))
+    if Base.libllvm_version < v"11.0.0" && !isnothing(suffix) && isreduct# && (iszero(suffix) || (ls.unrollspecification[].u₂ - 1 == suffix))
         # instrfid = findfirst(isequal(instr.instr), (:vfmadd, :vfnmadd, :vfmsub, :vfnmsub))
         instrfid = findfirst(isequal(instr.instr), (:vfmadd_fast, :vfnmadd_fast, :vfmsub_fast, :vfnmsub_fast))
         # want to instcombine when parent load's deps are superset
