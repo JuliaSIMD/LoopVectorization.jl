@@ -260,6 +260,7 @@ Additionally, define `pointer` and `stride` methods.
 end
 @inline check_args(A::BitVector) = true
 @inline check_args(A::BitArray) = iszero(size(A,1) & 7)
+@inline check_args(::VectorizationBase.AbstractStridedPointer) = true
 @inline check_args(_) = false
 @inline check_args(A, B, C::Vararg{Any,K}) where {K} = check_args(A) && check_args(B, C...)
 """
