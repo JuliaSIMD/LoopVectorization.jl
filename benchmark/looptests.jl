@@ -1,6 +1,8 @@
 using LoopVectorization, LinearAlgebra, OffsetArrays, ArrayInterface
 BLAS.set_num_threads(1)
 
+
+using LoopVectorization: Static
 # TODO: remove this once this PR merges: https://github.com/JuliaArrays/OffsetArrays.jl/pull/170
 @inline Base.unsafe_convert(::Type{Ptr{T}}, A::OffsetArray{T}) where {T} = pointer(parent(A))
 

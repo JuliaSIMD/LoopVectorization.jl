@@ -465,6 +465,6 @@ const FUNCTIONSYMBOLS = IdDict{Type{<:Function},Instruction}(
 )
 
 # implement whitelist for avx_support that package authors may use to conservatively guard `@avx` application
-for f ∈ keys(FUNCTIONSYMBOLS)
-    @eval ArrayInterface.can_avx(::$(typeof(f))) = true
-end
+# for f ∈ keys(FUNCTIONSYMBOLS)
+#     @eval ArrayInterface.can_avx(::$(typeof(f))) = true
+# end

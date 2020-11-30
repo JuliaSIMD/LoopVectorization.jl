@@ -122,7 +122,8 @@ function lsvecwidthshift(ls::LoopSet, vectorized::Symbol, size_T = nothing)
     W = ls.vector_width[]
     lvec = length(ls, vectorized)
     if iszero(W)
-        VectorizationBase.pick_vector_width_shift(lvec, isnothing(size_T) ? biggest_type_size(ls) : size_T)::Tuple{Int,Int}
+        VectorizationBase.pick_vector_width_shift_from_size(lvec, isnothing(size_T) ? biggest_type_size(ls) : size_T)::Tuple{Int,Int}
+        # VectorizationBase.pick_vector_width_shift(lvec, isnothing(size_T) ? biggest_type_size(ls) : size_T)::Tuple{Int,Int}
     else
         W = min(W, VectorizationBase.nextpow2(lvec))
         W, VectorizationBase.intlog2(W)

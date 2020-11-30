@@ -221,7 +221,7 @@ filter2d_unrolled_bench = benchmark_filter2dunrolled(sizes); println("Benchmark 
 vexp_bench = benchmark_exp(sizes); println("Benchmark results of exponentiating a vector:"); println(vexp_bench)
 randomaccess_bench = benchmark_random_access(sizes); println("Benchmark results from using a vector of indices:"); println(randomaccess_bench)
 
-const v = 1
+const v = 2
 using Cairo, Fontconfig
 const PICTURES = joinpath(pkgdir(LoopVectorization), "docs", "src", "assets")
 saveplot(f, br) = draw(PNG(joinpath(PICTURES, f * "$v.png"), 12inch, 8inch), plot(br))
