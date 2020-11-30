@@ -5,11 +5,11 @@
 @inline vreduce(::typeof(min), v::VectorizationBase.AbstractSIMDVector) = vminimum(v)
 @inline vreduce(op, v::VectorizationBase.AbstractSIMDVector) = _vreduce(op, v)
 @inline _vreduce(op, v::VectorizationBase.AbstractSIMDVector) = _reduce(op, Vec(v))
-@inline function _vreduce(op, v::Vec)
-    isone(length(v)) && return v[1]
-    a = op(v[1], v[2])
-    for i ∈ 3:length(v)
-        a = op(a, v[i])
+_vreduce(op, v::Vec{1}) = VectorizationBase.extractelement(v, 0)
+@inline function _vreduce(op, v::Vec{W}) where {W}
+    a = op(VectorizationBase.extractelement(v,0), VectorizationBase.extractelement(v, 1))
+    for i ∈ 2:W-1
+        a = op(a, VectorizationBase.extractelement(v, i))
     end
     a
 end

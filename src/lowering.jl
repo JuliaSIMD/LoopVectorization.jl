@@ -573,6 +573,8 @@ function determine_eltype(ls::LoopSet)
     end
     promote_q
 end
+@inline _eltype(x) = eltype(x)
+@inline _eltype(::BitArray) = VectorizationBase.Bit
 function determine_width(
     ls::LoopSet, vectorized::Union{Symbol,Nothing}
 )
@@ -588,7 +590,7 @@ function determine_width(
         push!(vwidth_q.args, ELTYPESYMBOL)
     else
         for array ∈ ls.includedactualarrays
-            push!(vwidth_q.args, Expr(:call, :eltype, array))
+            push!(vwidth_q.args, Expr(:call, lv(:_eltype), array))
         end
     end
     vwidth_q
