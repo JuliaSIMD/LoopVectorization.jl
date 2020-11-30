@@ -255,28 +255,13 @@ It returns true for `AbstractArray{T}`s when `check_type(T) == true` and the arr
 To provide support for a custom array type, ensure that `check_args` returns true, either through overloading it or subtyping `DenseArray`.
 Additionally, define `pointer` and `stride` methods.
 """
-@inline check_args(A::SubArray{T,N,P,I}) where {T,N,P,I<:Tuple{Vararg{Union{Int,Colon,AbstractRange}}}} = check_args(parent(A))
-@inline check_args(A::OffsetArray) = check_args(parent(A))
-@inline check_args(A::Adjoint) = check_args(parent(A))
-@inline check_args(A::Transpose) = check_args(parent(A))
-@inline check_args(A::PermutedDimsArray) = check_args(parent(A))
-@inline check_args(A::StridedArray) = check_type(eltype(A))
-@inline check_args(A::AbstractRange) = check_type(eltype(A))
-@inline check_args(A::BitVector) = true
-@inline check_args(A::BitMatrix) = true
-@inline function check_args(A::AbstractArray)
-    M = parentmodule(typeof(A))
-    if parent(A) === A # SparseMatrix, StaticArray, etc
-        false
-    elseif M === Base || M === Core || M ===LinearAlgebra
-        # reshapes which aren't StridedArrays, plus UpperTriangular, etc.
-        false
-    else
-        check_args(parent(A)) # PermutedDimsArray, NamedDimsArray
-    end
+@inline function check_args(A::AbstractArray{T}) where {T}
+    check_type(T) && ArrayInterface.device(A) === ArrayInterface.CPUPointer()
 end
-@inline check_args(A::VectorizationBase.AbstractStridedPointer{T}) where {T} = check_type(T)
-@inline check_args(A, Bs...) = check_args(A) && check_args(Bs...)
+@inline check_args(A::BitVector) = true
+@inline check_args(A::BitArray) = iszero(size(A,1) & 7)
+@inline check_args(_) = false
+@inline check_args(A, B, C::Vararg{Any,K}) where {K} = check_args(A) && check_args(B, C...)
 """
     check_type(::Type{T}) where {T}
 

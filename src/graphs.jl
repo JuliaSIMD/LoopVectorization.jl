@@ -458,6 +458,16 @@ function add_loop_bound!(ls::LoopSet, itersym::Symbol, bound, upper::Bool = true
     pushprepreamble!(ls, Expr(:(=), N, bound))
     N
 end
+function static_literals!(q::Expr)
+    for (i,ex) ∈ enumerate(q.args)
+        if ex isa Number
+            q.args[i] = staticexpr(ex)
+        elseif ex isa Expr
+            static_literals!(ex)
+        end
+    end
+    q
+end
 
 """
 This function creates a loop, while switching from 1 to 0 based indices
@@ -503,7 +513,7 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
             end
         else
             N = gensym("loop" * string(itersym))
-            pushprepreamble!(ls, Expr(:(=), N, Expr(:call, lv(:maybestaticrange), r)))
+            pushprepreamble!(ls, Expr(:(=), N, Expr(:call, lv(:maybestaticrange), static_literals!(r))))
             L = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticfirst), N), false)
             U = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticlast), N), true)
             Loop(itersym, L, U)
