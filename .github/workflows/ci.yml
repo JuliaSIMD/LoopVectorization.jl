@@ -15,11 +15,12 @@ jobs:
       fail-fast: false
       matrix:
         version:
-          # - '1.5'
-          - '1'
+          - '1.5'
+          - '1' # automatically expands to the latest stable 1.x release of Julia.
           - 'nightly'
         os:
           - ubuntu-latest
+          - windows-latest
         arch:
           - x64
     steps:
@@ -52,6 +53,31 @@ jobs:
       - uses: julia-actions/setup-julia@v1
         with:
           version: '1'
+      - run: julia --color=yes -e 'using Pkg; VERSION >= v"1.5-" && !isdir(joinpath(DEPOT_PATH[1], "registries", "General")) && Pkg.Registry.add("General")'
+        shell: bash
+        env:
+          JULIA_PKG_SERVER: ""
+      - run: |
+          julia --project=docs -e '
+            using Pkg
+            Pkg.develop(PackageSpec(path=pwd()))
+            Pkg.instantiate()'
+      - run: julia --project=docs docs/make.jl
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
+  doctests:
+    name: Doctests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: julia-actions/setup-julia@v1
+        with:
+          version: 'nightly'
+      - run: julia --color=yes -e 'using Pkg; VERSION >= v"1.5-" && !isdir(joinpath(DEPOT_PATH[1], "registries", "General")) && Pkg.Registry.add("General")'
+        shell: bash
+        env:
+          JULIA_PKG_SERVER: ""
       - run: |
           julia --project=docs -e '
             using Pkg
@@ -62,7 +88,3 @@ jobs:
             using Documenter: doctest
             using LoopVectorization
             doctest(LoopVectorization)'
-      - run: julia --project=docs docs/make.jl
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
