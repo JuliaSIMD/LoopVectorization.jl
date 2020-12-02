@@ -8,6 +8,7 @@ makedocs(;
         "Getting Started" => "getting_started.md",
         "Examples" => [
             "examples/matrix_multiplication.md",
+            "examples/array_interface.md",
             "examples/matrix_vector_ops.md",
             "examples/dot_product.md",
             "examples/special_functions.md",

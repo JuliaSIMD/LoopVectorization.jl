@@ -9,6 +9,7 @@ Please file an issue if you run into any problems.
 Pages = [
     "getting_started.md",
     "examples/matrix_multiplication.md",
+    "examples/array_interface.md",
     "examples/matrix_vector_ops.md",
     "examples/dot_product.md",
     "examples/filtering.md",
