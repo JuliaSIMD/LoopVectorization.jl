@@ -2,6 +2,10 @@ using Test
 using LoopVectorization
 using LinearAlgebra
 
+import InteractiveUtils
+
+InteractiveUtils.versioninfo(stdout; verbose = true)
+
 # const START_TIME = time()
 # exceeds_time_limit() = (time() - START_TIME) > 35 * 60
 
