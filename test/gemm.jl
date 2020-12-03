@@ -710,14 +710,21 @@
                 @test C ≈ C2
                 fill!(C, 9999.999); mulCAtB_2x2blockavx_noinline!(C, A', B);
                 @test C ≈ C2
-                fill!(C, 9999.999); gemm_accurate!(C, A, B);
-                @test C ≈ C2
-                fill!(C, 9999.999); gemm_accurate!(C, At', B);
-                @test C ≈ C2
-                fill!(C, 9999.999); gemm_accurate!(C, A, Bt');
-                @test C ≈ C2
-                fill!(C, 9999.999); gemm_accurate!(C, At', Bt');
-                @test C ≈ C2
+                if RUN_SLOW_TESTS
+                    fill!(C, 9999.999); gemm_accurate!(C, A, B);
+                    @test C ≈ C2
+                    fill!(C, 9999.999); gemm_accurate!(C, At', B);
+                    @test C ≈ C2
+                    fill!(C, 9999.999); gemm_accurate!(C, A, Bt');
+                    @test C ≈ C2
+                    fill!(C, 9999.999); gemm_accurate!(C, At', Bt');
+                    @test C ≈ C2
+                    Ab = zeros(eltype(C), size(A)); Bb = zeros(eltype(C), size(B)); Cb = zero(C);
+                    threegemms!(Ab, Bb, Cb, A, B, C)
+                    @test Ab ≈ C * B'
+                    @test Bb ≈ A' * C
+                    @test Cb ≈ A * B
+                end
                 if iszero(size(A,1) % 8)
                     Abit = A .> 0.5;
                     fill!(C, 9999.999); AmulBavx1!(C, Abit, B);
@@ -728,11 +735,6 @@
                     fill!(C, 9999.999); AmulBavx1!(C, A, Bbit);
                     @test C ≈ A * Bbit
                 end
-                Ab = zeros(eltype(C), size(A)); Bb = zeros(eltype(C), size(B)); Cb = zero(C);
-                threegemms!(Ab, Bb, Cb, A, B, C)
-                @test Ab ≈ C * B'
-                @test Bb ≈ A' * C
-                @test Cb ≈ A * B
             end
             # exceeds_time_limit() && break
             @time @testset "_avx $T dynamic gemm" begin

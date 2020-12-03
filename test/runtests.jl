@@ -2,6 +2,10 @@ using Test
 using LoopVectorization
 using LinearAlgebra
 
+import InteractiveUtils
+
+InteractiveUtils.versioninfo(stdout; verbose = true)
+
 # const START_TIME = time()
 # exceeds_time_limit() = (time() - START_TIME) > 35 * 60
 
@@ -30,11 +34,16 @@ Base.IndexStyle(::Type{<:FallbackArrayWrapper}) = IndexLinear()
 
 @show LoopVectorization.REGISTER_COUNT
 
+const RUN_SLOW_TESTS = LoopVectorization.REGISTER_COUNT ≤ 16 || !parse(Bool, get(ENV, "GITHUB_ACTIONS", "false"))
+@show RUN_SLOW_TESTS
+
 @time @testset "LoopVectorization.jl" begin
     
     @test isempty(detect_unbound_args(LoopVectorization))
 
     @time include("printmethods.jl")
+
+    @time include("can_avx.jl")
 
     @time include("fallback.jl")
 
@@ -44,9 +53,7 @@ Base.IndexStyle(::Type{<:FallbackArrayWrapper}) = IndexLinear()
 
     @time include("check_empty.jl")
 
-    if isnothing(get(ENV, "TRAVIS_BRANCH", nothing)) || LoopVectorization.REGISTER_COUNT ≠ 32 || VERSION ≥ v"1.4"
-        @time include("offsetarrays.jl")
-    end
+    @time include("offsetarrays.jl")
 
     @time include("tensors.jl")
 
@@ -70,8 +77,5 @@ Base.IndexStyle(::Type{<:FallbackArrayWrapper}) = IndexLinear()
 
     @time include("broadcast.jl")
 
-    # I test  locally on master; times out on Travis.
-    if isnothing(get(ENV, "TRAVIS_BRANCH", nothing)) || LoopVectorization.REGISTER_COUNT ≠ 32 || VERSION ≥ v"1.4"
-        @time include("gemm.jl")
-    end
+    @time include("gemm.jl")
 end
