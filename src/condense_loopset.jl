@@ -263,6 +263,7 @@ end
 @inline check_args(::VectorizationBase.AbstractStridedPointer) = true
 @inline check_args(_) = false
 @inline check_args(A, B, C::Vararg{Any,K}) where {K} = check_args(A) && check_args(B, C...)
+@inline check_args(::AbstractRange{T}) where {T} = check_type(T)
 """
     check_type(::Type{T}) where {T}
 

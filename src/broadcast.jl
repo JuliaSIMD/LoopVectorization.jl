@@ -338,7 +338,7 @@ end
 # size of dest determines loops
 # function vmaterialize!(
 @generated function vmaterialize!(
-    dest::StridedArray{T,N}, bc::BC, ::Val{Mod}
+    dest::AbstractArray{T,N}, bc::BC, ::Val{Mod}
 ) where {T <: NativeTypes, N, BC <: Union{Broadcasted,Product}, Mod}
     # we have an N dimensional loop.
     # need to construct the LoopSet
@@ -358,18 +358,23 @@ end
     add_simple_store!(ls, :dest, ArrayReference(:dest, loopsyms), elementbytes)
     resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
     # return ls
-    q = lower(ls)
+    q = lower(ls, 0)
     push!(q.args, :dest)
     # @show q
     # q
-    q = Expr(:block, ls.prepreamble, Expr(:if, check_args_call(ls), q, :(Base.Broadcast.materialize!(dest, bc))))
-    isone(N) && pushfirst!(q.args, Expr(:meta,:inline))
+    q = Expr(
+        :block,
+        ls.prepreamble,
+        # Expr(:if, check_args_call(ls), Expr(:block, :(println("Primary code path!")), q), Expr(:block, :(println("Back up code path!")), :(Base.Broadcast.materialize!(dest, bc))))
+        Expr(:if, check_args_call(ls), q, :(Base.Broadcast.materialize!(dest, bc)))
+    )
+    # isone(N) && pushfirst!(q.args, Expr(:meta,:inline))
     q
      # ls
 end
 @generated function vmaterialize!(
     dest′::Union{Adjoint{T,A},Transpose{T,A}}, bc::BC, ::Val{Mod}
-) where {T <: NativeTypes, N, A <: StridedArray{T,N}, BC <: Union{Broadcasted,Product}, Mod}
+) where {T <: NativeTypes, N, A <: AbstractArray{T,N}, BC <: Union{Broadcasted,Product}, Mod}
     # we have an N dimensional loop.
     # need to construct the LoopSet
     loopsyms = [gensym(:n) for n ∈ 1:N]
@@ -387,15 +392,20 @@ end
     add_broadcast!(ls, :dest, :bc, loopsyms, BC, elementbytes)
     add_simple_store!(ls, :dest, ArrayReference(:dest, reverse(loopsyms)), elementbytes)
     resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
-    q = lower(ls)
+    q = lower(ls, 0)
     push!(q.args, :dest′)
-    q = Expr(:block, ls.prepreamble, Expr(:if, check_args_call(ls), q, :(Base.Broadcast.materialize!(dest′, bc))))
-    isone(N) && pushfirst!(q.args, Expr(:meta,:inline))
+    q = Expr(
+        :block,
+        ls.prepreamble,
+        Expr(:if, check_args_call(ls), q, :(Base.Broadcast.materialize!(dest′, bc)))
+    )
+    # isone(N) && pushfirst!(q.args, Expr(:meta,:inline))
     q
     # ls
 end
-function vmaterialize!(
-    dest::StridedArray{T,N}, bc::Broadcasted{Base.Broadcast.DefaultArrayStyle{0},Nothing,typeof(identity),Tuple{T2}}, ::Val{Mod}
+# these are marked `@inline` so the `@avx` itself can choose whether or not to inline.
+@inline function vmaterialize!(
+    dest::AbstractArray{T,N}, bc::Broadcasted{Base.Broadcast.DefaultArrayStyle{0},Nothing,typeof(identity),Tuple{T2}}, ::Val{Mod}
 ) where {T <: NativeTypes, N, T2 <: Number, Mod}
     arg = T(first(bc.args))
     @avx for i ∈ eachindex(dest)
@@ -403,9 +413,9 @@ function vmaterialize!(
     end
     dest
 end
-function vmaterialize!(
+@inline function vmaterialize!(
     dest′::Union{Adjoint{T,A},Transpose{T,A}}, bc::Broadcasted{Base.Broadcast.DefaultArrayStyle{0},Nothing,typeof(identity),Tuple{T2}}, ::Val{Mod}
-) where {T <: NativeTypes, N, A <: StridedArray{T,N}, T2 <: Number, Mod}
+) where {T <: NativeTypes, N, A <: AbstractArray{T,N}, T2 <: NativeTypes, Mod}
     arg = T(first(bc.args))
     dest = parent(dest′)
     @avx for i ∈ eachindex(dest)
