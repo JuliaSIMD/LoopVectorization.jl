@@ -82,6 +82,7 @@ include("constructors.jl")
 include("user_api_conveniences.jl")
 include("mapreduce.jl")
 include("broadcast.jl")
+include("zygoterules.jl")
 
 """
 LoopVectorization provides macros and functions that combine SIMD vectorization and

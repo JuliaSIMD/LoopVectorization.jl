@@ -12,6 +12,7 @@ OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
 SLEEFPirates = "476501e8-09a2-5ece-8869-fb82de89a1fa"
 UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 VectorizationBase = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
+ZygoteRules = "700de1a5-db45-46bc-99cf-38207098b444"
 
 [compat]
 ArrayInterface = "2.14.2"
@@ -27,6 +28,7 @@ julia = "1.5"
 InteractiveUtils = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [targets]
-test = ["InteractiveUtils", "Random", "Test"]
+test = ["InteractiveUtils", "Random", "Test", "Zygote"]

@@ -39,6 +39,9 @@ const RUN_SLOW_TESTS = LoopVectorization.REGISTER_COUNT ≤ 16 || !parse(Bool, g
 
 @time @testset "LoopVectorization.jl" begin
     
+    @time include("zygoterules.jl")
+    # move down, later!
+
     @test isempty(detect_unbound_args(LoopVectorization))
 
     @time include("printmethods.jl")
