@@ -11,7 +11,7 @@ using VectorizationBase: REGISTER_SIZE, REGISTER_COUNT, data,
     Zero, maybestaticrange, offsetprecalc, lazymul,
     maybestaticfirst, maybestaticlast, scalar_less, gep, gesp, pointerforcomparison, NativeTypes,
     vfmadd, vfmsub, vfnmadd, vfnmsub, vfmadd231, vfmsub231, vfnmadd231, vfnmsub231, vadd, vsub, vmul,
-    relu, stridedpointer, StridedPointer, AbstractStridedPointer,
+    relu, stridedpointer, StridedPointer, StridedBitPointer, AbstractStridedPointer,
     reduced_add, reduced_prod, reduce_to_add, reduce_to_prod, reduced_max, reduced_min, reduce_to_max, reduce_to_min,
     vsum, vprod, vmaximum, vminimum, vstorent!
 

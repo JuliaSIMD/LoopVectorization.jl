@@ -20,7 +20,7 @@ IfElse = "0.1"
 OffsetArrays = "1"
 SLEEFPirates = "0.6"
 UnPack = "1"
-VectorizationBase = "0.13.4"
+VectorizationBase = "0.13.7"
 julia = "1.5"
 
 [extras]
