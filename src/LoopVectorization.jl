@@ -53,7 +53,6 @@ const VECTORWIDTHSYMBOL, ELTYPESYMBOL = Symbol("##Wvecwidth##"), Symbol("##Tloop
 include("vectorizationbase_compat/contract_pass.jl")
 include("vectorizationbase_compat/subsetview.jl")
 include("getconstindexes.jl")
-# include("vectorizationbase_extensions.jl")
 include("predicates.jl")
 include("map.jl")
 include("filter.jl")

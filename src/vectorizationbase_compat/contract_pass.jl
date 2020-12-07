@@ -1,15 +1,4 @@
 
-
-
-function check_negative(x)
-    x isa Expr || return false
-    x.head === :call || return false
-    length(x.args) == 2 || return false
-    a = first(x.args)
-    return (a === :(-) || a == :(Base.FastMath.sub_fast))
-end
-
-
 mulexprcost(::Number) = 0
 mulexprcost(::Symbol) = 1
 function mulexprcost(ex::Expr)
@@ -72,7 +61,6 @@ function recursive_muladd_search!(call, argv, cnmul::Bool = false, csub::Bool = 
             f = first(exa)
             exav = @view(exa[2:end])
             if f === :* || f === :vmul! || f === :vmul || f == :(Base.FastMath.mul_fast)
-                # isnmul = any(check_negative, exav)
                 a, b = mulexpr(exav)
                 call.args[2] = a
                 call.args[3] = b
