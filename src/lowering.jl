@@ -551,16 +551,87 @@ function reduce_expr!(q::Expr, ls::LoopSet, U::Int)
         end
     end
 end
+
+"""
+For structs wrapping arrays, using `GC.@preserve` can trigger heap allocations.
+`preserve_buffer` attempts to extract the heap-allocated part. Isolating it by itself
+will often allow the heap allocations to be elided. For example:
+
+```julia
+julia> using StaticArrays, BenchmarkTools
+
+julia> # Needed until a release is made featuring https://github.com/JuliaArrays/StaticArrays.jl/commit/a0179213b741c0feebd2fc6a1101a7358a90caed
+       Base.elsize(::Type{<:MArray{S,T}}) where {S,T} = sizeof(T)
+
+julia> @noinline foo(A) = unsafe_load(A,1)
+foo (generic function with 1 method)
+
+julia> function alloc_test_1()
+           A = view(MMatrix{8,8,Float64}(undef), 2:5, 3:7)
+           A[begin] = 4
+           GC.@preserve A foo(pointer(A))
+       end
+alloc_test_1 (generic function with 1 method)
+
+julia> function alloc_test_2()
+           A = view(MMatrix{8,8,Float64}(undef), 2:5, 3:7)
+           A[begin] = 4
+           pb = parent(A) # or `LoopVectorization.preserve_buffer(A)`; `perserve_buffer(::SubArray)` calls `parent`
+           GC.@preserve pb foo(pointer(A))
+       end
+alloc_test_2 (generic function with 1 method)
+
+julia> @benchmark alloc_test_1()
+BenchmarkTools.Trial:
+  memory estimate:  544 bytes
+  allocs estimate:  1
+  --------------
+  minimum time:     17.227 ns (0.00% GC)
+  median time:      21.352 ns (0.00% GC)
+  mean time:        26.151 ns (13.33% GC)
+  maximum time:     571.130 ns (78.53% GC)
+  --------------
+  samples:          10000
+  evals/sample:     998
+
+julia> @benchmark alloc_test_2()
+BenchmarkTools.Trial:
+  memory estimate:  0 bytes
+  allocs estimate:  0
+  --------------
+  minimum time:     3.275 ns (0.00% GC)
+  median time:      3.493 ns (0.00% GC)
+  mean time:        3.491 ns (0.00% GC)
+  maximum time:     4.998 ns (0.00% GC)
+  --------------
+  samples:          10000
+  evals/sample:     1000
+```
+"""
+@inline preserve_buffer(A::AbstractArray) = A
+@inline preserve_buffer(A::SubArray) = preserve_buffer(parent(A))
+@inline preserve_buffer(A::PermutedDimsArray) = preserve_buffer(parent(A))
+@inline preserve_buffer(A::Union{Transpose,Adjoint}) = preserve_buffer(parent(A))
+@inline preserve_buffer(x) = x
+
 function gc_preserve(ls::LoopSet, q::Expr)
     length(ls.opdict) == 0 && return q
-    gcp = Expr(:macrocall, Expr(:(.), :GC, QuoteNode(Symbol("@preserve"))), LineNumberNode(@__LINE__, Symbol(@__FILE__)))
+    q2 = Expr(:block)
+    gcp = Expr(:gc_preserve, q)
+    # gcp = Expr(:macrocall, Expr(:(.), :GC, QuoteNode(Symbol("@preserve"))), LineNumberNode(@__LINE__, Symbol(@__FILE__)))
     for array ∈ ls.includedactualarrays
-        push!(gcp.args, array)
+        pb = gensym(array);
+        push!(q2.args, Expr(:(=), pb, Expr(:call, lv(:preserve_buffer), array)))
+        push!(gcp.args, pb)
     end
     q.head === :block && push!(q.args, nothing)
-    push!(gcp.args, q)
-    Expr(:block, gcp)
+    # push!(gcp.args, q)
+    push!(q2.args, gcp)
+    q2
+    # Expr(:block, gcp)
 end
+
+
 function determine_eltype(ls::LoopSet)
     if length(ls.includedactualarrays) == 0
         return Expr(:call, :typeof, 0)
