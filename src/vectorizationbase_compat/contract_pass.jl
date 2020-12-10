@@ -18,20 +18,20 @@ function mulexpr(mulexargs)
         cc = mulexprcost(c)
         maxc = max(ac, bc, cc)
         if ac == maxc
-            return (a, Expr(:call, :vmul, b, c))
+            return (a, Expr(:call, :(*), b, c))
         elseif bc == maxc
-            return (b, Expr(:call, :vmul, a, c))
+            return (b, Expr(:call, :(*), a, c))
         else
-            return (c, Expr(:call, :vmul, a, b))
+            return (c, Expr(:call, :(*), a, b))
         end
     else
-        return (a, Expr(:call, :vmul, @view(mulexargs[2:end])...)::Expr)
+        return (a, Expr(:call, :(*), @view(mulexargs[2:end])...)::Expr)
     end
     a = (mulexargs[1])::Union{Symbol,Expr,Number}
     b = if length(mulexargs) == 2 # two arg mul
         (mulexargs[2])::Union{Symbol,Expr,Number}
     else
-        Expr(:call, :vmul, @view(mulexargs[2:end])...)::Expr
+        Expr(:call, :(*), @view(mulexargs[2:end])...)::Expr
     end
     a, b
 end
@@ -143,19 +143,19 @@ function contract!(expr::Expr, ex::Expr, i::Int, mod = nothing)
     # if ex.head === :call
         # expr.args[i] = capture_muladd(ex, mod)
     if ex.head === :(+=)
-        call = Expr(:call, :vadd)
+        call = Expr(:call, :(+))
         append!(call.args, ex.args)
         expr.args[i] = ex = Expr(:(=), first(ex.args), call)
     elseif ex.head === :(-=)
-        call = Expr(:call, :vsub)
+        call = Expr(:call, :(-))
         append!(call.args, ex.args)
         expr.args[i] = ex = Expr(:(=), first(ex.args), call)
     elseif ex.head === :(*=)
-        call = Expr(:call, :vmul)
+        call = Expr(:call, :(*))
         append!(call.args, ex.args)
         expr.args[i] = ex = Expr(:(=), first(ex.args), call)
     elseif ex.head === :(/=)
-        call = Expr(:call, :vfdiv)
+        call = Expr(:call, :(/))
         append!(call.args, ex.args)
         expr.args[i] = ex = Expr(:(=), first(ex.args), call)
     end

@@ -357,7 +357,7 @@ function add_pow!(
         while (t -= 1) >= 0
             xop = add_compute!(ls, gensym(:pbs), :abs2, [xop], elementbytes)
         end
-        yop = add_compute!(ls, iszero(pint) ? var : gensym(:pbs), :vmul, [xop, yop], elementbytes)
+        yop = add_compute!(ls, iszero(pint) ? var : gensym(:pbs), :(*), [xop, yop], elementbytes)
     end
     yop
 end
