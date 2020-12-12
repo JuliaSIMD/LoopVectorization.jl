@@ -17,7 +17,6 @@ jobs:
         version:
           - '1.5'
           - '1' # automatically expands to the latest stable 1.x release of Julia.
-          - 'nightly'
         os:
           - ubuntu-latest
           - windows-latest
