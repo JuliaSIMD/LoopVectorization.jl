@@ -1,13 +1,11 @@
 using Test
 using LoopVectorization
 using LinearAlgebra
-
 import InteractiveUtils
 
 InteractiveUtils.versioninfo(stdout; verbose = true)
 
-# const START_TIME = time()
-# exceeds_time_limit() = (time() - START_TIME) > 35 * 60
+const START_TIME = time()
 
 function clenshaw(x, coeff)
     len_c = length(coeff)
@@ -79,3 +77,6 @@ const RUN_SLOW_TESTS = LoopVectorization.REGISTER_COUNT ≤ 16 || !parse(Bool, g
 
     @time include("gemm.jl")
 end
+
+const ELAPSED_MINUTES = (time() - START_TIME)/60
+@test ELAPSED_MINUTES < 120
