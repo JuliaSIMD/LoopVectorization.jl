@@ -526,7 +526,7 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
         U = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticlast), N), true)
         loop = Loop(itersym, L, U)
     else
-        throw("Unrecognized loop range type: $r.")
+        throw(LoopError("Unrecognized loop range type: $r."))
     end
     add_loop!(ls, loop, itersym)
     nothing
@@ -819,6 +819,6 @@ struct LoopError <: Exception
 end
 
 function Base.showerror(io::IO, err::LoopError)
-    printstyled(io, err.msg, '\n'; color = :red)
-    printstyled(io, err.ex)
+    printstyled(io, err.msg; color = :red)
+    isnothing(err.ex) || printstyled(io, '\n', err.ex)
 end
