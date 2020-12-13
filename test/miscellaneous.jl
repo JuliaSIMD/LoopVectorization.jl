@@ -1139,5 +1139,16 @@ if Base.libllvm_version ≥ v"8" || LoopVectorization.VectorizationBase.SIMD_NAT
         end
     end
 end
+
+@test_throws LoadError @macroexpand begin # pull #172
+    @avx for i in eachindex(xs)
+        if i in axes(ys,1)
+            xs[i] = ys[i]
+        else
+            xs[i] = zero(eltype(ys))
+        end
+    end
+end
+
 end
 
