@@ -3,8 +3,6 @@ using LoopVectorization: Static
 # T = Float64; r = -1:1;
 # T = Float32; r = -1:1;
 
-# TODO: remove this once this PR merges: https://github.com/JuliaArrays/OffsetArrays.jl/pull/170
-@inline Base.unsafe_convert(::Type{Ptr{T}}, A::OffsetArray{T}) where {T} = pointer(parent(A))
 
 @testset "OffsetArrays" begin
 

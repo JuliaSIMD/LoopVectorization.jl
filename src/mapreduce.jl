@@ -65,7 +65,6 @@ function _vmapreduce(f::F, op::OP, ::StaticInt{W}, N, ::Type{T}, args::Vararg{De
     end
     vreduce(op, a_0)
 end
-
 @inline vmapreduce(f, op, args...) = mapreduce(f, op, args...)
 
 length_one_axis(::Base.OneTo) = Base.OneTo(1)
