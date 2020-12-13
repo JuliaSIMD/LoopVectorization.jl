@@ -621,8 +621,7 @@ function add_operation!(
     elseif RHS.head === :block
         add_operation!(ls, LHS, strip_op_linenumber_nodes(RHS), elementbytes, position)
     else
-        println(RHS)
-        throw("Expression not recognized.")
+        throw(LoopError("Expression not recognized.", RHS))
     end
 end
 add_operation!(ls::LoopSet, RHS::Expr, elementbytes::Int, position::Int) = add_operation!(ls, gensym(:LHS), RHS, elementbytes, position)
@@ -657,8 +656,7 @@ function add_operation!(
     elseif RHS.head === :block
         add_operation!(ls, LHS, strip_op_linenumber_nodes(RHS), elementbytes, position)
     else
-        println(RHS)
-        throw("Expression not recognized.")
+        throw(LoopError("Expression not recognized.", RHS))
     end
 end
 
@@ -722,18 +720,15 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
                         add_compute!(ls, tempunpacksym, f, vparents, elementbytes)
                         add_store_ref!(ls, tempunpacksym, lhsi, elementbytes)
                     else
-                        println(lhsi)
-                        throw("Unpacking the above expression in the left hand side was not understood/supported.")
+                        throw(LoopError("Unpacking the above expression in the left hand side was not understood/supported.", lhsi))
                     end
                 end
                 first(vparents)
             else
-                println(LHS)
-                throw("LHS not understood; only `:ref`s and `:tuple`s are currently supported.")
+                throw(LoopError("LHS not understood; only `:ref`s and `:tuple`s are currently supported.", LHS))
             end
         else
-            println(LHS)
-            throw("LHS not understood.")
+            throw(LoopError("LHS not understood.", LHS))
         end
     elseif ex.head === :block
         add_block!(ls, ex, elementbytes, position)
@@ -756,8 +751,7 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
             add_compute!(ls, LHS, :identity, [RHS], elementbytes)
         end
     else
-        println(ex)
-        throw("Don't know how to handle expression.")
+        throw(LoopError("Don't know how to handle expression.", ex))
     end
 end
 
@@ -817,3 +811,14 @@ end
 #     order[u₁loopnum], order[u₂loopnum]
 # end
 
+
+struct LoopError <: Exception
+    msg
+    ex
+    LoopError(msg, ex=nothing) = new(msg, ex)
+end
+
+function Base.showerror(io::IO, err::LoopError)
+    printstyled(io, err.msg, '\n'; color = :red)
+    printstyled(io, err.ex)
+end
