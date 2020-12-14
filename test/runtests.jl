@@ -79,4 +79,4 @@ const RUN_SLOW_TESTS = LoopVectorization.REGISTER_COUNT ≤ 16 || !parse(Bool, g
 end
 
 const ELAPSED_MINUTES = (time() - START_TIME)/60
-@test ELAPSED_MINUTES < 120
+@test ELAPSED_MINUTES < 180
