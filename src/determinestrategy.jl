@@ -1,5 +1,5 @@
 
-const CACHELINE_SIZE = VectorizationBase.L₁CACHE.linesize
+const CACHELINE_SIZE = something(VectorizationBase.L₁CACHE.linesize, 64)
 
 # function indexappearences(op::Operation, s::Symbol)
 #     s ∉ loopdependencies(op) && return 0
