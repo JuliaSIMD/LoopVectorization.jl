@@ -272,7 +272,7 @@ function check_full_conv_kernel(ls, us, N)
 end
 function allinteriorunrolled(ls::LoopSet, us::UnrollSpecification, N)
     if ls.loadelimination[]
-        check_full_conv_kernal(ls, us, N) || return false
+        check_full_conv_kernel(ls, us, N) || return false
     end
     unroll_total = 1
     for n ∈ 1:N-1
