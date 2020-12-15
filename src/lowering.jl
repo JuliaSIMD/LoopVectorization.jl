@@ -263,7 +263,17 @@ end
 #     )
 # end
 
+function check_full_conv_kernel(ls, us, N)
+    loop₁ = getloop(ls, names(ls)[us.u₁loopnum])
+    (isstaticloop(loop₁) && length(loop₁) == us.u₁) && return true
+    loop₂ = getloop(ls, names(ls)[us.u₂loopnum])
+    (isstaticloop(loop₂) && length(loop₂) == us.u₂) && return true
+    false
+end
 function allinteriorunrolled(ls::LoopSet, us::UnrollSpecification, N)
+    if ls.loadelimination[]
+        check_full_conv_kernal(ls, us, N) || return false
+    end
     unroll_total = 1
     for n ∈ 1:N-1
         loop = getloop(ls, names(ls)[n])
