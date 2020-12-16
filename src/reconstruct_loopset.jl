@@ -394,17 +394,26 @@ function extract_external_functions!(ls::LoopSet, offset::Int)
 end
 function sizeofeltypes(v, num_arrays)::Int
     T = typeeltype(v[1])
-    if !VectorizationBase.SIMD_NATIVE_INTEGERS && T <: Integer # hack
-        return VectorizationBase.REGISTER_SIZE
+    sz = if (VectorizationBase.SIMD_INTEGER_REGISTER_SIZE != VectorizationBase.REGISTER_SIZE) && T <: Integer # hack
+        (VectorizationBase.REGISTER_SIZE ÷ VectorizationBase.SIMD_INTEGER_REGISTER_SIZE) * sizeof(T)
+    else
+        sz = sizeof(T)
     end
     for i ∈ 2:num_arrays
         Ttemp = typeeltype(v[i])
-        if !VectorizationBase.SIMD_NATIVE_INTEGERS && Ttemp <: Integer # hack
-            return VectorizationBase.REGISTER_SIZE
+        szᵢ = if (VectorizationBase.SIMD_INTEGER_REGISTER_SIZE != VectorizationBase.REGISTER_SIZE) && T <: Integer # hack
+            (VectorizationBase.REGISTER_SIZE ÷ VectorizationBase.SIMD_INTEGER_REGISTER_SIZE) * sizeof(T)
+        else
+            sizeof(Ttemp)
         end
-        T = promote_type(T, Ttemp)
+        # if !VectorizationBase.SIMD_NATIVE_INTEGERS && Ttemp <: Integer # hack
+        #     return VectorizationBase.REGISTER_SIZE
+        # end
+        # T = promote_type(T, Ttemp)
+        sz = max(szᵢ, sz)
     end
-    sizeof(T)
+    sz
+    # sizeof(T)
 end
 
 function avx_loopset(instr, ops, arf, AM, LPSYM, LB, @nospecialize(vargs))

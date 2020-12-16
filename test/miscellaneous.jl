@@ -1028,47 +1028,47 @@ end
         @test out1 == out2
     end
 
-function smoothdim!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
-    ifirst, ilast = first(irng), last(irng)
-    ifirst > ilast && return s
-    # @inbounds @fastmath for Ipost in Rpost
-    for Ipost in Rpost
-        # Initialize the first value along the filtered dimension
-        for Ipre in Rpre
-            s[Ipre, ifirst, Ipost] = x[Ipre, ifirst, Ipost]
-        end
-        # Handle all other entries
-        for i = ifirst+1:ilast
+    function smoothdim!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
+        ifirst, ilast = first(irng), last(irng)
+        ifirst > ilast && return s
+        # @inbounds @fastmath for Ipost in Rpost
+        for Ipost in Rpost
+            # Initialize the first value along the filtered dimension
             for Ipre in Rpre
-                s[Ipre, i, Ipost] = α*x[Ipre, i, Ipost] + (1-α)*x[Ipre, i-1, Ipost]
+                s[Ipre, ifirst, Ipost] = x[Ipre, ifirst, Ipost]
             end
-        end
-    end
-    s
-end
-function smoothdim_avx!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
-    ifirst, ilast = first(irng), last(irng)
-    ifirst > ilast && return s
-    @avx for Ipost in Rpost
-        for Ipre in Rpre
-            s[Ipre, ifirst, Ipost] = x[Ipre, ifirst, Ipost]
+            # Handle all other entries
             for i = ifirst+1:ilast
-                s[Ipre, i, Ipost] = α*x[Ipre, i, Ipost] + (1-α)*x[Ipre, i-1, Ipost]
+                for Ipre in Rpre
+                    s[Ipre, i, Ipost] = α*x[Ipre, i, Ipost] + (1-α)*x[Ipre, i-1, Ipost]
+                end
             end
         end
+        s
     end
-    s
-end
-function smoothdim_ifelse_avx!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
-    ifirst, ilast = first(irng), last(irng)
-    ifirst > ilast && return s
-    @avx for Ipost in Rpost, i = ifirst:ilast, Ipre in Rpre
-        xi = x[Ipre, i, Ipost]
-        xim = i > ifirst ? x[Ipre, i-1, Ipost] : xi
-        s[Ipre, i, Ipost] = α*xi + (1-α)*xim
+    function smoothdim_avx!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
+        ifirst, ilast = first(irng), last(irng)
+        ifirst > ilast && return s
+        @avx for Ipost in Rpost
+            for Ipre in Rpre
+                s[Ipre, ifirst, Ipost] = x[Ipre, ifirst, Ipost]
+                for i = ifirst+1:ilast
+                    s[Ipre, i, Ipost] = α*x[Ipre, i, Ipost] + (1-α)*x[Ipre, i-1, Ipost]
+                end
+            end
+        end
+        s
     end
-    s
-end
+    function smoothdim_ifelse_avx!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
+        ifirst, ilast = first(irng), last(irng)
+        ifirst > ilast && return s
+        @avx for Ipost in Rpost, i = ifirst:ilast, Ipre in Rpre
+            xi = x[Ipre, i, Ipost]
+            xim = i > ifirst ? x[Ipre, i-1, Ipost] : xi
+            s[Ipre, i, Ipost] = α*xi + (1-α)*xim
+        end
+        s
+    end
 
     for T ∈ (Float32, Float64)
         @testset "Mixed CartesianIndex/Int indexing" begin
@@ -1103,33 +1103,33 @@ end
     end
 
 
-function mul1!(y::Vector{T}, A::Matrix{UInt8}, x::Vector{T}) where T 
-    packedstride = size(A, 1)
-    m, n = size(A)
-    @avx for j ∈ eachindex(x)
-        for i ∈ eachindex(y)
-            k = 2 * ((i-1) & 3)
-            block = A[(j-1) * packedstride + ((i-1) >> 2) + 1]
-            Aij = (block >> k) & 3
-            y[i] += (((Aij >= 2) + (Aij >= 3))) * x[j]
+    function mul1!(y::Vector{T}, A::Matrix{UInt8}, x::Vector{T}) where T 
+        packedstride = size(A, 1)
+        m, n = size(A)
+        @avx for j ∈ eachindex(x)
+            for i ∈ eachindex(y)
+                k = 2 * ((i-1) & 3)
+                block = A[(j-1) * packedstride + ((i-1) >> 2) + 1]
+                Aij = (block >> k) & 3
+                y[i] += (((Aij >= 2) + (Aij >= 3))) * x[j]
+            end
         end
+        y
     end
-    y
-end
-function mul2!(y::Vector{T}, A::Matrix{UInt8}, x::Vector{T}) where T 
-    packedstride = size(A, 1)
-    m, n = size(A)
-    for j ∈ eachindex(x)
-        for i ∈ eachindex(y)
-            k = 2 * ((i-1) & 3)
-            block = A[(j-1) * packedstride + ((i-1) >> 2) + 1]
-            Aij = (block >> k) & 3
-            y[i] += (((Aij >= 2) + (Aij >= 3))) * x[j]
+    function mul2!(y::Vector{T}, A::Matrix{UInt8}, x::Vector{T}) where T 
+        packedstride = size(A, 1)
+        m, n = size(A)
+        for j ∈ eachindex(x)
+            for i ∈ eachindex(y)
+                k = 2 * ((i-1) & 3)
+                block = A[(j-1) * packedstride + ((i-1) >> 2) + 1]
+                Aij = (block >> k) & 3
+                y[i] += (((Aij >= 2) + (Aij >= 3))) * x[j]
+            end
         end
+        y
     end
-    y
-end
-if Base.libllvm_version ≥ v"8" || LoopVectorization.VectorizationBase.SIMD_NATIVE_INTEGERS
+
     @testset "UInt8 mul" begin
         for n in 1:200
             v1 = rand(n); v3 =copy(v1);
@@ -1138,17 +1138,16 @@ if Base.libllvm_version ≥ v"8" || LoopVectorization.VectorizationBase.SIMD_NAT
             @test mul1!(v1, A, v2) ≈ mul2!(v3, A, v2)
         end
     end
-end
 
-@test_throws LoadError @macroexpand begin # pull #172
-    @avx for i in eachindex(xs)
-        if i in axes(ys,1)
-            xs[i] = ys[i]
-        else
-            xs[i] = zero(eltype(ys))
+    @test_throws LoadError @macroexpand begin # pull #172
+        @avx for i in eachindex(xs)
+            if i in axes(ys,1)
+                xs[i] = ys[i]
+            else
+                xs[i] = zero(eltype(ys))
+            end
         end
     end
-end
 
 end
 
