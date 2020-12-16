@@ -65,8 +65,19 @@ function indices_calculated_by_pointer_offsets(ls::LoopSet, ar::ArrayReferenceMe
     out
 end
 
-@inline onetozeroindexgephack(sptr::AbstractStridedPointer) = gesp(sptr, (Static{-1}(),)) # go backwords 
+@generated function set_first_stride(sptr::StridedPointer{T,N,C,B,R}) where {T,N,C,B,R}
+    minrank = argmin(R)
+    newC = C > 0 ? (C == minrank ? 1 : 0) : C
+    newB = C > 0 ? (C == minrank ? B : 0) : B #TODO: confirm correctness
+    quote
+        $(Expr(:meta,:inline))
+        VectorizationBase.StridedPointer{$T,1,$newC,$newB,$(R[minrank],)}(pointer(sptr), (sptr.strd[$minrank],), (Zero(),))
+    end
+end
+set_first_stride(x) = x # cross fingers that this works
+@inline onetozeroindexgephack(sptr::AbstractStridedPointer) = gesp(set_first_stride(sptr), (Static{-1}(),)) # go backwords 
 @inline onetozeroindexgephack(sptr::AbstractStridedPointer{T,1}) where {T} = sptr
+# @inline onetozeroindexgephack(sptr::StridedPointer{T,1}) where {T} = sptr
 @inline onetozeroindexgephack(x) = x
 
 """

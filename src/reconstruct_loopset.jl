@@ -133,10 +133,11 @@ function add_mref!(
     sp = ArrayInterface.rank_to_sortperm(R)
     # maybe no change needed? -- optimize common case
     column_major = ntuple(identity, N)
-    if sp === column_major
+    li = ar.loopedindex;
+    if sp === column_major || isone(length(li))
         return pushvarg!(ls, ar, i, name)
     end
-    li = ar.loopedindex; lic = copy(li);
+    lic = copy(li);
     inds = getindices(ar); indsc = copy(inds); 
     offsets = ar.ref.offsets; offsetsc = copy(offsets);
 
