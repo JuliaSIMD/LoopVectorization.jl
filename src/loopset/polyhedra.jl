@@ -417,6 +417,7 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
         # determining loop
         binomials = MVector{8,BinomialFunc}(undef)
         coef⁰ = nbinomials = 0
+        # coefs¹v is vectorized equivalent of coefs¹
         coefs¹v = coefs¹ = Base.Cartesian.@ntuple 8 i -> zero(Int64)
         coefs² = Base.Cartesian.@ntuple 8 i -> coefs¹
         not_visited_mask = 0x0101010101010101 >> ((8 - polydim)*8)
@@ -572,6 +573,7 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
             end
             if !iszero(coefs¹vᵢ)
                 verbose_getloop() && @show cdmin, cdmax
+                verbose_getloop() && @show coefs¹vᵢ
                 cdminₒ = cdₗ[veci]
                 cdmaxₒ = cdᵤ[veci]
                 if Aᵤᵢzero & Aₗᵢzero
@@ -594,6 +596,7 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
                         divvec, remvec = divrem(cdmax - r, vl)
                         divvec += one(divvec)
                         itersbin = bin2(divvec) * vl + remvec * divvec
+                        coef⁰ += coefs¹vᵢ * itersbin                        
                     end
                 else
                     minrem = cdminₒ % vl
