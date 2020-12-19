@@ -14,7 +14,7 @@ _vreduce(op, v::Vec{1}) = VectorizationBase.extractelement(v, 0)
     a
 end
 
-function mapreduce_simple(f::F, op::OP, args::Vararg{DenseArray{<:NativeTypes},A}) where {F,OP,A}
+function mapreduce_simple(f::F, op::OP, args::Vararg{DenseArray{T},A}) where {F,OP,A,T<:NativeTypes}
     ptrargs = ntuple(a -> pointer(args[a]), Val(A))
     N = length(first(args))
     iszero(N) && throw("Length of vector is 0!")

@@ -1,11 +1,13 @@
 
+const DenseNativeArray = DenseArray{<:NativeTypes}
+
 """
 `vstorent!` (non-temporal store) requires data to be aligned.
 `alignstores!` will align `y` in preparation for the non-temporal maps.
 """
 function alignstores!(
     f::F, y::DenseArray{T},
-    args::Vararg{<:DenseArray{<:Base.HWReal},A}
+    args::Vararg{DenseNativeArray,A}
 ) where {F, T <: Base.HWReal, A}
     N = length(y)
     ptry = VectorizationBase.zero_offsets(stridedpointer(y))
@@ -32,7 +34,7 @@ end
 function vmap_singlethread!(
     f::F, y::DenseArray{T},
     ::Val{NonTemporal},
-    args::Vararg{<:DenseArray{<:Base.HWReal},A}
+    args::Vararg{DenseNativeArray,A}
 ) where {F,T <: Base.HWReal, A, NonTemporal}
     if NonTemporal # if stores into `y` aren't aligned, we'll get a crash
         ptry, ptrargs, N = alignstores!(f, y, args...)
@@ -80,7 +82,7 @@ function vmap_multithreaded!(
     f::F,
     y::DenseArray{T},
     ::Val{true},
-    args::Vararg{<:DenseArray{<:Base.HWReal},A}
+    args::Vararg{DenseNativeArray,A}
 ) where {F,T,A}
     ptry, ptrargs, N = alignstores!(f, y, args...)
     N > 0 || return y
@@ -107,7 +109,7 @@ function vmap_multithreaded!(
     f::F,
     y::DenseArray{T},
     ::Val{false},
-    args::Vararg{<:DenseArray{<:Base.HWReal},A}
+    args::Vararg{DenseNativeArray,A}
 ) where {F,T,A}
     N = length(y)
     ptry = VectorizationBase.zero_offsets(stridedpointer(y))
@@ -142,7 +144,7 @@ Vectorized-`map!`, applying `f` to each element of `a` (or paired elements of `a
 and storing the result in `destination`.
 """
 function vmap!(
-    f::F, y::DenseArray{T}, args::Vararg{<:DenseArray{<:Base.HWReal},A}
+    f::F, y::DenseArray{T}, args::Vararg{DenseNativeArray,A}
 ) where {F,T<:Base.HWReal,A}
     vmap_singlethread!(f, y, Val{false}(), args...)
 end
@@ -154,7 +156,7 @@ end
 Like `vmap!` (see `vmap!`), but uses `Threads.@threads` for parallel execution.
 """
 function vmapt!(
-    f::F, y::DenseArray{T}, args::Vararg{<:DenseArray{<:Base.HWReal},A}
+    f::F, y::DenseArray{T}, args::Vararg{DenseNativeArray,A}
 ) where {F,T<:Base.HWReal,A}
     vmap_multithreaded!(f, y, Val{false}(), args...)
 end
@@ -216,7 +218,7 @@ BenchmarkTools.Trial:
 ```
 """
 function vmapnt!(
-    f::F, y::DenseArray{T}, args::Vararg{<:DenseArray{<:Base.HWReal},A}
+    f::F, y::DenseArray{T}, args::Vararg{DenseNativeArray,A}
 ) where {F,T<:Base.HWReal,A}
     vmap_singlethread!(f, y, Val{true}(), args...)
 end
@@ -227,7 +229,7 @@ end
 Like `vmapnt!` (see `vmapnt!`), but uses `Threads.@threads` for parallel execution.
 """
 function vmapntt!(
-    f::F, y::DenseArray{T}, args::Vararg{<:DenseArray{<:Base.HWReal},A}
+    f::F, y::DenseArray{T}, args::Vararg{DenseNativeArray,A}
 ) where {F,T<:Base.HWReal,A}
     vmap_multithreaded!(f, y, Val{true}(), args...)
 end
@@ -238,7 +240,7 @@ end
 @inline vmapnt!(f, args...) = map!(f, args...)
 @inline vmapntt!(f, args...) = map!(f, args...)
 
-function vmap_call(f::F, vm!::V, args::Vararg{<:Any,N}) where {V,F,N}
+function vmap_call(f::F, vm!::V, args::Vararg{Any,N}) where {V,F,N}
     T = Base._return_type(f, Base.Broadcast.eltypes(args))
     dest = similar(first(args), T)
     vm!(f, dest, args...)
@@ -251,7 +253,7 @@ end
 SIMD-vectorized `map`, applying `f` to each element of `a` (or paired elements of `a`, `b`, ...)
 and returning a new array.
 """
-vmap(f::F, args::Vararg{<:Any,N}) where {F,N} = vmap_call(f, vmap!, args...)
+vmap(f::F, args::Vararg{Any,N}) where {F,N} = vmap_call(f, vmap!, args...)
 
 """
     vmapt(f, a::AbstractArray)
@@ -259,7 +261,7 @@ vmap(f::F, args::Vararg{<:Any,N}) where {F,N} = vmap_call(f, vmap!, args...)
 
 A threaded variant of [`vmap`](@ref).
 """
-vmapt(f::F, args::Vararg{<:Any,N}) where {F,N} = vmap_call(f, vmapt!, args...)
+vmapt(f::F, args::Vararg{Any,N}) where {F,N} = vmap_call(f, vmapt!, args...)
 
 """
     vmapnt(f, a::AbstractArray)
@@ -268,7 +270,7 @@ vmapt(f::F, args::Vararg{<:Any,N}) where {F,N} = vmap_call(f, vmapt!, args...)
 A "non-temporal" variant of [`vmap`](@ref). This can improve performance in cases where
 `destination` will not be needed soon.
 """
-vmapnt(f::F, args::Vararg{<:Any,N}) where {F,N} = vmap_call(f, vmapnt!, args...)
+vmapnt(f::F, args::Vararg{Any,N}) where {F,N} = vmap_call(f, vmapnt!, args...)
 
 """
     vmapntt(f, a::AbstractArray)
@@ -276,7 +278,7 @@ vmapnt(f::F, args::Vararg{<:Any,N}) where {F,N} = vmap_call(f, vmapnt!, args...)
 
 A threaded variant of [`vmapnt`](@ref).
 """
-vmapntt(f::F, args::Vararg{<:Any,N}) where {F,N} = vmap_call(f, vmapntt!, args...)
+vmapntt(f::F, args::Vararg{Any,N}) where {F,N} = vmap_call(f, vmapntt!, args...)
 
 
 # @inline vmap!(f, y, x...) = @avx y .= f.(x...)

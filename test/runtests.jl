@@ -1,5 +1,6 @@
 using Test
 using LoopVectorization
+
 using LinearAlgebra
 import InteractiveUtils
 
@@ -80,3 +81,4 @@ end
 
 const ELAPSED_MINUTES = (time() - START_TIME)/60
 @test ELAPSED_MINUTES < 180
+
