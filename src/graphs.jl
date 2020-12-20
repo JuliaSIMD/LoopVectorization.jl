@@ -562,7 +562,13 @@ end
 # end
 # instruction(ls::LoopSet, f::Symbol) = instruction!(ls, f)
 function instruction!(ls::LoopSet, x::Expr)
-    x isa Symbol && return x
+    # x isa Symbol && return x
+    if x.head === :$
+        _x = only(x.args)
+        _x isa Symbol && return instruction!(ls, _x)
+        @assert _x isa Expr
+        x = _x
+    end
     instr = last(x.args).value
     if instr ∉ keys(COST)
         instr = gensym(:f)
@@ -571,6 +577,10 @@ function instruction!(ls::LoopSet, x::Expr)
     Instruction(Symbol(""), instr)
 end
 instruction!(ls::LoopSet, x::Symbol) = instruction(x)
+function instruction!(ls::LoopSet, ::F) where {F <: Function}
+    FUNCTIONSYMBOLS[F]
+    # get(FUNCTIONSYMBOLS, F, 
+end
 
 
 function maybe_const_compute!(ls::LoopSet, LHS::Symbol, op::Operation, elementbytes::Int, position::Int)

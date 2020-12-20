@@ -463,7 +463,11 @@ const FUNCTIONSYMBOLS = IdDict{Type{<:Function},Instruction}(
     typeof(Base.ifelse) => :ifelse,
     typeof(ifelse) => :ifelse,
     typeof(identity) => :identity,
-    typeof(conj) => :conj
+    typeof(conj) => :conj,
+    typeof(zero) => :zero,
+    typeof(one) => :one,
+    typeof(axes) => :axes,
+    typeof(eltype) => :eltype
 )
 
 # implement whitelist for avx_support that package authors may use to conservatively guard `@avx` application
