@@ -372,6 +372,7 @@ function solve_unroll_iter(X, R, u₁L, u₂L, u₁range, u₂range)
             RR ≥ u₁temp*u₂temp*R₁ + u₁temp*R₂ + u₂temp*R₅ || continue
             tempcost = unroll_cost(X, u₁temp, u₂temp, u₁L, u₂L)
             # @show u₁temp, u₂temp, tempcost
+            # @show u₁temp*u₂temp*R₁ + u₁temp*R₂ + u₂temp*R₅
             if tempcost ≤ bestcost
                 bestcost = tempcost
                 u₁best, u₂best = u₁temp, u₂temp
@@ -383,6 +384,8 @@ end
 
 function solve_unroll(X, R, u₁L, u₂L, u₁step, u₂step)
     X₁, X₂, X₃, X₄ = X[1], X[2], X[3], X[4]
+    # If we don't have AVX512, masks occupy a vector register
+    VectorizationBase.AVX512F || (R[3] += 1)
     R₁, R₂, R₃, R₄, R₅ = R[1], R[2], R[3], R[4], R[5]
     iszero(R₅) || return solve_unroll_iter(X, R, u₁L, u₂L, u₁step:u₁step:10, u₂step:u₂step:10)
     RR = REGISTER_COUNT - R₃ - R₄
