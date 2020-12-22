@@ -35,11 +35,11 @@ end
 function jgemm!(𝐂, 𝐀ᵀ::Adjoint, 𝐁)
     𝐀 = parent(𝐀ᵀ)
     @inbounds for n ∈ 1:size(𝐂,2), m ∈ 1:size(𝐂,1)
-        𝐂ₘₙ = zero(eltype(𝐂))
+        𝐂mn = zero(eltype(𝐂))
         @simd ivdep for k ∈ 1:size(𝐀,1)
-            @fastmath 𝐂ₘₙ += 𝐀[k,m] * 𝐁[k,n]
+            @fastmath 𝐂mn += 𝐀[k,m] * 𝐁[k,n]
         end
-        𝐂[m,n] = 𝐂ₘₙ
+        𝐂[m,n] = 𝐂mn
     end
 end
 function jgemm!(𝐂, 𝐀, 𝐁ᵀ::Adjoint)
@@ -65,11 +65,11 @@ function jgemm!(𝐂, 𝐀ᵀ::Adjoint, 𝐁ᵀ::Adjoint)
 end
 function gemmavx!(𝐂, 𝐀, 𝐁)
     @avx for m ∈ axes(𝐀,1), n ∈ axes(𝐁,2)
-        𝐂ₘₙ = zero(eltype(𝐂))
+        𝐂mn = zero(eltype(𝐂))
         for k ∈ axes(𝐀,2)
-            𝐂ₘₙ += 𝐀[m,k] * 𝐁[k,n]
+            𝐂mn += 𝐀[m,k] * 𝐁[k,n]
         end
-        𝐂[m,n] = 𝐂ₘₙ
+        𝐂[m,n] = 𝐂mn
     end
 end
 function jdot(a, b)

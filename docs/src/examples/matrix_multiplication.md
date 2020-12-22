@@ -7,11 +7,11 @@ We can write a single function:
 ```julia
 function A_mul_B!(𝐂, 𝐀, 𝐁)
     @avx for m ∈ axes(𝐀,1), n ∈ axes(𝐁,2)
-        𝐂ₘₙ = zero(eltype(𝐂))
+        𝐂mn = zero(eltype(𝐂))
         for k ∈ axes(𝐀,2)
-            𝐂ₘₙ += 𝐀[m,k] * 𝐁[k,n]
+            𝐂mn += 𝐀[m,k] * 𝐁[k,n]
         end
-        𝐂[m,n] = 𝐂ₘₙ
+        𝐂[m,n] = 𝐂mn
     end
 end
 ```

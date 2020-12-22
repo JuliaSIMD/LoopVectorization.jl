@@ -39,17 +39,17 @@ function substitute_broadcast(q::Expr, mod::Symbol)
     ex = Expr(:block,)
     syms = [gensym() for _ ∈ 1:nargs]
     for n ∈ 1:nargs
-        ciₙ = ci[n]
-        ciₙargs = ciₙ.args
-        f = first(ciₙargs)
-        if ciₙ.head === :(=)
-            push!(ex.args, Expr(:(=), f, syms[((ciₙargs[2])::Core.SSAValue).id]))
+        cin = ci[n]
+        cinargs = cin.args
+        f = first(cinargs)
+        if cin.head === :(=)
+            push!(ex.args, Expr(:(=), f, syms[((cinargs[2])::Core.SSAValue).id]))
         elseif isglobalref(f, Base, :materialize!)
-            add_ci_call!(ex, lv(:vmaterialize!), ciₙargs, syms, n, mod)
+            add_ci_call!(ex, lv(:vmaterialize!), cinargs, syms, n, mod)
         elseif isglobalref(f, Base, :materialize)
-            add_ci_call!(ex, lv(:vmaterialize), ciₙargs, syms, n, mod)
+            add_ci_call!(ex, lv(:vmaterialize), cinargs, syms, n, mod)
         else
-            add_ci_call!(ex, f, ciₙargs, syms, n)
+            add_ci_call!(ex, f, cinargs, syms, n)
         end
     end
     ex
@@ -72,11 +72,11 @@ Annotate a `for` loop, or a set of nested `for` loops whose bounds are constant 
 
     function AmulBavx!(C, A, B)
         @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
-            Cₘₙ = zero(eltype(C))
+            Cmn = zero(eltype(C))
             for k ∈ 1:size(A,2)
-                Cₘₙ += A[m,k] * B[k,n]
+                Cmn += A[m,k] * B[k,n]
             end
-            C[m,n] = Cₘₙ
+            C[m,n] = Cmn
         end
     end
 

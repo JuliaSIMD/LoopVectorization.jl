@@ -214,29 +214,29 @@ T = Float32
     end
     function AtmulBpos!(C, A, B)
         @inbounds for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
-            Cₘₙ = zero(eltype(C))
+            Cmn = zero(eltype(C))
             @simd ivdep for k ∈ 1:size(A,1)
-                Cₘₙ += A[k,m] * B[k,n]
+                Cmn += A[k,m] * B[k,n]
             end
-            C[m,n] > 0 && (C[m,n] = Cₘₙ)
+            C[m,n] > 0 && (C[m,n] = Cmn)
         end
     end
     function AtmulBposavx!(C, A, B)
         @avx for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
-            Cₘₙ = zero(eltype(C))
+            Cmn = zero(eltype(C))
             for k ∈ 1:size(A,1)
-                Cₘₙ += A[k,m] * B[k,n]
+                Cmn += A[k,m] * B[k,n]
             end
-            C[m,n] > 0 && (C[m,n] = Cₘₙ)
+            C[m,n] > 0 && (C[m,n] = Cmn)
         end
     end
     function AtmulBpos_avx!(C, A, B)
         @_avx for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
-            Cₘₙ = zero(eltype(C))
+            Cmn = zero(eltype(C))
             for k ∈ 1:size(A,1)
-                Cₘₙ += A[k,m] * B[k,n]
+                Cmn += A[k,m] * B[k,n]
             end
-            C[m,n] > 0 && (C[m,n] = Cₘₙ)
+            C[m,n] > 0 && (C[m,n] = Cmn)
         end
     end
     function condstore!(x)

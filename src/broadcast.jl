@@ -17,11 +17,11 @@ function stridedpointer_for_broadcast_quote(typ, N, S, X)
                 push!(strd_tup.args, :(strd[$n]))
             end
         else
-            Xₙ_type = X[n]
-            if Xₙ_type <: Static # FIXME; what to do here? Dynamic dispatch? 
+            Xn_type = X[n]
+            if Xn_type <: Static # FIXME; what to do here? Dynamic dispatch? 
                 push!(strd_tup.args, :(strd[$n]))
             else
-                push!(strd_tup.args, :(Base.ifelse(isone(s[$n]), zero($Xₙ_type), strd[$n])))
+                push!(strd_tup.args, :(Base.ifelse(isone(s[$n]), zero($Xn_type), strd[$n])))
             end
         end
     end
@@ -103,8 +103,8 @@ function add_broadcast!(
 )
     A, B = prod.parameters
     K = gensym(:K)
-    mA = gensym(:Aₘₖ)
-    mB = gensym(:Bₖₙ)
+    mA = gensym(:Amₖ)
+    mB = gensym(:Bₖn)
     pushprepreamble!(ls, Expr(:(=), mA, Expr(:(.), bcname, QuoteNode(:a))))
     pushprepreamble!(ls, Expr(:(=), mB, Expr(:(.), bcname, QuoteNode(:b))))
     pushprepreamble!(ls, Expr(:(=), K, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), Expr(:ref, Expr(:call, :size, mB), 1))))
@@ -130,7 +130,7 @@ function add_broadcast!(
     loadA = add_broadcast!(ls, gensym(:A), mA, Symbol[m,k], A, elementbytes)
     # load B
     loadB = add_broadcast!(ls, gensym(:B), mB, bloopsyms, B, elementbytes)
-    # set Cₘₙ = 0
+    # set Cmn = 0
     # setC = add_constant!(ls, zero(promote_type(recursive_eltype(A), recursive_eltype(B))), cloopsyms, mC, elementbytes)
     # targetC will be used for reduce_to_add
     mCt = gensym(mC)
@@ -139,7 +139,7 @@ function add_broadcast!(
     setC = add_constant!(ls, gensym(:zero), cloopsyms, mC, elementbytes, :numericconstant)
     push!(ls.preamble_zeros, (identifier(setC), IntOrFloat))
     setC.reduced_children = kvec
-    # compute Cₘₙ += Aₘₖ * Bₖₙ
+    # compute Cmn += Amₖ * Bₖn
     instrsym = Base.libllvm_version < v"11.0.0" ? :vfmadd231 : :vfmadd
     reductop = Operation(
         ls, mC, elementbytes, instrsym, compute, reductdeps, kvec, Operation[loadA, loadB, setC]

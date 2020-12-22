@@ -951,15 +951,15 @@ end
 function advance_state!(state)
     N = length(state)
     for n ∈ 1:N
-        sₙ = state[n]
-        if sₙ == N - n
+        sn = state[n]
+        if sn == N - n
             if n == N
                 return false
             else
                 state[n] = 0
             end
         else
-            state[n] = sₙ + 1
+            state[n] = sn + 1
             break
         end
     end
