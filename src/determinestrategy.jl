@@ -384,8 +384,10 @@ end
 
 function solve_unroll(X, R, u₁L, u₂L, u₁step, u₂step)
     X₁, X₂, X₃, X₄ = X[1], X[2], X[3], X[4]
-    # If we don't have AVX512, masks occupy a vector register
-    VectorizationBase.AVX512F || (R[3] += 1)
+    # If we don't have AVX512, masks occupy a vector register;
+    # AVX512F is currently defined as `false` for non-x86 CPUs, but
+    # should instead define generic constant `HAS_OPMASK_REGISTERS` in VectorizationBase.jl to use here instead.
+    AVX512F || (R[3] += 1)
     R₁, R₂, R₃, R₄, R₅ = R[1], R[2], R[3], R[4], R[5]
     iszero(R₅) || return solve_unroll_iter(X, R, u₁L, u₂L, u₁step:u₁step:10, u₂step:u₂step:10)
     RR = REGISTER_COUNT - R₃ - R₄

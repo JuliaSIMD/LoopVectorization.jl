@@ -1,7 +1,7 @@
 @testset "GEMM" begin
     # using LoopVectorization, LinearAlgebra, Test; T = Float64
     Unum, Tnum = LoopVectorization.REGISTER_COUNT == 16 ? (2, 6) : (3, 9)
-    Unumt, Tnumt = LoopVectorization.REGISTER_COUNT == 16 ? (3, 4) : (5, 5)
+    Unumt, Tnumt = LoopVectorization.REGISTER_COUNT == 16 ? (2, 6) : (5, 5)
     if LoopVectorization.REGISTER_COUNT != 8
         @test LoopVectorization.mᵣ == Unum
         @test LoopVectorization.nᵣ == Tnum
@@ -353,7 +353,7 @@
     if LoopVectorization.REGISTER_COUNT == 32
         @test LoopVectorization.choose_order(lsr2amb) == ([:n, :m, :k], :m, :n, :m, 3, 7)
     elseif LoopVectorization.REGISTER_COUNT == 16
-        @test LoopVectorization.choose_order(lsr2amb) == ([:m, :n, :k], :n, :m, :m, 4, 2)
+        @test LoopVectorization.choose_order(lsr2amb) == ([:m, :n, :k], :m, :n, :m, 1, 6)
     end
     function rank2AmulBavx!(C, Aₘ, Aₖ, B)
         @avx for m ∈ axes(C,1), n ∈ axes(C,2)
