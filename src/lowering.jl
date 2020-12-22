@@ -652,13 +652,13 @@ end
 
 function determine_eltype(ls::LoopSet)
     if length(ls.includedactualarrays) == 0
-        return Expr(:call, :typeof, 0)
+        return Expr(:call, lv(:typeof), 0)
     elseif length(ls.includedactualarrays) == 1
-        return Expr(:call, :eltype, first(ls.includedactualarrays))
+        return Expr(:call, lv(:eltype), first(ls.includedactualarrays))
     end
-    promote_q = Expr(:call, :promote_type)
+    promote_q = Expr(:call, lv(:promote_type))
     for array ∈ ls.includedactualarrays
-        push!(promote_q.args, Expr(:call, :eltype, array))
+        push!(promote_q.args, Expr(:call, lv(:eltype), array))
     end
     promote_q
 end

@@ -5,7 +5,7 @@ function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{<:AbstractUnitRange})
     start = gensym(ssym*"_loopstart"); stop = gensym(ssym*"_loopstop"); loopsym = gensym(ssym * "_loop")
     pushpreamble!(ls, Expr(:(=), loopsym, ex))
     pushpreamble!(ls, Expr(:(=), start, Expr(:call, :first, loopsym)))
-    pushpreamble!(ls, Expr(:(=), stop, Expr(:call, :last, loopsym)))
+    pushpreamble!(ls, Expr(:(=), stop, Expr(:call, lv(:last), loopsym)))
     loop = Loop(sym, 1, 1024, start, stop, false, false)::Loop
     pushpreamble!(ls, loopiteratesatleastonce(loop))
     loop
@@ -14,14 +14,14 @@ end
 
 function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{OptionallyStaticUnitRange{I, Static{U}}}) where {I<:Integer, U}
     start = gensym(String(sym)*"_loopstart")
-    pushpreamble!(ls, Expr(:(=), start, Expr(:call, :first, ex)))
+    pushpreamble!(ls, Expr(:(=), start, Expr(:call, lv(:first), ex)))
     loop = Loop(sym, U - 1024, U, start, Symbol(""), false, true)::Loop
     pushpreamble!(ls, loopiteratesatleastonce(loop))
     loop
 end
 function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{OptionallyStaticUnitRange{Static{L}, I}}) where {I <: Integer, L}
     stop = gensym(String(sym)*"_loopstop")
-    pushpreamble!(ls, Expr(:(=), stop, Expr(:call, :last, ex)))
+    pushpreamble!(ls, Expr(:(=), stop, Expr(:call, lv(:last), ex)))
     loop = Loop(sym, L, L + 1024, Symbol(""), stop, true, false)::Loop
     pushpreamble!(ls, loopiteratesatleastonce(loop))
     loop

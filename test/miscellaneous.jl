@@ -787,6 +787,31 @@ function maybe_const_issue144_avx!(𝛥mat, 𝛥ℛ, mat, ℛ)
     end
     𝛥mat
 end
+    function grad!(𝛥x, 𝛥ℛ, x, 𝒶𝓍i=eachindex(x))
+        for i = 𝒶𝓍i
+            (i >= first(axes(𝛥x, 1))) & (i <= last(axes(𝛥x, 1))) && (𝛥x[i] = 𝛥x[i] + 𝛥ℛ[i])
+        end
+        𝛥x
+    end
+    function grad_avx!(𝛥x, 𝛥ℛ, x, 𝒶𝓍i=eachindex(x))
+        @avx for i = 𝒶𝓍i
+            (i >= first(axes(𝛥x, 1))) & (i <= last(axes(𝛥x, 1))) && (𝛥x[i] = 𝛥x[i] + 𝛥ℛ[i])
+        end
+        𝛥x
+    end
+    function grad_avx_base!(𝛥x, 𝛥ℛ, x, 𝒶𝓍i=eachindex(x))
+        @avx for i = 𝒶𝓍i
+            (i >= first(axes(𝛥x, 1))) & (i <= Base.last(axes(𝛥x, 1))) && (𝛥x[i] = 𝛥x[i] + 𝛥ℛ[i])
+        end
+        𝛥x
+    end
+    @eval function grad_avx_eval!(𝛥x, 𝛥ℛ, x, 𝒶𝓍i=eachindex(x))
+        @avx for i = 𝒶𝓍i
+            (i >= $first($axes(𝛥x, 1))) & (i <= $last($axes(𝛥x, 1))) && (𝛥x[i] = 𝛥x[i] + 𝛥ℛ[i])
+        end
+        𝛥x
+    end # LoadError: KeyError: key typeof(first) not found
+
 
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
@@ -1015,6 +1040,7 @@ end
             rtol = ∛(eps(T))
         )
 
+        @test grad!(zeros(5), ones(5), ones(3)) ≈ grad_avx!(zeros(5), ones(5), ones(3)) ≈ grad_avx_base!(zeros(5), ones(5), ones(3)) ≈ grad_avx_eval!(zeros(5), ones(5), ones(3))
     end
     for T ∈ [Int16, Int32, Int64]
         n = 8sizeof(T) - 1

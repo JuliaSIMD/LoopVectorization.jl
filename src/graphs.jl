@@ -573,13 +573,18 @@ function instruction!(ls::LoopSet, x::Expr)
     if instr ∉ keys(COST)
         instr = gensym(:f)
         pushpreamble!(ls, Expr(:(=), instr, x))
+        Instruction(Symbol(""), instr)
+    else
+        Instruction(:LoopVectorization, instr)
     end
-    Instruction(Symbol(""), instr)
 end
 instruction!(ls::LoopSet, x::Symbol) = instruction(x)
-function instruction!(ls::LoopSet, ::F) where {F <: Function}
-    FUNCTIONSYMBOLS[F]
-    # get(FUNCTIONSYMBOLS, F, 
+function instruction!(ls::LoopSet, f::F) where {F <: Function}
+    get(FUNCTIONSYMBOLS, F) do
+        instr = gensym(:f)
+        pushpreamble!(ls, Expr(:(=), instr, f))
+        Instruction(Symbol(""), instr)
+    end
 end
 
 
