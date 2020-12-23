@@ -63,7 +63,7 @@ function LoopSet(q::Expr, mod::Symbol = :Main)
     resize!(ls.loop_order, num_loops(ls))
     ls
 end
-LoopSet(q::Expr, m::Module) = LoopSet(macroexpand(m, q), Symbol(m))
+LoopSet(q::Expr, m::Module) = LoopSet(macroexpand(m, q)::Expr, Symbol(m))
 
 """
     @avx
@@ -143,6 +143,7 @@ use their `parent`. Triangular loops aren't yet supported.
 """
 macro avx(q)
     q = macroexpand(__module__, q)
+    isa(q, Expr) || return q
     q2 = if q.head === :for
         setup_call(LoopSet(q, __module__), q)
     else# assume broadcast

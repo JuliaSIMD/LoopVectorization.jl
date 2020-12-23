@@ -57,7 +57,7 @@ function add_parent!(
         opp = getop(ls, var, elementbytes)
         # if var === :kern_1_1
         #     @show operations(ls) ls.preamble_symsym
-        # end 
+        # end
         # @show var opp first(operations(ls)) opp === first(operations(ls))
         if iscompute(opp) && instruction(opp).instr === :identity && length(loopdependencies(opp)) < position && isone(length(parents(opp))) && name(opp) === name(first(parents(opp)))
             first(parents(opp))
@@ -168,7 +168,7 @@ function add_reduction_update_parent!(
     # if !isouterreduction && !isreductzero(parent, ls, reduct_zero)
     add_reduct_instruct = !isouterreduction && !isconstant(parent)
     if add_reduct_instruct
-        # We add 
+        # We add
         reductcombine = reduction_scalar_combine(instrclass)
         # reductcombine = :identity
         reductsym = gensym(:reduction)
@@ -222,7 +222,10 @@ function add_compute!(
     # instr = instruction(first(ex.args))::Symbol
     instr = instruction!(ls, first(ex.args))::Instruction
     args = @view(ex.args[2:end])
-    (instr.instr === :(^) && length(args) == 2 && (args[2] isa Number)) && return add_pow!(ls, var, args[1], args[2], elementbytes, position)
+    if instr.instr === :(^) && length(args) == 2
+        arg2 = args[2]
+        arg2 isa Number && return add_pow!(ls, var, args[1], arg2, elementbytes, position)
+    end
     vparents = Operation[]
     deps = Symbol[]
     reduceddeps = Symbol[]
@@ -232,7 +235,7 @@ function add_compute!(
         if var === arg
             reduction_ind = ind
             # add_reduction!(vparents, deps, reduceddeps, ls, arg, elementbytes)
-            getop(ls, arg, elementbytes)
+            getop(ls, arg::Symbol, elementbytes)   # weird that this needs annotation
         elseif arg isa Expr
             isref, argref = tryrefconvert(ls, arg, elementbytes, varname(mpref))
             if isref
@@ -303,7 +306,7 @@ end
 
 # adds x ^ (p::Real)
 function add_pow!(
-    ls::LoopSet, var::Symbol, x, p::Real, elementbytes::Int, position::Int
+    ls::LoopSet, var::Symbol, @nospecialize(x), p::Real, elementbytes::Int, position::Int
 )
     xop::Operation = if x isa Expr
         add_operation!(ls, gensym(:xpow), x, elementbytes, position)

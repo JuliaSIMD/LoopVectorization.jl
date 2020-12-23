@@ -138,13 +138,13 @@ function add_mref!(
         return pushvarg!(ls, ar, i, name)
     end
     lic = copy(li);
-    inds = getindices(ar); indsc = copy(inds); 
+    inds = getindices(ar); indsc = copy(inds);
     offsets = ar.ref.offsets; offsetsc = copy(offsets);
 
     # must now sort array's inds, and stack pointer's
     tmpsp = gensym(name)
     pushvarg!(ls, ar, i, tmpsp)
-    # pushpreamble!(ls, 
+    # pushpreamble!(ls,
     strd_tup = Expr(:tuple)
     offsets_tup = Expr(:tuple)
     for (i, p) ∈ enumerate(sp)
@@ -417,7 +417,8 @@ function sizeofeltypes(v, num_arrays)::Int
     # sizeof(T)
 end
 
-function avx_loopset(instr, ops, arf, AM, LPSYM, LB, @nospecialize(vargs))
+function avx_loopset(instr::Vector{Instruction}, ops::Vector{OperationStruct}, arf::Vector{ArrayRefStruct},
+                     AM::Core.SimpleVector, LPSYM::Core.SimpleVector, LB::Core.SimpleVector, @nospecialize(vargs))
     ls = LoopSet(:LoopVectorization)
     num_arrays = length(arf)
     elementbytes = sizeofeltypes(vargs, num_arrays)
@@ -436,7 +437,7 @@ function avx_loopset(instr, ops, arf, AM, LPSYM, LB, @nospecialize(vargs))
     num_params = extract_external_functions!(ls, num_params)
     ls
 end
-function avx_body(ls, UNROLL)
+function avx_body(ls::LoopSet, UNROLL::Tuple{Int8,Int8,Int8,Int})
     inline, u₁, u₂, W = UNROLL
     ls.vector_width[] = W
     q = iszero(u₁) ? lower_and_split_loops(ls, inline % Int) : lower(ls, u₁ % Int, u₂ % Int, inline % Int)
@@ -448,7 +449,7 @@ function _avx_loopset_debug(::Type{OPS}, ::Type{ARF}, ::Type{AM}, ::Type{LPSYM},
     @show OPS ARF AM LPSYM LB vargs
     _avx_loopset(OPS.parameters, ARF.parameters, AM.parameters, LPSYM.parameters, LB.parameters, typeof.(vargs))
 end
-function _avx_loopset(OPSsv, ARFsv, AMsv, LPSYMsv, LBsv, @nospecialize(vargs))
+function _avx_loopset(OPSsv::Core.SimpleVector, ARFsv::Core.SimpleVector, AMsv::Core.SimpleVector, LPSYMsv::Core.SimpleVector, LBsv::Core.SimpleVector, @nospecialize(vargs))
     nops = length(OPSsv) ÷ 3
     instr = Instruction[Instruction(OPSsv[3i+1], OPSsv[3i+2]) for i ∈ 0:nops-1]
     ops = OperationStruct[ OPSsv[3i] for i ∈ 1:nops ]
