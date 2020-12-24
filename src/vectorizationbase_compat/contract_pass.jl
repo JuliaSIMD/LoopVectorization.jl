@@ -48,8 +48,8 @@ end
 function recursive_muladd_search!(call, argv, cnmul::Bool = false, csub::Bool = false)
     length(argv) < 3 && return length(call.args) == 4, cnmul, csub
     fun = first(argv)
-    isadd = fun === :+ || fun === :vadd! || fun === :vadd || fun == :(Base.FastMath.add_fast)
-    issub = fun === :- || fun === :vsub! || fun === :vsub || fun == :(Base.FastMath.sub_fast)
+    isadd = fun === :+ || fun === :vadd! || fun === :vadd || (fun == :(Base.FastMath.add_fast))::Bool
+    issub = fun === :- || fun === :vsub! || fun === :vsub || (fun == :(Base.FastMath.sub_fast))::Bool
     if !(isadd | issub)
         return length(call.args) == 4, cnmul, csub
     end
@@ -60,7 +60,7 @@ function recursive_muladd_search!(call, argv, cnmul::Bool = false, csub::Bool = 
             exa = ex.args
             f = first(exa)
             exav = @view(exa[2:end])
-            if f === :* || f === :vmul! || f === :vmul || f == :(Base.FastMath.mul_fast)
+            if f === :* || f === :vmul! || f === :vmul || (f == :(Base.FastMath.mul_fast))::Bool
                 a, b = mulexpr(exav)
                 call.args[2] = a
                 call.args[3] = b
@@ -107,28 +107,27 @@ function recursive_muladd_search!(call, argv, cnmul::Bool = false, csub::Bool = 
                         csub = false
                     end
                     return true, cnmul, csub
-                end                
+                end
             end
         end
     end
     length(call.args) == 4, cnmul, csub
 end
-                          
-function capture_muladd(ex::Expr, mod, LHS = nothing)
+
+function capture_muladd(ex::Expr, mod)
     call = Expr(:call, Symbol(""), Symbol(""), Symbol(""))
     found, nmul, sub = recursive_muladd_search!(call, ex.args)
     found || return ex
     # a, b, c = call.args[2], call.args[3], call.args[4]
     # call.args[2], call.args[3], call.args[4] = c, a, b
-    clobber = false#call.args[4] == LHS
     f = if nmul && sub
-        clobber ? :vfnmsub231 : :vfnmsub
+        :vfnmsub
     elseif nmul
-        clobber ? :vfnmadd231 : :vfnmadd
+        :vfnmadd
     elseif sub
-        clobber ? :vfmsub231 : :vfmsub
+        :vfmsub
     else
-        clobber ? :vfmadd231 : :vfmadd
+        :vfmadd
     end
     if mod === nothing
         call.args[1] = f
@@ -139,7 +138,7 @@ function capture_muladd(ex::Expr, mod, LHS = nothing)
 end
 
 contract_pass!(::Any, ::Any) = nothing
-function contract!(expr::Expr, ex::Expr, i::Int, mod = nothing)
+function contract!(expr::Expr, ex::Expr, i::Int, mod)
     # if ex.head === :call
         # expr.args[i] = capture_muladd(ex, mod)
     if ex.head === :(+=)
@@ -163,7 +162,7 @@ function contract!(expr::Expr, ex::Expr, i::Int, mod = nothing)
         RHS = ex.args[2]
         # @show ex
         if RHS isa Expr && RHS.head === :call
-            ex.args[2] = capture_muladd(RHS, mod, ex.args[1])
+            ex.args[2] = capture_muladd(RHS, mod)
         end
     end
     contract_pass!(expr.args[i], mod)

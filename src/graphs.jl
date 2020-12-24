@@ -136,7 +136,7 @@ function looprange(loop::Loop, incr::Int, mangledname)
 end
 function terminatecondition(
     loop::Loop, us::UnrollSpecification, n::Int, mangledname::Symbol, inclmask::Bool, UF::Int = unrollfactor(us, n)
-) 
+)
     if !isvectorized(us, n)
         looprange(loop, UF, mangledname)
     elseif inclmask
@@ -345,7 +345,7 @@ function LoopSet(mod::Symbol)
         Tuple{Int,Symbol}[],
         Tuple{Int,Int}[],
         Tuple{Int,Float64}[],
-        Int[],Int[],
+        Tuple{Int,NumberType}[],Tuple{Int,Symbol}[],
         Symbol[], Symbol[], Symbol[],
         ArrayReferenceMeta[],
         Matrix{Float64}(undef, 4, 2),
@@ -363,7 +363,7 @@ function cacheunrolled!(ls::LoopSet, u₁loop, u₂loop, vectorized)
         for opp ∈ parents(op)
             push!(children(opp), op)
         end
-    end    
+    end
 end
 
 num_loops(ls::LoopSet) = length(ls.loops)
@@ -404,7 +404,7 @@ function getop(ls::LoopSet, var::Symbol, deps, elementbytes::Int)
 end
 getop(ls::LoopSet, i::Int) = ls.operations[i]
 
-# """ 
+# """
 # Returns an operation with the same name as `s`.
 # """
 # function getoperation(ls::LoopSet, s::Symbol)
@@ -486,15 +486,16 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
     itersym = (looprange.args[1])::Symbol
     r = looprange.args[2]
     if isexpr(r, :call)
+        r = r::Expr        # julia#37342
         f = first(r.args)
         loop::Loop = if f === :(:)
             lower = r.args[2]
             upper = r.args[3]
             lii::Bool = lower isa Integer
-            liiv::Int = lii ? convert(Int, lower) : 1
+            liiv::Int = lii ? convert(Int, lower::Integer) : 1
             uii::Bool = upper isa Integer
             if lii & uii # both are integers
-                Loop(itersym, liiv, convert(Int, upper))
+                Loop(itersym, liiv, convert(Int, upper::Integer)::Int)
             elseif lii # only lower bound is an integer
                 if upper isa Symbol
                     Loop(itersym, liiv, upper)
@@ -504,7 +505,7 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
                     Loop(itersym, liiv, add_loop_bound!(ls, itersym, upper, true))
                 end
             elseif uii # only upper bound is an integer
-                uiiv = convert(Int, upper)
+                uiiv = convert(Int, upper::Integer)::Int
                 Loop(itersym, add_loop_bound!(ls, itersym, lower, false), uiiv)
             else # neither are integers
                 L = add_loop_bound!(ls, itersym, lower, false)
@@ -544,7 +545,7 @@ end
 function register_loop!(ls::LoopSet, looprange::Expr)
     if looprange.head === :block # multiple loops
         for lr ∈ looprange.args
-            register_single_loop!(ls, lr)
+            register_single_loop!(ls, lr::Expr)
         end
     else
         @assert looprange.head === :(=)
@@ -552,8 +553,8 @@ function register_loop!(ls::LoopSet, looprange::Expr)
     end
 end
 function add_loop!(ls::LoopSet, q::Expr, elementbytes::Int)
-    register_loop!(ls, q.args[1])
-    body = q.args[2]
+    register_loop!(ls, q.args[1]::Expr)
+    body = q.args[2]::Expr
     position = length(ls.loopsymbols)
     if body.head === :block
         add_block!(ls, body, elementbytes, position)
@@ -685,10 +686,8 @@ function add_operation!(
     end
 end
 
-function prepare_rhs_for_storage!(ls::LoopSet, RHS::Symbol, array, rawindices, elementbytes::Int, position::Int)
-    add_store!(ls, RHS, array, rawindices, elementbytes)
-end
-function prepare_rhs_for_storage!(ls::LoopSet, RHS::Expr, array, rawindices, elementbytes::Int, position::Int)
+function prepare_rhs_for_storage!(ls::LoopSet, RHS::Union{Symbol,Expr}, array, rawindices, elementbytes::Int, position::Int)
+    RHS isa Symbol && return add_store!(ls, RHS, array, rawindices, elementbytes)
     mpref = array_reference_meta!(ls, array, rawindices, elementbytes)
     cachedparents = copy(mpref.parents)
     ref = mpref.mref.ref
@@ -706,9 +705,9 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
         finex = first(ex.args)::Symbol
         if finex === :setindex!
             array, rawindices = ref_from_setindex!(ls, ex)
-            prepare_rhs_for_storage!(ls, ex.args[3], array, rawindices, elementbytes, position)
+            prepare_rhs_for_storage!(ls, ex.args[3]::Union{Symbol,Expr}, array, rawindices, elementbytes, position)
         else
-            throw("Function $finex not recognized.")
+            error("Function $finex not recognized.")
         end
     elseif ex.head === :(=)
         LHS = ex.args[1]
@@ -729,7 +728,7 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
                     array, rawindices = ref_from_expr!(ls, LHS)
                     prepare_rhs_for_storage!(ls, RHS, array, rawindices, elementbytes, position)
                 else
-                    add_store_ref!(ls, RHS, LHS, elementbytes)
+                    add_store_ref!(ls, RHS, LHS, elementbytes)  # is this necessary? (Extension API?)
                 end
             elseif LHS.head === :tuple
                 @assert length(LHS.args) ≤ 9 "Functions returning more than 9 values aren't currently supported."
