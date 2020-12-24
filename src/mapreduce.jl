@@ -32,7 +32,7 @@ end
 
 Vectorized version of `mapreduce`. Applies `f` to each element of the arrays `A`, and reduces the result with `op`.
 """
-function vmapreduce(f::F, op::OP, arg1::DenseArray{T}, args::Vararg{DenseArray{T},A}) where {F,OP,T<:NativeTypes,A}
+@inline function vmapreduce(f::F, op::OP, arg1::DenseArray{T}, args::Vararg{DenseArray{T},A}) where {F,OP,T<:NativeTypes,A}
     N = length(arg1)
     iszero(A) || @assert all(length.(args) .== N)
     W = VectorizationBase.pick_vector_width(T)
@@ -43,7 +43,7 @@ function vmapreduce(f::F, op::OP, arg1::DenseArray{T}, args::Vararg{DenseArray{T
         _vmapreduce(f, op, V, N, T, arg1, args...)
     end
 end
-function _vmapreduce(f::F, op::OP, ::StaticInt{W}, N, ::Type{T}, args::Vararg{DenseArray{<:NativeTypes},A}) where {F,OP,A,W,T}
+@inline function _vmapreduce(f::F, op::OP, ::StaticInt{W}, N, ::Type{T}, args::Vararg{DenseArray{<:NativeTypes},A}) where {F,OP,A,W,T}
     ptrargs = VectorizationBase.zero_offsets.(stridedpointer.(args))
     if N ≥ 4W
         index = VectorizationBase.Unroll{1,1,4,1,W,0x0000000000000000}((Zero(),)); i = 4W
@@ -78,7 +78,7 @@ Vectorized version of `reduce`. Reduces the array `A` using the operator `op`.
 @inline vreduce(op, arg) = vmapreduce(identity, op, arg)
 
 for (op, init) in zip((:+, :max, :min), (:zero, :typemin, :typemax))
-    @eval function vreduce(::typeof($op), arg; dims = nothing)
+    @eval @inline function vreduce(::typeof($op), arg; dims = nothing)
         isnothing(dims) && return _vreduce($op, arg)
         isone(ndims(arg)) && return [_vreduce($op, arg)]
         @assert length(dims) == 1
