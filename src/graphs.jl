@@ -105,18 +105,28 @@ function vec_looprange(loopmax, UF::Int, mangledname::Symbol, ptrcomp::Bool)
     end
 end
 function vec_looprange(loopmax, UF::Int, mangledname, W)
-    incr = if isone(UF)
-        Expr(:call, lv(:vsub), W, staticexpr(1))
+    if isone(UF)
+        compexpr = subexpr(loopmax, W)
     else
-        Expr(:call, lv(:vsub), Expr(:call, lv(:vmul), W, UF), staticexpr(1))
+        compexpr = subexpr(loopmax, Expr(:call, lv(:vmul), W, UF))
     end
-    compexpr = subexpr(loopmax, incr)
-    Expr(:call, :<, mangledname, compexpr)
+    Expr(:call, :≤, mangledname, compexpr)
 end
+# function vec_looprange(loopmax, UF::Int, mangledname, W)
+#     incr = if isone(UF)
+#         Expr(:call, lv(:vsub), W, staticexpr(1))
+#     else
+#         Expr(:call, lv(:vsub), Expr(:call, lv(:vmul), W, UF), staticexpr(1))
+#     end
+#     compexpr = subexpr(loopmax, incr)
+#     Expr(:call, :<, mangledname, compexpr)
+# end
 
 function looprange(stopcon, incr::Int, mangledname)
     if iszero(incr)
         Expr(:call, :≤, mangledname, stopcon)
+    elseif isone(incr)
+        Expr(:call, :<, mangledname, stopcon)
     else
         Expr(:call, :≤, mangledname, subexpr(stopcon, incr))
     end

@@ -291,7 +291,7 @@ function allinteriorunrolled(ls::LoopSet, us::UnrollSpecification, N)
     unroll_total ≤ 8
 end
 
-function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask::Bool)
+function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask::Bool, initialize::Bool = true, maxiters::Int=-1)
     usorig = ls.unrollspecification[]
     nisvectorized = isvectorized(us, n)
     loopsym = names(ls)[n]
@@ -301,7 +301,7 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
     #     # return lower_llvm_unroll(ls, us, n, loop)
     # end
     # sl = startloop(loop, nisvectorized, loopsym)
-    sl = startloop(ls, us, n)
+    
     tc = terminatecondition(ls, us, n, inclmask, 1)
     body = lower_block(ls, us, n, inclmask, 1)
     # align_loop = isone(n) & (ls.align_loops[] > 0)
@@ -319,11 +319,11 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
         foreach(_ -> push!(q.args, body), 1:(length(loop) ÷ W))
     elseif nisvectorized
             # Expr(:block, loopiteratesatleastonce(loop, true), Expr(:while, expect(tc), body))
-        q = Expr(:block, Expr(:while, tc, body))
+        q = Expr(:block, Expr(maxiters == 1 ? :if : :while, tc, body))
     else
         termcond = gensym(:maybeterm)
         push!(body.args, Expr(:(=), termcond, tc))
-        q = Expr(:block, Expr(:(=), termcond, true), Expr(:while, termcond, body))
+        q = Expr(:block, Expr(:(=), termcond, true), Expr(maxiters == 1 ? :if : :while, termcond, body))
         # Expr(:block, Expr(:while, expect(tc), body))
         # Expr(:block, assume(tc), Expr(:while, tc, body))
         # push!(body.args, Expr(:&&, expect(Expr(:call, :!, tc)), Expr(:break)))
@@ -346,7 +346,11 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
             push!(q.args, Expr(:if, tc, body))
         end
     end
-    Expr(:block, Expr(:let, sl, q))
+    if initialize
+        Expr(:let, startloop(ls, us, n), q)
+    else
+        q
+    end
 end
 function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask::Bool)
     UF = unrollfactor(us, n)
@@ -389,23 +393,49 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
         end
         remblock = Expr(:block)
         (nisvectorized && (UFt > 0) && isone(num_loops(ls))) && push!(remblock.args, definemask(loop))
+        unroll_cleanup = true
     else
         remblock = init_remblock(loop, ls.lssm[], n)#loopsym)
+        # unroll_cleanup = Ureduct > 0 || (nisunrolled ? (u₂ > 1) : (u₁ > 1))
+        # remblock = unroll_cleanup ? init_remblock(loop, ls.lssm[], n)#loopsym) : Expr(:block)
         q = Expr(:while, tc, body)
     end
     q = if unsigned(Ureduct) < unsigned(UF) # unsigned(-1) == typemax(UInt); is logic relying on twos-complement bad?
-        UF_cleanup = UF - Ureduct
-        us_cleanup = nisunrolled ? UnrollSpecification(us, UF_cleanup, u₂) : UnrollSpecification(us, u₁, UF_cleanup)
-        Expr(
-            :block,
-            add_upper_outer_reductions(ls, q, Ureduct, UF, loop, vectorized),
-            Expr(
-                # :if, terminatecondition(loop, us, n, loopsym, inclmask, UF_cleanup),
-                :if, terminatecondition(ls, us, n, inclmask, UF_cleanup),
-                lower_block(ls, us_cleanup, n, inclmask, UF_cleanup)
-            ),
-            remblock
-        )
+        add_cleanup = true
+        if isone(Ureduct)
+            UF_cleanup = 1
+            if nisvectorized
+                blockhead = :while
+            else
+                blockhead = if UF == 2
+                    if loopisstatic
+                        add_cleanup = UFt == 1
+                        :block
+                    else
+                        :if
+                    end
+                else
+                    :while
+                end
+                UFt = 0
+            end
+        elseif 2Ureduct < UF
+            UF_cleanup = 2
+            blockhead = :while
+        else
+            UF_cleanup = UF - Ureduct
+            blockhead = :if
+        end
+        _q = Expr(:block, add_upper_outer_reductions(ls, q, Ureduct, UF, loop, vectorized, nisvectorized))
+        if add_cleanup
+            cleanup_expr = Expr(blockhead)
+            blockhead === :block || push!(cleanup_expr.args, terminatecondition(ls, us, n, inclmask, UF_cleanup))
+            us_cleanup = nisunrolled ? UnrollSpecification(us, UF_cleanup, u₂) : UnrollSpecification(us, u₁, UF_cleanup)
+            push!(cleanup_expr.args, lower_block(ls, us_cleanup, n, inclmask, UF_cleanup))
+            push!(_q.args, cleanup_expr)
+        end
+        UFt > 0 && push!(_q.args, remblock)
+        _q
     elseif remfirst
         numiters = length(loop) ÷ UF
         if numiters > 2
@@ -440,10 +470,14 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
         Expr( :block, q, remblock )
     end
     if !iszero(UFt)
+        # if unroll_cleanup
         while true
             ust = nisunrolled ? UnrollSpecification(us, UFt, u₂) : UnrollSpecification(us, u₁, UFt)
             newblock = lower_block(ls, ust, n, remmask, UFt)
             if (UFt ≥ UF - 1 + nisvectorized) || UFt == Ureduct || loopisstatic
+                if isone(num_loops(ls)) && isone(UFt) && isone(Ureduct)
+                    newblock = Expr(:block, definemask(loop), newblock)
+                end
                 push!(remblock.args, newblock)
                 break
             end
@@ -459,6 +493,11 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
             end
             UFt += 1
         end
+        # else
+        #     ust = nisunrolled ? UnrollSpecification(us, 1, u₂) : UnrollSpecification(us, u₁, 1)
+        #     # newblock = lower_block(ls, ust, n, remmask, 1)
+        #     push!(remblock.args, lower_no_unroll(ls, ust, n, inclmask, false, UF-1))
+        # end
     end
     Expr(:block, Expr(:let, sl, q))
 end
@@ -529,26 +568,37 @@ end
 function initialize_outer_reductions!(ls::LoopSet, Umin::Int, Umax::Int, vectorized::Symbol, suffix::Union{Symbol,Nothing} = nothing)
     initialize_outer_reductions!(ls.preamble, ls, Umin, Umax, vectorized, suffix)
 end
-function add_upper_outer_reductions(ls::LoopSet, loopq::Expr, Ulow::Int, Uhigh::Int, unrolledloop::Loop, vectorized::Symbol)
+function add_upper_comp_check(unrolledloop, loopbuffer)
+    if isstaticloop(unrolledloop)
+        Expr(:call, lv(:scalar_greaterequal), length(unrolledloop), loopbuffer)
+    elseif unrolledloop.startexact
+        if isone(unrolledloop.starthint)
+            Expr(:call, lv(:scalar_greaterequal), unrolledloop.stopsym, loopbuffer)
+        else
+            Expr(:call, lv(:scalar_greaterequal), Expr(:call, lv(:vsub), unrolledloop.stopsym, unrolledloop.starthint-1), loopbuffer)
+        end
+    elseif unrolledloop.stopexact
+        Expr(:call, lv(:scalar_greaterequal), Expr(:call, lv(:vsub), unrolledloop.stophint+1, unrolledloop.startsym), loopbuffer)
+    else# both are given by symbols
+        Expr(:call, lv(:scalar_greaterequal), Expr(:call, lv(:vsub), unrolledloop.stopsym, Expr(:call,lv(:vsub),unrolledloop.startsym, staticexpr(1))), loopbuffer)
+    end
+end
+function add_upper_outer_reductions(ls::LoopSet, loopq::Expr, Ulow::Int, Uhigh::Int, unrolledloop::Loop, vectorized::Symbol, reductisvectorized::Bool)
     ifq = Expr(:block)
     initialize_outer_reductions!(ifq, ls, Ulow, Uhigh, vectorized)
     push!(ifq.args, loopq)
-    reduce_range!(ifq, ls, Ulow, Uhigh)
-    loopbuffer = Expr(:call, lv(:vmul), VECTORWIDTHSYMBOL, Uhigh)
-    comparison = if isstaticloop(unrolledloop)
-        Expr(:call, lv(:scalar_less), length(unrolledloop), loopbuffer)
-    elseif unrolledloop.startexact
-        if isone(unrolledloop.starthint)
-            Expr(:call, lv(:scalar_less), unrolledloop.stopsym, loopbuffer)
-        else
-            Expr(:call, lv(:scalar_less), Expr(:call, lv(:vsub), unrolledloop.stopsym, unrolledloop.starthint-1), loopbuffer)
-        end
-    elseif unrolledloop.stopexact
-        Expr(:call, lv(:scalar_less), Expr(:call, lv(:vsub), unrolledloop.stophint+1, unrolledloop.startsym), loopbuffer)
-    else# both are given by symbols
-        Expr(:call, lv(:scalar_less), Expr(:call, lv(:vsub), unrolledloop.stopsym, Expr(:call,lv(:vsub),unrolledloop.startsym, staticexpr(1))), loopbuffer)
+    _Ulow = Uhigh >>> 1; _Uhigh = Uhigh
+    while _Ulow > Ulow
+        reduce_range!(ifq, ls, _Ulow, _Uhigh)
+        _Uhigh = _Ulow
+        _Ulow >>>= 1
     end
-    ncomparison = Expr(:call, :!, comparison)
+    reduce_range!(ifq, ls, Ulow, _Uhigh)
+    ncomparison = if reductisvectorized
+        add_upper_comp_check(unrolledloop, Expr(:call, lv(:vmul), VECTORWIDTHSYMBOL, Uhigh))
+    else
+        add_upper_comp_check(unrolledloop, Uhigh)
+    end
     Expr(:if, ncomparison, ifq)
 end
 function reduce_expr!(q::Expr, ls::LoopSet, U::Int)
@@ -760,7 +810,9 @@ function calc_Ureduct(ls::LoopSet, us::UnrollSpecification)
     elseif u₂ == -1
         loopisstatic = isstaticloop(getloop(ls, names(ls)[u₁loopnum]))
         loopisstatic &= ((vectorizedloopnum != u₁loopnum) | (!iszero(ls.vector_width[])))
-        loopisstatic ? u₁ : min(u₁, 4)
+        # loopisstatic ? u₁ : min(u₁, 4) # much worse than the other two options, don't use this one
+        loopisstatic ? u₁ : (u₁ ≥ 4 ? 2 : 1)
+        # loopisstatic ? u₁ : 1
     else
         8#u₂#u₁
     # elseif num_loops(ls) == u₁loopnum

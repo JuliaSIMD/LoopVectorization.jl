@@ -56,7 +56,7 @@ function reduce_range!(q::Expr, toreduct::Symbol, instr::Instruction, Uh::Int, U
             push!(instrexpr.args, Symbol(toreduct, u + 1))
             push!(q.args, Expr(:(=), Symbol(toreduct, (u>>>1)), instrexpr))
         end
-    else
+    elseif 2Uh < Uh2
         for u ∈ Uh:Uh2-2
             tru = Symbol(toreduct, u - Uh)
             instrexpr = callexpr(instr)
@@ -70,6 +70,13 @@ function reduce_range!(q::Expr, toreduct::Symbol, instr::Instruction, Uh::Int, U
             push!(instrexpr.args, tru)
             push!(instrexpr.args, Symbol(toreduct, u))
             push!(q.args, Expr(:(=), tru, instrexpr))
+        end
+    else
+        for u ∈ 0:Uh2-Uh - 1
+            instrexpr = callexpr(instr)
+            push!(instrexpr.args, Symbol(toreduct, u))
+            push!(instrexpr.args, Symbol(toreduct, u + Uh))
+            push!(q.args, Expr(:(=), Symbol(toreduct, u), instrexpr))
         end
     end
 end
