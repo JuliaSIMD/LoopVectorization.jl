@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Vectorized Convenience Functions · LoopVectorization.jl</title><link href="https://fonts.googleapis.com/css?family=Lato|Roboto+Mono" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.0/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.0/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.0/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.11.1/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit">LoopVectorization.jl</span></div><form class="docs-search" action="../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><a class="tocitem" href="../getting_started/">Getting Started</a></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../examples/matrix_multiplication/">Matrix Multiplication</a></li><li><a class="tocitem" href="../examples/array_interface/">Array Interface</a></li><li><a class="tocitem" href="../examples/matrix_vector_ops/">Matrix-Vector Operations</a></li><li><a class="tocitem" href="../examples/dot_product/">Dot Products</a></li><li><a class="tocitem" href="../examples/special_functions/">Special Functions</a></li><li><a class="tocitem" href="../examples/sum_of_squared_error/">Sum of squared error</a></li><li><a class="tocitem" href="../examples/filtering/">Image Filtering</a></li></ul></li><li class="is-active"><a class="tocitem" href>Vectorized Convenience Functions</a><ul class="internal"><li><a class="tocitem" href="#vmap"><span>vmap</span></a></li><li><a class="tocitem" href="#vmapnt-and-vmapntt"><span>vmapnt and vmapntt</span></a></li><li><a class="tocitem" href="#vfilter"><span>vfilter</span></a></li><li><a class="tocitem" href="#vmapreduce"><span>vmapreduce</span></a></li></ul></li><li><a class="tocitem" href="../future_work/">Future Work</a></li><li><a class="tocitem" href="../api/">API reference</a></li><li><span class="tocitem">Developer Documentation</span><ul><li><a class="tocitem" href="../devdocs/overview/">Developer Overview</a></li><li><a class="tocitem" href="../devdocs/loopset_structure/">LoopSet Structure</a></li><li><a class="tocitem" href="../devdocs/constructing_loopsets/">Constructing LoopSets</a></li><li><a class="tocitem" href="../devdocs/evaluating_loops/">Determining the strategy for evaluating loops</a></li><li><a class="tocitem" href="../devdocs/lowering/">Lowering</a></li><li><a class="tocitem" href="../devdocs/reference/">Internals reference</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Vectorized Convenience Functions</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Vectorized Convenience Functions</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/chriselrod/LoopVectorization.jl/blob/master/docs/src/vectorized_convenience_functions.md" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="Convenient-Vectorized-Functions"><a class="docs-heading-anchor" href="#Convenient-Vectorized-Functions">Convenient Vectorized Functions</a><a id="Convenient-Vectorized-Functions-1"></a><a class="docs-heading-anchor-permalink" href="#Convenient-Vectorized-Functions" title="Permalink"></a></h1><h2 id="vmap"><a class="docs-heading-anchor" href="#vmap">vmap</a><a id="vmap-1"></a><a class="docs-heading-anchor-permalink" href="#vmap" title="Permalink"></a></h2><p>This is simply a vectorized <code>map</code> function.</p><h2 id="vmapnt-and-vmapntt"><a class="docs-heading-anchor" href="#vmapnt-and-vmapntt">vmapnt and vmapntt</a><a id="vmapnt-and-vmapntt-1"></a><a class="docs-heading-anchor-permalink" href="#vmapnt-and-vmapntt" title="Permalink"></a></h2><p>These are like <code>vmap</code>, but use non-temporal (streaming) stores into the destination, to avoid polluting the cache. Likely to yield a performance increase if you wont be reading the values soon.</p><pre><code class="language-julia">julia&gt; using LoopVectorization, BenchmarkTools
+
+julia&gt; f(x,y) = exp(-0.5abs2(x - y))
+f (generic function with 1 method)
+
+julia&gt; x = rand(10^8); y = rand(10^8); z = similar(x);
+
+julia&gt; @benchmark map!(f, $z, $x, $y)
+BenchmarkTools.Trial:
+  memory estimate:  0 bytes
+  allocs estimate:  0
+  --------------
+  minimum time:     442.614 ms (0.00% GC)
+  median time:      443.750 ms (0.00% GC)
+  mean time:        443.664 ms (0.00% GC)
+  maximum time:     444.730 ms (0.00% GC)
+  --------------
+  samples:          12
+  evals/sample:     1
+
+julia&gt; @benchmark vmap!(f, $z, $x, $y)
+BenchmarkTools.Trial:
+  memory estimate:  0 bytes
+  allocs estimate:  0
+  --------------
+  minimum time:     177.257 ms (0.00% GC)
+  median time:      177.380 ms (0.00% GC)
+  mean time:        177.423 ms (0.00% GC)
+  maximum time:     177.956 ms (0.00% GC)
+  --------------
+  samples:          29
+  evals/sample:     1
+
+julia&gt; @benchmark vmapnt!(f, $z, $x, $y)
+BenchmarkTools.Trial:
+  memory estimate:  0 bytes
+  allocs estimate:  0
+  --------------
+  minimum time:     143.521 ms (0.00% GC)
+  median time:      143.639 ms (0.00% GC)
+  mean time:        143.645 ms (0.00% GC)
+  maximum time:     143.821 ms (0.00% GC)
+  --------------
+  samples:          35
+  evals/sample:     1
+
+julia&gt; Threads.nthreads()
+36
+
+julia&gt; @benchmark vmapntt!(f, $z, $x, $y)
+BenchmarkTools.Trial:
+  memory estimate:  25.69 KiB
+  allocs estimate:  183
+  --------------
+  minimum time:     30.065 ms (0.00% GC)
+  median time:      30.130 ms (0.00% GC)
+  mean time:        30.146 ms (0.00% GC)
+  maximum time:     31.277 ms (0.00% GC)
+  --------------
+  samples:          166
+  evals/sample:     1</code></pre><h2 id="vfilter"><a class="docs-heading-anchor" href="#vfilter">vfilter</a><a id="vfilter-1"></a><a class="docs-heading-anchor-permalink" href="#vfilter" title="Permalink"></a></h2><p>This function requires LLVM 7 or greater, and is only likly to give better performance if your CPU has AVX512. This is because it uses the compressed store intrinsic, which was added in LLVM 7. AVX512 provides a corresponding instruction, making the operation fast, while other instruction sets must emulate it, and thus are likely to get similar performance with <code>LoopVectorization.vfilter</code> as they do from <code>Base.filter</code>.</p><pre><code class="language-julia">julia&gt; using LoopVectorization, BenchmarkTools
+
+julia&gt; x = rand(997);
+
+julia&gt; y1 = filter(a -&gt; a &gt; 0.7, x);
+
+julia&gt; y2 = vfilter(a -&gt; a &gt; 0.7, x);
+
+julia&gt; y1 == y2
+true
+
+julia&gt; @benchmark filter(a -&gt; a &gt; 0.7, $x)
+BenchmarkTools.Trial:
+  memory estimate:  7.94 KiB
+  allocs estimate:  1
+  --------------
+  minimum time:     955.389 ns (0.00% GC)
+  median time:      1.050 μs (0.00% GC)
+  mean time:        1.191 μs (9.72% GC)
+  maximum time:     82.799 μs (94.92% GC)
+  --------------
+  samples:          10000
+  evals/sample:     18
+
+julia&gt; @benchmark vfilter(a -&gt; a &gt; 0.7, $x)
+BenchmarkTools.Trial:
+  memory estimate:  7.94 KiB
+  allocs estimate:  1
+  --------------
+  minimum time:     477.487 ns (0.00% GC)
+  median time:      575.166 ns (0.00% GC)
+  mean time:        711.526 ns (17.87% GC)
+  maximum time:     9.257 μs (79.17% GC)
+  --------------
+  samples:          10000
+  evals/sample:     193</code></pre><h2 id="vmapreduce"><a class="docs-heading-anchor" href="#vmapreduce">vmapreduce</a><a id="vmapreduce-1"></a><a class="docs-heading-anchor-permalink" href="#vmapreduce" title="Permalink"></a></h2><p>Vectorized version of <code>mapreduce</code>. <code>vmapreduce(f, op, a, b, c)</code> applies <code>f(a[i], b[i], c[i])</code> for <code>i in eachindex(a,b,c)</code>, reducing the results to a scalar with <code>op</code>.</p><pre><code class="language-julia">julia&gt; using LoopVectorization, BenchmarkTools
+
+julia&gt; x = rand(127); y = rand(127);
+
+julia&gt; @btime vmapreduce(hypot, +, $x, $y)
+  191.420 ns (0 allocations: 0 bytes)
+96.75538300513509
+
+julia&gt; @btime mapreduce(hypot, +, $x, $y)
+  1.777 μs (5 allocations: 1.25 KiB)
+96.75538300513509</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../examples/filtering/">« Image Filtering</a><a class="docs-footer-nextpage" href="../future_work/">Future Work »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Thursday 24 December 2020 20:59">Thursday 24 December 2020</span>. Using Julia version 1.5.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
