@@ -197,10 +197,10 @@ using Test
         4acc/length(x)
     end
 
-    function dotloopinductvarpow(x)
-        s = zero(eltype(x))
+    function dotloopinductvarpow(x::AbstractArray{T}) where {T}
+        s = zero(T)
         for i ∈ eachindex(x)
-            s += x[i] * i^3
+            s += x[i] * T(i)^3
         end
         s
     end
