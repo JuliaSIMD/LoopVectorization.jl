@@ -114,21 +114,20 @@ function recursive_muladd_search!(call, argv, cnmul::Bool = false, csub::Bool = 
     length(call.args) == 4, cnmul, csub
 end
 
-function capture_muladd(ex::Expr, mod, @nospecialize(LHS) = nothing)
+function capture_muladd(ex::Expr, mod)
     call = Expr(:call, Symbol(""), Symbol(""), Symbol(""))
     found, nmul, sub = recursive_muladd_search!(call, ex.args)
     found || return ex
     # a, b, c = call.args[2], call.args[3], call.args[4]
     # call.args[2], call.args[3], call.args[4] = c, a, b
-    clobber = false#call.args[4] == LHS
     f = if nmul && sub
-        clobber ? :vfnmsub231 : :vfnmsub
+        :vfnmsub
     elseif nmul
-        clobber ? :vfnmadd231 : :vfnmadd
+        :vfnmadd
     elseif sub
-        clobber ? :vfmsub231 : :vfmsub
+        :vfmsub
     else
-        clobber ? :vfmadd231 : :vfmadd
+        :vfmadd
     end
     if mod === nothing
         call.args[1] = f
@@ -163,7 +162,7 @@ function contract!(expr::Expr, ex::Expr, i::Int, mod)
         RHS = ex.args[2]
         # @show ex
         if RHS isa Expr && RHS.head === :call
-            ex.args[2] = capture_muladd(RHS, mod, ex.args[1])
+            ex.args[2] = capture_muladd(RHS, mod)
         end
     end
     contract_pass!(expr.args[i], mod)
