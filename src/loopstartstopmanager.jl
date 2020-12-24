@@ -222,15 +222,15 @@ end
 function pointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvectorized::Bool, loop::Loop)::Expr
     pointermax(ls, ar, n, sub, isvectorized, looplengthexpr(loop, n))::Expr
 end
-function pointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvectorized::Bool, stophint::Int)::Expr
+function pointermax_index(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvectorized::Bool, stophint::Int)::Tuple{Expr,Int}
     # @unpack u₁loopnum, u₂loopnum, vectorizedloopnum, u₁, u₂ = us
     loopsym = names(ls)[n]
-    index = Expr(:tuple)
+    index = Expr(:tuple) 
     found_loop_sym = false
-    call = Expr(:call, lv(:pointerforcomparison))
-    for i ∈ getindicesonly(ar)
+    ind = 0
+    for (j,i) ∈ enumerate(getindicesonly(ar))
         if i === loopsym
-            found_loop_sym = true
+            ind = j
             if iszero(sub)
                 push!(index.args, stophint)
             elseif isvectorized
@@ -242,25 +242,20 @@ function pointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvec
             else
                 push!(index.args, staticexpr(stophint - sub))
             end
-            push!(call.args, vptr(ar))
-            # return 
         else
             push!(index.args, Expr(:call, lv(:Zero)))
         end
     end
-    @assert found_loop_sym "Failed to find $loopsym"
-    push!(call.args, index)
-    call
-    # @show ar, loopsym
+    @assert ind != 0 "Failed to find $loopsym"
+    index, ind
 end
-function pointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvectorized::Bool, stopsym)::Expr
-    # @unpack u₁loopnum, u₂loopnum, vectorizedloopnum, u₁, u₂ = us
+function pointermax_index(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvectorized::Bool, stopsym)::Tuple{Expr,Int}
     loopsym = names(ls)[n]
-    index = Expr(:tuple)
-    found_loop_sym = false
-    for i ∈ getindicesonly(ar)
+    index = Expr(:tuple);
+    ind = 0
+    for (j,i) ∈ enumerate(getindicesonly(ar))
         if i === loopsym
-            found_loop_sym = true
+            ind = j
             if iszero(sub)
                 push!(index.args, stopsym)
             elseif isvectorized
@@ -272,18 +267,75 @@ function pointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvec
             else
                 push!(index.args, Expr(:call, lv(:vsub), stopsym, sub))
             end
-            # return 
         else
             push!(index.args, Expr(:call, lv(:Zero)))
         end
     end
-    @assert found_loop_sym "Failed to find $loopsym"
+    @assert ind != 0 "Failed to find $loopsym"
+    index, ind
+end
+function pointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvectorized::Bool, stopsym)::Expr
+    index = first(pointermax_index(ls, ar, n, sub, isvectorized, stopsym))
     Expr(:call, lv(:pointerforcomparison), vptr(ar), index)
     # @show ar, loopsym
 end
 
 function defpointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvectorized::Bool)::Expr
     Expr(:(=), maxsym(vptr(ar), sub), pointermax(ls, ar, n, sub, isvectorized))
+end
+function offsetindex(dim::Int, ind::Int, scale::Int, isvectorized::Bool)
+    index = Expr(:tuple)
+    for d ∈ 1:dim
+        if d != ind || iszero(scale)
+            push!(index.args, Expr(:call, lv(:Zero)))
+            continue
+        end
+        if isvectorized
+            if isone(scale)
+                push!(index.args, VECTORWIDTHSYMBOL)
+            else
+                push!(index.args, Expr(:call, lv(:vmul), VECTORWIDTHSYMBOL, staticexpr(scale)))
+            end
+        else
+            push!(index.args, staticexpr(scale))
+        end
+    end
+    index
+end
+function append_pointer_maxes!(loopstart::Expr, ls::LoopSet, ar::ArrayReferenceMeta, n::Int, submax::Int, isvectorized::Bool, stopindicator)
+    if submax < 2
+        for sub ∈ 0:submax
+            push!(loopstart.args, Expr(:(=), maxsym(vptr(ar), sub), pointermax(ls, ar, n, sub, isvectorized, stopindicator)))
+            # push!(loopstart.args, defpointermax(ls, ptrdefs[termind], n, sub, isvectorized, stopindicator))
+        end
+    else
+        index, ind = pointermax_index(ls, ar, n, submax, isvectorized, stopindicator)
+        vptr_ar = vptr(ar)
+        _pointercompbase = maxsym(vptr_ar, submax)
+        pointercompbase = gensym(_pointercompbase)
+        push!(loopstart.args, Expr(:(=), pointercompbase, Expr(:call, lv(:gesp), vptr_ar, index)))
+        push!(loopstart.args, Expr(:(=), _pointercompbase, Expr(:call, lv(:pointerforcomparison), pointercompbase)))
+        dim = length(getindicesonly(ar))
+        # OFFSETPRECALCDEF = true
+        # if OFFSETPRECALCDEF
+        for sub ∈ 0:submax-1
+            push!(loopstart.args, Expr(:(=), maxsym(vptr_ar, sub), Expr(:call, lv(:pointerforcomparison), pointercompbase, offsetindex(dim, ind, submax - sub, isvectorized))))
+        end
+        # else
+        #     indexoff = offsetindex(dim, ind, 1, isvectorized)
+        #     for sub ∈ submax-1:-1:0
+        #         _newpointercompbase = maxsym(vptr_ar, sub)
+        #         newpointercompbase = gensym(_pointercompbase)
+        #         push!(loopstart.args, Expr(:(=), newpointercompbase, Expr(:call, lv(:gesp), pointercompbase, indexoff)))
+        #         push!(loopstart.args, Expr(:(=), _newpointercompbase, Expr(:call, lv(:pointerforcomparison), newpointercompbase)))
+        #         _pointercompbase = _newpointercompbase
+        #         pointercompbase = newpointercompbase
+        #     end
+        # end
+    end
+end
+function append_pointer_maxes!(loopstart::Expr, ls::LoopSet, ar::ArrayReferenceMeta, n::Int, submax::Int, isvectorized::Bool)
+    append_pointer_maxes!(loopstart, ls, ar, n, submax, isvectorized, looplengthexpr(getloop(ls, names(ls)[n]), n))
 end
 
 function maxunroll(us::UnrollSpecification, n)
@@ -314,9 +366,7 @@ function startloop(ls::LoopSet, us::UnrollSpecification, n::Int, submax = maxunr
         push!(loopstart.args, startloop(getloop(ls, loopsym), loopsym))
     else
         isvectorized = n == vectorizedloopnum
-        for sub ∈ 0:submax
-            push!(loopstart.args, defpointermax(ls, ptrdefs[termind], n, sub, isvectorized))
-        end
+        append_pointer_maxes!(loopstart, ls, ptrdefs[termind], n, submax, isvectorized)
     end
     loopstart
 end
