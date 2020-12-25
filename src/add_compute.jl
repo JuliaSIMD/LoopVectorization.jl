@@ -162,7 +162,13 @@ function add_reduction_update_parent!(
 )
     var = name(parent)
     isouterreduction = parent.instruction === LOOPCONSTANT
-    instrclass = reduction_instruction_class(instr) # key allows for faster lookups
+    # @show instr, vparents, parent, reduction_ind
+    if instr.instr === :ifelse
+        @assert length(vparents) == 2
+        instrclass = reduction_instruction_class(instruction(vparents[2])) # key allows for faster lookups
+    else
+        instrclass = reduction_instruction_class(instr) # key allows for faster lookups
+    end
     reduct_zero = reduction_zero(instrclass)
     # if parent is not an outer reduction...
     # if !isouterreduction && !isreductzero(parent, ls, reduct_zero)
@@ -295,13 +301,47 @@ function add_compute!(
 end
 
 function add_compute!(
-    ls::LoopSet, LHS::Symbol, instr, vparents::Vector{Operation}, elementbytes
+    ls::LoopSet, LHS::Symbol, instr, vparents::Vector{Operation}, elementbytes::Int
 )
     deps = Symbol[]
     reduceddeps = Symbol[]
-    foreach(parent -> update_deps!(deps, reduceddeps, parent), vparents)
+    for parent ∈ vparents
+        update_deps!(deps, reduceddeps, parent)
+    end
     op = Operation(length(operations(ls)), LHS, elementbytes, instr, compute, deps, reduceddeps, vparents)
     pushop!(ls, op, LHS)
+end
+# checks for reductions
+function add_compute_ifelse!(
+    ls::LoopSet, LHS::Symbol, cond::Operation, iftrue::Operation, iffalse::Operation, elementbytes::Int
+)
+    deps = Symbol[]
+    reduceddeps = Symbol[]
+    update_deps!(deps, reduceddeps, cond)
+    update_deps!(deps, reduceddeps, iftrue)
+    update_deps!(deps, reduceddeps, iffalse)
+    if name(iftrue) === LHS
+        if name(iffalse) === LHS # a = ifelse(condition, a, a) # -- why??? Let's just eliminate it.
+            return iftrue
+        end
+        vparents = Operation[cond, iffalse]
+        setdiffv!(reduceddeps, deps, loopdependencies(iftrue))
+        add_reduction_update_parent!(
+            vparents, deps, reduceddeps, ls,
+            iftrue, Instruction(:LoopVectorization,:ifelse), 2, elementbytes
+        )
+    elseif name(iffalse) === LHS
+        vparents = Operation[cond, iftrue]
+        setdiffv!(reduceddeps, deps, loopdependencies(iffalse))
+        add_reduction_update_parent!(
+            vparents, deps, reduceddeps, ls,
+            iffalse, Instruction(:LoopVectorization,:ifelse), 3, elementbytes
+        )
+    else
+        vparents = Operation[cond, iftrue, iffalse]
+        op = Operation(length(operations(ls)), LHS, elementbytes, :ifelse, compute, deps, reduceddeps, vparents)
+        pushop!(ls, op, LHS)
+    end
 end
 
 # adds x ^ (p::Real)

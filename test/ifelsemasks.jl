@@ -360,6 +360,72 @@ T = Float32
             f[j, d] = _x 
         end
     end
+    
+    function barycentric_weight0(X)
+        T = eltype(X)
+        n = length(X) - 1
+        w = zero(X)
+        @inbounds @fastmath for j in 0:n
+            tmp = one(T)
+            for k in 0:n
+                tmp = k==j ? tmp : tmp * (X[j+1] - X[k+1])
+            end
+            w[j+1] = inv(tmp)
+        end
+        return w
+    end
+    function barycentric_weight1(X)
+        T = eltype(X)
+        n = length(X) - 1
+        w = zero(X)
+        @avx for j in 0:n
+            tmp = one(T)
+            for k in 0:n
+                tmp = k != j ? tmp * (X[j+1] - X[k+1]) : tmp
+            end
+            w[j+1] = inv(tmp)
+        end
+        return w
+    end
+    function barycentric_weight2(X)
+        T = eltype(X)
+        n = length(X) - 1
+        w = zero(X)
+        @avx inline=true for j in 0:n
+            tmp = one(T)
+            for k in 0:n
+                tmp = k==j ? tmp : tmp * (X[j+1] - X[k+1])
+            end
+            w[j+1] = inv(tmp)
+        end
+        return w
+    end
+    function barycentric_weight3(X)
+        T = eltype(X)
+        n = length(X) - 1
+        w = zero(X)
+        @avx inline=true for j in 0:n
+            tmp = one(T)
+            for k in 0:n
+                tmp = ifelse(k != j, tmp * (X[j+1] - X[k+1]), tmp)
+            end
+            w[j+1] = inv(tmp)
+        end
+        return w
+    end
+    function barycentric_weight4(X)
+        T = eltype(X)
+        n = length(X) - 1
+        w = zero(X)
+        @avx for j in 0:n
+            tmp = one(T)
+            for k in 0:n
+                tmp = ifelse(k == j, tmp, tmp * (X[j+1] - X[k+1]))
+            end
+            w[j+1] = inv(tmp)
+        end
+        return w
+    end
 
     N = 117
     for T ∈ (Float32, Float64, Int32, Int64)
@@ -529,5 +595,11 @@ T = Float32
     # fc2 = copy(f);
     testfunctionavx!(f, v, d, g, s, θ)    
     @test f ≈ fc
-    
+
+    X = rand(4, 5)
+    bX = barycentric_weight0(X);
+    @test barycentric_weight1(X) ≈ bX
+    @test barycentric_weight2(X) ≈ bX
+    @test barycentric_weight3(X) ≈ bX
+    @test barycentric_weight4(X) ≈ bX
 end

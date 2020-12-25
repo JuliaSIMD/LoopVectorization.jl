@@ -892,13 +892,16 @@ function isunrolled_sym(op::Operation, u₁loop::Symbol, u₂loop::Symbol)
             u₂ild = u₂loop ∈ reducedchildren(op)
         end
     end
+    # @show op u₁ild, u₂ild
     (u₁ild & u₂ild) || return u₁ild, u₂ild
     reductops = isconstant(op) ? reducedchildren(op) : reduceddependencies(op)
+    # @show op reductops
     iszero(length(reductops)) && return true, true
     u₁reduced = u₁loop ∈ reductops
     u₂reduced = u₂loop ∈ reductops
     # We want to only unroll one of them.
     # We prefer not to unroll a reduced loop
+    # @show u₁reduced, u₂reduced
     if u₂reduced # if both are reduced, we unroll u₁
         true, false
     elseif u₁reduced
