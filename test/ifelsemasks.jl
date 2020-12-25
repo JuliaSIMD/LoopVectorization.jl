@@ -361,6 +361,7 @@ T = Float32
         end
     end
     
+    chebpts(m) = (n=m-1; [cos(k*pi/n) for k in 0:n])
     function barycentric_weight0(X)
         T = eltype(X)
         n = length(X) - 1
@@ -596,10 +597,13 @@ T = Float32
     testfunctionavx!(f, v, d, g, s, θ)    
     @test f ≈ fc
 
-    X = rand(4, 5)
-    bX = barycentric_weight0(X);
-    @test barycentric_weight1(X) ≈ bX
-    @test barycentric_weight2(X) ≈ bX
-    @test barycentric_weight3(X) ≈ bX
-    @test barycentric_weight4(X) ≈ bX
+    for i ∈ 1:50
+        X = chebpts(i)
+        bX = barycentric_weight0(X);
+        @test barycentric_weight1(X) ≈ bX
+        @test barycentric_weight2(X) ≈ bX
+        @test barycentric_weight3(X) ≈ bX
+        @test barycentric_weight4(X) ≈ bX
+    end
 end
+
