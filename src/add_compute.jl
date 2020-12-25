@@ -326,22 +326,26 @@ function add_compute_ifelse!(
         end
         vparents = Operation[cond, iffalse]
         setdiffv!(reduceddeps, deps, loopdependencies(iftrue))
-        add_reduction_update_parent!(
-            vparents, deps, reduceddeps, ls,
-            iftrue, Instruction(:LoopVectorization,:ifelse), 2, elementbytes
-        )
+        if any(in(deps), reduceddeps)
+            return add_reduction_update_parent!(
+                vparents, deps, reduceddeps, ls,
+                iftrue, Instruction(:LoopVectorization,:ifelse), 2, elementbytes
+            )
+        end
     elseif name(iffalse) === LHS
         vparents = Operation[cond, iftrue]
         setdiffv!(reduceddeps, deps, loopdependencies(iffalse))
-        add_reduction_update_parent!(
-            vparents, deps, reduceddeps, ls,
-            iffalse, Instruction(:LoopVectorization,:ifelse), 3, elementbytes
-        )
-    else
-        vparents = Operation[cond, iftrue, iffalse]
-        op = Operation(length(operations(ls)), LHS, elementbytes, :ifelse, compute, deps, reduceddeps, vparents)
-        pushop!(ls, op, LHS)
+        if any(in(deps), reduceddeps)
+            return add_reduction_update_parent!(
+                vparents, deps, reduceddeps, ls,
+                iffalse, Instruction(:LoopVectorization,:ifelse), 3, elementbytes
+            )
+        end
     end
+    vparents = Operation[cond, iftrue, iffalse]
+    op = Operation(length(operations(ls)), LHS, elementbytes, :ifelse, compute, deps, reduceddeps, vparents)
+    pushop!(ls, op, LHS)
+    
 end
 
 # adds x ^ (p::Real)

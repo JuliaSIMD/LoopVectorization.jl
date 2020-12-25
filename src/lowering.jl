@@ -811,8 +811,11 @@ function calc_Ureduct(ls::LoopSet, us::UnrollSpecification)
         loopisstatic = isstaticloop(getloop(ls, names(ls)[u₁loopnum]))
         loopisstatic &= ((vectorizedloopnum != u₁loopnum) | (!iszero(ls.vector_width[])))
         # loopisstatic ? u₁ : min(u₁, 4) # much worse than the other two options, don't use this one
-        loopisstatic ? u₁ : (u₁ ≥ 4 ? 2 : 1)
-        # loopisstatic ? u₁ : 1
+        if Sys.CPU_NAME === "znver1"
+            loopisstatic ? u₁ : 1
+        else
+            loopisstatic ? u₁ : (u₁ ≥ 4 ? 2 : 1)
+        end
     else
         8#u₂#u₁
     # elseif num_loops(ls) == u₁loopnum
