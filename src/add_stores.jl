@@ -19,7 +19,7 @@ end
 function add_copystore!(
     ls::LoopSet, parent::Operation, mpref::ArrayReferenceMetaPosition, elementbytes::Int
 )
-    op = add_compute!(ls, gensym(), :identity, [parent], elementbytes)
+    op = add_compute!(ls, gensym!(ls, "identity"), :identity, [parent], elementbytes)
     # pushfirst!(mpref.parents, parent)
     add_store!(ls, mpref, elementbytes, op)
 end

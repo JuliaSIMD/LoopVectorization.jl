@@ -97,7 +97,7 @@ end
 function addoffsetexpr!(ls, parents, indices, offsets, loopedindex, loopdependencies, reduceddeps, ind, offset, elementbytes)
     (typemin(Int8) ≤ offset ≤ typemax(Int8)) || return false
     parent = if ind isa Expr
-        add_operation!(ls, gensym(:indexpr), ind, elementbytes, length(ls.loopsymbols))
+        add_operation!(ls, gensym!(ls, "indexpr"), ind, elementbytes, length(ls.loopsymbols))
     else
         ls.opdict[ind]
     end
@@ -184,7 +184,7 @@ function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementby
         elseif ind isa Expr
             #FIXME: position (in loopnest) wont be length(ls.loopsymbols) in general
             if !checkforoffset!(ls, parents, indices, offsets, loopedindex, loopdependencies, reduceddeps, ind, elementbytes)
-                parent = add_operation!(ls, gensym(:indexpr), ind, elementbytes, length(ls.loopsymbols))
+                parent = add_operation!(ls, gensym!(ls, "indexpr"), ind, elementbytes, length(ls.loopsymbols))
                 pushparent!(parents, loopdependencies, reduceddeps, parent)
                 push!(indices, name(parent)); 
                 push!(offsets, zero(Int8))

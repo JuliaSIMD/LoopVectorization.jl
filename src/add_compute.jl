@@ -65,7 +65,7 @@ function add_parent!(
             opp
         end
     elseif var isa Expr #CSE candidate
-        add_operation!(ls, gensym(:temporary), var, elementbytes, position)
+        add_operation!(ls, gensym!(ls, "temp"), var, elementbytes, position)
     else # assumed constant
         add_constant!(ls, var, elementbytes)
         # add_constant!(ls, var, deps, gensym(:loopredefconst), elementbytes)
@@ -177,8 +177,10 @@ function add_reduction_update_parent!(
         # We add
         reductcombine = reduction_scalar_combine(instrclass)
         # reductcombine = :identity
-        reductsym = gensym(:reduction)
-        reductinit = add_constant!(ls, gensym(:reductzero), loopdependencies(parent), reductsym, elementbytes, :numericconstant)
+        reductsym = gensym!(ls, "reduction")
+        reductzero_sym = gensym!(ls, "reduction##zero")
+        # reductsym = gensym(:reduction)
+        reductinit = add_constant!(ls, reductzero_sym, loopdependencies(parent), reductsym, elementbytes, :numericconstant)
         if reduct_zero === :zero
             push!(ls.preamble_zeros, (identifier(reductinit), IntOrFloat))
         else
@@ -255,7 +257,7 @@ function add_compute!(
                         pushparent!(vparents, deps, reduceddeps, add_load!(ls, argref, elementbytes))
                     end
                 else
-                    argref.varname = gensym(:tempload)
+                    argref.varname = gensym!(ls, "tempload")
                     pushparent!(vparents, deps, reduceddeps, add_load!(ls, argref, elementbytes))
                 end
             else
@@ -353,7 +355,7 @@ function add_pow!(
     ls::LoopSet, var::Symbol, @nospecialize(x), p::Real, elementbytes::Int, position::Int
 )
     xop::Operation = if x isa Expr
-        add_operation!(ls, gensym(:xpow), x, elementbytes, position)
+        add_operation!(ls, Symbol("###xpow###$(length(operations(ls)))###"), x, elementbytes, position)
     elseif x isa Symbol
         if x ∈ ls.loopsymbols
             add_loopvalue!(ls, x, elementbytes)
@@ -377,7 +379,7 @@ function add_pow!(
     if pint == -1
         return add_compute!(ls, var, :inv, [xop], elementbytes)
     elseif pint < 0
-        xop = add_compute!(ls, gensym(:inverse), :inv, [xop], elementbytes)
+        xop = add_compute!(ls, gensym!(ls, "inverse"), :inv, [xop], elementbytes)
         pint = - pint
     end
     if pint == 0
@@ -394,7 +396,7 @@ function add_pow!(
     t = trailing_zeros(pint) + 1
     pint >>= t
     while (t -= 1) > 0
-        varname = (iszero(pint) && isone(t)) ? var : gensym(:pbs)
+        varname = (iszero(pint) && isone(t)) ? var : gensym!(ls, "pbs")
         xop = add_compute!(ls, varname, :abs2, [xop], elementbytes)
     end
     yop = xop
@@ -402,9 +404,9 @@ function add_pow!(
         t = trailing_zeros(pint) + 1
         pint >>= t
         while (t -= 1) >= 0
-            xop = add_compute!(ls, gensym(:pbs), :abs2, [xop], elementbytes)
+            xop = add_compute!(ls, gensym!(ls, "pbs"), :abs2, [xop], elementbytes)
         end
-        yop = add_compute!(ls, iszero(pint) ? var : gensym(:pbs), :(*), [xop, yop], elementbytes)
+        yop = add_compute!(ls, iszero(pint) ? var : gensym!(ls, "pbs"), :(*), [xop, yop], elementbytes)
     end
     yop
 end

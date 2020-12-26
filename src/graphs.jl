@@ -263,6 +263,7 @@ struct LoopSet
     loadelimination::Base.RefValue{Bool}
     lssm::Base.RefValue{LoopStartStopManager}
     vector_width::Base.RefValue{Int}
+    symcounter::Base.RefValue{Int}
     isbroadcast::Base.RefValue{Bool}
     mod::Symbol
 end
@@ -352,9 +353,15 @@ function LoopSet(mod::Symbol)
         Matrix{Float64}(undef, 5, 2),
         Bool[], Bool[], Ref{UnrollSpecification}(),
         Ref(false), Ref{LoopStartStopManager}(),
-        Ref(0), Ref(false), mod
+        Ref(0), Ref(0), Ref(false), mod
     )
 end
+
+"""
+Used internally to create symbols unique for this loopset.
+This is used so that identical loops will create identical `_avx_!` calls in the macroexpansions, hopefully reducing recompilation.
+"""
+gensym!(ls::LoopSet, s) = Symbol("###$(s)###$(ls.symcounter[] += 1)###")
 
 function cacheunrolled!(ls::LoopSet, u₁loop, u₂loop, vectorized)
     foreach(op -> setunrolled!(op, u₁loop, u₂loop, vectorized), operations(ls))
@@ -399,7 +406,7 @@ function getop(ls::LoopSet, var::Symbol, elementbytes::Int)
 end
 function getop(ls::LoopSet, var::Symbol, deps, elementbytes::Int)
     get!(ls.opdict, var) do
-        add_constant!(ls, var, deps, gensym(:constant), elementbytes)
+        add_constant!(ls, var, deps, gensym!(ls, "constant"), elementbytes)
     end
 end
 getop(ls::LoopSet, i::Int) = ls.operations[i]
@@ -464,7 +471,7 @@ end
 function add_loop_bound!(ls::LoopSet, itersym::Symbol, bound, upper::Bool = true)
     (bound isa Symbol && upper) && return bound
     bound isa Expr && maybestatic!(bound)
-    N = gensym(string(itersym) * (upper ? "_loop_upper_bound" : "_loop_lower_bound"))
+    N = gensym!(ls, string(itersym) * (upper ? "_loop_upper_bound" : "_loop_lower_bound"))
     pushprepreamble!(ls, Expr(:(=), N, bound))
     N
 end
@@ -518,12 +525,12 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
                 Loop(itersym, 1, otN)
             else
                 otN isa Expr && maybestatic!(otN)
-                N = gensym("loop" * string(itersym))
+                N = gensym!(ls, "loop" * string(itersym))
                 pushprepreamble!(ls, Expr(:(=), N, otN))
                 Loop(itersym, 1, N)
             end
         else
-            N = gensym("loop" * string(itersym))
+            N = gensym!(ls, "loop" * string(itersym))
             pushprepreamble!(ls, Expr(:(=), N, Expr(:call, lv(:maybestaticrange), static_literals!(r))))
             L = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticfirst), N), false)
             U = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticlast), N), true)
@@ -531,7 +538,7 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
         end
     elseif isa(r, Symbol)
         # Treat similar to `eachindex`
-        N = gensym("loop" * string(itersym))
+        N = gensym!(ls, "loop" * string(itersym))
         pushprepreamble!(ls, Expr(:(=), N, Expr(:call, lv(:maybestaticrange), r)))
         L = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticfirst), N), false)
         U = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticlast), N), true)
@@ -582,7 +589,7 @@ function instruction!(ls::LoopSet, x::Expr)
     end
     instr = last(x.args).value
     if instr ∉ keys(COST)
-        instr = gensym(:f)
+        instr = gensym!(ls, "f")
         pushpreamble!(ls, Expr(:(=), instr, x))
         Instruction(Symbol(""), instr)
     else
@@ -592,7 +599,7 @@ end
 instruction!(ls::LoopSet, x::Symbol) = instruction(x)
 function instruction!(ls::LoopSet, f::F) where {F <: Function}
     get(FUNCTIONSYMBOLS, F) do
-        instr = gensym(:f)
+        instr = gensym!(ls, "f")
         pushpreamble!(ls, Expr(:(=), instr, f))
         Instruction(Symbol(""), instr)
     end
@@ -602,7 +609,7 @@ end
 function maybe_const_compute!(ls::LoopSet, LHS::Symbol, op::Operation, elementbytes::Int, position::Int)
     # return op
     if iscompute(op) && iszero(length(loopdependencies(op)))
-        ls.opdict[LHS] = add_constant!(ls, LHS, ls.loopsymbols[1:position], gensym(instruction(op).instr), elementbytes, :numericconstant)
+        ls.opdict[LHS] = add_constant!(ls, LHS, ls.loopsymbols[1:position], gensym!(ls, instruction(op).instr), elementbytes, :numericconstant)
     else
         op
     end
@@ -630,7 +637,7 @@ function add_operation!(
         if f === :getindex
             add_load_getindex!(ls, LHS, RHS, elementbytes)
         elseif f === :zero || f === :one
-            c = gensym(f)
+            c = gensym!(ls, f)
             op = add_constant!(ls, c, ls.loopsymbols[1:position], LHS, elementbytes, :numericconstant)
             if f === :zero
                 push!(ls.preamble_zeros, (identifier(op), IntOrFloat))
@@ -650,13 +657,13 @@ function add_operation!(
         throw(LoopError("Expression not recognized.", RHS))
     end
 end
-add_operation!(ls::LoopSet, RHS::Expr, elementbytes::Int, position::Int) = add_operation!(ls, gensym(:LHS), RHS, elementbytes, position)
+add_operation!(ls::LoopSet, RHS::Expr, elementbytes::Int, position::Int) = add_operation!(ls, gensym!(ls, "LHS"), RHS, elementbytes, position)
 function add_operation!(
     ls::LoopSet, LHS_sym::Symbol, RHS::Expr, LHS_ref::ArrayReferenceMetaPosition, elementbytes::Int, position::Int
 )
     if RHS.head === :ref# || (RHS.head === :call && first(RHS.args) === :getindex)
         array, rawindices = ref_from_expr!(ls, RHS)
-        RHS_ref = array_reference_meta!(ls, array, rawindices, elementbytes, gensym(LHS_sym))
+        RHS_ref = array_reference_meta!(ls, array, rawindices, elementbytes, gensym!(ls, LHS_sym))
         op = add_load!(ls, RHS_ref, elementbytes)
         iop = add_compute!(ls, LHS_sym, :identity, [op], elementbytes)
         # pushfirst!(LHS_ref.parents, iop)
@@ -665,7 +672,7 @@ function add_operation!(
         if f === :getindex
             add_load!(ls, LHS_sym, LHS_ref, elementbytes)
         elseif f === :zero || f === :one
-            c = gensym(f)
+            c = gensym!(ls, f)
             op = add_constant!(ls, c, ls.loopsymbols[1:position], LHS_sym, elementbytes, :numericconstant)
             # op = add_constant!(ls, c, Symbol[], LHS_sym, elementbytes, :numericconstant)
             if f === :zero
@@ -693,7 +700,7 @@ function prepare_rhs_for_storage!(ls::LoopSet, RHS::Union{Symbol,Expr}, array, r
     ref = mpref.mref.ref
     # id = findfirst(r -> r == ref, ls.refs_aliasing_syms)
     # lrhs = id === nothing ? gensym(:RHS) : ls.syms_aliasing_refs[id]
-    lrhs = gensym(:RHS)
+    lrhs = gensym!(ls, "RHS")
     mpref.varname = lrhs
     add_operation!(ls, lrhs, RHS, mpref, elementbytes, position)
     mpref.parents = cachedparents
@@ -732,7 +739,7 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
                 end
             elseif LHS.head === :tuple
                 @assert length(LHS.args) ≤ 9 "Functions returning more than 9 values aren't currently supported."
-                lhstemp = gensym(:lhstuple)
+                lhstemp = gensym!(ls, "lhstuple")
                 vparents = Operation[maybe_const_compute!(ls, lhstemp, add_operation!(ls, lhstemp, RHS, elementbytes, position), elementbytes, position)]
                 for i ∈ eachindex(LHS.args)
                     f = (:first,:second,:third,:fourth,:fifth,:sixth,:seventh,:eighth,:ninth)[i]
@@ -740,7 +747,7 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
                     if lhsi isa Symbol
                         add_compute!(ls, lhsi, f, vparents, elementbytes)
                     elseif lhsi isa Expr && lhsi.head === :ref
-                        tempunpacksym = gensym(:tempunpack)
+                        tempunpacksym = gensym!(ls, "tempunpack")
                         add_compute!(ls, tempunpacksym, f, vparents, elementbytes)
                         add_store_ref!(ls, tempunpacksym, lhsi, elementbytes)
                     else

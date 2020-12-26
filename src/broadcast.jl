@@ -102,13 +102,13 @@ function add_broadcast!(
     @nospecialize(prod::Type{<:Product}), elementbytes::Int
 )
     A, B = prod.parameters
-    K = gensym(:K)
-    mA = gensym(:Aₘₖ)
-    mB = gensym(:Bₖₙ)
+    K = gensym!(ls, "K")
+    mA = gensym!(ls, "Aₘₖ")
+    mB = gensym!(ls, "Bₖₙ")
     pushprepreamble!(ls, Expr(:(=), mA, Expr(:(.), bcname, QuoteNode(:a))))
     pushprepreamble!(ls, Expr(:(=), mB, Expr(:(.), bcname, QuoteNode(:b))))
     pushprepreamble!(ls, Expr(:(=), K, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), Expr(:ref, Expr(:call, :size, mB), 1))))
-    k = gensym(:k)
+    k = gensym!(ls, "k")
     add_loop!(ls, Loop(k, 1, K), k)
     m = loopsyms[1];
     if numdims(B) == 1
@@ -126,17 +126,17 @@ function add_broadcast!(
         throw("B must be a vector or matrix.")
     end
     # load A
-    # loadA = add_load!(ls, gensym(:A), productref(A, mA, m, k), elementbytes)
-    loadA = add_broadcast!(ls, gensym(:A), mA, Symbol[m,k], A, elementbytes)
+    # loadA = add_load!(ls, gensym!(ls, :A), productref(A, mA, m, k), elementbytes)
+    loadA = add_broadcast!(ls, gensym!(ls, "A"), mA, Symbol[m,k], A, elementbytes)
     # load B
-    loadB = add_broadcast!(ls, gensym(:B), mB, bloopsyms, B, elementbytes)
+    loadB = add_broadcast!(ls, gensym!(ls, "B"), mB, bloopsyms, B, elementbytes)
     # set Cₘₙ = 0
     # setC = add_constant!(ls, zero(promote_type(recursive_eltype(A), recursive_eltype(B))), cloopsyms, mC, elementbytes)
     # targetC will be used for reduce_to_add
-    mCt = gensym(mC)
-    targetC = add_constant!(ls, gensym(:zero), cloopsyms, mCt, elementbytes, :numericconstant)
+    mCt = gensym!(ls, mC)
+    targetC = add_constant!(ls, gensym!(ls, "zero"), cloopsyms, mCt, elementbytes, :numericconstant)
     push!(ls.preamble_zeros, (identifier(targetC), IntOrFloat))
-    setC = add_constant!(ls, gensym(:zero), cloopsyms, mC, elementbytes, :numericconstant)
+    setC = add_constant!(ls, gensym!(ls, "zero"), cloopsyms, mC, elementbytes, :numericconstant)
     push!(ls.preamble_zeros, (identifier(setC), IntOrFloat))
     setC.reduced_children = kvec
     # compute Cₘₙ += Aₘₖ * Bₖₙ
@@ -226,7 +226,7 @@ function LowDimArray{D}(data::A) where {D,T,N,A <: AbstractArray{T,N}}
     LowDimArray{D,T,N,A}(data)
 end
 function extract_all_1_array!(ls::LoopSet, bcname::Symbol, N::Int, elementbytes::Int)
-    refextract = gensym(bcname)
+    refextract = gensym!(ls, bcname)
     ref = Expr(:ref, bcname); foreach(_ -> push!(ref.args, :begin), 1:N)
     pushprepreamble!(ls, Expr(:(=), refextract, ref))
     return add_constant!(ls, refextract, elementbytes) # or replace elementbytes with sizeof(T) ? u
@@ -247,7 +247,7 @@ end
 function add_broadcast_adjoint_array!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{A}, elementbytes::Int
 ) where {T,N,A<:AbstractArray{T,N}}
-    parent = gensym(:parent)
+    parent = gensym!(ls, "parent")
     pushprepreamble!(ls, Expr(:(=), parent, Expr(:call, :parent, bcname)))
     # isone(length(loopsyms)) && return extract_all_1_array!(ls, bcname, N, elementbytes)
     ref = ArrayReference(parent, Symbol[loopsyms[N + 1 - n] for n ∈ 1:N])
@@ -257,7 +257,7 @@ function add_broadcast_adjoint_array!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{<:AbstractVector}, elementbytes::Int
 )
     # isone(length(loopsyms)) && return extract_all_1_array!(ls, bcname, N, elementbytes)
-    parent = gensym(:parent)
+    parent = gensym!(ls, "parent")
     pushprepreamble!(ls, Expr(:(=), parent, Expr(:call, :parent, bcname)))
 
     ref = ArrayReference(parent, Symbol[loopsyms[2]])
@@ -289,7 +289,7 @@ end
 function add_broadcast!(
     ls::LoopSet, ::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{Base.RefValue{T}}, elementbytes::Int
 ) where {T}
-    refextract = gensym(bcname)
+    refextract = gensym!(ls, bcname)
     pushprepreamble!(ls, Expr(:(=), refextract, Expr(:ref, bcname)))
     add_constant!(ls, refextract, elementbytes) # or replace elementbytes with sizeof(T) ? u
 end
@@ -310,7 +310,7 @@ function add_broadcast!(
 )
     S,_,F,A = B.parameters
     instr = get(FUNCTIONSYMBOLS, F) do
-        f = gensym(:func)
+        f = gensym!(ls, "func")
         pushprepreamble!(ls, Expr(:(=), f, Expr(:(.), bcname, QuoteNode(:f))))
         Instruction(bcname, f)
     end
@@ -322,10 +322,10 @@ function add_broadcast!(
     deps = Symbol[]
     # reduceddeps = Symbol[]
     for (i,arg) ∈ enumerate(args)
-        argname = gensym(:arg)
+        argname = gensym!(ls, "arg")
         pushprepreamble!(ls, Expr(:(=), argname, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), Expr(:ref, bcargs, i))))
         # dynamic dispatch
-        parent = add_broadcast!(ls, gensym(:temp), argname, loopsyms, arg, elementbytes)::Operation
+        parent = add_broadcast!(ls, gensym!(ls, "temp"), argname, loopsyms, arg, elementbytes)::Operation
         push!(parents, parent)
         mergesetdiffv!(deps, loopdependencies(parent), reduceddependencies(parent))
     end
@@ -343,12 +343,12 @@ end
     # we have an N dimensional loop.
     # need to construct the LoopSet
     # @show typeof(dest)
-    loopsyms = [gensym(:n) for n ∈ 1:N]
     ls = LoopSet(Mod)
+    loopsyms = [gensym!(ls, "n") for n ∈ 1:N]
     ls.isbroadcast[] = true
     sizes = Expr(:tuple)
     for (n,itersym) ∈ enumerate(loopsyms)
-        Nsym = gensym(:N)
+        Nsym = gensym!(ls, "N")
         add_loop!(ls, Loop(itersym, 1, Nsym), itersym)
         push!(sizes.args, Nsym)
     end
@@ -377,13 +377,13 @@ end
 ) where {T <: NativeTypes, N, A <: AbstractArray{T,N}, BC <: Union{Broadcasted,Product}, Mod}
     # we have an N dimensional loop.
     # need to construct the LoopSet
-    loopsyms = [gensym(:n) for n ∈ 1:N]
     ls = LoopSet(Mod)
+    loopsyms = [gensym!(ls, "n") for n ∈ 1:N]
     ls.isbroadcast[] = true
     pushprepreamble!(ls, Expr(:(=), :dest, Expr(:call, :parent, :dest′)))
     sizes = Expr(:tuple)
     for (n,itersym) ∈ enumerate(loopsyms)
-        Nsym = gensym(:N)
+        Nsym = gensym!(ls, "N")
         add_loop!(ls, Loop(itersym, 1, Nsym), itersym)
         push!(sizes.args, Nsym)
     end
