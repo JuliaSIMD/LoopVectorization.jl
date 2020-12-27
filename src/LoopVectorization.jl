@@ -17,8 +17,8 @@ using VectorizationBase: REGISTER_SIZE, REGISTER_COUNT, data,
 
 using IfElse: ifelse
 
-# missing: stridedpointer_for_broadcast, noalias!, gepbyte, 
-# using SIMDPirates: VECTOR_SYMBOLS, evadd, evsub, evmul, evfdiv, vrange, 
+# missing: stridedpointer_for_broadcast, noalias!, gepbyte,
+# using SIMDPirates: VECTOR_SYMBOLS, evadd, evsub, evmul, evfdiv, vrange,
 #     reduced_add, reduced_prod, reduce_to_add, reduced_max, reduced_min, vsum, vprod, vmaximum, vminimum,
 #     sizeequivalentfloat, sizeequivalentint, vadd!, vsub!, vmul!, vfdiv!, vfmadd!, vfnmadd!, vfmsub!, vfnmsub!,
 #     vfmadd231, vfmsub231, vfnmadd231, vfnmsub231, sizeequivalentfloat, sizeequivalentint, #prefetch,
@@ -67,6 +67,7 @@ include("add_compute.jl")
 include("add_constants.jl")
 include("add_ifelse.jl")
 include("determinestrategy.jl")
+include("line_number_nodes.jl")
 include("loopstartstopmanager.jl")
 include("lower_compute.jl")
 include("lower_constant.jl")
