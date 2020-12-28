@@ -210,7 +210,7 @@ end
 # Try to condense in type stable manner
 function generate_call(ls::LoopSet, inline_unroll::NTuple{3,Int8}, debug::Bool = false)
     operation_descriptions = Expr(:curly, :Tuple)
-    varnames = Symbol[]; ids = Vector{Int}(undef, length(operations(ls))) 
+    varnames = Symbol[]; ids = Vector{Int}(undef, length(operations(ls)))
     for op ∈ operations(ls)
         instr = instruction(op)
         push!(operation_descriptions.args, QuoteNode(instr.mod))
@@ -315,7 +315,7 @@ function setup_call_inline(ls::LoopSet, inline::Int8 = zero(Int8), U::Int8 = zer
 end
 function setup_call_debug(ls::LoopSet)
     # avx_loopset(instr, ops, arf, AM, LB, vargs)
-    
+
     pushpreamble!(ls, generate_call(ls, (zero(Int8),zero(Int8),zero(Int8)), true))
     Expr(:block, ls.prepreamble, ls.preamble)
 end
@@ -325,8 +325,11 @@ function setup_call(ls::LoopSet, q = nothing, inline::Int8 = zero(Int8), check_e
     # the generated function must be inlined into the initial loop preamble for performance reasons.
     # Creating an anonymous function and calling it also achieves the outlining, while still
     # inlining the generated function into the loop preamble.
+    lnns = extract_all_lnns(q)
     call = setup_call_inline(ls, inline, u₁, u₂)
     call = check_empty ? check_if_empty(ls, call) : call
     isnothing(q) && return Expr(:block, ls.prepreamble, call)
-    Expr(:block, ls.prepreamble, Expr(:if, check_args_call(ls), call, make_crashy(make_fast(q))))
+    result = Expr(:block, ls.prepreamble, Expr(:if, check_args_call(ls), call, make_crashy(make_fast(q))))
+    prepend_lnns!(result, lnns)
+    return result
 end
