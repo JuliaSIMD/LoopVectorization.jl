@@ -102,14 +102,16 @@ function add_broadcast!(
     @nospecialize(prod::Type{<:Product}), elementbytes::Int
 )
     A, B = prod.parameters
-    K = gensym!(ls, "K")
+    Krange = gensym!(ls, "K")
+    Klen = gensym!(ls, "K")
     mA = gensym!(ls, "Aₘₖ")
     mB = gensym!(ls, "Bₖₙ")
     pushprepreamble!(ls, Expr(:(=), mA, Expr(:(.), bcname, QuoteNode(:a))))
     pushprepreamble!(ls, Expr(:(=), mB, Expr(:(.), bcname, QuoteNode(:b))))
-    pushprepreamble!(ls, Expr(:(=), K, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), Expr(:ref, Expr(:call, :size, mB), 1))))
+    pushprepreamble!(ls, Expr(:(=), Klen, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), Expr(:ref, Expr(:call, :size, mB), 1))))
+    pushpreamble!(ls, Expr(:(=), Krange, Expr(:call, :(:), staticexpr(1), Klen)))
     k = gensym!(ls, "k")
-    add_loop!(ls, Loop(k, 1, K), k)
+    add_loop!(ls, Loop(k, 1, Klen, Krange, Klen), k)
     m = loopsyms[1];
     if numdims(B) == 1
         bloopsyms = Symbol[k]
@@ -335,24 +337,34 @@ function add_broadcast!(
     pushop!(ls, op, destname)
 end
 
+function add_broadcast_loops!(ls::LoopSet, loopsyms::Vector{Symbol}, destsym::Symbol)
+    axes_tuple = Expr(:tuple)
+    pushpreamble!(ls, Expr(:(=), axes_tuple, Expr(:call, :axes, destsym)))
+    for (n,itersym) ∈ enumerate(loopsyms)
+        Nrange = gensym!(ls, "N")
+        Nlower = gensym!(ls, "N")
+        Nupper = gensym!(ls, "N")
+        Nlen = gensym!(ls, "N")
+        add_loop!(ls, Loop(itersym, Nlower, Nupper, Nrange, Nlen), itersym)
+        push!(axes_tuple.args, Nrange)
+        pushpreamble!(ls, Expr(:(=), Nlower, Expr(:call, lv(:maybestaticfirst), Nrange)))
+        pushpreamble!(ls, Expr(:(=), Nupper, Expr(:call, lv(:maybestaticlast), Nrange)))
+        pushpreamble!(ls, Expr(:(=), Nlen, Expr(:call, lv(:static_length), Nrange)))
+    end
+end
 # size of dest determines loops
 # function vmaterialize!(
 @generated function vmaterialize!(
     dest::AbstractArray{T,N}, bc::BC, ::Val{Mod}
 ) where {T <: NativeTypes, N, BC <: Union{Broadcasted,Product}, Mod}
+    # 2+1
     # we have an N dimensional loop.
     # need to construct the LoopSet
     # @show typeof(dest)
     ls = LoopSet(Mod)
     loopsyms = [gensym!(ls, "n") for n ∈ 1:N]
     ls.isbroadcast[] = true
-    sizes = Expr(:tuple)
-    for (n,itersym) ∈ enumerate(loopsyms)
-        Nsym = gensym!(ls, "N")
-        add_loop!(ls, Loop(itersym, 1, Nsym), itersym)
-        push!(sizes.args, Nsym)
-    end
-    pushpreamble!(ls, Expr(:(=), sizes, Expr(:call, :size, :dest)))
+    add_broadcast_loops!(ls, loopsyms, :dest)
     elementbytes = sizeof(T)
     add_broadcast!(ls, :dest, :bc, loopsyms, BC, elementbytes)
     add_simple_store!(ls, :dest, ArrayReference(:dest, loopsyms), elementbytes)
@@ -381,13 +393,7 @@ end
     loopsyms = [gensym!(ls, "n") for n ∈ 1:N]
     ls.isbroadcast[] = true
     pushprepreamble!(ls, Expr(:(=), :dest, Expr(:call, :parent, :dest′)))
-    sizes = Expr(:tuple)
-    for (n,itersym) ∈ enumerate(loopsyms)
-        Nsym = gensym!(ls, "N")
-        add_loop!(ls, Loop(itersym, 1, Nsym), itersym)
-        push!(sizes.args, Nsym)
-    end
-    pushpreamble!(ls, Expr(:(=), sizes, Expr(:call, :size, :dest′)))
+    add_broadcast_loops!(ls, loopsyms, :dest′)
     elementbytes = sizeof(T)
     add_broadcast!(ls, :dest, :bc, loopsyms, BC, elementbytes)
     add_simple_store!(ls, :dest, ArrayReference(:dest, reverse(loopsyms)), elementbytes)

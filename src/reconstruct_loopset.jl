@@ -2,40 +2,59 @@ const NOpsType = Int#Union{Int,Vector{Int}}
 
 function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{<:AbstractUnitRange})
     ssym = String(sym)
-    start = gensym(ssym*"_loopstart"); stop = gensym(ssym*"_loopstop"); loopsym = gensym(ssym * "_loop")
+    start = gensym(ssym*"_loopstart"); stop = gensym(ssym*"_loopstop"); loopsym = gensym(ssym * "_loop"); lensym = gensym(ssym * "_looplen")
     pushpreamble!(ls, Expr(:(=), loopsym, ex))
-    pushpreamble!(ls, Expr(:(=), start, Expr(:call, :first, loopsym)))
+    pushpreamble!(ls, Expr(:(=), start, Expr(:call, lv(:first), loopsym)))
     pushpreamble!(ls, Expr(:(=), stop, Expr(:call, lv(:last), loopsym)))
-    loop = Loop(sym, 1, 1024, start, stop, false, false)::Loop
+    pushpreamble!(ls, Expr(:(=), lensym, Expr(:call, lv(:static_length), loopsym)))
+    loop = Loop(sym, 1, 1024, start, stop, loopsym, lensym, false, false)::Loop
     pushpreamble!(ls, loopiteratesatleastonce(loop))
     loop
 end
 
+function add_static_upper_loop!(ls::LoopSet, ex::Expr, sym::Symbol, U::Int)
+    ssym = String(sym)
+    start = gensym(ssym*"_loopstart"); loopsym = gensym(ssym * "_loop"); lensym = gensym(ssym * "_looplen")
+    pushpreamble!(ls, Expr(:(=), loopsym, ex))
+    pushpreamble!(ls, Expr(:(=), start, Expr(:call, lv(:first), loopsym)))
+    pushpreamble!(ls, Expr(:(=), lensym, Expr(:call, lv(:static_length), loopsym)))
+    loop = Loop(sym, U - 1023, U, start, Symbol(""), loopsym, lensym, false, true)::Loop
+    pushpreamble!(ls, loopiteratesatleastonce(loop))
+    loop
+end
+function add_static_lower_loop!(ls::LoopSet, ex::Expr, sym::Symbol, L::Int)
+    ssym = String(sym)
+    stop = gensym(ssym*"_loopstop"); loopsym = gensym(ssym * "_loop"); lensym = gensym(ssym * "_looplen")
+    pushpreamble!(ls, Expr(:(=), loopsym, ex))
+    pushpreamble!(ls, Expr(:(=), stop, Expr(:call, lv(:last), loopsym)))
+    pushpreamble!(ls, Expr(:(=), lensym, Expr(:call, lv(:static_length), loopsym)))
+    loop = Loop(sym, L, L + 1023, Symbol(""), stop, loopsym, lensym, true, false)::Loop
+    pushpreamble!(ls, loopiteratesatleastonce(loop))
+    loop
+end
+function static_loop(sym::Symbol, L::Int, U::Int)
+    Loop(sym, L, U, Symbol(""), Symbol(""), Symbol(""), Symbol(""), true, true)::Loop
+end
 
 function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{OptionallyStaticUnitRange{I, Static{U}}}) where {I<:Integer, U}
-    start = gensym(String(sym)*"_loopstart")
-    pushpreamble!(ls, Expr(:(=), start, Expr(:call, lv(:first), ex)))
-    loop = Loop(sym, U - 1024, U, start, Symbol(""), false, true)::Loop
-    pushpreamble!(ls, loopiteratesatleastonce(loop))
-    loop
+    add_static_upper_loop!(ls, ex, sym, U)
 end
 function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{OptionallyStaticUnitRange{Static{L}, I}}) where {I <: Integer, L}
-    stop = gensym(String(sym)*"_loopstop")
-    pushpreamble!(ls, Expr(:(=), stop, Expr(:call, lv(:last), ex)))
-    loop = Loop(sym, L, L + 1024, Symbol(""), stop, true, false)::Loop
-    pushpreamble!(ls, loopiteratesatleastonce(loop))
-    loop
+    add_static_lower_loop!(ls, ex, sym, L)
 end
-# Is there any likely way to generate such a range?
-# function Loop(ls::LoopSet, l::Int, ::Type{StaticLengthUnitRange{N}}) where {N}
-#     start = gensym(:loopstart); stop = gensym(:loopstop)
-#     pushpreamble!(ls, Expr(:(=), start, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:(.), Expr(:ref, :lb, l), QuoteNode(:L)))))
-#     pushpreamble!(ls, Expr(:(=), stop, Expr(:call, :(+), start, N - 1)))
-#     Loop(gensym(:n), 0, N, start, stop, false, false)::Loop
-# end
 function Loop(::LoopSet, ::Expr, sym::Symbol, ::Type{OptionallyStaticUnitRange{Static{L}, Static{U}}}) where {L,U}
-    Loop(sym, L, U, Symbol(""), Symbol(""), true, true)::Loop
+    static_loop(sym, L, U)
 end
+function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{CloseOpen{Int, Static{U}}}) where {U}
+    add_static_upper_loop!(ls, ex, sym, U - 1)
+end
+function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{CloseOpen{Static{L}, Int}}) where {L}
+    add_static_lower_loop!(ls, ex, sym, L)
+end
+function Loop(::LoopSet, ::Expr, sym::Symbol, ::Type{CloseOpen{Static{L}, Static{U}}}) where {L,U}
+    static_loop(sym, L, U - 1)
+end
+
 
 function extract_loop(l)
     Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, :lb, l))

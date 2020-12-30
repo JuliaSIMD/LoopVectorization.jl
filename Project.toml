@@ -1,7 +1,7 @@
 name = "LoopVectorization"
 uuid = "bdcacae8-1622-11e9-2a5c-532679323890"
 authors = ["Chris Elrod <elrodc@gmail.com>"]
-version = "0.9.13"
+version = "0.9.14"
 
 [deps]
 ArrayInterface = "4fba245c-0d91-5ea0-9b3e-6abc04ee57a9"
@@ -14,13 +14,13 @@ UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 VectorizationBase = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
 
 [compat]
-ArrayInterface = "2.14.9"
+ArrayInterface = "2.14.10"
 DocStringExtensions = "0.8"
 IfElse = "0.1"
 OffsetArrays = "1.4.1"
 SLEEFPirates = "0.6"
 UnPack = "1"
-VectorizationBase = "0.14"
+VectorizationBase = "0.14.10"
 julia = "1.5"
 
 [extras]

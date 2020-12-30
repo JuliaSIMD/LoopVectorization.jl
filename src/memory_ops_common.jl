@@ -60,7 +60,7 @@ function append_loop_valdims!(valcall::Expr, loop::Loop)
     if isstaticloop(loop)
         push!(valcall.args, :(Val{1}()))
     else
-        push!(valcall.args, Expr(:call, lv(:valdims), loop_boundary(loop)))
+        push!(valcall.args, Expr(:call, lv(:valdims), loop.rangesym))#loop_boundary(loop)))
     end
     nothing
 end

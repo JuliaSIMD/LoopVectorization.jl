@@ -220,7 +220,11 @@ function pointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvec
     pointermax(ls, ar, n, sub, isvectorized, getloop(ls, names(ls)[n]))
 end
 function pointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvectorized::Bool, loop::Loop)::Expr
-    pointermax(ls, ar, n, sub, isvectorized, looplengthexpr(loop, n))::Expr
+    if loop.startexact & loop.stopexact
+        return pointermax(ls, ar, n, sub, isvectorized, length(loop))
+    end
+    looplensym = loop.startexact & isone(loop.starthint) ? loop.stopsym : loop.lensym
+    pointermax(ls, ar, n, sub, isvectorized, looplensym)
 end
 function pointermax_index(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvectorized::Bool, stophint::Int)::Tuple{Expr,Int}
     # @unpack u₁loopnum, u₂loopnum, vectorizedloopnum, u₁, u₂ = us
@@ -335,7 +339,12 @@ function append_pointer_maxes!(loopstart::Expr, ls::LoopSet, ar::ArrayReferenceM
     end
 end
 function append_pointer_maxes!(loopstart::Expr, ls::LoopSet, ar::ArrayReferenceMeta, n::Int, submax::Int, isvectorized::Bool)
-    append_pointer_maxes!(loopstart, ls, ar, n, submax, isvectorized, looplengthexpr(getloop(ls, names(ls)[n]), n))
+    loop = getloop(ls, names(ls)[n])
+    if loop.startexact & loop.stopexact
+        return append_pointer_maxes!(loopstart, ls, ar, n, submax, isvectorized, length(loop))
+    end
+    looplensym = loop.startexact & isone(loop.starthint) ? loop.stopsym : loop.lensym
+    append_pointer_maxes!(loopstart, ls, ar, n, submax, isvectorized, looplensym)
 end
 
 function maxunroll(us::UnrollSpecification, n)

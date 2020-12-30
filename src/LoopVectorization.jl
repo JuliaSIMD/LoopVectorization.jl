@@ -33,7 +33,7 @@ import LinearAlgebra # for check_args
 using Base.FastMath: add_fast, sub_fast, mul_fast, div_fast
 
 using ArrayInterface
-using ArrayInterface: OptionallyStaticUnitRange, Zero, One
+using ArrayInterface: OptionallyStaticUnitRange, Zero, One, static_length
 const Static = ArrayInterface.StaticInt
 
 
@@ -52,6 +52,7 @@ const VECTORWIDTHSYMBOL, ELTYPESYMBOL = Symbol("##Wvecwidth##"), Symbol("##Tloop
 
 include("vectorizationbase_compat/contract_pass.jl")
 include("vectorizationbase_compat/subsetview.jl")
+include("closeopen.jl")
 include("getconstindexes.jl")
 include("predicates.jl")
 include("map.jl")

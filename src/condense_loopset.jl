@@ -122,23 +122,26 @@ function OperationStruct!(varnames::Vector{Symbol}, ids::Vector{Int}, ls::LoopSe
 end
 ## turn a LoopSet into a type object which can be used to reconstruct the LoopSet.
 
-function loop_boundary(loop::Loop)
-    startexact = loop.startexact
-    stopexact = loop.stopexact
-    if startexact & stopexact
-        Expr(:call, lv(:OptionallyStaticUnitRange), staticexpr(loop.starthint), staticexpr(loop.stophint))
-    elseif startexact
-        Expr(:call, lv(:OptionallyStaticUnitRange), staticexpr(loop.starthint), loop.stopsym)
-    elseif stopexact
-        Expr(:call, lv(:OptionallyStaticUnitRange), loop.startsym, staticexpr(loop.stophint))
+function loop_boundary!(q::Expr, loop::Loop)
+    if loop.startexact & loop.stopexact
+        push!(q.args, Expr(:call, lv(:OptionallyStaticUnitRange), staticexpr(loop.starthint), staticexpr(loop.stophint)))
+    elseif loop.rangesym === Symbol("")
+        lb = if startexact
+            Expr(:call, lv(:OptionallyStaticUnitRange), staticexpr(loop.starthint), loop.stopsym)
+        elseif stopexact
+            Expr(:call, lv(:OptionallyStaticUnitRange), loop.startsym, staticexpr(loop.stophint))
+        else
+            Expr(:call, :(:), loop.startsym, loop.stopsym)
+        end
+        push!(q.args, lb)
     else
-        Expr(:call, :(:), loop.startsym, loop.stopsym)
+        push!(q.args, loop.rangesym)
     end
 end
 
 function loop_boundaries(ls::LoopSet)
     lbd = Expr(:tuple)
-    foreach(loop -> push!(lbd.args, loop_boundary(loop)), ls.loops)
+    foreach(loop -> loop_boundary!(lbd, loop), ls.loops)
     lbd
 end
 

@@ -55,6 +55,8 @@ struct Loop
     stophint::Int
     startsym::Symbol
     stopsym::Symbol
+    rangesym::Symbol
+    lensym::Symbol
     startexact::Bool
     stopexact::Bool
 end
@@ -62,10 +64,10 @@ startstopint(s::Int, start) = s
 startstopint(s::Symbol, start) = start ? 1 : 1024
 startstopsym(s::Int) = Symbol("##UNDEFINED##")
 startstopsym(s::Symbol) = s
-function Loop(itersymbol::Symbol, start::Union{Int,Symbol}, stop::Union{Int,Symbol})
+function Loop(itersymbol::Symbol, start::Union{Int,Symbol}, stop::Union{Int,Symbol}, rangename::Symbol, lensym::Symbol)
     Loop(
         itersymbol, startstopint(start,true), startstopint(stop,false),
-        startstopsym(start), startstopsym(stop), start isa Int, stop isa Int
+        startstopsym(start), startstopsym(stop), rangename, lensym, start isa Int, stop isa Int
     )
 end
 Base.length(loop::Loop) = 1 + loop.stophint - loop.starthint
@@ -169,33 +171,34 @@ function incrementloopcounter!(q, us::UnrollSpecification, n::Int, UF::Int = unr
         push!(q.args, staticexpr(UF))
     end
 end
-function looplengthexpr(loop::Loop)
-    if loop.stopexact
-        if loop.startexact
-            length(loop)
-        else
-            Expr(:call, lv(:vsub), loop.stophint + 1, loop.startsym)
-        end
-    elseif loop.startexact
-        if isone(loop.starthint)
-            loop.stopsym
-        else
-            Expr(:call, lv(:vsub), loop.stopsym, loop.starthint - 1)
-        end
-    else
-        Expr(:call, lv(:vsub), loop.stopsym, Expr(:call, lv(:staticm1), loop.startsym))
-    end
-end
+# function looplengthexpr(loop::Loop)
+#     if loop.stopexact
+#         if loop.startexact
+#             return length(loop)
+#         # elseif loop.rangename === Symbol("")
+#             # return Expr(:call, lv(:vsub), loop.stophint + 1, loop.startsym)
+#         end
+#     elseif loop.startexact
+#         if isone(loop.starthint)
+#             return loop.stopsym
+#         # elseif loop.rangename === Symbol("")
+#             # return Expr(:call, lv(:vsub), loop.stopsym, loop.starthint - 1)
+#         end
+#     # elseif loop.rangename === Symbol("")
+#         # return Expr(:call, lv(:vsub), loop.stopsym, Expr(:call, lv(:staticm1), loop.startsym))
+#     end
+#     Expr(:call, lv(:static_length), loop.rangename)
+# end
 # use_expect() = false
-use_expect() = true
-function looplengthexpr(loop, n)
-    le = looplengthexpr(loop)
-    # if false && use_expect() && isone(n) && !isstaticloop(loop)
-    #     le = expect(le)
-    #     push!(le.args, Expr(:call, Expr(:curly, :Val, length(loop))))
-    # end
-    le
-end
+# use_expect() = true
+# function looplengthexpr(loop, n)
+#     le = looplengthexpr(loop)
+#     # if false && use_expect() && isone(n) && !isstaticloop(loop)
+#     #     le = expect(le)
+#     #     push!(le.args, Expr(:call, Expr(:curly, :Val, length(loop))))
+#     # end
+#     le
+# end
 
 # load/compute/store × isunrolled × istiled × pre/post loop × Loop number
 struct LoopOrder <: AbstractArray{Vector{Operation},5}
@@ -475,6 +478,7 @@ function add_loop_bound!(ls::LoopSet, itersym::Symbol, bound, upper::Bool = true
     pushprepreamble!(ls, Expr(:(=), N, bound))
     N
 end
+static_literals!(s::Symbol) = s
 function static_literals!(q::Expr)
     for (i,ex) ∈ enumerate(q.args)
         if ex isa Number
@@ -486,63 +490,87 @@ function static_literals!(q::Expr)
     q
 end
 
+function range_loop!(ls::LoopSet, r::Expr, itersym::Symbol)::Loop
+    lower = r.args[2]
+    upper = r.args[3]
+    lii::Bool = lower isa Integer
+    liiv::Int = lii ? convert(Int, lower::Integer) : 1
+    uii::Bool = upper isa Integer
+    if lii & uii # both are integers
+        loop = Loop(itersym, liiv, convert(Int, upper::Integer)::Int, Symbol(""), Symbol(""))
+    elseif lii # only lower bound is an integer
+        rangename = gensym!(ls, "range"); lenname = gensym!(ls, "length")
+        loop = if upper isa Symbol
+            pushprepreamble!(ls, Expr(:(=), rangename, Expr(:call, :(:), staticexpr(liiv), upper)))
+            Loop(itersym, liiv, upper, rangename, lenname)
+        elseif upper isa Expr
+            supper = add_loop_bound!(ls, itersym, upper, true)
+            pushprepreamble!(ls, Expr(:(=), rangename, Expr(:call, :(:), staticexpr(liiv), supper)))
+            Loop(itersym, liiv, supper, rangename, lenname)
+        else
+            supper = add_loop_bound!(ls, itersym, upper, true)
+            pushprepreamble!(ls, Expr(:(=), rangename, Expr(:call, :(:), staticexpr(liiv), supper)))
+            Loop(itersym, liiv, supper, rangename, lenname)
+        end
+        pushprepreamble!(ls, Expr(:(=), lenname, Expr(:call, lv(:static_length), rangename)))
+    elseif uii # only upper bound is an integer
+        uiiv = convert(Int, upper::Integer)::Int
+        rangename = gensym!(ls, "range"); lenname = gensym!(ls, "length")
+        slower = add_loop_bound!(ls, itersym, lower, false)
+        pushprepreamble!(ls, Expr(:(=), rangename, Expr(:call, :(:), slower, staticexpr(uiiv))))
+        loop = Loop(itersym, slower, uiiv, rangename, lenname)
+        pushprepreamble!(ls, Expr(:(=), lenname, Expr(:call, lv(:static_length), rangename)))
+    else # neither are integers
+        L = add_loop_bound!(ls, itersym, lower, false)
+        U = add_loop_bound!(ls, itersym, upper, true)
+        rangename = gensym!(ls, "range"); lenname = gensym!(ls, "length")
+        pushprepreamble!(ls, Expr(:(=), rangename, Expr(:call, :(:), L, U)))
+        pushprepreamble!(ls, Expr(:(=), lenname, Expr(:call, lv(:static_length), rangename)))
+        loop = Loop(itersym, L, U, rangename, lenname)
+    end
+    loop
+end
+function oneto_loop!(ls::LoopSet, r::Expr, itersym::Symbol)::Loop
+    otN = r.args[2]
+    loop = if otN isa Integer
+        Loop(itersym, 1, Int(otN)::Int, Symbol(""), Symbol(""))
+    else
+        otN isa Expr && maybestatic!(otN)
+        N = gensym!(ls, "loop" * string(itersym))
+        rangename = gensym!(ls, "range");
+        pushprepreamble!(ls, Expr(:(=), rangename, Expr(:call, :(:), staticexpr(1), N)))
+        pushprepreamble!(ls, Expr(:(=), N, otN))
+        Loop(itersym, 1, N, rangename, N)
+    end
+    loop
+end
+function misc_loop!(ls::LoopSet, r::Union{Expr,Symbol}, itersym::Symbol)::Loop
+    rangename = gensym!(ls, "looprange" * string(itersym)); lenname = gensym!(ls, "looplen" * string(itersym));
+    pushprepreamble!(ls, Expr(:(=), rangename, Expr(:call, lv(:canonicalize_range), static_literals!(r))))
+    pushprepreamble!(ls, Expr(:(=), lenname, Expr(:call, lv(:static_length), rangename)))
+    L = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticfirst), rangename), false)
+    U = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticlast), rangename), true)
+    Loop(itersym, L, U, rangename, lenname)
+end
+
 """
 This function creates a loop, while switching from 1 to 0 based indices
 """
 function register_single_loop!(ls::LoopSet, looprange::Expr)
     itersym = (looprange.args[1])::Symbol
     r = looprange.args[2]
-    if isexpr(r, :call)
+    loop = if isexpr(r, :call)
         r = r::Expr        # julia#37342
         f = first(r.args)
-        loop::Loop = if f === :(:)
-            lower = r.args[2]
-            upper = r.args[3]
-            lii::Bool = lower isa Integer
-            liiv::Int = lii ? convert(Int, lower::Integer) : 1
-            uii::Bool = upper isa Integer
-            if lii & uii # both are integers
-                Loop(itersym, liiv, convert(Int, upper::Integer)::Int)
-            elseif lii # only lower bound is an integer
-                if upper isa Symbol
-                    Loop(itersym, liiv, upper)
-                elseif upper isa Expr
-                    Loop(itersym, liiv, add_loop_bound!(ls, itersym, upper, true))
-                else
-                    Loop(itersym, liiv, add_loop_bound!(ls, itersym, upper, true))
-                end
-            elseif uii # only upper bound is an integer
-                uiiv = convert(Int, upper::Integer)::Int
-                Loop(itersym, add_loop_bound!(ls, itersym, lower, false), uiiv)
-            else # neither are integers
-                L = add_loop_bound!(ls, itersym, lower, false)
-                U = add_loop_bound!(ls, itersym, upper, true)
-                Loop(itersym, L, U)
-            end
+        if f === :(:)
+            range_loop!(ls, r, itersym)
         elseif f === :OneTo || isscopedname(f, :Base, :OneTo)
-            otN = r.args[2]
-            if otN isa Integer
-                Loop(itersym, 1, otN)
-            else
-                otN isa Expr && maybestatic!(otN)
-                N = gensym!(ls, "loop" * string(itersym))
-                pushprepreamble!(ls, Expr(:(=), N, otN))
-                Loop(itersym, 1, N)
-            end
+            oneto_loop!(ls, r, itersym)
         else
-            N = gensym!(ls, "loop" * string(itersym))
-            pushprepreamble!(ls, Expr(:(=), N, Expr(:call, lv(:maybestaticrange), static_literals!(r))))
-            L = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticfirst), N), false)
-            U = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticlast), N), true)
-            Loop(itersym, L, U)
+            misc_loop!(ls, r, itersym)
         end
     elseif isa(r, Symbol)
-        # Treat similar to `eachindex`
-        N = gensym!(ls, "loop" * string(itersym))
-        pushprepreamble!(ls, Expr(:(=), N, Expr(:call, lv(:maybestaticrange), r)))
-        L = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticfirst), N), false)
-        U = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticlast), N), true)
-        loop = Loop(itersym, L, U)
+        misc_loop!(ls, r, itersym)
     else
         throw(LoopError("Unrecognized loop range type: $r."))
     end
