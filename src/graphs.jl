@@ -538,8 +538,8 @@ function oneto_loop!(ls::LoopSet, r::Expr, itersym::Symbol)::Loop
         otN isa Expr && maybestatic!(otN)
         N = gensym!(ls, "loop" * string(itersym))
         rangename = gensym!(ls, "range");
-        pushprepreamble!(ls, Expr(:(=), rangename, Expr(:call, :(:), staticexpr(1), N)))
         pushprepreamble!(ls, Expr(:(=), N, otN))
+        pushprepreamble!(ls, Expr(:(=), rangename, Expr(:call, :(:), staticexpr(1), N)))
         Loop(itersym, 1, N, rangename, N)
     end
     loop
