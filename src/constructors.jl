@@ -145,7 +145,7 @@ macro avx(q)
     q = macroexpand(__module__, q)
     isa(q, Expr) || return q
     q2 = if q.head === :for
-        setup_call(LoopSet(q, __module__), q)
+        setup_call(LoopSet(q, __module__), q, __source__)
     else# assume broadcast
         substitute_broadcast(q, Symbol(__module__))
     end
@@ -204,14 +204,14 @@ macro avx(arg, q)
     q = macroexpand(__module__, q)
     inline, check_empty, u₁, u₂ = check_macro_kwarg(arg)
     ls = LoopSet(q, __module__)
-    esc(setup_call(ls, q, inline, check_empty, u₁, u₂))
+    esc(setup_call(ls, q, __source__, inline, check_empty, u₁, u₂))
 end
 macro avx(arg1, arg2, q)
     @assert q.head === :for
     q = macroexpand(__module__, q)
     inline, check_empty, u₁, u₂ = check_macro_kwarg(arg1)
     inline, check_empty, u₁, u₂ = check_macro_kwarg(arg2, inline, check_empty, u₁, u₂)
-    esc(setup_call(LoopSet(q, __module__), q, inline, check_empty, u₁, u₂))
+    esc(setup_call(LoopSet(q, __module__), q, __source__, inline, check_empty, u₁, u₂))
 end
 macro avx(arg1, arg2, arg3, q)
     @assert q.head === :for
@@ -219,7 +219,7 @@ macro avx(arg1, arg2, arg3, q)
     inline, check_empty, u₁, u₂ = check_macro_kwarg(arg1)
     inline, check_empty, u₁, u₂ = check_macro_kwarg(arg2, inline, check_empty, u₁, u₂)
     inline, check_empty, u₁, u₂ = check_macro_kwarg(arg3, inline, check_empty, u₁, u₂)
-    esc(setup_call(LoopSet(q, __module__), q, inline, check_empty, u₁, u₂))
+    esc(setup_call(LoopSet(q, __module__), q, __source__, inline, check_empty, u₁, u₂))
 end
 
 
