@@ -3,10 +3,10 @@
 @inline vreduce(::typeof(*), v::VectorizationBase.AbstractSIMDVector) = vprod(v)
 @inline vreduce(::typeof(max), v::VectorizationBase.AbstractSIMDVector) = vmaximum(v)
 @inline vreduce(::typeof(min), v::VectorizationBase.AbstractSIMDVector) = vminimum(v)
-@inline vreduce(op, v::VectorizationBase.AbstractSIMDVector) = _vreduce(op, v)
-@inline _vreduce(op, v::VectorizationBase.AbstractSIMDVector) = _reduce(op, Vec(v))
-_vreduce(op, v::Vec{1}) = VectorizationBase.extractelement(v, 0)
-@inline function _vreduce(op, v::Vec{W}) where {W}
+@inline vreduce(op, v::VectorizationBase.AbstractSIMDVector) = vec_vreduce(op, v)
+@inline vec_reduce(op, v::VectorizationBase.AbstractSIMDVector) = vec_reduce(op, Vec(v))
+vec_vreduce(op, v::Vec{1}) = VectorizationBase.extractelement(v, 0)
+@inline function vec_vreduce(op, v::Vec{W}) where {W}
     a = op(VectorizationBase.extractelement(v,0), VectorizationBase.extractelement(v, 1))
     for i ∈ 2:W-1
         a = op(a, VectorizationBase.extractelement(v, i))

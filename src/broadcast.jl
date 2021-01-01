@@ -349,7 +349,7 @@ function add_broadcast_loops!(ls::LoopSet, loopsyms::Vector{Symbol}, destsym::Sy
         push!(axes_tuple.args, Nrange)
         pushpreamble!(ls, Expr(:(=), Nlower, Expr(:call, lv(:maybestaticfirst), Nrange)))
         pushpreamble!(ls, Expr(:(=), Nupper, Expr(:call, lv(:maybestaticlast), Nrange)))
-        pushpreamble!(ls, Expr(:(=), Nlen, Expr(:call, lv(:static_length), Nrange)))
+        pushpreamble!(ls, Expr(:(=), Nlen, Expr(:call, lv(:maybestaticlength), Nrange)))
     end
 end
 # size of dest determines loops
@@ -421,7 +421,7 @@ end
 end
 @inline function vmaterialize!(
     dest′::Union{Adjoint{T,A},Transpose{T,A}}, bc::Broadcasted{Base.Broadcast.DefaultArrayStyle{0},Nothing,typeof(identity),Tuple{T2}}, ::Val{Mod}
-) where {T <: NativeTypes, N, A <: AbstractArray{T,N}, T2 <: NativeTypes, Mod}
+) where {T <: NativeTypes, N, A <: AbstractArray{T,N}, T2 <: Number, Mod}
     arg = T(first(bc.args))
     dest = parent(dest′)
     @avx for i ∈ eachindex(dest)

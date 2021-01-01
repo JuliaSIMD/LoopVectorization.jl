@@ -33,7 +33,7 @@ import LinearAlgebra # for check_args
 using Base.FastMath: add_fast, sub_fast, mul_fast, div_fast
 
 using ArrayInterface
-using ArrayInterface: OptionallyStaticUnitRange, Zero, One, static_length
+using ArrayInterface: OptionallyStaticUnitRange, Zero, One#, static_length
 const Static = ArrayInterface.StaticInt
 
 

@@ -512,20 +512,20 @@ function range_loop!(ls::LoopSet, r::Expr, itersym::Symbol)::Loop
             pushprepreamble!(ls, Expr(:(=), rangename, Expr(:call, :(:), staticexpr(liiv), supper)))
             Loop(itersym, liiv, supper, rangename, lenname)
         end
-        pushprepreamble!(ls, Expr(:(=), lenname, Expr(:call, lv(:static_length), rangename)))
+        pushprepreamble!(ls, Expr(:(=), lenname, Expr(:call, lv(:maybestaticlength), rangename)))
     elseif uii # only upper bound is an integer
         uiiv = convert(Int, upper::Integer)::Int
         rangename = gensym!(ls, "range"); lenname = gensym!(ls, "length")
         slower = add_loop_bound!(ls, itersym, lower, false)
         pushprepreamble!(ls, Expr(:(=), rangename, Expr(:call, :(:), slower, staticexpr(uiiv))))
         loop = Loop(itersym, slower, uiiv, rangename, lenname)
-        pushprepreamble!(ls, Expr(:(=), lenname, Expr(:call, lv(:static_length), rangename)))
+        pushprepreamble!(ls, Expr(:(=), lenname, Expr(:call, lv(:maybestaticlength), rangename)))
     else # neither are integers
         L = add_loop_bound!(ls, itersym, lower, false)
         U = add_loop_bound!(ls, itersym, upper, true)
         rangename = gensym!(ls, "range"); lenname = gensym!(ls, "length")
         pushprepreamble!(ls, Expr(:(=), rangename, Expr(:call, :(:), L, U)))
-        pushprepreamble!(ls, Expr(:(=), lenname, Expr(:call, lv(:static_length), rangename)))
+        pushprepreamble!(ls, Expr(:(=), lenname, Expr(:call, lv(:maybestaticlength), rangename)))
         loop = Loop(itersym, L, U, rangename, lenname)
     end
     loop
@@ -547,7 +547,7 @@ end
 function misc_loop!(ls::LoopSet, r::Union{Expr,Symbol}, itersym::Symbol)::Loop
     rangename = gensym!(ls, "looprange" * string(itersym)); lenname = gensym!(ls, "looplen" * string(itersym));
     pushprepreamble!(ls, Expr(:(=), rangename, Expr(:call, lv(:canonicalize_range), static_literals!(r))))
-    pushprepreamble!(ls, Expr(:(=), lenname, Expr(:call, lv(:static_length), rangename)))
+    pushprepreamble!(ls, Expr(:(=), lenname, Expr(:call, lv(:maybestaticlength), rangename)))
     L = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticfirst), rangename), false)
     U = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticlast), rangename), true)
     Loop(itersym, L, U, rangename, lenname)

@@ -1,4 +1,4 @@
-using Test
+using Test, Aqua
 using LoopVectorization
 
 using LinearAlgebra
@@ -37,8 +37,9 @@ const RUN_SLOW_TESTS = LoopVectorization.REGISTER_COUNT ≤ 16 || !parse(Bool, g
 @show RUN_SLOW_TESTS
 
 @time @testset "LoopVectorization.jl" begin
-    
-    @test isempty(detect_unbound_args(LoopVectorization))
+
+    Aqua.test_all(LoopVectorization)
+    # @test isempty(detect_unbound_args(LoopVectorization))
 
     @time include("printmethods.jl")
 

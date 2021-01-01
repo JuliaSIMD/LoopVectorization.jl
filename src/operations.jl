@@ -75,8 +75,8 @@ Base.:(==)(x::ArrayReferenceMeta, y::ArrayReferenceMeta) = (x.ptr === y.ptr) && 
 # Errors preferable than silently working?
 Base.:(==)(x::ArrayReference, y::ArrayReferenceMeta) = x == y.ref
 Base.:(==)(x::ArrayReferenceMeta, y::ArrayReference) = x.ref == y
-Base.:(==)(x::ArrayReference, y) = false
-Base.:(==)(x::ArrayReferenceMeta, y) = false
+# Base.:(==)(x::ArrayReference, y) = false
+# Base.:(==)(x::ArrayReferenceMeta, y) = false
 
 abstract type AbstractLoopOperation end
 

@@ -6,7 +6,7 @@ function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{<:AbstractUnitRange})
     pushpreamble!(ls, Expr(:(=), loopsym, ex))
     pushpreamble!(ls, Expr(:(=), start, Expr(:call, lv(:first), loopsym)))
     pushpreamble!(ls, Expr(:(=), stop, Expr(:call, lv(:last), loopsym)))
-    pushpreamble!(ls, Expr(:(=), lensym, Expr(:call, lv(:static_length), loopsym)))
+    pushpreamble!(ls, Expr(:(=), lensym, Expr(:call, lv(:maybestaticlength), loopsym)))
     loop = Loop(sym, 1, 1024, start, stop, loopsym, lensym, false, false)::Loop
     pushpreamble!(ls, loopiteratesatleastonce(loop))
     loop
@@ -17,7 +17,7 @@ function add_static_upper_loop!(ls::LoopSet, ex::Expr, sym::Symbol, U::Int)
     start = gensym(ssym*"_loopstart"); loopsym = gensym(ssym * "_loop"); lensym = gensym(ssym * "_looplen")
     pushpreamble!(ls, Expr(:(=), loopsym, ex))
     pushpreamble!(ls, Expr(:(=), start, Expr(:call, lv(:first), loopsym)))
-    pushpreamble!(ls, Expr(:(=), lensym, Expr(:call, lv(:static_length), loopsym)))
+    pushpreamble!(ls, Expr(:(=), lensym, Expr(:call, lv(:maybestaticlength), loopsym)))
     loop = Loop(sym, U - 1023, U, start, Symbol(""), loopsym, lensym, false, true)::Loop
     pushpreamble!(ls, loopiteratesatleastonce(loop))
     loop
@@ -27,7 +27,7 @@ function add_static_lower_loop!(ls::LoopSet, ex::Expr, sym::Symbol, L::Int)
     stop = gensym(ssym*"_loopstop"); loopsym = gensym(ssym * "_loop"); lensym = gensym(ssym * "_looplen")
     pushpreamble!(ls, Expr(:(=), loopsym, ex))
     pushpreamble!(ls, Expr(:(=), stop, Expr(:call, lv(:last), loopsym)))
-    pushpreamble!(ls, Expr(:(=), lensym, Expr(:call, lv(:static_length), loopsym)))
+    pushpreamble!(ls, Expr(:(=), lensym, Expr(:call, lv(:maybestaticlength), loopsym)))
     loop = Loop(sym, L, L + 1023, Symbol(""), stop, loopsym, lensym, true, false)::Loop
     pushpreamble!(ls, loopiteratesatleastonce(loop))
     loop
