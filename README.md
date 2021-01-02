@@ -345,10 +345,10 @@ Similar approaches can be taken to make kernels working with a variety of numeri
 
 * [Gaius.jl](https://github.com/MasonProtter/Gaius.jl)
 * [MaBLAS.jl](https://github.com/YingboMa/MaBLAS.jl)
+* [Octavian.jl](https://github.com/JuliaLinearAlgebra/Octavian.jl)
 * [PaddedMatrices.jl](https://github.com/chriselrod/PaddedMatrices.jl)
 * [RecursiveFactorization.jl](https://github.com/YingboMa/RecursiveFactorization.jl)
 * [SnpArrays.jl](https://github.com/OpenMendel/SnpArrays.jl)
 * [Tullio.jl](https://github.com/mcabbott/Tullio.jl)
 
 If you're using LoopVectorization, please feel free to file a PR adding yours to the list!
-
