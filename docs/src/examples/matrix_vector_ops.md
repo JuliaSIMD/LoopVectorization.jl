@@ -5,11 +5,11 @@ Here I'll discuss a variety of Matrix-vector operations, naturally starting with
 ```julia
 function jgemvavx!(𝐲, 𝐀, 𝐱)
     @avx for i ∈ eachindex(𝐲)
-        𝐲_i = zero(eltype(𝐲))
+        𝐲ᵢ = zero(eltype(𝐲))
         for j ∈ eachindex(𝐱)
-            𝐲_i += 𝐀[i,j] * 𝐱[j]
+            𝐲ᵢ += 𝐀[i,j] * 𝐱[j]
         end
-        𝐲[i] = 𝐲_i
+        𝐲[i] = 𝐲ᵢ
     end
 end
 ```
