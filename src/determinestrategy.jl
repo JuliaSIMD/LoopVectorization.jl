@@ -16,6 +16,25 @@ const CACHELINE_SIZE = something(VectorizationBase.L₁CACHE.linesize, 64)
 #     factor = instruction(op).instr ∈ (:+, :vadd, :add_fast, :evadd) ? 1 : 10
 #     newapp * factor
 # end
+function check_linear_parents(ls::LoopSet, op::Operation, s::Symbol)
+    (s ∈ loopdependencies(op)) || return true
+    if isload(op) # TODO: handle loading from ranges.
+        return false
+    elseif !iscompute(op)
+        return true
+    end
+    op_is_linear = false
+    instr_op = instruction(op).instr
+    for instr ∈ (:(+), :vadd, :vadd1, :add_fast, :(-), :vsub, :sub_fast)
+        (op_is_linear = instr === instr_op) && break
+    end
+    op_is_linear || return false
+    for opp ∈ parents(op)
+        check_linear_parents(ls, opp, s) || return false
+    end
+    true
+end
+
 function findparent(ls::LoopSet, s::Symbol)#opdict isn't filled when reconstructing
     id = findfirst(op -> name(op) === s, operations(ls))
     id === nothing && throw("$s not found")
@@ -32,6 +51,10 @@ function unitstride(ls::LoopSet, op::Operation, s::Symbol)
     #     # We must check if this
     #     parent = findparent(ls, fi)
     #     indexappearences(parent, s) > 1 && return false
+    end
+    if length(li) > 0 && !first(li)
+        parent = findparent(ls, first(inds))
+        check_linear_parents(ls, parent, s) || return false
     end
     for i ∈ 2:length(inds)
         if li[i]
@@ -164,6 +187,7 @@ function evaluate_cost_unroll(
                 end
             end
             included_vars[id] = true
+            # @show op, cost(ls, op, vectorized, Wshift, size_T)
             total_cost += iter * first(cost(ls, op, vectorized, Wshift, size_T))
             total_cost > max_cost && return total_cost # abort if more expensive; we only want to know the cheapest
         end
