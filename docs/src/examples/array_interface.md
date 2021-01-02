@@ -15,11 +15,11 @@ using StaticArrays, LoopVectorization
 
 @inline function AmulB!(C, A, B)
     @avx for n ∈ axes(C,2), m ∈ axes(C,1)
-        Cₘₙ = zero(eltype(C))
+        Cmn = zero(eltype(C))
         for k ∈ axes(B,1)
-            Cₘₙ += A[m,k] * B[k,n]
+            Cmn += A[m,k] * B[k,n]
         end
-        C[m,n] = Cₘₙ
+        C[m,n] = Cmn
     end
     C
 end
@@ -41,19 +41,19 @@ function runbenches(sr, ::Type{T}, fa = identity, fb = identity) where {T}
     bench_results = Matrix{Float64}(undef, length(sr), 4);
     for (i,s) ∈ enumerate(sr)
         M, K, N = matdims(s)
-        Aₘ = @MMatrix rand(T, M, K)
-        Bₘ = @MMatrix rand(T, K, N)
-        Aₛ = Ref(SMatrix(Aₘ));
-        Bₛ = Ref(SMatrix(Bₘ));
-        Cₛₛ = fa(Aₛ[]) * fb(Bₛ[]);
-        Cₛₗ = AmulB(fa(Aₛ[]), fb(Bₛ[]))
-        Cₘₛ = similar(Cₛₛ); mul!(Cₘₛ, fa(Aₘ), fb(Bₘ));
-        Cₘₗ = similar(Cₛₛ); AmulB!(Cₘₗ, fa(Aₘ), fb(Bₘ));
-        @assert Array(Cₛₛ) ≈ Array(Cₛₗ) ≈ Array(Cₘₛ) ≈ Array(Cₘₗ) # Once upon a time Julia crashed on ≈ for large static arrays
-        bench_results[i,1] = @belapsed $fa($Aₛ[]) * $fb($Bₛ[])
-        bench_results[i,2] = @belapsed AmulB($fa($Aₛ[]), $fb($Bₛ[]))
-        bench_results[i,3] = @belapsed mul!($Cₘₛ, $fa($Aₘ), $fb($Bₘ))
-        bench_results[i,4] = @belapsed AmulB!($Cₘₗ, $fa($Aₘ), $fb($Bₘ))
+        Am = @MMatrix rand(T, M, K)
+        Bm = @MMatrix rand(T, K, N)
+        As = Ref(SMatrix(Am));
+        Bs = Ref(SMatrix(Bm));
+        Css = fa(As[]) * fb(Bs[]);
+        Csl = AmulB(fa(As[]), fb(Bs[]))
+        Cms = similar(Css); mul!(Cms, fa(Am), fb(Bm));
+        Cml = similar(Css); AmulB!(Cml, fa(Am), fb(Bm));
+        @assert Array(Css) ≈ Array(Csl) ≈ Array(Cms) ≈ Array(Cml) # Once upon a time Julia crashed on ≈ for large static arrays
+        bench_results[i,1] = @belapsed $fa($As[]) * $fb($Bs[])
+        bench_results[i,2] = @belapsed AmulB($fa($As[]), $fb($Bs[]))
+        bench_results[i,3] = @belapsed mul!($Cms, $fa($Am), $fb($Bm))
+        bench_results[i,4] = @belapsed AmulB!($Cml, $fa($Am), $fb($Bm))
         @show s, bench_results[i,:]
     end
     gflops = @. 1e-9 * matflop(sr) / bench_results
@@ -94,11 +94,11 @@ C_hybrid = HybridArray{Tuple{StaticArrays.Dynamic(),StaticArrays.Dynamic(),3,3}}
 # B is K x N x L x J
 function bmul!(C, A, B)
     @avx for n in axes(C,2), m in axes(C,1), j in axes(C,4), i in axes(C,3)
-        Cₘₙⱼᵢ = zero(eltype(C))
+        Cmnji = zero(eltype(C))
         for k in axes(B,1), l in axes(B,3)
-            Cₘₙⱼᵢ += A[m,k,i,l] * B[k,n,l,j]
+            Cmnji += A[m,k,i,l] * B[k,n,l,j]
         end
-        C[m,n,i,j] = Cₘₙⱼᵢ
+        C[m,n,i,j] = Cmnji
     end
 end
 ```

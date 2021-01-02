@@ -239,11 +239,11 @@ Note that loops will be faster than broadcasting in general. This is because the
 ```julia
 julia> function AmulBtest!(C,A,Bk,Bn,d)
           @avx for m ∈ axes(A,1), n ∈ axes(Bk,2)
-             ΔCₘₙ = zero(eltype(C))
+             ΔCmn = zero(eltype(C))
              for k ∈ axes(A,2)
-                ΔCₘₙ += A[m,k] * (Bk[k,n] + Bn[n,k])
+                ΔCmn += A[m,k] * (Bk[k,n] + Bn[n,k])
              end
-             C[m,n] = ΔCₘₙ + d[m]
+             C[m,n] = ΔCmn + d[m]
           end
        end
 AmulBtest! (generic function with 1 method)
