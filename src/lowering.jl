@@ -385,8 +385,7 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     body = lower_block(ls, us, n, inclmask, UF)
     if loopisstatic
         iters = length(loop) ÷ UFW
-        # @show loop iters*UF, allinteriorunrolled(ls, us, n)# Let's set a limit on total unrolling
-        if isone(iters) || (iters*UF ≤ 16 && allinteriorunrolled(ls, us, n))# Let's set a limit on total unrolling
+        if (iters ≤ 1) || (iters*UF ≤ 16 && allinteriorunrolled(ls, us, n))# Let's set a limit on total unrolling
             q = Expr(:block)
             foreach(_ -> push!(q.args, body), 1:iters)
         else

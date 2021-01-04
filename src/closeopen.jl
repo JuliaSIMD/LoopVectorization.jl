@@ -16,7 +16,7 @@ end
 @inline Base.length(r::CloseOpen{Zero}) = r.upper
 
 @inline Base.iterate(r::CloseOpen) = (i = Int(first(r)); (i, i))
-@inline Base.iterate(r::CloseOpen, i::Int) = (i += 1) == r.upper ? nothing : (i, i)
+@inline Base.iterate(r::CloseOpen, i::Int) = (i += 1) ≥ r.upper ? nothing : (i, i)
 
 ArrayInterface.known_first(::Type{<:CloseOpen{StaticInt{F}}}) where {F} = F
 ArrayInterface.known_step(::Type{<:CloseOpen}) = 1
