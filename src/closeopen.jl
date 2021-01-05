@@ -28,4 +28,8 @@ ArrayInterface.known_length(::Type{CloseOpen{StaticInt{F},StaticInt{L}}}) where 
 @inline canonicalize_range(r::AbstractUnitRange) = maybestaticfirst(r):maybestaticlast(r)
 @inline canonicalize_range(r::CartesianIndices) = CartesianIndices(map(canonicalize_range, r.indices))
 
+Base.IteratorSize(::Type{<:CloseOpen}) = Base.HasShape{1}()
+Base.IteratorEltype(::Type{<:CloseOpen}) = Base.HasEltype()
+@inline Base.size(r::CloseOpen) = (length(r),)
+Base.eltype(::CloseOpen) = Int
 
