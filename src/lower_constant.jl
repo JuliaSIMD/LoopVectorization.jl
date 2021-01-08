@@ -165,7 +165,7 @@ function lower_licm_constants!(ls::LoopSet)
         end
     end
     for (id,f) ∈ ls.preamble_funcofeltypes
-        setop!(ls, ops[id], Expr(:call, f, ELTYPESYMBOL))
+        setop!(ls, ops[id], Expr(:call, reduction_zero(f), ELTYPESYMBOL))
     end
 end
 

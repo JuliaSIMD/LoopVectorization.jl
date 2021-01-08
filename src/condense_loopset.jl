@@ -145,16 +145,25 @@ function loop_boundaries(ls::LoopSet)
     lbd
 end
 
+tuple_expr(v) = tuple_expr(identity, v)
+function tuple_expr(f, v)
+    t = Expr(:tuple)
+    for vᵢ ∈ v
+        push!(t.args, f(vᵢ))
+    end
+    t
+end
+
 function argmeta_and_consts_description(ls::LoopSet, arraysymbolinds)
     Expr(
-        :curly, :Tuple,
+        :tuple,
         length(arraysymbolinds),
-        Expr(:curly, :Tuple, ls.outer_reductions...),
-        Expr(:curly, :Tuple, first.(ls.preamble_symsym)...),
-        Expr(:curly, :Tuple, ls.preamble_symint...),
-        Expr(:curly, :Tuple, ls.preamble_symfloat...),
-        Expr(:curly, :Tuple, ls.preamble_zeros...),
-        Expr(:curly, :Tuple, ls.preamble_funcofeltypes...)
+        tuple_expr(ls.outer_reductions),
+        tuple_expr(first, ls.preamble_symsym),
+        tuple_expr(ls.preamble_symint),
+        tuple_expr(ls.preamble_symfloat),
+        tuple_expr(ls.preamble_zeros),
+        tuple_expr(ls.preamble_funcofeltypes)
     )
 end
 
@@ -210,9 +219,10 @@ function check_if_empty(ls::LoopSet, q::Expr)
     Expr(:if, Expr(:call, :!, Expr(:call, :any, :isempty, lb)), q)
 end
 
+val(x) = Expr(:call, Expr(:curly, :Val, x))
 # Try to condense in type stable manner
 function generate_call(ls::LoopSet, inline_unroll::NTuple{3,Int8}, debug::Bool = false)
-    operation_descriptions = Expr(:curly, :Tuple)
+    operation_descriptions = Expr(:tuple)
     varnames = Symbol[]; ids = Vector{Int}(undef, length(operations(ls)))
     for op ∈ operations(ls)
         instr = instruction(op)
@@ -221,27 +231,29 @@ function generate_call(ls::LoopSet, inline_unroll::NTuple{3,Int8}, debug::Bool =
         push!(operation_descriptions.args, OperationStruct!(varnames, ids, ls, op))
     end
     arraysymbolinds = Symbol[]
-    arrayref_descriptions = Expr(:curly, :Tuple)
+    arrayref_descriptions = Expr(:tuple)
     foreach(ref -> push!(arrayref_descriptions.args, ArrayRefStruct(ls, ref, arraysymbolinds, ids)), ls.refs_aliasing_syms)
     argmeta = argmeta_and_consts_description(ls, arraysymbolinds)
     loop_bounds = loop_boundaries(ls)
-    loop_syms = Expr(:curly, :Tuple, map(QuoteNode, ls.loopsymbols)...)
+    loop_syms = tuple_expr(QuoteNode, ls.loopsymbols)
     inline, u₁, u₂ = inline_unroll
-
     func = debug ? lv(:_avx_loopset_debug) : lv(:_avx_!)
     lbarg = debug ? Expr(:call, :typeof, loop_bounds) : loop_bounds
     q = Expr(
-        :call, func, Expr(:call, Expr(:curly, :Val, Expr(:tuple, inline, u₁, u₂, Expr(:call, lv(:unwrap), VECTORWIDTHSYMBOL)))),
-        operation_descriptions, arrayref_descriptions, argmeta, loop_syms, lbarg
+        :call, func, val(Expr(:tuple, inline, u₁, u₂, Expr(:call, lv(:unwrap), VECTORWIDTHSYMBOL))),
+        val(operation_descriptions), val(arrayref_descriptions), val(argmeta), val(loop_syms), lbarg
     )
-    debug && deleteat!(q.args, 2)
-    foreach(ref -> push!(q.args, vptr(ref)), ls.refs_aliasing_syms)
+    # debug && deleteat!(q.args, 2)
+    vargs_as_tuple = !debug
+    extra_args = vargs_as_tuple ? Expr(:tuple) : q
+    foreach(ref -> push!(extra_args.args, vptr(ref)), ls.refs_aliasing_syms)
 
-    foreach(is -> push!(q.args, last(is)), ls.preamble_symsym)
-    append!(q.args, arraysymbolinds)
-    add_reassigned_syms!(q, ls)
-    add_external_functions!(q, ls)
-    debug && return q
+    foreach(is -> push!(extra_args.args, last(is)), ls.preamble_symsym)
+    append!(extra_args.args, arraysymbolinds)
+    add_reassigned_syms!(extra_args, ls)
+    add_external_functions!(extra_args, ls)
+    # debug && return q
+    vargs_as_tuple && push!(q.args, extra_args)
     vecwidthdefq = Expr(:block)
     define_eltype_vec_width!(vecwidthdefq, ls, nothing)
     Expr(:block, vecwidthdefq, q)
@@ -318,7 +330,6 @@ function setup_call_inline(ls::LoopSet, inline::Int8 = zero(Int8), U::Int8 = zer
 end
 function setup_call_debug(ls::LoopSet)
     # avx_loopset(instr, ops, arf, AM, LB, vargs)
-
     pushpreamble!(ls, generate_call(ls, (zero(Int8),zero(Int8),zero(Int8)), true))
     Expr(:block, ls.prepreamble, ls.preamble)
 end

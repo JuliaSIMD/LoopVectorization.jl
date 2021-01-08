@@ -184,7 +184,7 @@ function add_reduction_update_parent!(
         if reduct_zero === :zero
             push!(ls.preamble_zeros, (identifier(reductinit), IntOrFloat))
         else
-            push!(ls.preamble_funcofeltypes, (identifier(reductinit), reduct_zero))
+            push!(ls.preamble_funcofeltypes, (identifier(reductinit), instrclass))
         end
     else
         reductinit = parent
@@ -384,7 +384,7 @@ function add_pow!(
     end
     if pint == 0
         op = Operation(length(operations(ls)), var, elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS)
-        push!(ls.preamble_funcofeltypes, (identifier(op),:one))
+        push!(ls.preamble_funcofeltypes, (identifier(op),MULTIPLICATIVE_IN_REDUCTIONS))
         return pushop!(ls, op)
     elseif pint == 1
         return add_compute!(ls, var, :identity, [xop], elementbytes)

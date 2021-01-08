@@ -253,7 +253,7 @@ struct LoopSet
     preamble_symint::Vector{Tuple{Int,Int}}
     preamble_symfloat::Vector{Tuple{Int,Float64}}
     preamble_zeros::Vector{Tuple{Int,NumberType}}
-    preamble_funcofeltypes::Vector{Tuple{Int,Symbol}}
+    preamble_funcofeltypes::Vector{Tuple{Int,Float64}}
     includedarrays::Vector{Symbol}
     includedactualarrays::Vector{Symbol}
     syms_aliasing_refs::Vector{Symbol}
@@ -308,7 +308,7 @@ function pushpreamble!(ls::LoopSet, op::Operation, v::Number)
     if iszero(v)
         push!(ls.preamble_zeros, (id, typ))
     elseif isone(v)
-        push!(ls.preamble_funcofeltypes, (id, :one))
+        push!(ls.preamble_funcofeltypes, (id, MULTIPLICATIVE_IN_REDUCTIONS))
     elseif v isa Integer
         push!(ls.preamble_symint, (id, convert(Int,v)))
     else
@@ -321,7 +321,7 @@ pushpreamble!(ls::LoopSet, ex::Expr) = push!(ls.preamble.args, ex)
 #     if RHS.head === :call && first(RHS.args) === :zero
 #         push!(ls.preamble_zeros, (identifier(op), IntOrFloat))
 #     elseif RHS.head === :call && first(RHS.args) === :one
-#         push!(ls.preamble_funcofeltypes, (identifier(op), :one))
+#         push!(ls.preamble_funcofeltypes, (identifier(op), MULTIPLICATIVE_IN_REDUCTIONS))
 #     else
 #         pushpreamble!(ls, Expr(:(=), c, RHS))
 #         pushpreamble!(ls, op, c)
@@ -670,7 +670,7 @@ function add_operation!(
             if f === :zero
                 push!(ls.preamble_zeros, (identifier(op), IntOrFloat))
             else
-                push!(ls.preamble_funcofeltypes, (identifier(op), :one))
+                push!(ls.preamble_funcofeltypes, (identifier(op), MULTIPLICATIVE_IN_REDUCTIONS))
             end
             op
         else
@@ -706,7 +706,7 @@ function add_operation!(
             if f === :zero
                 push!(ls.preamble_zeros, (identifier(op), IntOrFloat))
             else
-                push!(ls.preamble_funcofeltypes, (identifier(op), :one))
+                push!(ls.preamble_funcofeltypes, (identifier(op), MULTIPLICATIVE_IN_REDUCTIONS))
             end
             op
         else

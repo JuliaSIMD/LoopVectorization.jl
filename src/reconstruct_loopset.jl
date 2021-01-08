@@ -198,24 +198,24 @@ end
 function num_parameters(AM)
     num_param::Int = AM[1]
     # num_param += length(AM[2].parameters)
-    num_param + length(AM[3].parameters)
+    num_param + length(AM[3])
 end
 function gen_array_syminds(AM)
     Symbol[Symbol("##arraysymbolind##"*i*'#') for i ∈ 1:(AM[1])::Int]
 end
 function process_metadata!(ls::LoopSet, AM, num_arrays::Int)
     opoffsets = ls.operation_offsets
-    expandbyoffset!(ls.outer_reductions, AM[2].parameters, opoffsets)
-    for (i,si) ∈ enumerate(AM[3].parameters)
+    expandbyoffset!(ls.outer_reductions, AM[2], opoffsets)
+    for (i,si) ∈ enumerate(AM[3])
         sii = si::Int
         s = gensym(:symlicm)
         push!(ls.preamble_symsym, (opoffsets[sii] + 1, s))
         pushpreamble!(ls, Expr(:(=), s, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), Expr(:ref, :vargs, num_arrays + i))))
     end
-    expandbyoffset!(ls.preamble_symint, AM[4].parameters, opoffsets)
-    expandbyoffset!(ls.preamble_symfloat, AM[5].parameters, opoffsets)
-    expandbyoffset!(ls.preamble_zeros, AM[6].parameters, opoffsets)
-    expandbyoffset!(ls.preamble_funcofeltypes, AM[7].parameters, opoffsets)
+    expandbyoffset!(ls.preamble_symint, AM[4], opoffsets)
+    expandbyoffset!(ls.preamble_symfloat, AM[5], opoffsets)
+    expandbyoffset!(ls.preamble_zeros, AM[6], opoffsets)
+    expandbyoffset!(ls.preamble_funcofeltypes, AM[7], opoffsets)
     nothing
 end
 function expandbyoffset!(indexpand::Vector{T}, inds, offsets::Vector{Int}, expand::Bool = true) where {T <: Union{Int,Tuple{Int,<:Any}}}
@@ -437,7 +437,7 @@ function sizeofeltypes(v, num_arrays)::Int
 end
 
 function avx_loopset(instr::Vector{Instruction}, ops::Vector{OperationStruct}, arf::Vector{ArrayRefStruct},
-                     AM::Core.SimpleVector, LPSYM::Core.SimpleVector, LB::Core.SimpleVector, @nospecialize(vargs))
+                     AM::Vector{Any}, LPSYM::Vector{Any}, LB::Core.SimpleVector, @nospecialize(vargs))
     ls = LoopSet(:LoopVectorization)
     num_arrays = length(arf)
     elementbytes = sizeofeltypes(vargs, num_arrays)
@@ -464,18 +464,33 @@ function avx_body(ls::LoopSet, UNROLL::Tuple{Int8,Int8,Int8,Int})
     q
 end
 
-function _avx_loopset_debug(::Type{OPS}, ::Type{ARF}, ::Type{AM}, ::Type{LPSYM}, ::Type{LB}, vargs...) where {OPS, ARF, AM, LPSYM, LB}
+function _avx_loopset_debug(::Val{UNROLL}, ::Val{OPS}, ::Val{ARF}, ::Val{AM}, ::Val{LPSYM}, ::Type{LB}, vargs...) where {UNROLL, OPS, ARF, AM, LPSYM, LB}
     @show OPS ARF AM LPSYM LB vargs
-    _avx_loopset(OPS.parameters, ARF.parameters, AM.parameters, LPSYM.parameters, LB.parameters, typeof.(vargs))
+    inline, u₁, u₂, W = UNROLL
+    ls = _avx_loopset(OPS, ARF, AM, LPSYM, LB.parameters, typeof.(vargs))
+    ls.vector_width[] = W
+    ls
 end
-function _avx_loopset(OPSsv::Core.SimpleVector, ARFsv::Core.SimpleVector, AMsv::Core.SimpleVector, LPSYMsv::Core.SimpleVector, LBsv::Core.SimpleVector, @nospecialize(vargs))
+function tovector(@nospecialize(t))
+    v = Vector{Any}(undef, length(t))
+    for i ∈ eachindex(v)
+        tᵢ = t[i]
+        if tᵢ isa Tuple # reduce specialization?
+            v[i] = tovector(tᵢ)
+        else
+            v[i] = tᵢ
+        end
+    end
+    v
+end
+function _avx_loopset(@nospecialize(OPSsv), @nospecialize(ARFsv), @nospecialize(AMsv), @nospecialize(LPSYMsv), LBsv::Core.SimpleVector, @nospecialize(vargs))
     nops = length(OPSsv) ÷ 3
     instr = Instruction[Instruction(OPSsv[3i+1], OPSsv[3i+2]) for i ∈ 0:nops-1]
     ops = OperationStruct[ OPSsv[3i] for i ∈ 1:nops ]
     avx_loopset(
         instr, ops,
         ArrayRefStruct[ARFsv...],
-        AMsv, LPSYMsv, LBsv, vargs
+        tovector(AMsv), tovector(LPSYMsv), LBsv, vargs
     )
 end
 """
@@ -497,9 +512,9 @@ Execute an `@avx` block. The block's code is represented via the arguments:
   `StaticLowerUnitRange(1)` because the lower bound of the iterator can be determined to be 1.
 - `vargs...` holds the encoded pointers of all the arrays (see `VectorizationBase`'s various pointer types).
 """
-@generated function _avx_!(::Val{UNROLL}, ::Type{OPS}, ::Type{ARF}, ::Type{AM}, ::Type{LPSYM}, lb::LB, vargs...) where {UNROLL, OPS, ARF, AM, LPSYM, LB}
+@generated function _avx_!(::Val{UNROLL}, ::Val{OPS}, ::Val{ARF}, ::Val{AM}, ::Val{LPSYM}, lb::LB, vargs::Tuple{Vararg{Any,K}}) where {UNROLL, OPS, ARF, AM, LPSYM, LB, K}
     # 1 + 1 # Irrelevant line you can comment out/in to force recompilation...
-    ls = _avx_loopset(OPS.parameters, ARF.parameters, AM.parameters, LPSYM.parameters, LB.parameters, vargs)
+    ls = _avx_loopset(OPS, ARF, AM, LPSYM, LB.parameters, vargs.parameters)
     # return @show avx_body(ls, UNROLL)
     # @show UNROLL, OPS, ARF, AM, LPSYM, LB
     avx_body(ls, UNROLL)
