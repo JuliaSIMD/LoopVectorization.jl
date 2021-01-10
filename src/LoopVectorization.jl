@@ -10,19 +10,14 @@ using VectorizationBase: REGISTER_SIZE, REGISTER_COUNT, data,
     maybestaticlength, maybestaticsize, staticm1, staticp1, staticmul, vzero,
     Zero, maybestaticrange, offsetprecalc, lazymul,
     maybestaticfirst, maybestaticlast, scalar_less, scalar_greaterequal, gep, gesp, pointerforcomparison, NativeTypes,
-    vfmadd, vfmsub, vfnmadd, vfnmsub, vfmadd231, vfmsub231, vfnmadd231, vfnmsub231, vadd, vsub, vmul,
+    vfmadd, vfmsub, vfnmadd, vfnmsub, vfmadd_fast, vfmsub_fast, vfnmadd_fast, vfnmsub_fast, vfmadd231, vfmsub231, vfnmadd231, vfnmsub231,
+    vfma_fast, vmuladd_fast, vdiv_fast, vadd_fast, vsub_fast, vmul_fast,
     relu, stridedpointer, StridedPointer, StridedBitPointer, AbstractStridedPointer,
     reduced_add, reduced_prod, reduce_to_add, reduce_to_prod, reduced_max, reduced_min, reduce_to_max, reduce_to_min,
     vsum, vprod, vmaximum, vminimum, vstorent!
 
 using IfElse: ifelse
 
-# missing: stridedpointer_for_broadcast, noalias!, gepbyte,
-# using SIMDPirates: VECTOR_SYMBOLS, evadd, evsub, evmul, evfdiv, vrange,
-#     reduced_add, reduced_prod, reduce_to_add, reduced_max, reduced_min, vsum, vprod, vmaximum, vminimum,
-#     sizeequivalentfloat, sizeequivalentint, vadd!, vsub!, vmul!, vfdiv!, vfmadd!, vfnmadd!, vfmsub!, vfnmsub!,
-#     vfmadd231, vfmsub231, vfnmadd231, vfnmsub231, sizeequivalentfloat, sizeequivalentint, #prefetch,
-#     vmullog2, vmullog10, vdivlog2, vdivlog10, vmullog2add!, vmullog10add!, vdivlog2add!, vdivlog10add!, vfmaddaddone, vadd1, relu
 using SLEEFPirates: pow
 using Base.Broadcast: Broadcasted, DefaultArrayStyle
 using LinearAlgebra: Adjoint, Transpose
@@ -30,7 +25,8 @@ using Base.Meta: isexpr
 using DocStringExtensions
 import LinearAlgebra # for check_args
 
-using Base.FastMath: add_fast, sub_fast, mul_fast, div_fast
+using Base.FastMath: add_fast, sub_fast, mul_fast, div_fast, inv_fast, abs2_fast, rem_fast, max_fast, min_fast
+
 
 using ArrayInterface
 using ArrayInterface: OptionallyStaticUnitRange, Zero, One#, static_length

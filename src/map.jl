@@ -10,13 +10,13 @@ function alignstores!(
     args::Vararg{DenseNativeArray,A}
 ) where {F, T <: Base.HWReal, A}
     N = length(y)
-    ptry = VectorizationBase.zero_offsets(stridedpointer(y))
-    ptrargs = VectorizationBase.zero_offsets.(stridedpointer.(args))
+    ptry = VectorizationBase.zstridedpointer(y)
+    ptrargs = VectorizationBase.zstridedpointer.(args)
     V = VectorizationBase.pick_vector_width_val(T)
     W = unwrap(V)
     zero_index = MM{W}(Static(0))
     uintptry = reinterpret(UInt, pointer(ptry))
-    @assert iszero(uintptry & (sizeof(T) - 1)) "The destination vector (`dest`) must be aligned at least to `sizeof(eltype(dest))`."
+    @assert iszero(uintptry & (sizeof(T) - 1)) "The destination vector (`dest`) must be aligned to `sizeof(eltype(dest)) == $(sizeof(T))` bytes."
     alignment = uintptry & (VectorizationBase.REGISTER_SIZE - 1)
     if alignment > 0
         i = reinterpret(Int, W - (alignment >>> VectorizationBase.intlog2(sizeof(T))))
@@ -40,8 +40,8 @@ function vmap_singlethread!(
         ptry, ptrargs, N = alignstores!(f, y, args...)
     else
         N = length(y)
-        ptry = VectorizationBase.zero_offsets(stridedpointer(y))
-        ptrargs = VectorizationBase.zero_offsets.(stridedpointer.(args))
+        ptry = VectorizationBase.zstridedpointer(y)
+        ptrargs = VectorizationBase.zstridedpointer.(args)
     end
     i = 0
     V = VectorizationBase.pick_vector_width_val(T)
@@ -60,7 +60,7 @@ function vmap_singlethread!(
         else
             vnoaliasstore!(ptry, v, index)
         end
-        i = vadd(i, 4W)
+        i = vadd_fast(i, 4W)
     end
     while i < N - (W - 1) # stops at 16 when
         vᵣ = f(vload.(ptrargs, ((MM{W}(i),),))...)
@@ -69,7 +69,7 @@ function vmap_singlethread!(
         else
             vnoaliasstore!(ptry, vᵣ, (MM{W}(i),))
         end
-        i = vadd(i, W)
+        i = vadd_fast(i, W)
     end
     if i < N
         m = mask(T, N & (W - 1))
@@ -90,14 +90,14 @@ function vmap_multithreaded!(
     V = VectorizationBase.pick_vector_width_val(T)
     Wsh = Wshift + 2
     Niter = N >>> Wsh
-    Base.Threads.@threads for j ∈ 0:Niter-1
+    Base.Threads.@threads :static for j ∈ 0:Niter-1
         index = VectorizationBase.Unroll{1,1,4,1,W,0x0000000000000000}((j << Wsh,))
         vstorent!(ptry, f(vload.(ptrargs, index)...), index)
     end
     ii = Niter << Wsh
     while ii < N - (W - 1) # stops at 16 when
         vstorent!(ptry, f(vload.(ptrargs, ((MM{W}(ii),),))...), (MM{W}(ii),))
-        ii = vadd(ii, W)
+        ii = vadd_fast(ii, W)
     end
     if ii < N
         m = mask(T, N & (W - 1))
@@ -112,21 +112,21 @@ function vmap_multithreaded!(
     args::Vararg{DenseNativeArray,A}
 ) where {F,T,A}
     N = length(y)
-    ptry = VectorizationBase.zero_offsets(stridedpointer(y))
-    ptrargs = VectorizationBase.zero_offsets.(stridedpointer.(args))
+    ptry = VectorizationBase.zstridedpointer(y)
+    ptrargs = VectorizationBase.zstridedpointer.(args)
     N > 0 || return y
     W, Wshift = VectorizationBase.pick_vector_width_shift(T)
     V = VectorizationBase.pick_vector_width_val(T)
     Wsh = Wshift + 2
     Niter = N >>> Wsh
-    Base.Threads.@threads for j ∈ 0:Niter-1
+    Base.Threads.@threads :static for j ∈ 0:Niter-1
         index = VectorizationBase.Unroll{1,1,4,1,W,0x0000000000000000}((j << Wsh,))
         vnoaliasstore!(ptry, f(vload.(ptrargs, index)...), index)
     end
     ii = Niter << Wsh
     while ii < N - (W - 1) # stops at 16 when
         vnoaliasstore!(ptry, f(vload.(ptrargs, ((MM{W}(ii),),))...), (MM{W}(ii),))
-        ii = vadd(ii, W)
+        ii = vadd_fast(ii, W)
     end
     if ii < N
         m = mask(T, N & (W - 1))

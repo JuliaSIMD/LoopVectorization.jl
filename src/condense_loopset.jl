@@ -241,10 +241,11 @@ function generate_call(ls::LoopSet, inline_unroll::NTuple{3,Int8}, debug::Bool =
     lbarg = debug ? Expr(:call, :typeof, loop_bounds) : loop_bounds
     q = Expr(
         :call, func, val(Expr(:tuple, inline, u₁, u₂, Expr(:call, lv(:unwrap), VECTORWIDTHSYMBOL))),
-        val(operation_descriptions), val(arrayref_descriptions), val(argmeta), val(loop_syms), lbarg
+        val(operation_descriptions), val(arrayref_descriptions), val(argmeta), val(loop_syms)
     )
     # debug && deleteat!(q.args, 2)
-    vargs_as_tuple = !debug
+    vargs_as_tuple = true#!debug
+    vargs_as_tuple || push!(q.args, lbarg)
     extra_args = vargs_as_tuple ? Expr(:tuple) : q
     foreach(ref -> push!(extra_args.args, vptr(ref)), ls.refs_aliasing_syms)
 
@@ -253,7 +254,7 @@ function generate_call(ls::LoopSet, inline_unroll::NTuple{3,Int8}, debug::Bool =
     add_reassigned_syms!(extra_args, ls)
     add_external_functions!(extra_args, ls)
     # debug && return q
-    vargs_as_tuple && push!(q.args, extra_args)
+    vargs_as_tuple && push!(q.args, Expr(:tuple, lbarg, extra_args))
     vecwidthdefq = Expr(:block)
     define_eltype_vec_width!(vecwidthdefq, ls, nothing)
     Expr(:block, vecwidthdefq, q)
@@ -305,8 +306,7 @@ make_crashy(q) = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,
 
 function setup_call_inline(ls::LoopSet, inline::Int8 = zero(Int8), U::Int8 = zero(Int8), T::Int8 = zero(Int8))
     call = generate_call(ls, (inline,U,T))
-    noouterreductions = iszero(length(ls.outer_reductions))
-    if noouterreductions
+    if iszero(length(ls.outer_reductions))
         q = Expr(:block,gc_preserve(ls, call))
         append!(ls.preamble.args, q.args)
         return ls.preamble

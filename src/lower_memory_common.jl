@@ -34,9 +34,9 @@ function addoffset!(ret::Expr, ex, offset::Integer, _mm::Bool = false)
             return
         end
     elseif _mm
-        ind = _MMind(Expr(:call, lv(:vadd), ex, staticexpr(offset)))
+        ind = _MMind(Expr(:call, lv(:vadd_fast), ex, staticexpr(offset)))
     else
-        ind = Expr(:call, lv(:vadd), ex, staticexpr(offset))
+        ind = Expr(:call, lv(:vadd_fast), ex, staticexpr(offset))
     end
     push!(ret.args, ind)
     nothing
@@ -81,9 +81,9 @@ end
 function add_vectorized_offset!(ret::Expr, ind, offset, incr)
     if isone(incr)
         if iszero(offset)
-            push!(ret.args, _MMind(Expr(:call, lv(:vadd), VECTORWIDTHSYMBOL, maybestatic(ind))))
+            push!(ret.args, _MMind(Expr(:call, lv(:vadd_fast), VECTORWIDTHSYMBOL, maybestatic(ind))))
         else
-            push!(ret.args, _MMind(Expr(:call, lv(:vadd), ind, Expr(:call, lv(:vadd), VECTORWIDTHSYMBOL, staticexpr(offset)))))
+            push!(ret.args, _MMind(Expr(:call, lv(:vadd_fast), ind, Expr(:call, lv(:vadd_fast), VECTORWIDTHSYMBOL, staticexpr(offset)))))
         end
     elseif iszero(incr)
         if iszero(offset)
@@ -92,9 +92,9 @@ function add_vectorized_offset!(ret::Expr, ind, offset, incr)
             addoffset!(ret, ind, offset, true)
         end
     elseif iszero(offset)
-        push!(ret.args, _MMind(Expr(:call, lv(:vadd), Expr(:call, lv(:vmul), VECTORWIDTHSYMBOL, maybestatic(incr)), maybestatic(ind))))
+        push!(ret.args, _MMind(Expr(:call, lv(:vadd_fast), Expr(:call, lv(:vmul_fast), VECTORWIDTHSYMBOL, maybestatic(incr)), maybestatic(ind))))
     else
-        push!(ret.args, _MMind(Expr(:call, lv(:vadd), ind, Expr(:call, lv(:vadd), Expr(:call, lv(:vmul), VECTORWIDTHSYMBOL, maybestatic(incr)), staticexpr(offset)))))
+        push!(ret.args, _MMind(Expr(:call, lv(:vadd_fast), ind, Expr(:call, lv(:vadd_fast), Expr(:call, lv(:vmul_fast), VECTORWIDTHSYMBOL, maybestatic(incr)), staticexpr(offset)))))
     end
 end
 function add_vectorized_offset_unrolled!(ret::Expr, offset, incr)
@@ -102,7 +102,7 @@ function add_vectorized_offset_unrolled!(ret::Expr, offset, incr)
         if iszero(offset)
             push!(ret.args, _MMind(Expr(:call, lv(:Static), VECTORWIDTHSYMBOL)))
         else
-            push!(ret.args, _MMind(Expr(:call, lv(:vadd), VECTORWIDTHSYMBOL, staticexpr(offset))))
+            push!(ret.args, _MMind(Expr(:call, lv(:vadd_fast), VECTORWIDTHSYMBOL, staticexpr(offset))))
         end
     elseif iszero(incr)
         if iszero(offset)
@@ -113,7 +113,7 @@ function add_vectorized_offset_unrolled!(ret::Expr, offset, incr)
     elseif iszero(offset)
         push!(ret.args, _MMind(Expr(:call, lv(:*), VECTORWIDTHSYMBOL, maybestatic(incr))))
     else
-        push!(ret.args, _MMind(Expr(:call, lv(:vadd), Expr(:call, lv(:vmul), VECTORWIDTHSYMBOL, maybestatic(incr)), staticexpr(offset))))
+        push!(ret.args, _MMind(Expr(:call, lv(:vadd_fast), Expr(:call, lv(:vmul_fast), VECTORWIDTHSYMBOL, maybestatic(incr)), staticexpr(offset))))
     end
 end
 function add_vectorized_offset!(ret::Expr, ind, offset, incr, unrolled)

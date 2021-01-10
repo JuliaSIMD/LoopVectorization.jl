@@ -13,7 +13,7 @@ const CACHELINE_SIZE = something(VectorizationBase.L₁CACHE.linesize, 64)
 #     for opp ∈ parents(op)
 #         newapp += indexappearences(opp, s)
 #     end
-#     factor = instruction(op).instr ∈ (:+, :vadd, :add_fast, :evadd) ? 1 : 10
+#     factor = instruction(op).instr ∈ (:+, :vadd, :add_fast, :vadd_fast) ? 1 : 10
 #     newapp * factor
 # end
 function check_linear_parents(ls::LoopSet, op::Operation, s::Symbol)
@@ -82,7 +82,7 @@ function cost(ls::LoopSet, op::Operation, vectorized::Symbol, Wshift::Int, size_
     instr = instruction(op)
     # instr = instruction(op)
     if length(parents(op)) == 1
-        if instr == Instruction(:-) || instr === Instruction(:vsub) || instr == Instruction(:+) || instr == Instruction(:vadd)
+        if instr == Instruction(:-) || instr === Instruction(:sub_fast) || instr == Instruction(:+) || instr == Instruction(:add_fast)
             return 0.0, 0, 0.0
         end
     elseif iscompute(op) && all(opp -> (isloopvalue(opp) | isconstant(opp)), parents(op))

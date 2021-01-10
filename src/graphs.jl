@@ -82,18 +82,18 @@ function startloop(loop::Loop, itersymbol)
         Expr(:(=), itersymbol, Expr(:call, lv(:staticm1), Expr(:call, lv(:unwrap), loop.startsym)))
     end
 end
-addexpr(ex, incr) = Expr(:call, lv(:vadd), ex, incr)
+addexpr(ex, incr) = Expr(:call, lv(:vadd_fast), ex, incr)
 function addexpr(ex, incr::Number)
     if iszero(incr)
         incr
     elseif incr > 0
-        Expr(:call, lv(:vadd), ex, incr)
+        Expr(:call, lv(:vadd_fast), ex, incr)
     else
-        Expr(:call, lv(:vsub), ex, -incr)
+        Expr(:call, lv(:vsub_fast), ex, -incr)
     end
 end
 addexpr(ex::Number, incr::Number) = ex + incr
-subexpr(ex, incr) = Expr(:call, lv(:vsub), ex, incr)
+subexpr(ex, incr) = Expr(:call, lv(:vsub_fast), ex, incr)
 subexpr(ex::Number, incr::Number) = ex - incr
 subexpr(ex, incr::Number) = addexpr(ex,  -incr)
 
@@ -110,15 +110,15 @@ function vec_looprange(loopmax, UF::Int, mangledname, W)
     if isone(UF)
         compexpr = subexpr(loopmax, W)
     else
-        compexpr = subexpr(loopmax, Expr(:call, lv(:vmul), W, UF))
+        compexpr = subexpr(loopmax, Expr(:call, lv(:vmul_fast), W, UF))
     end
     Expr(:call, :≤, mangledname, compexpr)
 end
 # function vec_looprange(loopmax, UF::Int, mangledname, W)
 #     incr = if isone(UF)
-#         Expr(:call, lv(:vsub), W, staticexpr(1))
+#         Expr(:call, lv(:vsub_fast), W, staticexpr(1))
 #     else
-#         Expr(:call, lv(:vsub), Expr(:call, lv(:vmul), W, UF), staticexpr(1))
+#         Expr(:call, lv(:vsub_fast), Expr(:call, lv(:vmul_fast), W, UF), staticexpr(1))
 #     end
 #     compexpr = subexpr(loopmax, incr)
 #     Expr(:call, :<, mangledname, compexpr)
@@ -152,12 +152,12 @@ end
 function incrementloopcounter(us::UnrollSpecification, n::Int, mangledname::Symbol, UF::Int = unrollfactor(us, n))
     if isvectorized(us, n)
         if isone(UF)
-            Expr(:(=), mangledname, Expr(:call, lv(:vadd), VECTORWIDTHSYMBOL, mangledname))
+            Expr(:(=), mangledname, Expr(:call, lv(:vadd_fast), VECTORWIDTHSYMBOL, mangledname))
         else
-            Expr(:(=), mangledname, Expr(:call, lv(:vadd), Expr(:call, lv(:vmul), VECTORWIDTHSYMBOL, staticexpr(UF)), mangledname))
+            Expr(:(=), mangledname, Expr(:call, lv(:vadd_fast), Expr(:call, lv(:vmul_fast), VECTORWIDTHSYMBOL, staticexpr(UF)), mangledname))
         end
     else
-        Expr(:(=), mangledname, Expr(:call, lv(:vadd), mangledname, UF))
+        Expr(:(=), mangledname, Expr(:call, lv(:vadd_fast), mangledname, UF))
     end
 end
 function incrementloopcounter!(q, us::UnrollSpecification, n::Int, UF::Int = unrollfactor(us, n))
@@ -165,7 +165,7 @@ function incrementloopcounter!(q, us::UnrollSpecification, n::Int, UF::Int = unr
         if isone(UF)
             push!(q.args, Expr(:call, lv(:Static), VECTORWIDTHSYMBOL))
         else
-            push!(q.args, Expr(:call, lv(:vmul), VECTORWIDTHSYMBOL, Expr(:call, Expr(:curly, lv(:Static), UF))))
+            push!(q.args, Expr(:call, lv(:vmul_fast), VECTORWIDTHSYMBOL, Expr(:call, Expr(:curly, lv(:Static), UF))))
         end
     else
         push!(q.args, staticexpr(UF))
@@ -176,16 +176,16 @@ end
 #         if loop.startexact
 #             return length(loop)
 #         # elseif loop.rangename === Symbol("")
-#             # return Expr(:call, lv(:vsub), loop.stophint + 1, loop.startsym)
+#             # return Expr(:call, lv(:vsub_fast), loop.stophint + 1, loop.startsym)
 #         end
 #     elseif loop.startexact
 #         if isone(loop.starthint)
 #             return loop.stopsym
 #         # elseif loop.rangename === Symbol("")
-#             # return Expr(:call, lv(:vsub), loop.stopsym, loop.starthint - 1)
+#             # return Expr(:call, lv(:vsub_fast), loop.stopsym, loop.starthint - 1)
 #         end
 #     # elseif loop.rangename === Symbol("")
-#         # return Expr(:call, lv(:vsub), loop.stopsym, Expr(:call, lv(:staticm1), loop.startsym))
+#         # return Expr(:call, lv(:vsub_fast), loop.stopsym, Expr(:call, lv(:staticm1), loop.startsym))
 #     end
 #     Expr(:call, lv(:static_length), loop.rangename)
 # end

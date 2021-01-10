@@ -3,9 +3,17 @@ on:
   pull_request:
     branches:
       - master
+    paths-ignore:
+      - 'LICENSE.md'
+      - 'README.md'
+      - '.github/workflows/TagBot.yml'
   push:
     branches:
       - master
+    paths-ignore:
+      - 'LICENSE.md'
+      - 'README.md'
+      - '.github/workflows/TagBot.yml'
     tags: '*'
 jobs:
   test:

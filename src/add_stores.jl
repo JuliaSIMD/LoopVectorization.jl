@@ -71,12 +71,10 @@ function add_store_ref!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int)
     add_store!(ls, var, array, raw_indices, elementbytes)
 end
 function add_store_ref!(ls::LoopSet, var, ex::Expr, elementbytes::Int)
-    # array, raw_indices = ref_from_ref(ex)
-    # mpref = array_reference_meta!(ls, array, raw_indices, elementbytes)
-    # c = add_constant!(ls, var, loopdependencies(mpref), gensym(:storeconst), elementbytes)
-    # add_store!(ls, name(c), mpref, elementbytes)
-    c = add_constant!(ls, var, elementbytes)
-    add_store_ref!(ls, name(c), ex, elementbytes)
+    array, raw_indices = ref_from_ref!(ls, ex)
+    mpref = array_reference_meta!(ls, array, raw_indices, elementbytes)
+    c = add_constant!(ls, var, loopdependencies(mpref), gensym(:storeconst), elementbytes)
+    add_store!(ls, mpref, elementbytes, c)
 end
 
 # For now, it is illegal to load from a conditional store.

@@ -106,7 +106,7 @@ function lower_block(
                     # if t == 0
                     #     push!(blockq.args, Expr(:(=), u₂loop, tiledsym(u₂loop)))
                     # elseif u₂loopnum == vectorizedloopnum
-                    #     push!(blockq.args, Expr(:(=), u₂loop, Expr(:call, lv(:vadd), VECTORWIDTHSYMBOL, staticexpr(u₂loop))))
+                    #     push!(blockq.args, Expr(:(=), u₂loop, Expr(:call, lv(:vadd_fast), VECTORWIDTHSYMBOL, staticexpr(u₂loop))))
                     # else
                     #     push!(blockq.args, Expr(:+=, u₂loop, 1))
                     # end
@@ -148,7 +148,7 @@ function lower_block(
     push!(blockq.args, incrementloopcounter(ls, us, n, UF))
     # else
     #     loopsym = names(ls)[n]
-    #     push!(blockq.args, Expr(:(=), loopsym, Expr(:call, lv(:vadd), loopsym, Symbol("##ALIGNMENT#STEP##"))))
+    #     push!(blockq.args, Expr(:(=), loopsym, Expr(:call, lv(:vadd_fast), loopsym, Symbol("##ALIGNMENT#STEP##"))))
     # end
     blockq
 end
@@ -171,7 +171,7 @@ end
 #         # expectation = expect(Expr(:call, :(>), loop.stophint+5, loop.startsym))
 #         Expr(:(=), loopsym, Expr(:call, :(:), Expr(:call, lv(:staticm1), loop.startsym), loop.stophint - 1))
 #     else
-#         # expectation = expect(Expr(:call, :(>), loop.stopsym, Expr(:call, lv(:vsub), loop.startsym, 5)))
+#         # expectation = expect(Expr(:call, :(>), loop.stopsym, Expr(:call, lv(:vsub_fast), loop.startsym, 5)))
 #         Expr(:(=), loopsym, Expr(:call, :(:), Expr(:call, lv(:staticm1), loop.startsym), Expr(:call, lv(:staticm1), loop.stopsym)))
 #     end
 #     body = lower_block(ls, us, n, false, 1)
@@ -242,13 +242,13 @@ function loopiteratesatleastonce(loop::Loop, as::Bool = true)
     elseif loop.stopexact # requires !loop.startexact
         Expr(:call, :>, loop.stopexact + 1, loop.startsym)
     else
-        Expr(:call, :>, loop.stopsym, Expr(:call, lv(:vsub), loop.startsym, 1))
+        Expr(:call, :>, loop.stopsym, Expr(:call, lv(:vsub_fast), loop.startsym, 1))
     end
     # as ? assume(comp) : expect(comp)
     assume(comp)
 end
 # @inline step_to_align(x, ::Val{W}) where {W} = step_to_align(pointer(x), Val{W}())
-# @inline step_to_align(x::Ptr{T}, ::Val{W}) where {W,T} = vsub(W, reinterpret(Int, x) & (W - 1))
+# @inline step_to_align(x::Ptr{T}, ::Val{W}) where {W,T} = vsub_fast(W, reinterpret(Int, x) & (W - 1))
 # function align_inner_loop_expr(ls::LoopSet, us::UnrollSpecification, loop::Loop)
 #     alignincr = Symbol("##ALIGNMENT#STEP##")
 #     looplength = gensym(:inner_loop_length)
@@ -513,9 +513,9 @@ function loopvarremcomparison(loop::Loop, UFt::Int, nisvectorized::Bool, remfirs
     loopsym = loop.itersymbol
     if nisvectorized
         itercount = if loop.stopexact
-            Expr(:call, lv(:vsub), loop.stophint - 1, Expr(:call, lv(:vmul), VECTORWIDTHSYMBOL, UFt))
+            Expr(:call, lv(:vsub_fast), loop.stophint - 1, Expr(:call, lv(:vmul_fast), VECTORWIDTHSYMBOL, UFt))
         else
-            Expr(:call, lv(:vsub), loop.stopsym, Expr(:call, lv(:vadd), Expr(:call, lv(:vmul), VECTORWIDTHSYMBOL, UFt), staticexpr(1)))
+            Expr(:call, lv(:vsub_fast), loop.stopsym, Expr(:call, lv(:vadd_fast), Expr(:call, lv(:vmul_fast), VECTORWIDTHSYMBOL, UFt), staticexpr(1)))
         end
         Expr(:call, :>, loopsym, itercount)
     elseif remfirst
@@ -523,7 +523,7 @@ function loopvarremcomparison(loop::Loop, UFt::Int, nisvectorized::Bool, remfirs
     elseif loop.stopexact
         Expr(:call, :>, loopsym, loop.stophint - UFt - 1)
     else
-        Expr(:call, :>, loopsym, Expr(:call, lv(:vsub), loop.stopsym, UFt + 1))
+        Expr(:call, :>, loopsym, Expr(:call, lv(:vsub_fast), loop.stopsym, UFt + 1))
     end
 end
 function pointerremcomparison(ls::LoopSet, termind::Int, UFt::Int, n::Int, nisvectorized::Bool, remfirst::Bool, loop::Loop)
@@ -575,12 +575,12 @@ function add_upper_comp_check(unrolledloop, loopbuffer)
         if isone(unrolledloop.starthint)
             Expr(:call, lv(:scalar_greaterequal), unrolledloop.stopsym, loopbuffer)
         else
-            Expr(:call, lv(:scalar_greaterequal), Expr(:call, lv(:vsub), unrolledloop.stopsym, unrolledloop.starthint-1), loopbuffer)
+            Expr(:call, lv(:scalar_greaterequal), Expr(:call, lv(:vsub_fast), unrolledloop.stopsym, unrolledloop.starthint-1), loopbuffer)
         end
     elseif unrolledloop.stopexact
-        Expr(:call, lv(:scalar_greaterequal), Expr(:call, lv(:vsub), unrolledloop.stophint+1, unrolledloop.startsym), loopbuffer)
+        Expr(:call, lv(:scalar_greaterequal), Expr(:call, lv(:vsub_fast), unrolledloop.stophint+1, unrolledloop.startsym), loopbuffer)
     else# both are given by symbols
-        Expr(:call, lv(:scalar_greaterequal), Expr(:call, lv(:vsub), unrolledloop.stopsym, Expr(:call,lv(:vsub),unrolledloop.startsym, staticexpr(1))), loopbuffer)
+        Expr(:call, lv(:scalar_greaterequal), Expr(:call, lv(:vsub_fast), unrolledloop.stopsym, Expr(:call,lv(:vsub_fast),unrolledloop.startsym, staticexpr(1))), loopbuffer)
     end
 end
 function add_upper_outer_reductions(ls::LoopSet, loopq::Expr, Ulow::Int, Uhigh::Int, unrolledloop::Loop, vectorized::Symbol, reductisvectorized::Bool)
@@ -595,7 +595,7 @@ function add_upper_outer_reductions(ls::LoopSet, loopq::Expr, Ulow::Int, Uhigh::
     end
     reduce_range!(ifq, ls, Ulow, _Uhigh)
     ncomparison = if reductisvectorized
-        add_upper_comp_check(unrolledloop, Expr(:call, lv(:vmul), VECTORWIDTHSYMBOL, Uhigh))
+        add_upper_comp_check(unrolledloop, Expr(:call, lv(:vmul_fast), VECTORWIDTHSYMBOL, Uhigh))
     else
         add_upper_comp_check(unrolledloop, Uhigh)
     end
@@ -763,20 +763,20 @@ function definemask(loop::Loop)
         maskexpr(loop.stopsym)
     else
         lexpr = if loop.startexact
-            Expr(:call, lv(:vsub), loop.stopsym, loop.starthint - 1)
+            Expr(:call, lv(:vsub_fast), loop.stopsym, loop.starthint - 1)
         elseif loop.stopexact
-            Expr(:call, lv(:vsub), loop.stophint + 1, loop.startsym)
+            Expr(:call, lv(:vsub_fast), loop.stophint + 1, loop.startsym)
         else
-            Expr(:call, lv(:vsub), Expr(:call, lv(:vadd), loop.stopsym, 1), loop.startsym)
+            Expr(:call, lv(:vsub_fast), Expr(:call, lv(:vadd_fast), loop.stopsym, 1), loop.startsym)
         end
         maskexpr(lexpr)
     end
 end
 # function definemask_for_alignment_cleanup(loop::Loop)
 #     lexpr = if loop.stopexact
-#         Expr(:call, lv(:vsub), loop.stophint + 1, loop.itersym)
+#         Expr(:call, lv(:vsub_fast), loop.stophint + 1, loop.itersym)
 #     else
-#         Expr(:call, lv(:vsub), Expr(:call, lv(:vadd), loop.stopsym, 1), loop.itersymbol)
+#         Expr(:call, lv(:vsub_fast), Expr(:call, lv(:vadd_fast), loop.stopsym, 1), loop.itersymbol)
 #     end
 #     maskexpr(lexpr)
 # end

@@ -239,9 +239,9 @@ function pointermax_index(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int,
                 push!(index.args, stophint)
             elseif isvectorized
                 if isone(sub)
-                    push!(index.args, Expr(:call, lv(:vsub), staticexpr(stophint), VECTORWIDTHSYMBOL))
+                    push!(index.args, Expr(:call, lv(:vsub_fast), staticexpr(stophint), VECTORWIDTHSYMBOL))
                 else
-                    push!(index.args, Expr(:call, lv(:vsub), staticexpr(stophint), Expr(:call, lv(:vmul), VECTORWIDTHSYMBOL, staticexpr(sub))))
+                    push!(index.args, Expr(:call, lv(:vsub_fast), staticexpr(stophint), Expr(:call, lv(:vmul_fast), VECTORWIDTHSYMBOL, staticexpr(sub))))
                 end
             else
                 push!(index.args, staticexpr(stophint - sub))
@@ -264,12 +264,12 @@ function pointermax_index(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int,
                 push!(index.args, stopsym)
             elseif isvectorized
                 if isone(sub)
-                    push!(index.args, Expr(:call, lv(:vsub), stopsym, VECTORWIDTHSYMBOL))
+                    push!(index.args, Expr(:call, lv(:vsub_fast), stopsym, VECTORWIDTHSYMBOL))
                 else
-                    push!(index.args, Expr(:call, lv(:vsub), stopsym, Expr(:call, lv(:vmul), VECTORWIDTHSYMBOL, sub)))
+                    push!(index.args, Expr(:call, lv(:vsub_fast), stopsym, Expr(:call, lv(:vmul_fast), VECTORWIDTHSYMBOL, sub)))
                 end
             else
-                push!(index.args, Expr(:call, lv(:vsub), stopsym, sub))
+                push!(index.args, Expr(:call, lv(:vsub_fast), stopsym, sub))
             end
         else
             push!(index.args, Expr(:call, lv(:Zero)))
@@ -298,7 +298,7 @@ function offsetindex(dim::Int, ind::Int, scale::Int, isvectorized::Bool)
             if isone(scale)
                 push!(index.args, VECTORWIDTHSYMBOL)
             else
-                push!(index.args, Expr(:call, lv(:vmul), VECTORWIDTHSYMBOL, staticexpr(scale)))
+                push!(index.args, Expr(:call, lv(:vmul_fast), VECTORWIDTHSYMBOL, staticexpr(scale)))
             end
         else
             push!(index.args, staticexpr(scale))

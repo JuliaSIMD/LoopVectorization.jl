@@ -17,10 +17,10 @@ VectorizationBase = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
 ArrayInterface = "2.14.12"
 DocStringExtensions = "0.8"
 IfElse = "0.1"
-OffsetArrays = "1.4.1"
-SLEEFPirates = "0.6.3"
+OffsetArrays = "1.4.1, 1.5"
+SLEEFPirates = "0.6.4"
 UnPack = "1"
-VectorizationBase = "0.14.11"
+VectorizationBase = "0.15"
 julia = "1.5"
 
 [extras]

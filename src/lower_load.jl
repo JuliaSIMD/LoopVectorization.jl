@@ -138,7 +138,7 @@ function add_prefetches!(q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, pr
             if isone(u)
                 inds.args[i] = Expr(:call, lv(:unwrap), VECTORWIDTHSYMBOL)
             else
-                inds.args[i] = Expr(:call, lv(:vmul), VECTORWIDTHSYMBOL, u)
+                inds.args[i] = Expr(:call, lv(:vmul_fast), VECTORWIDTHSYMBOL, u)
             end
         else
             inds.args[i] = Expr(:call, Expr(:curly, lv(:Static), u))
