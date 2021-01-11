@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Array Interface · LoopVectorization.jl</title><link href="https://fonts.googleapis.com/css?family=Lato|Roboto+Mono" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.0/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.0/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.0/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.11.1/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit">LoopVectorization.jl</span></div><form class="docs-search" action="../../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../getting_started/">Getting Started</a></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../matrix_multiplication/">Matrix Multiplication</a></li><li class="is-active"><a class="tocitem" href>Array Interface</a></li><li><a class="tocitem" href="../matrix_vector_ops/">Matrix-Vector Operations</a></li><li><a class="tocitem" href="../dot_product/">Dot Products</a></li><li><a class="tocitem" href="../special_functions/">Special Functions</a></li><li><a class="tocitem" href="../sum_of_squared_error/">Sum of squared error</a></li><li><a class="tocitem" href="../filtering/">Image Filtering</a></li></ul></li><li><a class="tocitem" href="../../vectorized_convenience_functions/">Vectorized Convenience Functions</a></li><li><a class="tocitem" href="../../future_work/">Future Work</a></li><li><a class="tocitem" href="../../api/">API reference</a></li><li><span class="tocitem">Developer Documentation</span><ul><li><a class="tocitem" href="../../devdocs/overview/">Developer Overview</a></li><li><a class="tocitem" href="../../devdocs/loopset_structure/">LoopSet Structure</a></li><li><a class="tocitem" href="../../devdocs/constructing_loopsets/">Constructing LoopSets</a></li><li><a class="tocitem" href="../../devdocs/evaluating_loops/">Determining the strategy for evaluating loops</a></li><li><a class="tocitem" href="../../devdocs/lowering/">Lowering</a></li><li><a class="tocitem" href="../../devdocs/reference/">Internals reference</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>Array Interface</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Array Interface</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/chriselrod/LoopVectorization.jl/blob/master/docs/src/examples/array_interface.md" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="Array-Interface"><a class="docs-heading-anchor" href="#Array-Interface">Array Interface</a><a id="Array-Interface-1"></a><a class="docs-heading-anchor-permalink" href="#Array-Interface" title="Permalink"></a></h1><p>LoopVectorization uses <a href="https://github.com/SciML/ArrayInterface.jl">ArrayInterface.jl</a> to describe the memory layout of arrays. By supporting the interface, <code>LoopVectorization</code> will be able to support compatible <code>AbstractArray</code> types. <a href="https://github.com/JuliaArrays/StaticArrays.jl">StaticArrays.jl</a> and <a href="https://github.com/mateuszbaran/HybridArrays.jl">HybridArrays.jl</a> are two example libraries providing array types supporting the interface.</p><p><code>StaticArrays.SArray</code> itself is not compatible, because <code>LoopVectorization</code> needs access to a pointer. However,<code>StaticArrays.MArray</code>s are compatible. Loops featuring <code>StaticArrays.StaticArray</code> will result in a fall-back loop being executed that wasn&#39;t optimized by <code>LoopVectorization</code>, but instead simply had <code>@inbounds @fastmath</code> applied to the loop. This can often still yield reasonable to good performance, saving you from having to write more than one version of the loop to get good performance and correct behavior just because the array types happen to be different.</p><p>By supporting the interface, using <code>LoopVectorization</code> can simplify implementing many operations like matrix multiply while still getting good performance. For example, instead of <a href="https://github.com/JuliaArrays/StaticArrays.jl/blob/0e431022954f0207eeb2c4f661b9f76936105c8a/src/matrix_multiply.jl#L4">a few hundred lines of code</a> to define matix multiplication in <code>StaticArrays</code>, one could simply write:</p><pre><code class="language-julia">using StaticArrays, LoopVectorization
+
+@inline function AmulB!(C, A, B)
+    @avx for n ∈ axes(C,2), m ∈ axes(C,1)
+        Cmn = zero(eltype(C))
+        for k ∈ axes(B,1)
+            Cmn += A[m,k] * B[k,n]
+        end
+        C[m,n] = Cmn
+    end
+    C
+end
+@inline AmulB(A::MMatrix{M,K,T}, B::MMatrix{K,N,T}) where {M,K,N,T} = AmulB!(MMatrix{M,N,T}(undef), A, B)
+@inline AmulB(A::SMatrix, B::SMatrix) = SMatrix(AmulB(MMatrix(A), MMatrix(B)))</code></pre><p>Through converting back and fourth between <code>SMatrix</code> and <code>MMatrix</code>, we can still use <code>LoopVectorization</code> to implement <code>SMatrix</code> multiplication, and in most cases get better performance than the unrolled methods from the library. Unfortunately, it is still suboptimal because the compiler isn&#39;t able to elide the copying, but the temporaries are all stack-allocated, making the code allocateion free. We can benchmark our simple implementation vs the <code>StaticArrays.SMatrix</code> and <code>StaticArrays.MMatrix</code> methods:</p><pre><code class="language-julia">using BenchmarkTools, LinearAlgebra, DataFrames, VegaLite
+BLAS.set_num_threads(1);
+
+matdims(x::Integer) = (x, x, x)
+matdims(x::NTuple{3}) = x
+matflop(x::Integer) = 2x^3
+matflop(x::NTuple{3}) = 2prod(x)
+
+function runbenches(sr, ::Type{T}, fa = identity, fb = identity) where {T}
+    bench_results = Matrix{Float64}(undef, length(sr), 4);
+    for (i,s) ∈ enumerate(sr)
+        M, K, N = matdims(s)
+        Am = @MMatrix rand(T, M, K)
+        Bm = @MMatrix rand(T, K, N)
+        As = Ref(SMatrix(Am));
+        Bs = Ref(SMatrix(Bm));
+        Css = fa(As[]) * fb(Bs[]);
+        Csl = AmulB(fa(As[]), fb(Bs[]))
+        Cms = similar(Css); mul!(Cms, fa(Am), fb(Bm));
+        Cml = similar(Css); AmulB!(Cml, fa(Am), fb(Bm));
+        @assert Array(Css) ≈ Array(Csl) ≈ Array(Cms) ≈ Array(Cml) # Once upon a time Julia crashed on ≈ for large static arrays
+        bench_results[i,1] = @belapsed $fa($As[]) * $fb($Bs[])
+        bench_results[i,2] = @belapsed AmulB($fa($As[]), $fb($Bs[]))
+        bench_results[i,3] = @belapsed mul!($Cms, $fa($Am), $fb($Bm))
+        bench_results[i,4] = @belapsed AmulB!($Cml, $fa($Am), $fb($Bm))
+        @show s, bench_results[i,:]
+    end
+    gflops = @. 1e-9 * matflop(sr) / bench_results
+    array_type = append!(fill(&quot;Static&quot;, 2length(sr)), fill(&quot;Mutable&quot;, 2length(sr)))
+    sa = fill(&quot;StaticArrays&quot;, length(sr)); lv = fill(&quot;LoopVectorization&quot;, length(sr));
+    matmul_lib = vcat(sa, lv, sa, lv);
+    sizes = reduce(vcat, (sr for _ ∈ 1:4))
+	DataFrame(
+	    Size = sizes, Time = vec(bench_results), GFLOPS = vec(gflops),
+		ArrayType = array_type, MatmulLib = matmul_lib, MulType = array_type .* &#39; &#39; .* matmul_lib
+	)
+end
+
+df = runbenches(1:24, Float64);
+df |&gt; @vlplot(:line, x = :Size, y = :GFLOPS, color = :MulType, height=640,width=960) |&gt; save(&quot;sarraymatmul.svg&quot;)</code></pre><p>This yields: <img src="../../assets/sarraymatmul.png" alt="sarray_benchmarks"/> Our <code>AmulB!</code> for <code>MMatrix</code>es was the fastest at all sizes except <code>2</code>x<code>2</code>, where it lost out to <code>AmulB</code> for <code>SMatrix</code>, which in turn was faster than the hundreds of lines of <code>StaticArray</code>s code at all sizes except <code>3</code>x<code>3</code>,  <code>5</code>x<code>5</code>, and  <code>6</code>x<code>6</code>.</p><p>Additionally, <code>HybridArrays.jl</code> can be used when we have a mix of dynamic and statically sized arrays. Maybe we want to multiply two matrices, where each element is a <code>3</code>x<code>3</code> matrix:</p><pre><code class="language-julia">using HybridArrays, StaticArrays, LoopVectorization, BenchmarkTools
+
+A_static = [@SMatrix(rand(3,3)) for i in 1:32, j in 1:32];
+B_static = [@SMatrix(rand(3,3)) for i in 1:32, j in 1:32];
+C_static = similar(A_static);
+
+A_hybrid = HybridArray{Tuple{StaticArrays.Dynamic(),StaticArrays.Dynamic(),3,3}}(permutedims(reshape(reinterpret(Float64, A_static), (3,3,size(A_static)...)), (3,4,1,2)));
+B_hybrid = HybridArray{Tuple{StaticArrays.Dynamic(),StaticArrays.Dynamic(),3,3}}(permutedims(reshape(reinterpret(Float64, B_static), (3,3,size(B_static)...)), (3,4,1,2)));
+C_hybrid = HybridArray{Tuple{StaticArrays.Dynamic(),StaticArrays.Dynamic(),3,3}}(permutedims(reshape(reinterpret(Float64, C_static), (3,3,size(C_static)...)), (3,4,1,2)));
+
+# C is M x N x I x J
+# A is M x K x I x L
+# B is K x N x L x J
+function bmul!(C, A, B)
+    @avx for n in axes(C,2), m in axes(C,1), j in axes(C,4), i in axes(C,3)
+        Cmnji = zero(eltype(C))
+        for k in axes(B,1), l in axes(B,3)
+            Cmnji += A[m,k,i,l] * B[k,n,l,j]
+        end
+        C[m,n,i,j] = Cmnji
+    end
+end</code></pre><p>This yields</p><pre><code class="language-julia">julia&gt; @benchmark bmul!($C_hybrid, $A_hybrid, $B_hybrid)
+BenchmarkTools.Trial:
+  memory estimate:  0 bytes
+  allocs estimate:  0
+  --------------
+  minimum time:     15.550 μs (0.00% GC)
+  median time:      15.663 μs (0.00% GC)
+  mean time:        15.685 μs (0.00% GC)
+  maximum time:     50.286 μs (0.00% GC)
+  --------------
+  samples:          10000
+  evals/sample:     1
+  
+julia&gt; @benchmark mul!($C_static, $A_static, $B_static)
+BenchmarkTools.Trial:
+  memory estimate:  336 bytes
+  allocs estimate:  6
+  --------------
+  minimum time:     277.736 μs (0.00% GC)
+  median time:      278.035 μs (0.00% GC)
+  mean time:        278.310 μs (0.00% GC)
+  maximum time:     299.259 μs (0.00% GC)
+  --------------
+  samples:          10000
+  evals/sample:     1
+
+julia&gt; all(I -&gt; C_hybrid[Tuple(I)[1],Tuple(I)[2],:,:] ≈ C_static[I], CartesianIndices(C_static))
+true
+
+julia&gt; length(C_hybrid) * size(B_hybrid,1) * size(B_hybrid,3) * 2e-9 / 15.55e-6 # GFLOPS loops + hybrid arrays
+113.79241157556271
+
+julia&gt; length(C_hybrid) * size(B_hybrid,1) * size(B_hybrid,3) * 2e-9 / 277.736e-6 # GFLOPS LinearAlgebra.mul! + StaticArrays
+6.371057407034018</code></pre><p>When using <code>LoopVectorization</code> + <code>HybridArrays</code>, you may often find that you often get the best performance when the leading dimensions are either an even multiple of 8, or relatively large. This will often mean not leading with a small static dimension, which is commonly best practice when not using <code>LoopVectorization</code>.</p><p>If you happen to like tensor operations such as from this last example, you&#39;re also strongly encouraged to check out <a href="https://github.com/mcabbott/Tullio.jl">Tullio.jl</a> which provides index-notation that is both much more convenient and much less error-prone than writing out loops, and uses both <code>LoopVectorization</code> (if you <code>using LoopVectorization</code> before <code>@tullio</code>) as well as multiple threads to maximize performance.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../matrix_multiplication/">« Matrix Multiplication</a><a class="docs-footer-nextpage" href="../matrix_vector_ops/">Matrix-Vector Operations »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Monday 11 January 2021 06:43">Monday 11 January 2021</span>. Using Julia version 1.5.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
