@@ -303,6 +303,7 @@ make_crashy(q) = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,
 
 @inline vecmemaybe(x::NativeTypes) = x
 @inline vecmemaybe(x::VectorizationBase._Vec) = Vec(x)
+@inline vecmemaybe(x::Tuple) = VectorizationBase.VecUnroll(x)
 
 function setup_call_inline(ls::LoopSet, inline::Int8 = zero(Int8), U::Int8 = zero(Int8), T::Int8 = zero(Int8))
     call = generate_call(ls, (inline,U,T))
