@@ -47,33 +47,40 @@ function vmap_singlethread!(
     V = VectorizationBase.pick_vector_width_val(T)
     W = unwrap(V)
     st = VectorizationBase.static_sizeof(T)
-    zero_index = MM{W}(Static(0), st)
-    while i < N - ((W << 2) - 1)
+    UNROLL = 4
+    LOG2UNROLL = 2
+    while i < N - ((W << LOG2UNROLL) - 1)
 
-        # vstore!(stridedpointer(B), VectorizationBase.VecUnroll((v1,v2,v3)), VectorizationBase.Unroll{AU,1,3,AV,W64,zero(UInt)}((i, j, k)))
-        # vload(stridedpointer(B), VectorizationBase.Unroll{1,1,4,1,W,0x0000000000000000}((i,)))
-        
-        index = VectorizationBase.Unroll{1,1,4,1,W,0x0000000000000000}((i,))
+        index = VectorizationBase.Unroll{1,1,UNROLL,1,W,0x0000000000000000}((i,))
         v = f(vload.(ptrargs, index)...)
         if NonTemporal
             vstorent!(ptry, v, index)
         else
             vnoaliasstore!(ptry, v, index)
         end
-        i = vadd_fast(i, 4W)
+        i = vadd_fast(i, StaticInt{UNROLL}() * W)
     end
-    while i < N - (W - 1) # stops at 16 when
-        vᵣ = f(vload.(ptrargs, ((MM{W}(i),),))...)
-        if NonTemporal
-            vstorent!(ptry, vᵣ, (MM{W}(i),))
-        else
-            vnoaliasstore!(ptry, vᵣ, (MM{W}(i),))
+    if Base.libllvm_version ≥ v"11"
+        Nm1 = vsub_fast(N, 1)
+        while i < N # stops at 16 when
+            m = mask(V, i, Nm1)
+            vnoaliasstore!(ptry, f(vload.(ptrargs, ((MM{W}(i),),), m)...), (MM{W}(i,),), m)
+            i = vadd_fast(i, W)
         end
-        i = vadd_fast(i, W)
-    end
-    if i < N
-        m = mask(T, N & (W - 1))
-        vnoaliasstore!(ptry, f(vload.(ptrargs, ((MM{W}(i),),), m)...), (MM{W}(i,),), m)
+    else
+        while i < N - (W - 1) # stops at 16 when
+            vᵣ = f(vload.(ptrargs, ((MM{W}(i),),))...)
+            if NonTemporal
+                vstorent!(ptry, vᵣ, (MM{W}(i),))
+            else
+                vnoaliasstore!(ptry, vᵣ, (MM{W}(i),))
+            end
+            i = vadd_fast(i, W)
+        end
+        if i < N
+            m = mask(T, N & (W - 1))
+            vnoaliasstore!(ptry, f(vload.(ptrargs, ((MM{W}(i),),), m)...), (MM{W}(i,),), m)
+        end
     end
     y
 end

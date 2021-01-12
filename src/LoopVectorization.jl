@@ -32,11 +32,12 @@ using ArrayInterface
 using ArrayInterface: OptionallyStaticUnitRange, Zero, One#, static_length
 const Static = ArrayInterface.StaticInt
 
+using Requires
 
 
 export LowDimArray, stridedpointer,
     @avx, @_avx, *ˡ, _avx_!,
-    vmap, vmap!, vmapt, vmapt!, vmapnt, vmapnt!, vmapntt, vmapntt!,
+    vmap, vmap!, vmapt, vmapt!, vmapnt, vmapnt!, vmapntt, vmapntt!, tanh_fast,
     vfilter, vfilter!, vmapreduce, vreduce
 
 @inline unwrap(::Val{N}) where {N} = N
@@ -44,7 +45,6 @@ export LowDimArray, stridedpointer,
 @inline unwrap(x) = x
 
 const VECTORWIDTHSYMBOL, ELTYPESYMBOL = Symbol("##Wvecwidth##"), Symbol("##Tloopeltype##")
-
 
 include("vectorizationbase_compat/contract_pass.jl")
 include("vectorizationbase_compat/subsetview.jl")
@@ -95,5 +95,9 @@ LoopVectorization
 
 include("precompile.jl")
 _precompile_()
+
+function __init__()
+    @require ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4" include("vmap_grad.jl")
+end
 
 end # module
