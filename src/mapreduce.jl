@@ -14,7 +14,7 @@ vec_vreduce(op, v::Vec{1}) = VectorizationBase.extractelement(v, 0)
     a
 end
 
-function mapreduce_simple(f::F, op::OP, args::Vararg{DenseNativeArray,A}) where {F,OP,A}
+function mapreduce_simple(f::F, op::OP, args::Vararg{AbstractArray,A}) where {F,OP,A}
     ptrargs = ntuple(a -> pointer(args[a]), Val(A))
     N = length(first(args))
     iszero(N) && throw("Length of vector is 0!")
@@ -32,7 +32,10 @@ end
 
 Vectorized version of `mapreduce`. Applies `f` to each element of the arrays `A`, and reduces the result with `op`.
 """
-@inline function vmapreduce(f::F, op::OP, arg1::DenseArray{T}, args::Vararg{DenseArray{T},A}) where {F,OP,T<:NativeTypes,A}
+@inline function vmapreduce(f::F, op::OP, arg1::AbstractArray{T}, args::Vararg{AbstractArray{T},A}) where {F,OP,T<:NativeTypes,A}
+    if !(check_args(args1, args...) && all_dense(arg1, args...))
+        return mapreduce(f, op, arg1, args...)
+    end
     N = length(arg1)
     iszero(A) || @assert all(length.(args) .== N)
     W = VectorizationBase.pick_vector_width(T)
@@ -43,7 +46,7 @@ Vectorized version of `mapreduce`. Applies `f` to each element of the arrays `A`
         _vmapreduce(f, op, V, N, T, arg1, args...)
     end
 end
-@inline function _vmapreduce(f::F, op::OP, ::StaticInt{W}, N, ::Type{T}, args::Vararg{DenseArray{<:NativeTypes},A}) where {F,OP,A,W,T}
+@inline function _vmapreduce(f::F, op::OP, ::StaticInt{W}, N, ::Type{T}, args::Vararg{AbstractArray{<:NativeTypes},A}) where {F,OP,A,W,T}
     ptrargs = VectorizationBase.zero_offsets.(stridedpointer.(args))
     if N ≥ 4W
         index = VectorizationBase.Unroll{1,1,4,1,W,0x0000000000000000}((Zero(),)); i = 4W
@@ -79,6 +82,9 @@ Vectorized version of `reduce`. Reduces the array `A` using the operator `op`.
 
 for (op, init) in zip((:+, :max, :min), (:zero, :typemin, :typemax))
     @eval @inline function vreduce(::typeof($op), arg; dims = nothing)
+        if !(check_args(arg) && all_dense(arg))
+            return reduce($op, arg, dims = dims)
+        end
         isnothing(dims) && return _vreduce($op, arg)
         isone(ndims(arg)) && return [_vreduce($op, arg)]
         @assert length(dims) == 1
