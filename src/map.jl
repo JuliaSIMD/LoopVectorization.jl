@@ -1,13 +1,11 @@
 
-const DenseNativeArray = DenseArray{<:NativeTypes}
-
 """
 `vstorent!` (non-temporal store) requires data to be aligned.
 `alignstores!` will align `y` in preparation for the non-temporal maps.
 """
 function alignstores!(
-    f::F, y::DenseArray{T},
-    args::Vararg{DenseNativeArray,A}
+    f::F, y::AbstractArray{T},
+    args::Vararg{AbstractArray,A}
 ) where {F, T <: Base.HWReal, A}
     N = length(y)
     ptry = VectorizationBase.zstridedpointer(y)
@@ -32,9 +30,9 @@ function alignstores!(
 end
 
 function vmap_singlethread!(
-    f::F, y::DenseArray{T},
+    f::F, y::AbstractArray{T},
     ::Val{NonTemporal},
-    args::Vararg{DenseNativeArray,A}
+    args::Vararg{AbstractArray,A}
 ) where {F,T <: Base.HWReal, A, NonTemporal}
     if NonTemporal # if stores into `y` aren't aligned, we'll get a crash
         ptry, ptrargs, N = alignstores!(f, y, args...)
@@ -60,36 +58,36 @@ function vmap_singlethread!(
         end
         i = vadd_fast(i, StaticInt{UNROLL}() * W)
     end
-    if Base.libllvm_version ≥ v"11"
-        Nm1 = vsub_fast(N, 1)
-        while i < N # stops at 16 when
-            m = mask(V, i, Nm1)
-            vnoaliasstore!(ptry, f(vload.(ptrargs, ((MM{W}(i),),), m)...), (MM{W}(i,),), m)
-            i = vadd_fast(i, W)
+    # if Base.libllvm_version ≥ v"11" # this seems to be slower
+    #     Nm1 = vsub_fast(N, 1)
+    #     while i < N # stops at 16 when
+    #         m = mask(V, i, Nm1)
+    #         vnoaliasstore!(ptry, f(vload.(ptrargs, ((MM{W}(i),),), m)...), (MM{W}(i,),), m)
+    #         i = vadd_fast(i, W)
+    #     end
+    # else
+    while i < N - (W - 1) # stops at 16 when
+        vᵣ = f(vload.(ptrargs, ((MM{W}(i),),))...)
+        if NonTemporal
+            vstorent!(ptry, vᵣ, (MM{W}(i),))
+        else
+            vnoaliasstore!(ptry, vᵣ, (MM{W}(i),))
         end
-    else
-        while i < N - (W - 1) # stops at 16 when
-            vᵣ = f(vload.(ptrargs, ((MM{W}(i),),))...)
-            if NonTemporal
-                vstorent!(ptry, vᵣ, (MM{W}(i),))
-            else
-                vnoaliasstore!(ptry, vᵣ, (MM{W}(i),))
-            end
-            i = vadd_fast(i, W)
-        end
-        if i < N
-            m = mask(T, N & (W - 1))
-            vnoaliasstore!(ptry, f(vload.(ptrargs, ((MM{W}(i),),), m)...), (MM{W}(i,),), m)
-        end
+        i = vadd_fast(i, W)
     end
+    if i < N
+        m = mask(T, N & (W - 1))
+        vnoaliasstore!(ptry, f(vload.(ptrargs, ((MM{W}(i),),), m)...), (MM{W}(i,),), m)
+    end
+    # end
     y
 end
 
 function vmap_multithreaded!(
     f::F,
-    y::DenseArray{T},
+    y::AbstractArray{T},
     ::Val{true},
-    args::Vararg{DenseNativeArray,A}
+    args::Vararg{AbstractArray,A}
 ) where {F,T,A}
     ptry, ptrargs, N = alignstores!(f, y, args...)
     N > 0 || return y
@@ -114,9 +112,9 @@ function vmap_multithreaded!(
 end
 function vmap_multithreaded!(
     f::F,
-    y::DenseArray{T},
+    y::AbstractArray{T},
     ::Val{false},
-    args::Vararg{DenseNativeArray,A}
+    args::Vararg{AbstractArray,A}
 ) where {F,T,A}
     N = length(y)
     ptry = VectorizationBase.zstridedpointer(y)
@@ -142,6 +140,10 @@ function vmap_multithreaded!(
     y
 end
 
+Base.@pure _all_dense(::ArrayInterface.DenseDims{D}) where {D} = all(D)
+@inline all_dense() = true
+@inline all_dense(A::AbstractArray) = _all_dense(ArrayInterface.dense_dims(A))
+@inline all_dense(A::AbstractArray, B::AbstractArray, C::Vararg{AbstractArray,K}) where {K} = all_dense(A) && all_dense(B, C...)
 
 """
     vmap!(f, destination, a::AbstractArray)
@@ -151,9 +153,13 @@ Vectorized-`map!`, applying `f` to each element of `a` (or paired elements of `a
 and storing the result in `destination`.
 """
 function vmap!(
-    f::F, y::DenseArray{T}, args::Vararg{DenseNativeArray,A}
-) where {F,T<:Base.HWReal,A}
-    vmap_singlethread!(f, y, Val{false}(), args...)
+    f::F, y::AbstractArray, args::Vararg{AbstractArray,A}
+) where {F,A}
+    if check_args(y, args...) && all_dense(y, args...)
+        vmap_singlethread!(f, y, Val{false}(), args...)
+    else
+        map!(f, y, args...)
+    end
 end
 
 
@@ -163,9 +169,13 @@ end
 Like `vmap!` (see `vmap!`), but uses `Threads.@threads` for parallel execution.
 """
 function vmapt!(
-    f::F, y::DenseArray{T}, args::Vararg{DenseNativeArray,A}
-) where {F,T<:Base.HWReal,A}
-    vmap_multithreaded!(f, y, Val{false}(), args...)
+    f::F, y::AbstractArray, args::Vararg{AbstractArray,A}
+) where {F,A}
+    if check_args(y, args...) && all_dense(y, args...)
+        vmap_multithreaded!(f, y, Val{false}(), args...)
+    else
+        map!(f, y, args...)
+    end
 end
 
 
@@ -225,9 +235,13 @@ BenchmarkTools.Trial:
 ```
 """
 function vmapnt!(
-    f::F, y::DenseArray{T}, args::Vararg{DenseNativeArray,A}
-) where {F,T<:Base.HWReal,A}
-    vmap_singlethread!(f, y, Val{true}(), args...)
+    f::F, y::AbstractArray, args::Vararg{AbstractArray,A}
+) where {F,A}
+    if check_args(y, args...) && all_dense(y, args...)
+        vmap_singlethread!(f, y, Val{true}(), args...)
+    else
+        map!(f, y, args...)
+    end
 end
 
 """
@@ -236,9 +250,13 @@ end
 Like `vmapnt!` (see `vmapnt!`), but uses `Threads.@threads` for parallel execution.
 """
 function vmapntt!(
-    f::F, y::DenseArray{T}, args::Vararg{DenseNativeArray,A}
-) where {F,T<:Base.HWReal,A}
-    vmap_multithreaded!(f, y, Val{true}(), args...)
+    f::F, y::AbstractArray, args::Vararg{AbstractArray,A}
+) where {F,A}
+    if check_args(y, args...) && all_dense(y, args...)
+        vmap_multithreaded!(f, y, Val{true}(), args...)
+    else
+        map!(f, y, args...)
+    end
 end
 
 # generic fallbacks
