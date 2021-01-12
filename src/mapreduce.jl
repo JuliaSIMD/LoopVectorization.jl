@@ -33,7 +33,7 @@ end
 Vectorized version of `mapreduce`. Applies `f` to each element of the arrays `A`, and reduces the result with `op`.
 """
 @inline function vmapreduce(f::F, op::OP, arg1::AbstractArray{T}, args::Vararg{AbstractArray{T},A}) where {F,OP,T<:NativeTypes,A}
-    if !(check_args(args1, args...) && all_dense(arg1, args...))
+    if !(check_args(arg1, args...) && all_dense(arg1, args...))
         return mapreduce(f, op, arg1, args...)
     end
     N = length(arg1)
