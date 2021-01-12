@@ -1,5 +1,4 @@
 
-using ForwardDiff
 using VectorizationBase: AbstractSIMD
 
 @generated function SLEEFPirates.tanh_fast(x::ForwardDiff.Dual{T,S,N}) where {T,S,N}
@@ -13,7 +12,46 @@ using VectorizationBase: AbstractSIMD
 end
 function ChainRulesCore.rrule(::typeof(tanh_fast), x)
     t = tanh_fast(x)
-    t, y -> (ChainRulesCore.Zero(), mul_fast(vfnmadd_fast(t, t, one(t)), y))
+    ∂ = let t = t
+        y -> (ChainRulesCore.Zero(), mul_fast(vfnmadd_fast(t, t, one(t)), y))
+    end
+    t, ∂
+end
+@generated function SLEEFPirates.sigmoid_fast(x::ForwardDiff.Dual{T,S,N}) where {T,S,N}
+    quote
+        $(Expr(:meta,:inline))
+        s = sigmoid_fast(x.value)
+        ∂s = vfnmadd_fast(s,s,s)
+        p = x.partials
+        ForwardDiff.Dual(s, ForwardDiff.Partials(Base.Cartesian.@ntuple $N n -> mul_fast(∂s, p[n])))
+    end
+end
+function ChainRulesCore.rrule(::typeof(sigmoid_fast), x)
+    s = sigmoid_fast(x)
+    ∂ = let s = s
+        y -> (ChainRulesCore.Zero(), mul_fast(vfnmadd_fast(s, s, s), y))
+    end
+    s, ∂
+end
+@generated function VectorizationBase.relu(x::ForwardDiff.Dual{T,S,N}) where {T,S,N}
+    quote
+        $(Expr(:meta,:inline))
+        v = x.value
+        z = zero(v)
+        cmp = v < z
+        r = ifelse(cmp, z, v)
+        p = x.partials
+        ForwardDiff.Dual(r, ForwardDiff.Partials(Base.Cartesian.@ntuple $N n -> ifelse(cmp, z, p[n])))
+    end
+end
+function ChainRulesCore.rrule(::typeof(relu), v)
+    z = zero(v)
+    cmp = v < z
+    r = ifelse(cmp, z, v)
+    ∂ = let cmp = cmp
+        y -> (ChainRulesCore.Zero(), ifelse(cmp, zero(y), y))
+    end
+    r, ∂
 end
 
 
@@ -33,16 +71,6 @@ end
     q
 end
 
-@generated function dual_store!(∂p::Tuple{Vararg{AbstractStridedPointer,A}}, p::AbstractStridedPointer, ∂v, im::Vararg{Any,N}) where {A,N}
-    quote
-        $(Expr(:meta,:inline))
-        v = ∂v.value
-        ∂ = ∂v.partials
-        VectorizationBase.vnoaliasstore!(p, v, im...)
-        Base.Cartesian.@nexprs $A a -> VectorizationBase.vnoaliasstore!(∂p[a], ∂[a], im...)
-        nothing
-    end
-end
 @generated function dual_store!(∂p::Tuple{Vararg{AbstractStridedPointer,A}}, p::AbstractStridedPointer, ∂v, im::Vararg{Any,N}) where {A,N}
     quote
         $(Expr(:meta,:inline))

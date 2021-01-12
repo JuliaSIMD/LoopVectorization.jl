@@ -37,7 +37,7 @@ using Requires
 
 export LowDimArray, stridedpointer,
     @avx, @_avx, *ˡ, _avx_!,
-    vmap, vmap!, vmapt, vmapt!, vmapnt, vmapnt!, vmapntt, vmapntt!, tanh_fast,
+    vmap, vmap!, vmapt, vmapt!, vmapnt, vmapnt!, vmapntt, vmapntt!, tanh_fast, sigmoid_fast,
     vfilter, vfilter!, vmapreduce, vreduce
 
 @inline unwrap(::Val{N}) where {N} = N
@@ -96,8 +96,12 @@ LoopVectorization
 include("precompile.jl")
 _precompile_()
 
+# import ChainRulesCore, ForwardDiff
+# include("vmap_grad.jl")
 function __init__()
-    @require ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4" include("vmap_grad.jl")
+    @require ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4" begin
+        @require ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210" include("vmap_grad.jl")
+    end
 end
 
 end # module
