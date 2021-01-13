@@ -95,9 +95,12 @@ function vmap_multithreaded!(
     V = VectorizationBase.pick_vector_width_val(T)
     Wsh = Wshift + 2
     Niter = N >>> Wsh
-    Base.Threads.@threads :static for j ∈ 0:Niter-1
-        index = VectorizationBase.Unroll{1,1,4,1,W,0x0000000000000000}((j << Wsh,))
-        vstorent!(ptry, f(vload.(ptrargs, index)...), index)
+    let Wsh = Wsh, ptry = ptry, ptrargs = ptrargs
+        Base.Threads.@threads :static for j ∈ 0:Niter-1
+            W = VectorizationBase.pick_vector_width(eltype(ptry))
+            index = VectorizationBase.Unroll{1,1,4,1,W,0x0000000000000000}((j << Wsh,))
+            vstorent!(ptry, f(vload.(ptrargs, index)...), index)
+        end
     end
     ii = Niter << Wsh
     while ii < N - (W - 1) # stops at 16 when
@@ -110,34 +113,59 @@ function vmap_multithreaded!(
     end
     y
 end
-function vmap_multithreaded!(
+struct VmapClosure{F,D,N,A<:Tuple{Vararg{Any,N}}}
+    f::F
+    dest::D
+    args::A
+end
+(m::VmapClosure)() = vmap_singlethread!(m.f, m.dest, Val{false}(), m.args...)
+@generated function vmap_multithreaded!(
     f::F,
     y::AbstractArray{T},
     ::Val{false},
     args::Vararg{AbstractArray,A}
 ) where {F,T,A}
-    N = length(y)
-    ptry = VectorizationBase.zstridedpointer(y)
-    ptrargs = VectorizationBase.zstridedpointer.(args)
-    N > 0 || return y
-    W, Wshift = VectorizationBase.pick_vector_width_shift(T)
-    V = VectorizationBase.pick_vector_width_val(T)
-    Wsh = Wshift + 2
-    Niter = N >>> Wsh
-    Base.Threads.@threads :static for j ∈ 0:Niter-1
-        index = VectorizationBase.Unroll{1,1,4,1,W,0x0000000000000000}((j << Wsh,))
-        vnoaliasstore!(ptry, f(vload.(ptrargs, index)...), index)
+    quote
+        N = length(y)
+        nt = min(Threads.nthreads(), $(Sys.CPU_THREADS))
+        W, Wshift = VectorizationBase.pick_vector_width_shift(T)
+        (((W * nt < N) & (nt > 1)) && iszero(ccall(:jl_in_threaded_region, Cint, ()))) || return vmap_singlethread!(f, y, Val{false}(), args...)
+        Nd, Nr = divrem(N >>> Wshift, nt)
+        Ndb = Nd << Wshift
+        Ndbr = Ndb + W
+        Nlast = N - Ndbr * Nr - Ndb * (nt - 1  - Nr)
+        yfi = firstindex(y);
+        Base.Cartesian.@nexprs $A a -> begin
+            args_a = args[a]
+            argsfi_a = firstindex(args_a);
+        end
+        lb = 0
+        # tasks = Vector{Task}(undef, nt)
+        # tasks = Base.Cartesian.@ntuple $(Sys.CPU_THREADS) t -> Ref{Task}()
+        Base.Cartesian.@nexprs $(Sys.CPU_THREADS) j -> begin
+        # for j ∈ Base.OneTo(nt)
+            Nlen = j == nt ? Nlast : (j > Nr ? Ndb : Ndbr)
+            ub = lb + Nlen
+            yv = view(y, yfi+lb:yfi+ub-1)
+            argsview = Base.Cartesian.@ntuple $A a -> view(args_a, argsfi_a+lb:argsfi_a+ub-1)
+            t_j = Task(VmapClosure(f, yv, argsview))
+            # tasks[j] = t
+            t_j.sticky = true
+            ccall(:jl_set_task_tid, Cvoid, (Any, Cint), t_j, (j == nt ? 0 : j) % Cint)
+            schedule(t_j)
+            j == nt && @goto WAIT
+            lb = ub
+        end
+        @label WAIT
+        Base.Cartesian.@nexprs $(Sys.CPU_THREADS) j -> begin
+            wait(t_j)
+            j == nt && return y
+        end
+        # for j ∈ Base.OneTo(nt)
+        #     wait(tasks[j])
+            # end
+        y
     end
-    ii = Niter << Wsh
-    while ii < N - (W - 1) # stops at 16 when
-        vnoaliasstore!(ptry, f(vload.(ptrargs, ((MM{W}(ii),),))...), (MM{W}(ii),))
-        ii = vadd_fast(ii, W)
-    end
-    if ii < N
-        m = mask(T, N & (W - 1))
-        vnoaliasstore!(ptry, f(vload.(ptrargs, ((MM{W}(ii),),), m)...), (MM{W}(ii),), m)
-    end
-    y
 end
 
 Base.@pure _all_dense(::ArrayInterface.DenseDims{D}) where {D} = all(D)

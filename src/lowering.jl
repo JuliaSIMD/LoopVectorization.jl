@@ -699,10 +699,52 @@ function gc_preserve(ls::LoopSet, q::Expr)
     # Expr(:block, gcp)
 end
 
+function typeof_outer_reduction_init(ls::LoopSet, op::Operation)
+    opid = identifier(op)
+    for (id, sym) ∈ ls.preamble_symsym
+        opid == id && return Expr(:call, :typeof, sym)
+    end
+    for (id,intval) ∈ ls.preamble_symint
+        opid == id && return :Int
+    end
+    for (id,floatval) ∈ ls.preamble_symfloat
+        opid == id && return :Float64
+    end
+    for (id,typ) ∈ ls.preamble_zeros
+        instruction(ops[id]) === LOOPCONSTANT || continue
+        opid == id || continue
+        if typ == IntOrFloat
+            return :Float64
+        elseif typ == HardInt
+            return :Int
+        else#if typ == HardFloat
+            return :Float64
+        end
+    end
+    throw("Could not find initializing constant.")
+end
+function typeof_outer_reduction(ls::LoopSet, op::Operation)
+    for opp ∈ operations(ls)
+        opp === op && continue
+        name(op) === name(opp) && return typeof_outer_reduction_init(ls, opp)
+    end
+    throw("Could not find initialization op.")
+end
 
-function determine_eltype(ls::LoopSet)
+function determine_eltype(ls::LoopSet)::Union{Symbol,Expr}
     if length(ls.includedactualarrays) == 0
-        return Expr(:call, lv(:typeof), 0)
+        if length(ls.outer_reductions) == 0
+            return Expr(:call, lv(:typeof), 0)
+        elseif length(ls.outer_reductions) == 1
+            op = ls.operations[only(ls.outer_reductions)]
+            return typeof_outer_reduction(ls, op)
+        else
+            pt = Expr(:call, lv(:promote_type))
+            for j ∈ ls.outer_reductions
+                push!(pt.args, typeof_outer_reduction(ls, ls.operations[j]))
+            end
+            return pt
+        end
     elseif length(ls.includedactualarrays) == 1
         return Expr(:call, lv(:eltype), first(ls.includedactualarrays))
     end
@@ -783,6 +825,7 @@ end
 function define_eltype_vec_width!(q::Expr, ls::LoopSet, vectorized)
     push!(q.args, Expr(:(=), ELTYPESYMBOL, determine_eltype(ls)))
     push!(q.args, Expr(:(=), VECTORWIDTHSYMBOL, determine_width(ls, vectorized)))
+    nothing
 end
 function setup_preamble!(ls::LoopSet, us::UnrollSpecification, Ureduct::Int)
     @unpack u₁loopnum, u₂loopnum, vectorizedloopnum, u₁, u₂ = us
@@ -791,7 +834,7 @@ function setup_preamble!(ls::LoopSet, us::UnrollSpecification, Ureduct::Int)
     u₂loopsym = order[u₂loopnum]
     vectorized = order[vectorizedloopnum]
     set_vector_width!(ls, vectorized)
-    iszero(length(ls.includedactualarrays)) || define_eltype_vec_width!(ls.preamble, ls, vectorized)
+    iszero(length(ls.includedactualarrays) + length(ls.outer_reductions)) || define_eltype_vec_width!(ls.preamble, ls, vectorized)
     lower_licm_constants!(ls)
     isone(num_loops(ls)) || pushpreamble!(ls, definemask(getloop(ls, vectorized)))#, u₁ > 1 && u₁loopnum == vectorizedloopnum))
     initialize_outer_reductions!(ls, 0, Ureduct, vectorized)
