@@ -24,7 +24,7 @@ function sumloop0(M, W, i, l1 = 1, l2 = 1)
     s
 end
 
-# for m ∈ 1:M, n ∈ 1:m
+# for m ∈ l1:M, n ∈ l2:m
 function polyloop0(M, W, i, order, l1 = 1, l2 = 1, citers = 1)
     p0 = LoopVectorization.Polyhedra(
         ((ByteVector(0,0),ByteVector(0,0)), # Aₗ
@@ -46,10 +46,10 @@ for i ∈ 0:2, W ∈ (1, 4, 8, 16), M ∈ -48:48, l1 ∈ -53:M, l2 ∈ -53:l1
     @test (i == 2 ? cld(M+1-l2,W) : M+1-l2) == polyloop0(M, W, i, ByteVector(2), l1, l2, 1)
 end
 
-LoopVectorization.getloop(p0, ByteVector(1,2), LoopVectorization.VectorLength(8), 1, 1024)
-LoopVectorization.getloop(p0, ByteVector(1), LoopVectorization.VectorLength(8), 1, 1)
+# LoopVectorization.getloop(p0, ByteVector(1,2), LoopVectorization.VectorLength(8), 1, 1024)
+# LoopVectorization.getloop(p0, ByteVector(1), LoopVectorization.VectorLength(8), 1, 1)
 
-# for m ∈ 1:M, n ∈ 1:m
+# for m ∈ l1:M, n ∈ m:N
 function polyloop1(M, W, i, order, l1 = 1, N = M, citers = 1)
     p1 = LoopVectorization.Polyhedra(
         ((ByteVector(0,0),ByteVector(-1,0)), # Aₗ
@@ -63,6 +63,7 @@ function polyloop1(M, W, i, order, l1 = 1, N = M, citers = 1)
     first(LoopVectorization.getloop(p1, order, LoopVectorization.VectorLength(W), i, citers))
 end
 for i ∈ 0:2, W ∈ (1, 4, 8, 16), M ∈ 1:128
+    # @show M, W, i
     s = sumloop0(M, W, i)
     @test s == polyloop1(M, W, i, ByteVector(1,2), 1, M)
     @test s == polyloop1(M, W, i, ByteVector(2,1), 1, M)
@@ -70,8 +71,8 @@ for i ∈ 0:2, W ∈ (1, 4, 8, 16), M ∈ 1:128
     @test (i == 2 ? cld(M,W) : M) == polyloop1(M, W, i, ByteVector(2), 1, M)
 end
 
-LoopVectorization.getloop(p1, ByteVector(1,2), LoopVectorization.VectorLength(8), 1, 1024)
-LoopVectorization.getloop(p1, ByteVector(1), LoopVectorization.VectorLength(8), 1, 1)
+# LoopVectorization.getloop(p1, ByteVector(1,2), LoopVectorization.VectorLength(8), 1, 1024)
+# LoopVectorization.getloop(p1, ByteVector(1), LoopVectorization.VectorLength(8), 1, 1)
 
 # for m ∈ 1:M, n ∈ m:N, k ∈ 1:m+n+K
 p2 = LoopVectorization.Polyhedra(

@@ -1,4 +1,5 @@
-
+using Base: setindex, OneTo
+using VectorizationBase: insertelement, extractelement
 # struct Polyhedra{N}
 #     A::NTuple{N,NTuple{2,ByteVector}}
 #     B::NTuple{N,NTuple{2,ByteVector}}
@@ -36,7 +37,7 @@ end
 function RectangularPolyhedra(
     c::NTuple{2,NTuple{N,I}},
     d::NTuple{2,NTuple{N,I}},
-    paramids::NTuple{2,ByteVector{UInt64}}    
+    paramids::NTuple{2,ByteVector{UInt64}}
 ) where {N, I <: Integer}
     cₗ, cᵤ = c
     dₗ, dᵤ = d
@@ -112,8 +113,8 @@ bin2(n) = faulhaber(n - one(n), Val(1))
 @generated function faulhaber(n, ::Val{P}) where {P}
     @assert 2 ≤ P ≤ 8
     B = ( 0.5, 0.08333333333333333, 0.0, -0.001388888888888889, 0.0, 3.3068783068783064e-5, 0.0, -8.267195767195768e-7 )
-    fm = :(Base.FastMath.mul_fast)
-    fa = :(Base.FastMath.add_fast)
+    fm = :mul_fast
+    fa = :add_fast
     q = Expr(:block, :(n² = $fm(n,n)), :(norig = n))#, :(x = $fm($(B[P] * falling_factorial(P, P-1)), n)))
     xinitialized = false
     # B = (1/2, 1/6, 0.0, -1/30, 0.0, 1/42, 0.0, -1/30)
@@ -257,7 +258,7 @@ function extreme_bound_upper(
         cᵤᵢ += cᵤⱼ * Aᵤᵢⱼ
         dᵤᵢ += dᵤⱼ * Aᵤᵢⱼ
         pwᵤ = setindex(pwᵤ, pwᵤ[i] + Aᵤᵢⱼ, i)
-    end    
+    end
     # cₗᵢ, cᵤᵢ, dₗᵢ, dᵤᵢ, pwₗ, pwᵤ
     cᵤᵢ, dᵤᵢ, pwᵤ
 end
@@ -434,6 +435,7 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
             cdmin =  cdₗ[i]# cₗ[i] + dₗ[i]
             verbose_getloop() && @show cdmax, cdmin, veci, i
             cd = 1 + cdmax - cdmin
+            verbose_getloop() && @show veci, i, cd, vl
             cd = veci == i ? div(cd, vl, RoundNearestTiesAway) : cd
             # cd = max(zero(cd), cd)
             Asum = Aᵤᵢ + Aₗᵢ
@@ -453,8 +455,8 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
                     end
                 else
                     coefs¹v = Base.Cartesian.@ntuple 8 j -> (Asum[j] % Int64) # if j == veci, then j == i, and we won't visit again
-                    # coefs¹vᵤ = Base.Cartesian.@ntuple 8 j -> zero(Int64) # 
-                    # coefs¹vₗ = Base.Cartesian.@ntuple 8 j -> zero(Int64) # 
+                    # coefs¹vᵤ = Base.Cartesian.@ntuple 8 j -> zero(Int64) #
+                    # coefs¹vₗ = Base.Cartesian.@ntuple 8 j -> zero(Int64) #
                 end
                 verbose_getloop() && @show coef⁰ coefs¹
                 # coefs¹v = Base.Cartesian.@ntuple 8 j -> (coefs¹v[j]) | ((veci == i) & !(iszero(Asum[j])))
@@ -590,13 +592,15 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
                         blocksp1 = blocks + one(blocks)
                         itersbin += bin2(blocksp1)*vl + blocksp1 * upper_block
                         verbose_getloop() && @show cd, blocksp1, coefs¹vᵢ, bin2(blocksp1)*vl, blocksp1 * upper_block
-                        coef⁰ += coefs¹vᵢ * itersbin                        
+                        coef⁰ += coefs¹vᵢ * itersbin
                     else
-                        r = (cdmax - cdmin) % vl
+                        r = (1 + cdmax - cdmin) % vl
+                        verbose_getloop() && @show r, cdmax, cdmin, i
                         divvec, remvec = divrem(cdmax - r, vl)
                         divvec += one(divvec)
                         itersbin = bin2(divvec) * vl + remvec * divvec
-                        coef⁰ += coefs¹vᵢ * itersbin                        
+                        verbose_getloop() && @show coefs¹vᵢ, itersbin, coef⁰
+                        coef⁰ += coefs¹vᵢ * itersbin
                     end
                 else
                     minrem = cdminₒ % vl
@@ -605,7 +609,7 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
                         minovershoot = minrem + vl.W - one(vl.W)
                     elseif cdminₒ == 1
                         minovershoot = 0
-                    else                
+                    else
                         # minrem = cdminₒ % vl
                         minovershoot = (minrem - vl.W - one(vl.W))
                         # minovershoot = minrem - one(vl.W)
@@ -694,7 +698,7 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
                     else
                         coefs¹ = setindex(coefs¹, cd * coefs²ᵢⱼ, j)
                     end
-                end            
+                end
             end
             (not_visited_mask === zero(UInt64)) && break
         end
@@ -852,7 +856,7 @@ function unconditional_loop_iters!(loops::AbstractVector, loop::Loop)
     len = A₂.len
     istriangle = false
     while !allzero(A₃)
-        
+
     end
     while !allzero(A₄)
         for (n,a) ∈ enumerate(A₂)
@@ -873,7 +877,7 @@ function unconditional_loop_iters!(loops::AbstractVector, loop::Loop)
                 A₁new = setindex(setindex(A₄, (0xff % Int8), loopid), zero(Int8), newid)
                 A₂new = A₂
                 A₃new = A₃
-                A₄new = 
+                A₄new =
                 c₁new = c₄
                 c₂new = c₂
                 c₃new = c₃
@@ -881,7 +885,7 @@ function unconditional_loop_iters!(loops::AbstractVector, loop::Loop)
             elseif A₄val == (0xff % Int8)
             else# reject
                 return 9223372036854775807, loop
-            end                
+            end
             loops[n] = StaticLoop( (c₁new, c₂new), (A₁new, A₂new), nloops, newid )
             A₃ = A₃new
             A₄ = A₄new
@@ -944,7 +948,7 @@ end
 # Checks whether the dependencies iᵣ => iₛ
 # """
 # function checkdependencies(p::Polyhedra, (iᵣ, iₛ)::Pair{Schedule,Schedule})
-    
+
 # end
 
 # should make this iterable, transforming stepwise for determine_cost_looporder and scheduling...
@@ -961,7 +965,7 @@ end
 #     isaffinefunc
 #     for (i,j) ∈ enumerate(order)
 #         ls = us = Symbol("")
-        
+
 #         for k in axes(A,1)
 #             Aₖⱼ = A[k,j]
 #             if Aₖⱼ > 0 # then we have the lower bound
@@ -975,7 +979,7 @@ end
 #                     else
 #                     end
 #                 elseif l > 0 && l ≠ k
-                    
+
 #                 else
 #                 end
 #             elseif Aₖⱼ < 0 # then we have the upper bound
@@ -991,6 +995,5 @@ end
 # end
 
 function vertices(p::Polyhedra)
-    
-end
 
+end
