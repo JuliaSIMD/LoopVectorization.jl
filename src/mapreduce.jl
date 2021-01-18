@@ -3,24 +3,25 @@
 @inline vreduce(::typeof(*), v::VectorizationBase.AbstractSIMDVector) = vprod(v)
 @inline vreduce(::typeof(max), v::VectorizationBase.AbstractSIMDVector) = vmaximum(v)
 @inline vreduce(::typeof(min), v::VectorizationBase.AbstractSIMDVector) = vminimum(v)
-@inline vreduce(op, v::VectorizationBase.AbstractSIMDVector) = _vreduce(op, v)
-@inline _vreduce(op, v::VectorizationBase.AbstractSIMDVector) = _reduce(op, SVec(v))
-@inline function _vreduce(op, v::SVec)
-    isone(length(v)) && return v[1]
-    a = op(v[1], v[2])
-    for i ∈ 3:length(v)
-        a = op(a, v[i])
+@inline vreduce(op, v::VectorizationBase.AbstractSIMDVector) = vec_vreduce(op, v)
+@inline vec_reduce(op, v::VectorizationBase.AbstractSIMDVector) = vec_reduce(op, Vec(v))
+vec_vreduce(op, v::Vec{1}) = VectorizationBase.extractelement(v, 0)
+@inline function vec_vreduce(op, v::Vec{W}) where {W}
+    a = op(VectorizationBase.extractelement(v,0), VectorizationBase.extractelement(v, 1))
+    for i ∈ 2:W-1
+        a = op(a, VectorizationBase.extractelement(v, i))
     end
     a
 end
 
-function mapreduce_simple(f::F, op::OP, args::Vararg{DenseArray{<:NativeTypes},A}) where {F,OP,A}
+function mapreduce_simple(f::F, op::OP, args::Vararg{AbstractArray,A}) where {F,OP,A}
     ptrargs = ntuple(a -> pointer(args[a]), Val(A))
     N = length(first(args))
     iszero(N) && throw("Length of vector is 0!")
+    st = ntuple(a -> VectorizationBase.static_sizeof(eltype(args[a])), Val(A))
     a_0 = f(vload.(ptrargs)...); i = 1
     while i < N
-        a_0 = op(a_0, f(vload.(gep.(ptrargs, i))...)); i += 1
+        a_0 = op(a_0, f(vload.(ptrargs, VectorizationBase.lazymul.(st, i))...)); i += 1
     end
     a_0
 end
@@ -31,7 +32,10 @@ end
 
 Vectorized version of `mapreduce`. Applies `f` to each element of the arrays `A`, and reduces the result with `op`.
 """
-function vmapreduce(f::F, op::OP, arg1::DenseArray{T}, args::Vararg{DenseArray{T},A}) where {F,OP,T<:NativeTypes,A}
+@inline function vmapreduce(f::F, op::OP, arg1::AbstractArray{T}, args::Vararg{AbstractArray{T},A}) where {F,OP,T<:NativeTypes,A}
+    if !(check_args(arg1, args...) && all_dense(arg1, args...))
+        return mapreduce(f, op, arg1, args...)
+    end
     N = length(arg1)
     iszero(A) || @assert all(length.(args) .== N)
     W = VectorizationBase.pick_vector_width(T)
@@ -42,33 +46,28 @@ function vmapreduce(f::F, op::OP, arg1::DenseArray{T}, args::Vararg{DenseArray{T
         _vmapreduce(f, op, V, N, T, arg1, args...)
     end
 end
-function _vmapreduce(f::F, op::OP, ::Val{W}, N, ::Type{T}, args::Vararg{DenseArray{<:NativeTypes},A}) where {F,OP,A,W,T}
-    ptrargs = pointer.(args)
-    a_0 = f(vload.(Val{W}(), ptrargs)...); i = W
+@inline function _vmapreduce(f::F, op::OP, ::StaticInt{W}, N, ::Type{T}, args::Vararg{AbstractArray{<:NativeTypes},A}) where {F,OP,A,W,T}
+    ptrargs = VectorizationBase.zero_offsets.(stridedpointer.(args))
     if N ≥ 4W
-        a_1 = f(vload.(Val{W}(), gep.(ptrargs, i))...); i += W
-        a_2 = f(vload.(Val{W}(), gep.(ptrargs, i))...); i += W
-        a_3 = f(vload.(Val{W}(), gep.(ptrargs, i))...); i += W
+        index = VectorizationBase.Unroll{1,1,4,1,W,0x0000000000000000}((Zero(),)); i = 4W
+        au = f(vload.(ptrargs, index)...)
         while i < N - ((W << 2) - 1)
-            a_0 = op(a_0, f(vload.(Val{W}(), gep.(ptrargs, i))...)); i += W
-            a_1 = op(a_1, f(vload.(Val{W}(), gep.(ptrargs, i))...)); i += W
-            a_2 = op(a_2, f(vload.(Val{W}(), gep.(ptrargs, i))...)); i += W
-            a_3 = op(a_3, f(vload.(Val{W}(), gep.(ptrargs, i))...)); i += W
+            index = VectorizationBase.Unroll{1,1,4,1,W,0x0000000000000000}((i,)); i += 4W
+            au = op(au, f(vload.(ptrargs, index)...))
         end
-        a_0 = op(a_0, a_1)
-        a_2 = op(a_2, a_3)
-        a_0 = op(a_0, a_2)
+        a_0 = VectorizationBase.reduce_to_onevec(op, au)
+    else
+        a_0 = f(vload.(ptrargs, ((MM{W}(Zero()),),))...); i = W
     end
     while i < N - (W - 1)
-        a_0 = op(a_0, f(vload.(Val{W}(), gep.(ptrargs, i))...)); i += W
+        a_0 = op(a_0, f(vload.(ptrargs, ((MM{W}(i),),))...)); i += W
     end
     if i < N
         m = mask(T, N & (W - 1))
-        a_0 = vifelse(m, op(a_0, f(vload.(Val{W}(), gep.(ptrargs, i))...)), a_0)
+        a_0 = ifelse(m, op(a_0, f(vload.(ptrargs, ((MM{W}(i),),))...)), a_0)
     end
     vreduce(op, a_0)
 end
-
 @inline vmapreduce(f, op, args...) = mapreduce(f, op, args...)
 
 length_one_axis(::Base.OneTo) = Base.OneTo(1)
@@ -82,7 +81,10 @@ Vectorized version of `reduce`. Reduces the array `A` using the operator `op`.
 @inline vreduce(op, arg) = vmapreduce(identity, op, arg)
 
 for (op, init) in zip((:+, :max, :min), (:zero, :typemin, :typemax))
-    @eval function vreduce(::typeof($op), arg; dims = nothing)
+    @eval @inline function vreduce(::typeof($op), arg; dims = nothing)
+        if !(check_args(arg) && all_dense(arg))
+            return reduce($op, arg, dims = dims)
+        end
         isnothing(dims) && return _vreduce($op, arg)
         isone(ndims(arg)) && return [_vreduce($op, arg)]
         @assert length(dims) == 1

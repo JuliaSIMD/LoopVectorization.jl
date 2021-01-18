@@ -9,7 +9,7 @@
     s = String(take!(io))
     @test occursin("Operation[", s)
     @test occursin("s = 0", s)
-    @test occursin("s = LoopVectorization.vfmadd", s)
+    @test occursin("s = LoopVectorization.vfmadd_fast", s)
 
     AmulBq = :(for m ∈ 1:M, n ∈ 1:N
                    C[m,n] = zero(eltype(B))
@@ -24,6 +24,6 @@
     @test occursin("C[m, n] = ", s)
     @test occursin(" = A[m, k]", s)
     @test occursin(" = B[k, n]", s)
-    @test occursin(" = LoopVectorization.vfmadd", s)
+    @test occursin(" = LoopVectorization.vfmadd_fast", s)
     # @test occursin(" = LoopVectorization.reduce_to_add", s)
 end

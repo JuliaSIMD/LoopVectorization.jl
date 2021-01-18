@@ -57,13 +57,13 @@ end
 
 
 function LoopSet(q::Expr, mod::Symbol = :Main)
-    SIMDPirates.contract_pass!(q)
+    contract_pass!(q)
     ls = LoopSet(mod)
     copyto!(ls, q)
     resize!(ls.loop_order, num_loops(ls))
     ls
 end
-LoopSet(q::Expr, m::Module) = LoopSet(macroexpand(m, q), Symbol(m))
+LoopSet(q::Expr, m::Module) = LoopSet(macroexpand(m, q)::Expr, Symbol(m))
 
 """
     @avx
@@ -136,15 +136,16 @@ and `uᵢ=-1` disables unrolling for the correspond loop.
 
 The `@avx` macro also checks the array arguments using `LoopVectorization.check_args` to try and determine
 if they are compatible with the macro. If `check_args` returns false, a fall back loop annotated with `@inbounds`
-and `@fastmath` is generated. Note that `SIMDPirates` provides functions such as `evadd` and `evmul` that will
+and `@fastmath` is generated. Note that `VectorizationBase` provides functions such as `vadd` and `vmul` that will
 ignore `@fastmath`, preserving IEEE semantics both within `@avx` and `@fastmath`.
 `check_args` currently returns false for some wrapper types like `LinearAlgebra.UpperTriangular`, requiring you to
 use their `parent`. Triangular loops aren't yet supported.
 """
 macro avx(q)
     q = macroexpand(__module__, q)
+    isa(q, Expr) || return q
     q2 = if q.head === :for
-        setup_call(LoopSet(q, __module__), q)
+        setup_call(LoopSet(q, __module__), q, __source__)
     else# assume broadcast
         substitute_broadcast(q, Symbol(__module__))
     end
@@ -203,14 +204,14 @@ macro avx(arg, q)
     q = macroexpand(__module__, q)
     inline, check_empty, u₁, u₂ = check_macro_kwarg(arg)
     ls = LoopSet(q, __module__)
-    esc(setup_call(ls, q, inline, check_empty, u₁, u₂))
+    esc(setup_call(ls, q, __source__, inline, check_empty, u₁, u₂))
 end
 macro avx(arg1, arg2, q)
     @assert q.head === :for
     q = macroexpand(__module__, q)
     inline, check_empty, u₁, u₂ = check_macro_kwarg(arg1)
     inline, check_empty, u₁, u₂ = check_macro_kwarg(arg2, inline, check_empty, u₁, u₂)
-    esc(setup_call(LoopSet(q, __module__), q, inline, check_empty, u₁, u₂))
+    esc(setup_call(LoopSet(q, __module__), q, __source__, inline, check_empty, u₁, u₂))
 end
 macro avx(arg1, arg2, arg3, q)
     @assert q.head === :for
@@ -218,7 +219,7 @@ macro avx(arg1, arg2, arg3, q)
     inline, check_empty, u₁, u₂ = check_macro_kwarg(arg1)
     inline, check_empty, u₁, u₂ = check_macro_kwarg(arg2, inline, check_empty, u₁, u₂)
     inline, check_empty, u₁, u₂ = check_macro_kwarg(arg3, inline, check_empty, u₁, u₂)
-    esc(setup_call(LoopSet(q, __module__), q, inline, check_empty, u₁, u₂))
+    esc(setup_call(LoopSet(q, __module__), q, __source__, inline, check_empty, u₁, u₂))
 end
 
 

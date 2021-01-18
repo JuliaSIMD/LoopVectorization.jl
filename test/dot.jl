@@ -30,6 +30,7 @@ using Test
         end
         s
     end
+    
 
     selfdotq = :(for i ∈ eachindex(a)
                  s += a[i]*a[i]
@@ -47,6 +48,13 @@ using Test
     function myselfdotavx(a)
         s = zero(eltype(a))
         @avx for i ∈ eachindex(a)
+            s += a[i]*a[i]
+        end
+        s
+    end
+    function myselfdotavx_v2(a)
+        s = zero(eltype(a))
+        @avx for i ∈ 1:length(a)
             s += a[i]*a[i]
         end
         s
@@ -189,10 +197,10 @@ using Test
         4acc/length(x)
     end
 
-    function dotloopinductvarpow(x)
-        s = zero(eltype(x))
+    function dotloopinductvarpow(x::AbstractArray{T}) where {T}
+        s = zero(T)
         for i ∈ eachindex(x)
-            s += x[i] * i^3
+            s += x[i] * T(i)^3
         end
         s
     end
@@ -249,9 +257,16 @@ using Test
         @test dot_unroll3avx_inline(a,b) ≈ s
         s = myselfdot(a)
         @test myselfdotavx(a) ≈ s
+        @test myselfdotavx_v2(a) ≈ s
         @test myselfdotavx_range(a) ≈ s
         @test myselfdot_avx(a) ≈ s
         @test myselfdotavx(a) ≈ s
+
+        A = OffsetArray(rand(37, 61), -5, 10);
+        s = myselfdot(A);
+        @test myselfdotavx(A) ≈ myselfdotavx(A') ≈ s
+        @test myselfdotavx_v2(A) ≈ myselfdotavx_v2(A') ≈ s
+        # @test myselfdot_avx(A) ≈ myselfdot_avx(A') ≈ s
 
         @test dot17(a,b) ≈ @view(a[1:17])' * @view(b[1:17])
         @test dot33(a,b) ≈ @view(a[1:33])' * @view(b[1:33])

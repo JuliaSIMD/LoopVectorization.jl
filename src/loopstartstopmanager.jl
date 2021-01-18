@@ -1,15 +1,29 @@
 
 
-
 function uniquearrayrefs(ls::LoopSet)
     uniquerefs = ArrayReferenceMeta[]
+    includeinlet = Bool[]
     # for arrayref ∈ ls.refs_aliasing_syms
     for op ∈ operations(ls)
         arrayref = op.ref
         arrayref === NOTAREFERENCE && continue
-        any(ref -> sameref(arrayref, ref), uniquerefs) || push!(uniquerefs, arrayref)
+        notunique = false
+        isonlyname = true
+        for ref ∈ uniquerefs
+            notunique = sameref(arrayref, ref)
+            isonlyname &= vptr(arrayref) !== vptr(ref)
+            # if they're not the sameref, they may still have the same name
+            # if they have different names, they're definitely not sameref
+            notunique && break
+        end
+        if !notunique
+            push!(uniquerefs, arrayref)
+            push!(includeinlet, isonlyname)
+        end
+        # any(ref -> sameref(arrayref, ref), uniquerefs) || push!(uniquerefs, arrayref)
+        # any(ref -> vptr(ref) === vptr(arrayref), uniquerefs) || push!(uniquerefs, arrayref)
     end
-    uniquerefs
+    uniquerefs, includeinlet
 end
 
 otherindexunrolled(loopsym::Symbol, ind::Symbol, loopdeps::Vector{Symbol}) = (loopsym !== ind) && (loopsym ∈ loopdeps)
@@ -51,12 +65,27 @@ function indices_calculated_by_pointer_offsets(ls::LoopSet, ar::ArrayReferenceMe
     out
 end
 
+@generated function set_first_stride(sptr::StridedPointer{T,N,C,B,R}) where {T,N,C,B,R}
+    minrank = argmin(R)
+    newC = C > 0 ? (C == minrank ? 1 : 0) : C
+    newB = C > 0 ? (C == minrank ? B : 0) : B #TODO: confirm correctness
+    quote
+        $(Expr(:meta,:inline))
+        VectorizationBase.StridedPointer{$T,1,$newC,$newB,$(R[minrank],)}(pointer(sptr), (sptr.strd[$minrank],), (Zero(),))
+    end
+end
+set_first_stride(x) = x # cross fingers that this works
+@inline onetozeroindexgephack(sptr::AbstractStridedPointer) = gesp(set_first_stride(sptr), (Static{-1}(),)) # go backwords 
+@inline onetozeroindexgephack(sptr::AbstractStridedPointer{T,1}) where {T} = sptr
+# @inline onetozeroindexgephack(sptr::StridedPointer{T,1}) where {T} = sptr
+@inline onetozeroindexgephack(x) = x
+
 """
 Returns a vector of length equal to the number of indices.
 A value > 0 indicates which loop number that index corresponds to when incrementing the pointer.
 A value < 0 indicates that abs(value) is the corresponding loop, and a `loopvalue` will be used.
 """
-function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, allarrayrefs::Vector{ArrayReferenceMeta})
+function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, allarrayrefs::Vector{ArrayReferenceMeta}, includeinlet::Bool)
     us = ls.unrollspecification[]
     li = ar.loopedindex
     looporder = reversenames(ls)
@@ -82,7 +111,8 @@ function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, alla
         # else
         if (!li[i])
             uliv[i] = 0
-            push!(gespinds.args, Expr(:call, lv(:Zero)))
+            # push!(gespinds.args, Expr(:call, lv(:Zero)))
+            push!(gespinds.args, Expr(:call, Expr(:curly, lv(:Static), 1)))
             push!(offsetprecalc_descript.args, 0)
         elseif isbroadcast ||
             ((isone(ii) && (last(looporder) === ind)) && !(otherindexunrolled(ls, ind, ar)) ||
@@ -92,16 +122,23 @@ function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, alla
 
             # Not doing normal offset indexing
             uliv[i] = -findfirst(isequal(ind), looporder)::Int
-            push!(gespinds.args, Expr(:call, lv(:Zero)))
+            # push!(gespinds.args, Expr(:call, lv(:Zero)))
+            push!(gespinds.args, Expr(:call, Expr(:curly, lv(:Static), 1)))
+            
             push!(offsetprecalc_descript.args, 0) # not doing offset indexing, so push 0
         else
             uliv[i] = findfirst(isequal(ind), looporder)::Int
             loop = getloop(ls, ind)
             if loop.startexact
-                push!(gespinds.args, Expr(:call, Expr(:curly, lv(:Static), loop.starthint - 1)))
+                push!(gespinds.args, Expr(:call, Expr(:curly, lv(:Static), loop.starthint)))
             else
-                push!(gespinds.args, Expr(:call, lv(:staticm1), loop.startsym))
+                push!(gespinds.args, loop.startsym)
             end
+            # if loop.startexact
+            #     push!(gespinds.args, Expr(:call, Expr(:curly, lv(:Static), loop.starthint - 1)))
+            # else
+            #     push!(gespinds.args, Expr(:call, lv(:staticm1), loop.startsym))
+            # end
             if ind === names(ls)[us.vectorizedloopnum]
                 push!(offsetprecalc_descript.args, 0)
             elseif (ind === names(ls)[us.u₁loopnum]) & (us.u₁ > 3)
@@ -115,11 +152,19 @@ function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, alla
             end
         end
     end
-    if use_offsetprecalc
-        push!(q.args, Expr(:(=), vptr(ar), Expr(:call, lv(:offsetprecalc), Expr(:call, lv(:gesp), vptr(ar), gespinds), Expr(:call, Expr(:curly, :Val, offsetprecalc_descript)))))
-    else
-        push!(q.args, Expr(:(=), vptr(ar), Expr(:call, lv(:gesp), vptr(ar), gespinds)))
-    end    
+    if includeinlet
+        vptr_ar = if isone(length(li))
+            # Workaround for fact that 1-d OffsetArrays are offset when using 1 index, but multi-dim ones are not
+            Expr(:call, lv(:onetozeroindexgephack), vptr(ar))
+        else
+            vptr(ar)
+        end
+        if use_offsetprecalc
+            push!(q.args, Expr(:(=), vptr(ar), Expr(:call, lv(:offsetprecalc), Expr(:call, lv(:gesp), vptr_ar, gespinds), Expr(:call, Expr(:curly, :Val, offsetprecalc_descript)))))
+        else
+            push!(q.args, Expr(:(=), vptr(ar), Expr(:call, lv(:gesp), vptr_ar, gespinds)))
+        end
+    end
     uliv
 end
 
@@ -131,8 +176,8 @@ function add_loop_start_stop_manager!(ls::LoopSet)
     # TODO: replace first with only once you add Compat as a dep or drop support for older Julia versions
     loopinductvars = map(op -> first(loopdependencies(op)), filter(isloopvalue, operations(ls)))
     # Filtered ArrayReferenceMetas, we must increment each
-    arrayrefs = uniquearrayrefs(ls)
-    use_livs = map(ar -> use_loop_induct_var!(ls, q, ar, arrayrefs), arrayrefs)
+    arrayrefs, includeinlet = uniquearrayrefs(ls)
+    use_livs = map((ar,iil) -> use_loop_induct_var!(ls, q, ar, arrayrefs, iil), arrayrefs, includeinlet)
     # loops, sorted from outer-most to inner-most
     looporder = reversenames(ls)
     # For each loop, we need to choose an induction variable
@@ -175,60 +220,131 @@ function pointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvec
     pointermax(ls, ar, n, sub, isvectorized, getloop(ls, names(ls)[n]))
 end
 function pointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvectorized::Bool, loop::Loop)::Expr
-    pointermax(ls, ar, n, sub, isvectorized, looplengthexpr(loop, n))::Expr
+    if loop.startexact & loop.stopexact
+        return pointermax(ls, ar, n, sub, isvectorized, length(loop))
+    end
+    looplensym = loop.startexact & isone(loop.starthint) ? loop.stopsym : loop.lensym
+    pointermax(ls, ar, n, sub, isvectorized, looplensym)
 end
-function pointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvectorized::Bool, stophint::Int)::Expr
+function pointermax_index(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvectorized::Bool, stophint::Int)::Tuple{Expr,Int}
     # @unpack u₁loopnum, u₂loopnum, vectorizedloopnum, u₁, u₂ = us
     loopsym = names(ls)[n]
-    index = Expr(:tuple)
-    for i ∈ getindicesonly(ar)
+    index = Expr(:tuple) 
+    found_loop_sym = false
+    ind = 0
+    for (j,i) ∈ enumerate(getindicesonly(ar))
         if i === loopsym
+            ind = j
             if iszero(sub)
                 push!(index.args, stophint)
             elseif isvectorized
                 if isone(sub)
-                    push!(index.args, Expr(:call, lv(:valsub), stophint, VECTORWIDTHSYMBOL))
+                    push!(index.args, Expr(:call, lv(:vsub_fast), staticexpr(stophint), VECTORWIDTHSYMBOL))
                 else
-                    push!(index.args, Expr(:call, lv(:vsub), stophint, Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, sub)))
+                    push!(index.args, Expr(:call, lv(:vsub_fast), staticexpr(stophint), Expr(:call, lv(:vmul_fast), VECTORWIDTHSYMBOL, staticexpr(sub))))
                 end
             else
-                push!(index.args, stophint - sub)
+                push!(index.args, staticexpr(stophint - sub))
             end
-            ptr = vptr(ar)
-            return Expr(:call, lv(:pointerforcomparison), ptr, index)
         else
             push!(index.args, Expr(:call, lv(:Zero)))
         end
     end
-    @show ar, loopsym
+    @assert ind != 0 "Failed to find $loopsym"
+    index, ind
 end
-function pointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvectorized::Bool, stopsym)::Expr
-    # @unpack u₁loopnum, u₂loopnum, vectorizedloopnum, u₁, u₂ = us
+function pointermax_index(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvectorized::Bool, stopsym)::Tuple{Expr,Int}
     loopsym = names(ls)[n]
-    index = Expr(:tuple)
-    for i ∈ getindicesonly(ar)
+    index = Expr(:tuple);
+    ind = 0
+    for (j,i) ∈ enumerate(getindicesonly(ar))
         if i === loopsym
+            ind = j
             if iszero(sub)
                 push!(index.args, stopsym)
             elseif isvectorized
                 if isone(sub)
-                    push!(index.args, Expr(:call, lv(:valsub), stopsym, VECTORWIDTHSYMBOL))
+                    push!(index.args, Expr(:call, lv(:vsub_fast), stopsym, VECTORWIDTHSYMBOL))
                 else
-                    push!(index.args, Expr(:call, lv(:vsub), stopsym, Expr(:call, lv(:valmul), VECTORWIDTHSYMBOL, sub)))
+                    push!(index.args, Expr(:call, lv(:vsub_fast), stopsym, Expr(:call, lv(:vmul_fast), VECTORWIDTHSYMBOL, sub)))
                 end
             else
-                push!(index.args, Expr(:call, lv(:vsub), stopsym, sub))
+                push!(index.args, Expr(:call, lv(:vsub_fast), stopsym, sub))
             end
-            return Expr(:call, lv(:pointerforcomparison), vptr(ar), index)
         else
             push!(index.args, Expr(:call, lv(:Zero)))
         end
     end
-    @show ar, loopsym
+    @assert ind != 0 "Failed to find $loopsym"
+    index, ind
+end
+function pointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvectorized::Bool, stopsym)::Expr
+    index = first(pointermax_index(ls, ar, n, sub, isvectorized, stopsym))
+    Expr(:call, lv(:pointerforcomparison), vptr(ar), index)
+    # @show ar, loopsym
 end
 
 function defpointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvectorized::Bool)::Expr
     Expr(:(=), maxsym(vptr(ar), sub), pointermax(ls, ar, n, sub, isvectorized))
+end
+function offsetindex(dim::Int, ind::Int, scale::Int, isvectorized::Bool)
+    index = Expr(:tuple)
+    for d ∈ 1:dim
+        if d != ind || iszero(scale)
+            push!(index.args, Expr(:call, lv(:Zero)))
+            continue
+        end
+        if isvectorized
+            if isone(scale)
+                push!(index.args, VECTORWIDTHSYMBOL)
+            else
+                push!(index.args, Expr(:call, lv(:vmul_fast), VECTORWIDTHSYMBOL, staticexpr(scale)))
+            end
+        else
+            push!(index.args, staticexpr(scale))
+        end
+    end
+    index
+end
+function append_pointer_maxes!(loopstart::Expr, ls::LoopSet, ar::ArrayReferenceMeta, n::Int, submax::Int, isvectorized::Bool, stopindicator)
+    if submax < 2
+        for sub ∈ 0:submax
+            push!(loopstart.args, Expr(:(=), maxsym(vptr(ar), sub), pointermax(ls, ar, n, sub, isvectorized, stopindicator)))
+            # push!(loopstart.args, defpointermax(ls, ptrdefs[termind], n, sub, isvectorized, stopindicator))
+        end
+    else
+        index, ind = pointermax_index(ls, ar, n, submax, isvectorized, stopindicator)
+        vptr_ar = vptr(ar)
+        _pointercompbase = maxsym(vptr_ar, submax)
+        pointercompbase = gensym(_pointercompbase)
+        push!(loopstart.args, Expr(:(=), pointercompbase, Expr(:call, lv(:gesp), vptr_ar, index)))
+        push!(loopstart.args, Expr(:(=), _pointercompbase, Expr(:call, lv(:pointerforcomparison), pointercompbase)))
+        dim = length(getindicesonly(ar))
+        # OFFSETPRECALCDEF = true
+        # if OFFSETPRECALCDEF
+        for sub ∈ 0:submax-1
+            push!(loopstart.args, Expr(:(=), maxsym(vptr_ar, sub), Expr(:call, lv(:pointerforcomparison), pointercompbase, offsetindex(dim, ind, submax - sub, isvectorized))))
+        end
+        # else
+        #     indexoff = offsetindex(dim, ind, 1, isvectorized)
+        #     for sub ∈ submax-1:-1:0
+        #         _newpointercompbase = maxsym(vptr_ar, sub)
+        #         newpointercompbase = gensym(_pointercompbase)
+        #         push!(loopstart.args, Expr(:(=), newpointercompbase, Expr(:call, lv(:gesp), pointercompbase, indexoff)))
+        #         push!(loopstart.args, Expr(:(=), _newpointercompbase, Expr(:call, lv(:pointerforcomparison), newpointercompbase)))
+        #         _pointercompbase = _newpointercompbase
+        #         pointercompbase = newpointercompbase
+        #     end
+        # end
+    end
+end
+function append_pointer_maxes!(loopstart::Expr, ls::LoopSet, ar::ArrayReferenceMeta, n::Int, submax::Int, isvectorized::Bool)
+    loop = getloop(ls, names(ls)[n])
+    if loop.startexact & loop.stopexact
+        return append_pointer_maxes!(loopstart, ls, ar, n, submax, isvectorized, length(loop))
+    end
+    looplensym = loop.startexact & isone(loop.starthint) ? loop.stopsym : loop.lensym
+    append_pointer_maxes!(loopstart, ls, ar, n, submax, isvectorized, looplensym)
 end
 
 function maxunroll(us::UnrollSpecification, n)
@@ -259,9 +375,7 @@ function startloop(ls::LoopSet, us::UnrollSpecification, n::Int, submax = maxunr
         push!(loopstart.args, startloop(getloop(ls, loopsym), loopsym))
     else
         isvectorized = n == vectorizedloopnum
-        for sub ∈ 0:submax
-            push!(loopstart.args, defpointermax(ls, ptrdefs[termind], n, sub, isvectorized))
-        end
+        append_pointer_maxes!(loopstart, ls, ptrdefs[termind], n, submax, isvectorized)
     end
     loopstart
 end
@@ -280,7 +394,7 @@ function offset_ptr(ar::ArrayReferenceMeta, us::UnrollSpecification, loopsym::Sy
         else
             push!(gespinds.args, Expr(:call, lv(:Zero)))
         end
-        ind == loopsym && break
+        # ind == loopsym && break
     end
     Expr(:(=), vptr(ar), Expr(:call, lv(:gesp), vptr(ar), gespinds))
 end

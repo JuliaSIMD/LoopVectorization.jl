@@ -3,7 +3,7 @@ using LinearAlgebra
 using Test
 
 @testset "Miscellaneous" begin
-
+# T = Float32
     Unum, Tnum = LoopVectorization.REGISTER_COUNT == 16 ? (1, 6) : (1, 8)
     dot3q = :(for m ∈ 1:M, n ∈ 1:N
               s += x[m] * A[m,n] * y[n]
@@ -568,8 +568,11 @@ using Test
             end
         end
     end
+    # should be:
+    #  3.0  4.0  1.0  2.0  7.0  8.0  5.0  6.0  11.0  12.0  9.0  10.0  15.0  16.0  13.0  …  191.0  192.0  189.0  190.0  195.0  196.0  193.0  194.0  197.0  198.0  199.0
+     # 1.0  4.0  5.0  2.0  3.0  8.0  9.0  6.0  7.0  12.0  13.0  10.0  11.0  16.0  17.0  …  187.0  192.0  193.0  190.0  191.0  196.0  197.0  194.0  195.0  198.0  199.0
     function instruct_x_avx!(r::AbstractVector, loc::Int)
-        @avx for lhs in 0:(length(r) >> 1) - (1 << (loc - 1))
+      @avx for lhs in 0:(length(r) >> 1) - (1 << (loc - 1))
             # mask locations before
             p = lhs + lhs & ~(1 << (loc - 1) - 1)
             q = lhs + lhs & ~(1 << (loc - 1) - 1) + 1 << (loc - 1)
@@ -577,7 +580,7 @@ using Test
             tmp = r[p + 1]
             r[p + 1] = r[q + 1]
             r[q + 1] = tmp
-        end
+        end;
         return r
     end
     function instruct_x!(r::AbstractVector, loc::Int)
@@ -784,6 +787,31 @@ function maybe_const_issue144_avx!(𝛥mat, 𝛥ℛ, mat, ℛ)
     end
     𝛥mat
 end
+    function grad!(𝛥x, 𝛥ℛ, x, 𝒶𝓍i=eachindex(x))
+        for i = 𝒶𝓍i
+            (i >= first(axes(𝛥x, 1))) & (i <= last(axes(𝛥x, 1))) && (𝛥x[i] = 𝛥x[i] + 𝛥ℛ[i])
+        end
+        𝛥x
+    end
+    function grad_avx!(𝛥x, 𝛥ℛ, x, 𝒶𝓍i=eachindex(x))
+        @avx for i = 𝒶𝓍i
+            (i >= first(axes(𝛥x, 1))) & (i <= last(axes(𝛥x, 1))) && (𝛥x[i] = 𝛥x[i] + 𝛥ℛ[i])
+        end
+        𝛥x
+    end
+    function grad_avx_base!(𝛥x, 𝛥ℛ, x, 𝒶𝓍i=eachindex(x))
+        @avx for i = 𝒶𝓍i
+            (i >= first(axes(𝛥x, 1))) & (i <= Base.last(axes(𝛥x, 1))) && (𝛥x[i] = 𝛥x[i] + 𝛥ℛ[i])
+        end
+        𝛥x
+    end
+    @eval function grad_avx_eval!(𝛥x, 𝛥ℛ, x, 𝒶𝓍i=eachindex(x))
+        @avx for i = 𝒶𝓍i
+            (i >= $first($axes(𝛥x, 1))) & (i <= $last($axes(𝛥x, 1))) && (𝛥x[i] = 𝛥x[i] + 𝛥ℛ[i])
+        end
+        𝛥x
+    end # LoadError: KeyError: key typeof(first) not found
+
 
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
@@ -811,6 +839,8 @@ end
         fill!(x2, T(NaN)); myvar_avx!(x2, A, x̄)
         @test x1 ≈ x2
 
+        # x1b = x1; x2b = x2;
+        # x1 = copy(x1b); x2 = copy(x2b); x1 ≈ x2
         @test instruct_x!(x1, 2) ≈ instruct_x_avx!(x2, 2)
         @test instruct_x!(x1, 3) ≈ instruct_x_avx!(x2, 3)
         @test instruct_x!(x1, 4) ≈ instruct_x_avx!(x2, 4)
@@ -1010,6 +1040,7 @@ end
             rtol = ∛(eps(T))
         )
 
+        @test grad!(zeros(5), ones(5), ones(3)) ≈ grad_avx!(zeros(5), ones(5), ones(3)) ≈ grad_avx_base!(zeros(5), ones(5), ones(3)) ≈ grad_avx_eval!(zeros(5), ones(5), ones(3))
     end
     for T ∈ [Int16, Int32, Int64]
         n = 8sizeof(T) - 1
@@ -1023,47 +1054,47 @@ end
         @test out1 == out2
     end
 
-function smoothdim!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
-    ifirst, ilast = first(irng), last(irng)
-    ifirst > ilast && return s
-    # @inbounds @fastmath for Ipost in Rpost
-    for Ipost in Rpost
-        # Initialize the first value along the filtered dimension
-        for Ipre in Rpre
-            s[Ipre, ifirst, Ipost] = x[Ipre, ifirst, Ipost]
-        end
-        # Handle all other entries
-        for i = ifirst+1:ilast
+    function smoothdim!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
+        ifirst, ilast = first(irng), last(irng)
+        ifirst > ilast && return s
+        # @inbounds @fastmath for Ipost in Rpost
+        for Ipost in Rpost
+            # Initialize the first value along the filtered dimension
             for Ipre in Rpre
-                s[Ipre, i, Ipost] = α*x[Ipre, i, Ipost] + (1-α)*x[Ipre, i-1, Ipost]
+                s[Ipre, ifirst, Ipost] = x[Ipre, ifirst, Ipost]
             end
-        end
-    end
-    s
-end
-function smoothdim_avx!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
-    ifirst, ilast = first(irng), last(irng)
-    ifirst > ilast && return s
-    @avx for Ipost in Rpost
-        for Ipre in Rpre
-            s[Ipre, ifirst, Ipost] = x[Ipre, ifirst, Ipost]
+            # Handle all other entries
             for i = ifirst+1:ilast
-                s[Ipre, i, Ipost] = α*x[Ipre, i, Ipost] + (1-α)*x[Ipre, i-1, Ipost]
+                for Ipre in Rpre
+                    s[Ipre, i, Ipost] = α*x[Ipre, i, Ipost] + (1-α)*x[Ipre, i-1, Ipost]
+                end
             end
         end
+        s
     end
-    s
-end
-function smoothdim_ifelse_avx!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
-    ifirst, ilast = first(irng), last(irng)
-    ifirst > ilast && return s
-    @avx for Ipost in Rpost, i = ifirst:ilast, Ipre in Rpre
-        xi = x[Ipre, i, Ipost]
-        xim = i > ifirst ? x[Ipre, i-1, Ipost] : xi
-        s[Ipre, i, Ipost] = α*xi + (1-α)*xim
+    function smoothdim_avx!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
+        ifirst, ilast = first(irng), last(irng)
+        ifirst > ilast && return s
+        @avx for Ipost in Rpost
+            for Ipre in Rpre
+                s[Ipre, ifirst, Ipost] = x[Ipre, ifirst, Ipost]
+                for i = ifirst+1:ilast
+                    s[Ipre, i, Ipost] = α*x[Ipre, i, Ipost] + (1-α)*x[Ipre, i-1, Ipost]
+                end
+            end
+        end
+        s
     end
-    s
-end
+    function smoothdim_ifelse_avx!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
+        ifirst, ilast = first(irng), last(irng)
+        ifirst > ilast && return s
+        @avx for Ipost in Rpost, i = ifirst:ilast, Ipre in Rpre
+            xi = x[Ipre, i, Ipost]
+            xim = i > ifirst ? x[Ipre, i-1, Ipost] : xi
+            s[Ipre, i, Ipost] = α*xi + (1-α)*xim
+        end
+        s
+    end
 
     for T ∈ (Float32, Float64)
         @testset "Mixed CartesianIndex/Int indexing" begin
@@ -1096,36 +1127,35 @@ end
             end
         end
     end
-end
 
 
-function mul1!(y::Vector{T}, A::Matrix{UInt8}, x::Vector{T}) where T 
-    packedstride = size(A, 1)
-    m, n = size(A)
-    @avx for j ∈ eachindex(x)
-        for i ∈ eachindex(y)
-            k = 2 * ((i-1) & 3)
-            block = A[(j-1) * packedstride + ((i-1) >> 2) + 1]
-            Aij = (block >> k) & 3
-            y[i] += (((Aij >= 2) + (Aij >= 3))) * x[j]
+    function mul1!(y::Vector{T}, A::Matrix{UInt8}, x::Vector{T}) where T 
+        packedstride = size(A, 1)
+        m, n = size(A)
+        @avx for j ∈ eachindex(x)
+            for i ∈ eachindex(y)
+                k = 2 * ((i-1) & 3)
+                block = A[(j-1) * packedstride + ((i-1) >> 2) + 1]
+                Aij = (block >> k) & 3
+                y[i] += (((Aij >= 2) + (Aij >= 3))) * x[j]
+            end
         end
+        y
     end
-    y
-end
-function mul2!(y::Vector{T}, A::Matrix{UInt8}, x::Vector{T}) where T 
-    packedstride = size(A, 1)
-    m, n = size(A)
-    for j ∈ eachindex(x)
-        for i ∈ eachindex(y)
-            k = 2 * ((i-1) & 3)
-            block = A[(j-1) * packedstride + ((i-1) >> 2) + 1]
-            Aij = (block >> k) & 3
-            y[i] += (((Aij >= 2) + (Aij >= 3))) * x[j]
+    function mul2!(y::Vector{T}, A::Matrix{UInt8}, x::Vector{T}) where T 
+        packedstride = size(A, 1)
+        m, n = size(A)
+        for j ∈ eachindex(x)
+            for i ∈ eachindex(y)
+                k = 2 * ((i-1) & 3)
+                block = A[(j-1) * packedstride + ((i-1) >> 2) + 1]
+                Aij = (block >> k) & 3
+                y[i] += (((Aij >= 2) + (Aij >= 3))) * x[j]
+            end
         end
+        y
     end
-    y
-end
-if Base.libllvm_version ≥ v"8" || LoopVectorization.VectorizationBase.SIMD_NATIVE_INTEGERS
+
     @testset "UInt8 mul" begin
         for n in 1:200
             v1 = rand(n); v3 =copy(v1);
@@ -1134,5 +1164,16 @@ if Base.libllvm_version ≥ v"8" || LoopVectorization.VectorizationBase.SIMD_NAT
             @test mul1!(v1, A, v2) ≈ mul2!(v3, A, v2)
         end
     end
+
+    @test_throws LoadError @macroexpand begin # pull #172
+        @avx for i in eachindex(xs)
+            if i in axes(ys,1)
+                xs[i] = ys[i]
+            else
+                xs[i] = zero(eltype(ys))
+            end
+        end
+    end
+
 end
 

@@ -1,7 +1,8 @@
-using LoopVectorization, OffsetArrays, Test
-using LoopVectorization.VectorizationBase: StaticUnitRange
-# T = Float64
-# T = Float32
+using LoopVectorization, ArrayInterface, OffsetArrays, Test
+using LoopVectorization: Static
+# T = Float64; r = -1:1;
+# T = Float32; r = -1:1;
+
 
 @testset "OffsetArrays" begin
 
@@ -21,26 +22,33 @@ using LoopVectorization.VectorizationBase: StaticUnitRange
     # out = out1;
     # R=CartesianIndices(out);
     # z=zero(eltype(out));
-    # rng1k, rng2k = axes(skern);
+    # # rng1k, rng2k = axes(skern);
     # rng1,  rng2  = R.indices;
     # tmp = z; i = 2; j = 2;
-    # ls1 = LoopVectorization.@avx_debug for jk in rng2k, ik in rng1k
-    #     tmp += A[i+ik,j+jk]*skern[ik,jk]
+    # ls1 = LoopVectorization.@avx_debug for jk in rng2, ik in rng1
+    #     tmp += A[i+ik,j+jk]*kern[ik,jk]
     # end;
     # ls1
 
     # out = out1;
-    # rng1,  rng2  = CartesianIndices(out1).indices;
-    # rng1k, rng2k = axes(kern);
-    # # C = At';
-    # ls2d = LoopVectorization.@avx_debug for j in rng2, i in rng1
-    #         tmp = zero(eltype(out))
-    #         for jk in rng2k, ik in rng1k
+    # C = At';
+    # ls2d = LoopVectorization.@avx_debug for j in axes(out1,2), i in axes(out1,1)
+    #         tmp = zero(eltype(out1))
+    #         for jk in axes(kern,2), ik in axes(kern,1)
     #             tmp += A[i+ik,j+jk]*kern[ik,jk]
     #         end
     #         out1[i,j] = tmp
     # end;
     # LoopVectorization.choose_order(ls2d)
+    # ls2ds = LoopVectorization.@avx_debug for j in axes(out1,2), i in axes(out1,1)
+    #         tmp = zero(eltype(out1))
+    #         for jk in axes(skern,2), ik in axes(skern,1)
+    #             tmp += A[i+ik,j+jk]*skern[ik,jk]
+    #         end
+    #         out1[i,j] = tmp
+    # end;
+    # LoopVectorization.choose_order(ls2ds)
+
     
     # q2d = :(for j in rng2, i in rng1
     #         tmp = zero(eltype(out))
@@ -91,25 +99,21 @@ using LoopVectorization.VectorizationBase: StaticUnitRange
         data::Matrix{T}
     end
     Base.size(::SizedOffsetMatrix{<:Any,LR,UR,LC,UC}) where {LR,UR,LC,UC} = (UR-LR+1,UC-LC+1)
-    Base.axes(::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (StaticUnitRange{LR,UR}(),StaticUnitRange{LC,UC}())
+    Base.axes(::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (Static{LR}():Static{UR}(),Static{LC}():Static{UC}())
     Base.parent(A::SizedOffsetMatrix) = A.data
-    @generated function LoopVectorization.stridedpointer(A::SizedOffsetMatrix{T,LR,UR,LC,RC}) where {T,LR,UR,LC,RC}
-        quote
-            $(Expr(:meta,:inline))
-            LoopVectorization.OffsetStridedPointer(
-                LoopVectorization.StaticStridedPointer{$T,Tuple{1,$(UR-LR+1)}}(pointer(parent(A))),
-                ($(LR-1), $(LC-1))
-            )
-        end
+    Base.unsafe_convert(::Type{Ptr{T}}, A::SizedOffsetMatrix{T}) where {T} = pointer(A.data)
+    ArrayInterface.contiguous_axis(::Type{<:SizedOffsetMatrix}) = ArrayInterface.Contiguous{1}()
+    ArrayInterface.contiguous_batch_size(::Type{<:SizedOffsetMatrix}) = ArrayInterface.ContiguousBatch{0}()
+    ArrayInterface.stride_rank(::Type{<:SizedOffsetMatrix}) = ArrayInterface.StrideRank{(1,2)}()
+    function ArrayInterface.strides(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC}
+        (Static{1}(), (Static{UR}() - Static{LR}() + Static{1}()))
     end
-    # Base.size(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (1 + UR-LR, 1 + UC-LC)
-    # Base.CartesianIndices(::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = CartesianIndices((LR:UR,LC:UC))
-    Base.getindex(A::SizedOffsetMatrix, i, j) = LoopVectorization.vload(LoopVectorization.stridedpointer(A), (i-1,j-1))
+    ArrayInterface.offsets(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (Static{LR}(), Static{LC}())
+    Base.getindex(A::SizedOffsetMatrix, i, j) = LoopVectorization.vload(LoopVectorization.stridedpointer(A), (i,j))
     function avx2dunrolled!(out::AbstractMatrix, A::AbstractMatrix, kern::SizedOffsetMatrix{T,-1,1,-1,1}) where {T}
-        rng1,  rng2  = axes(out)
         Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> kern_ik_jk = kern[ik-2,jk-2]
         # Manually unpack the OffsetArray
-        @avx for j in rng2, i in rng1
+        @avx for j in axes(out,2), i in axes(out,1)
             tmp_0 = zero(eltype(out))
             Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> tmp_{ik+(jk-1)*3} = A[(ik-2)+i,(jk-2) + j*1] * kern_ik_jk + tmp_{ik+(jk-1)*3-1}
             out[i,j] = tmp_9
@@ -117,9 +121,10 @@ using LoopVectorization.VectorizationBase: StaticUnitRange
         out
     end
     function avx2dunrolled2x2!(out::AbstractMatrix, A::AbstractMatrix, kern::SizedOffsetMatrix{T,-1,1,-1,1}) where {T}
-        rng1,  rng2  = axes(out)
+        # rng1,  rng2  = axes(out)
         # Manually unpack the OffsetArray
-        @avx unroll=(2,2) for j in rng2, i in rng1
+        # @avx for j in rng2, i in rng1
+        @avx unroll=(2,2) for j in axes(out,2), i in axes(out,1)
             Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> kern_ik_jk = kern[ik - 2, jk + (-2)]
             tmp_0 = zero(eltype(out))
             j1 = j * 1
@@ -204,10 +209,10 @@ using LoopVectorization.VectorizationBase: StaticUnitRange
         @show T, @__LINE__
         Abase = fill(T(NaN), 200, 200);
         # out of bounds reads load NaNs, poisoning results leading to test failure.
-        A = view(Abase, 51:150, 51:150);
+        A = view(Abase, 51:152, 51:152);
         A .= rand.();
         Atbase = copy(Abase');
-        At = view(Atbase, 51:150, 51:150);
+        At = view(Atbase, 51:152, 51:152);
         for r ∈ (-1:1, -2:2)
             @show r
             fr = first(r); lr = last(r);

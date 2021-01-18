@@ -1,23 +1,24 @@
 module LoopVectorization
 
-if (!isnothing(get(ENV, "TRAVIS_BRANCH", nothing)) || !isnothing(get(ENV, "APPVEYOR", nothing))) && isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@optlevel"))
-    @eval Base.Experimental.@optlevel 1
-end
+# if (!isnothing(get(ENV, "TRAVIS_BRANCH", nothing)) || !isnothing(get(ENV, "APPVEYOR", nothing))) && isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@optlevel"))
+    # @eval Base.Experimental.@optlevel 1
+# end
 
-using VectorizationBase, SLEEFPirates, UnPack, OffsetArrays, ArrayInterface
-using VectorizationBase: NativeTypes, REGISTER_SIZE, REGISTER_COUNT, MM, insertelement, extractelement
-# using VectorizationBase: num_vector_load_expr,
-#     mask, pick_vector_width_val, MM, vzero, stridedpointer_for_broadcast,
-#     Zero, unwrap, maybestaticrange, REGISTER_COUNT,
-#     AbstractColumnMajorStridedPointer, AbstractRowMajorStridedPointer, AbstractSparseStridedPointer, AbstractStaticStridedPointer,
-#     PackedStridedPointer, SparseStridedPointer, RowMajorStridedPointer, StaticStridedPointer, StaticStridedStruct, offsetprecalc,
-#     maybestaticfirst, maybestaticlast, noalias!, gesp, gepbyte, pointerforcomparison, NativeTypes,
-#     reduced_add, reduced_prod, reduce_to_add, reduced_max, reduced_min, vsum, vprod, vmaximum, vminimum,
-#     sizeequivalentfloat, sizeequivalentint, vfmadd231, vfmsub231, vfnmadd231, vfnmsub231, sizeequivalentfloat, sizeequivalentint, relu
-    # vadd!, vsub!, vmul!, vfdiv!, vfmadd!, vfnmadd!, vfmsub!, vfnmsub!,
-    # vmullog2, vmullog10, vdivlog2, vdivlog10, vmullog2add!, vmullog10add!, vdivlog2add!, vdivlog10add!, vfmaddaddone, vadd1
-# using SLEEFPirates: pow # why?
-using Base: OneTo, setindex
+using VectorizationBase, SLEEFPirates, UnPack, OffsetArrays
+using VectorizationBase: REGISTER_SIZE, REGISTER_COUNT, data,
+    mask, pick_vector_width_val, MM,
+    maybestaticlength, maybestaticsize, staticm1, staticp1, staticmul, vzero,
+    Zero, maybestaticrange, offsetprecalc, lazymul,
+    maybestaticfirst, maybestaticlast, scalar_less, scalar_greaterequal, gep, gesp, pointerforcomparison, NativeTypes,
+    vfmadd, vfmsub, vfnmadd, vfnmsub, vfmadd_fast, vfmsub_fast, vfnmadd_fast, vfnmsub_fast, vfmadd231, vfmsub231, vfnmadd231, vfnmsub231,
+    vfma_fast, vmuladd_fast, vdiv_fast, vadd_fast, vsub_fast, vmul_fast,
+    relu, stridedpointer, StridedPointer, StridedBitPointer, AbstractStridedPointer,
+    reduced_add, reduced_prod, reduce_to_add, reduce_to_prod, reduced_max, reduced_min, reduce_to_max, reduce_to_min,
+    vsum, vprod, vmaximum, vminimum, vstorent!
+
+using IfElse: ifelse
+
+using SLEEFPirates: pow
 using Base.Broadcast: Broadcasted, DefaultArrayStyle
 using LinearAlgebra: Adjoint, Transpose
 using Base.Meta: isexpr
@@ -25,12 +26,25 @@ using DocStringExtensions
 using ArrayInterface: StaticInt
 import LinearAlgebra # for check_args
 
-# using Base.FastMath: add_fast, sub_fast, mul_fast, div_fast
+using Base.FastMath: add_fast, sub_fast, mul_fast, div_fast, inv_fast, abs2_fast, rem_fast, max_fast, min_fast
 
-# export LowDimArray, stridedpointer,
-#     @avx, @_avx, *ˡ, _avx_!,
-#     vmap, vmap!, vmapt, vmapt!, vmapnt, vmapnt!, vmapntt, vmapntt!,
-#     vfilter, vfilter!, vmapreduce, vreduce
+
+using ArrayInterface
+using ArrayInterface: OptionallyStaticUnitRange, Zero, One#, static_length
+const Static = ArrayInterface.StaticInt
+
+using ThreadingUtilities
+using Requires
+
+
+export LowDimArray, stridedpointer,
+    @avx, @_avx, *ˡ, _avx_!,
+    vmap, vmap!, vmapt, vmapt!, vmapnt, vmapnt!, vmapntt, vmapntt!, tanh_fast, sigmoid_fast,
+    vfilter, vfilter!, vmapreduce, vreduce
+
+@inline unwrap(::Val{N}) where {N} = N
+@inline unwrap(::Static{N}) where {N} = N
+@inline unwrap(x) = x
 
 const VECTORWIDTHSYMBOL, ELTYPESYMBOL = Symbol("##Wvecwidth##"), Symbol("##Tloopeltype##")
 
@@ -44,9 +58,11 @@ include("loopset/loopset.jl")
 include("optimizing/costs.jl")
 include("optimizing/determinestrategy.jl")
 
+# include("vectorizationbase_compat/contract_pass.jl")
+# include("vectorizationbase_compat/subsetview.jl")
+include("closeopen.jl")
 # include("getconstindexes.jl")
-# include("vectorizationbase_extensions.jl")
-# include("predicates.jl")
+include("predicates.jl")
 include("map.jl")
 include("filter.jl")
 # include("costs.jl")
@@ -60,6 +76,7 @@ include("filter.jl")
 # include("add_constants.jl")
 # include("add_ifelse.jl")
 # include("determinestrategy.jl")
+# include("line_number_nodes.jl")
 # include("loopstartstopmanager.jl")
 # include("lower_compute.jl")
 # include("lower_constant.jl")
@@ -74,6 +91,7 @@ include("filter.jl")
 # include("user_api_conveniences.jl")
 # include("mapreduce.jl")
 # include("broadcast.jl")
+
 
 """
 LoopVectorization provides macros and functions that combine SIMD vectorization and
@@ -90,5 +108,13 @@ LoopVectorization
 
 # include("precompile.jl")
 # _precompile_()
+
+# import ChainRulesCore, ForwardDiff
+# include("vmap_grad.jl")
+function __init__()
+    @require ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4" begin
+        @require ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210" include("vmap_grad.jl")
+    end
+end
 
 end # module

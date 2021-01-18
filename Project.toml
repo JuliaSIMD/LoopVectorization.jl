@@ -6,23 +6,32 @@ version = "0.10.0"
 [deps]
 ArrayInterface = "4fba245c-0d91-5ea0-9b3e-6abc04ee57a9"
 DocStringExtensions = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
+IfElse = "615f187c-cbe4-4ef1-ba3b-2fcf58d6d173"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
+Requires = "ae029012-a4dd-5104-9daa-d747884805df"
 SLEEFPirates = "476501e8-09a2-5ece-8869-fb82de89a1fa"
+ThreadingUtilities = "8290d209-cae3-49c0-8002-c8c24d57dab5"
 UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 VectorizationBase = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
 
 [compat]
+ArrayInterface = "2.14.12"
 DocStringExtensions = "0.8"
-OffsetArrays = "1.4.1"
-SLEEFPirates = "0.6"
-UnPack = "0,1"
-VectorizationBase = "0.14"
+IfElse = "0.1"
+OffsetArrays = "1.4.1, 1.5"
+Requires = "1"
+SLEEFPirates = "0.6.6"
+ThreadingUtilities = "0.1"
+UnPack = "1"
+VectorizationBase = "0.15.3"
 julia = "1.5"
 
 [extras]
+Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
+InteractiveUtils = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Random", "Test"]
+test = ["Aqua", "InteractiveUtils", "Random", "Test"]

@@ -10,7 +10,7 @@ end
 #     add_constant!(ls, sym, elementbytes)
 # end
 function add_constant!(ls::LoopSet, var::Number, elementbytes::Int = 8)
-    op = Operation(length(operations(ls)), gensym(:loopconstnumber), elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS)
+    op = Operation(length(operations(ls)), gensym!(ls, "loopconstnumber"), elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS)
     ops = operations(ls)
     typ = var isa Integer ? HardInt : HardFloat
     rop = pushop!(ls, op)
@@ -36,7 +36,7 @@ end
 function add_constant!(ls::LoopSet, mpref::ArrayReferenceMetaPosition, elementbytes::Int)
     op = Operation(length(operations(ls)), varname(mpref), elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS, mpref.mref)
     add_vptr!(ls, op)
-    temp = gensym(:intermediateconstref)
+    temp = gensym!(ls, "intermediateconstref")
     vloadcall = Expr(:call, lv(:vload), mpref.mref.ptr)
     if length(getindices(op)) > 0
         push!(vloadcall.args, mem_offset(op, UnrollArgs(0, Symbol(""), Symbol(""), Symbol(""), 0, nothing), Bool[]))
@@ -69,7 +69,7 @@ end
 function add_constant!(
     ls::LoopSet, value::Number, deps::Vector{Symbol}, assignedsym::Symbol, elementbytes::Int
 )
-    op = add_constant!(ls, gensym(string(value)), deps, assignedsym, elementbytes, :numericconstant)
+    op = add_constant!(ls, gensym!(ls, string(value)), deps, assignedsym, elementbytes, :numericconstant)
     pushpreamble!(ls, op, value)
     op
 end

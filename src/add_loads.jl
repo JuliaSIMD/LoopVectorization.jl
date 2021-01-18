@@ -2,13 +2,13 @@ function maybeaddref!(ls::LoopSet, op)
     ref = op.ref
     id = findfirst(r -> r == ref, ls.refs_aliasing_syms)
     # try to CSE
-    if isnothing(id)
+    if id === nothing
         push!(ls.syms_aliasing_refs, name(op))
         push!(ls.refs_aliasing_syms, ref)
         0
     else
         id
-    end    
+    end
 end
 
 function add_load!(ls::LoopSet, op::Operation, actualarray::Bool = true, broadcast::Bool = false)

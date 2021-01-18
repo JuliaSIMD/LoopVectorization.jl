@@ -7,6 +7,23 @@ function should_broadcast_op(op::Operation)
     true
 end
 
+
+@inline sizeequivalentfloat(::Type{T}) where {T<:Union{Float16,Float32,Float64}} = T
+@inline sizeequivalentfloat(::Type{T}) where {T <: Union{Int8,UInt8}} = Float32
+@inline sizeequivalentfloat(::Type{T}) where {T <: Union{Int16,UInt16}} = Float16
+@inline sizeequivalentfloat(::Type{T}) where {T <: Union{Int32,UInt32}} = Float32
+@inline sizeequivalentfloat(::Type{T}) where {T <: Union{Int64,UInt64}} = Float64
+@inline sizeequivalentint(::Type{T}) where {T <: Integer} = T
+@inline sizeequivalentint(::Type{Float16}) = Int16
+@inline sizeequivalentint(::Type{Float32}) = Int32
+@inline sizeequivalentfloat(::Type{T}, x) where {T} = sizeequivalentfloat(T)(x)
+@inline sizeequivalentint(::Type{T}, x) where {T} = sizeequivalentint(T)(x)
+if VectorizationBase.AVX512DQ || !((Sys.ARCH === :x86_64) || (Sys.ARCH === :i686))
+    @inline sizeequivalentint(::Type{Float64}) = Int64
+else
+    @inline sizeequivalentint(::Type{Float64}) = Int32
+end
+
 # @inline onefloat(::Type{T}) where {T} = one(sizeequivalentfloat(T))
 # @inline oneinteger(::Type{T}) where {T} = one(sizeequivalentint(T))
 @inline zerofloat(::Type{T}) where {T} = zero(sizeequivalentfloat(T))
@@ -70,14 +87,14 @@ function lower_constant!(
         call = if reducedchildvectorized && vectorized ∉ loopdependencies(op)
             instrclass = getparentsreductzero(ls, op)
             if instrclass == ADDITIVE_IN_REDUCTIONS
-                Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:SIMDPirates)), QuoteNode(:addscalar)), Expr(:call, lv(:vzero), VECTORWIDTHSYMBOL, ELTYPESYMBOL), constsym)
+                Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:VectorizationBase)), QuoteNode(:addscalar)), Expr(:call, lv(:vzero), VECTORWIDTHSYMBOL, ELTYPESYMBOL), constsym)
             elseif instrclass == MULTIPLICATIVE_IN_REDUCTIONS
-                Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:SIMDPirates)), QuoteNode(:mulscalar)), Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, Expr(:call, :one, ELTYPESYMBOL)), constsym)
+                Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:VectorizationBase)), QuoteNode(:mulscalar)), Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, Expr(:call, :one, ELTYPESYMBOL)), constsym)
             elseif instrclass == MAX
-                Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:SIMDPirates)), QuoteNode(:maxscalar)), Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, Expr(:call, :typemin, ELTYPESYMBOL)), constsym)
+                Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:VectorizationBase)), QuoteNode(:maxscalar)), Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, Expr(:call, :typemin, ELTYPESYMBOL)), constsym)
                 
             elseif instrclass == MIN
-                Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:SIMDPirates)), QuoteNode(:minscalar)), Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, Expr(:call, :typemax, ELTYPESYMBOL)), constsym)
+                Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:VectorizationBase)), QuoteNode(:minscalar)), Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, Expr(:call, :typemax, ELTYPESYMBOL)), constsym)
                 
             else
                 throw("Reductions of type $(reduction_zero(reinstrclass)) not yet supported; please file an issue as a reminder to take care of this.")
@@ -148,7 +165,7 @@ function lower_licm_constants!(ls::LoopSet)
         end
     end
     for (id,f) ∈ ls.preamble_funcofeltypes
-        setop!(ls, ops[id], Expr(:call, f, ELTYPESYMBOL))
+        setop!(ls, ops[id], Expr(:call, reduction_zero(f), ELTYPESYMBOL))
     end
 end
 

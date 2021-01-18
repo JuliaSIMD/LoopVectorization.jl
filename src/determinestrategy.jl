@@ -1,4 +1,6 @@
 
+const CACHELINE_SIZE = something(VectorizationBase.L₁CACHE.linesize, 64)
+
 # function indexappearences(op::Operation, s::Symbol)
 #     s ∉ loopdependencies(op) && return 0
 #     appearences = 0
@@ -11,9 +13,28 @@
 #     for opp ∈ parents(op)
 #         newapp += indexappearences(opp, s)
 #     end
-#     factor = instruction(op).instr ∈ (:+, :vadd, :add_fast, :evadd) ? 1 : 10
+#     factor = instruction(op).instr ∈ (:+, :vadd, :add_fast, :vadd_fast) ? 1 : 10
 #     newapp * factor
 # end
+function check_linear_parents(ls::LoopSet, op::Operation, s::Symbol)
+    (s ∈ loopdependencies(op)) || return true
+    if isload(op) # TODO: handle loading from ranges.
+        return false
+    elseif !iscompute(op)
+        return true
+    end
+    op_is_linear = false
+    instr_op = instruction(op).instr
+    for instr ∈ (:(+), :vadd, :vadd1, :add_fast, :(-), :vsub, :sub_fast)
+        (op_is_linear = instr === instr_op) && break
+    end
+    op_is_linear || return false
+    for opp ∈ parents(op)
+        check_linear_parents(ls, opp, s) || return false
+    end
+    true
+end
+
 function findparent(ls::LoopSet, s::Symbol)#opdict isn't filled when reconstructing
     id = findfirst(op -> name(op) === s, operations(ls))
     id === nothing && throw("$s not found")
@@ -30,6 +51,10 @@ function unitstride(ls::LoopSet, op::Operation, s::Symbol)
     #     # We must check if this
     #     parent = findparent(ls, fi)
     #     indexappearences(parent, s) > 1 && return false
+    end
+    if length(li) > 0 && !first(li)
+        parent = findparent(ls, first(inds))
+        check_linear_parents(ls, parent, s) || return false
     end
     for i ∈ 2:length(inds)
         if li[i]
@@ -57,7 +82,7 @@ function cost(ls::LoopSet, op::Operation, vectorized::Symbol, Wshift::Int, size_
     instr = instruction(op)
     # instr = instruction(op)
     if length(parents(op)) == 1
-        if instr == Instruction(:-) || instr === Instruction(:vsub) || instr == Instruction(:+) || instr == Instruction(:vadd)
+        if instr == Instruction(:-) || instr === Instruction(:sub_fast) || instr == Instruction(:+) || instr == Instruction(:add_fast)
             return 0.0, 0, 0.0
         end
     elseif iscompute(op) && all(opp -> (isloopvalue(opp) | isconstant(opp)), parents(op))
@@ -80,7 +105,7 @@ function cost(ls::LoopSet, op::Operation, vectorized::Symbol, Wshift::Int, size_
                 #       would be nice to add a check for this CPU, to see if such a penalty is still appropriate.
                 #       Also, once more SVE (scalable vector extension) CPUs are released, would be nice to know if
                 #       this feature is common to all of them.
-                srt += 0.5VectorizationBase.REGISTER_SIZE / VectorizationBase.CACHELINE_SIZE
+                srt += 0.5VectorizationBase.REGISTER_SIZE / CACHELINE_SIZE
             end
         elseif isstore(op) # broadcast or reductionstore; if store we want to penalize reduction
             srt *= 3
@@ -120,7 +145,8 @@ function lsvecwidthshift(ls::LoopSet, vectorized::Symbol, size_T = nothing)
     W = ls.vector_width[]
     lvec = length(ls, vectorized)
     if iszero(W)
-        VectorizationBase.pick_vector_width_shift(lvec, isnothing(size_T) ? biggest_type_size(ls) : size_T)::Tuple{Int,Int}
+        VectorizationBase.pick_vector_width_shift_from_size(lvec, isnothing(size_T) ? biggest_type_size(ls) : size_T)::Tuple{Int,Int}
+        # VectorizationBase.pick_vector_width_shift(lvec, isnothing(size_T) ? biggest_type_size(ls) : size_T)::Tuple{Int,Int}
     else
         W = min(W, VectorizationBase.nextpow2(lvec))
         W, VectorizationBase.intlog2(W)
@@ -161,6 +187,7 @@ function evaluate_cost_unroll(
                 end
             end
             included_vars[id] = true
+            # @show op, cost(ls, op, vectorized, Wshift, size_T)
             total_cost += iter * first(cost(ls, op, vectorized, Wshift, size_T))
             total_cost > max_cost && return total_cost # abort if more expensive; we only want to know the cheapest
         end
@@ -369,6 +396,7 @@ function solve_unroll_iter(X, R, u₁L, u₂L, u₁range, u₂range)
             RR ≥ u₁temp*u₂temp*R₁ + u₁temp*R₂ + u₂temp*R₅ || continue
             tempcost = unroll_cost(X, u₁temp, u₂temp, u₁L, u₂L)
             # @show u₁temp, u₂temp, tempcost
+            # @show u₁temp*u₂temp*R₁ + u₁temp*R₂ + u₂temp*R₅
             if tempcost ≤ bestcost
                 bestcost = tempcost
                 u₁best, u₂best = u₁temp, u₂temp
@@ -380,6 +408,10 @@ end
 
 function solve_unroll(X, R, u₁L, u₂L, u₁step, u₂step)
     X₁, X₂, X₃, X₄ = X[1], X[2], X[3], X[4]
+    # If we don't have AVX512, masks occupy a vector register;
+    # AVX512F is currently defined as `false` for non-x86 CPUs, but
+    # should instead define generic constant `HAS_OPMASK_REGISTERS` in VectorizationBase.jl to use here instead.
+    VectorizationBase.AVX512F || (R[3] += 1)
     R₁, R₂, R₃, R₄, R₅ = R[1], R[2], R[3], R[4], R[5]
     iszero(R₅) || return solve_unroll_iter(X, R, u₁L, u₂L, u₁step:u₁step:10, u₂step:u₂step:10)
     RR = REGISTER_COUNT - R₃ - R₄
@@ -469,9 +501,9 @@ function solve_unroll(
     W::Int, vectorized::Symbol, rounduᵢ::Int
 )
     (u₁step, u₂step) = if rounduᵢ == 1 # max is to safeguard against some weird arch I've never heard of.
-        (max(1,VectorizationBase.CACHELINE_SIZE ÷ VectorizationBase.REGISTER_SIZE), 1)
+        (max(1,CACHELINE_SIZE ÷ VectorizationBase.REGISTER_SIZE), 1)
     elseif rounduᵢ == 2
-        (1, max(1,VectorizationBase.CACHELINE_SIZE ÷ VectorizationBase.REGISTER_SIZE))
+        (1, max(1,CACHELINE_SIZE ÷ VectorizationBase.REGISTER_SIZE))
     else
         (1, 1)
     end
@@ -887,7 +919,7 @@ function evaluate_cost_tile(
         rt, lat, rp = cost(ls, op, vectorized, Wshift, size_T)
         if isload(op)
             if !iszero(prefetchisagoodidea(ls, op, UnrollArgs(4, unrollsyms, 4, 0)))
-                # rt += 0.5VectorizationBase.REGISTER_SIZE / VectorizationBase.CACHELINE_SIZE
+                # rt += 0.5VectorizationBase.REGISTER_SIZE / CACHELINE_SIZE
                 prefetch_good_idea = true
             end
         end

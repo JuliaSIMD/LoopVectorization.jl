@@ -75,8 +75,8 @@ Base.:(==)(x::ArrayReferenceMeta, y::ArrayReferenceMeta) = (x.ptr === y.ptr) && 
 # Errors preferable than silently working?
 Base.:(==)(x::ArrayReference, y::ArrayReferenceMeta) = x == y.ref
 Base.:(==)(x::ArrayReferenceMeta, y::ArrayReference) = x.ref == y
-Base.:(==)(x::ArrayReference, y) = false
-Base.:(==)(x::ArrayReferenceMeta, y) = false
+# Base.:(==)(x::ArrayReference, y) = false
+# Base.:(==)(x::ArrayReferenceMeta, y) = false
 
 abstract type AbstractLoopOperation end
 
@@ -126,13 +126,13 @@ julia> AmulBq = :(for m ∈ 1:M, n ∈ 1:N
 julia> lsAmulB = LoopVectorization.LoopSet(AmulBq);
 
 julia> LoopVectorization.operations(lsAmulB)
-6-element Array{LoopVectorization.Operation,1}:
- var"##RHS#253" = var"##zero#254"
- C[m, n] = var"##RHS#253"
- var"##tempload#255" = A[m, k]
- var"##tempload#256" = B[k, n]
- var"##RHS#253" = LoopVectorization.vfmadd_fast(var"##tempload#255", var"##tempload#256", var"##RHS#253")
- var"##RHS#253" = LoopVectorization.identity(var"##RHS#253")
+6-element Vector{LoopVectorization.Operation}:
+ var"##RHS#245" = var"##zero#246"
+ C[m, n] = var"##RHS#245"
+ var"##tempload#248" = A[m, k]
+ var"##tempload#249" = B[k, n]
+ var"##RHS#245" = LoopVectorization.vfmadd(var"##tempload#248", var"##tempload#249", var"##RHS#245")
+ var"##RHS#245" = LoopVectorization.identity(var"##RHS#245")
 ```
 Each one of these lines is a pretty-printed `Operation`.
 """

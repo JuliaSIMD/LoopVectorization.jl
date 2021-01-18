@@ -1,7 +1,7 @@
 @testset "GEMM" begin
     # using LoopVectorization, LinearAlgebra, Test; T = Float64
     Unum, Tnum = LoopVectorization.REGISTER_COUNT == 16 ? (2, 6) : (3, 9)
-    Unumt, Tnumt = LoopVectorization.REGISTER_COUNT == 16 ? (3, 4) : (5, 5)
+    Unumt, Tnumt = LoopVectorization.REGISTER_COUNT == 16 ? (2, 6) : (5, 5)
     if LoopVectorization.REGISTER_COUNT != 8
         @test LoopVectorization.mᵣ == Unum
         @test LoopVectorization.nᵣ == Tnum
@@ -17,7 +17,7 @@
         @test LoopVectorization.choose_order(lsAmulBt1) == (Symbol[:n,:m,:k], :m, :n, :m, Unum, Tnum)
     end
     AmulBq1 = :(for n ∈ axes(B,2), m ∈ axes(A,1)
-                C[m,n] = zeroB
+                C[m,n] = 0.0
                 for k ∈ axes(A,2)
                 C[m,n] += A[m,k] * B[k,n]
                 end
@@ -200,7 +200,7 @@
     # # ls.preamble_symsym
     # ls.operations[1]
     function AmulB_avx3!(C, A, B)
-        Kmin = firstindex(axes(A,2)); Kmax = lastindex(axes(A,2))
+        Kmin = first(axes(A,2)); Kmax = last(axes(A,2))
         @_avx unroll=(2,2) for m ∈ axes(A,1), n ∈ axes(B,2)
             C[m,n] = zero(eltype(C))
             for k ∈ Kmin:Kmax
@@ -353,7 +353,7 @@
     if LoopVectorization.REGISTER_COUNT == 32
         @test LoopVectorization.choose_order(lsr2amb) == ([:n, :m, :k], :m, :n, :m, 3, 7)
     elseif LoopVectorization.REGISTER_COUNT == 16
-        @test LoopVectorization.choose_order(lsr2amb) == ([:m, :n, :k], :n, :m, :m, 4, 2)
+        @test LoopVectorization.choose_order(lsr2amb) == ([:m, :n, :k], :m, :n, :m, 1, 6)
     end
     function rank2AmulBavx!(C, Aₘ, Aₖ, B)
         @avx for m ∈ axes(C,1), n ∈ axes(C,2)
@@ -547,31 +547,32 @@
         return C
     end
 
-    function gemm_accurate!(C, A, B)
-        @avx for n in axes(C,2), m in axes(C,1)
-            Cmn_hi = zero(eltype(C))
-            Cmn_lo = zero(eltype(C))
-            for k in axes(B,1)
-                hiprod = evmul(A[m,k], B[k,n])
-                loprod = vfmsub(A[m,k], B[k,n], hiprod)
-                hi_ts = evadd(hiprod, Cmn_hi)
-                a1_ts = evsub(hi_ts, Cmn_hi)
-                b1_ts = evsub(hi_ts, a1_ts)
-                lo_ts = evadd(evsub(hiprod, a1_ts), evsub(Cmn_hi, b1_ts))
-                thi = evadd(loprod, Cmn_lo)
-                a1_t = evsub(thi, Cmn_lo)
-                b1_t = evsub(thi, a1_t)
-                tlo = evadd(evsub(loprod, a1_t), evsub(Cmn_lo, b1_t))
-                c1 = evadd(lo_ts, thi)
-                hi_ths = evadd(hi_ts, c1)
-                lo_ths = evsub(c1, evsub(hi_ths, hi_ts))
-                c2 = evadd(tlo, lo_ths)
-                Cmn_hi = evadd(hi_ths, c2)
-                Cmn_lo = evsub(c2, evsub(Cmn_hi, hi_ths))
-            end
-            C[m,n] = Cmn_hi
-        end
-    end
+    # TODO: add fast=false option to `@avx`
+    # function gemm_accurate!(C, A, B)
+    #     @avx for n in axes(C,2), m in axes(C,1)
+    #         Cmn_hi = zero(eltype(C))
+    #         Cmn_lo = zero(eltype(C))
+    #         for k in axes(B,1)
+    #             hiprod = vmul(A[m,k], B[k,n])
+    #             loprod = vfmsub(A[m,k], B[k,n], hiprod)
+    #             hi_ts = vadd(hiprod, Cmn_hi)
+    #             a1_ts = vsub(hi_ts, Cmn_hi)
+    #             b1_ts = vsub(hi_ts, a1_ts)
+    #             lo_ts = vadd(vsub(hiprod, a1_ts), vsub(Cmn_hi, b1_ts))
+    #             thi = vadd(loprod, Cmn_lo)
+    #             a1_t = vsub(thi, Cmn_lo)
+    #             b1_t = vsub(thi, a1_t)
+    #             tlo = vadd(vsub(loprod, a1_t), vsub(Cmn_lo, b1_t))
+    #             c1 = vadd(lo_ts, thi)
+    #             hi_ths = vadd(hi_ts, c1)
+    #             lo_ths = vsub(c1, vsub(hi_ths, hi_ts))
+    #             c2 = vadd(tlo, lo_ths)
+    #             Cmn_hi = vadd(hi_ths, c2)
+    #             Cmn_lo = vsub(c2, vsub(Cmn_hi, hi_ths))
+    #         end
+    #         C[m,n] = Cmn_hi
+    #     end
+    # end
     
     function threegemms!(Ab, Bb, Cb, A, B, C)
         M, N = size(Cb); K = size(B,1)
@@ -610,284 +611,299 @@
     
     struct SizedMatrix{M,N,T} <: DenseMatrix{T}
         data::Matrix{T}
+        function SizedMatrix{M,N}(data::Matrix{T}) where {M,N,T}
+            @assert (M,N) === size(data)
+            new{M,N,T}(data)
+        end
     end
     Base.parent(A::SizedMatrix) = A.data
-    SizedMatrix{M,N}(A::Matrix{T}) where {M,N,T} = SizedMatrix{M,N,T}(A)
-    Base.@propagate_inbounds Base.getindex(A::SizedMatrix, i...) = getindex(parent(A), i...)
-    Base.@propagate_inbounds Base.setindex!(A::SizedMatrix, v, i...) = setindex!(parent(A), v, i...)
+    Base.IndexStyle(::Type{<:SizedMatrix}) = Base.IndexLinear()
+    Base.@propagate_inbounds Base.getindex(A::SizedMatrix, i::Int) = getindex(parent(A), i)
+    Base.@propagate_inbounds Base.setindex!(A::SizedMatrix, v, i::Int) = setindex!(parent(A), v, i)
+    Base.@propagate_inbounds Base.getindex(A::SizedMatrix, i::CartesianIndex) = getindex(parent(A), i + oneunit(i))
+    Base.@propagate_inbounds Base.setindex!(A::SizedMatrix, v, i::CartesianIndex) = setindex!(parent(A), v, i + oneunit(i))
+    Base.@propagate_inbounds Base.getindex(A::SizedMatrix, i::Int, j::Int) = getindex(parent(A), i+1, j+1)
+    Base.@propagate_inbounds Base.setindex!(A::SizedMatrix, v, i::Int, j::Int) = setindex!(parent(A), v, i+1, j+1)
     Base.size(::SizedMatrix{M,N}) where {M,N} = (M,N)
-    @inline function LoopVectorization.stridedpointer(A::SizedMatrix{M,N,T}) where {M,N,T}
-        LoopVectorization.StaticStridedPointer{T,Tuple{1,M}}(pointer(parent(A)))
+    LoopVectorization.ArrayInterface.size(::SizedMatrix{M,N}) where {M,N} = (LoopVectorization.Static{M}(),LoopVectorization.Static{N}())
+    function Base.axes(::SizedMatrix{M,N}) where {M,N}
+        (LoopVectorization.CloseOpen(LoopVectorization.Static{M}()), LoopVectorization.CloseOpen(LoopVectorization.Static{N}()))
     end
-    @inline function LoopVectorization.stridedpointer(A::LinearAlgebra.Adjoint{T,SizedMatrix{M,N,T}}) where {M,N,T}
-        LoopVectorization.StaticStridedPointer{T,Tuple{M,1}}(pointer(parent(A).data))
-    end
-    @inline function LoopVectorization.stridedpointer(A::LinearAlgebra.Transpose{T,SizedMatrix{M,N,T}}) where {M,N,T}
-        LoopVectorization.StaticStridedPointer{T,Tuple{M,1}}(pointer(parent(A).data))
-    end
-    LoopVectorization.maybestaticsize(::SizedMatrix{M,N}, ::Val{1}) where {M,N} = LoopVectorization.Static{M}()
-    LoopVectorization.maybestaticsize(::SizedMatrix{M,N}, ::Val{2}) where {M,N} = LoopVectorization.Static{N}()
-    LoopVectorization.maybestaticsize(::LinearAlgebra.Adjoint{T,SizedMatrix{M,N,T}}, ::Val{1}) where {M,N,T} = LoopVectorization.Static{N}()
-    LoopVectorization.maybestaticsize(::LinearAlgebra.Adjoint{T,SizedMatrix{M,N,T}}, ::Val{2}) where {M,N,T} = LoopVectorization.Static{M}()
-    LoopVectorization.maybestaticsize(::LinearAlgebra.Transpose{T,SizedMatrix{M,N,T}}, ::Val{1}) where {M,N,T} = LoopVectorization.Static{N}()
-    LoopVectorization.maybestaticsize(::LinearAlgebra.Transpose{T,SizedMatrix{M,N,T}}, ::Val{2}) where {M,N,T} = LoopVectorization.Static{M}()
-
-struct ZeroInitializedArray{T,N,A<:DenseArray{T,N}} <: DenseArray{T,N}
-    data::A
-end
-Base.size(A::ZeroInitializedArray) = size(A.data)
-Base.length(A::ZeroInitializedArray) = length(A.data)
-Base.axes(A::ZeroInitializedArray, i) = axes(A.data, i)
-@inline Base.getindex(A::ZeroInitializedArray{T}) where {T} = zero(T)
-Base.@propagate_inbounds Base.setindex!(A::ZeroInitializedArray, v, i...) = setindex!(A.data, v, i...)
-function LoopVectorization.VectorizationBase.stridedpointer(A::ZeroInitializedArray)
-    LoopVectorization.VectorizationBase.ZeroInitializedStridedPointer(LoopVectorization.VectorizationBase.stridedpointer(A.data))
-end
+    Base.unsafe_convert(::Type{Ptr{T}}, A::SizedMatrix{M,N,T}) where {M,N,T} = pointer(A.data)
+    LoopVectorization.ArrayInterface.strides(::SizedMatrix{M}) where {M} = (LoopVectorization.Static{1}(),LoopVectorization.Static{M}())
+    LoopVectorization.ArrayInterface.contiguous_axis(::Type{<:SizedMatrix}) = LoopVectorization.ArrayInterface.Contiguous{1}()
+    LoopVectorization.ArrayInterface.contiguous_batch_size(::Type{<:SizedMatrix}) = LoopVectorization.ArrayInterface.ContiguousBatch{0}()
+    LoopVectorization.ArrayInterface.stride_rank(::Type{<:SizedMatrix}) = LoopVectorization.ArrayInterface.StrideRank{(1,2)}()
+    LoopVectorization.ArrayInterface.offsets(::SizedMatrix) = (LoopVectorization.Static{0}(), LoopVectorization.Static{0}())
+# struct ZeroInitializedArray{T,N,A<:DenseArray{T,N}} <: DenseArray{T,N}
+#     data::A
+# end
+# Base.size(A::ZeroInitializedArray) = size(A.data)
+# Base.length(A::ZeroInitializedArray) = length(A.data)
+# Base.axes(A::ZeroInitializedArray, i) = axes(A.data, i)
+# @inline Base.getindex(A::ZeroInitializedArray{T}) where {T} = zero(T)
+# Base.@propagate_inbounds Base.setindex!(A::ZeroInitializedArray, v, i...) = setindex!(A.data, v, i...)
+# function LoopVectorization.VectorizationBase.stridedpointer(A::ZeroInitializedArray)
+#     LoopVectorization.VectorizationBase.ZeroInitializedStridedPointer(LoopVectorization.VectorizationBase.stridedpointer(A.data))
+# end
 
     for T ∈ (Float32, Float64, Int32, Int64)
     # let T = Int32
         # exceeds_time_limit() && break
         @show T, @__LINE__
         # M, K, N = 128, 128, 128;
-        M, K, N = 73, 75, 69;
-        TC = sizeof(T) == 4 ? Float32 : Float64
-        R = T <: Integer ? (T(-1000):T(1000)) : T
-        C = Matrix{TC}(undef, M, N);
-        A = rand(R, M, K); B = rand(R, K, N);
-        At = copy(A');
-        Bt = copy(B');
-        C2 = similar(C);
-        As = SizedMatrix{M,K}(A);
-        Ats = SizedMatrix{K,M}(At);
-        Bs = SizedMatrix{K,N}(B);
-        Bts = SizedMatrix{N,K}(Bt);
-        Cs = SizedMatrix{M,N}(C);
-        @time @testset "avx $T dynamc gemm" begin
-            AmulB!(C2, A, B)
-            AmulBavx1!(C, A, B)
-            @test C ≈ C2
-            fill!(C, 999.99); AmulBavx1!(C, At', B)
-            @test C ≈ C2
-            fill!(C, 999.99); AmulBavx2!(C, A, B)
-            @test C ≈ C2
-            fill!(C, 999.99); AmulBavx2!(C, At', B)
-            @test C ≈ C2
-            fill!(C, 999.99); AmulBavx2!(C, A, Bt')
-            @test C ≈ C2
-            fill!(C, 999.99); AmulBavx2!(C, At', Bt')
-            @test C ≈ C2
-            fill!(C, 999.99); AmulBavx3!(C, A, B)
-            @test C ≈ C2
-            fill!(C, 999.99); AmulBavx3!(C, At', B)
-            @test C ≈ C2
-            fill!(C, 0.0); AmuladdBavx!(C, A, B)
-            @test C ≈ C2
-            AmuladdBavx!(C, At', B)
-            @test C ≈ 2C2
-            AmuladdBavx!(C, A, B, -1)
-            @test C ≈ C2
-            AmuladdBavx!(C, At', Bt', -2)
-            @test C ≈ -C2
-            AmuladdBavx!(C, At', B, 3, 2)
-            @test C ≈ C2
-            # How much of this can I do before rounding errors are likely to cause test failures?
-            # Setting back to zero here...
-            AmuladdBavx!(C, At', B, 1, 0) 
-            @test C ≈ C2
-            AmuladdBavx!(C, At', Bt', 2, -1)
-            @test C ≈ C2
-            fill!(C, 9999.999); AmuladdBavx!(ZeroInitializedArray(C), At', Bt')
-            @test C ≈ C2
-            fill!(C, 9999.999); AmulB2x2avx!(C, A, B);
-            @test C ≈ C2
-            fill!(C, 9999.999); AmulB2x2avx!(C, At', B);
-            @test C ≈ C2
-            fill!(C, 9999.999); AtmulBavx1!(C, At, B)
-            @test C ≈ C2
-            fill!(C, 9999.999); AtmulBavx1!(C, A', B)
-            @test C ≈ C2
-            fill!(C, 9999.999); AtmulBavx2!(C, At, B);
-            @test C ≈ C2
-            fill!(C, 9999.999); AtmulBavx2!(C, A', B);
-            @test C ≈ C2
-            fill!(C, 9999.999); mulCAtB_2x2blockavx!(C, At, B);
-            @test C ≈ C2
-            fill!(C, 9999.999); mulCAtB_2x2blockavx!(C, A', B);
-            @test C ≈ C2
-            fill!(C, 9999.999); mulCAtB_2x2blockavx_noinline!(C, At, B);
-            @test C ≈ C2
-            fill!(C, 9999.999); mulCAtB_2x2blockavx_noinline!(C, A', B);
-            @test C ≈ C2
-            fill!(C, 9999.999); gemm_accurate!(C, A, B);
-            @test C ≈ C2
-            fill!(C, 9999.999); gemm_accurate!(C, At', B);
-            @test C ≈ C2
-            fill!(C, 9999.999); gemm_accurate!(C, A, Bt');
-            @test C ≈ C2
-            fill!(C, 9999.999); gemm_accurate!(C, At', Bt');
-            @test C ≈ C2
-            Abit = A .> 0.5;
-            fill!(C, 9999.999); AmulBavx1!(C, Abit, B);
-            @test C ≈ Abit * B
-            Bbit = B .> 0.5;
-            fill!(C, 9999.999); AmulBavx1!(C, A, Bbit);
-            @test C ≈ A * Bbit
-            Ab = zero(A); Bb = zero(B); Cb = zero(C);
-            threegemms!(Ab, Bb, Cb, A, B, C)
-            @test Ab ≈ C * B'
-            @test Bb ≈ A' * C
-            @test Cb ≈ A * B
-        end
-        # exceeds_time_limit() && break
-        @time @testset "_avx $T dynamic gemm" begin
-            AmulB_avx1!(C, A, B)
-            @test C ≈ C2
-            fill!(C, 999.99); AmulB_avx1!(C, At', B)
-            @test C ≈ C2
-            fill!(C, 999.99); AmulB_avx2!(C, A, B)
-            @test C ≈ C2
-            fill!(C, 999.99); AmulB_avx2!(C, At', B)
-            @test C ≈ C2
-            fill!(C, 999.99); AmulB_avx2!(C, A, Bt')
-            @test C ≈ C2
-            fill!(C, 999.99); AmulB_avx2!(C, At', Bt')
-            @test C ≈ C2
-            fill!(C, 999.99); AmulB_avx3!(C, A, B)
-            @test C ≈ C2
-            fill!(C, 999.99); AmulB_avx3!(C, At', B)
-            @test C ≈ C2
-            fill!(C, 0.0); AmuladdB_avx!(C, A, B)
-            @test C ≈ C2
-            AmuladdB_avx!(C, At', B)
-            @test C ≈ 2C2
-            AmuladdB_avx!(C, A, B, -1)
-            @test C ≈ C2
-            AmuladdB_avx!(C, At', B, -2)
-            @test C ≈ -C2
-            fill!(C, 9999.999); AmulB2x2_avx!(C, A, B);
-            @test C ≈ C2
-            fill!(C, 9999.999); AmulB2x2_avx!(C, At', B);
-            @test C ≈ C2
-            fill!(C, 9999.999); AtmulB_avx1!(C, At, B);
-            @test C ≈ C2
-            fill!(C, 9999.999); AtmulB_avx1!(C, A', B);
-            @test C ≈ C2
-            fill!(C, 9999.999); AtmulB_avx2!(C, At, B);
-            @test C ≈ C2
-            fill!(C, 9999.999); AtmulB_avx2!(C, A', B);
-            @test C ≈ C2
-            fill!(C, 9999.999); mulCAtB_2x2block_avx!(C, At, B);
-            @test C ≈ C2
-            fill!(C, 9999.999); mulCAtB_2x2block_avx!(C, A', B);
-            @test C ≈ C2
-        end
-        # exceeds_time_limit() && break
-        @time @testset "avx $T static gemm" begin
-            AmulBavx1!(Cs, As, Bs)
-            @test Cs ≈ C2
-            fill!(Cs, 999.99); AmulBavx1!(Cs, Ats', Bs)
-            @test Cs ≈ C2
-            fill!(Cs, 999.99); AmulBavx2!(Cs, As, Bs)
-            @test Cs ≈ C2
-            fill!(Cs, 999.99); AmulBavx2!(Cs, Ats', Bs)
-            @test Cs ≈ C2
-            fill!(Cs, 999.99); AmulBavx2!(Cs, As, Bts')
-            @test Cs ≈ C2
-            fill!(Cs, 999.99); AmulBavx2!(Cs, Ats', Bts')
-            @test Cs ≈ C2
-            fill!(Cs, 999.99); AmulBavx3!(Cs, As, Bs)
-            @test Cs ≈ C2
-            fill!(Cs, 999.99); AmulBavx3!(Cs, Ats', Bs)
-            @test Cs ≈ C2
-            fill!(Cs, 0.0); AmuladdBavx!(Cs, As, Bs)
-            @test Cs ≈ C2
-            AmuladdBavx!(Cs, Ats', Bs)
-            @test Cs ≈ 2C2
-            AmuladdBavx!(Cs, As, Bs, -1)
-            @test Cs ≈ C2
-            AmuladdBavx!(Cs, Ats', Bs, -2)
-            @test Cs ≈ -C2
-            fill!(Cs, 9999.999); AmulB2x2avx!(Cs, As, Bs)
-            @test Cs ≈ C2
-            fill!(Cs, 9999.999); AmulB2x2avx!(Cs, Ats', Bs)
-            @test Cs ≈ C2
-            fill!(Cs, 9999.999); AtmulBavx1!(Cs, Ats, Bs);
-            @test Cs ≈ C2
-            fill!(Cs, 9999.999); AtmulBavx1!(Cs, As', Bs);
-            @test Cs ≈ C2
-            fill!(Cs, 9999.999); AtmulBavx2!(Cs, Ats, Bs);
-            @test Cs ≈ C2
-            fill!(Cs, 9999.999); AtmulBavx2!(Cs, As', Bs);
-            @test Cs ≈ C2
-            fill!(Cs, 9999.999); mulCAtB_2x2blockavx!(Cs, Ats, Bs);
-            @test Cs ≈ C2
-            fill!(Cs, 9999.999); mulCAtB_2x2blockavx!(Cs, As', Bs);
-            @test Cs ≈ C2
-            fill!(Cs, 9999.999); mulCAtB_2x2blockavx_noinline!(Cs, Ats, Bs);
-            @test Cs ≈ C2
-            fill!(Cs, 9999.999); mulCAtB_2x2blockavx_noinline!(Cs, As', Bs);
-            @test Cs ≈ C2
-        end
-        # exceeds_time_limit() && break
-        @time @testset "_avx $T static gemm" begin
-            AmulB_avx1!(Cs, As, Bs)
-            @test Cs ≈ C2
-            fill!(Cs, 999.99); AmulB_avx1!(Cs, Ats', Bs)
-            @test Cs ≈ C2
-            fill!(Cs, 999.99); AmulB_avx2!(Cs, As, Bs)
-            @test Cs ≈ C2
-            fill!(Cs, 999.99); AmulB_avx2!(Cs, Ats', Bs)
-            @test Cs ≈ C2
-            fill!(Cs, 999.99); AmulB_avx2!(Cs, As, Bts')
-            @test Cs ≈ C2
-            fill!(Cs, 999.99); AmulB_avx2!(Cs, Ats', Bts')
-            @test Cs ≈ C2
-            fill!(Cs, 999.99); AmulB_avx3!(Cs, As, Bs)
-            @test Cs ≈ C2
-            fill!(Cs, 999.99); AmulB_avx3!(Cs, Ats', Bs)
-            @test Cs ≈ C2
-            fill!(Cs, 0.0); AmuladdB_avx!(Cs, As, Bs)
-            @test Cs ≈ C2
-            AmuladdB_avx!(Cs, Ats', Bs)
-            @test Cs ≈ 2C2
-            AmuladdB_avx!(Cs, As, Bs, -1)
-            @test Cs ≈ C2
-            AmuladdB_avx!(Cs, Ats', Bs, -2)
-            @test Cs ≈ -C2
-            fill!(Cs, 9999.999); AmulB2x2_avx!(Cs, As, Bs)
-            @test Cs ≈ C2
-            fill!(Cs, 9999.999); AmulB2x2_avx!(Cs, Ats', Bs)
-            @test Cs ≈ C2
-            fill!(Cs, 9999.999); AtmulB_avx1!(Cs, Ats, Bs)
-            @test Cs ≈ C2
-            fill!(Cs, 9999.999); AtmulB_avx1!(Cs, As', Bs)
-            @test Cs ≈ C2
-            fill!(Cs, 9999.999); AtmulB_avx2!(Cs, Ats, Bs);
-            @test Cs ≈ C2
-            fill!(Cs, 9999.999); AtmulB_avx2!(Cs, As', Bs);
-            @test Cs ≈ C2
-            fill!(Cs, 9999.999); mulCAtB_2x2block_avx!(Cs, Ats, Bs);
-            @test Cs ≈ C2
-            fill!(Cs, 9999.999); mulCAtB_2x2block_avx!(Cs, As', Bs);
-            @test Cs ≈ C2
-        end
-        # exceeds_time_limit() && break
-        @time @testset "$T rank2mul" begin
-            Aₘ= rand(R, M, 2); Aₖ = rand(R, 2, K);
-            Aₖ′ = copy(Aₖ');
-            rank2AmulB!(C2, Aₘ, Aₖ, B)
-            rank2AmulBavx!(C, Aₘ, Aₖ, B)
-            @test C ≈ C2
-            fill!(C, 9999.999); rank2AmulB_avx!(C, Aₘ, Aₖ, B)
-            @test C ≈ C2
-            fill!(C, 9999.999); rank2AmulBavx_noinline!(C, Aₘ, Aₖ, B)
-            @test C ≈ C2
-            fill!(C, 9999.999); rank2AmulBavx!(C, Aₘ, Aₖ′', B)
-            @test C ≈ C2
-            fill!(C, 9999.999); rank2AmulB_avx!(C, Aₘ, Aₖ′', B)
-            @test C ≈ C2
-            fill!(C, 9999.999); rank2AmulBavx_noinline!(C, Aₘ, Aₖ′', B)
-            @test C ≈ C2
+        N = 69;
+        for M ∈ 72:80, K ∈ 72:80
+        # M, K, N = 73, 75, 69;
+            TC = sizeof(T) == 4 ? Float32 : Float64
+            R = T <: Integer ? (T(-1000):T(1000)) : T
+            C = Matrix{TC}(undef, M, N);
+            A = rand(R, M, K); B = rand(R, K, N);
+            At = copy(A');
+            Bt = copy(B');
+            C2 = similar(C);
+            @time @testset "avx $T dynamc gemm" begin
+                AmulB!(C2, A, B)
+                AmulBavx1!(C, A, B)
+                @test C ≈ C2
+                fill!(C, 999.99); AmulBavx1!(C, At', B)
+                @test C ≈ C2
+                fill!(C, 999.99); AmulBavx2!(C, A, B)
+                @test C ≈ C2
+                fill!(C, 999.99); AmulBavx2!(C, At', B)
+                @test C ≈ C2
+                fill!(C, 999.99); AmulBavx2!(C, A, Bt')
+                @test C ≈ C2
+                fill!(C, 999.99); AmulBavx2!(C, At', Bt')
+                @test C ≈ C2
+                fill!(C, 999.99); AmulBavx3!(C, A, B)
+                @test C ≈ C2
+                fill!(C, 999.99); AmulBavx3!(C, At', B)
+                @test C ≈ C2
+                fill!(C, 0.0); AmuladdBavx!(C, A, B)
+                @test C ≈ C2
+                AmuladdBavx!(C, At', B)
+                @test C ≈ 2C2
+                AmuladdBavx!(C, A, B, -1)
+                @test C ≈ C2
+                AmuladdBavx!(C, At', Bt', -2)
+                @test C ≈ -C2
+                AmuladdBavx!(C, At', B, 3, 2)
+                @test C ≈ C2
+                # How much of this can I do before rounding errors are likely to cause test failures?
+                # Setting back to zero here...
+                AmuladdBavx!(C, At', B, 1, 0) 
+                @test C ≈ C2
+                AmuladdBavx!(C, At', Bt', 2, -1)
+                @test C ≈ C2
+                # TODO: Reimplement the ZeroInitialized wrappers
+                # fill!(C, 9999.999); AmuladdBavx!(ZeroInitializedArray(C), At', Bt')
+                # @test C ≈ C2
+                fill!(C, 9999.999); AmulB2x2avx!(C, A, B);
+                @test C ≈ C2
+                fill!(C, 9999.999); AmulB2x2avx!(C, At', B);
+                @test C ≈ C2
+                fill!(C, 9999.999); AtmulBavx1!(C, At, B)
+                @test C ≈ C2
+                fill!(C, 9999.999); AtmulBavx1!(C, A', B)
+                @test C ≈ C2
+                fill!(C, 9999.999); AtmulBavx2!(C, At, B);
+                @test C ≈ C2
+                fill!(C, 9999.999); AtmulBavx2!(C, A', B);
+                @test C ≈ C2
+                fill!(C, 9999.999); mulCAtB_2x2blockavx!(C, At, B);
+                @test C ≈ C2
+                fill!(C, 9999.999); mulCAtB_2x2blockavx!(C, A', B);
+                @test C ≈ C2
+                fill!(C, 9999.999); mulCAtB_2x2blockavx_noinline!(C, At, B);
+                @test C ≈ C2
+                fill!(C, 9999.999); mulCAtB_2x2blockavx_noinline!(C, A', B);
+                @test C ≈ C2
+                if RUN_SLOW_TESTS
+                    # fill!(C, 9999.999); gemm_accurate!(C, A, B);
+                    # @test C ≈ C2
+                    # fill!(C, 9999.999); gemm_accurate!(C, At', B);
+                    # @test C ≈ C2
+                    # fill!(C, 9999.999); gemm_accurate!(C, A, Bt');
+                    # @test C ≈ C2
+                    # fill!(C, 9999.999); gemm_accurate!(C, At', Bt');
+                    # @test C ≈ C2
+                    Ab = zeros(eltype(C), size(A)); Bb = zeros(eltype(C), size(B)); Cb = zero(C);
+                    threegemms!(Ab, Bb, Cb, A, B, C)
+                    @test Ab ≈ C * B'
+                    @test Bb ≈ A' * C
+                    @test Cb ≈ A * B
+                end
+                if iszero(size(A,1) % 8)
+                    Abit = A .> 0.5;
+                    fill!(C, 9999.999); AmulBavx1!(C, Abit, B);
+                    @test C ≈ Abit * B
+                end
+                if iszero(size(B,1) % 8)
+                    Bbit = B .> 0.5;
+                    fill!(C, 9999.999); AmulBavx1!(C, A, Bbit);
+                    @test C ≈ A * Bbit
+                end
+            end
+            # exceeds_time_limit() && break
+            @time @testset "_avx $T dynamic gemm" begin
+                AmulB_avx1!(C, A, B)
+                @test C ≈ C2
+                fill!(C, 999.99); AmulB_avx1!(C, At', B)
+                @test C ≈ C2
+                fill!(C, 999.99); AmulB_avx2!(C, A, B)
+                @test C ≈ C2
+                fill!(C, 999.99); AmulB_avx2!(C, At', B)
+                @test C ≈ C2
+                fill!(C, 999.99); AmulB_avx2!(C, A, Bt')
+                @test C ≈ C2
+                fill!(C, 999.99); AmulB_avx2!(C, At', Bt')
+                @test C ≈ C2
+                fill!(C, 999.99); AmulB_avx3!(C, A, B)
+                @test C ≈ C2
+                fill!(C, 999.99); AmulB_avx3!(C, At', B)
+                @test C ≈ C2
+                fill!(C, 0.0); AmuladdB_avx!(C, A, B)
+                @test C ≈ C2
+                AmuladdB_avx!(C, At', B)
+                @test C ≈ 2C2
+                AmuladdB_avx!(C, A, B, -1)
+                @test C ≈ C2
+                AmuladdB_avx!(C, At', B, -2)
+                @test C ≈ -C2
+                fill!(C, 9999.999); AmulB2x2_avx!(C, A, B);
+                @test C ≈ C2
+                fill!(C, 9999.999); AmulB2x2_avx!(C, At', B);
+                @test C ≈ C2
+                fill!(C, 9999.999); AtmulB_avx1!(C, At, B);
+                @test C ≈ C2
+                fill!(C, 9999.999); AtmulB_avx1!(C, A', B);
+                @test C ≈ C2
+                fill!(C, 9999.999); AtmulB_avx2!(C, At, B);
+                @test C ≈ C2
+                fill!(C, 9999.999); AtmulB_avx2!(C, A', B);
+                @test C ≈ C2
+                fill!(C, 9999.999); mulCAtB_2x2block_avx!(C, At, B);
+                @test C ≈ C2
+                fill!(C, 9999.999); mulCAtB_2x2block_avx!(C, A', B);
+                @test C ≈ C2
+            end
+            # exceeds_time_limit() && break
+            if (M,K) === (73,77) # pick a random size, we only want to compile once
+                As = SizedMatrix{M,K}(A);
+                Ats = SizedMatrix{K,M}(At);
+                Bs = SizedMatrix{K,N}(B);
+                Bts = SizedMatrix{N,K}(Bt);
+                Cs = SizedMatrix{M,N}(C);
+                C2z = LoopVectorization.OffsetArray(C2, -1, -1)
+                @time @testset "avx $T static gemm" begin
+                    # AmulBavx1!(Cs, As, Bs)
+                    # @test Cs ≈ C2
+                    # fill!(Cs, 999.99); AmulBavx1!(Cs, Ats', Bs)
+                    # @test Cs ≈ C2
+                    fill!(Cs, 999.99); AmulBavx2!(Cs, As, Bs)
+                    @test Cs ≈ C2z
+                    fill!(Cs, 999.99); AmulBavx2!(Cs, Ats', Bs)
+                    @test Cs ≈ C2z
+                    fill!(Cs, 999.99); AmulBavx2!(Cs, As, Bts')
+                    @test Cs ≈ C2z
+                    fill!(Cs, 999.99); AmulBavx2!(Cs, Ats', Bts')
+                    @test Cs ≈ C2z
+                    fill!(Cs, 999.99); AmulBavx3!(Cs, As, Bs)
+                    @test Cs ≈ C2z
+                    fill!(Cs, 999.99); AmulBavx3!(Cs, Ats', Bs)
+                    @test Cs ≈ C2z
+                    fill!(Cs, 0.0); AmuladdBavx!(Cs, As, Bs)
+                    @test Cs ≈ C2z
+                    AmuladdBavx!(Cs, Ats', Bs)
+                    @test Cs ≈ 2C2z
+                    AmuladdBavx!(Cs, As, Bs, -1)
+                    @test Cs ≈ C2z
+                    AmuladdBavx!(Cs, Ats', Bs, -2)
+                    @test Cs ≈ -C2z
+                    fill!(Cs, 9999.999); AmulB2x2avx!(Cs, As, Bs)
+                    @test Cs ≈ C2z
+                    fill!(Cs, 9999.999); AmulB2x2avx!(Cs, Ats', Bs)
+                    @test Cs ≈ C2z
+                    fill!(Cs, 9999.999); AtmulBavx1!(Cs, Ats, Bs);
+                    @test Cs ≈ C2z
+                    fill!(Cs, 9999.999); AtmulBavx1!(Cs, As', Bs);
+                    @test Cs ≈ C2z
+                    fill!(Cs, 9999.999); AtmulBavx2!(Cs, Ats, Bs);
+                    @test Cs ≈ C2z
+                    fill!(Cs, 9999.999); AtmulBavx2!(Cs, As', Bs);
+                    @test Cs ≈ C2z
+                    # fill!(Cs, 9999.999); mulCAtB_2x2blockavx!(Cs, Ats, Bs);
+                    # @test Cs ≈ C2
+                    # fill!(Cs, 9999.999); mulCAtB_2x2blockavx!(Cs, As', Bs);
+                    # @test Cs ≈ C2
+                    # fill!(Cs, 9999.999); mulCAtB_2x2blockavx_noinline!(Cs, Ats, Bs);
+                    # @test Cs ≈ C2
+                    # fill!(Cs, 9999.999); mulCAtB_2x2blockavx_noinline!(Cs, As', Bs);
+                    # @test Cs ≈ C2
+                end
+                # exceeds_time_limit() && break
+                @time @testset "_avx $T static gemm" begin
+                    # AmulB_avx1!(Cs, As, Bs)
+                    # @test Cs ≈ C2
+                    # fill!(Cs, 999.99); AmulB_avx1!(Cs, Ats', Bs)
+                    # @test Cs ≈ C2
+                    fill!(Cs, 999.99); AmulB_avx2!(Cs, As, Bs)
+                    @test Cs ≈ C2z
+                    fill!(Cs, 999.99); AmulB_avx2!(Cs, Ats', Bs)
+                    @test Cs ≈ C2z
+                    fill!(Cs, 999.99); AmulB_avx2!(Cs, As, Bts')
+                    @test Cs ≈ C2z
+                    fill!(Cs, 999.99); AmulB_avx2!(Cs, Ats', Bts')
+                    @test Cs ≈ C2z
+                    fill!(Cs, 999.99); AmulB_avx3!(Cs, As, Bs)
+                    @test Cs ≈ C2z
+                    fill!(Cs, 999.99); AmulB_avx3!(Cs, Ats', Bs)
+                    @test Cs ≈ C2z
+                    fill!(Cs, 0.0); AmuladdB_avx!(Cs, As, Bs)
+                    @test Cs ≈ C2z
+                    AmuladdB_avx!(Cs, Ats', Bs)
+                    @test Cs ≈ 2C2z
+                    AmuladdB_avx!(Cs, As, Bs, -1)
+                    @test Cs ≈ C2z
+                    AmuladdB_avx!(Cs, Ats', Bs, -2)
+                    @test Cs ≈ -C2z
+                    fill!(Cs, 9999.999); AmulB2x2_avx!(Cs, As, Bs)
+                    @test Cs ≈ C2z
+                    fill!(Cs, 9999.999); AmulB2x2_avx!(Cs, Ats', Bs)
+                    @test Cs ≈ C2z
+                    fill!(Cs, 9999.999); AtmulB_avx1!(Cs, Ats, Bs)
+                    @test Cs ≈ C2z
+                    fill!(Cs, 9999.999); AtmulB_avx1!(Cs, As', Bs)
+                    @test Cs ≈ C2z
+                    fill!(Cs, 9999.999); AtmulB_avx2!(Cs, Ats, Bs);
+                    @test Cs ≈ C2z
+                    fill!(Cs, 9999.999); AtmulB_avx2!(Cs, As', Bs);
+                    @test Cs ≈ C2z
+                    # fill!(Cs, 9999.999); mulCAtB_2x2block_avx!(Cs, Ats, Bs);
+                    # @test Cs ≈ C2
+                    # fill!(Cs, 9999.999); mulCAtB_2x2block_avx!(Cs, As', Bs);
+                    # @test Cs ≈ C2
+                end
+            end
+            # exceeds_time_limit() && break
+            @time @testset "$T rank2mul" begin
+                Aₘ= rand(R, M, 2); Aₖ = rand(R, 2, K);
+                Aₖ′ = copy(Aₖ');
+                rank2AmulB!(C2, Aₘ, Aₖ, B)
+                rank2AmulBavx!(C, Aₘ, Aₖ, B)
+                @test C ≈ C2
+                fill!(C, 9999.999); rank2AmulB_avx!(C, Aₘ, Aₖ, B)
+                @test C ≈ C2
+                fill!(C, 9999.999); rank2AmulBavx_noinline!(C, Aₘ, Aₖ, B)
+                @test C ≈ C2
+                fill!(C, 9999.999); rank2AmulBavx!(C, Aₘ, Aₖ′', B)
+                @test C ≈ C2
+                fill!(C, 9999.999); rank2AmulB_avx!(C, Aₘ, Aₖ′', B)
+                @test C ≈ C2
+                fill!(C, 9999.999); rank2AmulBavx_noinline!(C, Aₘ, Aₖ′', B)
+                @test C ≈ C2
+            end
         end
     end
 end

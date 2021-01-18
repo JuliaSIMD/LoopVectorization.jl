@@ -2,8 +2,8 @@
 
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://chriselrod.github.io/LoopVectorization.jl/stable)
 [![Latest](https://img.shields.io/badge/docs-latest-blue.svg)](https://chriselrod.github.io/LoopVectorization.jl/latest)
-[![Build Status](https://travis-ci.com/chriselrod/LoopVectorization.jl.svg?branch=master)](https://travis-ci.com/chriselrod/LoopVectorization.jl)
-[![Build Status](https://ci.appveyor.com/api/projects/status/github/chriselrod/LoopVectorization.jl?svg=true)](https://ci.appveyor.com/project/chriselrod/LoopVectorization-jl)
+[![CI](https://github.com/chriselrod/LoopVectorization.jl/workflows/CI/badge.svg)](https://github.com/chriselrod/LoopVectorization.jl/actions?query=workflow%3ACI)
+[![CI (Julia nightly)](https://github.com/chriselrod/LoopVectorization.jl/workflows/CI%20(Julia%20nightly)/badge.svg)](https://github.com/chriselrod/LoopVectorization.jl/actions?query=workflow%3A%22CI+%28Julia+nightly%29%22)
 [![Codecov](https://codecov.io/gh/chriselrod/LoopVectorization.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/chriselrod/LoopVectorization.jl)
 
 ## Installation
@@ -239,11 +239,11 @@ Note that loops will be faster than broadcasting in general. This is because the
 ```julia
 julia> function AmulBtest!(C,A,Bk,Bn,d)
           @avx for m ∈ axes(A,1), n ∈ axes(Bk,2)
-             ΔCₘₙ = zero(eltype(C))
+             ΔCmn = zero(eltype(C))
              for k ∈ axes(A,2)
-                ΔCₘₙ += A[m,k] * (Bk[k,n] + Bn[n,k])
+                ΔCmn += A[m,k] * (Bk[k,n] + Bn[n,k])
              end
-             C[m,n] = ΔCₘₙ + d[m]
+             C[m,n] = ΔCmn + d[m]
           end
        end
 AmulBtest! (generic function with 1 method)
@@ -345,10 +345,10 @@ Similar approaches can be taken to make kernels working with a variety of numeri
 
 * [Gaius.jl](https://github.com/MasonProtter/Gaius.jl)
 * [MaBLAS.jl](https://github.com/YingboMa/MaBLAS.jl)
+* [Octavian.jl](https://github.com/JuliaLinearAlgebra/Octavian.jl)
 * [PaddedMatrices.jl](https://github.com/chriselrod/PaddedMatrices.jl)
 * [RecursiveFactorization.jl](https://github.com/YingboMa/RecursiveFactorization.jl)
 * [SnpArrays.jl](https://github.com/OpenMendel/SnpArrays.jl)
 * [Tullio.jl](https://github.com/mcabbott/Tullio.jl)
 
 If you're using LoopVectorization, please feel free to file a PR adding yours to the list!
-

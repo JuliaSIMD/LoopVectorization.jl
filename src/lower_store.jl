@@ -3,17 +3,17 @@ using VectorizationBase: vnoaliasstore!
 
 @inline vstoreadditivereduce!(args...) = vnoaliasstore!(args...)
 @inline vstoremultiplicativevereduce!(args...) = vnoaliasstore!(args...)
-@inline function vstoreadditivereduce!(ptr::VectorizationBase.AbstractStridedPointer, v::VectorizationBase.SVec, i::Tuple{Vararg{Union{Integer,Static}}})
-    vnoaliasstore!(ptr, SIMDPirates.vsum(v), i)
+@inline function vstoreadditivereduce!(ptr::VectorizationBase.AbstractStridedPointer, v::VectorizationBase.Vec, i::Tuple{Vararg{Union{Integer,Static}}})
+    vnoaliasstore!(ptr, VectorizationBase.vsum(v), i)
 end
-@inline function vstoreadditivereduce!(ptr::VectorizationBase.AbstractStridedPointer, v::VectorizationBase.SVec, i::Tuple{Vararg{Union{Integer,Static}}}, m::VectorizationBase.Mask)
-    vnoaliasstore!(ptr, SIMDPirates.vsum(v), i, m)
+@inline function vstoreadditivereduce!(ptr::VectorizationBase.AbstractStridedPointer, v::VectorizationBase.Vec, i::Tuple{Vararg{Union{Integer,Static}}}, m::VectorizationBase.Mask)
+    vnoaliasstore!(ptr, VectorizationBase.vsum(v), i, m)
 end
-@inline function vstoremultiplicativevereduce!(ptr::VectorizationBase.AbstractStridedPointer, v::VectorizationBase.SVec, i::Tuple{Vararg{Union{Integer,Static}}})
-    vnoaliasstore!(ptr, SIMDPirates.vprod(v), i)
+@inline function vstoremultiplicativevereduce!(ptr::VectorizationBase.AbstractStridedPointer, v::VectorizationBase.Vec, i::Tuple{Vararg{Union{Integer,Static}}})
+    vnoaliasstore!(ptr, VectorizationBase.vprod(v), i)
 end
-@inline function vstoremultiplicativevereduce!(ptr::VectorizationBase.AbstractStridedPointer, v::VectorizationBase.SVec, i::Tuple{Vararg{Union{Integer,Static}}}, m::VectorizationBase.Mask)
-    vnoaliasstore!(ptr, SIMDPirates.vprod(v), i, m)
+@inline function vstoremultiplicativevereduce!(ptr::VectorizationBase.AbstractStridedPointer, v::VectorizationBase.Vec, i::Tuple{Vararg{Union{Integer,Static}}}, m::VectorizationBase.Mask)
+    vnoaliasstore!(ptr, VectorizationBase.vprod(v), i, m)
 end
 
 function storeinstr(op::Operation, vectorized::Symbol)
@@ -56,7 +56,7 @@ function reduce_range!(q::Expr, toreduct::Symbol, instr::Instruction, Uh::Int, U
             push!(instrexpr.args, Symbol(toreduct, u + 1))
             push!(q.args, Expr(:(=), Symbol(toreduct, (u>>>1)), instrexpr))
         end
-    else
+    elseif 2Uh < Uh2
         for u ∈ Uh:Uh2-2
             tru = Symbol(toreduct, u - Uh)
             instrexpr = callexpr(instr)
@@ -70,6 +70,13 @@ function reduce_range!(q::Expr, toreduct::Symbol, instr::Instruction, Uh::Int, U
             push!(instrexpr.args, tru)
             push!(instrexpr.args, Symbol(toreduct, u))
             push!(q.args, Expr(:(=), tru, instrexpr))
+        end
+    else
+        for u ∈ 0:Uh2-Uh - 1
+            instrexpr = callexpr(instr)
+            push!(instrexpr.args, Symbol(toreduct, u))
+            push!(instrexpr.args, Symbol(toreduct, u + Uh))
+            push!(q.args, Expr(:(=), Symbol(toreduct, u), instrexpr))
         end
     end
 end
