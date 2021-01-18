@@ -32,6 +32,7 @@ using ArrayInterface
 using ArrayInterface: OptionallyStaticUnitRange, Zero, One#, static_length
 const Static = ArrayInterface.StaticInt
 
+using ThreadingUtilities
 using Requires
 
 
