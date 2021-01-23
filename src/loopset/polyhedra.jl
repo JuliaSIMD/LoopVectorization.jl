@@ -426,6 +426,7 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
         constraints = 2
         first_iter = true
         while true
+            # @show Aₗ′[1:3] Aᵤ′[1:3] not_visited_mask
             i, not_visited_mask = depending_ind(Aₗ′, Aᵤ′, not_visited_mask) # no others not yet visited depend on `i`
             Aₗᵢ = Aₗ[i] # others it depends on
             Aᵤᵢ = Aᵤ[i] # others it depends on
@@ -692,7 +693,7 @@ function getloop(p::Polyhedra, v::ByteVector, vl::VectorLength, veci, citers)
                         fh2 += faulhaber(cdmin, Val(2))
                     end
                     coef⁰ += coefs²ᵢⱼ * (veci == i ? div(fh2, vl, RoundNearestTiesAway) : fh2)
-                elseif VectorizationBase.splitint(not_visited_mask, Bool)[j]
+                elseif VectorizationBase.splitint(not_visited_mask, Bool)(j)
                     if j == veci
                         coefs¹v = setindex(coefs¹v, cd * coefs²ᵢⱼ, j)
                     else

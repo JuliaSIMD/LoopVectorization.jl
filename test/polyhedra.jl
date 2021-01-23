@@ -53,7 +53,7 @@ end
 function polyloop1(M, W, i, order, l1 = 1, N = M, citers = 1)
     p1 = LoopVectorization.Polyhedra(
         ((ByteVector(0,0),ByteVector(-1,0)), # Aₗ
-         (ByteVector(0,0),ByteVector(0,0))), # Aᵤ
+         (ByteVector(0,0),ByteVector( 0,0))), # Aᵤ
         LoopVectorization.RectangularPolyhedra(
             ((l1,0),(0,0)), # cₗ, cᵤ
             ((0,0),(-M,-N)), # dₗ, dᵤ
@@ -74,15 +74,34 @@ end
 # LoopVectorization.getloop(p1, ByteVector(1,2), LoopVectorization.VectorLength(8), 1, 1024)
 # LoopVectorization.getloop(p1, ByteVector(1), LoopVectorization.VectorLength(8), 1, 1)
 
-# for m ∈ 1:M, n ∈ m:N, k ∈ 1:m+n+K
-p2 = LoopVectorization.Polyhedra(
-    ((ByteVector(0,0,0),ByteVector(0,0)), # Aₗ
-     (ByteVector(0,0,0),ByteVector(1,0))), # Aᵤ
-    LoopVectorization.RectangularPolyhedra(
-        ((1,1),(0,0)), # cₗ, cᵤ
-        ((0,0),(-1024,0)), # dₗ, dᵤ
-        (ByteVector(),ByteVector(1))
-    )
-);
-
+# for m ∈ l1:M, n ∈ l2+m:N, k ∈ l3:m+n+K
+# A * i ≥ c + d
+# [  1  0  0;   m ≥ [ l1
+#   -1  0  0;   n    -M
+#   -1  1  0;   k     l2
+#    0 -1  0;        -N
+#    0  0  1;         l3
+#    1  1  -1 ]      -K ]
+function polyloop2(M, W, i, order, l1 = 1, l2 = 1, l3 = 1, N = M, K = M, citers = 1)
+    p2 = LoopVectorization.Polyhedra(
+        ((ByteVector(0,0,0),ByteVector(-1,0,0),ByteVector(0,0,0)), # Aₗ
+         (ByteVector(0,0,0),ByteVector( 0,0,0),ByteVector(1,1,0))), # Aᵤ
+        LoopVectorization.RectangularPolyhedra(
+            ((l1,l2,l3),(0,0,0)), # cₗ, cᵤ
+            ((0,0,0),(-M,-N,-K)), # dₗ, dᵤ
+            (ByteVector(),ByteVector(1))
+        )
+    );
+    first(LoopVectorization.getloop(p2, order, LoopVectorization.VectorLength(W), i, citers))
+end
+function sumloop2(M, W, i, l1=1, l2=2, l3=1, N = M, K = M)
+    r1 = i == 1 ? (n = cld(M - l1 + 1, W)-1; M-W*n:W:M) : l1:1:M
+    W2 = i == 2 ? W : 1
+    W3 = i == 3 ? W : 1
+    s = 0
+    for m ∈ r1, n ∈ l2+m:W2:N, k ∈ l3:W3:K+m+n
+        s += 1
+    end
+    s
+end
 

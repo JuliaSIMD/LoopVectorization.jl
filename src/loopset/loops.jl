@@ -110,10 +110,11 @@ function depending_ind(Aₗ′, Aᵤ′, not_visited_mask)
     A′ᵢ = (Aₗ′[(i>>>3)+1] + Aᵤ′[(i>>>3)+1]) & VectorizationBase.splitint(not_visited_mask, Int8) # gives all that depend on i
     # @show A′ᵢ, not_visited_mask
     while !allzero(A′ᵢ)
+        # @show 0, A′ᵢ
         nvm = (not_visited_mask >>> (i+1))
         @assert !iszero(nvm)
         i += 1 + trailing_zeros(nvm)
-        A′ᵢ = (Aₗ′[(i>>>3)+1] + Aᵤ′[(i>>>3)+1]) & not_visited_mask # gives all that depend on i
+        A′ᵢ = (Aₗ′[(i>>>3)+1] + Aᵤ′[(i>>>3)+1]) & VectorizationBase.splitint(not_visited_mask, Int8) # gives all that depend on i # gives all that depend on i
         # Aₗ′ᵢ = Aₗ′[(i>>>3)+1] & not_visited_mask
         # Aᵤ′ᵢ = Aᵤ′[(i>>>3)+1] & not_visited_mask
     end
