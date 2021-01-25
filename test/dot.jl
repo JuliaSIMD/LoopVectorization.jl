@@ -7,7 +7,7 @@ using Test
              end)
     lsdot = LoopVectorization.LoopSet(dotq);
     @test LoopVectorization.choose_order(lsdot) == (Symbol[:i], :i, Symbol("##undefined##"), :i, 4, -1)
-    function mydot(a, b)
+    function mydot(a::AbstractVector, b::AbstractVector)
         s = zero(eltype(a))
         za = OffsetArray(a, OffsetArrays.Origin(0))
         zb = OffsetArray(b, OffsetArrays.Origin(0))
@@ -16,12 +16,27 @@ using Test
         end
         s
     end
-    function mydotavx(a, b)
+    function mydotavx(a::AbstractVector, b::AbstractVector)
         s = zero(eltype(a))
         za = OffsetArray(a, OffsetArrays.Origin(0))
         zb = OffsetArray(b, OffsetArrays.Origin(0))
         @avx for i ∈ LoopVectorization.CloseOpen(min(length(a),length(b)))
             s += za[i]*zb[i]
+        end
+        s
+    end
+    @test LoopVectorization.ArrayInterface.static_step(LoopVectorization.CloseOpen(-5,10)) === LoopVectorization.One()
+    function mydot(a, b)
+        s = zero(eltype(a))
+        @inbounds @simd for i ∈ eachindex(a,b)
+            s += a[i]*b[i]
+        end
+        s
+    end
+    function mydotavx(a, b)
+        s = zero(eltype(a))
+        @avx for i ∈ eachindex(a,b)
+            s += a[i]*b[i]
         end
         s
     end
