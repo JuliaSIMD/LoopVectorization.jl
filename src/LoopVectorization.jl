@@ -5,7 +5,7 @@ module LoopVectorization
 # end
 
 using VectorizationBase, SLEEFPirates, UnPack, OffsetArrays
-using VectorizationBase: REGISTER_SIZE, REGISTER_COUNT, data,
+using VectorizationBase: register_size, register_count, dynamic_register_size, dynamic_register_count, data,
     mask, pick_vector_width_val, MM,
     maybestaticlength, maybestaticsize, staticm1, staticp1, staticmul, vzero,
     Zero, maybestaticrange, offsetprecalc, lazymul,
@@ -18,6 +18,7 @@ using VectorizationBase: REGISTER_SIZE, REGISTER_COUNT, data,
 
 using IfElse: ifelse
 
+using ThreadingUtilities
 using SLEEFPirates: pow
 using Base.Broadcast: Broadcasted, DefaultArrayStyle
 using LinearAlgebra: Adjoint, Transpose

@@ -415,20 +415,20 @@ function extract_external_functions!(ls::LoopSet, offset::Int)
 end
 function sizeofeltypes(v, num_arrays)::Int
     T = typeeltype(v[1])
-    sz = if (VectorizationBase.SIMD_INTEGER_REGISTER_SIZE != VectorizationBase.REGISTER_SIZE) && T <: Integer # hack
-        (VectorizationBase.REGISTER_SIZE ÷ VectorizationBase.SIMD_INTEGER_REGISTER_SIZE) * sizeof(T)
+    sz = if (VectorizationBase.simd_integer_register_size() != VectorizationBase.register_size()) && T <: Integer # hack
+        (VectorizationBase.register_size() ÷ VectorizationBase.simd_integer_register_size()) * sizeof(T)
     else
         sz = sizeof(T)
     end
     for i ∈ 2:num_arrays
         Ttemp = typeeltype(v[i])
-        szᵢ = if (VectorizationBase.SIMD_INTEGER_REGISTER_SIZE != VectorizationBase.REGISTER_SIZE) && T <: Integer # hack
-            (VectorizationBase.REGISTER_SIZE ÷ VectorizationBase.SIMD_INTEGER_REGISTER_SIZE) * sizeof(T)
+        szᵢ = if (VectorizationBase.simd_integer_register_size() != VectorizationBase.register_size()) && T <: Integer # hack
+            (VectorizationBase.register_size() ÷ VectorizationBase.simd_integer_register_size()) * sizeof(T)
         else
             sizeof(Ttemp)
         end
         # if !VectorizationBase.SIMD_NATIVE_INTEGERS && Ttemp <: Integer # hack
-        #     return VectorizationBase.REGISTER_SIZE
+        #     return VectorizationBase.register_size()
         # end
         # T = promote_type(T, Ttemp)
         sz = max(szᵢ, sz)

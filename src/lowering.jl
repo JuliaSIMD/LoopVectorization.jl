@@ -845,7 +845,6 @@ end
 function lsexpr(ls::LoopSet, q)
     Expr(:block, ls.preamble, q)
 end
-const ISZEN1 = Sys.CPU_NAME === "znver1"
 function calc_Ureduct(ls::LoopSet, us::UnrollSpecification)
     @unpack u₁loopnum, u₁, u₂, vectorizedloopnum = us
     if iszero(length(ls.outer_reductions))
@@ -854,7 +853,7 @@ function calc_Ureduct(ls::LoopSet, us::UnrollSpecification)
         loopisstatic = isstaticloop(getloop(ls, names(ls)[u₁loopnum]))
         loopisstatic &= ((vectorizedloopnum != u₁loopnum) | (!iszero(ls.vector_width[])))
         # loopisstatic ? u₁ : min(u₁, 4) # much worse than the other two options, don't use this one
-        if ISZEN1
+        if Sys.CPU_NAME === "znver1"
             loopisstatic ? u₁ : 1
         else
             loopisstatic ? u₁ : (u₁ ≥ 4 ? 2 : 1)

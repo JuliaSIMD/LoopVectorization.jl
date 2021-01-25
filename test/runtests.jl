@@ -6,7 +6,7 @@ InteractiveUtils.versioninfo(stdout; verbose = true)
 
 const START_TIME = time()
 
-@show LoopVectorization.REGISTER_COUNT
+@show LoopVectorization.register_count()
 
 @show RUN_SLOW_TESTS
 

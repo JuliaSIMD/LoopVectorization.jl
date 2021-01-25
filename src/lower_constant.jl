@@ -18,12 +18,13 @@ end
 @inline sizeequivalentint(::Type{Float32}) = Int32
 @inline sizeequivalentfloat(::Type{T}, x) where {T} = sizeequivalentfloat(T)(x)
 @inline sizeequivalentint(::Type{T}, x) where {T} = sizeequivalentint(T)(x)
-if VectorizationBase.AVX512DQ || !((Sys.ARCH === :x86_64) || (Sys.ARCH === :i686))
-    @inline sizeequivalentint(::Type{Float64}) = Int64
-else
-    @inline sizeequivalentint(::Type{Float64}) = Int32
+@generated function sizeequivalentint(::Type{Float64})
+    if !((Sys.ARCH === :x86_64) || (Sys.ARCH === :i686)) || VectorizationBase.has_feature("x86_64_avx512dq")
+        :Int64
+    else
+        :Int32
+    end
 end
-
 # @inline onefloat(::Type{T}) where {T} = one(sizeequivalentfloat(T))
 # @inline oneinteger(::Type{T}) where {T} = one(sizeequivalentint(T))
 @inline zerofloat(::Type{T}) where {T} = zero(sizeequivalentfloat(T))

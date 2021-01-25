@@ -1,5 +1,4 @@
 
-const CACHELINE_SIZE = something(VectorizationBase.L₁CACHE.linesize, 64)
 
 # function indexappearences(op::Operation, s::Symbol)
 #     s ∉ loopdependencies(op) && return 0
@@ -105,7 +104,7 @@ function cost(ls::LoopSet, op::Operation, vectorized::Symbol, Wshift::Int, size_
                 #       would be nice to add a check for this CPU, to see if such a penalty is still appropriate.
                 #       Also, once more SVE (scalable vector extension) CPUs are released, would be nice to know if
                 #       this feature is common to all of them.
-                srt += 0.5VectorizationBase.REGISTER_SIZE / CACHELINE_SIZE
+                srt += 0.5VectorizationBase.dynamic_register_size() / VectorizationBase.cacheline_size()
             end
         elseif isstore(op) # broadcast or reductionstore; if store we want to penalize reduction
             srt *= 3
@@ -388,7 +387,7 @@ end
 
 function solve_unroll_iter(X, R, u₁L, u₂L, u₁range, u₂range)
     R₁, R₂, R₃, R₄, R₅ = R[1], R[2], R[3], R[4], R[5]
-    RR = REGISTER_COUNT - R₃ - R₄
+    RR = dynamic_register_count() - R₃ - R₄
     u₁best, u₂best = 0, 0
     bestcost = Inf
     for u₁temp ∈ u₁range
@@ -408,13 +407,11 @@ end
 
 function solve_unroll(X, R, u₁L, u₂L, u₁step, u₂step)
     X₁, X₂, X₃, X₄ = X[1], X[2], X[3], X[4]
-    # If we don't have AVX512, masks occupy a vector register;
-    # AVX512F is currently defined as `false` for non-x86 CPUs, but
-    # should instead define generic constant `HAS_OPMASK_REGISTERS` in VectorizationBase.jl to use here instead.
-    VectorizationBase.AVX512F || (R[3] += 1)
+    # If we don't have opmask registers, masks probably occupy a vector register (e.g., on CPUs with AVX but not AVX512)
+    VectorizationBase.dynamic_has_opmask_registers() || (R[3] += 1)
     R₁, R₂, R₃, R₄, R₅ = R[1], R[2], R[3], R[4], R[5]
     iszero(R₅) || return solve_unroll_iter(X, R, u₁L, u₂L, u₁step:u₁step:10, u₂step:u₂step:10)
-    RR = REGISTER_COUNT - R₃ - R₄
+    RR = dynamic_register_count() - R₃ - R₄
     a = R₂^2*X₃ -R₁*X₄ * R₂ - R₁*X₂*RR
     b = R₁ * X₄ * RR - R₁ * X₄ * RR - 2X₃*RR*R₂
     c = X₃*RR^2
@@ -424,15 +421,15 @@ function solve_unroll(X, R, u₁L, u₂L, u₁step, u₂step)
     u₂float = (RR - u₁float*R₂)/(u₁float*R₁)
     if !(isfinite(u₂float) & isfinite(u₁float)) # brute force
         u₁low = u₂low = 1
-        u₁high = iszero(X₂) ? 2 : (REGISTER_COUNT == 32 ? 8 : 6)
-        u₂high = iszero(X₃) ? 2 : (REGISTER_COUNT == 32 ? 8 : 6)
+        u₁high = iszero(X₂) ? 2 : (dynamic_register_count() == 32 ? 8 : 6)
+        u₂high = iszero(X₃) ? 2 : (dynamic_register_count() == 32 ? 8 : 6)
         return solve_unroll_iter(X, R, u₁L, u₂L, u₁low:u₁step:u₁high, u₂low:u₂step:u₂high)
     end
     u₁low = floor(Int, u₁float)
     u₂low = max(u₂step, floor(Int, 0.8u₂float)) # must be at least 1
     u₁high = solve_unroll_constT(R, u₂low) + u₁step
     u₂high = solve_unroll_constU(R, u₁low) + u₂step
-    maxunroll = REGISTER_COUNT == 32 ? (((X₂ > 0) & (X₃ > 0)) ? 10 : 8) : 6
+    maxunroll = dynamic_register_count() == 32 ? (((X₂ > 0) & (X₃ > 0)) ? 10 : 8) : 6
     u₁low = (min(u₁low, maxunroll) ÷ u₁step) * u₁step
     u₂low = (min(u₂low, maxunroll) ÷ u₂step) * u₂step
     u₁high = min(u₁high, maxunroll)
@@ -443,18 +440,18 @@ end
 function solve_unroll_constU(R::AbstractVector, u₁::Int)
     denom = u₁ * R[1] + R[5]
     iszero(denom) && return 8
-    floor(Int, (REGISTER_COUNT - R[3] - R[4] - u₁*R[2]) / denom)
+    floor(Int, (dynamic_register_count() - R[3] - R[4] - u₁*R[2]) / denom)
 end
 function solve_unroll_constT(R::AbstractVector, u₂::Int)
     denom = u₂ * R[1] + R[2]
     iszero(denom) && return 8
-    floor(Int, (REGISTER_COUNT - R[3] - R[4] - u₂*R[5]) / denom)
+    floor(Int, (dynamic_register_count() - R[3] - R[4] - u₂*R[5]) / denom)
 end
 # function solve_unroll_constT(ls::LoopSet, u₂::Int)
 #     R = @view ls.reg_pres[:,1]
 #     denom = u₂ * R[1] + R[2]
 #     iszero(denom) && return 8
-#     floor(Int, (REGISTER_COUNT - R[3] - R[4] - u₂*R[5]) / (u₂ * R[1] + R[2]))
+#     floor(Int, (dynamic_register_count() - R[3] - R[4] - u₂*R[5]) / (u₂ * R[1] + R[2]))
 # end
 # Tiling here is about alleviating register pressure for the UxT
 function solve_unroll(X, R, u₁max, u₂max, u₁L, u₂L, u₁step, u₂step)
@@ -501,9 +498,9 @@ function solve_unroll(
     W::Int, vectorized::Symbol, rounduᵢ::Int
 )
     (u₁step, u₂step) = if rounduᵢ == 1 # max is to safeguard against some weird arch I've never heard of.
-        (max(1,CACHELINE_SIZE ÷ VectorizationBase.REGISTER_SIZE), 1)
+        (max(1,VectorizationBase.cacheline_size() ÷ VectorizationBase.dynamic_register_size()), 1)
     elseif rounduᵢ == 2
-        (1, max(1,CACHELINE_SIZE ÷ VectorizationBase.REGISTER_SIZE))
+        (1, max(1,VectorizationBase.cacheline_size() ÷ VectorizationBase.dynamic_register_size()))
     else
         (1, 1)
     end
@@ -522,7 +519,7 @@ function solve_unroll(
     u₁loop::Loop, u₂loop::Loop,
     u₁step::Int, u₂step::Int
 )
-    maxu₂base = maxu₁base = REGISTER_COUNT == 32 ? 10 : 6#8
+    maxu₂base = maxu₁base = dynamic_register_count() == 32 ? 10 : 6#8
     maxu₂ = maxu₂base#8
     maxu₁ = maxu₁base#8
     u₁L = length(u₁loop)
@@ -721,13 +718,13 @@ function load_elimination_cost_factor!(
         #     if isstaticloop(loop) && length(loop) ≤ 4
         #         itersym = loop.itersymbol
         #         if itersym !== u₁loopsym && itersym !== u₂loopsym
-        #             return (0.25, REGISTER_COUNT == 32 ? 2.0 : 1.0)
+        #             return (0.25, dynamic_register_count() == 32 ? 2.0 : 1.0)
         #             # return (0.25, 1.0)
         #             return true
         #         end
         #     end
         # end
-        # # (0.25, REGISTER_COUNT == 32 ? 1.2 : 1.0)
+        # # (0.25, dynamic_register_count() == 32 ? 1.2 : 1.0)
         # (0.25, 1.0)
         cost_vec[1] -= 0.1looplengthprod(ls)
         reg_pressure[1] += 0.25rp
@@ -919,7 +916,7 @@ function evaluate_cost_tile(
         rt, lat, rp = cost(ls, op, vectorized, Wshift, size_T)
         if isload(op)
             if !iszero(prefetchisagoodidea(ls, op, UnrollArgs(4, unrollsyms, 4, 0)))
-                # rt += 0.5VectorizationBase.REGISTER_SIZE / CACHELINE_SIZE
+                # rt += 0.5VectorizationBase.dynamic_register_size() / VectorizationBase.cacheline_size()
                 prefetch_good_idea = true
             end
         end
@@ -936,7 +933,7 @@ function evaluate_cost_tile(
     end
     # reg_pressure[1] = max(reg_pressure[1], length(ls.outer_reductions))
     # @inbounds ((cost_vec[4] > 0) || ((cost_vec[2] > 0) & (cost_vec[3] > 0))) || return 0,0,Inf,false
-    costpenalty = (sum(reg_pressure) > REGISTER_COUNT) ? 2 : 1
+    costpenalty = (sum(reg_pressure) > dynamic_register_count()) ? 2 : 1
     u₁v = vectorized === u₁loopsym; u₂v = vectorized === u₂loopsym
     round_uᵢ = prefetch_good_idea ? (u₁v ? 1 : (u₂v ? 2 : 0)) : 0
     if (irreducible_storecosts / sum(cost_vec) ≥ 0.25) && !any(op -> loadintostore(ls, op), operations(ls))

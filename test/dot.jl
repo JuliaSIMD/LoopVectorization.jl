@@ -279,7 +279,7 @@ using Test
             @test πest == pi_avx_u4(a, b)
         end
 
-        if !(!LoopVectorization.VectorizationBase.AVX2 && T === Int32)
+        if !(!LoopVectorization.VectorizationBase.has_feature("x86_64_avx2") && T === Int32)
             @test dotloopinductvarpow(a) ≈ dotloopinductvarpowavx(a)
         end
         @test dot_from_n_to_100(a, b, 33) == @views mydotavx(a[33:100], b[33:100])

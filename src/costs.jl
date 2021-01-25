@@ -75,7 +75,7 @@ function vector_cost(ic::InstructionCost, Wshift, sizeof_T)
         return srt, sl, srp
     elseif offsetscaling(ic) # offset scaling
         srt *= 1 << (Wshift + VectorizationBase.intlog2(sizeof_T) - 4)
-        if (sizeof_T << Wshift) == 64 # VectorizationBase.REGISTER_SIZE # These instructions experience double latency with zmm
+        if (sizeof_T << Wshift) == 64 # VectorizationBase.register_size() # These instructions experience double latency with zmm
             sl += sl
         end
     elseif linearscaling(ic) # linear scaling
@@ -90,7 +90,7 @@ function vector_cost(ic::InstructionCost, Wshift, sizeof_T)
     srt, sl, srp
 end
 
-const OPAQUE_INSTRUCTION = InstructionCost(-1.0, 40, 40.0, REGISTER_COUNT)
+const OPAQUE_INSTRUCTION = InstructionCost(-1.0, 40, 40.0, 32)
 
 instruction_cost(instruction::Instruction) = instruction.mod === :LoopVectorization ? COST[instruction.instr] : OPAQUE_INSTRUCTION
 instruction_cost(instruction::Symbol) = get(COST, instruction, OPAQUE_INSTRUCTION)

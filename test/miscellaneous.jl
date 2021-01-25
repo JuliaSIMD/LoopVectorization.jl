@@ -4,12 +4,12 @@ using Test
 
 @testset "Miscellaneous" begin
 # T = Float32
-    Unum, Tnum = LoopVectorization.REGISTER_COUNT == 16 ? (1, 6) : (1, 8)
+    Unum, Tnum = LoopVectorization.register_count() == 16 ? (1, 6) : (1, 8)
     dot3q = :(for m ∈ 1:M, n ∈ 1:N
               s += x[m] * A[m,n] * y[n]
               end);
     lsdot3 = LoopVectorization.LoopSet(dot3q);
-    if LoopVectorization.REGISTER_COUNT != 8
+    if LoopVectorization.register_count() != 8
         @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :m, :n, :m, Unum, Tnum)#&-2
     end
 
@@ -66,15 +66,15 @@ using Test
                 B[j,i] = A[j,i] - x[j]
                 end)
     lssubcol = LoopVectorization.LoopSet(subcolq);
-    # if LoopVectorization.REGISTER_COUNT != 8
+    # if LoopVectorization.register_count() != 8
     #     # @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, :i, :j, Unum, Tnum)
     #     @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, :i, :j, 1, 1)
     # end
     @test LoopVectorization.choose_order(lssubcol) == (Symbol[:i,:j], :i, Symbol("##undefined##"), :j, 1, -1)
     # @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :i, Symbol("##undefined##"), :j, 4, -1)
-    # if LoopVectorization.REGISTER_COUNT == 32
+    # if LoopVectorization.register_count() == 32
     #     @test LoopVectorization.choose_order(lssubcol) == (Symbol[:i,:j], :j, :i, :j, 2, 10)
-    # elseif LoopVectorization.REGISTER_COUNT == 16
+    # elseif LoopVectorization.register_count() == 16
     #     @test LoopVectorization.choose_order(lssubcol) == (Symbol[:i,:j], :j, :i, :j, 2, 6)
     # end
     # @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, Symbol("##undefined##"), :j, 4, -1)
@@ -102,7 +102,7 @@ using Test
                 x[j] += A[j,i] - 0.25
                 end)
     lscolsum = LoopVectorization.LoopSet(colsumq);
-    # if LoopVectorization.REGISTER_COUNT != 8
+    # if LoopVectorization.register_count() != 8
     #     # @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, :i, :j, Unum, Tnum)
     #     @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, :i, :j, 1, 1)
     # end
@@ -142,10 +142,10 @@ using Test
     lsvar = LoopVectorization.LoopSet(varq);
     # LoopVectorization.choose_order(lsvar)
     # @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, Unum, Tnum)
-    if LoopVectorization.REGISTER_COUNT == 32
+    if LoopVectorization.register_count() == 32
         @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, Symbol("##undefined##"), :j, 4, -1)
     #     @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, 2, 10)
-    else#if LoopVectorization.REGISTER_COUNT == 16
+    else#if LoopVectorization.register_count() == 16
         @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, Symbol("##undefined##"), :j, 8, -1)
     #     @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, 2, 6)
     end

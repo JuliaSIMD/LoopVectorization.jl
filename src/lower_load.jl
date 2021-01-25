@@ -70,7 +70,7 @@ function prefetchisagoodidea(ls::LoopSet, op::Operation, td::UnrollArgs)
     length(loopdependencies(op)) ≤ 1 && return 0
     vectorized ∈ loopdependencies(op) || return 0
     u₂loopsym === Symbol("##undefined##") && return 0
-    dontskip = (CACHELINE_SIZE ÷ VectorizationBase.REGISTER_SIZE) - 1
+    dontskip = (VectorizationBase.cacheline_size() ÷ VectorizationBase.dynamic_register_size()) - 1
     # u₂loopsym is vectorized
     # u₁vectorized = vectorized === u₁loopsym
     u₂vectorized = vectorized === u₂loopsym
@@ -101,7 +101,7 @@ function prefetchisagoodidea(ls::LoopSet, op::Operation, td::UnrollArgs)
 end
 function add_prefetches!(q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, prefetchind::Int, umin::Int)
     @unpack u₁, u₁loopsym, u₂loopsym, vectorized, u₂max = td
-    dontskip = (64 ÷ VectorizationBase.REGISTER_SIZE) - 1
+    dontskip = (64 ÷ VectorizationBase.dynamic_register_size()) - 1
     ptr = vptr(op)
     innermostloopsym = first(names(ls))
     us = ls.unrollspecification[]

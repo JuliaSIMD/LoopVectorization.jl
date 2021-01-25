@@ -14,7 +14,7 @@ function vfilter!(f::F, x::Vector{T}, y::AbstractArray{T}) where {F,T <: NativeT
             vy = vload(ptr_y, zero_index)
             mask = f(vy)
             VectorizationBase.compressstore!(gep(ptr_x, VectorizationBase.lazymul(st, j)), vy, mask)
-            ptr_y = gep(ptr_y, VectorizationBase.REGISTER_SIZE)
+            ptr_y = gep(ptr_y, register_size())
             j = vadd_fast(j, count_ones(mask))
         end
         rem_mask = VectorizationBase.mask(T, Nrem)
