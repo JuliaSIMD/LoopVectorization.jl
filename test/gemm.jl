@@ -3,7 +3,7 @@
     Unum, Tnum = LoopVectorization.register_count() == 16 ? (2, 6) : (3, 9)
     Unumt, Tnumt = LoopVectorization.register_count() == 16 ? (2, 6) : (5, 5)
     if LoopVectorization.register_count() != 8
-        @test LoopVectorization.matmul_params() == (Unum, Tnum)
+        @test @inferred(LoopVectorization.matmul_params()) == (Unum, Tnum)
     end
     AmulBtq1 = :(for m ∈ axes(A,1), n ∈ axes(B,2)
                  C[m,n] = zeroB

@@ -56,7 +56,6 @@ function vmap_singlethread!(
     UNROLL = 4
     LOG2UNROLL = 2
     while i < N - ((W << LOG2UNROLL) - 1)
-
         index = VectorizationBase.Unroll{1,1,UNROLL,1,W,0x0000000000000000}((i,))
         v = f(vload.(ptrargs, index)...)
         if NonTemporal
@@ -261,9 +260,7 @@ function vmap!(
         map!(f, y, arg1, arg2, args...)
     end
 end
-function vmap!(
-    f::F, y::AbstractArray, arg::AbstractArray
-) where {F,A}
+function vmap!(f::F, y::AbstractArray, arg::AbstractArray) where {F}
     if check_args(y, arg) && all_dense(y, arg)
         gc_preserve_vmap!(f, y, Val{false}(), Val{false}(), arg)
     else
