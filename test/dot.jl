@@ -9,15 +9,19 @@ using Test
     @test LoopVectorization.choose_order(lsdot) == (Symbol[:i], :i, Symbol("##undefined##"), :i, 4, -1)
     function mydot(a, b)
         s = zero(eltype(a))
-        @inbounds @simd for i ∈ eachindex(a,b)
-            s += a[i]*b[i]
+        za = OffsetArray(a, OffsetArrays.Origin(0))
+        zb = OffsetArray(b, OffsetArrays.Origin(0))
+        @inbounds @simd for i ∈ LoopVectorization.CloseOpen(min(length(a),length(b)))
+            s += za[i]*zb[i]
         end
         s
     end
     function mydotavx(a, b)
         s = zero(eltype(a))
-        @avx for i ∈ eachindex(a,b)
-            s += a[i]*b[i]
+        za = OffsetArray(a, OffsetArrays.Origin(0))
+        zb = OffsetArray(b, OffsetArrays.Origin(0))
+        @avx for i ∈ LoopVectorization.CloseOpen(min(length(a),length(b)))
+            s += za[i]*zb[i]
         end
         s
     end
@@ -88,9 +92,9 @@ using Test
         end
         z
     end
-    @macroexpand @avx inline=false unroll=2 for i ∈ 1:length(x)
-            z += x[i]*y[i]
-        end
+    # @macroexpand @avx inline=false unroll=2 for i ∈ 1:length(x)
+    #         z += x[i]*y[i]
+    #     end
 
     function dot_unroll2avx_noinline(x::Vector{T}, y::Vector{T}) where {T<:Number}
         z = zero(T)
