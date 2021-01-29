@@ -240,8 +240,12 @@ end
 end
 
 
-Base.@pure _all_dense(::ArrayInterface.DenseDims{D}) where {D} = all(D)
+@inline _all_dense(t::Tuple{ArrayInterface.True}) = true
+@inline _all_dense(t::Tuple{ArrayInterface.True,ArrayInterface.True,Vararg}) = _all_dense(Base.tail(t))
+@inline _all_dense(t::Tuple{ArrayInterface.True,ArrayInterface.False,Vararg}) = false
+@inline _all_dense(t::Tuple{ArrayInterface.False,Vararg}) = false
 @inline all_dense() = true
+@inline all_dense(A::Array) = true
 @inline all_dense(A::AbstractArray) = _all_dense(ArrayInterface.dense_dims(A))
 @inline all_dense(A::AbstractArray, B::AbstractArray, C::Vararg{AbstractArray,K}) where {K} = all_dense(A) && all_dense(B, C...)
 

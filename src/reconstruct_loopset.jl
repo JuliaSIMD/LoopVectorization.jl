@@ -145,11 +145,19 @@ function pushvarg!(ls::LoopSet, ar::ArrayReferenceMeta, i, name)
     # pushpreamble!(ls, Expr(:(=), name, Expr(:call, :(VectorizationBase.zero_offsets), extract_varg(i))))
     pushpreamble!(ls, Expr(:(=), name, extract_varg(i)))
 end
+function rank_to_sortperm(R::NTuple{N,Int}) where {N}
+    sp = ntuple(zero, Val{N}())
+    r = ntuple(n -> sum(R[n] .≥ R), Val{N}())
+    @inbounds for n = 1:N
+        sp = Base.setindex(sp, n, r[n])
+    end
+    sp
+end
 function add_mref!(
     ls::LoopSet, ar::ArrayReferenceMeta, i::Int, @nospecialize(_::Type{S}), name
 ) where {T, N, C, B, R, X, O, S <: AbstractStridedPointer{T,N,C,B,R,X,O}}
     @assert B ≤ 0 "Batched arrays not supported yet."
-    sp = ArrayInterface.rank_to_sortperm(R)
+    sp = rank_to_sortperm(R)
     # maybe no change needed? -- optimize common case
     column_major = ntuple(identity, N)
     li = ar.loopedindex;

@@ -13,9 +13,9 @@ Base.size(::SizedOffsetMatrix{<:Any,LR,UR,LC,UC}) where {LR,UR,LC,UC} = (UR-LR+1
 Base.axes(::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (Static{LR}():Static{UR}(),Static{LC}():Static{UC}())
 Base.parent(A::SizedOffsetMatrix) = A.data
 Base.unsafe_convert(::Type{Ptr{T}}, A::SizedOffsetMatrix{T}) where {T} = pointer(A.data)
-ArrayInterface.contiguous_axis(::Type{<:SizedOffsetMatrix}) = ArrayInterface.Contiguous{1}()
-ArrayInterface.contiguous_batch_size(::Type{<:SizedOffsetMatrix}) = ArrayInterface.ContiguousBatch{0}()
-ArrayInterface.stride_rank(::Type{<:SizedOffsetMatrix}) = ArrayInterface.StrideRank{(1,2)}()
+ArrayInterface.contiguous_axis(::Type{<:SizedOffsetMatrix}) = Static(1)
+ArrayInterface.contiguous_batch_size(::Type{<:SizedOffsetMatrix}) = Static(0)
+ArrayInterface.stride_rank(::Type{<:SizedOffsetMatrix}) = (Static(1), Static(2))
 function ArrayInterface.strides(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC}
     (Static{1}(), (Static{UR}() - Static{LR}() + Static{1}()))
 end

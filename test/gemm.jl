@@ -630,9 +630,9 @@
     end
     Base.unsafe_convert(::Type{Ptr{T}}, A::SizedMatrix{M,N,T}) where {M,N,T} = pointer(A.data)
     LoopVectorization.ArrayInterface.strides(::SizedMatrix{M}) where {M} = (LoopVectorization.Static{1}(),LoopVectorization.Static{M}())
-    LoopVectorization.ArrayInterface.contiguous_axis(::Type{<:SizedMatrix}) = LoopVectorization.ArrayInterface.Contiguous{1}()
-    LoopVectorization.ArrayInterface.contiguous_batch_size(::Type{<:SizedMatrix}) = LoopVectorization.ArrayInterface.ContiguousBatch{0}()
-    LoopVectorization.ArrayInterface.stride_rank(::Type{<:SizedMatrix}) = LoopVectorization.ArrayInterface.StrideRank{(1,2)}()
+    LoopVectorization.ArrayInterface.contiguous_axis(::Type{<:SizedMatrix}) = LoopVectorization.One()
+    LoopVectorization.ArrayInterface.contiguous_batch_size(::Type{<:SizedMatrix}) = LoopVectorization.Zero()
+    LoopVectorization.ArrayInterface.stride_rank(::Type{<:SizedMatrix}) = (LoopVectorization.Static(1), LoopVectorization.Static(2))
     LoopVectorization.ArrayInterface.offsets(::SizedMatrix) = (LoopVectorization.Static{0}(), LoopVectorization.Static{0}())
 # struct ZeroInitializedArray{T,N,A<:DenseArray{T,N}} <: DenseArray{T,N}
 #     data::A
