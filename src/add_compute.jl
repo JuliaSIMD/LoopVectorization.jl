@@ -86,6 +86,52 @@ function search_tree(opv::Vector{Operation}, var::Symbol) # relies on cycles bei
     end
     false
 end
+
+function update_for_ref_reduction!()
+    if varname(mpref) === var
+        id = findfirst(r -> r == mpref.mref, ls.refs_aliasing_syms)
+        mpref.varname = var = isnothing(id) ? var : ls.syms_aliasing_refs[id]
+        reduction_ind = ind
+        mergesetv!(deps, loopdependencies(add_load!(ls, argref, elementbytes)))
+    else
+        pushparent!(vparents, deps, reduceddeps, add_load!(ls, argref, elementbytes))
+    end
+end
+search_tree_for_ref(ls::LoopSet, opv::Vector{Operation}, ::Nothing, var::Symbol) = var, false
+function search_tree_for_ref(ls::LoopSet, opv::Vector{Operation}, mpref::ArrayReferenceMetaPosition, var::Symbol) # relies on cycles being forbidden
+    # isref, argref = tryrefconvert(ls, arg, elementbytes, varname(mpref))
+    # if isref
+    #     if mpref == argref
+    #         if varname(mpref) === var
+    #             id = findfirst(r -> r == mpref.mref, ls.refs_aliasing_syms)
+    #             mpref.varname = var = isnothing(id) ? var : ls.syms_aliasing_refs[id]
+    #             reduction_ind = ind
+    #             mergesetv!(deps, loopdependencies(add_load!(ls, argref, elementbytes)))
+    #         else
+    #             pushparent!(vparents, deps, reduceddeps, add_load!(ls, argref, elementbytes))
+    #         end
+    #     else
+    #         argref.varname = gensym!(ls, "tempload")
+    #         pushparent!(vparents, deps, reduceddeps, add_load!(ls, argref, elementbytes))
+    #     end
+    # else
+    #     add_parent!(vparents, deps, reduceddeps, ls, arg, elementbytes, position)
+    # end
+    for opp ∈ opv
+        if opp.ref == mpref.mref
+            if varname(mpref) === var
+                id = findfirst(r -> r == mpref.mref, ls.refs_aliasing_syms)
+                # @show var = isnothing(id) ? var : ls.syms_aliasing_refs[id]
+                mpref.varname = var = isnothing(id) ? var : ls.syms_aliasing_refs[id]
+                # @show mpref.varname
+                return var, true
+            end
+        end
+        var, found = search_tree_for_ref(ls, parents(opp), mpref, var)
+        found && return (var, found)
+    end
+    var, false
+end
 function search_tree(opv::Vector{Operation}, var::Operation) # relies on cycles being forbidden
     for opp ∈ opv
         opp === var && return true
@@ -281,25 +327,34 @@ function add_compute!(
         mergesetv!(newreduceddeps, reduceddeps)
         deps = newloopdeps; reduceddeps = newreduceddeps
     end
+    # @show reduction, search_tree(vparents, var) ex var vparents mpref get(ls.opdict, var, nothing) search_tree_for_ref(ls, vparents, mpref, var) # relies on cycles being forbidden
     op = if reduction || search_tree(vparents, var)
-        parent = ls.opdict[var]
-        setdiffv!(reduceddeps, deps, loopdependencies(parent))
-        # parent = getop(ls, var, elementbytes)
-        # if length(reduceddeps) == 0
-        if all(!in(deps), reduceddeps)
-            insert!(vparents, reduction_ind, parent)
-            mergesetv!(deps, loopdependencies(parent))
+        add_reduction!(ls, var, reduceddeps, deps, vparents, reduction_ind, elementbytes, instr)
+    else
+        var, found = search_tree_for_ref(ls, vparents, mpref, var)
+        if found
+            add_reduction!(ls, var, reduceddeps, deps, vparents, reduction_ind, elementbytes, instr)
+        else
             op = Operation(length(operations(ls)), var, elementbytes, instr, compute, deps, reduceddeps, vparents)
             pushop!(ls, op, var)
-        else
-            add_reduction_update_parent!(vparents, deps, reduceddeps, ls, parent, instr, reduction_ind, elementbytes)
         end
-    else
-        op = Operation(length(operations(ls)), var, elementbytes, instr, compute, deps, reduceddeps, vparents)
-        pushop!(ls, op, var)
     end
     # maybe_const_compute!(ls, op, elementbytes, position)
     op
+end
+function add_reduction!(ls::LoopSet, var::Symbol, reduceddeps, deps, vparents, reduction_ind, elementbytes, instr)
+    parent = ls.opdict[var]
+    setdiffv!(reduceddeps, deps, loopdependencies(parent))
+    # parent = getop(ls, var, elementbytes)
+    # if length(reduceddeps) == 0
+    if all(!in(deps), reduceddeps)
+        insert!(vparents, reduction_ind, parent)
+        mergesetv!(deps, loopdependencies(parent))
+        op = Operation(length(operations(ls)), var, elementbytes, instr, compute, deps, reduceddeps, vparents)
+        pushop!(ls, op, var)
+    else
+        add_reduction_update_parent!(vparents, deps, reduceddeps, ls, parent, instr, reduction_ind, elementbytes)
+    end    
 end
 
 function add_compute!(

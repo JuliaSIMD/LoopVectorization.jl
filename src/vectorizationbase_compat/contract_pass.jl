@@ -5,6 +5,13 @@ function mulexprcost(ex::Expr)
     base = ex.head === :call ? 10 : 1
     base + length(ex.args)
 end
+function mul_fast_expr(args)
+    b = Expr(:call, :mul_fast)
+    for i ∈ 2:length(args)
+        push!(b.args, args[i])
+    end
+    b
+end
 function mulexpr(mulexargs)
     a = (mulexargs[1])::Union{Symbol,Expr,Number}
     if length(mulexargs) == 2
@@ -25,17 +32,17 @@ function mulexpr(mulexargs)
             return (c, Expr(:call, :mul_fast, a, b))
         end
     else
-        return (a, Expr(:call, :mul_fast, @view(mulexargs[2:end])...)::Expr)
+        return (a, mul_fast_expr(mulexargs))
     end
     a = (mulexargs[1])::Union{Symbol,Expr,Number}
     b = if length(mulexargs) == 2 # two arg mul
         (mulexargs[2])::Union{Symbol,Expr,Number}
     else
-        Expr(:call, :mul_fast, @view(mulexargs[2:end])...)::Expr
+        mul_fast_expr(mulexargs)
     end
     a, b
 end
-function append_args_skip!(call, args, i)
+function append_args_skip!(call, args, i, mod)
     for j ∈ eachindex(args)
         j == i && continue
         push!(call.args, args[j])
@@ -44,18 +51,29 @@ function append_args_skip!(call, args, i)
 end
 
 fastfunc(f) = get(VectorizationBase.FASTDICT, f, f)
-function make_fast!(call::Expr)
-    call.args[1] = fastfunc(first(call.args))
-    nothing
+function muladd_arguments!(argv, mod, f = first(argv))
+    if f === :*
+        argv[1] = :mul_fast
+    else
+        argv[1] = fastfunc(f)
+    end
+    for i ∈ 2:length(argv)
+        a = argv[i]
+        a isa Expr || continue
+        argv[i] = capture_muladd(a::Expr, mod)
+    end
 end
 
-function recursive_muladd_search!(call, argv, cnmul::Bool = false, csub::Bool = false)
-    length(argv) < 3 && (make_fast!(call); return length(call.args) == 4, cnmul, csub)
+function recursive_muladd_search!(call, argv, mod, cnmul::Bool = false, csub::Bool = false)
+    if length(argv) < 3
+        muladd_arguments!(argv, mod)
+        return length(call.args) == 4, cnmul, csub
+    end
     fun = first(argv)
     isadd = fun === :+ || fun === :add_fast || fun === :vadd || (fun == :(Base.FastMath.add_fast))::Bool
     issub = fun === :- || fun === :sub_fast || fun === :vsub || (fun == :(Base.FastMath.sub_fast))::Bool
     if !(isadd | issub)
-        argv[1] = fastfunc(fun)
+        muladd_arguments!(argv, mod, fun)
         return length(call.args) == 4, cnmul, csub
     end
     exargs = @view(argv[2:end])
@@ -72,7 +90,7 @@ function recursive_muladd_search!(call, argv, cnmul::Bool = false, csub::Bool = 
                 if length(exargs) == 2
                     push!(call.args, exargs[3 -  i])
                 else
-                    push!(call.args, append_args_skip!(Expr(:call, :add_fast), exargs, i))
+                    push!(call.args, append_args_skip!(Expr(:call, :add_fast), exargs, i, mod))
                 end
                 if issub
                     csub = i == 1
@@ -80,21 +98,21 @@ function recursive_muladd_search!(call, argv, cnmul::Bool = false, csub::Bool = 
                 end
                 return true, cnmul, csub
             elseif isadd
-                found, cnmul, csub = recursive_muladd_search!(call, exa)
+                found, cnmul, csub = recursive_muladd_search!(call, exa, mod)
                 if found
                     if csub
                         call.args[4] = if length(exargs) == 2
                             Expr(:call, :sub_fast, exargs[3 - i], call.args[4])
                         else
-                            Expr(:call, :sub_fast, append_args_skip!(Expr(:call, :add_fast), exargs, i), call.args[4])
+                            Expr(:call, :sub_fast, append_args_skip!(Expr(:call, :add_fast), exargs, i, mod), call.args[4])
                         end
                     else
-                        call.args[4] = append_args_skip!(Expr(:call, :add_fast, call.args[4]), exargs, i)
+                        call.args[4] = append_args_skip!(Expr(:call, :add_fast, call.args[4]), exargs, i, mod)
                     end
                     return true, cnmul, false
                 end
             elseif issub
-                found, cnmul, csub = recursive_muladd_search!(call, exa)
+                found, cnmul, csub = recursive_muladd_search!(call, exa, mod)
                 if found
                     if i == 1
                         if csub
@@ -119,10 +137,11 @@ function recursive_muladd_search!(call, argv, cnmul::Bool = false, csub::Bool = 
     length(call.args) == 4, cnmul, csub
 end
 
-function capture_muladd(ex::Expr, mod)
+function capture_a_muladd(ex::Expr, mod)
     call = Expr(:call, Symbol(""), Symbol(""), Symbol(""))
-    found, nmul, sub = recursive_muladd_search!(call, ex.args)
-    found || return ex
+    found, nmul, sub = recursive_muladd_search!(call, ex.args, mod)
+    found || return false, ex
+    # found || return ex
     # a, b, c = call.args[2], call.args[3], call.args[4]
     # call.args[2], call.args[3], call.args[4] = c, a, b
     f = if nmul && sub
@@ -139,7 +158,13 @@ function capture_muladd(ex::Expr, mod)
     else
         call.args[1] = Expr(:(.), mod, QuoteNote(f))#_fast))
     end
-    call
+    true, call
+end
+function capture_muladd(ex::Expr, mod)
+    while true
+        found, ex = capture_a_muladd(ex, mod)
+        found || return ex
+    end
 end
 
 contract_pass!(::Any, ::Any) = nothing

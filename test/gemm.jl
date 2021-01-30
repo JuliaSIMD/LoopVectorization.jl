@@ -572,7 +572,26 @@
     #         C[m,n] = Cmn_hi
     #     end
     # end
-    
+    function doublegemm!(du, u, mat)
+        @assert size(u, 1) == size(u, 2) == size(mat, 1) == size(mat, 2)
+        for i2 in 1:size(u, 2), i1 in 1:size(u, 1)
+            for sum_idx in 1:size(u, 1)
+                du[i1, i2] += mat[i1, sum_idx] * u[sum_idx, i2] + mat[i2, sum_idx] * u[i1, sum_idx]
+            end
+        end
+        return nothing
+    end
+
+    function doublegemmavx!(du, u, mat)
+        @assert size(u, 1) == size(u, 2) == size(mat, 1) == size(mat, 2)
+        @avx for i2 in 1:size(u, 2), i1 in 1:size(u, 1)
+            for sum_idx in 1:size(u, 1)
+                du[i1, i2] += mat[i1, sum_idx] * u[sum_idx, i2] + mat[i2, sum_idx] * u[i1, sum_idx]
+            end
+        end
+        return nothing
+    end
+
     function threegemms!(Ab, Bb, Cb, A, B, C)
         M, N = size(Cb); K = size(B,1)
         @avx for m in 1:M, k in 1:K, n in 1:N
@@ -647,6 +666,15 @@
 # end
 
     for T ∈ (Float32, Float64, Int32, Int64)
+        TC = sizeof(T) == 4 ? Float32 : Float64
+        R = T <: Integer ? (T(-1000):T(1000)) : T
+        for M ∈ 48:54
+            C0 = zeros(TC, M, M); C1 = zeros(TC, M, M);
+            A = rand(R, M, M); B = rand(R, M, M);
+            doublegemm!(C0, A, B)
+            doublegemmavx!(C1, A, B)
+            @test C0 ≈ C1
+        end
     # let T = Int32
         # exceeds_time_limit() && break
         @show T, @__LINE__
@@ -654,8 +682,6 @@
         N = 69;
         for M ∈ 72:80, K ∈ 72:80
         # M, K, N = 73, 75, 69;
-            TC = sizeof(T) == 4 ? Float32 : Float64
-            R = T <: Integer ? (T(-1000):T(1000)) : T
             C = Matrix{TC}(undef, M, N);
             A = rand(R, M, K); B = rand(R, K, N);
             At = copy(A');
