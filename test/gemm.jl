@@ -352,7 +352,8 @@
     if LoopVectorization.register_count() == 32
         @test LoopVectorization.choose_order(lsr2amb) == ([:n, :m, :k], :m, :n, :m, 3, 7)
     elseif LoopVectorization.register_count() == 16
-        @test LoopVectorization.choose_order(lsr2amb) == ([:m, :n, :k], :m, :n, :m, 1, 6)
+        # @test LoopVectorization.choose_order(lsr2amb) == ([:m, :n, :k], :m, :n, :m, 1, 6)
+        @test LoopVectorization.choose_order(lsr2amb) == ([:m, :n, :k], :m, :n, :m, 2, 4)
     end
     function rank2AmulBavx!(C, Aₘ, Aₖ, B)
         @avx for m ∈ axes(C,1), n ∈ axes(C,2)
