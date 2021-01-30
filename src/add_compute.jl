@@ -348,8 +348,10 @@ function add_reduction!(ls::LoopSet, var::Symbol, reduceddeps, deps, vparents, r
     # parent = getop(ls, var, elementbytes)
     # if length(reduceddeps) == 0
     if all(!in(deps), reduceddeps)
-        insert!(vparents, reduction_ind, parent)
-        mergesetv!(deps, loopdependencies(parent))
+        if reduction_ind != 0
+            insert!(vparents, reduction_ind, parent)
+            mergesetv!(deps, loopdependencies(parent))
+        end
         op = Operation(length(operations(ls)), var, elementbytes, instr, compute, deps, reduceddeps, vparents)
         pushop!(ls, op, var)
     else

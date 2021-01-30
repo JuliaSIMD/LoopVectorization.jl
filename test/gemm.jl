@@ -572,7 +572,7 @@
     #         C[m,n] = Cmn_hi
     #     end
     # end
-    function doublegemm!(du, u, mat)
+    function AB_plus_BA!(du, u, mat)
         @assert size(u, 1) == size(u, 2) == size(mat, 1) == size(mat, 2)
         for i2 in 1:size(u, 2), i1 in 1:size(u, 1)
             for sum_idx in 1:size(u, 1)
@@ -582,7 +582,7 @@
         return nothing
     end
 
-    function doublegemmavx!(du, u, mat)
+    function AB_plus_BA_avx!(du, u, mat)
         @assert size(u, 1) == size(u, 2) == size(mat, 1) == size(mat, 2)
         @avx for i2 in 1:size(u, 2), i1 in 1:size(u, 1)
             for sum_idx in 1:size(u, 1)
@@ -671,8 +671,8 @@
         for M ∈ 48:54
             C0 = zeros(TC, M, M); C1 = zeros(TC, M, M);
             A = rand(R, M, M); B = rand(R, M, M);
-            doublegemm!(C0, A, B)
-            doublegemmavx!(C1, A, B)
+            AB_plus_BA!(C0, A, B)
+            AB_plus_BA_avx!(C1, A, B)
             @test C0 ≈ C1
         end
     # let T = Int32
