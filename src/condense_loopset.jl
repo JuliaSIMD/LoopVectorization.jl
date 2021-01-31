@@ -239,8 +239,21 @@ function generate_call(ls::LoopSet, inline_unroll::NTuple{3,Int8}, debug::Bool =
     inline, u₁, u₂ = inline_unroll
     func = debug ? lv(:_avx_loopset_debug) : lv(:_avx_!)
     lbarg = debug ? Expr(:call, :typeof, loop_bounds) : loop_bounds
+    unroll_param_tup = Expr(
+        :tuple, inline, u₁, u₂,
+        Expr(:call, lv(:unwrap), VECTORWIDTHSYMBOL),
+        Expr(:call, lv(:unwrap), Expr(:call, lv(:register_size))),
+        Expr(:call, lv(:unwrap),
+            Expr(:call, lv(:ifelse),
+                Expr(:call, lv(:unwrap), Expr(:call, lv(:has_opmask_registers))),
+                Expr(:call, lv(:unwrap), Expr(:call, lv(:register_count))),
+                Expr(:call, lv(:unwrap), Expr(:call, :(-), Expr(:call, lv(:register_count)), Expr(:call, lv(:One))))
+            )
+        ),
+        Expr(:call, lv(:unwrap), Expr(:call, lv(:cache_linesize)))
+    )
     q = Expr(
-        :call, func, val(Expr(:tuple, inline, u₁, u₂, Expr(:call, lv(:unwrap), VECTORWIDTHSYMBOL))),
+        :call, func, val(unroll_param_tup),
         val(operation_descriptions), val(arrayref_descriptions), val(argmeta), val(loop_syms)
     )
     # debug && deleteat!(q.args, 2)

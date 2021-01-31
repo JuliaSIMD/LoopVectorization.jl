@@ -5,7 +5,7 @@ using Test
     dotq = :(for i ∈ eachindex(a,b)
              s += a[i]*b[i]
              end)
-    lsdot = LoopVectorization.LoopSet(dotq);
+    lsdot = LoopVectorization.loopset(dotq);
     @test LoopVectorization.choose_order(lsdot) == (Symbol[:i], :i, Symbol("##undefined##"), :i, 4, -1)
     function mydot(a::AbstractVector, b::AbstractVector)
         s = zero(eltype(a))
@@ -54,7 +54,7 @@ using Test
     selfdotq = :(for i ∈ eachindex(a)
                  s += a[i]*a[i]
                  end)
-    lsselfdot = LoopVectorization.LoopSet(selfdotq);
+    lsselfdot = LoopVectorization.loopset(selfdotq);
     @test LoopVectorization.choose_order(lsselfdot) == (Symbol[:i], :i, Symbol("##undefined##"), :i, 8, -1)
 
     function myselfdot(a)
@@ -155,7 +155,7 @@ using Test
            zre += xre[i]*yre[i] - xim[i]*yim[i]
            zim += xre[i]*yim[i] + xim[i]*yre[i]
            end);
-    lsc = LoopVectorization.LoopSet(qc);
+    lsc = LoopVectorization.loopset(qc);
     function complex_mul_with_index_offset!(c_re, c_im, a_re, a_im, b_re, b_im)
         @inbounds @simd ivdep for i = 1:length(a_re) - 1
             c_re[i] = b_re[i] * a_re[i + 1] - b_im[i] * a_im[i + 1]
@@ -178,7 +178,7 @@ using Test
     #         c_re[i] = b_re[i] * a_re[i + 1] - b_im[i] * a_im[i + 1]
     #         c_im[i] = b_re[i] * a_im[i + 1] + b_im[i] * a_re[i + 1]
     #       end);
-    # ls = LoopVectorization.LoopSet(q)
+    # ls = LoopVectorization.loopset(q)
 
     function pi(x, y)
         acc = 0

@@ -11,7 +11,7 @@ using Test
               end
               y[i] = yᵢ
               end)
-    lsgemv = LoopVectorization.LoopSet(gemvq);
+    lsgemv = LoopVectorization.loopset(gemvq);
     if LoopVectorization.register_count() != 8
         @test LoopVectorization.choose_order(lsgemv) == (Symbol[:i, :j], :j, :i, :i, Unum, Tnum)
     end
@@ -51,7 +51,7 @@ using Test
     #       end
     #       y[i] = yᵢ
     #       end);
-    # ls = LoopVectorization.LoopSet(q);
+    # ls = LoopVectorization.loopset(q);
     function mygemv_avx!(y, A, x)
         # Need to test 0s somewhere!
         @_avx for i ∈ eachindex(y)
@@ -69,7 +69,7 @@ using Test
     #         end
     #         y[i] = yᵢ
     #   end);
-    # ls = LoopVectorization.LoopSet(q);
+    # ls = LoopVectorization.loopset(q);
     # LoopVectorization.lower(ls, 2, 2, 0)
 
 
@@ -139,7 +139,7 @@ using Test
               end
               G[d1,κ] = z
               end)
-    lsgemv = LoopVectorization.LoopSet(gemvq);
+    lsgemv = LoopVectorization.loopset(gemvq);
     if LoopVectorization.register_count() != 8
         @test LoopVectorization.choose_order(lsgemv) == ([:d1,:d2], :d2, :d1, :d2, Unum, Tnum)
     end
@@ -158,7 +158,7 @@ using Test
            G[d1,κ] += B[d2,d1]*B[d2,κ]
            end
            end)
-    lsp = LoopVectorization.LoopSet(pq);
+    lsp = LoopVectorization.loopset(pq);
     if LoopVectorization.register_count() != 8
         @test LoopVectorization.choose_order(lsp) == ([:d1, :d2], :d2, :d1, :d2, Unum, Tnum)
     end

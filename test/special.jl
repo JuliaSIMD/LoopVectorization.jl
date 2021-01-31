@@ -2,7 +2,7 @@
     vexpq = :(for i ∈ eachindex(a)
               b[i] = exp(a[i])
               end)
-    lsvexp = LoopVectorization.LoopSet(vexpq);
+    lsvexp = LoopVectorization.loopset(vexpq);
     @test LoopVectorization.choose_order(lsvexp) == (Symbol[:i], :i, Symbol("##undefined##"), :i, 1, -1)
 
     function myvexp!(b, a)
@@ -39,7 +39,7 @@
     vexpsq = :(for i ∈ eachindex(a)
                s += exp(a[i])
                end)
-    lsvexps = LoopVectorization.LoopSet(vexpsq);
+    lsvexps = LoopVectorization.loopset(vexpsq);
     @test LoopVectorization.choose_order(lsvexps) == (Symbol[:i], :i, Symbol("##undefined##"), :i, 1, -1)
 
     function myvexp(a)
@@ -95,7 +95,7 @@
     ldq = :(for i ∈ 1:size(L,1)
             ld += log(L[i,i])
             end)
-    lsld = LoopVectorization.LoopSet(ldq);
+    lsld = LoopVectorization.loopset(ldq);
     @test LoopVectorization.choose_order(lsld) == (Symbol[:i], :i, Symbol("##undefined##"), :i, 1, -1)
 
     function calc_sins!(res::AbstractArray{T}) where {T}
@@ -181,7 +181,7 @@
     #         r[i] = tmp
     #         s += tmp
     #         end)
-    # lsfeq = LoopVectorization.LoopSet(feq);
+    # lsfeq = LoopVectorization.loopset(feq);
     # # lsfeq.operations
 
     function vpow0!(y, x)
@@ -237,11 +237,11 @@
     q = :(for i ∈ eachindex(y, x)
             y[i] = x[i] ^ -5
           end);
-    ls = LoopVectorization.LoopSet(q);
+    ls = LoopVectorization.loopset(q);
     q2 = :(for i ∈ eachindex(y, x)
             y[i] = x[i] ^ 5
           end);
-    ls2 = LoopVectorization.LoopSet(q2);
+    ls2 = LoopVectorization.loopset(q2);
     
     function vpow5!(y, x)
         @avx for i ∈ eachindex(y, x)

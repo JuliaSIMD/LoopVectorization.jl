@@ -39,11 +39,10 @@ Vectorized version of `mapreduce`. Applies `f` to each element of the arrays `A`
     N = length(arg1)
     iszero(A) || @assert all(length.(args) .== N)
     W = VectorizationBase.pick_vector_width(T)
-    V = VectorizationBase.pick_vector_width_val(T)
     if N < W
         mapreduce_simple(f, op, arg1, args...)
     else
-        _vmapreduce(f, op, V, N, T, arg1, args...)
+        _vmapreduce(f, op, W, N, T, arg1, args...)
     end
 end
 @inline function _vmapreduce(f::F, op::OP, ::StaticInt{W}, N, ::Type{T}, args::Vararg{AbstractArray{<:NativeTypes},A}) where {F,OP,A,W,T}

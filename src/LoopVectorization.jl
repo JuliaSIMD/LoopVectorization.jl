@@ -5,10 +5,10 @@ module LoopVectorization
 # end
 
 using VectorizationBase, SLEEFPirates, UnPack, OffsetArrays
-using VectorizationBase: register_size, register_count, dynamic_register_size, dynamic_register_count, data,
-    mask, pick_vector_width_val, MM,
+using VectorizationBase: register_size, register_count, cache_linesize, has_opmask_registers,
+    mask, pick_vector_width, MM, data,
     maybestaticlength, maybestaticsize, staticm1, staticp1, staticmul, vzero,
-    Zero, maybestaticrange, offsetprecalc, lazymul,
+    maybestaticrange, offsetprecalc, lazymul,
     maybestaticfirst, maybestaticlast, scalar_less, scalar_greaterequal, gep, gesp, pointerforcomparison, NativeTypes,
     vfmadd, vfmsub, vfnmadd, vfnmsub, vfmadd_fast, vfmsub_fast, vfnmadd_fast, vfnmsub_fast, vfmadd231, vfmsub231, vfnmadd231, vfnmsub231,
     vfma_fast, vmuladd_fast, vdiv_fast, vadd_fast, vsub_fast, vmul_fast,
@@ -30,7 +30,7 @@ using Base.FastMath: add_fast, sub_fast, mul_fast, div_fast, inv_fast, abs2_fast
 
 
 using ArrayInterface
-using ArrayInterface: OptionallyStaticUnitRange, Zero, One#, static_length
+using ArrayInterface: OptionallyStaticUnitRange, Zero, One, StaticBool, True, False#, static_length
 const Static = ArrayInterface.StaticInt
 
 using Requires

@@ -29,7 +29,12 @@ function add_ci_call!(q::Expr, @nospecialize(f), args, syms, i, mod = nothing)
             push!(call.args, arg)
         end
     end
-    mod === nothing || push!(call.args, Expr(:call, Expr(:curly, :Val, QuoteNode(mod))))
+    if mod !== nothing # indicates it's `vmaterialize(!)`
+        reg_size = Expr(:call, lv(:register_size))
+        reg_count = Expr(:call, lv(:register_size))
+        cache_lnsze = Expr(:call, lv(:cache_linesize))
+        push!(call.args, Expr(:call, Expr(:curly, :Val, QuoteNode(mod))), reg_size, reg_count, cache_lnsze)
+    end
     push!(q.args, Expr(:(=), syms[i], call))
 end
 
@@ -64,6 +69,12 @@ function LoopSet(q::Expr, mod::Symbol = :Main)
     ls
 end
 LoopSet(q::Expr, m::Module) = LoopSet(macroexpand(m, q)::Expr, Symbol(m))
+
+function loopset(q::Expr) # for interactive use only
+    ls = LoopSet(q)
+    set_hw!(ls)
+    ls
+end
 
 """
     @avx
@@ -235,6 +246,7 @@ This macro accepts the `inline` and `unroll` keyword arguments like `@avx`, but 
 macro _avx(q)
     q = macroexpand(__module__, q)
     ls = LoopSet(q, __module__)
+    set_hw!(ls)
     esc(Expr(:block, ls.prepreamble, lower_and_split_loops(ls, -1)))
 end
 macro _avx(arg, q)
@@ -242,6 +254,7 @@ macro _avx(arg, q)
     q = macroexpand(__module__, q)
     inline, check_empty, u₁, u₂ = check_macro_kwarg(arg)
     ls = LoopSet(q, __module__)
+    set_hw!(ls)
     esc(Expr(:block, ls.prepreamble, lower(ls, u₁ % Int, u₂ % Int, -1)))
 end
 

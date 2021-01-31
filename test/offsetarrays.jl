@@ -57,7 +57,7 @@ using LoopVectorization: Static
     #         end
     #         out[i,j] = tmp
     #        end);
-    # lsq2d = LoopVectorization.LoopSet(q2d); LoopVectorization.choose_order(lsq2d)
+    # lsq2d = LoopVectorization.loopset(q2d); LoopVectorization.choose_order(lsq2d)
 
     # oq2 = :(for j in rng2, i in rng1
     #         tmp = zero(eltype(out))
@@ -66,7 +66,7 @@ using LoopVectorization: Static
     #         end
     #         out[i,j] = tmp
     #        end);
-    # lsoq = LoopVectorization.LoopSet(oq2);
+    # lsoq = LoopVectorization.loopset(oq2);
     # LoopVectorization.choose_order(lsoq)
 
     function avx2d!(out::AbstractMatrix, A::AbstractMatrix, kern)
@@ -149,7 +149,7 @@ using LoopVectorization: Static
     #         Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> tmp_{ik+(jk-1)*3} = A[i+(ik-2),j+(jk-2)] * kern_ik_jk + tmp_{ik+(jk-1)*3-1}
     #         out[i,j] = tmp_9
     #        end);
-    # lsuq = LoopVectorization.LoopSet(macroexpand(Base, uq));
+    # lsuq = LoopVectorization.loopset(macroexpand(Base, uq));
     # LoopVectorization.choose_order(lsuq)
     # lsuq
     

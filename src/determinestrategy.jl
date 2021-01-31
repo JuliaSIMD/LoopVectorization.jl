@@ -1,5 +1,4 @@
 
-
 # function indexappearences(op::Operation, s::Symbol)
 #     s ∉ loopdependencies(op) && return 0
 #     appearences = 0
@@ -66,13 +65,6 @@ function unitstride(ls::LoopSet, op::Operation, s::Symbol)
     true
 end
 
-# function register_pressure(op::Operation)
-#     if isconstant(op) || isloopvalue(op)
-#         0
-#     else
-#         instruction_cost(instruction(op)).register_pressure
-#     end
-# end
 function cost(ls::LoopSet, op::Operation, vectorized::Symbol, Wshift::Int, size_T::Int = op.elementbytes)
     isconstant(op) && return 0.0, 0, Float64(length(loopdependencies(op)) > 0)
     isloopvalue(op) && return 0.0, 0, 0.0
@@ -104,7 +96,7 @@ function cost(ls::LoopSet, op::Operation, vectorized::Symbol, Wshift::Int, size_
                 #       would be nice to add a check for this CPU, to see if such a penalty is still appropriate.
                 #       Also, once more SVE (scalable vector extension) CPUs are released, would be nice to know if
                 #       this feature is common to all of them.
-                srt += 0.5VectorizationBase.dynamic_register_size() / VectorizationBase.cacheline_size()
+                srt += 0.5reg_size(ls) / cache_lnsze(ls)
             end
         elseif isstore(op) # broadcast or reductionstore; if store we want to penalize reduction
             srt *= 3
@@ -143,13 +135,15 @@ end
 function lsvecwidthshift(ls::LoopSet, vectorized::Symbol, size_T = nothing)
     W = ls.vector_width[]
     lvec = length(ls, vectorized)
-    if iszero(W)
-        VectorizationBase.pick_vector_width_shift_from_size(lvec, isnothing(size_T) ? biggest_type_size(ls) : size_T)::Tuple{Int,Int}
+    W = if iszero(W)
+        bytes = isnothing(size_T) ? biggest_type_size(ls) : size_T
+        reg_size(ls) ÷ bytes
+        # VectorizationBase.pick_vector_width_shift_from_size(lvec, )::Tuple{Int,Int}
         # VectorizationBase.pick_vector_width_shift(lvec, isnothing(size_T) ? biggest_type_size(ls) : size_T)::Tuple{Int,Int}
     else
-        W = min(W, VectorizationBase.nextpow2(lvec))
-        W, VectorizationBase.intlog2(W)
+        min(W, VectorizationBase.nextpow2(lvec))
     end
+    W, VectorizationBase.intlog2(W)
 end
 
 # evaluates cost of evaluating loop in given order
@@ -386,16 +380,16 @@ end
 # end
 
 function solve_unroll_iter(X, R, u₁L, u₂L, u₁range, u₂range)
-    R₁, R₂, R₃, R₄, R₅ = R[1], R[2], R[3], R[4], R[5]
-    RR = dynamic_register_count() - R₃ - R₄
+    R₁, R₂, R₃, R₄ = R[1], R[2], R[3], R[4]
+    RR = R₄
     u₁best, u₂best = 0, 0
     bestcost = Inf
     for u₁temp ∈ u₁range
         for u₂temp ∈ u₂range
-            RR ≥ u₁temp*u₂temp*R₁ + u₁temp*R₂ + u₂temp*R₅ || continue
+            RR ≥ u₁temp*u₂temp*R₁ + u₁temp*R₂ + u₂temp*R₃ || continue
             tempcost = unroll_cost(X, u₁temp, u₂temp, u₁L, u₂L)
             # @show u₁temp, u₂temp, tempcost
-            # @show u₁temp*u₂temp*R₁ + u₁temp*R₂ + u₂temp*R₅
+            # @show u₁temp*u₂temp*R₁ + u₁temp*R₂ + u₂temp*R₃
             if tempcost ≤ bestcost
                 bestcost = tempcost
                 u₁best, u₂best = u₁temp, u₂temp
@@ -405,47 +399,56 @@ function solve_unroll_iter(X, R, u₁L, u₂L, u₁range, u₂range)
     u₁best, u₂best, bestcost
 end
 
-function solve_unroll(X, R, u₁L, u₂L, u₁step, u₂step)
+function solve_unroll_lagrange(X, R, u₁L, u₂L, u₁step::Int, u₂step::Int, atleast32registers::Bool)
     X₁, X₂, X₃, X₄ = X[1], X[2], X[3], X[4]
     # If we don't have opmask registers, masks probably occupy a vector register (e.g., on CPUs with AVX but not AVX512)
-    VectorizationBase.dynamic_has_opmask_registers() || (R[3] += 1)
-    R₁, R₂, R₃, R₄, R₅ = R[1], R[2], R[3], R[4], R[5]
-    iszero(R₅) || return solve_unroll_iter(X, R, u₁L, u₂L, u₁step:u₁step:10, u₂step:u₂step:10)
-    RR = dynamic_register_count() - R₃ - R₄
+    R₁, R₂, R₃, R₄ = R[1], R[2], R[3], R[4]
+    iszero(R₃) || return solve_unroll_iter(X, R, u₁L, u₂L, u₁step:u₁step:10, u₂step:u₂step:10)
+    RR = R₄
     a = R₂^2*X₃ -R₁*X₄ * R₂ - R₁*X₂*RR
     b = R₁ * X₄ * RR - R₁ * X₄ * RR - 2X₃*RR*R₂
     c = X₃*RR^2
     discriminant = b^2 - 4a*c
     discriminant < 0 && return -1,-1,Inf
-    u₁float = max(float(u₁step), (sqrt(discriminant) + b) / (-2a)) # must be at least 1
+    # @show R₁, R₂, R₃, R₄
+    u₁float = max((sqrt(discriminant) + b) / (-2a), float(u₁step)) # must be at least 1
     u₂float = (RR - u₁float*R₂)/(u₁float*R₁)
+    # @show u₁float, u₂float
     if !(isfinite(u₂float) & isfinite(u₁float)) # brute force
         u₁low = u₂low = 1
-        u₁high = iszero(X₂) ? 2 : (dynamic_register_count() == 32 ? 8 : 6)
-        u₂high = iszero(X₃) ? 2 : (dynamic_register_count() == 32 ? 8 : 6)
+        u₁high = iszero(X₂) ? 2 : (atleast32registers ? 8 : 6)
+        u₂high = iszero(X₃) ? 2 : (atleast32registers ? 8 : 6)
         return solve_unroll_iter(X, R, u₁L, u₂L, u₁low:u₁step:u₁high, u₂low:u₂step:u₂high)
     end
     u₁low = floor(Int, u₁float)
     u₂low = max(u₂step, floor(Int, 0.8u₂float)) # must be at least 1
     u₁high = solve_unroll_constT(R, u₂low) + u₁step
     u₂high = solve_unroll_constU(R, u₁low) + u₂step
-    maxunroll = dynamic_register_count() == 32 ? (((X₂ > 0) & (X₃ > 0)) ? 10 : 8) : 6
+    # @show u₁low, u₁high, u₂low, u₂high
+    if u₁low ≥ u₁high
+        u₁low = solve_unroll_constT(R, u₂high)
+    end
+    if u₂low ≥ u₂high
+        u₂low = solve_unroll_constU(R, u₁high)
+    end
+    maxunroll = atleast32registers ? (((X₂ > 0) & (X₃ > 0)) ? 10 : 8) : 6
     u₁low = (min(u₁low, maxunroll) ÷ u₁step) * u₁step
     u₂low = (min(u₂low, maxunroll) ÷ u₂step) * u₂step
     u₁high = min(u₁high, maxunroll)
     u₂high = min(u₂high, maxunroll)
+    # @show u₁low, u₁high, u₂low, u₂high, u₁float, u₂float
     solve_unroll_iter(X, R, u₁L, u₂L, reverse(u₁low:u₁step:u₁high), reverse(u₂low:u₂step:u₂high))
 end
 
 function solve_unroll_constU(R::AbstractVector, u₁::Int)
-    denom = u₁ * R[1] + R[5]
+    denom = u₁ * R[1] + R[3]
     iszero(denom) && return 8
-    floor(Int, (dynamic_register_count() - R[3] - R[4] - u₁*R[2]) / denom)
+    floor(Int, (R[4] - u₁*R[2]) / denom)
 end
 function solve_unroll_constT(R::AbstractVector, u₂::Int)
     denom = u₂ * R[1] + R[2]
     iszero(denom) && return 8
-    floor(Int, (dynamic_register_count() - R[3] - R[4] - u₂*R[5]) / denom)
+    floor(Int, (R[4] - u₂*R[3]) / denom)
 end
 # function solve_unroll_constT(ls::LoopSet, u₂::Int)
 #     R = @view ls.reg_pres[:,1]
@@ -454,9 +457,9 @@ end
 #     floor(Int, (dynamic_register_count() - R[3] - R[4] - u₂*R[5]) / (u₂ * R[1] + R[2]))
 # end
 # Tiling here is about alleviating register pressure for the UxT
-function solve_unroll(X, R, u₁max, u₂max, u₁L, u₂L, u₁step, u₂step)
+function solve_unroll(X, R, u₁max, u₂max, u₁L, u₂L, u₁step, u₂step, atleast32registers::Bool)
     # iszero(first(R)) && return -1,-1,Inf #solve_smalltilesize(X, R, u₁max, u₂max)
-    u₁, u₂, cost = solve_unroll(X, R, u₁L, u₂L, u₁step, u₂step)
+    u₁, u₂, cost = solve_unroll_lagrange(X, R, u₁L, u₂L, u₁step, u₂step, atleast32registers)
     # u₂ -= u₂ & 1
     # u₁ = min(u₁, u₂)
     u₁_too_large = u₁ > u₁max
@@ -498,16 +501,16 @@ function solve_unroll(
     W::Int, vectorized::Symbol, rounduᵢ::Int
 )
     (u₁step, u₂step) = if rounduᵢ == 1 # max is to safeguard against some weird arch I've never heard of.
-        (max(1,VectorizationBase.cacheline_size() ÷ VectorizationBase.dynamic_register_size()), 1)
+        (max(1,cache_lnsze(ls) ÷ reg_size(ls)), 1)
     elseif rounduᵢ == 2
-        (1, max(1,VectorizationBase.cacheline_size() ÷ VectorizationBase.dynamic_register_size()))
+        (1, max(1,cache_lnsze(ls) ÷ reg_size(ls)))
     else
         (1, 1)
     end
     u₁loop = getloop(ls, u₁loopsym)
     u₂loop = getloop(ls, u₂loopsym)
     solve_unroll(
-        u₁loopsym, u₂loopsym, cost_vec, reg_pressure, W, vectorized, u₁loop, u₂loop, u₁step, u₂step
+        u₁loopsym, u₂loopsym, cost_vec, reg_pressure, W, vectorized, u₁loop, u₂loop, u₁step, u₂step, reg_count(ls) ≥ 32
     )
 end
 
@@ -517,9 +520,10 @@ function solve_unroll(
     reg_pressure::AbstractVector{Float64},
     W::Int, vectorized::Symbol,
     u₁loop::Loop, u₂loop::Loop,
-    u₁step::Int, u₂step::Int
+    u₁step::Int, u₂step::Int,
+    atleast32registers::Bool
 )
-    maxu₂base = maxu₁base = dynamic_register_count() == 32 ? 10 : 6#8
+    maxu₂base = maxu₁base = atleast32registers ? 10 : 6#8
     maxu₂ = maxu₂base#8
     maxu₁ = maxu₁base#8
     u₁L = length(u₁loop)
@@ -553,7 +557,7 @@ function solve_unroll(
         u₂Lf = Float64(u₂L)
     end
     # @show u₁Lf, u₂Lf, u₁L, length(u₁loop)
-    u₁, u₂, cost = solve_unroll(cost_vec, reg_pressure, maxu₁, maxu₂, u₁Lf, u₂Lf, u₁step, u₂step)
+    u₁, u₂, cost = solve_unroll(cost_vec, reg_pressure, maxu₁, maxu₂, u₁Lf, u₂Lf, u₁step, u₂step, atleast32registers)
     # heuristic to more evenly divide small numbers of iterations
     if isstaticloop(u₂loop)
         u₂ = maybedemotesize(u₂, length(u₂loop), u₁, u₁loop, maxu₂base)
@@ -731,8 +735,8 @@ function load_elimination_cost_factor!(
         cost_vec[2] += rt
         reg_pressure[2] += rp
         cost_vec[3] += rt
-        # reg_pressure[3] += rp
-        reg_pressure[5] += rp
+        # currently only place `reg_pressure[3]` is updated
+        reg_pressure[3] += rp
         true
     else
         (1.0, 1.0)
@@ -790,10 +794,10 @@ function add_constant_offset_load_elmination_cost!(
         else
             throw("uid somehow did not return 1 or 2, even though offset > -4.")
         end
-        X[r] += rt * uindependent_increase
-        R[r] += rp * uindependent_increase
-        X[i] += rt * udependent_reduction
-        R[i] += rp * udependent_reduction
+        X[r             ] += rt * uindependent_increase
+        R[r == 3 ? 4 : r] += rp * uindependent_increase
+        X[i             ] += rt * udependent_reduction
+        R[i == 3 ? 4 : i] += rp * udependent_reduction
         choose_to_inline[] = true
         return true
     else
@@ -801,7 +805,7 @@ function add_constant_offset_load_elmination_cost!(
     end
 end
 
-function update_costs!(costs, cost, u₁reduces, u₂reduces)
+function update_cost_vec!(costs, cost, u₁reduces, u₂reduces)
     if u₁reduces & u₂reduces
         costs[4] += cost
     elseif u₂reduces # cost decreased by unrolling u₂loop
@@ -810,6 +814,17 @@ function update_costs!(costs, cost, u₁reduces, u₂reduces)
         costs[3] += cost
     else # no cost decrease; cost must be repeated
         costs[1] += cost
+    end
+end
+function update_reg_pres!(rp, cost, u₁reduces, u₂reduces)
+    if u₁reduces# & u₂reduces
+        rp[4] -= cost
+    elseif u₂reduces # cost decreased by unrolling u₂loop
+        rp[2] += cost
+    # elseif u₁reduces # cost decreased by unrolling u₁loop
+        # rp[4] -= cost
+    else # no cost decrease; cost must be repeated
+        rp[1] += cost
     end
 end
 
@@ -844,8 +859,6 @@ function evaluate_cost_tile(
     # cost_mat[4]
     cost_vec = cost_vec_buf(ls)
     reg_pressure = reg_pres_buf(ls)
-    # @inbounds reg_pressure[2] = 1
-    # @inbounds reg_pressure[3] = 1
     iter::Float64 = 1.0
     u₁reached = u₂reached = false
     choose_to_inline = Ref(false)
@@ -928,12 +941,14 @@ function evaluate_cost_tile(
             irreducible_storecosts += rt
         end
         # iiter = convert(Int, iters[id]); @show u₁reducesrt, u₂reducesrt, op, rt, rto, rp, iiter
-        update_costs!(cost_vec, rt, u₁reducesrt, u₂reducesrt)
-        update_costs!(reg_pressure, rp, u₁reducesrp, u₂reducesrp)
+        update_cost_vec!(cost_vec, rt, u₁reducesrt, u₂reducesrt)
+        update_reg_pres!(reg_pressure, rp, u₁reducesrp, u₂reducesrp)
+        # update_costs!(reg_pressure, rp, u₁reducesrp, u₂reducesrp)
     end
     # reg_pressure[1] = max(reg_pressure[1], length(ls.outer_reductions))
     # @inbounds ((cost_vec[4] > 0) || ((cost_vec[2] > 0) & (cost_vec[3] > 0))) || return 0,0,Inf,false
-    costpenalty = (sum(reg_pressure) > dynamic_register_count()) ? 2 : 1
+    # reg_pres[4] == remaining_registers
+    costpenalty = ((reg_pressure[1] + reg_pressure[2] + reg_pressure[3]) > reg_pressure[4]) ? 2 : 1
     u₁v = vectorized === u₁loopsym; u₂v = vectorized === u₂loopsym
     round_uᵢ = prefetch_good_idea ? (u₁v ? 1 : (u₂v ? 2 : 0)) : 0
     if (irreducible_storecosts / sum(cost_vec) ≥ 0.25) && !any(op -> loadintostore(ls, op), operations(ls))
@@ -1134,16 +1149,4 @@ function choose_order(ls::LoopSet)
     order, unroll, tile, vec, u₁, u₂
 end
 
-# function register_pressure(ls::LoopSet, u₁, u₂)
-#     if u₂ == -1
-#         sum(register_pressure, operations(ls))
-#     else
-#         rp = @view ls.reg_pres[:,1]
-#         u₁ * u₂ * rp[1] + u₁ * rp[2] + rp[3] + rp[4]
-#     end
-# end
-# function register_pressure(ls::LoopSet)
-#     order, unroll, tile, vec, u₁, u₂ = choose_order(ls)
-#     register_pressure(ls, u₁, u₂)
-# end
 

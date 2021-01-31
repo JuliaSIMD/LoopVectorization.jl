@@ -11,7 +11,7 @@
                  C[m,n] += A[m,k] * B[n,k]
                  end
                  end);
-    lsAmulBt1 = LoopVectorization.LoopSet(AmulBtq1);
+    lsAmulBt1 = LoopVectorization.loopset(AmulBtq1);
     if LoopVectorization.register_count() != 8
         @test LoopVectorization.choose_order(lsAmulBt1) == (Symbol[:n,:m,:k], :m, :n, :m, Unum, Tnum)
     end
@@ -21,7 +21,7 @@
                 C[m,n] += A[m,k] * B[k,n]
                 end
                 end);
-    lsAmulB1 = LoopVectorization.LoopSet(AmulBq1);
+    lsAmulB1 = LoopVectorization.loopset(AmulBq1);
     if LoopVectorization.register_count() != 8
         @test LoopVectorization.choose_order(lsAmulB1) == (Symbol[:n,:m,:k], :m, :n, :m, Unum, Tnum)
     end
@@ -31,7 +31,7 @@
                 C[m,n] += A[m,k] * B[k,n]
                 end
                 end)
-    lsAmulB2 = LoopVectorization.LoopSet(AmulBq2);
+    lsAmulB2 = LoopVectorization.loopset(AmulBq2);
     if LoopVectorization.register_count() != 8
         @test LoopVectorization.choose_order(lsAmulB2) == (Symbol[:n,:m,:k], :m, :n, :m, Unum, Tnum)
     end
@@ -42,7 +42,7 @@
                 end
                 C[m,n] += ΔCₘₙ
                 end)
-    lsAmulB3 = LoopVectorization.LoopSet(AmulBq3);
+    lsAmulB3 = LoopVectorization.loopset(AmulBq3);
     if LoopVectorization.register_count() != 8
         @test LoopVectorization.choose_order(lsAmulB3) == (Symbol[:n,:m,:k], :m, :n, :m, Unum, Tnum)
     end
@@ -138,7 +138,7 @@
                  end
                  C[m,n] = α * ΔCₘₙ + β * C[m,n]
                  end);
-    lsAmuladd = LoopVectorization.LoopSet(Amuladdq);
+    lsAmuladd = LoopVectorization.loopset(Amuladdq);
     if LoopVectorization.register_count() != 8
         @test LoopVectorization.choose_order(lsAmuladd) == (Symbol[:n,:m,:k], :m, :n, :m, Unum, Tnum)
     end
@@ -149,7 +149,7 @@
                   end
                   C[m,n] += α * ΔCₘₙ
                  end);
-    lsAtmuladd = LoopVectorization.LoopSet(Atmuladdq);
+    lsAtmuladd = LoopVectorization.loopset(Atmuladdq);
     # LoopVectorization.lower(lsAtmuladd, 2, 2)
     # lsAmuladd.operations
     # LoopVectorization.loopdependencies.(lsAmuladd.operations)
@@ -195,7 +195,7 @@
     # C[m,n] += A[m,k] * B[k,n]
     # end
     # end);
-    # ls = LoopVectorization.LoopSet(gq);
+    # ls = LoopVectorization.loopset(gq);
     # # ls.preamble_symsym
     # ls.operations[1]
     function AmulB_avx3!(C, A, B)
@@ -221,7 +221,7 @@
     #       C[m,n] += A[m,k] * B[k,n]
     #       end
     #       end)
-    # ls = LoopVectorization.LoopSet(q);
+    # ls = LoopVectorization.loopset(q);
     function AmuladdB_avx!(C, A, B, factor = 1)
         @_avx unroll=(2,2) for m ∈ axes(A,1), n ∈ axes(B,2)
             ΔCₘₙ = zero(eltype(C))
@@ -267,7 +267,7 @@
                 end
                 C[m,n] = Cₘₙ
                 end)
-    lsAtmulB = LoopVectorization.LoopSet(AtmulBq);
+    lsAtmulB = LoopVectorization.loopset(AtmulBq);
     if LoopVectorization.register_count() != 8
         @test LoopVectorization.choose_order(lsAtmulB) == (Symbol[:n,:m,:k], :n, :m, :k, Unumt, Tnumt)
     end
@@ -287,7 +287,7 @@
             end
             C[m,n] += Cₘₙ * factor
             end);
-    atls = LoopVectorization.LoopSet(Atq);
+    atls = LoopVectorization.loopset(Atq);
     # LoopVectorization.operations(atls)
     # LoopVectorization.loopdependencies.(operations(atls))
     # LoopVectorization.reduceddependencies.(operations(atls))
@@ -348,7 +348,7 @@
                end
                C[m,n] = Cₘₙ
                end);
-    lsr2amb = LoopVectorization.LoopSet(r2ambq);
+    lsr2amb = LoopVectorization.loopset(r2ambq);
     if LoopVectorization.register_count() == 32
         @test LoopVectorization.choose_order(lsr2amb) == ([:n, :m, :k], :m, :n, :m, 3, 7)
     elseif LoopVectorization.register_count() == 16
@@ -611,7 +611,7 @@
     # C12 += A[k,m] * B[k,n1] 
     # C22 += A[k,m1] * B[k,n1]
     # end)
-    # lsmul2x2q = LoopVectorization.LoopSet(mul2x2q)
+    # lsmul2x2q = LoopVectorization.loopset(mul2x2q)
 
     lsAtmulBt8 = :(for m ∈ 1:8, n ∈ 1:8
     ΔCₘₙ = zero(eltype(C))
@@ -619,7 +619,7 @@
     ΔCₘₙ += A[k,m] * B[n,k]
     end
     C[m,n] = ΔCₘₙ
-    end) |> LoopVectorization.LoopSet;
+    end) |> LoopVectorization.loopset;
     if LoopVectorization.register_count() == 32
         @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 1, 8)
     elseif LoopVectorization.register_count() == 16

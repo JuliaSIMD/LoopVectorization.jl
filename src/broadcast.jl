@@ -355,13 +355,15 @@ end
 # size of dest determines loops
 # function vmaterialize!(
 @generated function vmaterialize!(
-    dest::AbstractArray{T,N}, bc::BC, ::Val{Mod}
-) where {T <: NativeTypes, N, BC <: Union{Broadcasted,Product}, Mod}
+    dest::AbstractArray{T,N}, bc::BC,
+    ::Val{Mod}, ::StaticInt{RS}, ::StaticInt{RC}, ::StaticInt{CLS}
+) where {T <: NativeTypes, N, BC <: Union{Broadcasted,Product}, Mod, RS, RC, CLS}
     # 2+1
     # we have an N dimensional loop.
     # need to construct the LoopSet
     # @show typeof(dest)
     ls = LoopSet(Mod)
+    set_hw!(ls, RS, RC, CLS)
     loopsyms = [gensym!(ls, "n") for n ∈ 1:N]
     ls.isbroadcast[] = true
     add_broadcast_loops!(ls, loopsyms, :dest)
@@ -385,11 +387,13 @@ end
      # ls
 end
 @generated function vmaterialize!(
-    dest′::Union{Adjoint{T,A},Transpose{T,A}}, bc::BC, ::Val{Mod}
-) where {T <: NativeTypes, N, A <: AbstractArray{T,N}, BC <: Union{Broadcasted,Product}, Mod}
+    dest′::Union{Adjoint{T,A},Transpose{T,A}}, bc::BC,
+    ::Val{Mod}, ::StaticInt{RS}, ::StaticInt{RC}, ::StaticInt{CLS}
+) where {T <: NativeTypes, N, A <: AbstractArray{T,N}, BC <: Union{Broadcasted,Product}, Mod, RS, RC, CLS}
     # we have an N dimensional loop.
     # need to construct the LoopSet
     ls = LoopSet(Mod)
+    set_hw!(ls, RS, RC, CLS)
     loopsyms = [gensym!(ls, "n") for n ∈ 1:N]
     ls.isbroadcast[] = true
     pushprepreamble!(ls, Expr(:(=), :dest, Expr(:call, :parent, :dest′)))
@@ -411,7 +415,8 @@ end
 end
 # these are marked `@inline` so the `@avx` itself can choose whether or not to inline.
 @inline function vmaterialize!(
-    dest::AbstractArray{T,N}, bc::Broadcasted{Base.Broadcast.DefaultArrayStyle{0},Nothing,typeof(identity),Tuple{T2}}, ::Val{Mod}
+    dest::AbstractArray{T,N}, bc::Broadcasted{Base.Broadcast.DefaultArrayStyle{0},Nothing,typeof(identity),Tuple{T2}},
+    ::Val{Mod}, RS::Static, RC::Static, CLS::Static
 ) where {T <: NativeTypes, N, T2 <: Number, Mod}
     arg = T(first(bc.args))
     @avx for i ∈ eachindex(dest)
@@ -420,7 +425,8 @@ end
     dest
 end
 @inline function vmaterialize!(
-    dest′::Union{Adjoint{T,A},Transpose{T,A}}, bc::Broadcasted{Base.Broadcast.DefaultArrayStyle{0},Nothing,typeof(identity),Tuple{T2}}, ::Val{Mod}
+    dest′::Union{Adjoint{T,A},Transpose{T,A}}, bc::Broadcasted{Base.Broadcast.DefaultArrayStyle{0},Nothing,typeof(identity),Tuple{T2}},
+    ::Val{Mod}, RS::Static, RC::Static, CLS::Static
 ) where {T <: NativeTypes, N, A <: AbstractArray{T,N}, T2 <: Number, Mod}
     arg = T(first(bc.args))
     dest = parent(dest′)
@@ -430,10 +436,10 @@ end
     dest′
 end
 
-@inline function vmaterialize(bc::Broadcasted, ::Val{Mod}) where {Mod}
+@inline function vmaterialize(bc::Broadcasted, ::Val{Mod}, RS::Static, RC::Static, CLS::Static) where {Mod}
     ElType = Base.Broadcast.combine_eltypes(bc.f, bc.args)
-    vmaterialize!(similar(bc, ElType), bc, Val{Mod}())
+    vmaterialize!(similar(bc, ElType), bc, Val{Mod}(), RS, RC, CLS)
 end
 
-vmaterialize!(dest, bc, ::Val{mod}) where {mod} = Base.Broadcast.materialize!(dest, bc)
+vmaterialize!(dest, bc, ::Val{mod}, ::StaticInt, ::StaticInt, ::StaticInt) where {mod} = Base.Broadcast.materialize!(dest, bc)
 

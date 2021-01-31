@@ -76,8 +76,13 @@ end
         $(Expr(:meta,:inline))
         v = ∂v.value
         ∂ = ∂v.partials
-        VectorizationBase.vnoaliasstore!(p, v, im...)
-        Base.Cartesian.@nexprs $A a -> VectorizationBase.vnoaliasstore!(∂p[a], ∂[a], im...)
+        Base.Cartesian.@nextract $N im im
+        Base.Cartesian.@ncall $N VectorizationBase.vnoaliasstore! p v im  # store
+        Base.Cartesian.@nexprs $A a -> begin # for each of `A` partials
+            ∂p_a = ∂p[a]
+            ∂_a = ∂[a]
+            Base.Cartesian.@ncall $N VectorizationBase.vnoaliasstore! ∂p_a ∂_a im # store
+        end
         nothing
     end
 end
@@ -92,7 +97,7 @@ function ∂vmap_singlethread!(
     ptr∂y = VectorizationBase.zero_offsets.(stridedpointer.(∂y))
     
     i = 0
-    V = VectorizationBase.pick_vector_width_val(T)
+    V = VectorizationBase.pick_vector_width(T)
     W = Int(V)
     st = VectorizationBase.static_sizeof(T)
     zero_index = MM{W}(StaticInt(0), st)
