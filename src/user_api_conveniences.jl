@@ -18,6 +18,7 @@ function matmul_params(rs::Int, rc::Int, cls::Int)
     order[5], last(order)
 end
 @generated function matmul_params(::StaticInt{RS}, ::StaticInt{RC}, ::StaticInt{CLS}) where {RS,RC,CLS}
+    mᵣ, nᵣ = matmul_params(RS, RC, CLS)
     Expr(:tuple, Expr(:call, Expr(:curly, :StaticInt, mᵣ)), Expr(:call, Expr(:curly, :StaticInt, nᵣ)))
 end
 matmul_params() = matmul_params(register_size(), register_count(), cache_linesize())

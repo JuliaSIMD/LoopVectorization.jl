@@ -6,7 +6,7 @@ function vfilter!(f::F, x::Vector{T}, y::AbstractArray{T}) where {F,T <: NativeT
     Nrem = N & (W - 1)
     j = 0
     st = VectorizationBase.static_sizeof(T)
-    zero_index = MM{W}(Static(0), st)
+    zero_index = MM(W, Static(0), st)
     GC.@preserve x y begin
         ptr_x = pointer(x)
         ptr_y = pointer(y)

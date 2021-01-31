@@ -206,6 +206,27 @@ using Test
         return out
     end
     
+
+    function multiple_muls!(Y, dY, A, dA, b, db)
+        mul!(dY, dA, b)
+        # much of the cost is in memory bandwidth for traversing `A`, so we group the two together
+        mul!(Y, A, b)
+        mul!(dY, A, db, true, true)
+        nothing
+    end
+    function multiple_muls_avx!(Y, dY, A, dA, b, db)
+        @avx for m ∈ axes(A,1)
+            dy = 0.0
+            y = 0.0
+            for n ∈ axes(A,2)
+                dy += dA[m,n] * b[n] + A[m,n] * db[n]
+                y += A[m,n] * b[n]
+            end
+            dY[m] = dy
+            Y[m] = y
+        end
+    end
+
     M, K, N = 51, 49, 61
     for T ∈ (Float32, Float64, Int32, Int64)
         @show T, @__LINE__
@@ -286,5 +307,16 @@ using Test
         out1 = similar(A, 11); out2 = similar(out1);
         @test reinterpret(T,tuplemul!(out1, A, b)) ≈ reinterpret(T,tuplemulavx!(out2, A, b))
         
+
+        A = rand(R, N, N); dA = rand(R, N, N);
+        b = rand(R, N); db = rand(R, N);
+        Y0 = Vector{TC}(undef, N); Y1 = similar(Y0);
+        dY0 = similar(Y0); dY1 = similar(Y0);
+
+        multiple_muls!(Y0, dY0, A, dA, b, db)
+        multiple_muls_avx!(Y1, dY1, A, dA, b, db)
+        @test Y0 ≈ Y1
+        @test dY0 ≈ dY1
+
     end
 end

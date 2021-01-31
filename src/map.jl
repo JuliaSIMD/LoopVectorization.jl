@@ -196,7 +196,8 @@ function vmap_multithread!(
     # nt = min(Threads.nthreads(), VectorizationBase.SYS_CPU_THREADS, N >> (Wshift + 3))
     nt = min(Threads.nthreads(), VectorizationBase.num_cores(), N >> (Wshift + 5))
 
-    if !((nt > 1) && iszero(ccall(:jl_in_threaded_region, Cint, ())))
+    # if !((nt > 1) && iszero(ccall(:jl_in_threaded_region, Cint, ())))
+    if nt < 2
         vmap_singlethread!(f, ptry, Zero(), N, Val{NonTemporal}(), ptrargs)
         return
     end

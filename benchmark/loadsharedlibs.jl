@@ -36,7 +36,7 @@ end
 eigenfile = joinpath(LOOPVECBENCHDIR, "looptestseigen.cpp")
 if !isfile(LIBEIGENTEST) || mtime(eigenfile) > mtime(LIBEIGENTEST)
     # Clang seems to have trouble finding includes
-    if LoopVectorization.VectorizationBase.has_feature("x86_64_avx512f")
+    if Bool(LoopVectorization.VectorizationBase.has_feature(Val(:x86_64_avx512f)))
         run(`g++ -O3 -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -DEIGEN_VECTORIZE_AVX512 -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBEIGENTEST`)
     else
         run(`g++ -O3 -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBEIGENTEST`)
@@ -44,7 +44,7 @@ if !isfile(LIBEIGENTEST) || mtime(eigenfile) > mtime(LIBEIGENTEST)
 end
 if !isfile(LIBIEIGENTEST) || mtime(eigenfile) > mtime(LIBIEIGENTEST)
     # run(`/usr/bin/clang++ -Ofast -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -DEIGEN_VECTORIZE_AVX512 -I/usr/include/c++/9 -I/usr/include/c++/9/x86_64-generic-linux -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBEIGENTEST`)
-    if LoopVectorization.VectorizationBase.has_feature("x86_64_avx512f")
+    if Bool(LoopVectorization.VectorizationBase.has_feature(Val(:x86_64_avx512f)))
         run(`/usr/bin/clang++ -Ofast -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -DEIGEN_VECTORIZE_AVX512 -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBIEIGENTEST`)
     else
         run(`/usr/bin/clang++ -Ofast -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBIEIGENTEST`)
