@@ -48,10 +48,10 @@ end
 @inline function _vmapreduce(f::F, op::OP, ::StaticInt{W}, N, ::Type{T}, args::Vararg{AbstractArray{<:NativeTypes},A}) where {F,OP,A,W,T}
     ptrargs = VectorizationBase.zero_offsets.(stridedpointer.(args))
     if N ≥ 4W
-        index = VectorizationBase.Unroll{1,1,4,1,W,0x0000000000000000}((Zero(),)); i = 4W
+        index = VectorizationBase.Unroll{1,W,4,1,W,0x0000000000000000}((Zero(),)); i = 4W
         au = f(vload.(ptrargs, index)...)
         while i < N - ((W << 2) - 1)
-            index = VectorizationBase.Unroll{1,1,4,1,W,0x0000000000000000}((i,)); i += 4W
+            index = VectorizationBase.Unroll{1,W,4,1,W,0x0000000000000000}((i,)); i += 4W
             au = op(au, f(vload.(ptrargs, index)...))
         end
         a_0 = VectorizationBase.reduce_to_onevec(op, au)
