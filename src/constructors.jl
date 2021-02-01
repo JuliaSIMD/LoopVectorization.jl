@@ -31,7 +31,7 @@ function add_ci_call!(q::Expr, @nospecialize(f), args, syms, i, mod = nothing)
     end
     if mod !== nothing # indicates it's `vmaterialize(!)`
         reg_size = Expr(:call, lv(:register_size))
-        reg_count = Expr(:call, lv(:register_count))
+        reg_count = Expr(:call, lv(:available_registers))
         cache_lnsze = Expr(:call, lv(:cache_linesize))
         push!(call.args, Expr(:call, Expr(:curly, :Val, QuoteNode(mod))), reg_size, reg_count, cache_lnsze)
     end

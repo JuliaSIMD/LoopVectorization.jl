@@ -220,6 +220,7 @@ function check_if_empty(ls::LoopSet, q::Expr)
 end
 
 val(x) = Expr(:call, Expr(:curly, :Val, x))
+
 # Try to condense in type stable manner
 function generate_call(ls::LoopSet, inline_unroll::NTuple{3,Int8}, debug::Bool = false)
     operation_descriptions = Expr(:tuple)
@@ -243,13 +244,7 @@ function generate_call(ls::LoopSet, inline_unroll::NTuple{3,Int8}, debug::Bool =
         :tuple, inline, u₁, u₂,
         Expr(:call, lv(:unwrap), VECTORWIDTHSYMBOL),
         Expr(:call, lv(:unwrap), Expr(:call, lv(:register_size))),
-        Expr(:call, lv(:unwrap),
-            Expr(:call, lv(:ifelse),
-                Expr(:call, lv(:unwrap), Expr(:call, lv(:has_opmask_registers))),
-                Expr(:call, lv(:unwrap), Expr(:call, lv(:register_count))),
-                Expr(:call, lv(:unwrap), Expr(:call, :(-), Expr(:call, lv(:register_count)), Expr(:call, lv(:One))))
-            )
-        ),
+        Expr(:call, lv(:unwrap), Expr(:call, lv(:available_registers))),
         Expr(:call, lv(:unwrap), Expr(:call, lv(:cache_linesize)))
     )
     q = Expr(

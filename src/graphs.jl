@@ -305,9 +305,10 @@ function set_hw!(ls::LoopSet, rs::Int, rc::Int, cls::Int)
     ls.cache_linesize[] = cls
     # ls.opmask_register[] = omr
 end
+available_registers() = ifelse(has_opmask_registers(), register_count(), register_count() - One())
 function set_hw!(ls::LoopSet)
     rs = Int(register_size())
-    rc = Int(register_count())
+    rc = Int(available_registers())
     cls = Int(cache_linesize())
     # omr = Bool(VectorizationBase.has_opmask_registers())
     set_hw!(ls, rs, rc, cls)
