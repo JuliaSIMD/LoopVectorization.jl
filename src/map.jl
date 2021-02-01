@@ -9,19 +9,19 @@ function setup_vmap!(
     N = length(y)
     ptry = VectorizationBase.zstridedpointer(y)
     ptrargs = VectorizationBase.zstridedpointer.(args)
-    V = VectorizationBase.pick_vector_width_val(T)
+    V = pick_vector_width(T)
     W = unwrap(V)
     zero_index = MM{W}(Static(0))
     uintptry = reinterpret(UInt, pointer(ptry))
     @assert iszero(uintptry & (sizeof(T) - 1)) "The destination vector (`dest`) must be aligned to `sizeof(eltype(dest)) == $(sizeof(T))` bytes."
-    alignment = uintptry & (VectorizationBase.register_size() - 1)
+    alignment = uintptry & (register_size() - 1)
     if alignment > 0
         i = reinterpret(Int, W - (alignment >>> VectorizationBase.intlog2(sizeof(T))))
         m = mask(T, i)
         if N < i
             m &= mask(T, N & (W - 1))
         end
-        vnoaliasstore!(ptry, f(vload.(ptrargs, ((zero_index,),), m)...), (zero_index,), m)
+        vstore!(ptry, f(vload.(ptrargs, ((zero_index,),), m)...), (zero_index,), m, False(), True(), False(), register_size())
         gesp(ptry, (i,)), gesp.(ptrargs, ((i,),)), N - i
     else
         ptry, ptrargs, N
@@ -50,18 +50,18 @@ function vmap_singlethread!(
     ptrargs::Tuple{Vararg{AbstractStridedPointer,A}}
 ) where {F, T, NonTemporal, A}
     i = convert(Int, start)
-    V = VectorizationBase.pick_vector_width_val(T)
+    V = VectorizationBase.pick_vector_width(T)
     W = unwrap(V)
     st = VectorizationBase.static_sizeof(T)
     UNROLL = 4
     LOG2UNROLL = 2
     while i < N - ((W << LOG2UNROLL) - 1)
-        index = VectorizationBase.Unroll{1,1,UNROLL,1,W,0x0000000000000000}((i,))
+        index = VectorizationBase.Unroll{1,W,UNROLL,1,W,0x0000000000000000}((i,))
         v = f(vload.(ptrargs, index)...)
         if NonTemporal
-            vstorent!(ptry, v, index)
+            vstore!(ptry, v, index, True(), True(), True(), register_size())
         else
-            vnoaliasstore!(ptry, v, index)
+            vstore!(ptry, v, index, False(), True(), False(), register_size())
         end
         i = vadd_fast(i, StaticInt{UNROLL}() * W)
     end
@@ -76,15 +76,19 @@ function vmap_singlethread!(
     while i < N - (W - 1) # stops at 16 when
         vᵣ = f(vload.(ptrargs, ((MM{W}(i),),))...)
         if NonTemporal
-            vstorent!(ptry, vᵣ, (MM{W}(i),))
+            vstore!(ptry, vᵣ, (MM{W}(i),), True(), True(), True(), register_size())
         else
-            vnoaliasstore!(ptry, vᵣ, (MM{W}(i),))
+            vstore!(ptry, vᵣ, (MM{W}(i),), False(), True(), False(), register_size())
         end
         i = vadd_fast(i, W)
     end
     if i < N
         m = mask(T, N & (W - 1))
-        vnoaliasstore!(ptry, f(vload.(ptrargs, ((MM{W}(i),),), m)...), (MM{W}(i,),), m)
+        if NonTemporal
+            vstore!(ptry, f(vload.(ptrargs, ((MM{W}(i),),), m)...), (MM{W}(i,),), m, True(), True(), False(), register_size())
+        else
+            vstore!(ptry, f(vload.(ptrargs, ((MM{W}(i),),), m)...), (MM{W}(i,),), m, False(), True(), False(), register_size())
+        end
     end
     # end
     nothing
@@ -192,7 +196,8 @@ function vmap_multithread!(
     # nt = min(Threads.nthreads(), VectorizationBase.SYS_CPU_THREADS, N >> (Wshift + 3))
     nt = min(Threads.nthreads(), VectorizationBase.num_cores(), N >> (Wshift + 5))
 
-    if !((nt > 1) && iszero(ccall(:jl_in_threaded_region, Cint, ())))
+    # if !((nt > 1) && iszero(ccall(:jl_in_threaded_region, Cint, ())))
+    if nt < 2
         vmap_singlethread!(f, ptry, Zero(), N, Val{NonTemporal}(), ptrargs)
         return
     end

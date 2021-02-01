@@ -1,5 +1,5 @@
 function lower_load_scalar!(
-    q::Expr, op::Operation, ua::UnrollArgs, umin::Int, inds_calc_by_ptr_offset::Vector{Bool}
+    q::Expr, op::Operation, ua::UnrollArgs, umin::Int, inds_calc_by_ptr_offset::Vector{Bool}, rsi::Int
 )
     loopdeps = loopdependencies(op)
     @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = ua
@@ -9,11 +9,12 @@ function lower_load_scalar!(
     opu₁ = isu₁unrolled(op)
     ptr = vptr(op)
     U = opu₁ ? u₁ : 1
+    falseexpr = Expr(:call, lv(:False)); rs = staticexpr(rsi);
     if instruction(op).instr !== :conditionalload
         for u ∈ umin:U-1
             varname = varassignname(mvar, u, opu₁)
             td = UnrollArgs(ua, u)
-            push!(q.args, Expr(:(=), varname, Expr(:call, lv(:vload), ptr, mem_offset_u(op, td, inds_calc_by_ptr_offset))))
+            push!(q.args, Expr(:(=), varname, Expr(:call, lv(:vload), ptr, mem_offset_u(op, td, inds_calc_by_ptr_offset), falseexpr, rs)))
         end
     else
         opu₂ = !isnothing(suffix) && u₂loopsym ∈ loopdeps
@@ -23,7 +24,7 @@ function lower_load_scalar!(
             condsym = varassignname(condvar, u, condu₁)
             varname = varassignname(mvar, u, u₁loopsym ∈ loopdependencies(op))
             td = UnrollArgs(ua, u)
-            load = Expr(:call, lv(:vload), ptr, mem_offset_u(op, td, inds_calc_by_ptr_offset))
+            load = Expr(:call, lv(:vload), ptr, mem_offset_u(op, td, inds_calc_by_ptr_offset), falseexpr, rs)
             cload = Expr(:if, condsym, load, Expr(:call, :zero, Expr(:call, :eltype, ptr)))
             push!(q.args, Expr(:(=), varname, cload))
         end
@@ -31,7 +32,7 @@ function lower_load_scalar!(
     nothing
 end
 function pushvectorload!(
-    q::Expr, op::Operation, var::Symbol, td::UnrollArgs, U::Int, vectorized::Symbol, mask, u₁unrolled::Bool, inds_calc_by_ptr_offset::Vector{Bool}
+    q::Expr, op::Operation, var::Symbol, td::UnrollArgs, U::Int, vectorized::Symbol, mask, u₁unrolled::Bool, inds_calc_by_ptr_offset::Vector{Bool}, rsi::Int
 )
     @unpack u₁, u₁loopsym, u₂loopsym, suffix = td
     ptr = vptr(op)
@@ -61,6 +62,7 @@ function pushvectorload!(
     elseif maskend
         push!(instrcall.args, mask)
     end
+    push!(instrcall.args, Expr(:call, lv(:False)), staticexpr(rsi)) # unaligned load
     push!(q.args, Expr(:(=), name, instrcall))
     # push!(q.args, :(@show $name))
 end
@@ -70,7 +72,8 @@ function prefetchisagoodidea(ls::LoopSet, op::Operation, td::UnrollArgs)
     length(loopdependencies(op)) ≤ 1 && return 0
     vectorized ∈ loopdependencies(op) || return 0
     u₂loopsym === Symbol("##undefined##") && return 0
-    dontskip = (VectorizationBase.cacheline_size() ÷ VectorizationBase.dynamic_register_size()) - 1
+    # @show cache_lnsze(ls) reg_size(ls) pointer_from_objref(ls.register_size)
+    dontskip = (cache_lnsze(ls) ÷ reg_size(ls)) - 1
     # u₂loopsym is vectorized
     # u₁vectorized = vectorized === u₁loopsym
     u₂vectorized = vectorized === u₂loopsym
@@ -101,7 +104,7 @@ function prefetchisagoodidea(ls::LoopSet, op::Operation, td::UnrollArgs)
 end
 function add_prefetches!(q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, prefetchind::Int, umin::Int)
     @unpack u₁, u₁loopsym, u₂loopsym, vectorized, u₂max = td
-    dontskip = (64 ÷ VectorizationBase.dynamic_register_size()) - 1
+    dontskip = (64 ÷ reg_size(ls)) - 1
     ptr = vptr(op)
     innermostloopsym = first(names(ls))
     us = ls.unrollspecification[]
@@ -135,13 +138,17 @@ function add_prefetches!(q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, pr
         # for u ∈ umin:min(umin,U-1)
         (u₁loopsym === vectorized && !iszero(u & dontskip)) && continue
         if u₁loopsym === vectorized
+            # W = ls.vector_width[]
+            # if W != 0
+            #     inds.args[i] = staticexpr(W*u)
+            # else
             if isone(u)
-                inds.args[i] = Expr(:call, lv(:unwrap), VECTORWIDTHSYMBOL)
+                inds.args[i] = VECTORWIDTHSYMBOL
             else
-                inds.args[i] = Expr(:call, lv(:vmul_fast), VECTORWIDTHSYMBOL, u)
+                inds.args[i] = Expr(:call, lv(:vmul_fast), VECTORWIDTHSYMBOL, staticexpr(u))
             end
         else
-            inds.args[i] = Expr(:call, Expr(:curly, lv(:Static), u))
+            inds.args[i] = staticexpr(u)
         end
         push!(q.args, Expr(:call, lv(:prefetch0), gptr, copy(inds)))
     end
@@ -166,7 +173,7 @@ function lower_load_vectorized!(
     var = variable_name(op, suffix)
     for u ∈ umin:U-1
         td = UnrollArgs(td, u)
-        pushvectorload!(q, op, var, td, U, vectorized, mask, opu₁, inds_calc_by_ptr_offset)
+        pushvectorload!(q, op, var, td, U, vectorized, mask, opu₁, inds_calc_by_ptr_offset, reg_size(ls))
     end
     prefetchind = prefetchisagoodidea(ls, op, td)
     iszero(prefetchind) || add_prefetches!(q, ls, op, td, prefetchind, umin)
@@ -254,7 +261,6 @@ function lower_load_for_optranslation!(
 
     inds = Expr(:tuple)
     indices = getindicesonly(op)
-
     for (i,ind) ∈ enumerate(indices)
         if i == translationind # ind cannot be the translation ind
             push!(inds.args, Expr(:call, Expr(:curly, lv(:Static), 0)))
@@ -265,11 +271,16 @@ function lower_load_for_optranslation!(
         end
     end
     varbase = variable_name(op, 0)
-    push!(q.args, Expr(:(=), Symbol(varbase, 0), Expr(:call, lv(:vload), gptr, copy(inds))))
-
+    loadcall = Expr(:call, lv(:vload), gptr, copy(inds))
+    falseexpr = Expr(:call, lv(:False)); rs = staticexpr(reg_size(ls));
+    domask = mask !== nothing
+    domask ? push!(loadcall.args, mask, falseexpr, rs) : push!(loadcall.args, falseexpr, rs)
+    push!(q.args, Expr(:(=), Symbol(varbase, 0), loadcall))
     for u ∈ 1:u₁-1
         inds.args[translationind] = Expr(:call, Expr(:curly, lv(:Static), u))
-        push!(q.args, Expr(:(=), Symbol(varbase, u), Expr(:call, lv(:vload), gptr, copy(inds))))
+        loadcall = Expr(:call, lv(:vload), gptr, copy(inds))
+        domask ? push!(loadcall.args, mask, falseexpr, rs) : push!(loadcall.args, falseexpr, rs)
+        push!(q.args, Expr(:(=), Symbol(varbase, u), loadcall))
     end
     # this takes care of u₂ == 0
     offset = u₁
@@ -280,7 +291,9 @@ function lower_load_for_optranslation!(
             push!(q.args, Expr(:(=), Symbol(varbase, u), Symbol(varold, u + 1)))
         end
         inds.args[translationind] = Expr(:call, Expr(:curly, lv(:Static), offset))
-        push!(q.args, Expr(:(=), Symbol(varbase, u₁ - 1), Expr(:call, lv(:vload), gptr, copy(inds))))
+        loadcall = Expr(:call, lv(:vload), gptr, copy(inds))
+        domask ? push!(loadcall.args, mask, falseexpr, rs) : push!(loadcall.args, falseexpr, rs)
+        push!(q.args, Expr(:(=), Symbol(varbase, u₁ - 1), loadcall))
         offset += 1
     end
     nothing
@@ -319,6 +332,6 @@ function lower_load!(
     if isvectorized(op)
         lower_load_vectorized!(q, ls, op, td, mask, umin)
     else
-        lower_load_scalar!(q, op, td, umin, indices_calculated_by_pointer_offsets(ls, op.ref))
+        lower_load_scalar!(q, op, td, umin, indices_calculated_by_pointer_offsets(ls, op.ref), reg_size(ls))
     end
 end

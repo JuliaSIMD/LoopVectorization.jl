@@ -8,7 +8,7 @@ using Test
     dot3q = :(for m ∈ 1:M, n ∈ 1:N
               s += x[m] * A[m,n] * y[n]
               end);
-    lsdot3 = LoopVectorization.LoopSet(dot3q);
+    lsdot3 = LoopVectorization.loopset(dot3q);
     if LoopVectorization.register_count() != 8
         @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :m, :n, :m, Unum, Tnum)#&-2
     end
@@ -43,7 +43,7 @@ using Test
             end
             s += t * y[n]
            end);
-    ls = LoopVectorization.LoopSet(q);
+    ls = LoopVectorization.loopset(q);
     
     function dot3avx24(x, A, y)
         M, N = size(A)
@@ -65,7 +65,7 @@ using Test
     subcolq = :(for i ∈ 1:size(A,2), j ∈ eachindex(x)
                 B[j,i] = A[j,i] - x[j]
                 end)
-    lssubcol = LoopVectorization.LoopSet(subcolq);
+    lssubcol = LoopVectorization.loopset(subcolq);
     # if LoopVectorization.register_count() != 8
     #     # @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, :i, :j, Unum, Tnum)
     #     @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, :i, :j, 1, 1)
@@ -101,7 +101,7 @@ using Test
     colsumq = :(for i ∈ 1:size(A,2), j ∈ eachindex(x)
                 x[j] += A[j,i] - 0.25
                 end)
-    lscolsum = LoopVectorization.LoopSet(colsumq);
+    lscolsum = LoopVectorization.loopset(colsumq);
     # if LoopVectorization.register_count() != 8
     #     # @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, :i, :j, Unum, Tnum)
     #     @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, :i, :j, 1, 1)
@@ -139,7 +139,7 @@ using Test
              δ = A[j,i] - x̄[j]
              s²[j] += δ*δ
              end)
-    lsvar = LoopVectorization.LoopSet(varq);
+    lsvar = LoopVectorization.loopset(varq);
     # LoopVectorization.choose_order(lsvar)
     # @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, Unum, Tnum)
     if LoopVectorization.register_count() == 32
@@ -243,7 +243,7 @@ using Test
            end
            p += pn
            end)
-    lsb = LoopVectorization.LoopSet(bq);
+    lsb = LoopVectorization.loopset(bq);
 
     function clenshaw!(ret,x,coeff)
         @inbounds for j in 1:length(ret)
@@ -380,7 +380,7 @@ using Test
     #             lse[i] += tmp
     #             k <= maxk && (qq[i,k] = tmp)
     #          end)
-    # lsif = LoopVectorization.LoopSet(qif)
+    # lsif = LoopVectorization.loopset(qif)
     function softmax3_coreavx4!(lse, qq, xx, tmpmax, maxk, nk)
         @avx for k in Base.OneTo(nk)
             for i in eachindex(lse)

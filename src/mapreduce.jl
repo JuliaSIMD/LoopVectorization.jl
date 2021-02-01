@@ -39,20 +39,19 @@ Vectorized version of `mapreduce`. Applies `f` to each element of the arrays `A`
     N = length(arg1)
     iszero(A) || @assert all(length.(args) .== N)
     W = VectorizationBase.pick_vector_width(T)
-    V = VectorizationBase.pick_vector_width_val(T)
     if N < W
         mapreduce_simple(f, op, arg1, args...)
     else
-        _vmapreduce(f, op, V, N, T, arg1, args...)
+        _vmapreduce(f, op, W, N, T, arg1, args...)
     end
 end
 @inline function _vmapreduce(f::F, op::OP, ::StaticInt{W}, N, ::Type{T}, args::Vararg{AbstractArray{<:NativeTypes},A}) where {F,OP,A,W,T}
     ptrargs = VectorizationBase.zero_offsets.(stridedpointer.(args))
     if N ≥ 4W
-        index = VectorizationBase.Unroll{1,1,4,1,W,0x0000000000000000}((Zero(),)); i = 4W
+        index = VectorizationBase.Unroll{1,W,4,1,W,0x0000000000000000}((Zero(),)); i = 4W
         au = f(vload.(ptrargs, index)...)
         while i < N - ((W << 2) - 1)
-            index = VectorizationBase.Unroll{1,1,4,1,W,0x0000000000000000}((i,)); i += 4W
+            index = VectorizationBase.Unroll{1,W,4,1,W,0x0000000000000000}((i,)); i += 4W
             au = op(au, f(vload.(ptrargs, index)...))
         end
         a_0 = VectorizationBase.reduce_to_onevec(op, au)

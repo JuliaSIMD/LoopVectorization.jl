@@ -268,6 +268,10 @@ struct LoopSet
     vector_width::Base.RefValue{Int}
     symcounter::Base.RefValue{Int}
     isbroadcast::Base.RefValue{Bool}
+    register_size::Base.RefValue{Int}
+    register_count::Base.RefValue{Int}
+    cache_linesize::Base.RefValue{Int}
+    # opmask_register::Base.RefValue{Bool}
     mod::Symbol
 end
 
@@ -282,9 +286,10 @@ function cost_vec_buf(ls::LoopSet)
 end
 function reg_pres_buf(ls::LoopSet)
     ps = @view(ls.reg_pres[:,2])
-    @inbounds for i ∈ 1:5
+    @inbounds for i ∈ 1:4
         ps[i] = 0
     end
+    ps[4] = reg_count(ls)
     ps
 end
 function save_tilecost!(ls::LoopSet)
@@ -292,8 +297,26 @@ function save_tilecost!(ls::LoopSet)
         ls.cost_vec[i,1] = ls.cost_vec[i,2]
         ls.reg_pres[i,1] = ls.reg_pres[i,2]
     end
-    ls.reg_pres[5,1] = ls.reg_pres[5,2]
+    # ls.reg_pres[5,1] = ls.reg_pres[5,2]
 end
+function set_hw!(ls::LoopSet, rs::Int, rc::Int, cls::Int)
+    ls.register_size[] = rs
+    ls.register_count[] = rc
+    ls.cache_linesize[] = cls
+    # ls.opmask_register[] = omr
+end
+available_registers() = ifelse(has_opmask_registers(), register_count(), register_count() - One())
+function set_hw!(ls::LoopSet)
+    rs = Int(register_size())
+    rc = Int(available_registers())
+    cls = Int(cache_linesize())
+    # omr = Bool(VectorizationBase.has_opmask_registers())
+    set_hw!(ls, rs, rc, cls)
+end
+reg_size(ls::LoopSet) = ls.register_size[]
+reg_count(ls::LoopSet) = ls.register_count[]
+cache_lnsze(ls::LoopSet) = ls.cache_linesize[]
+# opmask_reg(ls::LoopSet) = ls.opmask_register[]
 
 pushprepreamble!(ls::LoopSet, ex) = push!(ls.prepreamble.args, ex)
 function pushpreamble!(ls::LoopSet, op::Operation, v::Symbol)
@@ -352,11 +375,13 @@ function LoopSet(mod::Symbol)
         Tuple{Int,NumberType}[],Tuple{Int,Symbol}[],
         Symbol[], Symbol[], Symbol[],
         ArrayReferenceMeta[],
-        Matrix{Float64}(undef, 4, 2),
-        Matrix{Float64}(undef, 5, 2),
+        Matrix{Float64}(undef, 4, 2), # cost_vec
+        Matrix{Float64}(undef, 4, 2), # reg_pres
         Bool[], Bool[], Ref{UnrollSpecification}(),
         Ref(false), Ref{LoopStartStopManager}(),
-        Ref(0), Ref(0), Ref(false), mod
+        Ref(0), Ref(0), Ref(false),
+        Ref(0), Ref(0), Ref(0), #Ref(false),# hw params
+        mod
     )
 end
 

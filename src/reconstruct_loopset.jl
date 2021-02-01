@@ -466,9 +466,9 @@ function avx_loopset(instr::Vector{Instruction}, ops::Vector{OperationStruct}, a
     num_params = extract_external_functions!(ls, num_params)
     ls
 end
-function avx_body(ls::LoopSet, UNROLL::Tuple{Int8,Int8,Int8,Int})
-    inline, u₁, u₂, W = UNROLL
-    ls.vector_width[] = W
+function avx_body(ls::LoopSet, UNROLL::Tuple{Int8,Int8,Int8,Int,Int,Int,Int})
+    inline, u₁, u₂, W, rs, rc, cls = UNROLL
+    set_hw!(ls, rs, rc, cls); ls.vector_width[] = W
     q = iszero(u₁) ? lower_and_split_loops(ls, inline % Int) : lower(ls, u₁ % Int, u₂ % Int, inline % Int)
     iszero(length(ls.outer_reductions)) ? push!(q.args, nothing) : push!(q.args, loopset_return_value(ls, Val(true)))
     q
@@ -476,10 +476,10 @@ end
 
 function _avx_loopset_debug(::Val{UNROLL}, ::Val{OPS}, ::Val{ARF}, ::Val{AM}, ::Val{LPSYM}, _vargs::Tuple{LB,V}) where {UNROLL, OPS, ARF, AM, LPSYM, LB, V}
     @show OPS ARF AM LPSYM _vargs
-    inline, u₁, u₂, W = UNROLL
+    inline, u₁, u₂, W, rs, rc, cls = UNROLL
     ls = _avx_loopset(OPS, ARF, AM, LPSYM, _vargs[1].parameters, V.parameters)
     # ls = _avx_loopset(OPS, ARF, AM, LPSYM, _vargs[1], _vargs[2])
-    ls.vector_width[] = W
+    set_hw!(ls, rs, rc, cls); ls.vector_width[] = W
     ls
 end
 function tovector(@nospecialize(t))
@@ -524,7 +524,7 @@ Execute an `@avx` block. The block's code is represented via the arguments:
 - `vargs...` holds the encoded pointers of all the arrays (see `VectorizationBase`'s various pointer types).
 """
 @generated function _avx_!(::Val{UNROLL}, ::Val{OPS}, ::Val{ARF}, ::Val{AM}, ::Val{LPSYM}, _vargs::Tuple{LB,V}) where {UNROLL, OPS, ARF, AM, LPSYM, LB, V}
-    # 1 + 1 # Irrelevant line you can comment out/in to force recompilation...
+    1 + 1 # Irrelevant line you can comment out/in to force recompilation...
     ls = _avx_loopset(OPS, ARF, AM, LPSYM, LB.parameters, V.parameters)
     # return @show avx_body(ls, UNROLL)
     # @show UNROLL, OPS, ARF, AM, LPSYM, LB

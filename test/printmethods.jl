@@ -3,7 +3,7 @@
     selfdotq = :(for i ∈ eachindex(a)
                  s += a[i]*a[i] + i
                  end)
-    lsselfdot = LoopVectorization.LoopSet(selfdotq);
+    lsselfdot = LoopVectorization.loopset(selfdotq);
     io = IOBuffer();
     println(io, LoopVectorization.operations(lsselfdot))
     s = String(take!(io))
@@ -17,7 +17,7 @@
                        C[m,n] += A[m,k] * B[k,n]
                    end
                end);
-    lsAmulB = LoopVectorization.LoopSet(AmulBq);
+    lsAmulB = LoopVectorization.loopset(AmulBq);
     println(io, LoopVectorization.operations(lsAmulB))
     s = String(take!(io))
     @test occursin("Operation[", s)

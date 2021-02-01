@@ -14,19 +14,19 @@ end
 @inline sizeequivalentfloat(::Type{T}) where {T <: Union{Int32,UInt32}} = Float32
 @inline sizeequivalentfloat(::Type{T}) where {T <: Union{Int64,UInt64}} = Float64
 @inline sizeequivalentint(::Type{T}) where {T <: Integer} = T
-@inline sizeequivalentint(::Type{Float16}) = Int16
-@inline sizeequivalentint(::Type{Float32}) = Int32
 @inline sizeequivalentfloat(::Type{T}, x) where {T} = sizeequivalentfloat(T)(x)
 @inline sizeequivalentint(::Type{T}, x) where {T} = sizeequivalentint(T)(x)
-@generated function sizeequivalentint(::Type{Float64})
-    if !((Sys.ARCH === :x86_64) || (Sys.ARCH === :i686)) || VectorizationBase.has_feature("x86_64_avx512dq")
-        :Int64
-    else
-        :Int32
-    end
+
+if (Sys.ARCH === :x86_64) || (Sys.ARCH === :i686)
+    @inline widest_supported_integer(::True) = Int64
+    @inline widest_supported_integer(::False) = Int32
+    @inline sizeequivalentint(::Type{Float64}) = widest_supported_integer(VectorizationBase.has_feature(Val(:x86_64_avx512dq)))
+else
+    @inline sizeequivalentint(::Type{Float64}) = Int
 end
-# @inline onefloat(::Type{T}) where {T} = one(sizeequivalentfloat(T))
-# @inline oneinteger(::Type{T}) where {T} = one(sizeequivalentint(T))
+@inline sizeequivalentint(::Type{Float32}) = Int32
+@inline sizeequivalentint(::Type{Float16}) = Int16
+
 @inline zerofloat(::Type{T}) where {T} = zero(sizeequivalentfloat(T))
 @inline zerointeger(::Type{T}) where {T} = zero(sizeequivalentint(T))
 

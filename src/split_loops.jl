@@ -69,7 +69,8 @@ function split_loopset(ls::LoopSet, ids)
     # it shouldn't.
     # Current behavior is incorrect when VECWIDTH chosen does actually differ between
     # split loops and the loops are statically sized, because code gen will then assume it is correct...
-    ls_new.vector_width[] = ls.vector_width[] 
+    set_hw!(ls_new, reg_size(ls), reg_count(ls), cache_lnsze(ls))
+    ls_new.vector_width[] = ls.vector_width[]
     ls_new
 end
 

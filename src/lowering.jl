@@ -759,7 +759,7 @@ end
 function determine_width(
     ls::LoopSet, vectorized::Union{Symbol,Nothing}
 )
-    vwidth_q = Expr(:call, lv(:pick_vector_width_val))
+    vwidth_q = Expr(:call, lv(:pick_vector_width))
     if !isnothing(vectorized)
         vloop = getloop(ls, vectorized)
         if isstaticloop(vloop)
