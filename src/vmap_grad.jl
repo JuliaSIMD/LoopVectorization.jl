@@ -1,5 +1,7 @@
 
 using VectorizationBase: AbstractSIMD
+using .ForwardDiff
+using .ChainRulesCore
 
 @generated function SLEEFPirates.tanh_fast(x::ForwardDiff.Dual{T,S,N}) where {T,S,N}
     quote
