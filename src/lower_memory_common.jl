@@ -110,11 +110,15 @@ function unrolledindex(op::Operation, td::UnrollArgs, mask, inds_calc_by_ptr_off
     else
         M = zero(UInt)
     end
-    intvecsym = :(Int($VECTORWIDTHSYMBOL))
-    if vecnotunrolled
-        Expr(:call, Expr(:curly, lv(:Unroll), AU, 1, u₁, AV, intvecsym, M, 1), ind)
+    if AV > 0
+        intvecsym = :(Int($VECTORWIDTHSYMBOL))
+        if vecnotunrolled
+            Expr(:call, Expr(:curly, lv(:Unroll), AU, 1, u₁, AV, intvecsym, M, 1), ind)
+        else
+            Expr(:call, Expr(:curly, lv(:Unroll), AU, intvecsym, u₁, AV, intvecsym, M, 1), ind)
+        end
     else
-        Expr(:call, Expr(:curly, lv(:Unroll), AU, intvecsym, u₁, AV, intvecsym, M, 1), ind)
+        Expr(:call, Expr(:curly, lv(:Unroll), AU, 1, u₁, AV, 1, M, 1), ind)
     end
 end
 
