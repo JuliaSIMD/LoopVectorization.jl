@@ -569,6 +569,12 @@ function oneto_loop!(ls::LoopSet, r::Expr, itersym::Symbol)::Loop
     end
     loop
 end
+
+@inline canonicalize_range(r::OptionallyStaticUnitRange) = r
+@inline canonicalize_range(r::CloseOpen) = r
+@inline canonicalize_range(r::AbstractUnitRange) = maybestaticfirst(r):maybestaticlast(r)
+@inline canonicalize_range(r::CartesianIndices) = CartesianIndices(map(canonicalize_range, r.indices))
+
 function misc_loop!(ls::LoopSet, r::Union{Expr,Symbol}, itersym::Symbol)::Loop
     rangename = gensym!(ls, "looprange" * string(itersym)); lenname = gensym!(ls, "looplen" * string(itersym));
     pushprepreamble!(ls, Expr(:(=), rangename, Expr(:call, lv(:canonicalize_range), static_literals!(r))))

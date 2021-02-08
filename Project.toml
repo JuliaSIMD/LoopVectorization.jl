@@ -24,7 +24,7 @@ Requires = "1"
 SLEEFPirates = "0.6.7"
 ThreadingUtilities = "0.2.3"
 UnPack = "1"
-VectorizationBase = "0.18.1"
+VectorizationBase = "0.18.9"
 julia = "1.5"
 
 [extras]

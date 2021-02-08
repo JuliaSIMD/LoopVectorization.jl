@@ -14,7 +14,15 @@ using VectorizationBase: register_size, register_count, cache_linesize, has_opma
     vfma_fast, vmuladd_fast, vdiv_fast, vadd_fast, vsub_fast, vmul_fast,
     relu, stridedpointer, StridedPointer, StridedBitPointer, AbstractStridedPointer,
     reduced_add, reduced_prod, reduce_to_add, reduce_to_prod, reduced_max, reduced_min, reduce_to_max, reduce_to_min,
-    vsum, vprod, vmaximum, vminimum, unwrap
+    vsum, vprod, vmaximum, vminimum, unwrap, Unroll, VecUnroll,
+    preserve_buffer, zero_vecunroll, vbroadcast_vecunroll, _vzero, _vbroadcast,
+    contract_add, collapse_add,
+    contract_mul, collapse_mul,
+    contract_max, collapse_max,
+    contract_min, collapse_min,
+    contract_and, collapse_and,
+    contract_or,  collapse_or
+
 
 using IfElse: ifelse
 
@@ -30,7 +38,7 @@ using Base.FastMath: add_fast, sub_fast, mul_fast, div_fast, inv_fast, abs2_fast
 
 
 using ArrayInterface
-using ArrayInterface: OptionallyStaticUnitRange, Zero, One, StaticBool, True, False#, static_length
+using ArrayInterface: OptionallyStaticUnitRange, Zero, One, StaticBool, True, False, reduce_tup
 const Static = ArrayInterface.StaticInt
 
 using Requires

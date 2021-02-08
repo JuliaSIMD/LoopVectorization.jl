@@ -47,14 +47,8 @@ function indices_calculated_by_pointer_offsets(ls::LoopSet, ar::ArrayReferenceMe
     for i ∈ eachindex(li)
         ii = i + offset
         ind = indices[ii]
-        # j = findfirst(isequal(ind), view(indices, offset+1:ii-1))
-        # if !isnothing(j)
-        #     out[i] = out[j - offset]
-        #     continue
-        # end
         if (!li[i]) || multiple_with_name(vptr(ar), ls.lssm[].uniquearrayrefs) ||
             (iszero(ls.vector_width[]) && isstaticloop(getloop(ls, ind)))# ||
-            # ((ls.align_loops[] > 0) && (first(names(ls)) == ind))
             out[i] = false
         elseif (isone(ii) && (first(looporder) === ind))
             out[i] = otherindexunrolled(ls, ind, ar)

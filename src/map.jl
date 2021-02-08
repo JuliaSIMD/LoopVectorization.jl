@@ -103,23 +103,18 @@ struct VmapClosure{NonTemporal,F,D,N,A} <: AbstractVmapClosure{NonTemporal,F,D,N
 end
 # struct VmapKnownClosure{NonTemporal,F,D,N,A} <: AbstractVmapClosure{NonTemporal,F,D,N,A} end
 
-@inline function _vmap_thread_call!(
-    f::F, p::Ptr{UInt}, ::Type{D}, ::Type{A}, ::Val{NonTemporal}
-) where {F,D,A,NonTemporal}
+# @generated function (::VmapKnownClosure{NonTemporal,F,D,N,A})(p::Ptr{UInt})  where {NonTemporal,F,D,N,A}
+#     :(_vmap_thread_call!($(F.instance), p, $D, $A, Val{$NonTemporal}()))
+# end
+function (m::VmapClosure{NonTemporal,F,D,N,A})(p::Ptr{UInt}) where {NonTemporal,F,D,N,A}
     (offset, dest) = ThreadingUtilities.load(p, D, 1)
     (offset, args) = ThreadingUtilities.load(p, A, offset)
     
     (offset, start) = ThreadingUtilities.load(p, Int, offset)
     (offset, stop ) = ThreadingUtilities.load(p, Int, offset)
         
-    vmap_singlethread!(f, dest, start, stop, Val{NonTemporal}(), args)
+    vmap_singlethread!(m.f, dest, start, stop, Val{NonTemporal}(), args)
     nothing
-end
-# @generated function (::VmapKnownClosure{NonTemporal,F,D,N,A})(p::Ptr{UInt})  where {NonTemporal,F,D,N,A}
-#     :(_vmap_thread_call!($(F.instance), p, $D, $A, Val{$NonTemporal}()))
-# end
-function (m::VmapClosure{NonTemporal,F,D,N,A})(p::Ptr{UInt}) where {NonTemporal,F,D,N,A}
-    _vmap_thread_call!(m.f, p, D, A, Val{NonTemporal}())
 end
 
 @inline function _get_fptr(cfunc::Base.CFunction)

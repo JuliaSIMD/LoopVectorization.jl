@@ -167,25 +167,32 @@ function capture_muladd(ex::Expr, mod)
     end
 end
 
+function append_update_args!(call::Expr, ex::Expr)
+    for i ∈ 2:length(ex.args)
+        push!(call.args, ex.args[i])
+    end
+    push!(call.args, ex.args[1])
+    nothing
+end
 contract_pass!(::Any, ::Any) = nothing
 function contract!(expr::Expr, ex::Expr, i::Int, mod)
     # if ex.head === :call
         # expr.args[i] = capture_muladd(ex, mod)
     if ex.head === :(+=)
         call = Expr(:call, :add_fast)
-        append!(call.args, ex.args)
+        append_update_args!(call, ex)
         expr.args[i] = ex = Expr(:(=), first(ex.args), call)
     elseif ex.head === :(-=)
         call = Expr(:call, :sub_fast)
-        append!(call.args, ex.args)
+        append_update_args!(call, ex)
         expr.args[i] = ex = Expr(:(=), first(ex.args), call)
     elseif ex.head === :(*=)
         call = Expr(:call, :mul_fast)
-        append!(call.args, ex.args)
+        append_update_args!(call, ex)
         expr.args[i] = ex = Expr(:(=), first(ex.args), call)
     elseif ex.head === :(/=)
         call = Expr(:call, :div_fast)
-        append!(call.args, ex.args)
+        append_update_args!(call, ex)
         expr.args[i] = ex = Expr(:(=), first(ex.args), call)
     end
     if ex.head === :(=)

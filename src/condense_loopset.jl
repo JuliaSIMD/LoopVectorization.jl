@@ -172,13 +172,13 @@ function loopset_return_value(ls::LoopSet, ::Val{extract}) where {extract}
     if isone(length(ls.outer_reductions))
         op = getop(ls, ls.outer_reductions[1])
         if extract
-            if (isu₁unrolled(op) | isu₂unrolled(op))
-                Expr(:call, :data, Symbol(mangledvar(op), 0))
-            else
-                Expr(:call, :data, mangledvar(op))
-            end
+            # if (isu₁unrolled(op) | isu₂unrolled(op))
+                Expr(:call, :data, Symbol(mangledvar(op), "##onevec##"))
+            # else
+                # Expr(:call, :data, mangledvar(op))
+            # end
         else
-            Symbol(mangledvar(op), 0)
+            Symbol(mangledvar(op), "##onevec##")
         end
     else#if length(ls.outer_reductions) > 1
         ret = Expr(:tuple)
@@ -186,9 +186,9 @@ function loopset_return_value(ls::LoopSet, ::Val{extract}) where {extract}
         for or ∈ ls.outer_reductions
             op = ops[or]
             if extract
-                push!(ret.args, Expr(:call, :data, Symbol(mangledvar(op), 0)))
+                push!(ret.args, Expr(:call, :data, Symbol(mangledvar(op), "##onevec##")))
             else
-                push!(ret.args, Symbol(mangledvar(ops[or]), 0))
+                push!(ret.args, Symbol(mangledvar(ops[or]), "##onevec##"))
             end
         end
         ret
@@ -329,7 +329,7 @@ function setup_call_inline(ls::LoopSet, inline::Int8 = zero(Int8), U::Int8 = zer
         # push!(call.args, Symbol("##TYPEOF##", var))
         mvar = mangledvar(op)
         instr = instruction(op)
-        out = Symbol(mvar, 0)
+        out = Symbol(mvar, "##onevec##")
         push!(outer_reducts.args, out)
         push!(q.args, Expr(:(=), var, Expr(:call, lv(reduction_scalar_combine(instr)), Expr(:call, lv(:vecmemaybe), out), var)))
     end

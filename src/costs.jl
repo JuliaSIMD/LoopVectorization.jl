@@ -346,22 +346,99 @@ const REDUCTION_CLASS = Dict{Symbol,Float64}(
 reduction_instruction_class(instr::Symbol) = get(REDUCTION_CLASS, instr, NaN)
 reduction_instruction_class(instr::Instruction) = reduction_instruction_class(instr.instr)
 function reduction_to_single_vector(x::Float64)
-    # x == 1.0 ? :evadd : x == 2.0 ? :evmul : x == 3.0 ? :vor : x == 4.0 ? :vand : x == 5.0 ? :max : x == 6.0 ? :min : throw("Reduction not found.")
-    x == ADDITIVE_IN_REDUCTIONS ? :(+) : x == MULTIPLICATIVE_IN_REDUCTIONS ? :(*) : x == MAX ? :max : x == MIN ? :min : throw("Reduction not found.")
+    if x == ADDITIVE_IN_REDUCTIONS
+        :collapse_add
+    elseif x == MULTIPLICATIVE_IN_REDUCTIONS
+        :collapse_mul
+    elseif x == MAX
+        :collapse_max
+    elseif x == MIN
+        :collapse_min
+    elseif x == ALL
+        :collapse_and
+    elseif x == ANY
+        :collapse_or
+    else
+        throw("Reduction not found.")
+    end
 end
 reduction_to_single_vector(x) = reduction_to_single_vector(reduction_instruction_class(x))
+function reduce_to_onevecunroll(x::Float64)
+    if x == ADDITIVE_IN_REDUCTIONS
+        :+
+    elseif x == MULTIPLICATIVE_IN_REDUCTIONS
+        :*
+    elseif x == MAX
+        :max
+    elseif x == MIN
+        :min
+    elseif x == ALL
+        :&
+    elseif x == ANY
+        :|
+    else
+        throw("Reduction not found.")
+    end
+end
+reduce_to_onevecunroll(x) = reduce_to_onevecunroll(reduction_instruction_class(x))
+function reduce_number_of_vectors(x::Float64)
+    if x == ADDITIVE_IN_REDUCTIONS
+        :contract_add
+    elseif x == MULTIPLICATIVE_IN_REDUCTIONS
+        :contract_mul
+    elseif x == MAX
+        :contract_max
+    elseif x == MIN
+        :contract_min
+    elseif x == ALL
+        :contract_and
+    elseif x == ANY
+        :contract_or
+    else
+        throw("Reduction not found.")
+    end
+end
+reduce_number_of_vectors(x) = reduce_number_of_vectors(reduction_instruction_class(x))
 # function reduction_to_scalar(x::Float64)
 #     # x == 1.0 ? :vsum : x == 2.0 ? :vprod : x == 3.0 ? :vany : x == 4.0 ? :vall : x == 5.0 ? :maximum : x == 6.0 ? :minimum : throw("Reduction not found.")
 #     x == 1.0 ? :vsum : x == 2.0 ? :vprod : x == 5.0 ? :maximum : x == 6.0 ? :minimum : throw("Reduction not found.")
 # end
 # reduction_to_scalar(x) = reduction_to_scalar(reduction_instruction_class(x))
 function reduction_to_scalar(x::Float64)
-    x == ADDITIVE_IN_REDUCTIONS ? :vsum : x == MULTIPLICATIVE_IN_REDUCTIONS ? :vprod : x == MAX ? :vmaximum : x == MIN ? :vminimum : throw("Reduction not found.")
+    if x == ADDITIVE_IN_REDUCTIONS
+        :vsum
+    elseif x == MULTIPLICATIVE_IN_REDUCTIONS
+        :vprod
+    elseif x == MAX
+        :vmaximum
+    elseif x == MIN
+        :vminimum
+    elseif x == ALL
+        :vall
+    elseif x == ANY
+        :vany
+    else
+        throw("Reduction not found.")
+    end
 end
 reduction_to_scalar(x) = reduction_to_scalar(reduction_instruction_class(x))
 function reduction_scalar_combine(x::Float64)
     # x == 1.0 ? :reduced_add : x == 2.0 ? :reduced_prod : x == 3.0 ? :reduced_any : x == 4.0 ? :reduced_all : x == 5.0 ? :reduced_max : x == 6.0 ? :reduced_min : throw("Reduction not found.")
-    x == ADDITIVE_IN_REDUCTIONS ? :reduced_add : x == MULTIPLICATIVE_IN_REDUCTIONS ? :reduced_prod : x == MAX ? :reduced_max : x == MIN ? :reduced_min : throw("Reduction not found.")
+    if x == ADDITIVE_IN_REDUCTIONS
+        :reduced_add
+    elseif x == MULTIPLICATIVE_IN_REDUCTIONS
+        :reduced_prod
+    elseif x == MAX
+        :reduced_max
+    elseif x == MIN
+        :reduced_min
+    elseif x == ALL
+        :reduced_all
+    elseif x == ANY
+        :reduced_any
+    else
+        throw("Reduction not found.")
+    end
 end
 reduction_scalar_combine(x) = reduction_scalar_combine(reduction_instruction_class(x))
 # function reduction_combine_to(x::Float64)
@@ -371,7 +448,21 @@ reduction_scalar_combine(x) = reduction_scalar_combine(reduction_instruction_cla
 # reduction_combine_to(x) = reduction_combine_to(reduction_instruction_class(x))
 function reduction_zero(x::Float64)
     # x == 1.0 ? :zero : x == 2.0 ? :one : x == 3.0 ? :false : x == 4.0 ? :true : x == 5.0 ? :typemin : x == 6.0 ? :typemax : throw("Reduction not found.")
-    x == ADDITIVE_IN_REDUCTIONS ? :zero : x == MULTIPLICATIVE_IN_REDUCTIONS ? :one : x == MAX ? :typemin : x == MIN ? :typemax : throw("Reduction not found.")
+    if x == ADDITIVE_IN_REDUCTIONS
+        :zero
+    elseif x == MULTIPLICATIVE_IN_REDUCTIONS
+        :one
+    elseif x == MAX
+        :typemin
+    elseif x == MIN
+        :typemax
+    elseif x == ALL
+        :max_mask
+    elseif x == ANY
+        :zero_mask
+    else
+        throw("Reduction not found.")
+    end
 end
 reduction_zero(x) = reduction_zero(reduction_instruction_class(x))
 

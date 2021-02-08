@@ -56,9 +56,7 @@ function Loop(::LoopSet, ::Expr, sym::Symbol, ::Type{CloseOpen{Static{L}, Static
 end
 
 
-function extract_loop(l)
-    Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, :lb, l))
-end
+extract_loop(l) = Expr(:call, :getfield, :lb, l, false)
 
 function add_loops!(ls::LoopSet, LPSYM, LB)
     n = max(length(LPSYM), length(LB))
@@ -76,7 +74,7 @@ function add_loops!(ls::LoopSet, i::Int, sym::Symbol, @nospecialize(l::Type{<:Ca
     N, T = l.parameters
     ssym = String(sym)
     for k = N:-1:1
-        axisexpr = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, Expr(:., Expr(:ref, :lb, i), QuoteNode(:indices)), k))
+        axisexpr = :(getfield(getfield(getfield(lb, $i, false), :indices), $k, false))
         add_loop!(ls, Loop(ls, axisexpr, Symbol(ssym*'#'*string(k)*'#'), T.parameters[k])::Loop)
     end
     push!(ls.loopsymbol_offsets, ls.loopsymbol_offsets[end]+N)
@@ -134,12 +132,7 @@ function ArrayReferenceMeta(
     )
 end
 
-# extract_varg(i) = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, :vargs, i))
-function extract_varg(i)
-    sptr = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, :vargs, i))
-    # Base.libllvm_version ≥ v"10" ? Expr(:call, lv(:noalias!), sptr) : sptr
-    sptr
-end
+extract_varg(i) = :(getfield(vargs, $i, false))
 # _extract(::Type{Static{N}}) where {N} = N
 function pushvarg!(ls::LoopSet, ar::ArrayReferenceMeta, i, name)
     # pushpreamble!(ls, Expr(:(=), name, Expr(:call, :(VectorizationBase.zero_offsets), extract_varg(i))))
@@ -218,7 +211,7 @@ function process_metadata!(ls::LoopSet, AM, num_arrays::Int)
         sii = si::Int
         s = gensym(:symlicm)
         push!(ls.preamble_symsym, (opoffsets[sii] + 1, s))
-        pushpreamble!(ls, Expr(:(=), s, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), Expr(:ref, :vargs, num_arrays + i))))
+        pushpreamble!(ls, Expr(:(=), s, extract_varg(num_arrays + i)))
     end
     expandbyoffset!(ls.preamble_symint, AM[4], opoffsets)
     expandbyoffset!(ls.preamble_symfloat, AM[5], opoffsets)
@@ -339,21 +332,26 @@ function add_op!(
     push!(opoffsets, opoffsets[end] + nops)
     nothing
 end
-function add_parents_to_op!(ls::LoopSet, vparents::Vector{Operation}, up::Unsigned, k::Int, Δ::Int)
+function add_parents_to_op!(ls::LoopSet, op::Operation, up::Unsigned, k::Int, Δ::Int)
+    vparents = parents(op)
     ops = operations(ls)
     offsets = ls.operation_offsets
     if isone(Δ) # not expanded
         @assert isone(k)
         for i ∈ parents(ls, up)
             for j ∈ offsets[i]+1:offsets[i+1] # if parents are expanded, add them all
-                pushfirst!(vparents, ops[j])
+                opp = ops[j]
+                pushfirst!(vparents, opp)
+                push!(children(opp), op)
             end
         end
     else#if isexpanded
         # Do we want to require that all Δidxs are equal?
         # Because `CartesianIndex((2,3)) - 1` results in a methoderorr, I think this is reasonable for now
         for i ∈ parents(ls, up)
-            pushfirst!(vparents, ops[offsets[i]+k])
+            opp = ops[offsets[i]+k]
+            pushfirst!(vparents, opp)
+            push!(children(opp), op)
         end
     end
 end
@@ -368,10 +366,10 @@ function add_parents_to_ops!(ls::LoopSet, ops::Vector{OperationStruct}, constoff
                 instr = instruction(op)
                 if instr != LOOPCONSTANT && instr.mod !== :numericconstant
                     constoffset += 1
-                    pushpreamble!(ls, Expr(:(=), instr.instr, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, :vargs, constoffset))))
+                    pushpreamble!(ls, Expr(:(=), instr.instr, extract_varg(constoffset)))
                 end
             elseif !isloopvalue(op)
-                add_parents_to_op!(ls, parents(op), ops[i].parents, k, Δ)
+                add_parents_to_op!(ls, op, ops[i].parents, k, Δ)
             end
         end
     end
@@ -406,16 +404,22 @@ typeeltype(::Type{T}) where {T<:Real} = T
 
 function add_array_symbols!(ls::LoopSet, arraysymbolinds::Vector{Symbol}, offset::Int)
     for (i,as) ∈ enumerate(arraysymbolinds)
-        pushpreamble!(ls, Expr(:(=), as, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, :vargs, i + offset))))
+        pushpreamble!(ls, Expr(:(=), as, extract_varg(i + offset)))
     end
 end
-function extract_external_functions!(ls::LoopSet, offset::Int)
+function extract_external_functions!(ls::LoopSet, offset::Int, vargs)
     for op ∈ operations(ls)
         if iscompute(op)
             instr = instruction(op)
             if instr.mod != :LoopVectorization
                 offset += 1
-                pushpreamble!(ls, Expr(:(=), instr.instr, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, :vargs, offset))))
+                instr_new = get(FUNCTIONSYMBOLS, vargs[offset], instr)
+                if instr_new === instr
+                    extractf = Expr(:call, :getfield, :vargs, offset, false)
+                    pushpreamble!(ls, Expr(:(=), instr.instr, extractf))
+                else
+                    op.instruction = instr_new
+                end
             end
         end
     end
@@ -463,7 +467,7 @@ function avx_loopset(instr::Vector{Instruction}, ops::Vector{OperationStruct}, a
     add_ops!(ls, instr, ops, mrefs, opsymbols, num_params, nopsv, expandedv, elementbytes)
     process_metadata!(ls, AM, length(arf))
     add_array_symbols!(ls, arraysymbolinds, num_arrays + length(ls.preamble_symsym))
-    num_params = extract_external_functions!(ls, num_params)
+    num_params = extract_external_functions!(ls, num_params, vargs)
     ls
 end
 function avx_body(ls::LoopSet, UNROLL::Tuple{Int8,Int8,Int8,Int,Int,Int,Int})

@@ -291,7 +291,7 @@ using Test
         @test dot33(a,b) ≈ @view(a[1:33])' * @view(b[1:33])
 
         if T <: Union{Float32,Float64}
-            πest = pi(a, b)
+            πest = T(pi(a, b))
             @test πest == piavx(a, b)
             @test πest == piavx_u4(a, b)
             @test πest == pi_avx(a, b)
