@@ -313,7 +313,7 @@ function lower_compute!(
     # making BitArrays inefficient.
     # parentsyms = [opp.variable for opp ∈ parents(op)]
     Uiter = opunrolled ? u₁ - 1 : 0
-    # @show mvar, opunrolled, u₁
+    # @show mvar, opunrolled, u₁, u₁loopsym, u₂loopsym
     isreduct = isreduction(op)
     if Base.libllvm_version < v"11.0.0" && !isnothing(suffix) && isreduct# && (iszero(suffix) || (ls.unrollspecification[].u₂ - 1 == suffix))
         # instrfid = findfirst(isequal(instr.instr), (:vfmadd, :vfnmadd, :vfmsub, :vfnmsub))

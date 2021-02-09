@@ -185,9 +185,9 @@ end
 #         push!(q.args, instrcall)
 #     end
 # end
-function _lower_store_nonloopindex!()
+# function _lower_store_nonloopindex!()
     
-end
+# end
 
 function lower_store!(
     q::Expr, ls::LoopSet, op::Operation, ua::UnrollArgs, mask::Union{Nothing,Symbol,Unsigned} = nothing
@@ -199,7 +199,9 @@ function lower_store!(
     falseexpr = Expr(:call, lv(:False)); trueexpr = Expr(:call, lv(:True)); rs = staticexpr(reg_size(ls));
 
     reductfunc = storeinstr_preprend(op, vectorized)
-    mvar = Symbol(variable_name(first(parents(op)), suffix), '_', u₁)
+    opp = first(parents(op))
+    u = isu₁unrolled(opp) ? u₁ : 1
+    mvar = Symbol(variable_name(opp, suffix), '_', u)
 
     if all(op.ref.loopedindex)
         inds = unrolledindex(op, ua, mask, inds_calc_by_ptr_offset)

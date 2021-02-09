@@ -572,7 +572,7 @@ using Test
     #  3.0  4.0  1.0  2.0  7.0  8.0  5.0  6.0  11.0  12.0  9.0  10.0  15.0  16.0  13.0  …  191.0  192.0  189.0  190.0  195.0  196.0  193.0  194.0  197.0  198.0  199.0
      # 1.0  4.0  5.0  2.0  3.0  8.0  9.0  6.0  7.0  12.0  13.0  10.0  11.0  16.0  17.0  …  187.0  192.0  193.0  190.0  191.0  196.0  197.0  194.0  195.0  198.0  199.0
     function instruct_x_avx!(r::AbstractVector, loc::Int)
-      @avx for lhs in 0:(length(r) >> 1) - (1 << (loc - 1))
+        @avx for lhs in 0:(length(r) >> 1) - (1 << (loc - 1))
             # mask locations before
             p = lhs + lhs & ~(1 << (loc - 1) - 1)
             q = lhs + lhs & ~(1 << (loc - 1) - 1) + 1 << (loc - 1)
@@ -965,7 +965,7 @@ end
         @test test_bit_shift(r) == test_bit_shiftavx(r)
         @test test_bit_shift(r) == test_bit_shift_avx(r)
 
-        r = T(-10):T(2.3):T(1000)
+        r = T(-1):T(0.23):T(10)
         s = if VERSION >= v"1.5.0-DEV.255" || T != Float32
             sum(r)
         else
