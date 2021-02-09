@@ -14,7 +14,7 @@ function symbolind(ind::Symbol, op::Operation, td::UnrollArgs)
     else
         mangledvar(parent)
     end
-    ex = u₁loopsym ∈ loopdependencies(parent) ? Symbol(pvar, u₁) : pvar
+    ex = u₁loopsym ∈ loopdependencies(parent) ? Symbol(pvar, '_', u₁) : pvar
     Expr(:call, lv(:staticm1), ex)
 end
 
@@ -262,13 +262,13 @@ function add_memory_mask!(memopexpr::Expr, op::Operation, td::UnrollArgs, mask::
         # if it isn't unrolled, then `m`
         u = isu₁unrolled(op) ? u₁ : 1
         condvar = Symbol(condvar, '_', u)
-        if mask === nothing
+        if mask === nothing || (!isvectorized(op))
             push!(memopexpr.args, condvar)
         else
             # we only want to apply mask to `u₁`
             push!(memopexpr.args, Expr(:call, lv(:and_last), condvar, mask))
         end
-    elseif mask !== nothing
+    elseif mask !== nothing && isvectorized(op)
         push!(memopexpr.args, mask)
     end
 end

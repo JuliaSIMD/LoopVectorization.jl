@@ -94,6 +94,7 @@ function lower_constant!(
     mvar = Symbol(mvar, '_', u₁)
     instruction = op.instruction
     constsym = instruction.instr
+    # constsym = Symbol(instruction.instr, '_', 1)
     reducedchildvectorized = vectorized ∈ reducedchildren(op)
     if reducedchildvectorized || isvectorized(op) || vectorized ∈ reduceddependencies(op) || should_broadcast_op(op)
         # call = Expr(:call, lv(:vbroadcast), W, Expr(:call, lv(:maybeconvert), typeT, constsym))
@@ -139,14 +140,17 @@ end
 function setop!(ls, op, val)
     if instruction(op) === LOOPCONSTANT# && mangledvar(op) !== val
         pushpreamble!(ls, Expr(:(=), Symbol(mangledvar(op), '_', 1), val))
+        # pushpreamble!(ls, Expr(:(=), mangledvar(op), val))
     else
-        pushpreamble!(ls, Expr(:(=), Symbol(instruction(op).instr, '_', 1), val))
+    #     pushpreamble!(ls, Expr(:(=), Symbol(instruction(op).instr, '_', 1), val))
+        pushpreamble!(ls, Expr(:(=), instruction(op).instr, val))
     end
     nothing
 end
 function setconstantop!(ls, op, val)
     if instruction(op) === LOOPCONSTANT# && mangledvar(op) !== val
         pushpreamble!(ls, Expr(:(=), Symbol(mangledvar(op), '_', 1), val))
+        # pushpreamble!(ls, Expr(:(=), mangledvar(op), val))
     end
     nothing
 end

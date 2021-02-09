@@ -963,6 +963,7 @@ end
 function variable_name_and_unrolled(op::Operation, u₁loop::Symbol, u₂loop::Symbol, u₂iter::Int)
     u₁op, u₂op = isunrolled_sym(op, u₁loop, u₂loop)
     mvar = u₂op ? variable_name(op, u₂iter) : mangledvar(op)
+    # mvar = mangledvar(op)
     mvar, u₁op, u₂op
 end
 

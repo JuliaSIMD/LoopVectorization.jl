@@ -104,7 +104,7 @@ function _add_loopvalue!(ex::Expr, loopval::Symbol, vectorized::Symbol, u::Int)
             push!(ex.args, Expr(:call, lv(:vadd_fast), Expr(:call, lv(:vmul_fast), VECTORWIDTHSYMBOL, u), _MMind(Expr(:call, lv(:staticp1), loopval))))
         end
     else
-        push!(ex.args, Expr(:call, lv(:vadd_fast), loopval, Expr(:call, Expr(:curly, :Static, u + 1))))
+        push!(ex.args, Expr(:call, lv(:vadd_fast), loopval, staticexpr(u+1)))
     end
 end
 function add_loopvalue!(instrcall::Expr, loopval, ua::UnrollArgs, u₁::Int)
@@ -240,7 +240,8 @@ end
 end
 
 function parent_op_name(parents_op, n, modsuffix, suffix_, parents_u₁syms, parents_u₂syms, u₁, opisvectorized, tiledouterreduction)
-    parent = mangledvar(parents_op[n])
+    opp = parents_op[n]
+    parent = mangledvar(opp)
     if n == tiledouterreduction
         parent = Symbol(parent, modsuffix)
     else
@@ -249,7 +250,7 @@ function parent_op_name(parents_op, n, modsuffix, suffix_, parents_u₁syms, par
         end
     end
     parent = Symbol(parent, '_', parents_u₁syms[n] ? u₁ : 1)
-    if opisvectorized && isload(parents_op[n]) && (!isvectorized(parents_op[n]))
+    if opisvectorized && isload(opp) && (!isvectorized(opp))
         # && n != tiledouterreduction && !(parents_u₁syms[n] & parents_u₂syms[n])
         parent = Symbol(parent, "##broadcasted##")
     end
@@ -270,11 +271,13 @@ function lower_compute!(
     # parent_names, parents_u₁syms, parents_u₂syms = parent_unroll_status(op, u₁loop, u₂loop, suffix)
     parents_u₁syms, parents_u₂syms = parent_unroll_status(op, u₁loopsym, u₂loopsym, suffix)
     tiledouterreduction = if isnothing(suffix)
+        suffix_ = nothing
         -1
     else
         suffix_ = Symbol(suffix, :_)
         isouterreduction(op)
     end
+    
     if !opunrolled && any(parents_u₁syms) # TODO: Clean up this mess, refactor the naming code, putting it in one place and have everywhere else use it for easy equivalence.
         parents_op = copy(parents_op) # don't mutate the original!
         for i ∈ eachindex(parents_u₁syms)
@@ -310,6 +313,7 @@ function lower_compute!(
     # making BitArrays inefficient.
     # parentsyms = [opp.variable for opp ∈ parents(op)]
     Uiter = opunrolled ? u₁ - 1 : 0
+    # @show mvar, opunrolled, u₁
     isreduct = isreduction(op)
     if Base.libllvm_version < v"11.0.0" && !isnothing(suffix) && isreduct# && (iszero(suffix) || (ls.unrollspecification[].u₂ - 1 == suffix))
         # instrfid = findfirst(isequal(instr.instr), (:vfmadd, :vfnmadd, :vfmsub, :vfnmsub))
@@ -343,8 +347,8 @@ function lower_compute!(
     varsym = if tiledouterreduction > 0 # then suffix !== nothing
         # modsuffix = ((u + suffix*(Uiter + 1)) & 7)
         modsuffix = suffix % tiled_outerreduct_unroll(ls)
-        # Symbol(mangledvar(op), modsuffix)
-        Symbol(mvar, modsuffix)
+        Symbol(mangledvar(op), modsuffix)
+        # Symbol(mvar, modsuffix)
         # elseif u₁unrolledsym
         #     Symbol(mvar, u)
     elseif isanouterreduction(ls, op)
@@ -352,9 +356,15 @@ function lower_compute!(
         Ureduct = calc_Ureduct(ls, usfull)
         Symbol(mvar, '_', max(u₁, Ureduct))
     else
-        Symbol(mvar, '_', u₁)
+        Symbol(mvar, '_', ifelse(opunrolled, u₁, 1))
     end
     selfopname = varsym
+    # if name(op) === Symbol("##op#5631")
+    #     @show name(op), parents(op), name.(parents(op))
+    #     parent_name = parent_op_name(parents_op, 1, modsuffix, suffix_, parents_u₁syms, parents_u₂syms, u₁, opisvectorized, tiledouterreduction)
+    #     @show parent_name
+    # end
+    # @show selfopname, varsym, mvar, mangledvar(op)
     for n ∈ 1:nparents
         if isloopvalue(parents_op[n])
             loopval = first(loopdependencies(parents_op[n]))
@@ -366,6 +376,7 @@ function lower_compute!(
                     selfopname = parent
                     push!(instrcall.args, parent)
                 else
+                    # @show name(parents_op[n]), name(op), mangledvar(parents_op[n]), mangledvar(op)
                     push!(instrcall.args, varsym)
                 end
             else
@@ -395,11 +406,10 @@ function lower_compute!(
             insert!(instrcall.args, 3, selfopname)
             insert!(instrcall.args, 4, staticexpr(u₁))
         end
-    elseif isreduct
+    elseif vecinreduceddeps
         pushfirst!(instrcall.args, lv(:partialmap))
         insert!(instrcall.args, 3, selfopname)
         insert!(instrcall.args, 4, staticexpr(u₁))
-        # partialmap(f::F, default::D, ::StaticInt{M}, vargs::Vararg{Any,K}) where {F,M,K,D}
     end
     if instr.instr === :identity && isone(length(parents_op))
         push!(q.args, Expr(:(=), varsym, instrcall.args[2]))
