@@ -131,7 +131,7 @@ end
 
 vecunrolllen(::Type{VecUnroll{N,W,T,V}}) where {N,W,T,V} = (N::Int + 1)
 vecunrolllen(_) = -1
-function ifelselastexpr(hasf::Bool, M::Int, vargtypes, K::Int)
+function ifelselastexpr(hasf::Bool, M::Int, vargtypes, K::Int, maskearly::Bool)
     t = Expr(:tuple)
     q = Expr(:block, Expr(:meta,:inline))
     vargs = map(k -> Symbol(:varg_,k), 1:K)
@@ -152,13 +152,15 @@ function ifelselastexpr(hasf::Bool, M::Int, vargtypes, K::Int)
     end
     N = last(lengths)
     # @show N, M lengths vargs
-    start = hasf ? 1 : M
+    start = (hasf | maskearly) ? 1 : M
     for m ∈ 1:start-1
-        push!(t.args, :(getfield($(vargs[K]), $m, false)))
+        # push!(q.args, :(@show getfield($(vargs[1]), $m, false)))
+        # push!(q.args, :(@show getfield($(vargs[K]), $m, false)))
+        push!(t.args, :(getfield($(vargs[1]), $m, false)))
     end
     for m ∈ start:M
         call = if hasf
-            m == M ? Expr(:call, :ifelse, :f, :m) : Expr(:call, :f)
+            (maskearly | (m == M)) ? Expr(:call, :ifelse, :f, :m) : Expr(:call, :f)
         else# m == M because !hasf
             Expr(:call, :ifelse, :m)
         end
@@ -181,17 +183,28 @@ function ifelselastexpr(hasf::Bool, M::Int, vargtypes, K::Int)
     end
     # push!(q.args, :(VecUnroll($t)::VecUnroll{$N,$W,$T,$V}))
     push!(q.args, :(VecUnroll($t)))
+    # push!(q.args, :(@show VecUnroll($t)))
     q
 end
 @generated function ifelselast(f::F, m::Mask{W}, ::StaticInt{M}, vargs::Vararg{Any,K}) where {F,W,K,M}
     # 1+1
     # @show vargs K
-    ifelselastexpr(true, M, vargs, K)
+    ifelselastexpr(true, M, vargs, K, false)
 end
 @generated function ifelselast(m::Mask{W}, ::StaticInt{M}, varg_1::V1, varg_2::V2) where {W,V1,V2,M}
-    1+1
+    # 1+1
     # @show V1 V2 W
-    ifelselastexpr(false, M, (V1,V2), 2)
+    ifelselastexpr(false, M, (V1,V2), 2, false)
+end
+@generated function ifelsepartial(f::F, m::Mask{W}, ::StaticInt{M}, vargs::Vararg{Any,K}) where {F,W,K,M}
+    # 1+1
+    # @show vargs K
+    ifelselastexpr(true, M, vargs, K, true)
+end
+@generated function ifelsepartial(m::Mask{W}, ::StaticInt{M}, varg_1::V1, varg_2::V2) where {W,V1,V2,M}
+    # 1+1
+    # @show V1 V2 W
+    ifelselastexpr(false, M, (V1,V2), 2, true)
 end
 @generated function partialmap(f::F, default::D, ::StaticInt{M}, vargs::Vararg{Any,K}) where {F,M,K,D}
     lengths = Vector{Int}(undef, K);
@@ -402,16 +415,18 @@ function lower_compute!(
         end
     end
     if maskreduct
-        ifelsefunc = if ls.unrollspecification[].u₁ == 1 #u₁loopsym !== vectorized
-            :ifelse
+        ifelsefunc = if ls.unrollspecification[].u₁ == 1
+            :ifelse # don't need to be fancy
+        elseif (u₁loopsym !== vectorized)
+            :ifelsepartial # ifelse all the early ones
         else# mask last u₁
-            :ifelselast
+            :ifelselast # ifelse only the last one
         end
         if last(instrcall.args) == varsym
             pushfirst!(instrcall.args, lv(ifelsefunc))
             # showexpr = true
             insert!(instrcall.args, 3, mask)
-            ifelsefunc === :ifelselast && insert!(instrcall.args, 4, staticexpr(u₁))
+            ifelsefunc === :ifelse || insert!(instrcall.args, 4, staticexpr(u₁))
         elseif all(in(loopdependencies(op)), reduceddeps) || any(opp -> mangledvar(opp) === mangledvar(op), parents_op)
             if ifelsefunc === :ifelse
                 push!(q.args, Expr(:(=), varsym, Expr(:call, lv(ifelsefunc), mask, instrcall, selfopname)))

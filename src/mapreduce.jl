@@ -84,7 +84,7 @@ for (op, init) in zip((:+, :max, :min), (:zero, :typemin, :typemax))
         if !(check_args(arg) && all_dense(arg))
             return reduce($op, arg, dims = dims)
         end
-        isnothing(dims) && return _vreduce($op, arg)
+        dims === nothing && return _vreduce($op, arg)
         isone(ndims(arg)) && return [_vreduce($op, arg)]
         @assert length(dims) == 1
         axes_arg = axes(arg)
