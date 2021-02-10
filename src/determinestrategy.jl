@@ -341,6 +341,7 @@ function determine_unroll_factor(ls::LoopSet, order::Vector{Symbol}, vectorized:
     innermost_loop = last(order)
     rt = Inf; rtcomp = Inf; latency = Inf; best_unrolled = Symbol("")
     for unrolled ∈ order
+        reject_reorder(ls, unrolled) && continue
         rttemp, ltemp = determine_unroll_factor(ls, order, unrolled, vectorized)
         rtcomptemp = rttemp + (0.01 * ((vectorized === unrolled) + (unrolled === innermost_loop) - latency))
         if rtcomptemp < rtcomp
@@ -864,6 +865,7 @@ function evaluate_cost_tile(
     choose_to_inline = Ref(false)
     copyto!(names(ls), order); reverse!(names(ls))
     prefetch_good_idea = false
+    # goes from outer to inner
     for n ∈ 1:N
         itersym = order[n]
         if itersym == u₁loopsym
@@ -1019,6 +1021,7 @@ function choose_unroll_order(ls::LoopSet, lowest_cost::Float64 = Inf)
     best_vec = first(new_order)
     while true
         for new_vec ∈ new_order
+            reject_reorder(ls, new_vec) && continue
             cost_temp = evaluate_cost_unroll(ls, new_order, new_vec, lowest_cost)
             if cost_temp < lowest_cost
                 lowest_cost = cost_temp
@@ -1084,6 +1087,13 @@ function reject_candidate(op::Operation, u₁loopsym::Symbol, u₂loopsym::Symbo
     false
 end
 
+function reject_reorder(ls::LoopSet, reordered::Symbol)
+    length(ls.outer_reductions) > 0 || return false
+    for op ∈ operations(ls)
+        reordered ∈ loopdependencies(op) && any(opp -> (iscompute(opp) && isanouterreduction(ls, opp)), parents(op)) && return true
+    end
+    false
+end
 function reject_candidate(ls::LoopSet, u₁loopsym::Symbol, u₂loopsym::Symbol)
     for op ∈ operations(ls)
         reject_candidate(op, u₁loopsym, u₂loopsym) && return true
@@ -1096,27 +1106,32 @@ function choose_tile(ls::LoopSet)
     best_order = copyto!(ls.loop_order.bestorder, lo.syms)
     bestu₁ = bestu₂ = best_vec = first(best_order) # filler
     u₁ = u₂ = 0; lowest_cost = Inf; shouldinline = false
-    for newu₂ ∈ lo.syms, newu₁ ∈ lo.syms#@view(new_order[nt+1:end])
-        ((newu₁ == newu₂) || reject_candidate(ls, newu₁, newu₂)) && continue
-        new_order, state = iterate(lo) # right now, new_order === best_order
-        while true
-            for new_vec ∈ new_order # view to skip first
-                u₁temp, u₂temp, cost_temp, shouldinline_temp = evaluate_cost_tile(ls, new_order, UnrollSymbols(newu₁, newu₂, new_vec))
-                # if cost_temp < lowest_cost # leads to 4 vmovapds
-                if cost_temp ≤ lowest_cost # lead to 2 vmovapds
-                    lowest_cost = cost_temp
-                    u₁, u₂ = u₁temp, u₂temp
-                    best_vec = new_vec
-                    bestu₂ = newu₂
-                    bestu₁ = newu₁
-                    shouldinline = shouldinline_temp
-                    copyto!(best_order, new_order)
-                    save_tilecost!(ls)
+    for newu₂ ∈ lo.syms
+        reject_reorder(ls, newu₂) && continue
+        for newu₁ ∈ lo.syms#@view(new_order[nt+1:end])
+            reject_reorder(ls, newu₁) && continue
+            ((newu₁ == newu₂) || reject_candidate(ls, newu₁, newu₂)) && continue
+            new_order, state = iterate(lo) # right now, new_order === best_order
+            while true
+                for new_vec ∈ new_order # view to skip first
+                    reject_reorder(ls, new_vec) && continue
+                    u₁temp, u₂temp, cost_temp, shouldinline_temp = evaluate_cost_tile(ls, new_order, UnrollSymbols(newu₁, newu₂, new_vec))
+                    # if cost_temp < lowest_cost # leads to 4 vmovapds
+                    if cost_temp ≤ lowest_cost # lead to 2 vmovapds
+                        lowest_cost = cost_temp
+                        u₁, u₂ = u₁temp, u₂temp
+                        best_vec = new_vec
+                        bestu₂ = newu₂
+                        bestu₁ = newu₁
+                        shouldinline = shouldinline_temp
+                        copyto!(best_order, new_order)
+                        save_tilecost!(ls)
+                    end
                 end
+                iter = iterate(lo, state)
+                iter === nothing && break
+                new_order, state = iter
             end
-            iter = iterate(lo, state)
-            iter === nothing && break
-            new_order, state = iter
         end
     end
     ls.loadelimination[] = shouldinline

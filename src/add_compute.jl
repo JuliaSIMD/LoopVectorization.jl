@@ -219,6 +219,7 @@ function add_reduction_update_parent!(
     # if parent is not an outer reduction...
     # if !isouterreduction && !isreductzero(parent, ls, reduct_zero)
     add_reduct_instruct = !isouterreduction && !isconstant(parent)
+    # @show isouterreduction, isconstant(parent)
     if add_reduct_instruct
         # We add
         reductcombine = reduction_scalar_combine(instrclass)
@@ -263,6 +264,9 @@ function add_reduction_update_parent!(
     child = Operation(
         length(operations(ls)), name(parent), elementbytes, reductcombine, compute, childdeps, childrdeps, childparents
     )
+    # child = Operation(
+    #     length(operations(ls)), name(parent), elementbytes, Instruction(reductcombine,:identity), compute, childdeps, childrdeps, childparents
+    # )
     pushop!(ls, child, name(parent))
     opout
 end

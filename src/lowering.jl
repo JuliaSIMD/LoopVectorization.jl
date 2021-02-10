@@ -373,7 +373,7 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
         us = nisunrolled ? UnrollSpecification(us, UF, u₂) : UnrollSpecification(us, u₁, UF)
     end
     remmask = inclmask | nisvectorized
-    Ureduct = (n == num_loops(ls) && (u₂ == -1)) ? calc_Ureduct(ls, us) : -1
+    Ureduct = (n == num_loops(ls) && (u₂ == -1)) ? ureduct(ls) : -1
     # sl = startloop(loop, nisvectorized, loopsym)
     sl = startloop(ls, us, n)
     UFt = loopisstatic ? cld(looplength % UFW, W) : 1
@@ -471,6 +471,7 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     end
     if !iszero(UFt)
         # if unroll_cleanup
+        iforelseif = :if
         while true
             ust = nisunrolled ? UnrollSpecification(us, UFt, u₂) : UnrollSpecification(us, u₁, UFt)
             newblock = lower_block(ls, ust, n, remmask, UFt)
@@ -487,9 +488,11 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
                 push!(remblock.args, Expr(:block, Expr(:let, definemask(loop), remblocknew)))
                 remblock = remblocknew
             else
-                remblocknew = Expr(:elseif, comparison, newblock)
+                remblocknew = Expr(iforelseif, comparison, newblock)
+                # remblocknew = Expr(:elseif, comparison, newblock)
                 push!(remblock.args, remblocknew)
                 remblock = remblocknew
+                iforelseif = :elseif
             end
             UFt += 1
         end
@@ -571,6 +574,7 @@ function initialize_outer_reductions!(
         push!(q.args, Expr(:(=), Symbol(mvar, '_', _Umax), z))
     else
         for u ∈ 0:_Umax-1
+            # push!(q.args, Expr(:(=), Symbol(mvar, '_', u), z))
             push!(q.args, Expr(:(=), Symbol(mvar, u), z))
         end
     end
@@ -633,7 +637,7 @@ end
 function reduce_expr!(q::Expr, ls::LoopSet, U::Int)
     us = ls.unrollspecification[]
     u1f, u2f = if us.u₂ == -1 # TODO: these multiple meanings make code hard to follow. Simplify.
-        U, -1
+        ifelse(U == -1, us.u₁, U), -1
     else
         us.u₁, U
     end
@@ -810,8 +814,8 @@ function setup_preamble!(ls::LoopSet, us::UnrollSpecification, Ureduct::Int)
     iszero(length(ls.includedactualarrays) + length(ls.outer_reductions)) || define_eltype_vec_width!(ls.preamble, ls, vectorized)
     lower_licm_constants!(ls)
     isone(num_loops(ls)) || pushpreamble!(ls, definemask(getloop(ls, vectorized)))#, u₁ > 1 && u₁loopnum == vectorizedloopnum))
-    if (Ureduct == u₁) || (u₂ != -1)
-        initialize_outer_reductions!(ls, Ureduct, vectorized) # TODO: outer reducts?
+    if (Ureduct == u₁) || (u₂ != -1) || (Ureduct == -1)
+        initialize_outer_reductions!(ls, ifelse(Ureduct == -1, u₁, Ureduct), vectorized) # TODO: outer reducts?
     elseif length(ls.outer_reductions) > 0
         decl = Expr(:local)
         for or ∈ ls.outer_reductions
@@ -841,30 +845,36 @@ function tiled_outerreduct_unroll(us::UnrollSpecification)
     unroll = u₁ ≥ 8 ? 1 : 8 ÷ u₁
     cld(u₂, cld(u₂, unroll))
 end
-function calc_Ureduct(ls::LoopSet, us::UnrollSpecification)
+function calc_Ureduct!(ls::LoopSet, us::UnrollSpecification)
     @unpack u₁loopnum, u₁, u₂, vectorizedloopnum = us
-    if iszero(length(ls.outer_reductions))
+    ur = if iszero(length(ls.outer_reductions))
         -1
     elseif u₂ == -1
-        loopisstatic = isstaticloop(getloop(ls, names(ls)[u₁loopnum]))
-        loopisstatic &= ((vectorizedloopnum != u₁loopnum) | (!iszero(ls.vector_width[])))
-        # loopisstatic ? u₁ : min(u₁, 4) # much worse than the other two options, don't use this one
-        if Sys.CPU_NAME === "znver1"
-            loopisstatic ? u₁ : 1
+        if u₁loopnum == num_loops(ls)
+            loopisstatic = isstaticloop(getloop(ls, names(ls)[u₁loopnum]))
+            loopisstatic &= ((vectorizedloopnum != u₁loopnum) | (!iszero(ls.vector_width[])))
+            # loopisstatic ? u₁ : min(u₁, 4) # much worse than the other two options, don't use this one
+            if Sys.CPU_NAME === "znver1"
+                loopisstatic ? u₁ : 1
+            else
+                loopisstatic ? u₁ : (u₁ ≥ 4 ? 2 : 1)
+            end
         else
-            loopisstatic ? u₁ : (u₁ ≥ 4 ? 2 : 1)
+            -1
         end
     else
         tiled_outerreduct_unroll(us)
     end
+    ls.ureduct[] = ur
 end
+ureduct(ls::LoopSet) = ls.ureduct[]
 function lower_unrollspec(ls::LoopSet)
     us = ls.unrollspecification[]
     @unpack vectorizedloopnum, u₁, u₂ = us
     # @show u₁, u₂
     order = names(ls)
     vectorized = order[vectorizedloopnum]
-    Ureduct = calc_Ureduct(ls, us)
+    Ureduct = calc_Ureduct!(ls, us)
     setup_preamble!(ls, us, Ureduct)
     initgesps = add_loop_start_stop_manager!(ls)
     q = Expr(:let, initgesps, lower_unrolled_dynamic(ls, us, num_loops(ls), false))

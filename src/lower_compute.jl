@@ -36,6 +36,7 @@ end
 struct FalseCollection end
 Base.getindex(::FalseCollection, i...) = false
 function parent_unroll_status(op::Operation, u₁loop::Symbol, u₂loop::Symbol, ::Nothing)
+    # map(opp -> isunrolled_sym(opp, u₁loop), parents(op)), map(opp -> isunrolled_sym(opp, u₂loop), parents(op))
     map(opp -> isunrolled_sym(opp, u₁loop), parents(op)), FalseCollection()
 end
 # function parent_unroll_status(op::Operation, u₁loop::Symbol, u₂loop::Symbol, ::Nothing)
@@ -130,8 +131,7 @@ end
 
 vecunrolllen(::Type{VecUnroll{N,W,T,V}}) where {N,W,T,V} = (N::Int + 1)
 vecunrolllen(_) = -1
-function ifelselastexpr(_M, vargtypes, K)
-    hasf = _M == -1
+function ifelselastexpr(hasf::Bool, M::Int, vargtypes, K::Int)
     t = Expr(:tuple)
     q = Expr(:block, Expr(:meta,:inline))
     vargs = map(k -> Symbol(:varg_,k), 1:K)
@@ -151,7 +151,6 @@ function ifelselastexpr(_M, vargtypes, K)
         end
     end
     N = last(lengths)
-    M = _M == -1 ? max(1, maximum(view(lengths, 1:K-1))) : _M
     # @show N, M lengths vargs
     start = hasf ? 1 : M
     for m ∈ 1:start-1
@@ -160,7 +159,7 @@ function ifelselastexpr(_M, vargtypes, K)
     for m ∈ start:M
         call = if hasf
             m == M ? Expr(:call, :ifelse, :f, :m) : Expr(:call, :f)
-        else
+        else# m == M because !hasf
             Expr(:call, :ifelse, :m)
         end
         for k ∈ 1:K
@@ -184,15 +183,15 @@ function ifelselastexpr(_M, vargtypes, K)
     push!(q.args, :(VecUnroll($t)))
     q
 end
-@generated function ifelselast(f::F, m::Mask{W}, vargs::Vararg{Any,K}) where {F,W,K}
+@generated function ifelselast(f::F, m::Mask{W}, ::StaticInt{M}, vargs::Vararg{Any,K}) where {F,W,K,M}
     # 1+1
     # @show vargs K
-    ifelselastexpr(-1, vargs, K)
+    ifelselastexpr(true, M, vargs, K)
 end
 @generated function ifelselast(m::Mask{W}, ::StaticInt{M}, varg_1::V1, varg_2::V2) where {W,V1,V2,M}
     1+1
     # @show V1 V2 W
-    ifelselastexpr(M, (V1,V2), 2)
+    ifelselastexpr(false, M, (V1,V2), 2)
 end
 @generated function partialmap(f::F, default::D, ::StaticInt{M}, vargs::Vararg{Any,K}) where {F,M,K,D}
     lengths = Vector{Int}(undef, K);
@@ -277,7 +276,6 @@ function lower_compute!(
         suffix_ = Symbol(suffix, :_)
         isouterreduction(op)
     end
-    
     if !opunrolled && any(parents_u₁syms) # TODO: Clean up this mess, refactor the naming code, putting it in one place and have everywhere else use it for easy equivalence.
         parents_op = copy(parents_op) # don't mutate the original!
         for i ∈ eachindex(parents_u₁syms)
@@ -301,13 +299,18 @@ function lower_compute!(
             else
                 newpname = Symbol(newparentname, '_', u₁)
                 push!(q.args, Expr(:(=), newpname, Symbol(parentname, '_', u₁)))
-                # for u ∈ 0:u₁-1
-                # end
-                reduce_expr!(q, newpname, Instruction(reduction_to_single_vector(instruction(newparentop))), u₁, -1)
-                push!(q.args, Expr(:(=), Symbol(newparentname, '_', 1), Symbol(newpname, "##onevec##")))
+                # @show newparentop op instruction(newparentop)
+                reduce_expr!(q, newparentname, instruction(newparentop), u₁, -1)
+                push!(q.args, Expr(:(=), Symbol(newparentname, '_', 1), Symbol(newparentname, "##onevec##")))
             end
         end
     end
+    # if suffix === nothing# &&
+    # end
+    # if instr.instr === :div_fast
+    #     @show op, suffix, parents_u₂syms parents(op)
+    #     @show isu₂unrolled.(parents(op))
+    # end
     # cache unroll and tiling check of parents
     # not broadcasted, because we use frequent checks of individual bools
     # making BitArrays inefficient.
@@ -343,46 +346,58 @@ function lower_compute!(
     opisvectorized = isvectorized(op)
     modsuffix = 0
     # for u ∈ 0:Uiter
+    isouterreduct = false
     instrcall = callexpr(instr)
     varsym = if tiledouterreduction > 0 # then suffix !== nothing
         # modsuffix = ((u + suffix*(Uiter + 1)) & 7)
+        isouterreduct = true
         modsuffix = suffix % tiled_outerreduct_unroll(ls)
         Symbol(mangledvar(op), modsuffix)
         # Symbol(mvar, modsuffix)
         # elseif u₁unrolledsym
         #     Symbol(mvar, u)
     elseif isanouterreduction(ls, op)
-        usfull = ls.unrollspecification[]
-        Ureduct = calc_Ureduct(ls, usfull)
-        Symbol(mvar, '_', max(u₁, Ureduct))
+        isouterreduct = true
+        Ureduct = ureduct(ls)
+        ufull = if Ureduct == -1 # no reducing
+            ls.unrollspecification[].u₁
+        else
+            Ureduct
+        end
+        Symbol(mvar, '_', max(u₁, ufull))
     else
         Symbol(mvar, '_', ifelse(opunrolled, u₁, 1))
     end
     selfopname = varsym
+    # @show op, tiledouterreduction, isouterreduct
     # if name(op) === Symbol("##op#5631")
     #     @show name(op), parents(op), name.(parents(op))
     #     parent_name = parent_op_name(parents_op, 1, modsuffix, suffix_, parents_u₁syms, parents_u₂syms, u₁, opisvectorized, tiledouterreduction)
     #     @show parent_name
     # end
     # @show selfopname, varsym, mvar, mangledvar(op)
+    selfdep = false
+    # showexpr = false
     for n ∈ 1:nparents
-        if isloopvalue(parents_op[n])
-            loopval = first(loopdependencies(parents_op[n]))
+        opp = parents_op[n]
+        if isloopvalue(opp)
+            loopval = first(loopdependencies(opp))
             add_loopvalue!(instrcall, loopval, ua, u₁)
-        else
-            if name(parents_op[n]) === name(op)
-                if ((isvectorized(first(parents_op)) && !isvectorized(op)) && !dependent_outer_reducts(ls, op))
-                    parent = parent_op_name(parents_op, n, modsuffix, suffix_, parents_u₁syms, parents_u₂syms, u₁, opisvectorized, tiledouterreduction)
-                    selfopname = parent
-                    push!(instrcall.args, parent)
-                else
-                    # @show name(parents_op[n]), name(op), mangledvar(parents_op[n]), mangledvar(op)
-                    push!(instrcall.args, varsym)
-                end
-            else
+        elseif name(opp) === name(op)
+            selfdep = true
+            if ((isvectorized(first(parents_op)) && !isvectorized(op)) && !dependent_outer_reducts(ls, op))
                 parent = parent_op_name(parents_op, n, modsuffix, suffix_, parents_u₁syms, parents_u₂syms, u₁, opisvectorized, tiledouterreduction)
+                selfopname = parent
                 push!(instrcall.args, parent)
+            else
+                # @show name(parents_op[n]), name(op), mangledvar(parents_op[n]), mangledvar(op)
+                push!(instrcall.args, varsym)
             end
+        elseif ((!isu₂unrolled(op)) & isu₂unrolled(opp)) && (isouterreduction(opp) != -1)
+            push!(instrcall.args, reduce_expr_u₂(mangledvar(opp), instruction(opp), ureduct(ls)))
+        else
+            parent = parent_op_name(parents_op, n, modsuffix, suffix_, parents_u₁syms, parents_u₂syms, u₁, opisvectorized, tiledouterreduction)
+            push!(instrcall.args, parent)
         end
     end
     if maskreduct
@@ -393,7 +408,9 @@ function lower_compute!(
         end
         if last(instrcall.args) == varsym
             pushfirst!(instrcall.args, lv(ifelsefunc))
+            # showexpr = true
             insert!(instrcall.args, 3, mask)
+            ifelsefunc === :ifelselast && insert!(instrcall.args, 4, staticexpr(u₁))
         elseif all(in(loopdependencies(op)), reduceddeps) || any(opp -> mangledvar(opp) === mangledvar(op), parents_op)
             if ifelsefunc === :ifelse
                 push!(q.args, Expr(:(=), varsym, Expr(:call, lv(ifelsefunc), mask, instrcall, selfopname)))
@@ -401,16 +418,27 @@ function lower_compute!(
                 push!(q.args, Expr(:(=), varsym, Expr(:call, lv(ifelsefunc), mask, staticexpr(u₁), instrcall, selfopname)))
             end
             return
-        else
+        elseif selfdep
+            # @show op, isouterreduct, maskreduct, instr
             pushfirst!(instrcall.args, lv(:partialmap))
             insert!(instrcall.args, 3, selfopname)
             insert!(instrcall.args, 4, staticexpr(u₁))
         end
-    elseif vecinreduceddeps
+    elseif isouterreduct && selfdep && (opunrolled) && (u₁ < ls.unrollspecification[].u₁)
+        # @show op, isouterreduct, maskreduct, instr
+        # needed for cases like `myselfdotavx(A')`, where we have an unrolled reduction
+        # 
+        # names could disagree
         pushfirst!(instrcall.args, lv(:partialmap))
         insert!(instrcall.args, 3, selfopname)
         insert!(instrcall.args, 4, staticexpr(u₁))
     end
+    # if showexpr
+    #     for i ∈ eachindex(parents_op)
+    #         push!(q.args, :(@show $(instrcall.args[end+1-i])))
+    #     end
+    #     instrcall = :(@show $instrcall)
+    # end
     if instr.instr === :identity && isone(length(parents_op))
         push!(q.args, Expr(:(=), varsym, instrcall.args[2]))
     elseif identifier(op) ∉ ls.outer_reductions && should_broadcast_op(op)

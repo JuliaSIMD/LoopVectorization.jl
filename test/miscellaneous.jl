@@ -662,8 +662,22 @@ function maxavx!(R::AbstractArray{T}, Q, keep=nothing) where T
     end
     R
 end
-function splitintonoloop(U = randn(2,2), E1 = randn(2))
-    t = 1
+    function reductionorder(E1, n)
+        t = 0.5
+        a = 1.0
+        _s = 0.0
+        k = length(E1);
+        @avx for j = 1:k
+            for i = 1:n
+                v = a * (1 - t * t)
+                _s += v
+            end
+            E1[j] = _s / n
+        end
+        E1
+    end
+function splitintonoloop(U, E1)
+    t = 0.5
     a = 1.0
     _s = 0.0
     n, k = size(U)
@@ -678,8 +692,8 @@ function splitintonoloop(U = randn(2,2), E1 = randn(2))
     end
     U, E1
 end
-function splitintonoloop_reference(U = randn(2,2), E1 = randn(2))
-    t = 1
+function splitintonoloop_reference(U, E1)
+    t = 0.5
     a = 1.0
     _s = 0.0
     n, k = size(U)
@@ -1020,7 +1034,7 @@ end
 
         @test manyreturntest(Q) ≈ manyreturntestavx(Q)
         
-        U0 = randn(T, 5, 7); E0 = randn(T, 7);
+        U0 = randn(T, 15, 17); E0 = randn(T, 17);
         U1, E1 = splitintonoloop_reference(copy(U0), copy(E0));
         U2, E2 = splitintonoloop(copy(U0), copy(E0));
         @test U1 ≈ U2

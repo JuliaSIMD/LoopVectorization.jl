@@ -19,43 +19,17 @@ function storeinstr_preprend(op::Operation, vectorized::Symbol)
     reduction_to_scalar(reduction_instruction_class(instruction(opp)))
 end
 
-# const STOREOP = :vstore!
-# variable_name(op::Operation, ::Nothing) = mangledvar(op)
-# variable_name(op::Operation, suffix) = Symbol(mangledvar(op), suffix, :_)
-# # variable_name(op::Operation, suffix, u::Int) = (n = variable_name(op, suffix); u < 0 ? n : Symbol(n, u))
-function reduce_range!(q::Expr, toreduct::Symbol, instr::Instruction, Uh2::Int)
-    for u ∈ 0:Uh2-2
-        tru = Symbol(toreduct, u)
-        instrexpr = callexpr(instr)
-        push!(instrexpr.args, tru)
-        push!(instrexpr.args, Symbol(toreduct, u))
-        push!(q.args, Expr(:(=), tru, instrexpr))
+function reduce_expr_u₂(toreduct::Symbol, instr::Instruction, u₂::Int)
+    t = Expr(:tuple)
+    for u ∈ 0:u₂-1
+        push!(t.args, Symbol(toreduct, u))
     end
-    for u ∈ 0:Uh2-1
-        tru = Symbol(toreduct, u - 2Uh)
-        instrexpr = callexpr(instr)
-        push!(instrexpr.args, tru)
-        push!(instrexpr.args, Symbol(toreduct, u))
-        push!(q.args, Expr(:(=), tru, instrexpr))
-    end
+    Expr(:call, lv(:reduce_tup), reduce_to_onevecunroll(instr), t)
 end
-function reduce_range!(q::Expr, ls::LoopSet, Uhigh::Int)
-    for or ∈ ls.outer_reductions
-        op = ls.operations[or]
-        var = mangledvar(op)
-        instr = Instruction(reduction_to_single_vector(op.instruction))
-        reduce_range!(q, var, instr, Uhigh)
-    end
-end
-
 function reduce_expr!(q::Expr, toreduct::Symbol, instr::Instruction, u₁::Int, u₂::Int)
     if u₂ != -1
-        t = Expr(:tuple)
-        for u ∈ 0:u₂-1
-            push!(t.args, Symbol(toreduct, u))
-        end
         _toreduct = Symbol(toreduct, 0)
-        push!(q.args, Expr(:(=), _toreduct, Expr(:call, lv(:reduce_tup), reduce_to_onevecunroll(instr), t)))
+        push!(q.args, Expr(:(=), _toreduct, reduce_expr_u₂(toreduct, instr, u₂)))
     else
         _toreduct = Symbol(toreduct, '_', u₁)
     end
@@ -63,6 +37,8 @@ function reduce_expr!(q::Expr, toreduct::Symbol, instr::Instruction, u₁::Int, 
         push!(q.args, Expr(:(=), Symbol(toreduct, "##onevec##"), _toreduct))
     else
         push!(q.args, Expr(:(=), Symbol(toreduct, "##onevec##"), Expr(:call, lv(reduction_to_single_vector(instr)), _toreduct)))
+        # push!(q.args, :(@show $_toreduct))
+        # push!(q.args, Expr(:(=), Symbol(toreduct, "##onevec##"), :(@show $(Expr(:call, lv(reduction_to_single_vector(instr)), _toreduct)))))
     end
     nothing
 end
@@ -201,7 +177,11 @@ function lower_store!(
     reductfunc = storeinstr_preprend(op, vectorized)
     opp = first(parents(op))
     u = isu₁unrolled(opp) ? u₁ : 1
-    mvar = Symbol(variable_name(opp, suffix), '_', u)
+    mvar = if (opp.instruction.instr === reductfunc) && isone(length(parents(opp)))
+        Symbol(variable_name(only(parents(opp)), suffix), '_', u)
+    else
+        Symbol(variable_name(opp, suffix), '_', u)
+    end
 
     if all(op.ref.loopedindex)
         inds = unrolledindex(op, ua, mask, inds_calc_by_ptr_offset)

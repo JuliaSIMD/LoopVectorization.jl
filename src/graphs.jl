@@ -271,6 +271,7 @@ struct LoopSet
     register_size::Base.RefValue{Int}
     register_count::Base.RefValue{Int}
     cache_linesize::Base.RefValue{Int}
+    ureduct::Base.RefValue{Int}
     # opmask_register::Base.RefValue{Bool}
     mod::Symbol
 end
@@ -381,6 +382,7 @@ function LoopSet(mod::Symbol)
         Ref(false), Ref{LoopStartStopManager}(),
         Ref(0), Ref(0), Ref(false),
         Ref(0), Ref(0), Ref(0), #Ref(false),# hw params
+        Ref(-1), # Ureduct
         mod
     )
 end
