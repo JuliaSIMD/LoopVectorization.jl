@@ -326,13 +326,15 @@ function lower_load!(
                     varnew = variable_name(op, suffix)
                     varold = variable_name(operations(ls)[id], suffix + mno)
                     opold = operations(ls)[id]
-                    if isu₁unrolled(op)
-                        for u ∈ 0:u₁-1
-                            push!(q.args, Expr(:(=), Symbol(varnew, u), Symbol(varold, u)))
-                        end
-                    else
-                        push!(q.args, Expr(:(=), varnew, varold))
-                    end
+                    u = isu₁unrolled(op) ? u₁ : 1
+                    push!(q.args, Expr(:(=), Symbol(varnew, '_', u), Symbol(varold, '_', u)))
+                    # if isu₁unrolled(op)
+                    #     for u ∈ 0:u₁-1
+                    #         push!(q.args, Expr(:(=), Symbol(varnew, u), Symbol(varold, u)))
+                    #     end
+                    # else
+                        
+                    # end
                     return
                 end
             end

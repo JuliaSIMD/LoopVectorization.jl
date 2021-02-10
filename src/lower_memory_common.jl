@@ -260,8 +260,9 @@ function add_memory_mask!(memopexpr::Expr, op::Operation, td::UnrollArgs, mask::
         opu₂ = !isnothing(suffix) && isu₂unrolled(op)
         condvar = condvarname_and_unroll(condop, u₁loopsym, u₂loopsym, suffix, opu₂)
         # if it isn't unrolled, then `m`
-        u = isu₁unrolled(op) ? u₁ : 1
+        u = isu₁unrolled(condop) ? u₁ : 1
         condvar = Symbol(condvar, '_', u)
+        # @show condvar
         if mask === nothing || (!isvectorized(op))
             push!(memopexpr.args, condvar)
         else

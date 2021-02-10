@@ -394,6 +394,7 @@ function lower_compute!(
                 push!(instrcall.args, varsym)
             end
         elseif ((!isu₂unrolled(op)) & isu₂unrolled(opp)) && (isouterreduction(opp) != -1)
+            # this checks if the parent is u₂ unrolled but this operation is not, in which case we need to reduce it.
             push!(instrcall.args, reduce_expr_u₂(mangledvar(opp), instruction(opp), ureduct(ls)))
         else
             parent = parent_op_name(parents_op, n, modsuffix, suffix_, parents_u₁syms, parents_u₂syms, u₁, opisvectorized, tiledouterreduction)
