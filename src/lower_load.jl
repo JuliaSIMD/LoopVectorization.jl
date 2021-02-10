@@ -175,8 +175,9 @@ function lower_load_no_optranslation!(
         push!(loadexpr.args, falseexpr, rs) # unaligned load
         push!(q.args, Expr(:(=), mvar, loadexpr))
     elseif u₁ > 1
-        t = Expr(:tuple)
-        for u ∈ 1:u₁
+        # t = Expr(:tuple)
+        # for u ∈ 1:u₁
+        let t = u₁, t = q
             inds = mem_offset_u(op, td, inds_calc_by_ptr_offset, true, u-1)
             loadexpr = Expr(:call, lv(:vload), vptr(op), inds)
             if (mask === nothing) || (u == u₁) || isvectorized(op)
@@ -185,9 +186,10 @@ function lower_load_no_optranslation!(
                 add_memory_mask!(loadexpr, op, td, nothing)
             end
             push!(loadexpr.args, falseexpr, rs)
-            push!(t.args, loadexpr)
+            # push!(t.args, loadexpr)
+            push!(t.args, Expr(:(=), mvar, loadexpr))
         end
-        push!(q.args, Expr(:(=), mvar, Expr(:call, lv(:VecUnroll), t)))
+        # push!(q.args, Expr(:(=), mvar, Expr(:call, lv(:VecUnroll), t)))
     else
         inds = mem_offset_u(op, td, inds_calc_by_ptr_offset, true, 0)
         loadexpr = Expr(:call, lv(:vload), vptr(op), inds)

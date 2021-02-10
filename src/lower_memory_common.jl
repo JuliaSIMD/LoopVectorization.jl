@@ -6,7 +6,7 @@ function parentind(ind::Symbol, op::Operation)
 end
 function symbolind(ind::Symbol, op::Operation, td::UnrollArgs)
     id = parentind(ind, op)
-    id == -1 && return ind
+    id == -1 && return ind, op
     @unpack u₁, u₁loopsym, u₂loopsym, suffix = td
     parent = parents(op)[id]
     pvar = if u₂loopsym ∈ loopdependencies(parent)
@@ -15,7 +15,7 @@ function symbolind(ind::Symbol, op::Operation, td::UnrollArgs)
         mangledvar(parent)
     end
     ex = u₁loopsym ∈ loopdependencies(parent) ? Symbol(pvar, '_', u₁) : pvar
-    Expr(:call, lv(:staticm1), ex)
+    Expr(:call, lv(:staticm1), ex), parent
 end
 
 staticexpr(x::Integer) = Expr(:call, Expr(:curly, lv(:Static), convert(Int, x)))
@@ -59,18 +59,21 @@ function mem_offset(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Vect
     # inds_calc_by_ptr_offset = indices_calculated_by_pointer_offsets(ls, op.ref)
     @unpack vectorized = td
     for (n,ind) ∈ enumerate(indices)
+        indvectorized = _mm & (ind === vectorized)
         offset = offsets[n] % Int
         # if ind isa Int # impossible
             # push!(ret.args, ind + offset)
         # else
         if loopedindex[n]
             if inds_calc_by_ptr_offset[n]
-                addoffset!(ret, offset, _mm & (ind === vectorized))
+                addoffset!(ret, offset, indvectorized)
             else
-                addoffset!(ret, ind, offset, _mm & (ind === vectorized))
+                addoffset!(ret, ind, offset, indvectorized)
             end
         else
-            addoffset!(ret, symbolind(ind, op, td), offset, false)
+            newname, parent = symbolind(ind, op, td)
+            _mmi = indvectorized && parent !== op && (!isvectorized(parent))
+            addoffset!(ret, newname, offset, _mmi)
         end
     end
     ret
@@ -234,7 +237,9 @@ function mem_offset_u(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Ve
                     addoffset!(ret, ind, offset, _mm & indvectorized)
                 end
             else
-                addoffset!(ret, symbolind(ind, op, td), offset, _mm)
+                newname, parent = symbolind(ind, op, td)
+                _mmi = _mm && indvectorized && parent !== op && (!isvectorized(parent))
+                addoffset!(ret, newname, offset, _mmi)
             end
         end
     end
