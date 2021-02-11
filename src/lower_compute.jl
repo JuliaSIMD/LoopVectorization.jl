@@ -269,6 +269,38 @@ function parent_op_name(parents_op, n, modsuffix, suffix_, parents_u₁syms, par
     parent
 end
 
+function getu₁full(ls::LoopSet, u₁::Int)
+    Ureduct = ureduct(ls)
+    ufull = if Ureduct == -1 # no reducing
+        ls.unrollspecification[].u₁
+    else
+        Ureduct
+    end
+    # max is because we may be in the extended (non-reduct) region
+    return max(u₁, ufull)
+end
+function getu₁forreduct(ls::LoopSet, op::Operation, u₁::Int)
+    !isu₁unrolled(op) && return 1
+    # if `op` is u₁unrolled, we must then find out if the initialization is `u₁unrolled`
+    # if it is, then op's `u₁` will be the current `u₁`
+    # if it is not, then the opp is initialized once per full u₁
+    while true
+        opname = name(op)
+        selfparentid = findfirst(opp -> name(opp) === opname, parents(op))
+        selfparentid === nothing && return u₁
+        op = parents(op)[selfparentid]
+        isreduction(op) || break
+    end
+    if isu₁unrolled(op)
+        return u₁
+    elseif (ls.unrollspecification[].u₂ != -1) && length(ls.outer_reductions) > 0
+        # then `ureduct` doesn't tell us what we need, so
+        return ls.unrollspecification[].u₁
+    else # we need to find u₁-full
+        return getu₁full(ls, u₁)
+    end    
+end
+
 function lower_compute!(
     q::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs, mask::Union{Nothing,Symbol,Unsigned} = nothing,
 )
@@ -369,17 +401,21 @@ function lower_compute!(
         # Symbol(mvar, modsuffix)
         # elseif u₁unrolledsym
         #     Symbol(mvar, u)
-    elseif isanouterreduction(ls, op)
-        isouterreduct = true
-        Ureduct = ureduct(ls)
-        ufull = if Ureduct == -1 # no reducing
-            ls.unrollspecification[].u₁
+    elseif opunrolled
+        if isreduct #(isanouterreduction(ls, op))
+            # isouterreduct = true
+            isouterreduct = isanouterreduction(ls, op)
+            # @show op, isouterreduct, u₁, ls.unrollspecification[].u₂ != -1
+            if isouterreduct
+                Symbol(mvar, '_', getu₁full(ls, u₁))
+            else
+                Symbol(mvar, '_', getu₁forreduct(ls, op, u₁))
+            end
         else
-            Ureduct
+            Symbol(mvar, '_', u₁)
         end
-        Symbol(mvar, '_', max(u₁, ufull))
     else
-        Symbol(mvar, '_', ifelse(opunrolled, u₁, 1))
+        Symbol(mvar, '_', 1)
     end
     selfopname = varsym
     # @show op, tiledouterreduction, isouterreduct

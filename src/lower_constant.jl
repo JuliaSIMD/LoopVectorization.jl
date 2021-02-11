@@ -49,7 +49,12 @@ function lower_zero!(
     @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = ua
     mvar, opu₁, opu₂ = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, suffix)
     (!(suffix === nothing)) && !opu₂ && suffix > 0 && return
-    mvar = Symbol(mvar, '_', u₁)
+    # TODO: for u₁, needs to consider if reducedchildren are u₁-unrolled
+    #       reductions need to consider reduct-status
+    if !opu₁
+        opu₁ = u₁loopsym ∈ reducedchildren(op)
+    end
+    mvar = Symbol(mvar, '_', opu₁ ? u₁ : 1)
     typeT = typeof_sym(ls, op, zerotyp)
     # TODO: make should_broadcast_op handle everything.
     if isvectorized(op) || vectorized ∈ reducedchildren(op) || vectorized ∈ reduceddependencies(op) || should_broadcast_op(op)
