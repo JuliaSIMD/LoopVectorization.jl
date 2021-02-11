@@ -14,7 +14,8 @@ function symbolind(ind::Symbol, op::Operation, td::UnrollArgs)
     else
         mangledvar(parent)
     end
-    ex = u₁loopsym ∈ loopdependencies(parent) ? Symbol(pvar, '_', u₁) : pvar
+    u = u₁loopsym ∈ loopdependencies(parent) ? u₁ : 1
+    ex = Symbol(pvar, '_', u)
     Expr(:call, lv(:staticm1), ex), parent
 end
 
