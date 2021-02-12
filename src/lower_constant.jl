@@ -46,14 +46,14 @@ end
 function lower_zero!(
     q::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs, zerotyp::NumberType = zerotype(ls, op)
 )
-    @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = ua
-    mvar, opu₁, opu₂ = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, suffix)
+    @unpack u₁, u₁loopsym, u₂loopsym, vectorized, u₂max, suffix = ua
+    mvar, opu₁, opu₂ = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, u₂max, suffix)
     (!(suffix === nothing)) && !opu₂ && suffix > 0 && return
     # TODO: for u₁, needs to consider if reducedchildren are u₁-unrolled
     #       reductions need to consider reduct-status
-    if !opu₁
-        opu₁ = u₁loopsym ∈ reducedchildren(op)
-    end
+    # if !opu₁
+    #     opu₁ = u₁loopsym ∈ reducedchildren(op)
+    # end
     mvar = Symbol(mvar, '_', opu₁ ? u₁ : 1)
     typeT = typeof_sym(ls, op, zerotyp)
     # TODO: make should_broadcast_op handle everything.
@@ -93,8 +93,8 @@ vecbasefunc(f) = Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:Vectorizat
 function lower_constant!(
     q::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs
 )
-    @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = ua
-    mvar, opu₁, opu₂ = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, suffix)
+    @unpack u₁, u₁loopsym, u₂loopsym, vectorized, u₂max, suffix = ua
+    mvar, opu₁, opu₂ = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, u₂max, suffix)
     (!(suffix === nothing)) && !opu₂ && suffix > 0 && return
     mvar = Symbol(mvar, '_', u₁)
     instruction = op.instruction

@@ -266,7 +266,8 @@ function lower_load_for_optranslation!(
             push!(inds.args, Expr(:call, lv(:Zero)))
         end
     end
-    varbase = Symbol("##var##", variable_name(op, 0))
+    variable_name0 = variable_name(op, 0)
+    varbase = Symbol("##var##", variable_name0)
     loadcall = Expr(:call, lv(:vload), gptr, copy(inds))
     falseexpr = Expr(:call, lv(:False)); rs = staticexpr(reg_size(ls));
     domask = mask !== nothing
@@ -283,7 +284,7 @@ function lower_load_for_optranslation!(
         push!(q.args, Expr(:(=), varbaseu, loadcall))
         push!(t.args, varbaseu)
     end
-    vecunroll_name = Symbol(variable_name(op, 0), '_', u₁)
+    vecunroll_name = Symbol(variable_name0, '_', u₁)
     push!(q.args, Expr(:(=), vecunroll_name, Expr(:call, lv(:VecUnroll), t)))
     shouldbroadcast && pushbroadcast!(q, vecunroll_name)
     # this takes care of u₂ == 0

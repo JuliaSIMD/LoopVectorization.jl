@@ -915,7 +915,7 @@ end
 Base.show(io::IO, ls::LoopSet) = println(io, lower(ls))
 
 
-
+# TODO: this is no longer how I generate code...
 """
 This function is normally called
 isunrolled_sym(op, u₁loop)
@@ -927,8 +927,8 @@ If there is a third argument, it will avoid unrolling that symbol along reductio
 
 """
 function isunrolled_sym(op::Operation, u₁loop::Symbol, u₂loop::Symbol)
-    u₁ild = u₁loop ∈ loopdependencies(op)
-    u₂ild = u₂loop ∈ loopdependencies(op)
+    u₁ild = isu₁unrolled(op)
+    u₂ild = isu₂unrolled(op)
     (accesses_memory(op) | isloopvalue(op)) && return (u₁ild, u₂ild)
     if isconstant(op)
         if !u₁ild
@@ -945,8 +945,7 @@ function isunrolled_sym(op::Operation, u₁loop::Symbol, u₂loop::Symbol)
     iszero(length(reductops)) && return true, true
     u₁reduced = u₁loop ∈ reductops
     u₂reduced = u₂loop ∈ reductops
-    # We want to only unroll one of them.
-    # We prefer not to unroll a reduced loop
+    # If they're being reduced, we want to only unroll the reduced variable along one of the two loops.
     # @show u₁reduced, u₂reduced
     if u₂reduced # if both are reduced, we unroll u₁
         true, false
@@ -958,19 +957,21 @@ function isunrolled_sym(op::Operation, u₁loop::Symbol, u₂loop::Symbol)
 end
 
 function isunrolled_sym(op::Operation, u₁loop::Symbol)
-    u₁loop ∈ loopdependencies(op) || (isconstant(op) && (u₁loop ∈ reducedchildren(op)))
+    isu₁unrolled(op) || (isconstant(op) & (u₁loop ∈ reducedchildren(op)))
 end
 
-isunrolled_sym(op::Operation, u₁loop::Symbol, u₂loop::Symbol, ::Nothing) = (isunrolled_sym(op, u₁loop), false)
-isunrolled_sym(op::Operation, u₁loop::Symbol, u₂loop::Symbol, ::Int) = isunrolled_sym(op, u₁loop, u₂loop)
+# isunrolled_sym(op::Operation, u₁loop::Symbol, u₂loop::Symbol) = (isunrolled_sym(op, u₁loop), false)
+# isunrolled_sym(op::Operation, u₁loop::Symbol, u₂loop::Symbol, ::Int) = isunrolled_sym(op, u₁loop, u₂loop)
+isunrolled_sym(op::Operation, u₁loop::Symbol, u₂loop::Symbol, u₂max::Int) = ((u₂max > 1) | accesses_memory(op)) ? isunrolled_sym(op, u₁loop, u₂loop) : (isunrolled_sym(op, u₁loop), false)
 
 variable_name(op::Operation, ::Nothing) = mangledvar(op)
 variable_name(op::Operation, suffix) = Symbol(mangledvar(op), suffix, :_)
 
-function variable_name_and_unrolled(op::Operation, u₁loop::Symbol, u₂loop::Symbol, ::Nothing)
+function variable_name_and_unrolled(op::Operation, u₁loop::Symbol, u₂loop::Symbol, ::Int, ::Nothing)
     mangledvar(op), isunrolled_sym(op, u₁loop), false
 end
-function variable_name_and_unrolled(op::Operation, u₁loop::Symbol, u₂loop::Symbol, u₂iter::Int)
+function variable_name_and_unrolled(op::Operation, u₁loop::Symbol, u₂loop::Symbol, u₂max::Int, u₂iter::Int)
+    ((u₂max > 1) & (!accesses_memory(op))) || return variable_name_and_unrolled(op, u₁loop, u₂loop, u₂max, nothing)
     u₁op, u₂op = isunrolled_sym(op, u₁loop, u₂loop)
     mvar = u₂op ? variable_name(op, u₂iter) : mangledvar(op)
     # mvar = mangledvar(op)

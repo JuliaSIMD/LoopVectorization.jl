@@ -168,7 +168,7 @@ end
 function lower_store!(
     q::Expr, ls::LoopSet, op::Operation, ua::UnrollArgs, mask::Union{Nothing,Symbol,Unsigned} = nothing
 )
-    @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = ua
+    @unpack u₁, u₁loopsym, u₂loopsym, vectorized, u₂max, suffix = ua
     isunrolled₁ = isu₁unrolled(op) #u₁loopsym ∈ loopdependencies(op)
     # isunrolled₂ = isu₂unrolled(op)
     inds_calc_by_ptr_offset = indices_calculated_by_pointer_offsets(ls, op.ref)
@@ -176,11 +176,15 @@ function lower_store!(
 
     reductfunc = storeinstr_preprend(op, vectorized)
     opp = first(parents(op))
-    u = isu₁unrolled(opp) ? u₁ : 1
-    mvar = if (opp.instruction.instr === reductfunc) && isone(length(parents(opp)))
-        Symbol(variable_name(only(parents(opp)), suffix), '_', u)
-    else
+    if (opp.instruction.instr === reductfunc) && isone(length(parents(opp)))
+        opp = only(parents(opp))
+    end
+    isu₁, isu₂ = isunrolled_sym(opp, u₁loopsym, u₂loopsym, u₂max)
+    u = isu₁ ? u₁ : 1
+    mvar = if isu₂
         Symbol(variable_name(opp, suffix), '_', u)
+    else
+        Symbol(variable_name(opp, nothing), '_', u)
     end
 
     if all(op.ref.loopedindex)

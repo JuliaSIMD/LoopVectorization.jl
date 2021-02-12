@@ -260,13 +260,14 @@ end
 end
 
 function add_memory_mask!(memopexpr::Expr, op::Operation, td::UnrollArgs, mask::Union{Nothing,Symbol,Unsigned})
-    @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = td
+    @unpack u₁, u₁loopsym, u₂loopsym, vectorized, u₂max, suffix = td
     if isconditionalmemop(op)
         condop = last(parents(op))
         opu₂ = !isnothing(suffix) && isu₂unrolled(op)
-        condvar = condvarname_and_unroll(condop, u₁loopsym, u₂loopsym, suffix, opu₂)
+        condvar, condu₁unrolled = condvarname_and_unroll(condop, u₁loopsym, u₂loopsym, u₂max, suffix, opu₂)
         # if it isn't unrolled, then `m`
-        u = isu₁unrolled(condop) ? u₁ : 1
+        u = condu₁unrolled ? u₁ : 1
+        # u = isu₁unrolled(condop) ? u₁ : 1
         condvar = Symbol(condvar, '_', u)
         # @show condvar
         if mask === nothing || (!isvectorized(op))
@@ -296,11 +297,11 @@ function name_memoffset(var::Symbol, op::Operation, td::UnrollArgs, u₁unrolled
     name, mo
 end
 
-function condvarname_and_unroll(cond, u₁loop, u₂loop, suffix, opu₂)
+function condvarname_and_unroll(cond, u₁loop, u₂loop, u₂max, suffix, opu₂)
     if isnothing(suffix) || !opu₂
-        condvar, condu₁, condu₂ = variable_name_and_unrolled(cond, u₁loop, u₂loop, nothing)
+        condvar, condu₁, condu₂ = variable_name_and_unrolled(cond, u₁loop, u₂loop, u₂max, nothing)
     else
-        condvar, condu₁, condu₂ = variable_name_and_unrolled(cond, u₁loop, u₂loop, suffix)
+        condvar, condu₁, condu₂ = variable_name_and_unrolled(cond, u₁loop, u₂loop, u₂max, suffix)
     end
-    condvar#, condu₁
+    condvar, condu₁
 end

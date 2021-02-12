@@ -26,8 +26,9 @@ end
 function isnopidentity(ls::LoopSet, op::Operation, u₁loop::Symbol, u₂loop::Symbol, vectorized::Symbol, suffix)
     parents_op = parents(op)
     if iscompute(op) && instruction(op).instr === :identity && name(first(parents_op)) === name(op) && isone(length(parents_op))
-        mvar, u₁unrolledsym, u₂unrolledsym = variable_name_and_unrolled(op, u₁loop, u₂loop, suffix)
-        parents_u₁syms, parents_u₂syms = parent_unroll_status(op, u₁loop, u₂loop, suffix)
+        u₂max = ls.unrollspecification[].u₂
+        mvar, u₁unrolledsym, u₂unrolledsym = variable_name_and_unrolled(op, u₁loop, u₂loop, u₂max, suffix)
+        parents_u₁syms, parents_u₂syms = parent_unroll_status(op, u₁loop, u₂loop, u₂max)
         if (u₁unrolledsym == first(parents_u₁syms)) && ((!isnothing(suffix)) == parents_u₂syms[1])
             #TODO: identifer(first(parents_op)) ∉ ls.outer_reductions is going to miss a lot of cases
             #Should probably replace that with `DVec` (demoting Vec) types, that demote to scalar.
