@@ -7,14 +7,15 @@ end
 function symbolind(ind::Symbol, op::Operation, td::UnrollArgs)
     id = parentind(ind, op)
     id == -1 && return ind, op
-    @unpack u₁, u₁loopsym, u₂loopsym, suffix = td
+    @unpack u₁, u₁loopsym, u₂loopsym, u₂max, suffix = td
     parent = parents(op)[id]
-    pvar = if u₂loopsym ∈ loopdependencies(parent)
-        variable_name(parent, suffix)
-    else
-        mangledvar(parent)
-    end
-    u = u₁loopsym ∈ loopdependencies(parent) ? u₁ : 1
+    pvar, u₁op, u₂op = variable_name_and_unrolled(parent, u₁loopsym, u₂loopsym, u₂max, suffix)
+    # pvar = if u₂loopsym ∈ loopdependencies(parent)
+    #     variable_name(parent, suffix)
+    # else
+    #     mangledvar(parent)
+    # end
+    u = u₁op ? u₁ : 1
     ex = Symbol(pvar, '_', u)
     Expr(:call, lv(:staticm1), ex), parent
 end

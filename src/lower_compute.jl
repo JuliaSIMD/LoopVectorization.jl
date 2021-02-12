@@ -212,13 +212,14 @@ function parent_op_name(
         if parents_u₂syms[n]
             parent = Symbol(parent, suffix_)
         end
+        u = parents_u₁syms[n] ? u₁ : 1
+        parent = Symbol(parent, '_', u)
     end
     # if (tiledouterreduction == -1) && LoopVectorization.names(ls)[ls.unrollspecification[].u₁loopnum] ∈ reduceddependencies(opp)
     #     u = u₁
     # else
-    u = parents_u₁syms[n] ? u₁ : 1
+
     # end
-    parent = Symbol(parent, '_', u)
     if opisvectorized && isload(opp) && (!isvectorized(opp))
         parent = Symbol(parent, "##broadcasted##")
     end
@@ -390,9 +391,8 @@ function lower_compute!(
         elseif name(opp) === name(op)
             selfdep = true
             if ((isvectorized(first(parents_op)) && !isvectorized(op)) && !dependent_outer_reducts(ls, op)) || (parents_u₁syms[n] != u₁unrolledsym) || (parents_u₂syms[n] != u₂unrolledsym)
-                parent = parent_op_name(ls, parents_op, n, modsuffix, suffix_, parents_u₁syms, parents_u₂syms, u₁, opisvectorized, tiledouterreduction)
-                selfopname = parent
-                push!(instrcall.args, parent)
+                selfopname = parent_op_name(ls, parents_op, n, modsuffix, suffix_, parents_u₁syms, parents_u₂syms, u₁, opisvectorized, tiledouterreduction)
+                push!(instrcall.args, selfopname)
             else
                 # @show name(parents_op[n]), name(op), mangledvar(parents_op[n]), mangledvar(op)
                 push!(instrcall.args, varsym)
