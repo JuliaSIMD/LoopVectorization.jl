@@ -885,7 +885,7 @@ end
 
 function lower(ls::LoopSet, order, u₁loop, u₂loop, vectorized, u₁, u₂, inline::Bool)
     cacheunrolled!(ls, u₁loop, u₂loop, vectorized)
-    fillorder!(ls, order, u₁loop, u₂loop, u₂ != -1, vectorized)
+    fillorder!(ls, order, u₁loop, u₂loop, u₂, vectorized)
     ls.unrollspecification[] = UnrollSpecification(ls, u₁loop, u₂loop, vectorized, u₁, u₂)
     q = lower_unrollspec(ls)
     inline && pushfirst!(q.args, Expr(:meta, :inline))

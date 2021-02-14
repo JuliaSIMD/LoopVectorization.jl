@@ -305,6 +305,7 @@ function set_hw!(ls::LoopSet, rs::Int, rc::Int, cls::Int)
     ls.register_count[] = rc
     ls.cache_linesize[] = cls
     # ls.opmask_register[] = omr
+    nothing
 end
 available_registers() = ifelse(has_opmask_registers(), register_count(), register_count() - One())
 function set_hw!(ls::LoopSet)
@@ -396,6 +397,7 @@ gensym!(ls::LoopSet, s) = Symbol("###$(s)###$(ls.symcounter[] += 1)###")
 function cacheunrolled!(ls::LoopSet, u₁loop, u₂loop, vectorized)
     foreach(op -> setunrolled!(op, u₁loop, u₂loop, vectorized), operations(ls))
     foreach(empty! ∘ children, operations(ls))
+    # TODO: WHY?
     for op ∈ operations(ls)
         for opp ∈ parents(op)
             push!(children(opp), op)

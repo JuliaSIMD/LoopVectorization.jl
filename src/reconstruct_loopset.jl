@@ -339,6 +339,7 @@ function add_parents_to_op!(ls::LoopSet, op::Operation, up::Unsigned, k::Int, Δ
     if isone(Δ) # not expanded
         @assert isone(k)
         for i ∈ parents(ls, up)
+            # FIXME; children also filled in cacheunrolled
             for j ∈ offsets[i]+1:offsets[i+1] # if parents are expanded, add them all
                 opp = ops[j]
                 pushfirst!(vparents, opp)
@@ -348,6 +349,7 @@ function add_parents_to_op!(ls::LoopSet, op::Operation, up::Unsigned, k::Int, Δ
     else#if isexpanded
         # Do we want to require that all Δidxs are equal?
         # Because `CartesianIndex((2,3)) - 1` results in a methoderorr, I think this is reasonable for now
+        # FIXME; children also filled in cacheunrolled
         for i ∈ parents(ls, up)
             opp = ops[offsets[i]+k]
             pushfirst!(vparents, opp)
@@ -528,7 +530,7 @@ Execute an `@avx` block. The block's code is represented via the arguments:
 - `vargs...` holds the encoded pointers of all the arrays (see `VectorizationBase`'s various pointer types).
 """
 @generated function _avx_!(::Val{UNROLL}, ::Val{OPS}, ::Val{ARF}, ::Val{AM}, ::Val{LPSYM}, _vargs::Tuple{LB,V}) where {UNROLL, OPS, ARF, AM, LPSYM, LB, V}
-    1 + 1 # Irrelevant line you can comment out/in to force recompilation...
+    # 1 + 1 # Irrelevant line you can comment out/in to force recompilation...
     ls = _avx_loopset(OPS, ARF, AM, LPSYM, LB.parameters, V.parameters)
     # return @show avx_body(ls, UNROLL)
     # @show UNROLL, OPS, ARF, AM, LPSYM, LB
