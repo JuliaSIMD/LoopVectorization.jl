@@ -23,17 +23,17 @@ function dependent_outer_reducts(ls::LoopSet, op)
     false
 end
 
-function isnopidentity(ls::LoopSet, op::Operation, u₁loop::Symbol, u₂loop::Symbol, vectorized::Symbol, u₂max)
+function isnopidentity(ls::LoopSet, op::Operation, u₁loop::Symbol, u₂loop::Symbol, vectorized::Symbol, u₂max::Int)
     parents_op = parents(op)
     if iscompute(op) && instruction(op).instr === :identity && name(first(parents_op)) === name(op) && isone(length(parents_op))
         loopistiled = u₂max ≠ -1
-        if loopistiled
+        if isu₂unrolled(op)
             mvar, u₁unrolledsym, u₂unrolledsym = variable_name_and_unrolled(op, u₁loop, u₂loop, u₂max, u₂max)
         else
             mvar, u₁unrolledsym, u₂unrolledsym = variable_name_and_unrolled(op, u₁loop, u₂loop, u₂max, nothing)
         end
         parents_u₁syms, parents_u₂syms = parent_unroll_status(op, u₁loop, u₂loop, u₂max)
-        if (u₁unrolledsym == first(parents_u₁syms)) && (loopistiled == parents_u₂syms[1])
+        if (u₁unrolledsym == first(parents_u₁syms)) && (isu₂unrolled(op) == parents_u₂syms[1])
             #TODO: identifer(first(parents_op)) ∉ ls.outer_reductions is going to miss a lot of cases
             #Should probably replace that with `DVec` (demoting Vec) types, that demote to scalar.
             #TODO: document (after finding out...) why only checking `isvectorized(first(parents_op))` -- why not `any(isvectorized, parents_op)`???
@@ -77,15 +77,16 @@ function addoptoorder!(
     included_vars[id] && return nothing
     included_vars[id] = true
     isunrolled = (isu₁unrolled(op)) + 1
-    istiled = isu₂unrolled(op)
+    istiled = isu₂unrolled(op) + 1
     # optype = Int(op.node_type) + 1
     after_loop = place_after_loop[id] + 1
     if !isloopvalue(op)
-        if istiled
-            isnopidentity(ls, op, u₁loop, u₂loop, vectorized, u₂max) || push!(lo[isunrolled,2,after_loop,_n], op)
-        else
-            isnopidentity(ls, op, u₁loop, u₂loop, vectorized, nothing) || push!(lo[isunrolled,1,after_loop,_n], op)
-        end
+        isnopidentity(ls, op, u₁loop, u₂loop, vectorized, u₂max) || push!(lo[isunrolled,istiled,after_loop,_n], op)
+        # if istiled
+        #     isnopidentity(ls, op, u₁loop, u₂loop, vectorized, u₂max, u₂max) || push!(lo[isunrolled,2,after_loop,_n], op)
+        # else
+        #     isnopidentity(ls, op, u₁loop, u₂loop, vectorized, u₂max, nothing) || push!(lo[isunrolled,1,after_loop,_n], op)
+        # end
     end
     # @show op, after_loop
     # isloopvalue(op) || push!(lo[isunrolled,istiled,after_loop,_n], op)
