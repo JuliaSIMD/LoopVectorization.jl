@@ -204,7 +204,10 @@ using LoopVectorization: Static
         end
         out
     end
-
+    function pparent(x) # go through nested parents
+        px = parent(x)
+        px === x ? x : pparent(px)
+    end
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
         Abase = fill(T(NaN), 200, 200);
@@ -225,51 +228,49 @@ using LoopVectorization: Static
 
             old2d!(out1, A, kern);
             avx2d!(out2, A, kern);
-            @test parent(out1) ≈ parent(out2)
+            @test pparent(out1) ≈ pparent(out2)
 
             avx2douter!(out3, A, kern);
-            @test parent(out1) ≈ parent(out3)
+            @test pparent(out1) ≈ pparent(out3)
 
             fill!(out2, NaN); avx2d!(out2, A, skern);
-            @test parent(out1) ≈ parent(out2)
+            @test pparent(out1) ≈ pparent(out2)
 
             fill!(out2, NaN); avx2douter!(out2, At', kern);
-            @test parent(out1) ≈ parent(out2)
+            @test pparent(out1) ≈ pparent(out2)
 
             fill!(out2, NaN); avx2douter!(out2', A, kern);
-            @test parent(out1) ≈ parent(out2)'
+            @test pparent(out1) ≈ pparent(out2)'
 
             fill!(out2, NaN); avx2douter!(out2', At', kern);
-            @test parent(out1) ≈ parent(out2)'
+            @test pparent(out1) ≈ pparent(out2)'
 
             fill!(out3, NaN); avx2douter!(out3, A, skern);
-            @test parent(out1) ≈ parent(out3)
+            @test pparent(out1) ≈ pparent(out3)
 
             if r == -1:1
                 fill!(out3, NaN); avx2dunrolled!(out3, A, skern);
-                @test parent(out1) ≈ parent(out3)
+                @test pparent(out1) ≈ pparent(out3)
 
                 fill!(out3, NaN); avx2dunrolled2x2!(out3, A, skern);
-                @test parent(out1) ≈ parent(out3)
+                @test pparent(out1) ≈ pparent(out3)
 
                 fill!(out3, NaN); avx2dunrolled3x3!(out3, A, skern);
-                @test parent(out1) ≈ parent(out3)
+                @test pparent(out1) ≈ pparent(out3)
             end
             
-            @test parent(avxgeneric!(out4, A, kern)) ≈ parent(out1)
+            @test pparent(avxgeneric!(out4, A, kern)) ≈ pparent(out1)
             fill!(out4, NaN);
-            @test parent(avxgeneric!(out4, A, skern)) ≈ parent(out1)
+            @test pparent(avxgeneric!(out4, A, skern)) ≈ pparent(out1)
 
-            fill!(out4, NaN); @test parent(avxgeneric2!(out4, A, kern)) ≈ parent(out1)
-            fill!(out4, NaN); @test parent(avxgeneric2!(out4, A, skern)) ≈ parent(out1)
-            fill!(out4, NaN); @test parent(avxgeneric2!(out4, At', kern)) ≈ parent(out1)
-            fill!(out4, NaN); @test parent(avxgeneric2!(out4, At', skern)) ≈ parent(out1)
-            fill!(out4, NaN); @test parent(avxgeneric2!(out4', A, kern)')' ≈ parent(out1)
-            fill!(out4, NaN); @test parent(avxgeneric2!(out4', A, skern)')' ≈ parent(out1)
-            fill!(out4, NaN); @test parent(avxgeneric2!(out4', At', kern)')' ≈ parent(out1)
-            fill!(out4, NaN); @test parent(avxgeneric2!(out4', At', skern)')' ≈ parent(out1)
+            fill!(out4, NaN); @test pparent(avxgeneric2!(out4, A, kern)) ≈ pparent(out1)
+            fill!(out4, NaN); @test pparent(avxgeneric2!(out4, A, skern)) ≈ pparent(out1)
+            fill!(out4, NaN); @test pparent(avxgeneric2!(out4, At', kern)) ≈ pparent(out1)
+            fill!(out4, NaN); @test pparent(avxgeneric2!(out4, At', skern)) ≈ pparent(out1)
+            fill!(out4, NaN); @test pparent(avxgeneric2!(out4', A, kern)')' ≈ pparent(out1)
+            fill!(out4, NaN); @test pparent(avxgeneric2!(out4', A, skern)')' ≈ pparent(out1)
+            fill!(out4, NaN); @test pparent(avxgeneric2!(out4', At', kern)')' ≈ pparent(out1)
+            fill!(out4, NaN); @test pparent(avxgeneric2!(out4', At', skern)')' ≈ pparent(out1)
         end
     end
-
-
 end

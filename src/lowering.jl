@@ -951,6 +951,7 @@ function isunrolled_sym(op::Operation, u₁loop::Symbol, u₂loop::Symbol)
         true, false
     elseif u₁reduced
         false, true
+        # true, false
     else
         true, true
     end

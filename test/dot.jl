@@ -180,35 +180,35 @@ using Test
     #       end);
     # ls = LoopVectorization.loopset(q)
 
-    function pi(x, y)
+    function mcpi(x, y)
         acc = 0
         @inbounds @simd for i ∈ eachindex(x)
             acc += (x[i]*x[i] + y[i]*y[i]) < 1.0
         end
         4acc/length(x)
     end
-    function piavx(x, y)
+    function mcpiavx(x, y)
         acc = 0
         @avx for i ∈ eachindex(x)
             acc += (x[i]*x[i] + y[i]*y[i]) < 1.0
         end
         4acc/length(x)
     end
-    function piavx_u4(x, y)
+    function mcpiavx_u4(x, y)
         acc = 0
         @avx unroll=4 for i ∈ eachindex(x)
             acc += (x[i]*x[i] + y[i]*y[i]) < 1.0
         end
         4acc/length(x)
     end
-    function pi_avx(x, y)
+    function mcpi_avx(x, y)
         acc = 0
         @_avx for i ∈ eachindex(x)
             acc += (x[i]*x[i] + y[i]*y[i]) < 1.0
         end
         4acc/length(x)
     end
-    function pi_avx_u4(x, y)
+    function mcpi_avx_u4(x, y)
         acc = 0
         @_avx unroll=4 for i ∈ eachindex(x)
             acc += (x[i]*x[i] + y[i]*y[i]) < 1.0
@@ -291,11 +291,11 @@ using Test
         @test dot33(a,b) ≈ @view(a[1:33])' * @view(b[1:33])
 
         if T <: Union{Float32,Float64}
-            πest = T(pi(a, b))
-            @test πest == piavx(a, b)
-            @test πest == piavx_u4(a, b)
-            @test πest == pi_avx(a, b)
-            @test πest == pi_avx_u4(a, b)
+            πest = T(mcpi(a, b))
+            @test πest == mcpiavx(a, b)
+            @test πest == mcpiavx_u4(a, b)
+            @test πest == mcpi_avx(a, b)
+            @test πest == mcpi_avx_u4(a, b)
         end
 
         if !(!Bool(LoopVectorization.VectorizationBase.has_feature(Val(:x86_64_avx2))) && T === Int32)

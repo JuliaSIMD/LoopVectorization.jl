@@ -54,7 +54,7 @@ function lower_zero!(
     # if !opu₁
     #     opu₁ = u₁loopsym ∈ reducedchildren(op)
     # end
-    mvar = Symbol(mvar, '_', opu₁ ? u₁ : 1)
+    mvar = Symbol(mvar, '_', Core.ifelse(opu₁, u₁, 1))
     typeT = typeof_sym(ls, op, zerotyp)
     # TODO: make should_broadcast_op handle everything.
     if isvectorized(op) || vectorized ∈ reducedchildren(op) || vectorized ∈ reduceddependencies(op) || should_broadcast_op(op)
@@ -96,7 +96,7 @@ function lower_constant!(
     @unpack u₁, u₁loopsym, u₂loopsym, vectorized, u₂max, suffix = ua
     mvar, opu₁, opu₂ = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, u₂max, suffix)
     (!(suffix === nothing)) && !opu₂ && suffix > 0 && return
-    mvar = Symbol(mvar, '_', u₁)
+    mvar = Symbol(mvar, '_', Core.ifelse(opu₁, u₁, 1))
     instruction = op.instruction
     constsym = instruction.instr
     # constsym = Symbol(instruction.instr, '_', 1)

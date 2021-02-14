@@ -88,8 +88,7 @@ end
 
 vecunrolllen(::Type{VecUnroll{N,W,T,V}}) where {N,W,T,V} = (N::Int + 1)
 vecunrolllen(_) = -1
-function ifelselastexpr(hasf::Bool, M::Int, vargtypes, K::Int, maskearly::Bool)
-    t = Expr(:tuple)
+function ifelselastexpr(hasf::Bool, M::Int, vargtypes, K::Int, S::Int, maskearly::Bool)
     q = Expr(:block, Expr(:meta,:inline))
     vargs = map(k -> Symbol(:varg_,k), 1:K)
     lengths = Vector{Int}(undef, K);
@@ -109,6 +108,20 @@ function ifelselastexpr(hasf::Bool, M::Int, vargtypes, K::Int, maskearly::Bool)
     end
     N = last(lengths)
     start = (hasf | maskearly) ? 1 : M
+    Sreduced = (S > 0) && (lengths[S] == -1)
+    if Sreduced
+        maxlen = maximum(lengths)
+        if maxlen == -1
+            Sreduced = false
+            t = Expr(:tuple)
+        else
+            hasf || throw(ArgumentError("Argument reduction only supported for `ifelse(last/partial)(f::Function, args...)`"))
+            M = maxlen
+            t = q
+        end
+    else
+        t = Expr(:tuple)
+    end
     for m ∈ 1:start-1
         push!(t.args, :(getfield($(vargs[1]), $m, false)))
     end
@@ -126,12 +139,16 @@ function ifelselastexpr(hasf::Bool, M::Int, vargtypes, K::Int, maskearly::Bool)
                 push!(call.args, :(getfield($(vargs[k]), $m, false)))
             end
         end
-        if N == -1
+        if Sreduced
+            push!(t.args, Expr(:(=), vargs[S], call))
+        elseif N == -1
             push!(q.args, call)
             return q
+        else
+            push!(t.args, call)
         end
-        push!(t.args, call)
     end
+    Sreduced && return q
     for m ∈ M+1:N
         push!(t.args, :(getfield($(vargs[K]), $m, false)))
     end
@@ -139,28 +156,34 @@ function ifelselastexpr(hasf::Bool, M::Int, vargtypes, K::Int, maskearly::Bool)
     push!(q.args, :(VecUnroll($t)))
     q
 end
-@generated function ifelselast(f::F, m::Mask{W}, ::StaticInt{M}, vargs::Vararg{Any,K}) where {F,W,K,M}
-    # 1+1
-    ifelselastexpr(true, M, vargs, K, false)
+@generated function ifelselast(f::F, m::Mask{W}, ::StaticInt{M}, ::StaticInt{S}, vargs::Vararg{Any,K}) where {F,W,K,M,S}
+    1+1
+    ifelselastexpr(true, M, vargs, K, S, false)
 end
-@generated function ifelselast(m::Mask{W}, ::StaticInt{M}, varg_1::V1, varg_2::V2) where {W,V1,V2,M}
-    # 1+1
-    ifelselastexpr(false, M, (V1,V2), 2, false)
+@generated function ifelselast(m::Mask{W}, ::StaticInt{M}, ::StaticInt{S}, varg_1::V1, varg_2::V2) where {W,V1,V2,M,S}
+    1+1
+    ifelselastexpr(false, M, (V1,V2), 2, S, false)
 end
-@generated function ifelsepartial(f::F, m::Mask{W}, ::StaticInt{M}, vargs::Vararg{Any,K}) where {F,W,K,M}
-    # 1+1
-    ifelselastexpr(true, M, vargs, K, true)
+@generated function ifelsepartial(f::F, m::Mask{W}, ::StaticInt{M}, ::StaticInt{S}, vargs::Vararg{Any,K}) where {F,W,K,M,S}
+    1+1
+    ifelselastexpr(true, M, vargs, K, S, true)
 end
-@generated function ifelsepartial(m::Mask{W}, ::StaticInt{M}, varg_1::V1, varg_2::V2) where {W,V1,V2,M}
-    # 1+1
-    ifelselastexpr(false, M, (V1,V2), 2, true)
+@generated function ifelsepartial(m::Mask{W}, ::StaticInt{M}, ::StaticInt{S}, varg_1::V1, varg_2::V2) where {W,V1,V2,M,S}
+    1+1
+    ifelselastexpr(false, M, (V1,V2), 2, S, true)
 end
-@generated function partialmap(f::F, default::D, ::StaticInt{M}, vargs::Vararg{Any,K}) where {F,M,K,D}
+# `S` is the ind to replace with the return value of previous invocation ("S" for "self") if reducing
+@generated function partialmap(f::F, default::D, ::StaticInt{M}, ::StaticInt{S}, vargs::Vararg{Any,K}) where {F,M,K,D,S}
     lengths = Vector{Int}(undef, K);
     q = Expr(:block, Expr(:meta,:inline))
     syms = Vector{Symbol}(undef, K)
+    isnotpartial = true
     for k ∈ 1:K
-        lengths[k] = l = vecunrolllen(vargs[k])
+        l = vecunrolllen(vargs[k])
+        # if l
+        kisnotpartial = ((l ≡ -1) & (k ≢ S)) | (l ≡ M)
+        isnotpartial &= kisnotpartial
+        lengths[k] = l
         @assert (l == -1) || (l ≥ M)
         syms[k] = symk = Symbol(:vargs_,k)
         extractq = :(getfield(vargs, $k, false))
@@ -169,15 +192,29 @@ end
         end
         push!(q.args, :($symk = $extractq))
     end
+    if isnotpartial
+        q =  Expr(:call, :f)
+        for k ∈ 1:K
+            push!(q.args, :(getfield(vargs, $k, false)))
+        end
+        return Expr(:block, Expr(:meta, :inline), q)
+    end
     N = maximum(lengths)
     Dlen = vecunrolllen(D)
-    @assert N == Dlen
-    if Dlen == -1
-        @assert M == 1
+    Sreduced = (S > 0) && (lengths[S] == -1) && N != -1
+    # @show N, M, Sreduced
+    if Sreduced
+        M = N
+        t = q
     else
-        push!(q.args, :(dd = data(default)))
+        @assert (N == Dlen)
+        if Dlen == -1
+            @assert (M == 1)
+        else
+            push!(q.args, :(dd = data(default)))
+        end
+        t = Expr(:tuple)
     end
-    t = Expr(:tuple)
     for m ∈ 1:M
         call = Expr(:call, :f)
         for k ∈ 1:K
@@ -191,8 +228,13 @@ end
             push!(q.args, call)
             return q
         end
-        push!(t.args, call)
+        if Sreduced
+            push!(t.args, Expr(:(=), syms[S], call))
+        else
+            push!(t.args, call)
+        end
     end
+    Sreduced && return q
     for m ∈ M+1:N 
         push!(t.args, :(getfield(dd, $m, false)))
     end
@@ -381,7 +423,7 @@ function lower_compute!(
     #     @show parent_name
     # end
     # @show selfopname, varsym, mvar, mangledvar(op)
-    selfdep = false
+    selfdep = 0
     # showexpr = false
     for n ∈ 1:nparents
         opp = parents_op[n]
@@ -389,8 +431,10 @@ function lower_compute!(
             loopval = first(loopdependencies(opp))
             add_loopvalue!(instrcall, loopval, ua, u₁)
         elseif name(opp) === name(op)
-            selfdep = true
-            if ((isvectorized(first(parents_op)) && !isvectorized(op)) && !dependent_outer_reducts(ls, op)) || (parents_u₁syms[n] != u₁unrolledsym) || (parents_u₂syms[n] != u₂unrolledsym)
+            selfdep = n
+            if ((isvectorized(first(parents_op)) && !isvectorized(op)) && !dependent_outer_reducts(ls, op)) ||
+                (parents_u₁syms[n] != u₁unrolledsym) || (parents_u₂syms[n] != u₂unrolledsym)
+                
                 selfopname = parent_op_name(ls, parents_op, n, modsuffix, suffix_, parents_u₁syms, parents_u₂syms, u₁, opisvectorized, tiledouterreduction)
                 push!(instrcall.args, selfopname)
             else
@@ -405,6 +449,7 @@ function lower_compute!(
             push!(instrcall.args, parent)
         end
     end
+    selfdepreduce = ifelse(((!u₁unrolledsym) & isu₁unrolled(op)) & (u₁ > 1), selfdep, 0)
     if maskreduct
         ifelsefunc = if ls.unrollspecification[].u₁ == 1
             :ifelse # don't need to be fancy
@@ -417,28 +462,40 @@ function lower_compute!(
             pushfirst!(instrcall.args, lv(ifelsefunc))
             # showexpr = true
             insert!(instrcall.args, 3, mask)
-            ifelsefunc === :ifelse || insert!(instrcall.args, 4, staticexpr(u₁))
+            if !(ifelsefunc === :ifelse)
+                insert!(instrcall.args, 4, staticexpr(u₁))
+                insert!(instrcall.args, 5, staticexpr(selfdepreduce))
+            end
         elseif all(in(loopdependencies(op)), reduceddeps) || any(opp -> mangledvar(opp) === mangledvar(op), parents_op)
-            if ifelsefunc === :ifelse
+            # Here, we are evaluating the function, and then `ifelse`-ing it with `hasf == false`.
+            # That means we still need to adjust the `instrcall` in case we're reducing/accumulating across the unroll
+            if ifelsefunc ≡ :ifelse # ifelse means it's unrolled by 1, no need
                 push!(q.args, Expr(:(=), varsym, Expr(:call, lv(ifelsefunc), mask, instrcall, selfopname)))
+            elseif ((u₁ ≡ 1) | (selfdepreduce ≡ 0))
+                # if the current unroll is 1, no need to accumulate. Same if there is no selfdepreduce, but there has to be if we're here?
+                push!(q.args, Expr(:(=), varsym, Expr(:call, lv(ifelsefunc), mask, staticexpr(u₁), staticexpr(selfdepreduce), instrcall, selfopname)))
             else
-                push!(q.args, Expr(:(=), varsym, Expr(:call, lv(ifelsefunc), mask, staticexpr(u₁), instrcall, selfopname)))
+                make_partial_map!(instrcall, selfopname, u₁, selfdepreduce)
+                # partialmap accumulates
+                push!(q.args, Expr(:(=), varsym, Expr(:call, lv(:ifelse), mask, instrcall, selfopname)))
             end
             return
-        elseif selfdep
+        elseif selfdep != 0
             # @show op, isouterreduct, maskreduct, instr
-            pushfirst!(instrcall.args, lv(:partialmap))
-            insert!(instrcall.args, 3, selfopname)
-            insert!(instrcall.args, 4, staticexpr(u₁))
+            make_partial_map!(instrcall, selfopname, u₁, selfdepreduce)
         end
-    elseif isouterreduct && selfdep && (opunrolled) && (u₁ < ls.unrollspecification[].u₁)
-        # @show op, isouterreduct, maskreduct, instr
-        # needed for cases like `myselfdotavx(A')`, where we have an unrolled reduction
-        # 
-        # names could disagree
-        pushfirst!(instrcall.args, lv(:partialmap))
-        insert!(instrcall.args, 3, selfopname)
-        insert!(instrcall.args, 4, staticexpr(u₁))
+    elseif selfdep != 0 &&
+        (isouterreduct && (opunrolled) && (u₁ < ls.unrollspecification[].u₁)) ||
+        (isreduct & (u₁ > 1) & (!u₁unrolledsym) & isu₁unrolled(op))
+        # first possibility (`isouterreduct && opunrolled && (u₁ < ls.unrollspecification[].u₁)`):
+        # checks if we're in the "reduct" part of an outer reduction
+        #
+        # second possibility (`(isreduct & (u₁ > 1) & (!u₁unrolledsym) & isu₁unrolled(op))`):
+        # if the operation is repeated across u₁ (indicated by `isu₁unrolled(op)`) but
+        # the variables are not correspondingly replicated across u₁ (indicated by `!u₁unrolledsym`)
+        # then we need to accumulate it.
+        make_partial_map!(instrcall, selfopname, u₁, selfdepreduce)
+    # elseif 
     end
     if instr.instr === :identity && isone(length(parents_op))
         push!(q.args, Expr(:(=), varsym, instrcall.args[2]))
@@ -449,5 +506,10 @@ function lower_compute!(
     end
     # end
 end
-
-
+function make_partial_map!(instrcall, selfopname, u₁, selfdep)
+    pushfirst!(instrcall.args, lv(:partialmap))
+    insert!(instrcall.args, 3, selfopname)
+    insert!(instrcall.args, 4, staticexpr(u₁))
+    insert!(instrcall.args, 5, staticexpr(selfdep))
+    nothing
+end

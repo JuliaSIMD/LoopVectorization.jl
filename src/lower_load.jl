@@ -236,18 +236,21 @@ function indisvectorized(ls::LoopSet, ind::Symbol, vectorized::Symbol)
     end
     false
 end
-
+@inline firstunroll(vu::VecUnroll) = getfield(getfield(vu,:data),1,false)
+@inline firstunroll(x) = x
 function lower_load_for_optranslation!(
     q::Expr, op::Operation, ls::LoopSet, td::UnrollArgs{Int}, mask::Union{Nothing,Symbol,Unsigned}, translationind::Int
 )
     @unpack u₁, u₁loopsym, u₂loopsym, vectorized, u₂max, suffix = td
     iszero(suffix) || return
 
-    gespinds = mem_offset(op, UnrollArgs(td, 0), indices_calculated_by_pointer_offsets(ls, op.ref), false)
+    gespinds = mem_offset(op, UnrollArgs(td, u₁), indices_calculated_by_pointer_offsets(ls, op.ref), false)
     ptr = vptr(op)
     gptr = Symbol(ptr, "##GESPED##")
     for i ∈ eachindex(gespinds.args)
-        if i != translationind
+        if i == translationind
+            gespinds.args[i] = Expr(:call, lv(:firstunroll), gespinds.args[i])
+        else
             gespinds.args[i] = Expr(:call, lv(:data), gespinds.args[i])
         end
     end    
