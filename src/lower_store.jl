@@ -1,4 +1,3 @@
-
 function storeinstr_preprend(op::Operation, vectorized::Symbol)
     # defaultstoreop = :vstore!
     # defaultstoreop = :vnoaliasstore!
@@ -43,138 +42,14 @@ function reduce_expr!(q::Expr, toreduct::Symbol, instr::Instruction, u₁::Int, 
     nothing
 end
 
-# pvariable_name(op::Operation, ::Nothing) = mangledvar(first(parents(op)))
-# pvariable_name(op::Operation, ::Nothing, ::Symbol) = mangledvar(first(parents(op)))
-# pvariable_name(op::Operation, suffix) = Symbol(pvariable_name(op, nothing), suffix, :_)
-# function pvariable_name(op::Operation, suffix, tiled::Symbol)
-#     parent = first(parents(op))
-#     mname = mangledvar(parent)
-#     tiled ∈ loopdependencies(parent) ? Symbol(mname, suffix, :_) : mname
-# end
-
-
-# function lower_conditionalstore_scalar!(
-#     q::Expr, op::Operation, ua::UnrollArgs, mask::Union{Nothing,Symbol,Unsigned}, inds_calc_by_ptr_offset::Vector{Bool}, rsi::Int
-# )
-#     @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = ua
-#     mvar, opu₁, opu₂ = variable_name_and_unrolled(first(parents(op)), u₁loopsym, u₂loopsym, suffix)
-#     # var = pvariable_name(op, suffix, tiled)
-#     cond = last(parents(op))
-#     condvar, condu₁ = condvarname_and_unroll(cond, u₁loopsym, u₂loopsym, suffix, opu₂)
-#     loopdeps = loopdependencies(op)
-#     opu₁ = u₁loopsym ∈ loopdeps
-#     ptr = vptr(op)
-#     storef = storeinstr(op, vectorized)
-#     falseexpr = Expr(:call, lv(:False)); trueexpr = Expr(:call, lv(:True)); rs = staticexpr(rsi);
-#     for u ∈ 0:u₁-1
-#         varname = varassignname(mvar, u, opu₁)
-#         condvarname = varassignname(condvar, u, condu₁)
-#         td = UnrollArgs(ua, u)
-#         storecall = Expr(:call, storef, ptr, varname, mem_offset_u(op, td, inds_calc_by_ptr_offset), falseexpr, trueexpr, falseexpr, rs)
-#         push!(q.args, Expr(:&&, condvarname, storecall))
-#     end
-#     nothing
-# end
-# function lower_conditionalstore_vectorized!(
-#     q::Expr, op::Operation, ua::UnrollArgs, mask::Union{Nothing,Symbol,Unsigned}, isunrolled::Bool, inds_calc_by_ptr_offset::Vector{Bool}, rsi::Int
-# )
-#     @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = ua
-#     loopdeps = loopdependencies(op)
-#     @assert vectorized ∈ loopdeps
-#     mvar, opu₁, opu₂ = variable_name_and_unrolled(first(parents(op)), u₁loopsym, u₂loopsym, suffix)
-#     # var = pvariable_name(op, suffix, tiled)
-#     if isunrolled
-#         umin = 0
-#         U = u₁
-#     else
-#         umin = -1
-#         U = 0
-#     end
-#     ptr = vptr(op)
-#     vecnotunrolled = vectorized !== u₁loopsym
-#     cond = last(parents(op))
-#     condvar, condu₁ = condvarname_and_unroll(cond, u₁loopsym, u₂loopsym, suffix, opu₂)
-#     # @show parents(op) cond condvar
-#     storef = storeinstr(op, vectorized)
-#     falseexpr = Expr(:call, lv(:False)); trueexpr = Expr(:call, lv(:True)); rs = staticexpr(rsi);
-#     for u ∈ 0:U-1
-#         td = UnrollArgs(ua, u)
-#         name, mo = name_memoffset(mvar, op, td, opu₁, inds_calc_by_ptr_offset)
-#         condvarname = varassignname(condvar, u, condu₁)
-#         instrcall = Expr(:call, storef, ptr, name, mo)
-#         if mask !== nothing && (vecnotunrolled || u == U - 1)
-#             push!(instrcall.args, Expr(:call, :&, condvarname, mask))
-#         else
-#             push!(instrcall.args, condvarname)
-#         end
-#         push!(instrcall.args, falseexpr, trueexpr, falseexpr, rs)
-#         push!(q.args, instrcall)
-#     end
-# end
-
-# function lower_store_scalar!(
-#     q::Expr, op::Operation, ua::UnrollArgs, mask::Union{Nothing,Symbol,Unsigned}, inds_calc_by_ptr_offset::Vector{Bool}, rsi::Int
-# )
-#     @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = ua
-#     mvar, opu₁, opu₂ = variable_name_and_unrolled(first(parents(op)), u₁loopsym, u₂loopsym, suffix)
-#     ptr = vptr(op)
-#     # var = pvariable_name(op, suffix, tiled)
-#     # parentisunrolled = unrolled ∈ loopdependencies(first(parents(op)))
-#     storef = storeinstr(op, vectorized)
-#     falseexpr = Expr(:call, lv(:False)); trueexpr = Expr(:call, lv(:True)); rs = staticexpr(rsi);
-#     for u ∈ 0:u₁-1
-#         varname = varassignname(mvar, u, opu₁)
-#         td = UnrollArgs(ua, u)
-#         storecall = Expr(:call, storef, ptr, varname, mem_offset_u(op, td, inds_calc_by_ptr_offset), falseexpr, trueexpr, falseexpr, rs)
-#         push!(q.args, storecall)
-#     end
-#     nothing
-# end
-# function lower_store_vectorized!(
-#     q::Expr, op::Operation, ua::UnrollArgs, mask::Union{Nothing,Symbol,Unsigned}, isunrolled::Bool, inds_calc_by_ptr_offset::Vector{Bool}, rsi::Int
-# )
-#     @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = ua
-#     loopdeps = loopdependencies(op)
-#     @assert vectorized ∈ loopdeps
-#     mvar, opu₁, opu₂ = variable_name_and_unrolled(first(parents(op)), u₁loopsym, u₂loopsym, suffix)
-#     ptr = vptr(op)
-#     # var = pvariable_name(op, suffix, tiled)
-#     # parentisunrolled = unrolled ∈ loopdependencies(first(parents(op)))
-#     if isunrolled
-#         umin = 0
-#         U = u₁
-#     else
-#         umin = -1
-#         U = 0
-#     end
-#     vecnotunrolled = vectorized !== u₁loopsym
-#     storef = storeinstr(op, vectorized)
-#     falseexpr = Expr(:call, lv(:False)); trueexpr = Expr(:call, lv(:True)); rs = staticexpr(rsi);
-#     for u ∈ umin:U-1
-#         td = UnrollArgs(ua, u)
-#         name, mo = name_memoffset(mvar, op, td, opu₁, inds_calc_by_ptr_offset)
-#         instrcall = Expr(:call, storef, ptr, name, mo)
-#         if mask !== nothing && (vecnotunrolled || u == U - 1)
-#             push!(instrcall.args, mask)
-#         end
-#         push!(instrcall.args, falseexpr, trueexpr, falseexpr, rs)
-#         push!(q.args, instrcall)
-#     end
-# end
-# function _lower_store_nonloopindex!()
-    
-# end
-
 function lower_store!(
-    q::Expr, ls::LoopSet, op::Operation, ua::UnrollArgs, mask::Union{Nothing,Symbol,Unsigned} = nothing
+    q::Expr, ls::LoopSet, op::Operation, ua::UnrollArgs, mask::Union{Nothing,Symbol,Unsigned},
+    reductfunc::Symbol = storeinstr_preprend(op, ua.vectorized), inds_calc_by_ptr_offset = indices_calculated_by_pointer_offsets(ls, op.ref)
 )
     @unpack u₁, u₁loopsym, u₂loopsym, vectorized, u₂max, suffix = ua
     isunrolled₁ = isu₁unrolled(op) #u₁loopsym ∈ loopdependencies(op)
-    # isunrolled₂ = isu₂unrolled(op)
-    inds_calc_by_ptr_offset = indices_calculated_by_pointer_offsets(ls, op.ref)
+    # isunrolled₂ = isu₂unrolled(op)    
     falseexpr = Expr(:call, lv(:False)); trueexpr = Expr(:call, lv(:True)); rs = staticexpr(reg_size(ls));
-
-    reductfunc = storeinstr_preprend(op, vectorized)
     opp = first(parents(op))
     if (opp.instruction.instr === reductfunc) && isone(length(parents(opp)))
         opp = only(parents(opp))
@@ -189,12 +64,12 @@ function lower_store!(
 
     if all(op.ref.loopedindex)
         inds = unrolledindex(op, ua, mask, inds_calc_by_ptr_offset)
-        
+
         storeexpr = if reductfunc === Symbol("")
             Expr(:call, lv(:vstore!), vptr(op), mvar, inds)
         else
             Expr(:call, lv(:vstore!), lv(reductfunc), vptr(op), mvar, inds)
-        end    
+        end
         add_memory_mask!(storeexpr, op, ua, mask)
         push!(storeexpr.args, falseexpr, trueexpr, falseexpr, rs)
         push!(q.args, storeexpr)
@@ -208,7 +83,7 @@ function lower_store!(
                 Expr(:call, lv(:vstore!), vptr(op), mvaru, inds)
             else
                 Expr(:call, lv(:vstore!), lv(reductfunc), vptr(op), mvaru, inds)
-            end    
+            end
             if (mask === nothing) || (u == u₁) || isvectorized(op)
                 add_memory_mask!(storeexpr, op, ua, mask)
             else
@@ -223,7 +98,7 @@ function lower_store!(
             Expr(:call, lv(:vstore!), vptr(op), mvar, inds)
         else
             Expr(:call, lv(:vstore!), lv(reductfunc), vptr(op), mvar, inds)
-        end    
+        end
         add_memory_mask!(storeexpr, op, ua, mask)
         push!(storeexpr.args, falseexpr, trueexpr, falseexpr, rs)
         push!(q.args, storeexpr)
@@ -231,4 +106,66 @@ function lower_store!(
     nothing
 end
 
+function lower_tiled_store!(
+    blockq::Expr, opsv1::Vector{Operation}, opsv2::Vector{Operation}, ls::LoopSet, unrollsyms::UnrollSymbols, u₁::Int, u₂::Int, mask
+)
+    ua = UnrollArgs(u₁, unrollsyms, u₂, u₂)
+    for opsv ∈ (opsv1, opsv2)
+        for op ∈ opsv
+            lower_tiled_store!(blockq, op, ls, unrollsyms, u₁, u₂, mask)
+        end
+    end
+end
+# VectorizationBase implements optimizations for certain grouped stores
+# thus we group stores together here to allow for these possibilities.
+# (In particular, it tries to replace scatters with shuffles when there are groups
+#   of stores offset from one another.)
+function lower_tiled_store!(blockq::Expr, op::Operation, ls::LoopSet, unrollsyms::UnrollSymbols, u₁::Int, u₂::Int, mask)
+    @unpack u₁loopsym, u₂loopsym, vectorized = unrollsyms
+    reductfunc = storeinstr_preprend(op, vectorized)
+    inds_calc_by_ptr_offset = indices_calculated_by_pointer_offsets(ls, op.ref)
 
+    if (!((reductfunc === Symbol("")) && all(op.ref.loopedindex))) || (u₂ ≤ 1) || isconditionalmemop(op)
+        # If we have a reductfunc, we're using a reducing store instead of a contiuguous or shuffle store anyway
+        # so no benefit to being able to handle that case here, vs just calling the default `lower_store!` method
+        for t ∈ 0:u₂-1
+            unrollargs = UnrollArgs(u₁, unrollsyms, u₂, t)
+            lower_store!(blockq, ls, op, unrollargs, mask, reductfunc, inds_calc_by_ptr_offset)
+        end
+        return
+    end
+    opp = first(parents(op))
+    if (opp.instruction.instr === reductfunc) && isone(length(parents(opp)))
+        throw("Operation $opp's instruction is $reductfunc, shouldn't be able to reach here.")
+        # opp = only(parents(opp))
+    end
+    isu₁, isu₂ = isunrolled_sym(opp, u₁loopsym, u₂loopsym, u₂)
+    @assert isu₂
+    # It's reasonable forthis to be `!isu₁`
+    u = isu₁ ? u₁ : 1
+    tup = Expr(:tuple)
+    for t ∈ 0:u₂-1
+        mvar = Symbol(variable_name(opp, t), '_', u)
+        push!(tup.args, mvar)
+    end
+    vut = :(VecUnroll($tup)) # `VecUnroll` of `VecUnroll`s
+    ua = UnrollArgs(u₁, unrollsyms, u₂, 0)
+    inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false)
+    unrollcurl₂ = unrolled_curly(op, u₂, u₂loopsym, vectorized, mask)
+    falseexpr = Expr(:call, lv(:False)); trueexpr = Expr(:call, lv(:True)); rs = staticexpr(reg_size(ls));
+    if isu₁ && u₁ > 1 # both unrolled
+        unrollcurl₁ = unrolled_curly(op, u₁, u₁loopsym, vectorized, mask)
+        inds = Expr(:call, unrollcurl₁, inds)
+    end
+    uinds = Expr(:call, unrollcurl₂, inds)
+    storeexpr = Expr(:call, lv(:vstore!), vptr(op), vut, uinds)
+    if mask !== nothing && isvectorized(op)
+        # add_memory_mask!(storeexpr, op, ua, mask)
+        # we checked for `isconditionalmemop` earlier, so we skip this check
+        # and just directly take the branch in `add_memory_mask!`
+        push!(storeexpr.args, mask)
+    end
+    push!(storeexpr.args, falseexpr, trueexpr, falseexpr, rs)
+    push!(blockq.args, storeexpr)
+    nothing
+end

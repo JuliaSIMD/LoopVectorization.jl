@@ -81,13 +81,13 @@ function mem_offset(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Vect
     ret
 end
 isconditionalmemop(op::Operation) = (instruction(op).instr === :conditionalload) || (instruction(op).instr === :conditionalstore!)
-function unrolledindex(op::Operation, td::UnrollArgs, mask, inds_calc_by_ptr_offset::Vector{Bool})
+function unrolled_curly(op::Operation, u₁::Int, u₁loopsym::Symbol, vectorized::Symbol, mask)
     indices = getindicesonly(op)
     loopedindex = op.ref.loopedindex
     # @assert all(loopedindex)
-    @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = td
+    # @unpack u₁, u₁loopsym, vectorized = td
     # @show vptr(op), inds_calc_by_ptr_offset
-    isone(u₁) && return mem_offset_u(op, td, inds_calc_by_ptr_offset, true)
+    # isone(u₁) && return mem_offset_u(op, td, inds_calc_by_ptr_offset, true)
     AV = AU = -1
     for (n,ind) ∈ enumerate(indices)
         if ind === vectorized
@@ -97,10 +97,10 @@ function unrolledindex(op::Operation, td::UnrollArgs, mask, inds_calc_by_ptr_off
             AU = n
         end
     end
-    if AU == -1
-        return mem_offset_u(op, td, inds_calc_by_ptr_offset, true)
-    end
-    ind = mem_offset_u(op, td, inds_calc_by_ptr_offset, false)
+    # if AU == -1
+    #     return mem_offset_u(op, td, inds_calc_by_ptr_offset, true)
+    # end
+    # ind = mem_offset_u(op, td, inds_calc_by_ptr_offset, false)
     vecnotunrolled = AU != AV
     conditional_memory_op = isconditionalmemop(op)
     if conditional_memory_op || (mask !== nothing)
@@ -118,13 +118,23 @@ function unrolledindex(op::Operation, td::UnrollArgs, mask, inds_calc_by_ptr_off
     if AV > 0
         intvecsym = :(Int($VECTORWIDTHSYMBOL))
         if vecnotunrolled
-            Expr(:call, Expr(:curly, lv(:Unroll), AU, 1, u₁, AV, intvecsym, M, 1), ind)
+            # Expr(:call, Expr(:curly, lv(:Unroll), AU, 1, u₁, AV, intvecsym, M, 1), ind)
+            Expr(:curly, lv(:Unroll), AU, 1, u₁, AV, intvecsym, M, 1)
         else
-            Expr(:call, Expr(:curly, lv(:Unroll), AU, intvecsym, u₁, AV, intvecsym, M, 1), ind)
+            Expr(:curly, lv(:Unroll), AU, intvecsym, u₁, AV, intvecsym, M, 1)
         end
     else
-        Expr(:call, Expr(:curly, lv(:Unroll), AU, 1, u₁, AV, 1, M, 1), ind)
+        Expr(:curly, lv(:Unroll), AU, 1, u₁, AV, 1, M, 1)
     end
+end
+function unrolledindex(op::Operation, td::UnrollArgs, mask, inds_calc_by_ptr_offset::Vector{Bool})
+    @unpack u₁, u₁loopsym, vectorized = td
+    isone(u₁) && return mem_offset_u(op, td, inds_calc_by_ptr_offset, true)
+    any(==(u₁loopsym), getindicesonly(op)) || return mem_offset_u(op, td, inds_calc_by_ptr_offset, true)
+    
+    unrollcurl = unrolled_curly(op, u₁, u₁loopsym, vectorized, mask)
+    ind = mem_offset_u(op, td, inds_calc_by_ptr_offset, false)
+    Expr(:call, unrollcurl, ind)
 end
 
 function add_vectorized_offset!(ret::Expr, ind, offset, incr, _mm::Bool)

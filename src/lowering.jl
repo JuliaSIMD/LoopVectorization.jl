@@ -1,4 +1,3 @@
-
 # struct TileDescription
     # vectorized::Symbol
     # u₁loop::Symbol
@@ -78,61 +77,46 @@ function lower_block(
     u₁ = n == u₁loopnum ? UF : u₁
     dontmaskfirsttiles = !isnothing(mask) && vectorizedloopnum == u₂loopnum
     blockq = Expr(:block)
-    delay_u₁ = true
-    # delay_u₁ = false
-    dontdelayat = nothing#4
     for prepost ∈ 1:2
         # !u₁ && !u₂
         lower!(blockq, ops[1,1,prepost,n], ls, unrollsyms, u₁, u₂, nothing, mask)
-        if !delay_u₁ || u₁ == dontdelayat
-            lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, u₂, nothing, mask)
-        end
         opsv1 = ops[1,2,prepost,n]
         opsv2 = ops[2,2,prepost,n]
         if length(opsv1) + length(opsv2) > 0
-            # if u₁ == 3
-                # lower!(blockq, ops[2,1,prepost,n], vectorized, ls, u₁loop, u₂loop, u₁, u₂, nothing, mask)
-            # end
-            for store ∈ (false,true)
-                # let store = nothing
-                nstores = 0
-                iszero(length(opsv1)) || (nstores += sum(isstore, opsv1))
-                iszero(length(opsv2)) || (nstores += sum(isstore, opsv2))
-                if delay_u₁ && !store && length(opsv1) + length(opsv2) == nstores
-                    u₁ != dontdelayat && lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, u₂, nothing, mask) # for u ∈ 0:u₁-1     
-                    continue
+            nstores = 0
+            iszero(length(opsv1)) || (nstores += sum(isstore, opsv1))
+            iszero(length(opsv2)) || (nstores += sum(isstore, opsv2))
+            # if nstores
+            if (length(opsv1) + length(opsv2) == nstores) # all_u₂_ops_store
+                lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, u₂, nothing, mask) # for u ∈ 0:u₁-1
+                lower_tiled_store!(blockq, opsv1, opsv2, ls, unrollsyms, u₁, u₂, mask)
+            else
+                for store ∈ (false,true)
+                    for t ∈ 0:u₂-1
+                        if dontmaskfirsttiles && t < u₂ - 1 # !u₁ &&  u₂
+                            lower!(blockq, opsv1, ls, unrollsyms, u₁, u₂, t, nothing, store)
+                        else # !u₁ &&  u₂
+                            lower!(blockq, opsv1, ls, unrollsyms, u₁, u₂, t, mask, store)
+                        end
+                        if iszero(t) && !store #  u₁ && !u₂
+                            # for u ∈ 0:u₁-1
+                            lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, u₂, nothing, mask)
+                            # end
+                        end
+                        if dontmaskfirsttiles && t < u₂ - 1 #  u₁ && u₂
+                            # for u ∈ 0:u₁-1
+                            lower!(blockq, opsv2, ls, unrollsyms, u₁, u₂, t, nothing, store)
+                            # end
+                        else #  u₁ && u₂
+                            # for u ∈ 0:u₁-1
+                            lower!(blockq, opsv2, ls, unrollsyms, u₁, u₂, t, mask, store)
+                            # end
+                        end
+                    end
+                    nstores == 0 && break
                 end
-                for t ∈ 0:u₂-1
-                    # if t == 0
-                    #     push!(blockq.args, Expr(:(=), u₂loop, tiledsym(u₂loop)))
-                    # elseif u₂loopnum == vectorizedloopnum
-                    #     push!(blockq.args, Expr(:(=), u₂loop, Expr(:call, lv(:vadd_fast), VECTORWIDTHSYMBOL, staticexpr(u₂loop))))
-                    # else
-                    #     push!(blockq.args, Expr(:+=, u₂loop, 1))
-                    # end
-                    if dontmaskfirsttiles && t < u₂ - 1 # !u₁ &&  u₂
-                        lower!(blockq, opsv1, ls, unrollsyms, u₁, u₂, t, nothing, store)
-                    else # !u₁ &&  u₂
-                        lower!(blockq, opsv1, ls, unrollsyms, u₁, u₂, t, mask, store)
-                    end
-                    if delay_u₁ && iszero(t) && !store && u₁ != dontdelayat #  u₁ && !u₂
-                        # for u ∈ 0:u₁-1     
-                        lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, u₂, nothing, mask)
-                        # end
-                    end
-                    if dontmaskfirsttiles && t < u₂ - 1 #  u₁ && u₂
-                        # for u ∈ 0:u₁-1
-                        lower!(blockq, opsv2, ls, unrollsyms, u₁, u₂, t, nothing, store)
-                        # end
-                    else #  u₁ && u₂
-                        # for u ∈ 0:u₁-1 
-                        lower!(blockq, opsv2, ls, unrollsyms, u₁, u₂, t, mask, store)
-                        # end
-                    end
-                end
-                nstores == 0 && break
             end
-        elseif delay_u₁ && u₁ != dontdelayat
+        else
             # for u ∈ 0:u₁-1     #  u₁ && !u₂
             lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, u₂, nothing, mask)
             # end
@@ -301,7 +285,7 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
     #     # return lower_llvm_unroll(ls, us, n, loop)
     # end
     # sl = startloop(loop, nisvectorized, loopsym)
-    
+
     tc = terminatecondition(ls, us, n, inclmask, 1)
     body = lower_block(ls, us, n, inclmask, 1)
     # align_loop = isone(n) & (ls.align_loops[] > 0)
@@ -978,4 +962,3 @@ function variable_name_and_unrolled(op::Operation, u₁loop::Symbol, u₂loop::S
     # mvar = mangledvar(op)
     mvar, u₁op, u₂op
 end
-
