@@ -350,5 +350,6 @@ Similar approaches can be taken to make kernels working with a variety of numeri
 * [RecursiveFactorization.jl](https://github.com/YingboMa/RecursiveFactorization.jl)
 * [SnpArrays.jl](https://github.com/OpenMendel/SnpArrays.jl)
 * [Tullio.jl](https://github.com/mcabbott/Tullio.jl)
+* [YisyAIFramework.jl](https://github.com/SkyWorld117/YisyAIFramework.jl)
 
 If you're using LoopVectorization, please feel free to file a PR adding yours to the list!
