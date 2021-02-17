@@ -1,4 +1,3 @@
-
 struct UnrollSymbols
     u₁loopsym::Symbol
     u₂loopsym::Symbol
@@ -272,7 +271,7 @@ struct LoopSet
     register_count::Base.RefValue{Int}
     cache_linesize::Base.RefValue{Int}
     ureduct::Base.RefValue{Int}
-    # opmask_register::Base.RefValue{Bool}
+    equalarraydims::Vector{Tuple{Vector{Symbol},Vector{Int}}}
     mod::Symbol
 end
 
@@ -384,6 +383,8 @@ function LoopSet(mod::Symbol)
         Ref(0), Ref(0), Ref(false),
         Ref(0), Ref(0), Ref(0), #Ref(false),# hw params
         Ref(-1), # Ureduct
+        Tuple{Vector{Symbol},Vector{Int}}[],
+        # Vector{NTuple{2,Int}}[],
         mod
     )
 end
@@ -581,11 +582,48 @@ end
 
 function misc_loop!(ls::LoopSet, r::Union{Expr,Symbol}, itersym::Symbol)::Loop
     rangename = gensym!(ls, "looprange" * string(itersym)); lenname = gensym!(ls, "looplen" * string(itersym));
-    pushprepreamble!(ls, Expr(:(=), rangename, Expr(:call, lv(:canonicalize_range), static_literals!(r))))
+    pushprepreamble!(ls, Expr(:(=), rangename, Expr(:call, lv(:canonicalize_range), :(@inbounds $(static_literals!(r))))))
     pushprepreamble!(ls, Expr(:(=), lenname, Expr(:call, lv(:maybestaticlength), rangename)))
     L = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticfirst), rangename), false)
     U = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticlast), rangename), true)
     Loop(itersym, L, U, rangename, lenname)
+end
+
+function indices_loop!(ls::LoopSet, r::Expr, itersym::Symbol)::Loop
+    if length(r.args) == 3
+        arrays = r.args[2]
+        dims = r.args[3]
+        if isexpr(arrays, :tuple) && length(arrays.args) > 1 && all(s -> s isa Symbol, arrays.args)
+            narrays =  length(arrays.args)::Int
+            if dims isa Integer
+                # ids = Vector{NTuple{2,Int}}(undef, narrays)
+                vptrs = Vector{Symbol}(undef, narrays)
+                mdims = fill(dims::Int, narrays)
+                # _d::Int = dims
+                for n ∈ 1:narrays
+                    a_s::Symbol = arrays.args[n]
+                    vptrs[n] = vptr(a_s)
+                    # add_vptr!(ls, a_s, vptr(a_s))
+                    # ids[n] = (findfirst(ls.includedactualarrays, a_s)::Int,_d)
+                end
+                push!(ls.equalarraydims, (vptrs, mdims))
+            elseif isexpr(dims, :tuple) && length(dims.args) == narrays && all(i -> i isa Integer, dims.args)
+                # ids = Vector{NTuple{2,Int}}(undef, narrays)
+                vptrs = Vector{Symbol}(undef, narrays)
+                mdims = Vector{Int}(undef, narrays)
+                for n ∈ 1:narrays
+                    a_s::Symbol = arrays.args[n]
+                    vptrs[n] = vptr(a_s)
+                    mdims[n] = dims.args[n]
+                    # add_vptr!(ls, a_s, vptr(a_s))
+                    # ids[n] = (findfirst(ls.includedactualarrays, a_s)::Int,(dims.args[n])::Int)
+                end
+                push!(ls.equalarraydims, (vptrs, mdims))
+                # push!(ls.equalarraydims, ids)
+            end
+        end
+    end
+    misc_loop!(ls, r, itersym)
 end
 
 """
@@ -601,6 +639,8 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
             range_loop!(ls, r, itersym)
         elseif f === :OneTo || isscopedname(f, :Base, :OneTo)
             oneto_loop!(ls, r, itersym)
+        elseif f === :indices || (isexpr(f, :(.), 2) && (f.args[2] === QuoteNode(:indices)) && ((f.args[1] === :ArrayInterface) || (f.args[1] === :LoopVectorization)))
+            indices_loop!(ls, r, itersym)
         else
             misc_loop!(ls, r, itersym)
         end

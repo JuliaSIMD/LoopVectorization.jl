@@ -32,7 +32,7 @@ end
     typ = Expr(:curly, :StridedPointer, T, N, C, B, R)
     stridedpointer_for_broadcast_quote(typ, N, s.parameters, X.parameters)
 end
-@generated function stridedpointer_for_broadcast(s::Tuple{Vararg{Any,N}}, ptr::VectorizationBase.StridedBitPointer{N,C,B,R,X,O}) where {N,C,B,R,X,O}
+@generated function stridedpointer_for_broadcast(s::Tuple{Vararg{Any,N}}, ptr::VectorizationBase.StridedBitPointer{N,C,B,R,X}) where {N,C,B,R,X}
     typ = Expr(:curly, lv(:StridedBitPointer), N, C, B, R)
     stridedpointer_for_broadcast_quote(typ, N, s.parameters, X.parameters)
 end

@@ -6,7 +6,7 @@ module LoopVectorization
 
 using VectorizationBase, SLEEFPirates, UnPack, OffsetArrays
 using VectorizationBase: register_size, register_count, cache_linesize, has_opmask_registers,
-    mask, pick_vector_width, MM, data,
+    mask, pick_vector_width, MM, data, grouped_strided_pointer,
     maybestaticlength, maybestaticsize, staticm1, staticp1, staticmul, vzero,
     maybestaticrange, offsetprecalc, lazymul,
     maybestaticfirst, maybestaticlast, scalar_less, scalar_greaterequal, gep, gesp, pointerforcomparison, NativeTypes,
@@ -38,15 +38,16 @@ using Base.FastMath: add_fast, sub_fast, mul_fast, div_fast, inv_fast, abs2_fast
 
 
 using ArrayInterface
-using ArrayInterface: OptionallyStaticUnitRange, Zero, One, StaticBool, True, False, reduce_tup
+using ArrayInterface: OptionallyStaticUnitRange, Zero, One, StaticBool, True, False, reduce_tup, indices
 const Static = ArrayInterface.StaticInt
 
 using Requires
 
 
-export LowDimArray, stridedpointer,
+export LowDimArray, stridedpointer, indices,
     @avx, @_avx, *ˡ, _avx_!,
-    vmap, vmap!, vmapt, vmapt!, vmapnt, vmapnt!, vmapntt, vmapntt!, tanh_fast, sigmoid_fast,
+    vmap, vmap!, vmapt, vmapt!, vmapnt, vmapnt!, vmapntt, vmapntt!,
+    tanh_fast, sigmoid_fast,
     vfilter, vfilter!, vmapreduce, vreduce
 
 const VECTORWIDTHSYMBOL, ELTYPESYMBOL = Symbol("##Wvecwidth##"), Symbol("##Tloopeltype##")

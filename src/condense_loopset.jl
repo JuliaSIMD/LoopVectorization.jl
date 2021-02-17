@@ -221,6 +221,40 @@ end
 
 val(x) = Expr(:call, Expr(:curly, :Val, x))
 
+function add_grouped_strided_pointer!(extra_args::Expr, ls::LoopSet)
+    # foreach(ref -> push!(extra_args.args, vptr(ref)), ls.refs_aliasing_syms)
+    gsp = Expr(:call, lv(:grouped_strided_pointer))
+    tgarrays = Expr(:tuple)
+    i = 0
+    for ref ∈ ls.refs_aliasing_syms
+        i += 1
+        found = false
+        for (vptrs,dims) ∈ ls.equalarraydims
+            _id = findfirst(==(vptr(ref)), vptrs)
+            _id === nothing && continue
+            id::Int = _id
+            found = true
+            push!(tgarrays.args, ref.ref.array)
+            break
+        end
+        found || push!(tgarrays.args, vptr(ref))
+    end
+    push!(gsp.args, tgarrays)
+    matcheddims = Expr(:tuple)
+    for (vptrs,dims) ∈ ls.equalarraydims
+        t = Expr(:tuple)
+        for (vp,d) ∈ zip(vptrs,dims)
+            _id = findfirst(r -> vptr(r) === vp, ls.refs_aliasing_syms)
+            _id === nothing && continue
+            push!(t.args, Expr(:tuple, _id, d))
+        end
+        length(t.args) > 1 && push!(matcheddims.args, t)
+    end
+    push!(gsp.args, val(matcheddims))
+    push!(extra_args.args, gsp)
+    nothing
+end
+
 # Try to condense in type stable manner
 function generate_call(ls::LoopSet, inline_unroll::NTuple{3,Int8}, debug::Bool = false)
     operation_descriptions = Expr(:tuple)
@@ -255,8 +289,8 @@ function generate_call(ls::LoopSet, inline_unroll::NTuple{3,Int8}, debug::Bool =
     vargs_as_tuple = true#!debug
     vargs_as_tuple || push!(q.args, lbarg)
     extra_args = vargs_as_tuple ? Expr(:tuple) : q
-    foreach(ref -> push!(extra_args.args, vptr(ref)), ls.refs_aliasing_syms)
-
+    add_grouped_strided_pointer!(extra_args, ls)
+    
     foreach(is -> push!(extra_args.args, last(is)), ls.preamble_symsym)
     append!(extra_args.args, arraysymbolinds)
     add_reassigned_syms!(extra_args, ls)
@@ -280,12 +314,15 @@ To provide support for a custom array type, ensure that `check_args` returns tru
 Additionally, define `pointer` and `stride` methods.
 """
 @inline function check_args(A::AbstractArray{T}) where {T}
-    check_type(T) && ArrayInterface.device(A) === ArrayInterface.CPUPointer()
+    check_type(T) && check_device(ArrayInterface.device(A))
 end
 @inline check_args(A::BitVector) = true
 @inline check_args(A::BitArray) = iszero(size(A,1) & 7)
 @inline check_args(::VectorizationBase.AbstractStridedPointer) = true
-@inline check_args(_) = false
+@inline function check_args(x)
+    @info "`LoopVectorization.check_args(::$(typeof(x))) == false`, therefore compiling a probably slow `@inbounds @fastmath` fallback loop." maxlog=1
+    false
+end
 @inline check_args(A, B, C::Vararg{Any,K}) where {K} = check_args(A) && check_args(B, C...)
 @inline check_args(::AbstractRange{T}) where {T} = check_type(T)
 @inline check_args(::Type{T}) where {T <: VectorizationBase.NativeTypesV} = true
@@ -294,8 +331,20 @@ end
 
 Returns true if the element type is supported.
 """
-check_type(::Type{T}) where {T <: NativeTypes} = true
-check_type(::Type{T}) where {T} = false
+@inline check_type(::Type{T}) where {T <: NativeTypes} = true
+function check_type(::Type{T}) where {T}
+    @info """`LoopVectorization.check_type` returned `false`, because `LoopVectorization.check_type(::$(T)) == false`.
+        `LoopVectorization` currently only supports `T <: $(NativeTypes)`.
+        Therefore compiling a probably slow `@inbounds @fastmath` fallback loop.""" maxlog=1
+    false
+end
+@inline check_device(::ArrayInterface.CPUPointer) = true
+function check_device(x)
+    @info """`LoopVectorization.check_args` returned `false`, because `ArrayInterface.device(::$(typeof(x))) == $x`
+        `LoopVectorization` normally requires `ArrayInterface.CPUPointer` (exceptions include ranges, `BitVector`s, and
+        `BitArray`s whose number of rows is a multiple of 8). Therefore compiling a probably slow `@inbounds @fastmath` fallback loop.""" maxlog=1
+    false    
+end
 
 function check_args_call(ls::LoopSet)
     q = Expr(:call, lv(:check_args))
