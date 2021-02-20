@@ -594,8 +594,10 @@ T = Float32
     fc = copy(f);
     testfunction!(fc, v, d, g, s, θ);
     # fc2 = copy(f);
-    testfunctionavx!(f, v, d, g, s, θ)    
-    @test f ≈ fc
+    testfunctionavx!(f, v, d, g, s, θ)
+    finite_subset = isfinite.(fc)
+    @test finite_subset == isfinite.(f)
+    @test f[finite_subset] ≈ fc[finite_subset]
 
     for i ∈ 1:50
         X = chebpts(i)

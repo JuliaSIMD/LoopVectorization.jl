@@ -19,7 +19,7 @@ LoopVectorization is supported on Julia 1.1 and later. It is tested on Julia 1.1
 Misusing LoopVectorization can have [serious consequences](http://catb.org/jargon/html/N/nasal-demons.html). Like `@inbounds`, misusing it can lead to segfaults and memory corruption.
 We expect that any time you use the `@avx` macro with a given block of code that you:
 1. Are not indexing an array out of bounds. `@avx` does not perform any bounds checking.
-2. Are not iterationg over an empty collection. Iterating over an empty loop such as `for i ∈ eachindex(Float64[])` is undefined behavior, and will likely result in the out of bounds memory accesses. Ensure that loops behave correctly.
+2. Are not iterating over an empty collection. Iterating over an empty loop such as `for i ∈ eachindex(Float64[])` is undefined behavior, and will likely result in the out of bounds memory accesses. Ensure that loops behave correctly.
 3. Are not relying on a specific execution order. `@avx` can and will re-order operations and loops inside its scope, so the correctness cannot depend on a particular order. You cannot implement `cumsum` with `@avx`.
 4. Loops increment by 1 on each iteration, e.g. `1:2:N` is not supported at the moment. (This requirement will eventually be lifted.)
 
@@ -32,7 +32,7 @@ The macro assumes that loop iterations can be reordered. It also currently suppo
 
 ## Benchmarks
 
-Please see the documentation for benchmarks versus base Julia, Clang, icc, ifort, gfortran, and Eigen. If you would believe any code or compiler flags can be improved, would like to submit your own benchmarks, or have Julia code using LoopVectorization that you would like to be tested for performance regressions on a semi-regular basis, please feel file an issue or PR with the code sample.
+Please see the documentation for benchmarks versus base Julia, Clang, icc, ifort, gfortran, and Eigen. If you believe any code or compiler flags can be improved, would like to submit your own benchmarks, or have Julia code using LoopVectorization that you would like to be tested for performance regressions on a semi-regular basis, please feel file an issue or PR with the code sample.
 
 ## Examples
 ### Dot Product
@@ -350,5 +350,6 @@ Similar approaches can be taken to make kernels working with a variety of numeri
 * [RecursiveFactorization.jl](https://github.com/YingboMa/RecursiveFactorization.jl)
 * [SnpArrays.jl](https://github.com/OpenMendel/SnpArrays.jl)
 * [Tullio.jl](https://github.com/mcabbott/Tullio.jl)
+* [YisyAIFramework.jl](https://github.com/SkyWorld117/YisyAIFramework.jl)
 
 If you're using LoopVectorization, please feel free to file a PR adding yours to the list!
