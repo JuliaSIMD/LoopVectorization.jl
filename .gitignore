@@ -12,3 +12,7 @@
 *.s
 *#
 *.jld2
+Manifest.toml
+test/Manifest.toml
+test/*#*
+
