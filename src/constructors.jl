@@ -199,7 +199,7 @@ function check_macro_kwarg(arg, inline::Int8 = zero(Int8), check_empty::Bool = f
     i = check_inline(arg)
     if iszero(i)
         ce = check_checkempty(arg)
-        if isnothing(ce)
+        if ce === nothing
             u₁, u₂ = check_unroll(arg)
         else
             check_empty = ce

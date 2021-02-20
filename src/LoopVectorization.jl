@@ -1,8 +1,5 @@
 module LoopVectorization
 
-# if (!isnothing(get(ENV, "TRAVIS_BRANCH", nothing)) || !isnothing(get(ENV, "APPVEYOR", nothing))) && isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@optlevel"))
-    # @eval Base.Experimental.@optlevel 1
-# end
 
 using VectorizationBase, SLEEFPirates, UnPack, OffsetArrays
 using VectorizationBase: register_size, register_count, cache_linesize, has_opmask_registers,
@@ -50,40 +47,40 @@ export LowDimArray, stridedpointer, indices,
     tanh_fast, sigmoid_fast,
     vfilter, vfilter!, vmapreduce, vreduce
 
-const VECTORWIDTHSYMBOL, ELTYPESYMBOL = Symbol("##Wvecwidth##"), Symbol("##Tloopeltype##")
+const VECTORWIDTHSYMBOL, ELTYPESYMBOL, MASKSYMBOL = Symbol("##Wvecwidth##"), Symbol("##Tloopeltype##"), Symbol("##mask##")
 
 include("vectorizationbase_compat/contract_pass.jl")
 include("vectorizationbase_compat/subsetview.jl")
 include("closeopen.jl")
 include("getconstindexes.jl")
 include("predicates.jl")
-include("map.jl")
-include("filter.jl")
-include("costs.jl")
+include("simdfunctionals/map.jl")
+include("simdfunctionals/filter.jl")
+include("modeling/costs.jl")
 include("operations.jl")
 include("graphs.jl")
 include("operation_evaluation_order.jl")
 include("memory_ops_common.jl")
-include("add_loads.jl")
-include("add_stores.jl")
-include("add_compute.jl")
-include("add_constants.jl")
-include("add_ifelse.jl")
-include("determinestrategy.jl")
-include("line_number_nodes.jl")
-include("loopstartstopmanager.jl")
-include("lower_compute.jl")
-include("lower_constant.jl")
-include("lower_memory_common.jl")
-include("lower_load.jl")
-include("lower_store.jl")
-include("lowering.jl")
-include("split_loops.jl")
+include("parse/add_loads.jl")
+include("parse/add_stores.jl")
+include("parse/add_compute.jl")
+include("parse/add_constants.jl")
+include("parse/add_ifelse.jl")
+include("modeling/determinestrategy.jl")
+include("codegen/line_number_nodes.jl")
+include("codegen/loopstartstopmanager.jl")
+include("codegen/lower_compute.jl")
+include("codegen/lower_constant.jl")
+include("codegen/lower_memory_common.jl")
+include("codegen/lower_load.jl")
+include("codegen/lower_store.jl")
+include("codegen/lowering.jl")
+include("codegen/split_loops.jl")
 include("condense_loopset.jl")
 include("reconstruct_loopset.jl")
 include("constructors.jl")
 include("user_api_conveniences.jl")
-include("mapreduce.jl")
+include("simdfunctionals/mapreduce.jl")
 include("broadcast.jl")
 
 """
@@ -106,7 +103,7 @@ _precompile_()
 # include("vmap_grad.jl")
 function __init__()
     @require ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4" begin
-        @require ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210" include("vmap_grad.jl")
+        @require ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210" include("simdfunctionals/vmap_grad.jl")
     end
 end
 

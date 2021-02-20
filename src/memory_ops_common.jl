@@ -194,7 +194,7 @@ function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementby
         elseif ind isa Symbol
             if ind ∈ loopset
                 ind_prev_index = findfirst(isequal(ind), indices)
-                if isnothing(ind_prev_index)
+                if ind_prev_index === nothing
                     push!(indices, ind); ninds += 1
                     push!(offsets, zero(Int8))
                     push!(loopedindex, true)
@@ -225,7 +225,7 @@ function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementby
     end
     # (length(parents) != 0 && first(indices) !== Symbol("##DISCONTIGUOUSSUBARRAY##")) && pushfirst!(indices, Symbol("##DISCONTIGUOUSSUBARRAY##"))
     mref = ArrayReferenceMeta(ArrayReference( array, indices, offsets ), loopedindex, vptrarray)
-    ArrayReferenceMetaPosition(mref, parents, loopdependencies, reduceddeps, isnothing(var) ? Symbol("") : var )
+    ArrayReferenceMetaPosition(mref, parents, loopdependencies, reduceddeps, var === nothing ? Symbol("") : var )
 end
 function tryrefconvert(ls::LoopSet, ex::Expr, elementbytes::Int, var::Union{Nothing,Symbol} = nothing)::Tuple{Bool,ArrayReferenceMetaPosition}
     ya, yinds = if ex.head === :ref

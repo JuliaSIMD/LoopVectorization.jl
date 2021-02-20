@@ -3,15 +3,15 @@ struct UnrollSymbols
     u₂loopsym::Symbol
     vectorized::Symbol
 end
-struct UnrollArgs{T <: Union{Nothing,Int}}
+struct UnrollArgs
     u₁::Int
     u₁loopsym::Symbol
     u₂loopsym::Symbol
     vectorized::Symbol
     u₂max::Int
-    suffix::T
+    suffix::Int # -1 means not tiled
 end
-function UnrollArgs(u₁::Int, unrollsyms::UnrollSymbols, u₂max::Int, suffix)
+function UnrollArgs(u₁::Int, unrollsyms::UnrollSymbols, u₂max::Int, suffix::Int)
     @unpack u₁loopsym, u₂loopsym, vectorized = unrollsyms
     UnrollArgs(u₁, u₁loopsym, u₂loopsym, vectorized, u₂max, suffix)
 end
@@ -228,6 +228,7 @@ Base.@propagate_inbounds Base.getindex(lo::LoopOrder, i::Int) = lo.oporder[i]
 Base.@propagate_inbounds Base.getindex(lo::LoopOrder, i...) = lo.oporder[LinearIndices(size(lo))[i...]]
 
 @enum NumberType::Int8 HardInt HardFloat IntOrFloat INVALID
+
 
 struct LoopStartStopManager
     terminators::Vector{Int}
@@ -915,7 +916,7 @@ end
 function looplength(ls::LoopSet, s::Symbol)
     # search_tree(parents(operations(ls)[i]), name(op)) && return true
     id = getloopid_or_nothing(ls, s)
-    if isnothing(id)
+    if id === nothing
         l = 0.0
         # TODO: we could double count a loop.
         for op ∈ operations(ls)
@@ -954,5 +955,5 @@ end
 
 function Base.showerror(io::IO, err::LoopError)
     printstyled(io, err.msg; color = :red)
-    isnothing(err.ex) || printstyled(io, '\n', err.ex)
+    err.ex === nothing || printstyled(io, '\n', err.ex)
 end

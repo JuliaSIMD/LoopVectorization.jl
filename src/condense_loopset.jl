@@ -43,7 +43,7 @@ function ArrayRefStruct(ls::LoopSet, mref::ArrayReferenceMeta, arraysymbolinds::
             indices |= getloopid(ls, ind)
         else
             parent = get(ls.opdict, ind, nothing)
-            @assert !isnothing(parent) "Index $ind not found in array."
+            @assert !(parent === nothing) "Index $ind not found in array."
             # if parent === nothing
             #     index_types |= SymbolicIndex
             #     indices |= findindoradd!(arraysymbolinds, ind)
@@ -401,7 +401,6 @@ function setup_call(ls::LoopSet, q::Expr, source::LineNumberNode, inline::Int8 =
     pushfirst!(lnns, source)
     call = setup_call_inline(ls, inline, u₁, u₂)
     call = check_empty ? check_if_empty(ls, call) : call
-    isnothing(q) && return Expr(:block, ls.prepreamble, call)
     result = Expr(:block, ls.prepreamble, Expr(:if, check_args_call(ls), call, make_crashy(make_fast(q))))
     prepend_lnns!(result, lnns)
     return result

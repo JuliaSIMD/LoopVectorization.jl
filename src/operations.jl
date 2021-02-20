@@ -55,6 +55,12 @@ function ArrayReferenceMeta(ref::ArrayReference, loopedindex, ptr = vptr(ref))
     )
 end
 
+struct OffsetMemOpCollection
+    opids::Vector{Vector{Int}}
+    
+end
+
+
 # function Base.hash(x::ArrayReference, h::UInt)
     # @inbounds for n ∈ eachindex(x)
         # h = hash(x.ref[n], h)
