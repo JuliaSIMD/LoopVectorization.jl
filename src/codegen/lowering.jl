@@ -265,9 +265,14 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
         remblock = init_remblock(loop, ls.lssm[], n)#loopsym)
         # unroll_cleanup = Ureduct > 0 || (nisunrolled ? (u₂ > 1) : (u₁ > 1))
         # remblock = unroll_cleanup ? init_remblock(loop, ls.lssm[], n)#loopsym) : Expr(:block)
-        q = Expr(:while, tc, body)
+        q = if unsigned(Ureduct) < unsigned(UF)
+            push!(body.args, Expr(:(||), tc, Expr(:break)))
+            Expr(:while, true, body)
+        else
+            Expr(:while, tc, body)
+        end
     end
-    q = if unsigned(Ureduct) < unsigned(UF) # unsigned(-1) == typemax(UInt); is logic relying on twos-complement bad?
+    q = if unsigned(Ureduct) < unsigned(UF) # unsigned(-1) == typemax(UInt); 
         add_cleanup = true
         if isone(Ureduct)
             UF_cleanup = 1
@@ -488,6 +493,7 @@ function add_upper_outer_reductions(ls::LoopSet, loopq::Expr, Ulow::Int, Uhigh::
     ifq = Expr(:block)
     ifqlet = Expr(:block)
     initialize_outer_reductions!(ifqlet, ls, Uhigh, vectorized)
+    # @show loopq
     push!(ifq.args, loopq)
     t = Expr(:tuple)
     mvartu = Expr(:tuple)

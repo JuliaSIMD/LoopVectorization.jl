@@ -1,6 +1,6 @@
 
 
-function load_constrained(op, u₁loop, u₂loop, innermost_loop, forprefetch = false)
+function load_constrained(op, u₁loop, u₂loop, innermost_loop_or_vloop, forprefetch = false)
     loopdeps = loopdependencies(op)
     dependsonu₁ = u₁loop ∈ loopdeps
     dependsonu₂ = u₂loop ∈ loopdeps
@@ -8,9 +8,16 @@ function load_constrained(op, u₁loop, u₂loop, innermost_loop, forprefetch = 
         (dependsonu₁ & dependsonu₂) || return false
     end
     unrolleddeps = Symbol[]
+    if forprefetch # innermost_loop_or_vloop is innermost_loop
+        push!(unrolleddeps, innermost_loop_or_vloop)
+    else# if this is for `sub_fmas` instead of prefetch, then `innermost_loop_or_vloop` is `vloop`, and we only care if it isn't vectorized
+        # if it is vectorized, it can't be broadcasted on AVX512 anyway, so no point trying to enable that optimization
+        dependsonu₁ &= u₁loop !== innermost_loop_or_vloop
+        dependsonu₂ &= u₂loop !== innermost_loop_or_vloop
+    end
     dependsonu₁ && push!(unrolleddeps, u₁loop)
     dependsonu₂ && push!(unrolleddeps, u₂loop)
-    forprefetch && push!(unrolleddeps, innermost_loop)
+    length(unrolleddeps) > 0 || return false
     any(parents(op)) do opp
         isload(opp) && all(in(loopdependencies(opp)), unrolleddeps)
     end
@@ -29,8 +36,8 @@ function check_if_remfirst(ls, ua)
     false
 end
 function sub_fmas(ls::LoopSet, op::Operation, ua::UnrollArgs)
-    @unpack u₁, u₁loopsym, u₂loopsym, u₂max = ua
-    !(load_constrained(op, u₁loopsym, u₂loopsym, first(names(ls))) || check_if_remfirst(ls, ua))
+    @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, u₂max = ua
+    !(load_constrained(op, u₁loopsym, u₂loopsym, vloopsym) || check_if_remfirst(ls, ua))
 end
 
 struct FalseCollection end
@@ -373,12 +380,16 @@ function lower_compute!(
     # @show mvar, opunrolled, u₁, u₁loopsym, u₂loopsym
     isreduct = isreduction(op)
     if Base.libllvm_version < v"11.0.0" && (suffix ≠ -1) && isreduct# && (iszero(suffix) || (ls.unrollspecification[].u₂ - 1 == suffix))
+    # if (length(reduceddependencies(op)) > 0) | (length(reducedchildren(op)) > 0)# && (iszero(suffix) || (ls.unrollspecification[].u₂ - 1 == suffix))
         # instrfid = findfirst(isequal(instr.instr), (:vfmadd, :vfnmadd, :vfmsub, :vfnmsub))
         instrfid = findfirst(isequal(instr.instr), (:vfmadd_fast, :vfnmadd_fast, :vfmsub_fast, :vfnmsub_fast))
+        # instrfid = findfirst(isequal(instr.instr), (:vfnmadd_fast, :vfmsub_fast, :vfnmsub_fast))
+        # @show isreduct, instrfid, instr.instr sub_fmas(ls, op, ua)
         # want to instcombine when parent load's deps are superset
         # also make sure opp is unrolled
         if !(instrfid === nothing) && (opunrolled && u₁ > 1) && sub_fmas(ls, op, ua)
             specific_fmas = Base.libllvm_version >= v"11.0.0" ? (:vfmadd, :vfnmadd, :vfmsub, :vfnmsub) : (:vfmadd231, :vfnmadd231, :vfmsub231, :vfnmsub231)
+            # specific_fmas = Base.libllvm_version >= v"11.0.0" ? (:vfnmadd, :vfmsub, :vfnmsub) : (:vfnmadd231, :vfmsub231, :vfnmsub231)
             # specific_fmas = (:vfmadd231, :vfnmadd231, :vfmsub231, :vfnmsub231)
             instr = Instruction(specific_fmas[instrfid])
         end

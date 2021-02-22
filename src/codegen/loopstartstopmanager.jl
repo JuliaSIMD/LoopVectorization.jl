@@ -240,7 +240,7 @@ function pointermax_index(
                     if isone(sub)
                         Expr(:call, lv(:vsub_fast), staticexpr(stophint), VECTORWIDTHSYMBOL)
                     else
-                        Expr(:call, lv(:vsub_fast), staticexpr(stophint), Expr(:call, lv(:vmul_fast), VECTORWIDTHSYMBOL, staticexpr(sub)))
+                        Expr(:call, lv(:vsub_fast), staticexpr(stophint), mulexpr(VECTORWIDTHSYMBOL, sub))
                     end
                 else
                     staticexpr(stophint - sub)
@@ -278,10 +278,10 @@ function pointermax_index(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int,
                     if isone(sub)
                         Expr(:call, lv(:vsub_fast), stopsym, VECTORWIDTHSYMBOL)
                     else
-                        Expr(:call, lv(:vsub_fast), stopsym, Expr(:call, lv(:vmul_fast), VECTORWIDTHSYMBOL, sub))
+                        Expr(:call, lv(:vsub_fast), stopsym, mulexpr(VECTORWIDTHSYMBOL, sub))
                     end                    
                 else
-                    Expr(:call, lv(:vsub_fast), stopsym, sub)
+                     subexpr(stopsym, sub)
                 end
                 stride = getstrides(ar)[j]
                 if isknown(incr)
