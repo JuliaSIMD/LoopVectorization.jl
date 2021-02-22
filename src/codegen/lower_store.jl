@@ -133,7 +133,7 @@ function lower_tiled_store!(blockq::Expr, op::Operation, ls::LoopSet, unrollsyms
     isu₁, isu₂ = isunrolled_sym(opp, u₁loopsym, u₂loopsym, u₂)
     @assert isu₂
     # It's reasonable forthis to be `!isu₁`
-    u = isu₁ ? u₁ : 1
+    u = Core.ifelse(isu₁, u₁, 1)
     tup = Expr(:tuple)
     for t ∈ 0:u₂-1
         mvar = Symbol(variable_name(opp, t), '_', u)

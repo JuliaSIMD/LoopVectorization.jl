@@ -15,6 +15,7 @@ struct ArrayRefStruct{array,ptr}
     index_types::UInt64
     indices::UInt64
     offsets::UInt64
+    strides::UInt64
 end
 array(ar::ArrayRefStruct{a,p}) where {a,p} = a
 ptr(ar::ArrayRefStruct{a,p}) where {a,p}   = p
@@ -29,18 +30,25 @@ function ArrayRefStruct(ls::LoopSet, mref::ArrayReferenceMeta, arraysymbolinds::
     index_types = zero(UInt64)
     indices = zero(UInt64)
     offsets = zero(UInt64)
-    indv = mref.ref.indices
-    offv = mref.ref.offsets
+    strides = zero(UInt64)
+    @unpack loopedindex, ref = mref
+    indv = ref.indices
+    offv = ref.offsets
+    strv = ref.strides
     # we can discard that the array was considered discontiguous, as it should be recovered from type information
-    start = 1 + (first(indv) === Symbol("##DISCONTIGUOUSSUBARRAY##"))
+    start = 1 + (first(indv) === DISCONTIGUOUS)
     for (n,ind) ∈ enumerate(@view(indv[start:end]))
         index_types <<= 8
         indices <<= 8
         offsets <<= 8
         offsets |= (offv[n] % UInt8)
-        if mref.loopedindex[n]
+        strides <<= 8
+        strides |= (strv[n] % UInt8)
+        if loopedindex[n]
             index_types |= LoopIndex
-            indices |= getloopid(ls, ind)
+            if strv[n] ≠ 0
+                indices |= getloopid(ls, ind)
+            end
         else
             parent = get(ls.opdict, ind, nothing)
             @assert !(parent === nothing) "Index $ind not found in array."
@@ -53,7 +61,7 @@ function ArrayRefStruct(ls::LoopSet, mref::ArrayReferenceMeta, arraysymbolinds::
             # end
         end
     end
-    ArrayRefStruct{mref.ref.array,mref.ptr}( index_types, indices, offsets )
+    ArrayRefStruct{mref.ref.array,mref.ptr}( index_types, indices, offsets, strides )
 end
 
 """
@@ -123,17 +131,12 @@ end
 ## turn a LoopSet into a type object which can be used to reconstruct the LoopSet.
 
 function loop_boundary!(q::Expr, loop::Loop)
-    if loop.startexact & loop.stopexact
-        push!(q.args, Expr(:call, lv(:OptionallyStaticUnitRange), staticexpr(loop.starthint), staticexpr(loop.stophint)))
-    elseif loop.rangesym === Symbol("")
-        lb = if startexact
-            Expr(:call, lv(:OptionallyStaticUnitRange), staticexpr(loop.starthint), loop.stopsym)
-        elseif stopexact
-            Expr(:call, lv(:OptionallyStaticUnitRange), loop.startsym, staticexpr(loop.stophint))
-        else
-            Expr(:call, :(:), loop.startsym, loop.stopsym)
-        end
-        push!(q.args, lb)
+    if isstaticloop(loop) || loop.rangesym === Symbol("")
+        call = Expr(:call, :(:))
+        pushexpr!(call, first(loop))
+        unitstep(loop) || pushexpr!(call, step(loop))
+        pushexpr!(call, last(loop))
+        push!(q.args, call)
     else
         push!(q.args, loop.rangesym)
     end

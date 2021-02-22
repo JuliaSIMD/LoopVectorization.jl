@@ -35,7 +35,7 @@ using Base.FastMath: add_fast, sub_fast, mul_fast, div_fast, inv_fast, abs2_fast
 
 
 using ArrayInterface
-using ArrayInterface: OptionallyStaticUnitRange, Zero, One, StaticBool, True, False, reduce_tup, indices
+using ArrayInterface: OptionallyStaticUnitRange, OptionallyStaticRange, Zero, One, StaticBool, True, False, reduce_tup, indices, static_step
 const Static = ArrayInterface.StaticInt
 
 using Requires
@@ -96,8 +96,8 @@ loop-reordering so as to improve performance:
 """
 LoopVectorization
 
-include("precompile.jl")
-_precompile_()
+# include("precompile.jl")
+# _precompile_()
 
 # import ChainRulesCore, ForwardDiff
 # include("vmap_grad.jl")

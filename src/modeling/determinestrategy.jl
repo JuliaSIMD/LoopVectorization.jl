@@ -43,7 +43,7 @@ function unitstride(ls::LoopSet, op::Operation, s::Symbol)
     li = op.ref.loopedindex
     # The first index is allowed to be indexed by `s`
     fi = first(inds)
-    if fi === Symbol("##DISCONTIGUOUSSUBARRAY##")
+    if ((fi === DISCONTIGUOUS) | (fi === CONSTANTZEROINDEX)) || (first(getstrides(op)) ≠ 1) || !unitstep(getloop(ls,s))
         return false
     # elseif !first(li)
     #     # We must check if this
@@ -576,7 +576,7 @@ function set_upstream_family!(adal::Vector{T}, op::Operation, val::T) where {T}
 end
 function loopdepindices(ls::LoopSet, op::Operation)
     loopdeps = loopdependencies(op.ref)
-    isdiscontig = first(loopdeps) === Symbol("##DISCONTIGUOUSSUBARRAY##")
+    isdiscontig = first(loopdeps) === DISCONTIGUOUS
     if !isdiscontig && all(op.ref.loopedindex)
         return loopdeps
     end
@@ -597,7 +597,7 @@ function stride_penalty(ls::LoopSet, op::Operation, order::Vector{Symbol}, loopf
     loopdeps = loopdepindices(ls, op)
     opstrides = Vector{Int}(undef, length(loopdeps))
     # very minor stride assumption here, because we don't really want to base optimization decisions on it...
-    opstrides[1] = 1.0 + (first(loopdependencies(op.ref)) === Symbol("##DISCONTIGUOUSSUBARRAY##"))
+    opstrides[1] = 1.0 + (first(loopdependencies(op.ref)) === DISCONTIGUOUS)
     # loops = map(s -> getloop(ls, s), loopdeps)
     l = Float64(length(getloop(ls, first(loopdeps)))) 
     for i ∈ 2:length(loopdeps)
@@ -643,7 +643,7 @@ function isoptranslation(ls::LoopSet, op::Operation, unrollsyms::UnrollSymbols)
     translationplus = false
     for i ∈ eachindex(li)
         if !li[i]
-            opp = findparent(ls, inds[i + (first(inds) === Symbol("##DISCONTIGUOUSSUBARRAY##"))])
+            opp = findparent(ls, inds[i + (first(inds) === DISCONTIGUOUS)])
             if instruction(opp).instr ∈ (:+, :-) && u₁loopsym ∈ loopdependencies(opp) && u₂loopsym ∈ loopdependencies(opp)
                 istranslation = i
                 translationplus = instruction(opp).instr === :+
@@ -653,24 +653,27 @@ function isoptranslation(ls::LoopSet, op::Operation, unrollsyms::UnrollSymbols)
     istranslation, translationplus
 end
 function maxnegativeoffset(ls::LoopSet, op::Operation, u::Symbol)
-    opmref = op.ref
-    opref = opmref.ref
     mno = typemin(Int)
     id = 0
-    for opp ∈ operations(ls)
-        opp === op && continue
-        oppmref = opp.ref
-        oppref = oppmref.ref
-        sameref(opref, oppref) || continue
-        opinds = getindicesonly(op)
-        oppinds = getindicesonly(opp)
-        opoffs = opref.offsets
-        oppoffs = oppref.offsets
-        # oploopi = opmref.loopedindex
-        # opploopi = oppmref.loopedindex
+    omop = offsetloadcollection(ls)
+    collectionid, opind = omop.opidcollectionmap[identifer(op)]
+    collectionid == 0 && return mno, id
+    @unpack opids = omop
+    
+    # offsetcol = offsets[collectionid]
+    opidcol = opids[collectionid]
+    opid = identifer(op)
+    # opoffs = offsetcol[opind]
+    opoffs = getoffsets(op)
+    ops = operations(ls)
+    opindices = getindicesonly(op)
+    for (i,oppid) ∈ enumerate(opidcol)
+        opid == oppid && continue
+        opp = ops[oppid]
+        oppoffs = getoffsets(opp)
         mnonew = typemin(Int)
-        for i ∈ eachindex(opinds)
-            if opinds[i] === u
+        for i ∈ eachindex(opindices)
+            if opindices[i] === u
                 mnonew = (opoffs[i] - oppoffs[i])
             elseif opoffs[i] != oppoffs[i]
                 mnonew = 1
@@ -928,9 +931,8 @@ function evaluate_cost_tile(
         end
         rt, lat, rp = cost(ls, op, vectorized, Wshift, size_T)
         if isload(op)
-            if !iszero(prefetchisagoodidea(ls, op, UnrollArgs(4, unrollsyms, 4, 0)))
-                # rt += 0.5VectorizationBase.dynamic_register_size() / VectorizationBase.cacheline_size()
-                prefetch_good_idea = true
+            if !prefetch_good_idea
+                prefetch_good_idea = prefetchisagoodidea(ls, op, UnrollArgs(ls, 4, unrollsyms, 4, 0)) ≠ 0
             end
         end
         # rp = (opisininnerloop && !(loadintostore(ls, op))) ? rp : zero(rp) # we only care about register pressure within the inner most loop

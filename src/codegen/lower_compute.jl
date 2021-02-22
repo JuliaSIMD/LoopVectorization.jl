@@ -52,35 +52,39 @@ function parent_unroll_status(op::Operation, u₁loop::Symbol, u₂loop::Symbol,
     parents_u₁syms, parents_u₂syms
 end
 
-function _add_loopvalue!(ex::Expr, loopval::Symbol, vectorized::Symbol, u::Int)
-    if loopval === vectorized
+function _add_loopvalue!(ex::Expr, loopval::Symbol, vloop::Loop, u::Int)
+    vloopsym = vloop.itersymbol
+    if loopval === vloopsym
         if iszero(u)
-            push!(ex.args, _MMind(Expr(:call, lv(:staticp1), loopval)))
-        elseif isone(u)
-            push!(ex.args, Expr(:call, lv(:vadd_fast), VECTORWIDTHSYMBOL, _MMind(Expr(:call, lv(:staticp1), loopval))))
+            push!(ex.args, _MMind(Expr(:call, lv(:staticp1), loopval), step(vloop)))
         else
-            push!(ex.args, Expr(:call, lv(:vadd_fast), Expr(:call, lv(:vmul_fast), VECTORWIDTHSYMBOL, u), _MMind(Expr(:call, lv(:staticp1), loopval))))
+            mm = _MMind(Expr(:call, lv(:staticp1), loopval), step(vloop))
+            if isone(u)
+                push!(ex.args, Expr(:call, lv(:vadd_fast), VECTORWIDTHSYMBOL, mm))
+            else
+                push!(ex.args, Expr(:call, lv(:vadd_fast), Expr(:call, lv(:vmul_fast), VECTORWIDTHSYMBOL, u), mm))
+            end
         end
     else
         push!(ex.args, Expr(:call, lv(:vadd_fast), loopval, staticexpr(u+1)))
     end
 end
 function add_loopvalue!(instrcall::Expr, loopval, ua::UnrollArgs, u₁::Int)
-    @unpack u₁loopsym, u₂loopsym, vectorized, suffix = ua
+    @unpack u₁loopsym, u₂loopsym, vloopsym, vloop, suffix = ua
     if loopval === u₁loopsym #parentsunrolled[n]
         if isone(u₁)
-            _add_loopvalue!(instrcall, loopval, vectorized, 0)
+            _add_loopvalue!(instrcall, loopval, vloop, 0)
         else
             t = Expr(:tuple)
             for u ∈ 0:u₁-1
-                _add_loopvalue!(t, loopval, vectorized, u)
+                _add_loopvalue!(t, loopval, vloop, u)
             end
             push!(instrcall.args, Expr(:call, lv(:VecUnroll), t))
         end
     elseif suffix > 0 && loopval === u₂loopsym
-        _add_loopvalue!(instrcall, loopval, vectorized, suffix)
-    elseif loopval === vectorized
-        push!(instrcall.args, _MMind(Expr(:call, lv(:staticp1), loopval)))
+        _add_loopvalue!(instrcall, loopval, vloop, suffix)
+    elseif loopval === vloopsym
+        push!(instrcall.args, _MMind(Expr(:call, lv(:staticp1), loopval), step(vloop)))
     else
         push!(instrcall.args, Expr(:call, lv(:staticp1), loopval))
     end
@@ -303,7 +307,7 @@ end
 function lower_compute!(
     q::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs, mask::Bool
 )
-    @unpack u₁, u₁loopsym, u₂loopsym, vectorized, u₂max, suffix = ua
+    @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, u₂max, suffix = ua
     var = name(op)
     instr = instruction(op)
     parents_op = parents(op)
@@ -373,7 +377,7 @@ function lower_compute!(
         end
     end
     reduceddeps = reduceddependencies(op)
-    vecinreduceddeps = isreduct && vectorized ∈ reduceddeps
+    vecinreduceddeps = isreduct && vloopsym ∈ reduceddeps
     maskreduct = mask & vecinreduceddeps #any(opp -> opp.variable === var, parents_op)
     # if vecinreduceddeps && vectorized ∉ loopdependencies(op) # screen parent opps for those needing a reduction to scalar
     #     # parents_op = reduce_vectorized_parents!(q, op, parents_op, U, u₁loopsym, u₂loopsym, vectorized, suffix)
@@ -453,7 +457,7 @@ function lower_compute!(
     if maskreduct
         ifelsefunc = if ls.unrollspecification[].u₁ == 1
             :ifelse # don't need to be fancy
-        elseif (u₁loopsym !== vectorized)
+        elseif (u₁loopsym !== vloopsym)
             :ifelsepartial # ifelse all the early ones
         else# mask last u₁
             :ifelselast # ifelse only the last one

@@ -1,58 +1,56 @@
 const NOpsType = Int#Union{Int,Vector{Int}}
 
-function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{<:AbstractUnitRange})
+function Loop(ls::LoopSet, ex::Expr, sym::Symbol, f, s, l)
+    if (f !== nothing) && (s !== nothing) && (l !== nothing)
+        return static_loop(sym, f, s, l)
+    end
     ssym = String(sym)
-    start = gensym(ssym*"_loopstart"); stop = gensym(ssym*"_loopstop"); loopsym = gensym(ssym * "_loop"); lensym = gensym(ssym * "_looplen")
-    pushpreamble!(ls, Expr(:(=), loopsym, ex))
-    pushpreamble!(ls, Expr(:(=), start, Expr(:call, lv(:first), loopsym)))
-    pushpreamble!(ls, Expr(:(=), stop, Expr(:call, lv(:last), loopsym)))
-    pushpreamble!(ls, Expr(:(=), lensym, Expr(:call, lv(:maybestaticlength), loopsym)))
-    loop = Loop(sym, 1, 1024, start, stop, loopsym, lensym, false, false)::Loop
-    pushpreamble!(ls, loopiteratesatleastonce(loop))
-    loop
+    rangesym = gensym(ssym * "_loop");
+    lensym = gensym(ssym * "_looplen")
+    pushpreamble!(ls, Expr(:(=), rangesym, ex))
+    pushpreamble!(ls, Expr(:(=), lensym, Expr(:call, lv(:maybestaticlength), rangesym)))
+    F = if f === nothing
+        start = gensym(ssym*"_loopstart")
+        pushpreamble!(ls, Expr(:(=), start, Expr(:call, lv(:first), rangesym)))
+        MaybeKnown(start, 1)
+    else
+        MaybeKnown(f)
+    end
+    S = if s === nothing
+        step = gensym(ssym*"_loopstep")
+        pushpreamble!(ls, Expr(:(=), step, Expr(:call, lv(:step), rangesym)))
+        MaybeKnown(step, 1)
+    else
+        MaybeKnown(s)
+    end
+    L = if l === nothing
+        stop = gensym(ssym*"_loopstop")
+        pushpreamble!(ls, Expr(:(=), stop, Expr(:call, lv(:last), rangesym)))
+        MaybeKnown(stop, 1024)
+    else
+        MaybeKnown(l)
+    end
+    loopiteratesatleastonce!(ls, Loop(sym, F, L, S, rangesym, lensym))
+end
+function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{R}) where {R<:AbstractRange}
+    f = ArrayInterface.known_first(R)
+    s = ArrayInterface.known_step(R)
+    l = ArrayInterface.known_last(R)
+    
+    Loop(ls, ex, sym, f, s, l)
 end
 
-function add_static_upper_loop!(ls::LoopSet, ex::Expr, sym::Symbol, U::Int)
-    ssym = String(sym)
-    start = gensym(ssym*"_loopstart"); loopsym = gensym(ssym * "_loop"); lensym = gensym(ssym * "_looplen")
-    pushpreamble!(ls, Expr(:(=), loopsym, ex))
-    pushpreamble!(ls, Expr(:(=), start, Expr(:call, lv(:first), loopsym)))
-    pushpreamble!(ls, Expr(:(=), lensym, Expr(:call, lv(:maybestaticlength), loopsym)))
-    loop = Loop(sym, U - 1023, U, start, Symbol(""), loopsym, lensym, false, true)::Loop
-    pushpreamble!(ls, loopiteratesatleastonce(loop))
-    loop
-end
-function add_static_lower_loop!(ls::LoopSet, ex::Expr, sym::Symbol, L::Int)
-    ssym = String(sym)
-    stop = gensym(ssym*"_loopstop"); loopsym = gensym(ssym * "_loop"); lensym = gensym(ssym * "_looplen")
-    pushpreamble!(ls, Expr(:(=), loopsym, ex))
-    pushpreamble!(ls, Expr(:(=), stop, Expr(:call, lv(:last), loopsym)))
-    pushpreamble!(ls, Expr(:(=), lensym, Expr(:call, lv(:maybestaticlength), loopsym)))
-    loop = Loop(sym, L, L + 1023, Symbol(""), stop, loopsym, lensym, true, false)::Loop
-    pushpreamble!(ls, loopiteratesatleastonce(loop))
-    loop
-end
-function static_loop(sym::Symbol, L::Int, U::Int)
-    Loop(sym, L, U, Symbol(""), Symbol(""), Symbol(""), Symbol(""), true, true)::Loop
-end
-
-function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{OptionallyStaticUnitRange{I, Static{U}}}) where {I<:Integer, U}
-    add_static_upper_loop!(ls, ex, sym, U)
-end
-function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{OptionallyStaticUnitRange{Static{L}, I}}) where {I <: Integer, L}
-    add_static_lower_loop!(ls, ex, sym, L)
+function static_loop(sym::Symbol, L::Int, S::Int, U::Int)
+    Loop(sym, MaybeKnown(L,0), MaybeKnown(U,0), MaybeKnown(S,0), Symbol(""), Symbol(""))
 end
 function Loop(::LoopSet, ::Expr, sym::Symbol, ::Type{OptionallyStaticUnitRange{Static{L}, Static{U}}}) where {L,U}
-    static_loop(sym, L, U)
+    static_loop(sym, L, 1, U)
 end
-function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{CloseOpen{Int, Static{U}}}) where {U}
-    add_static_upper_loop!(ls, ex, sym, U - 1)
-end
-function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{CloseOpen{Static{L}, Int}}) where {L}
-    add_static_lower_loop!(ls, ex, sym, L)
+function Loop(::LoopSet, ::Expr, sym::Symbol, ::Type{ArrayInterface.OptionallyStaticStepRange{StaticInt{L}, StaticInt{S}, StaticInt{U}}}) where {L,S,U}
+    static_loop(sym, L, S, U)
 end
 function Loop(::LoopSet, ::Expr, sym::Symbol, ::Type{CloseOpen{Static{L}, Static{U}}}) where {L,U}
-    static_loop(sym, L, U - 1)
+    static_loop(sym, L, 1, U - 1)
 end
 
 
@@ -84,21 +82,47 @@ function ArrayReferenceMeta(
     ls::LoopSet, @nospecialize(ar::ArrayRefStruct), arraysymbolinds::Vector{Symbol},
     opsymbols::Vector{Symbol}, nopsv::Vector{NOpsType}, expandedv::Vector{Bool}
 )
-    index_types = ar.index_types
-    indices = ar.indices
-    offsets = ar.offsets
+    # unpack the `ArrayRefStruct`
+    # we don't want to specialize on it, as it is typed on symbols.
+    index_types = (ar.index_types)::UInt64
+    indices = (ar.indices)::UInt64
+    offsets = (ar.offsets)::UInt64
+    strides = (ar.strides)::UInt64
+    arrayar = array(ar)::Symbol
+    ptrar = ptr(ar)::Symbol
+    # TODO, check if this matters at all. The compiler still knows it is an `::ArrayRefStruct`, just not `arrayar` or `ptrar`?
+    ArrayReferenceMeta(
+        ls, index_types, indices, offsets, strides,
+        arrayar, ptrar, arraysymbolinds, opsymbols, nopsv, expandedv
+    )
+end
+function ArrayReferenceMeta(
+    ls::LoopSet, index_types::UInt64, indices::UInt64, offsets::UInt64, strides::UInt64,
+    arrayar::Symbol, ptrar::Symbol, arraysymbolinds::Vector{Symbol},
+    opsymbols::Vector{Symbol}, nopsv::Vector{NOpsType}, expandedv::Vector{Bool}
+)
     ni = filled_8byte_chunks(index_types)
     index_vec = Symbol[]
     offset_vec = Int8[]
+    stride_vec = Int8[]
     loopedindex = Bool[]
     while index_types != zero(UInt64)
         ind = indices % UInt8
-        offset = offsets % Int8
+        offsetᵢ = offsets % Int8
+        strideᵢ = strides % Int8
         if index_types == LoopIndex
-            for inda in ls.loopsymbol_offsets[ind]+1:ls.loopsymbol_offsets[ind+1]
-                pushfirst!(index_vec, ls.loopsymbols[inda])
-                pushfirst!(offset_vec, offset)
+            if ind == zero(Int8) # CONSTANTZEROINDEX
+                pushfirst!(index_vec, CONSTANTZEROINDEX)
+                pushfirst!(offset_vec, offsetᵢ)
+                pushfirst!(stride_vec, strideᵢ)
                 pushfirst!(loopedindex, true)
+            else
+                for inda in ls.loopsymbol_offsets[ind]+1:ls.loopsymbol_offsets[ind+1]
+                    pushfirst!(index_vec, ls.loopsymbols[inda])
+                    pushfirst!(offset_vec, offsetᵢ)
+                    pushfirst!(stride_vec, strideᵢ)
+                    pushfirst!(loopedindex, true)
+                end
             end
         else#if index_types == ComputedIndex
             @assert index_types == ComputedIndex
@@ -107,12 +131,14 @@ function ArrayReferenceMeta(
                 nops = nopsv[ind]
                 for j ∈ 0:nops-1
                     pushfirst!(index_vec, expandedopname(opsym, j))
-                    pushfirst!(offset_vec, offset)
+                    pushfirst!(offset_vec, offsetᵢ)
+                    pushfirst!(stride_vec, strideᵢ)
                     pushfirst!(loopedindex, false)
                 end
             else
                 pushfirst!(index_vec, opsym)
-                pushfirst!(offset_vec, offset)
+                pushfirst!(offset_vec, offsetᵢ)
+                pushfirst!(stride_vec, strideᵢ)
                 pushfirst!(loopedindex, false)
             end
         # else
@@ -124,11 +150,12 @@ function ArrayReferenceMeta(
         index_types >>>= 8
         indices >>>= 8
         offsets >>>= 8
+        strides >>>= 8
         ni -= 1
     end
     ArrayReferenceMeta(
-        ArrayReference(array(ar), index_vec, offset_vec),
-        loopedindex, ptr(ar)
+        ArrayReference(arrayar, index_vec, offset_vec, stride_vec),
+        loopedindex, ptrar
     )
 end
 

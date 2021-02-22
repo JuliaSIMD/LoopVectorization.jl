@@ -1,3 +1,7 @@
+const DISCONTIGUOUS = Symbol("##DISCONTIGUOUSSUBARRAY##")
+const CONSTANTZEROINDEX = Symbol("##CONSTANTZEROINDEX##")
+
+
 """
     ArrayReference
 
@@ -17,17 +21,19 @@ struct ArrayReference
     the previous load `x[i-1]` can be "carried over" to the next iteration.
     Only used for small (`Int8`) offsets."""    
     offsets::Vector{Int8}
+    strides::Vector{Int8}
 end
-ArrayReference(array, indices) = ArrayReference(array, indices, zeros(Int8, length(indices)))
+ArrayReference(array, indices) = ArrayReference(array, indices, zeros(Int8, length(indices)), ones(Int8, length(indices)))
 function sameref(x::ArrayReference, y::ArrayReference)
     (x.array === y.array) && (x.indices == y.indices)
 end
 function Base.isequal(x::ArrayReference, y::ArrayReference)
     sameref(x, y) || return false
     xoffs = x.offsets; yoffs = y.offsets
+    xmult = x.strides; ymult = y.strides
     length(xoffs) == length(yoffs) || return false
     for n ∈ eachindex(xoffs)
-        xoffs[n] == yoffs[n] || return false
+        ((xoffs[n] == yoffs[n]) & (xmult[n] == ymult[n])) || return false
     end
     true
 end
@@ -55,11 +61,12 @@ function ArrayReferenceMeta(ref::ArrayReference, loopedindex, ptr = vptr(ref))
     )
 end
 
-struct OffsetMemOpCollection
+struct OffsetLoadCollection
     opids::Vector{Vector{Int}}
-    
+    # offsets::Vector{Vector{Vector{Int8}}}
+    opidcollectionmap::Vector{Tuple{Int,Int}}
+    OffsetLoadCollection() = new(Vector{Int}[], Tuple{Int,Int}[])
 end
-
 
 # function Base.hash(x::ArrayReference, h::UInt)
     # @inbounds for n ∈ eachindex(x)
@@ -347,7 +354,7 @@ arrayref(ref::ArrayReferenceMetaPosition) = ref.ref.ref
 arrayref(op::Operation) = op.ref.ref
 getindices(ref) = arrayref(ref).indices
 getoffsets(ref) = arrayref(ref).offsets
-const DISCONTIGUOUS = Symbol("##DISCONTIGUOUSSUBARRAY##")
+getstrides(ref) = arrayref(ref).strides
 function makediscontiguous!(inds)
     if iszero(length(inds)) || first(inds) !== DISCONTIGUOUS
         pushfirst!(inds, DISCONTIGUOUS)

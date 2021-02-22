@@ -300,7 +300,7 @@ function add_broadcast!(
     @nospecialize(_::Type{SubArray{T,N,A,S,B}}), elementbytes::Int
 ) where {T,N,N2,A<:AbstractArray{T,N2},B,N3,S <: Tuple{Int,Vararg{Any,N3}}}
     inds = Vector{Symbol}(undef, N+1)
-    inds[1] = Symbol("##DISCONTIGUOUSSUBARRAY##")
+    inds[1] = DISCONTIGUOUS
     inds[2:end] .= @view(loopsyms[1:N])
     add_simple_load!(ls, destname, ArrayReference(bcname, inds), elementbytes, true, true)
 end

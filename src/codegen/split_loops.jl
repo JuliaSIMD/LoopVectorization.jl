@@ -71,6 +71,7 @@ function split_loopset(ls::LoopSet, ids)
     # split loops and the loops are statically sized, because code gen will then assume it is correct...
     set_hw!(ls_new, reg_size(ls), reg_count(ls), cache_lnsze(ls))
     ls_new.vector_width[] = ls.vector_width[]
+    fill_offset_memop_collection!(ls)
     ls_new
 end
 
