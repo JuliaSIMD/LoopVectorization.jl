@@ -554,12 +554,19 @@ end
 names(ls::LoopSet) = ls.loop_order.loopnames
 reversenames(ls::LoopSet) = ls.loop_order.bestorder
 function getloopid_or_nothing(ls::LoopSet, s::Symbol)
+    # @show ls.loopsymbols, s
     for (loopnum,sym) ∈ enumerate(ls.loopsymbols)
         s === sym && return loopnum
     end
 end
 
 getloopid(ls::LoopSet, s::Symbol) = getloopid_or_nothing(ls, s)::Int
+# function getloopid(ls::LoopSet, s::Symbol)::Int
+#     @show ls.loops
+#     id = getloopid_or_nothing(ls, s)
+#     @show id
+#     id
+# end
 # getloop(ls::LoopSet, i::Integer) = getloop(ls, names(ls)[i])
 getloop(ls::LoopSet, i::Integer) = ls.loops[ls.loopordermap[i]] # takes nest level after reordering
 getloop_from_id(ls::LoopSet, i::Integer) = ls.loops[i] # takes w/ respect to original loop order.
@@ -1121,6 +1128,29 @@ function fill_offset_memop_collection!(ls::LoopSet)
     end
 end
 
+
+"""
+Returns `0` if the op is the declaration of the constant outerreduction variable.
+Returns `n`, where `n` is the constant declarations's index among parents(op), if op is an outter reduction.
+Returns `-1` if not an outerreduction.
+"""
+function isouterreduction(ls::LoopSet, op::Operation)
+    if isconstant(op) # equivalent to checking if length(loopdependencies(op)) == 0
+        op.instruction === LOOPCONSTANT ? 0 : -1
+    elseif iscompute(op)
+        var = op.variable
+        for opid ∈ ls.outer_reductions
+            rop = operations(ls)[opid]
+            for (n,opp) ∈ enumerate(parents(op))
+                opp === rop && return n
+                search_tree(parents(opp), rop.variable) && return n
+            end
+        end
+        -1
+    else
+        -1
+    end
+end
 
 struct LoopError <: Exception
     msg

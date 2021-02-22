@@ -86,7 +86,7 @@ function subset_vptr!(ls::LoopSet, vptr::Symbol, indnum::Int, ind, previndices, 
     subsetvptr
 end
 byterepresentable(x)::Bool = false
-byterepresentable(x::Integer)::Bool = typemin(Int8) ≤ x ≤ typemax(Int8)
+byterepresentable(x::Integer)::Bool = typemin(Int8) < x < typemax(Int8)
 function _addoffset!(indices, offsets, strides, loopedindex, loopdependencies, ind, offset, stride)
     push!(indices, ind)
     push!(offsets, offset % Int8)
@@ -103,7 +103,7 @@ end
 
 function addconstindex!(indices, offsets, strides, loopedindex, offset)
     push!(indices, CONSTANTZEROINDEX)
-    push!(offsets, offset % Int8)
+    push!(offsets, (offset-1) % Int8)
     push!(strides, zero(Int8))
     push!(loopedindex, true)
     true

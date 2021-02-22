@@ -307,25 +307,6 @@ These names will be further processed if op is tiled and/or unrolled.
 """
 mangledvar(op::Operation) = op.mangledvariable
 
-"""
-Returns `0` if the op is the declaration of the constant outerreduction variable.
-Returns `n`, where `n` is the constant declarations's index among parents(op), if op is an outter reduction.
-Returns `-1` if not an outerreduction.
-"""
-function isouterreduction(op::Operation)
-    if isconstant(op) # equivalent to checking if length(loopdependencies(op)) == 0
-        op.instruction === LOOPCONSTANT ? 0 : -1
-    elseif iscompute(op)
-        var = op.variable
-        for (n,opp) ∈ enumerate(parents(op))
-            opp.variable === var && opp.instruction === LOOPCONSTANT && return n
-        end
-        -1
-    else
-        -1
-    end
-end
-
 mutable struct ArrayReferenceMetaPosition
     mref::ArrayReferenceMeta
     parents::Vector{Operation}
@@ -355,13 +336,18 @@ arrayref(op::Operation) = op.ref.ref
 getindices(ref) = arrayref(ref).indices
 getoffsets(ref) = arrayref(ref).offsets
 getstrides(ref) = arrayref(ref).strides
+
+isdiscontiguous(ref) = isdiscontiguous_inds(getindices(ref))
+function isdiscontiguous_inds(inds)
+    # (first(inds) === DISCONTIGUOUS) || (first(inds) === CONSTANTZEROINDEX)
+    first(inds) === DISCONTIGUOUS
+end
 function makediscontiguous!(inds)
-    if iszero(length(inds)) || first(inds) !== DISCONTIGUOUS
+    if iszero(length(inds)) || !isdiscontiguous_inds(inds)
         pushfirst!(inds, DISCONTIGUOUS)
     end
     nothing
 end
-isdiscontiguous(ref) = first(getindices(ref)) === DISCONTIGUOUS
 
 function getindicesonly(ref)
     indices = getindices(ref)

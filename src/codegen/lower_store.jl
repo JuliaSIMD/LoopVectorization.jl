@@ -154,7 +154,7 @@ function lower_tiled_store!(blockq::Expr, op::Operation, ls::LoopSet, unrollsyms
         # add_memory_mask!(storeexpr, op, ua, mask)
         # we checked for `isconditionalmemop` earlier, so we skip this check
         # and just directly take the branch in `add_memory_mask!`
-        push!(storeexpr.args, mask)
+        push!(storeexpr.args, MASKSYMBOL)
     end
     push!(storeexpr.args, falseexpr, trueexpr, falseexpr, rs)
     push!(blockq.args, storeexpr)

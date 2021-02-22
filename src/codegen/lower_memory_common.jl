@@ -97,7 +97,7 @@ function mem_offset(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Vect
             # push!(ret.args, ind + offset)
         # else
         if loopedindex[n]
-            if inds_calc_by_ptr_offset[n]
+            if inds_calc_by_ptr_offset[n] || ind === CONSTANTZEROINDEX
                 addoffset!(ret, stride, offset, indvectorized)
             else
                 addoffset!(ret, ind, stride, offset, indvectorized)
@@ -160,7 +160,7 @@ function unrolled_curly(op::Operation, u₁::Int, u₁loop::Loop, vloop::Loop, m
         intvecsym = :(Int($VECTORWIDTHSYMBOL))
         if vecnotunrolled
             # Expr(:call, Expr(:curly, lv(:Unroll), AU, 1, u₁, AV, intvecsym, M, 1), ind)
-            Expr(:curly, lv(:Unroll), AU, gethint(u₁loop), u₁, AV, intvecsym, M, X)
+            Expr(:curly, lv(:Unroll), AU, gethint(step(u₁loop)), u₁, AV, intvecsym, M, X)
         else
             if isone(step(u₁loop))
                 Expr(:curly, lv(:Unroll), AU, intvecsym, u₁, AV, intvecsym, M, X)
@@ -170,7 +170,7 @@ function unrolled_curly(op::Operation, u₁::Int, u₁loop::Loop, vloop::Loop, m
             end
         end
     else
-        Expr(:curly, lv(:Unroll), AU, gethint(u₁loop), u₁, AV, 1, M, 1)
+        Expr(:curly, lv(:Unroll), AU, gethint(step(u₁loop)), u₁, AV, 1, M, 1)
     end
 end
 function unrolledindex(op::Operation, td::UnrollArgs, mask::Bool, inds_calc_by_ptr_offset::Vector{Bool})
@@ -317,7 +317,7 @@ function mem_offset_u(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Ve
                     end
                 else
                     # stride doesn't matter
-                    if ind_by_offset
+                    if ind_by_offset || ind === CONSTANTZEROINDEX
                         addoffset!(ret, 1, offset, _mm & indvectorized)
                     else
                         addoffset!(ret, ind, 1, offset, _mm & indvectorized)

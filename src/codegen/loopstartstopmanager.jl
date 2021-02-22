@@ -47,6 +47,7 @@ function indices_calculated_by_pointer_offsets(ls::LoopSet, ar::ArrayReferenceMe
     for i ∈ eachindex(li)
         ii = i + offset
         ind = indices[ii]
+        ind === CONSTANTZEROINDEX && continue
         if (!li[i]) || multiple_with_name(vptr(ar), ls.lssm[].uniquearrayrefs) ||
             (iszero(ls.vector_width[]) && isstaticloop(getloop(ls, ind)))# ||
             out[i] = false
@@ -100,7 +101,7 @@ function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, alla
         if (!li[i])
             uliv[i] = 0
             # push!(gespinds.args, Expr(:call, lv(:Zero)))
-            push!(gespinds.args, Expr(:call, Expr(:curly, lv(:Static), 1)))
+            push!(gespinds.args, staticexpr(1))
             push!(offsetprecalc_descript.args, 0)
         elseif isbroadcast ||
             ((isone(ii) && (last(looporder) === ind)) && !(otherindexunrolled(ls, ind, ar)) ||
@@ -111,16 +112,20 @@ function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, alla
             # Not doing normal offset indexing
             uliv[i] = -findfirst(isequal(ind), looporder)::Int
             # push!(gespinds.args, Expr(:call, lv(:Zero)))
-            push!(gespinds.args, Expr(:call, Expr(:curly, lv(:Static), 1)))
+            push!(gespinds.args, staticexpr(1))
             
             push!(offsetprecalc_descript.args, 0) # not doing offset indexing, so push 0
         else
+            if ind === CONSTANTZEROINDEX
+                push!(gespinds.args, staticexpr(1))
+                continue
+            end
             uliv[i] = findfirst(isequal(ind), looporder)::Int
             loop = getloop(ls, ind)
-            if loop.startexact
-                push!(gespinds.args, Expr(:call, Expr(:curly, lv(:Static), loop.starthint)))
+            if isknown(first(loop))
+                push!(gespinds.args, staticexpr(gethint(first(loop))))
             else
-                push!(gespinds.args, loop.startsym)
+                push!(gespinds.args, getsym(first(loop)))
             end
             # if loop.startexact
             #     push!(gespinds.args, Expr(:call, Expr(:curly, lv(:Static), loop.starthint - 1)))
@@ -269,7 +274,6 @@ function pointermax_index(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int,
             if iszero(sub)
                 push!(index.args, stopsym)
             else
-                stride = getstrides(ar)[i]
                 _ind = if isvectorized
                     if isone(sub)
                         Expr(:call, lv(:vsub_fast), stopsym, VECTORWIDTHSYMBOL)
@@ -279,9 +283,9 @@ function pointermax_index(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int,
                 else
                     Expr(:call, lv(:vsub_fast), stopsym, sub)
                 end
-                stride = getstrides(ar)[i]
+                stride = getstrides(ar)[j]
                 if isknown(incr)
-                    stride *= gethint
+                    stride *= gethint(incr)
                 else
                     _ind = mulexpr(_ind, getsym(incr))
                 end
@@ -334,7 +338,7 @@ function append_pointer_maxes!(
             # push!(loopstart.args, defpointermax(ls, ptrdefs[termind], n, sub, isvectorized, stopindicator))
         end
     else
-        index, ind = pointermax_index(ls, ar, n, submax, isvectorized, stopindicator)
+        index, ind = pointermax_index(ls, ar, n, submax, isvectorized, stopindicator, incr)
         vptr_ar = vptr(ar)
         _pointercompbase = maxsym(vptr_ar, submax)
         pointercompbase = gensym(_pointercompbase)

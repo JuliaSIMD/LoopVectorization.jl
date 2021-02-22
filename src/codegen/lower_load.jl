@@ -347,7 +347,7 @@ function lower_load_collection!(q, ls, op, td, mask, collectionid)
         for j ∈ 1:num_unroll_collections
             collectionⱼ = unroll_collections[j]
             # giet id (`first`) of first item in collection to get base offsets for comparison
-            if view(getoffset(ops[first(first(collectionⱼ))]), r) == v
+            if view(getoffsets(ops[first(first(collectionⱼ))]), r) == v
                 found_match = true
                 push!(collectionⱼ, (i, o))
             end
@@ -388,7 +388,7 @@ function lower_load_collection!(q, ls, op, td, mask, collectionid)
                 lower_load_no_optranslation!(q, ls, ops[opidc[istart]], td, mask, inds_calc_by_ptr_offset)
             else
                 # lower `Unroll` with
-                lower_tiled_load!(q, ls, ops, opidc, view(collectionⱼ, istart:i-1), ostart, td, mask, inds_calc_by_ptr_offset)
+                lower_tiled_load!(q, ls, opidc, view(collectionⱼ, istart:i-1), ostart, td, mask, inds_calc_by_ptr_offset)
             end
             # restart istart and ostart
             istart = i
@@ -398,40 +398,44 @@ function lower_load_collection!(q, ls, op, td, mask, collectionid)
         if istart == collen
             lower_load_no_optranslation!(q, ls, ops[opidc[istart]], td, mask, inds_calc_by_ptr_offset)
         else
-            lower_tiled_load!(q, ls, ops, opidc, view(collectionⱼ, istart:collen), ostart, td, mask, inds_calc_by_ptr_offset)
+            lower_tiled_load!(q, ls, opidc, view(collectionⱼ, istart:collen), ostart, td, mask, inds_calc_by_ptr_offset)
         end
     end
 end
 function lower_tiled_load!(
-    q::Expr, ls::LoopSet, ops::Vector{Operation}, opidmap::Vector{Int},
-    idsformap::SubArray{Int64, 1, Vector{Int64}, Tuple{UnitRange{Int64}}, true},
+    q::Expr, ls::LoopSet, opidmap::Vector{Int},
+    idsformap::SubArray{Tuple{Int,Int}, 1, Vector{Tuple{Int,Int}}, Tuple{UnitRange{Int}}, true},
     ostart::Int, ua::UnrollArgs, mask::Bool, inds_calc_by_ptr_offset::Vector{Bool}
 )
-    @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, suffix = ua
+    @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, vloop, suffix = ua
     # ostart is first, it extends contiguously for each in idsformap, which we extract from and assign to
+    ops = operations(ls)
     nouter = length(idsformap)
     # ua = UnrollArgs(nouter, unrollsyms, u₂, 0)
-    op = ops[opidmap[first(idsformap)]]
+    # idsformap contains (index, offset) pairs
+    op = ops[opidmap[first(first(idsformap))]]
     opindices = getindices(op)
-    unrollcurl₂ = unrolled_curly(op, nouter, first(opindices), vloopsym, mask)
+    # construct dummy unrolled loop 
+    offset_dummy_loop = Loop(first(opindices), MaybeKnown(1), MaybeKnown(1024), MaybeKnown(1), Symbol(""), Symbol(""))
+    unrollcurl₂ = unrolled_curly(op, nouter, offset_dummy_loop, vloop, mask)
     inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false)
     falseexpr = Expr(:call, lv(:False)); rs = staticexpr(reg_size(ls));
-    if isu₁ && u₁ > 1 # both unrolled
-        unrollcurl₁ = unrolled_curly(op, u₁, u₁loopsym, vloopsym, mask)
+    if isu₁unrolled(op) && u₁ > 1 # both unrolled
+        unrollcurl₁ = unrolled_curly(op, u₁, ua.u₁loop, vloop, mask)
         inds = Expr(:call, unrollcurl₁, inds)
     end
     uinds = Expr(:call, unrollcurl₂, inds)
     vp = vptr(op)
     loadexpr = Expr(:call, lv(:vload), vp, uinds)
     # not using `add_memory_mask!(storeexpr, op, ua, mask)` because we checked `isconditionalmemop` earlier in `lower_load_collection!`
-    (mask && isvectorized(op)) && push!(storeexpr.args, mask)
+    (mask && isvectorized(op)) && push!(loadexpr.args, MASKSYMBOL)
     push!(loadexpr.args, falseexpr, rs)
-    collectionname = Symbol(vp, "##collection##number", first(idsformap), "##size##", nouter, "##u₁##", u₁)
+    collectionname = Symbol(vp, "##collection##number", first(first(idsformap)), "##size##", nouter, "##u₁##", u₁)
     # getfield to extract data from `VecUnroll` object, so we have a tuple
     push!(q.args, Expr(:(=), collectionname, Expr(:call, :getfield, loadexpr, 1)))
-    u = Core.ifelse(isu₁, u₁, 1)
-    for (i,opid) ∈ enumerate(idsformap)
-        _op = operations[opidmap[opid]]
+    u = Core.ifelse(isu₁unrolled(op), u₁, 1)
+    for (i,(opid,o)) ∈ enumerate(idsformap)
+        _op = ops[opidmap[opid]]
         mvar = Symbol(variable_name(_op, suffix), '_', u)
         push!(q.args, Expr(:(=), mvar, Expr(:call, :getfield, collectionname, i, false)))
     end

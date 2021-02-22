@@ -258,7 +258,14 @@ function parent_op_name(
         if parents_u₂syms[n]
             parent = Symbol(parent, suffix_)
         end
-        u = parents_u₁syms[n] ? u₁ : 1
+        u = if !parents_u₁syms[n]
+            1
+        elseif isouterreduction(ls, opp) ≠ -1
+            getu₁full(ls, u₁)
+        else
+            getu₁forreduct(ls, opp, u₁)
+        end
+        # u = parents_u₁syms[n] ? u₁ : 1
         parent = Symbol(parent, '_', u)
     end
     # if (tiledouterreduction == -1) && LoopVectorization.names(ls)[ls.unrollspecification[].u₁loopnum] ∈ reduceddependencies(opp)
@@ -321,7 +328,7 @@ function lower_compute!(
         -1
     else
         suffix_ = Symbol(suffix, :_)
-        isouterreduction(op)
+        isouterreduction(ls, op)
     end
     if !opunrolled && any(parents_u₁syms) # TODO: Clean up this mess, refactor the naming code, putting it in one place and have everywhere else use it for easy equivalence.
         parents_op = copy(parents_op) # don't mutate the original!
@@ -445,11 +452,12 @@ function lower_compute!(
                 # @show name(parents_op[n]), name(op), mangledvar(parents_op[n]), mangledvar(op)
                 push!(instrcall.args, varsym)
             end
-        elseif ((!isu₂unrolled(op)) & isu₂unrolled(opp)) && (isouterreduction(opp) != -1)
+        elseif ((!isu₂unrolled(op)) & isu₂unrolled(opp)) && (isouterreduction(ls, opp) != -1)
             # this checks if the parent is u₂ unrolled but this operation is not, in which case we need to reduce it.
             push!(instrcall.args, reduce_expr_u₂(mangledvar(opp), instruction(opp), ureduct(ls)))
         else
             parent = parent_op_name(ls, parents_op, n, modsuffix, suffix_, parents_u₁syms, parents_u₂syms, u₁, opisvectorized, tiledouterreduction)
+            # @show parent, u₁, selfopname
             push!(instrcall.args, parent)
         end
     end
