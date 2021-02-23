@@ -15,7 +15,7 @@ end
 struct UnrollSymbols
     u₁loopsym::Symbol
     u₂loopsym::Symbol
-    vectorized::Symbol
+    vloopsym::Symbol
 end
 struct UnrollArgs
     u₁loop::Loop
@@ -36,7 +36,7 @@ function UnrollArgs(ua::UnrollArgs, u₁::Int)
     @unpack u₁loop, u₂loop, vloop, u₂max, suffix = ua
     UnrollArgs(u₁loop, u₂loop, vloop, u₁, u₂max, suffix)
 end
-# UnrollSymbols(ua::UnrollArgs) = UnrollSymbols(ua.u₁loopsym, ua.u₂loopsym, ua.vectorized)
+# UnrollSymbols(ua::UnrollArgs) = UnrollSymbols(ua.u₁loopsym, ua.u₂loopsym, ua.vloopsym)
 
 # isfirst(ua::UnrollArgs{Nothing}) = iszero(ua.u₁)
 # isfirst(ua::UnrollArgs{Int}) = iszero(ua.u₁) & iszero(ua.suffix)
@@ -44,22 +44,22 @@ end
 struct UnrollSpecification
     u₁loopnum::Int
     u₂loopnum::Int
-    vectorizedloopnum::Int
+    vloopnum::Int
     u₁::Int
     u₂::Int
 end
-# UnrollSpecification(ls::LoopSet, u₁loop::Loop, vectorized::Symbol, u₁, u₂) = UnrollSpecification(ls, u₁loop.itersymbol, vectorized, u₁, u₂)
+# UnrollSpecification(ls::LoopSet, u₁loop::Loop, vloopsym::Symbol, u₁, u₂) = UnrollSpecification(ls, u₁loop.itersymbol, vloopsym, u₁, u₂)
 function UnrollSpecification(us::UnrollSpecification, u₁, u₂)
-    @unpack u₁loopnum, u₂loopnum, vectorizedloopnum = us
-    UnrollSpecification(u₁loopnum, u₂loopnum, vectorizedloopnum, u₁, u₂)
+    @unpack u₁loopnum, u₂loopnum, vloopnum = us
+    UnrollSpecification(u₁loopnum, u₂loopnum, vloopnum, u₁, u₂)
 end
 # function UnrollSpecification(us::UnrollSpecification; u₁ = us.u₁, u₂ = us.u₂)
-#     @unpack u₁loopnum, u₂loopnum, vectorizedloopnum = us
-#     UnrollSpecification(u₁loopnum, u₂loopnum, vectorizedloopnum, u₁, u₂)
+#     @unpack u₁loopnum, u₂loopnum, vloopnum = us
+#     UnrollSpecification(u₁loopnum, u₂loopnum, vloopnum, u₁, u₂)
 # end
 isunrolled1(us::UnrollSpecification, n::Int) = us.u₁loopnum == n
 isunrolled2(us::UnrollSpecification, n::Int) = !isunrolled1(us, n) && us.u₂loopnum == n
-isvectorized(us::UnrollSpecification, n::Int) = us.vectorizedloopnum == n
+isvectorized(us::UnrollSpecification, n::Int) = us.vloopnum == n
 function unrollfactor(us::UnrollSpecification, n::Int)
     @unpack u₁loopnum, u₂loopnum, u₁, u₂ = us
     (u₁loopnum == n) ? u₁ : ((u₂loopnum == n) ? u₂ : 1)
@@ -414,10 +414,10 @@ struct LoopSet
 end
 
 function UnrollArgs(ls::LoopSet, u₁::Int, unrollsyms::UnrollSymbols, u₂max::Int, suffix::Int)
-    @unpack u₁loopsym, u₂loopsym, vectorized = unrollsyms
+    @unpack u₁loopsym, u₂loopsym, vloopsym = unrollsyms
     u₁loop = getloop(ls, u₁loopsym)
     u₂loop = u₂loopsym === Symbol("##undefined##") ? u₁loop : getloop(ls, u₂loopsym)
-    vloop = getloop(ls, vectorized)
+    vloop = getloop(ls, vloopsym)
     UnrollArgs(u₁loop, u₂loop, vloop, u₁, u₂max, suffix)
 end
 
@@ -535,8 +535,8 @@ This is used so that identical loops will create identical `_avx_!` calls in the
 """
 gensym!(ls::LoopSet, s) = Symbol("###$(s)###$(ls.symcounter[] += 1)###")
 
-function cacheunrolled!(ls::LoopSet, u₁loop, u₂loop, vectorized)
-    foreach(op -> setunrolled!(op, u₁loop, u₂loop, vectorized), operations(ls))
+function cacheunrolled!(ls::LoopSet, u₁loop, u₂loop, vloopsym)
+    foreach(op -> setunrolled!(op, u₁loop, u₂loop, vloopsym), operations(ls))
     foreach(empty! ∘ children, operations(ls))
     # TODO: WHY?
     for op ∈ operations(ls)
@@ -1039,11 +1039,11 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
     end
 end
 
-function UnrollSpecification(ls::LoopSet, u₁loop::Symbol, u₂loop::Symbol, vectorized::Symbol, u₁, u₂)
+function UnrollSpecification(ls::LoopSet, u₁loop::Symbol, u₂loop::Symbol, vloopsym::Symbol, u₁, u₂)
     order = names(ls)
     nu₁ = findfirst(isequal(u₁loop), order)::Int
     nu₂ = u₂ == -1 ? nu₁ : findfirst(isequal(u₂loop), order)::Int
-    nv = findfirst(isequal(vectorized), order)::Int
+    nv = findfirst(isequal(vloopsym), order)::Int
     UnrollSpecification(nu₁, nu₂, nv, u₁, u₂)
 end
 
@@ -1099,19 +1099,30 @@ function fill_offset_memop_collection!(ls::LoopSet)
     omop = offsetloadcollection(ls)
     ops = operations(ls)
     num_ops = length(ops)
-    @unpack opids, opidcollectionmap = omop
+    @unpack opids, opidcollectionmap, batchedcollections, batchedcollectionmap = omop
+    length(opidcollectionmap) == 0 || return
     resize!(opidcollectionmap, num_ops)
     fill!(opidcollectionmap, (0,0));
+    resize!(batchedcollectionmap, num_ops)
+    fill!(batchedcollectionmap, (0,0))
     empty!(opids);# empty!(offsets);
     for i ∈ 1:num_ops
         op = ops[i]
+        isconditionalmemop(op) && continue # not supported yet
         opref = op.ref.ref
-        isload(op) || continue
+        opisload = isload(op)
+        (opisload | isstore(op)) || continue
         opidcollectionmap[i] === (0,0) || continue # if not -1, we already handled
+        isdiscontiguous(op) && continue
         collectionsize = 0
         for j ∈ i+1:num_ops
             opp = ops[j]
-            isload(opp) || continue
+            isconditionalmemop(opp) && continue # not supported yet
+            if opisload # Each collection is either entirely loads or entirely stores
+                isload(opp) || continue
+            else
+                isstore(opp) || continue
+            end
             # @show op opp
             oppref = opp.ref.ref
             sameref(opref, oppref) || continue
@@ -1125,9 +1136,77 @@ function fill_offset_memop_collection!(ls::LoopSet)
             end
             opidcollectionmap[identifier(opp)] = (length(opids),length(last(opids)))
         end
+    end    
+    for (collectionid,opidc) ∈ enumerate(opids)
+        length(opidc) > 1 || continue
+        
+        # we check if we can turn the offsets into an unroll
+        # we have up to `length(opidc)` loads to do, so we allocate that many "base" vectors
+        # then we iterate through them, adding them to collections as appropriate
+        # inner vector tuple is of (op_pos_w/in collection,o)
+        unroll_collections = Vector{Vector{Tuple{Int,Int}}}(undef, length(opidc))
+        num_unroll_collections = 0
+        # num_ops_considered = length(opidc)
+        r = 2:length(getindices(ops[first(opidc)]))
+        
+        for (i,opid) ∈ enumerate(opidc)
+            op = ops[opid]
+            offset = getoffsets(op)
+            o = offset[1]
+            v = view(offset, r)
+            found_match = false
+            for j ∈ 1:num_unroll_collections
+                collectionⱼ = unroll_collections[j]
+                # giet id (`first`) of first item in collection to get base offsets for comparison
+                if view(getoffsets(ops[first(first(collectionⱼ))]), r) == v
+                    found_match = true
+                    push!(collectionⱼ, (i, o))
+                end
+            end
+            if !found_match
+                num_unroll_collections += 1
+                unroll_collections[num_unroll_collections] = [(i,o)]
+            end
+        end
+        for j ∈ 1:num_unroll_collections
+            collectionⱼ = unroll_collections[j]
+            collen = length(collectionⱼ)
+            collen ≤ 1 && continue
+            # we have multiple, easiest to process if we sort them
+            sort!(collectionⱼ, by=last)
+            istart = 1; ostart = last(first(collectionⱼ))
+            oprev = ostart
+            for i ∈ 2:collen
+                onext = last(collectionⱼ[i])
+                if onext == oprev + 1
+                    oprev = onext
+                    continue
+                end
+                # we skipped one, so we must now lower all previous
+                if oprev ≠ ostart # it's just 1
+                    pushbatchedcollection!(batchedcollections, batchedcollectionmap, opidc, ops, collectionⱼ, istart, i-1)
+                end
+                # restart istart and ostart
+                istart = i
+                ostart = onext
+                oprev = onext
+            end
+            if istart ≠ collen
+                pushbatchedcollection!(batchedcollections, batchedcollectionmap, opidc, ops, collectionⱼ, istart, collen)
+            end
+        end
     end
 end
 
+function pushbatchedcollection!(batchedcollections, batchedcollectionmap, opidc, ops, collectionⱼ, istart, istop)
+    colview = view(collectionⱼ, istart:istop)
+    push!(batchedcollections, colview)
+    bclen = length(batchedcollections)
+    for (i,(k,_)) ∈ enumerate(colview)
+        # batchedcollectionmap[identifier(op)] gives index into `batchedcollections` containing `colview`
+        batchedcollectionmap[identifier(ops[opidc[k]])] = (bclen,i)
+    end
+end
 
 """
 Returns `0` if the op is the declaration of the constant outerreduction variable.

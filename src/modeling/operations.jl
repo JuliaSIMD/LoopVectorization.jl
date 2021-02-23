@@ -65,7 +65,11 @@ struct OffsetLoadCollection
     opids::Vector{Vector{Int}}
     # offsets::Vector{Vector{Vector{Int8}}}
     opidcollectionmap::Vector{Tuple{Int,Int}}
-    OffsetLoadCollection() = new(Vector{Int}[], Tuple{Int,Int}[])
+    batchedcollections::Vector{SubArray{Tuple{Int,Int}, 1, Vector{Tuple{Int,Int}}, Tuple{UnitRange{Int}}, true}}
+    batchedcollectionmap::Vector{Tuple{Int,Int}}
+    function OffsetLoadCollection()
+        new(Vector{Int}[], Tuple{Int,Int}[], SubArray{Tuple{Int,Int}, 1, Vector{Tuple{Int,Int}}, Tuple{UnitRange{Int}}, true}[], Tuple{Int,Int}[])
+    end
 end
 
 # function Base.hash(x::ArrayReference, h::UInt)

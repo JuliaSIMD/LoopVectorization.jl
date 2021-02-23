@@ -29,15 +29,15 @@ end
 function lower_block(
     ls::LoopSet, us::UnrollSpecification, n::Int, mask::Bool, UF::Int
 )
-    @unpack u₁loopnum, u₂loopnum, vectorizedloopnum, u₁, u₂ = us
+    @unpack u₁loopnum, u₂loopnum, vloopnum, u₁, u₂ = us
     ops = oporder(ls)
     order = names(ls)
     u₁loopsym = order[u₁loopnum]
     u₂loopsym = order[u₂loopnum]
-    vectorized = order[vectorizedloopnum]
+    vectorized = order[vloopnum]
     unrollsyms = UnrollSymbols(u₁loopsym, u₂loopsym, vectorized)
     u₁ = n == u₁loopnum ? UF : u₁
-    dontmaskfirsttiles = mask && vectorizedloopnum == u₂loopnum
+    dontmaskfirsttiles = mask && vloopnum == u₂loopnum
     blockq = Expr(:block)
     for prepost ∈ 1:2
         # !u₁ && !u₂
@@ -222,11 +222,11 @@ end
 function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask::Bool)
     UF = unrollfactor(us, n)
     isone(UF) && return lower_no_unroll(ls, us, n, inclmask)
-    @unpack u₁loopnum, vectorizedloopnum, u₁, u₂ = us
+    @unpack u₁loopnum, vloopnum, u₁, u₂ = us
     order = names(ls)
     loopsym = order[n]
     loop = getloop(ls, n)
-    vectorized = order[vectorizedloopnum]
+    vectorized = order[vloopnum]
     nisunrolled = isunrolled1(us, n)
     nisvectorized = isvectorized(us, n)
     W = nisvectorized ? ls.vector_width[] : 1
@@ -697,15 +697,15 @@ function define_eltype_vec_width!(q::Expr, ls::LoopSet, vectorized)
     nothing
 end
 function setup_preamble!(ls::LoopSet, us::UnrollSpecification, Ureduct::Int)
-    @unpack u₁loopnum, u₂loopnum, vectorizedloopnum, u₁, u₂ = us
+    @unpack u₁loopnum, u₂loopnum, vloopnum, u₁, u₂ = us
     order = names(ls)
     u₁loopsym = order[u₁loopnum]
     u₂loopsym = order[u₂loopnum]
-    vectorized = order[vectorizedloopnum]
+    vectorized = order[vloopnum]
     set_vector_width!(ls, vectorized)
     iszero(length(ls.includedactualarrays) + length(ls.outer_reductions)) || define_eltype_vec_width!(ls.preamble, ls, vectorized)
     lower_licm_constants!(ls)
-    isone(num_loops(ls)) || pushpreamble!(ls, definemask(getloop(ls, vectorized)))#, u₁ > 1 && u₁loopnum == vectorizedloopnum))
+    isone(num_loops(ls)) || pushpreamble!(ls, definemask(getloop(ls, vectorized)))#, u₁ > 1 && u₁loopnum == vloopnum))
     if (Ureduct == u₁) || (u₂ != -1) || (Ureduct == -1)
         initialize_outer_reductions!(ls, ifelse(Ureduct == -1, u₁, Ureduct), vectorized) # TODO: outer reducts?
     elseif length(ls.outer_reductions) > 0
@@ -740,13 +740,13 @@ function tiled_outerreduct_unroll(us::UnrollSpecification)
     cld(u₂, cld(u₂, unroll))
 end
 function calc_Ureduct!(ls::LoopSet, us::UnrollSpecification)
-    @unpack u₁loopnum, u₁, u₂, vectorizedloopnum = us
+    @unpack u₁loopnum, u₁, u₂, vloopnum = us
     ur = if iszero(length(ls.outer_reductions))
         -1
     elseif u₂ == -1
         if u₁loopnum == num_loops(ls)
             loopisstatic = isstaticloop(getloop(ls, u₁loopnum))
-            loopisstatic &= ((vectorizedloopnum != u₁loopnum) | (!iszero(ls.vector_width[])))
+            loopisstatic &= ((vloopnum != u₁loopnum) | (!iszero(ls.vector_width[])))
             # loopisstatic ? u₁ : min(u₁, 4) # much worse than the other two options, don't use this one
             if Sys.CPU_NAME === "znver1"
                 loopisstatic ? u₁ : 1
@@ -764,11 +764,11 @@ end
 ureduct(ls::LoopSet) = ls.ureduct[]
 function lower_unrollspec(ls::LoopSet)
     us = ls.unrollspecification[]
-    @unpack vectorizedloopnum, u₁, u₂ = us
+    @unpack vloopnum, u₁, u₂ = us
     # @show u₁, u₂
     order = names(ls)
     init_loop_map!(ls)
-    vectorized = order[vectorizedloopnum]
+    vectorized = order[vloopnum]
     Ureduct = calc_Ureduct!(ls, us)
     setup_preamble!(ls, us, Ureduct)
     initgesps = add_loop_start_stop_manager!(ls)

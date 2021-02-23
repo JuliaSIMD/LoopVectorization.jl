@@ -162,6 +162,7 @@ function capture_a_muladd(ex::Expr, mod)
 end
 function capture_muladd(ex::Expr, mod)
     while true
+        ex.head === :ref && return ex
         found, ex = capture_a_muladd(ex, mod)
         found || return ex
     end

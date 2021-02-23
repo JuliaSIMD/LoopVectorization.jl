@@ -46,7 +46,7 @@ end
 function lower_zero!(
     q::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs, zerotyp::NumberType = zerotype(ls, op)
 )
-    @unpack u₁, u₁loopsym, u₂loopsym, vectorized, u₂max, suffix = ua
+    @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, u₂max, suffix = ua
     mvar, opu₁, opu₂ = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, u₂max, suffix)
     !opu₂ && suffix > 0 && return
     # TODO: for u₁, needs to consider if reducedchildren are u₁-unrolled
@@ -57,7 +57,7 @@ function lower_zero!(
     mvar = Symbol(mvar, '_', Core.ifelse(opu₁, u₁, 1))
     typeT = typeof_sym(ls, op, zerotyp)
     # TODO: make should_broadcast_op handle everything.
-    if isvectorized(op) || vectorized ∈ reducedchildren(op) || vectorized ∈ reduceddependencies(op) || should_broadcast_op(op)
+    if isvectorized(op) || vloopsym ∈ reducedchildren(op) || vloopsym ∈ reduceddependencies(op) || should_broadcast_op(op)
         if opu₁ && u₁ > 1
             call = Expr(:call, lv(:zero_vecunroll), staticexpr(u₁), VECTORWIDTHSYMBOL, typeT, staticexpr(reg_size(ls)))
         else
@@ -93,17 +93,17 @@ vecbasefunc(f) = Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:Vectorizat
 function lower_constant!(
     q::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs
 )
-    @unpack u₁, u₁loopsym, u₂loopsym, vectorized, u₂max, suffix = ua
+    @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, u₂max, suffix = ua
     mvar, opu₁, opu₂ = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, u₂max, suffix)
     !opu₂ && suffix > 0 && return
     mvar = Symbol(mvar, '_', Core.ifelse(opu₁, u₁, 1))
     instruction = op.instruction
     constsym = instruction.instr
     # constsym = Symbol(instruction.instr, '_', 1)
-    reducedchildvectorized = vectorized ∈ reducedchildren(op)
-    if reducedchildvectorized || isvectorized(op) || vectorized ∈ reduceddependencies(op) || should_broadcast_op(op)
+    reducedchildvectorized = vloopsym ∈ reducedchildren(op)
+    if reducedchildvectorized || isvectorized(op) || vloopsym ∈ reduceddependencies(op) || should_broadcast_op(op)
         # call = Expr(:call, lv(:vbroadcast), W, Expr(:call, lv(:maybeconvert), typeT, constsym))
-        call = if reducedchildvectorized && vectorized ∉ loopdependencies(op)
+        call = if reducedchildvectorized && vloopsym ∉ loopdependencies(op)
             instrclass = getparentsreductzero(ls, op)
             if instrclass == ADDITIVE_IN_REDUCTIONS
                 Expr(:call, vecbasefunc(:addscalar), Expr(:call, lv(:vzero), VECTORWIDTHSYMBOL, ELTYPESYMBOL), constsym)

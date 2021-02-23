@@ -1,14 +1,15 @@
-function storeinstr_preprend(op::Operation, vectorized::Symbol)
+function storeinstr_preprend(op::Operation, vloopsym::Symbol)
     # defaultstoreop = :vstore!
     # defaultstoreop = :vnoaliasstore!
-    vectorized ∉ reduceddependencies(op) && return Symbol("")
-    vectorized ∈ loopdependencies(op) && return Symbol("")
+    isvectorized(op) && return Symbol("")
+    vloopsym ∉ reduceddependencies(op) && return Symbol("")
     # vectorized is not a loopdep, but is a reduced dep
     opp = first(parents(op))
-    while vectorized ∉ loopdependencies(opp)
+    # while vectorized ∉ loopdependencies(opp)
+    while !isvectorized(opp)
         oppold = opp
         for oppp ∈ parents(opp)
-            if vectorized ∈ reduceddependencies(oppp)
+            if vloopsym ∈ reduceddependencies(oppp)
                 @assert opp !== oppp "More than one parent is a reduction over the vectorized variable."
                 opp = oppp
             end
@@ -42,11 +43,64 @@ function reduce_expr!(q::Expr, toreduct::Symbol, instr::Instruction, u₁::Int, 
     nothing
 end
 
+function lower_store_collection!(
+    q::Expr, ls::LoopSet, op::Operation, ua::UnrollArgs, mask::Bool, inds_calc_by_ptr_offset::Vector{Bool}
+)
+    omop = offsetloadcollection(ls)
+    batchid, bopind = omop.batchedcollectionmap[identifier(op)]
+    collectionid, copind = omop.opidcollectionmap[identifier(op)]
+    opidmap = offsetloadcollection(ls).opids[collectionid]
+    idsformap = omop.batchedcollections[batchid]
+
+    @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, vloop, suffix = ua
+    ops = operations(ls)
+
+    nouter = length(idsformap)
+
+    t = Expr(:tuple)
+    u = Core.ifelse(isu₁unrolled(op), u₁, 1)
+    for (i,(opid,_)) ∈ enumerate(idsformap)
+        _op = ops[opidmap[opid]]
+        mvar = Symbol(variable_name(_op, suffix), '_', u)
+        push!(t.args, mvar)
+    end
+    
+    offset_dummy_loop = Loop(first(opindices), MaybeKnown(1), MaybeKnown(1024), MaybeKnown(1), Symbol(""), Symbol(""))
+    unrollcurl₂ = unrolled_curly(op, nouter, offset_dummy_loop, vloop, mask, true)
+    inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false)
+
+    falseexpr = Expr(:call, lv(:False));
+    trueexpr = Expr(:call, lv(:True));
+    rs = staticexpr(reg_size(ls));
+    
+    if isu₁unrolled(op) && u₁ > 1 # both unrolled
+        unrollcurl₁ = unrolled_curly(op, u₁, ua.u₁loop, vloop, mask, false)
+        inds = Expr(:call, unrollcurl₁, inds)
+    end
+    uinds = Expr(:call, unrollcurl₂, inds)
+    vp = vptr(op)
+    storeexpr = Expr(:call, lv(:vstore!), vp, Expr(:call, lv(:VecUnroll), t), uinds)
+    # not using `add_memory_mask!(storeexpr, op, ua, mask)` because we checked `isconditionalmemop` earlier in `lower_load_collection!`
+    mask && push!(storeexpr.args, MASKSYMBOL)
+    push!(storeexpr.args, falseexpr, trueexpr, falseexpr, rs)
+    push!(q.args, storeexpr)
+    nothing
+end
 function lower_store!(
     q::Expr, ls::LoopSet, op::Operation, ua::UnrollArgs, mask::Bool,
-    reductfunc::Symbol = storeinstr_preprend(op, ua.vectorized), inds_calc_by_ptr_offset = indices_calculated_by_pointer_offsets(ls, op.ref)
+    reductfunc::Symbol = storeinstr_preprend(op, ua.vloopsym), inds_calc_by_ptr_offset = indices_calculated_by_pointer_offsets(ls, op.ref)
 )
-    @unpack u₁, u₁loopsym, u₂loopsym, vectorized, u₂max, suffix = ua
+    @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, vloop, u₂max, suffix = ua
+
+    omop = offsetloadcollection(ls)
+    batchid, opind = omop.batchedcollectionmap[identifier(op)]
+    if ((batchid ≠ 0) && isvectorized(op))
+        if !rejectinterleave(op, vloop, omop.batchedcollections[batchid])
+            (opind == 1) && lower_store_collection!(q, ls, op, ua, mask, inds_calc_by_ptr_offset)
+            return
+        end
+    end
+
     isunrolled₁ = isu₁unrolled(op) #u₁loopsym ∈ loopdependencies(op)
     # isunrolled₂ = isu₂unrolled(op)    
     falseexpr = Expr(:call, lv(:False)); trueexpr = Expr(:call, lv(:True)); rs = staticexpr(reg_size(ls));
@@ -112,8 +166,8 @@ end
 # (In particular, it tries to replace scatters with shuffles when there are groups
 #   of stores offset from one another.)
 function lower_tiled_store!(blockq::Expr, op::Operation, ls::LoopSet, unrollsyms::UnrollSymbols, u₁::Int, u₂::Int, mask::Bool)
-    @unpack u₁loopsym, u₂loopsym, vectorized = unrollsyms
-    reductfunc = storeinstr_preprend(op, vectorized)
+    @unpack u₁loopsym, u₂loopsym, vloopsym = unrollsyms
+    reductfunc = storeinstr_preprend(op, vloopsym)
     inds_calc_by_ptr_offset = indices_calculated_by_pointer_offsets(ls, op.ref)
 
     if (!((reductfunc === Symbol("")) && all(op.ref.loopedindex))) || (u₂ ≤ 1) || isconditionalmemop(op)
@@ -142,10 +196,10 @@ function lower_tiled_store!(blockq::Expr, op::Operation, ls::LoopSet, unrollsyms
     vut = :(VecUnroll($tup)) # `VecUnroll` of `VecUnroll`s
     ua = UnrollArgs(u₁, unrollsyms, u₂, 0)
     inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false)
-    unrollcurl₂ = unrolled_curly(op, u₂, u₂loopsym, vectorized, mask)
+    unrollcurl₂ = unrolled_curly(op, u₂, u₂loopsym, vloopsym, mask)
     falseexpr = Expr(:call, lv(:False)); trueexpr = Expr(:call, lv(:True)); rs = staticexpr(reg_size(ls));
     if isu₁ && u₁ > 1 # both unrolled
-        unrollcurl₁ = unrolled_curly(op, u₁, u₁loopsym, vectorized, mask)
+        unrollcurl₁ = unrolled_curly(op, u₁, u₁loopsym, vloopsym, mask)
         inds = Expr(:call, unrollcurl₁, inds)
     end
     uinds = Expr(:call, unrollcurl₂, inds)

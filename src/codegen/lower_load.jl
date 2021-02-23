@@ -299,129 +299,52 @@ end
 function _lower_load!(
     q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, mask::Bool
 )
-    collectionid, opind = offsetloadcollection(ls).opidcollectionmap[identifier(op)]
-    if collectionid == 0 || isdiscontiguous(op) || (!isvectorized(op))
-        lower_load_no_optranslation!(q, ls, op, td, mask, indices_calculated_by_pointer_offsets(ls, op.ref))
+    omop = offsetloadcollection(ls)
+    batchid, opind = omop.batchedcollectionmap[identifier(op)]
+    inds_calc_by_ptr_offset = indices_calculated_by_pointer_offsets(ls, op.ref)
+    idsformap = omop.batchedcollections[batchid]
+    # @show batchid == 0 (!isvectorized(op)) rejectinterleave(op, td.vloop, idsformap)
+    if batchid == 0 || (!isvectorized(op)) || rejectinterleave(op, td.vloop, idsformap)
+        lower_load_no_optranslation!(q, ls, op, td, mask, inds_calc_by_ptr_offset)
     elseif opind == 1# only lower loads once
         # I do not believe it is possible for `opind == 1` to be lowered after an  operation depending on a different opind.
-        lower_load_collection!(q, ls, op, td, mask, collectionid)
+        # lower_load_collection!(q, ls, op, td, mask, collectionid)
+        omop = offsetloadcollection(ls)
+        collectionid, copind = omop.opidcollectionmap[identifier(op)]
+        opidmap = offsetloadcollection(ls).opids[collectionid]
+        lower_load_collection!(q, ls, opidmap, idsformap, td, mask, inds_calc_by_ptr_offset)
     end
 end
-
-function lower_load_collection!(q, ls, op, td, mask, collectionid)
-    @unpack opids = offsetloadcollection(ls)
-    opidc = opids[collectionid]
-    inds_calc_by_ptr_offset = indices_calculated_by_pointer_offsets(ls, op.ref)
-    @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, suffix = td
-
-    ops = operations(ls)
-    condmemop = false
-    for opid ∈ opidc
-        condmemop |= isconditionalmemop(ops[opid])
-    end
-
-    opindices = getindices(op)
-    contigind = first(opindices) # checked `isdiscontiguous` in branch to ensure we're only here if it is contiguous
-    # don't bother if contigind is vectorized (we may want to in the future)
-    # and if it is a condmemop, need to pay attention that it's actually don correctly, which I haven't done yet, so just bailing for now.
-    if (contigind === vloopsym) || condmemop
-        for opid ∈ opidc
-            lower_load_no_optranslation!(q, ls, ops[opid], td, mask, inds_calc_by_ptr_offset)
-        end
-        return
-    end
-    # we check if we can turn the offsets into an unroll
-    # we have up to `length(opidc)` loads to do, so we allocate that many "base" vectors
-    # then we iterate through them, adding them to collections as appropriate
-    # inner vector tuple is of (op_pos_w/in collection,o)
-    unroll_collections = Vector{Vector{Tuple{Int,Int}}}(undef, length(opidc))
-    num_unroll_collections = 0
-    # num_ops_considered = length(opidc)
-    r = 2:length(opindices)
-    for (i,opid) ∈ enumerate(opidc)
-        op = ops[opid]
-        offset = getoffsets(op)
-        o = offset[1]
-        v = view(offset, r)
-        found_match = false
-        for j ∈ 1:num_unroll_collections
-            collectionⱼ = unroll_collections[j]
-            # giet id (`first`) of first item in collection to get base offsets for comparison
-            if view(getoffsets(ops[first(first(collectionⱼ))]), r) == v
-                found_match = true
-                push!(collectionⱼ, (i, o))
-            end
-        end
-        if !found_match
-            num_unroll_collections += 1
-            unroll_collections[num_unroll_collections] = [(i,o)]
-        end
-    end
-    for j ∈ 1:num_unroll_collections
-        collectionⱼ = unroll_collections[j]
-        collen = length(collectionⱼ)
-        if collen ≤ 1 # only (below) will throw if it isn't 1
-            i = first(only(collectionⱼ))
-            lower_load_no_optranslation!(q, ls, ops[opidc[i]], td, mask, inds_calc_by_ptr_offset)
-            continue
-        # elseif collen == 2 # special case
-        #     l1, o1 = collectionⱼ[1]
-        #     l2, o2 = collectionⱼ[2]
-        #     if o1 - o2 == 1
-        #     elseif o2 - o1 == 1
-        #     else
-        #     end
-        #     continue
-        end
-        # we have multiple, easiest to process if we sort them
-        sort!(collectionⱼ, by=last)
-        istart = 1; ostart = last(first(collectionⱼ))
-        oprev = ostart
-        for i ∈ 2:collen
-            onext = last(collectionⱼ[i])
-            if onext == oprev + 1
-                oprev = onext
-                continue
-            end
-            # we skipped one, so we must now lower all previous
-            if oprev == ostart # it's just 1
-                lower_load_no_optranslation!(q, ls, ops[opidc[istart]], td, mask, inds_calc_by_ptr_offset)
-            else
-                # lower `Unroll` with
-                lower_tiled_load!(q, ls, opidc, view(collectionⱼ, istart:i-1), ostart, td, mask, inds_calc_by_ptr_offset)
-            end
-            # restart istart and ostart
-            istart = i
-            ostart = onext
-            oprev = onext
-        end
-        if istart == collen
-            lower_load_no_optranslation!(q, ls, ops[opidc[istart]], td, mask, inds_calc_by_ptr_offset)
-        else
-            lower_tiled_load!(q, ls, opidc, view(collectionⱼ, istart:collen), ostart, td, mask, inds_calc_by_ptr_offset)
-        end
-    end
+function rejectinterleave(op::Operation, vloop::Loop, idsformap::SubArray{Tuple{Int,Int}, 1, Vector{Tuple{Int,Int}}, Tuple{UnitRange{Int}}, true})
+    vloopsym = vloop.itersymbol; strd = step(vloop)
+    isknown(strd) || return true
+    (first(getindices(op)) === vloopsym) && (length(idsformap) ≠ first(getstrides(op)) * gethint(strd))
 end
-function lower_tiled_load!(
+function lower_load_collection!(
     q::Expr, ls::LoopSet, opidmap::Vector{Int},
     idsformap::SubArray{Tuple{Int,Int}, 1, Vector{Tuple{Int,Int}}, Tuple{UnitRange{Int}}, true},
-    ostart::Int, ua::UnrollArgs, mask::Bool, inds_calc_by_ptr_offset::Vector{Bool}
+    ua::UnrollArgs, mask::Bool, inds_calc_by_ptr_offset::Vector{Bool}
 )
     @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, vloop, suffix = ua
-    # ostart is first, it extends contiguously for each in idsformap, which we extract from and assign to
     ops = operations(ls)
     nouter = length(idsformap)
     # ua = UnrollArgs(nouter, unrollsyms, u₂, 0)
     # idsformap contains (index, offset) pairs
     op = ops[opidmap[first(first(idsformap))]]
     opindices = getindices(op)
+    interleave = first(opindices) === vloopsym
     # construct dummy unrolled loop 
     offset_dummy_loop = Loop(first(opindices), MaybeKnown(1), MaybeKnown(1024), MaybeKnown(1), Symbol(""), Symbol(""))
-    unrollcurl₂ = unrolled_curly(op, nouter, offset_dummy_loop, vloop, mask)
+    unrollcurl₂ = unrolled_curly(op, nouter, offset_dummy_loop, vloop, mask, 1) # interleave always 1 here
     inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false)
     falseexpr = Expr(:call, lv(:False)); rs = staticexpr(reg_size(ls));
     if isu₁unrolled(op) && u₁ > 1 # both unrolled
-        unrollcurl₁ = unrolled_curly(op, u₁, ua.u₁loop, vloop, mask)
+        if interleave # TODO: handle this better than using `rejectinterleave`
+            interleaveval = -nouter
+        else
+            interleaveval = 0
+        end
+        unrollcurl₁ = unrolled_curly(op, u₁, ua.u₁loop, vloop, mask, interleaveval)
         inds = Expr(:call, unrollcurl₁, inds)
     end
     uinds = Expr(:call, unrollcurl₂, inds)

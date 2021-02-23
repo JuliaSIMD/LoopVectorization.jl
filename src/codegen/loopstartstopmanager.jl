@@ -86,6 +86,7 @@ function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, alla
     looporder = reversenames(ls)
     uliv = Vector{Int}(undef, length(li))
     indices = getindices(ar)
+    strides = getstrides(ar)
     offset = first(indices) === DISCONTIGUOUS
     if length(indices) != offset + length(li)
         println(ar)
@@ -112,7 +113,8 @@ function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, alla
             # Not doing normal offset indexing
             uliv[i] = -findfirst(isequal(ind), looporder)::Int
             # push!(gespinds.args, Expr(:call, lv(:Zero)))
-            push!(gespinds.args, staticexpr(1))
+            # push!(gespinds.args, staticexpr(1))
+            push!(gespinds.args, staticexpr(convert(Int, strides[i])))
             
             push!(offsetprecalc_descript.args, 0) # not doing offset indexing, so push 0
         else
@@ -132,7 +134,7 @@ function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, alla
             # else
             #     push!(gespinds.args, Expr(:call, lv(:staticm1), loop.startsym))
             # end
-            if ind === names(ls)[us.vectorizedloopnum]
+            if ind === names(ls)[us.vloopnum]
                 push!(offsetprecalc_descript.args, 0)
             elseif (ind === names(ls)[us.u₁loopnum]) & (us.u₁ > 3)
                 use_offsetprecalc = true
@@ -225,7 +227,7 @@ end
 function pointermax_index(
     ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvectorized::Bool, stophint::Int, incr::MaybeKnown
 )::Tuple{Expr,Int}
-    # @unpack u₁loopnum, u₂loopnum, vectorizedloopnum, u₁, u₂ = us
+    # @unpack u₁loopnum, u₂loopnum, vloopnum, u₁, u₂ = us
     loopsym = names(ls)[n]
     index = Expr(:tuple)
     found_loop_sym = false
@@ -390,7 +392,7 @@ end
     
 
 function startloop(ls::LoopSet, us::UnrollSpecification, n::Int, submax = maxunroll(us, n))
-    @unpack u₁loopnum, u₂loopnum, vectorizedloopnum, u₁, u₂ = us
+    @unpack u₁loopnum, u₂loopnum, vloopnum, u₁, u₂ = us
     lssm = ls.lssm[]
     termind = lssm.terminators[n]
     ptrdefs = lssm.incrementedptrs[n]
@@ -404,7 +406,7 @@ function startloop(ls::LoopSet, us::UnrollSpecification, n::Int, submax = maxunr
         loopsym = names(ls)[n]
         push!(loopstart.args, startloop(getloop(ls, loopsym), loopsym))
     else
-        isvectorized = n == vectorizedloopnum
+        isvectorized = n == vloopnum
         append_pointer_maxes!(loopstart, ls, ptrdefs[termind], n, submax, isvectorized)
     end
     loopstart
@@ -430,7 +432,7 @@ function offset_ptr(
     Expr(:(=), vptr(ar), Expr(:call, lv(:gesp), vptr(ar), gespinds))
 end
 function incrementloopcounter(ls::LoopSet, us::UnrollSpecification, n::Int, UF::Int)
-    @unpack u₁loopnum, u₂loopnum, vectorizedloopnum, u₁, u₂ = us
+    @unpack u₁loopnum, u₂loopnum, vloopnum, u₁, u₂ = us
     lssm = ls.lssm[]
     ptrdefs = lssm.incrementedptrs[n]
     looporder = names(ls)

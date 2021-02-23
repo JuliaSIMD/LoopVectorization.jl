@@ -96,7 +96,10 @@ function _addoffset!(indices, offsets, strides, loopedindex, loopdependencies, i
     true
 end
 
-function addoffset!(indices, offsets, strides, loopedindex, loopdependencies, ind, offset, stride)::Bool
+function addoffset_index!(
+    indices::Vector{Symbol}, offsets::Vector{Int8}, strides::Vector{Int8}, loopedindex::Vector{Bool},
+    loopdependencies::Vector{Symbol}, ind::Symbol, offset, stride
+)::Bool
     byterepresentable(offset) || return false
     _addoffset!(indices, offsets, strides, loopedindex, loopdependencies, ind, offset, stride)
 end
@@ -112,7 +115,8 @@ end
 # The search for multipliers is recursive
 # TODO: make the search for increments recursive as well.
 function addoffsetexpr!(
-    ls, parents, indices, offsets, strides, loopedindex, loopdependencies, reduceddeps, ind, offset, stride::Int, elementbytes
+    ls::LoopSet, parents::Vector{Operation}, indices, offsets, strides, loopedindex,
+    loopdependencies::Vector{Symbol}, reduceddeps::Vector{Symbol}, ind, offset, stride::Int, elementbytes
 )::Bool
     byterepresentable(offset) || return false
     if isexpr(ind, :call, 3) && ind.args[1] === :(*)
@@ -164,11 +168,21 @@ function checkforoffset!(
 )
     ind.head === :call || return false
     f = first(ind.args)
+    # if f === :add_fast
+    # elseif f === :sub_fast
+    # elseif f === :mul_fast
+    # elseif f === :vfmadd_fast
+    # elseif f === :vfnmadd_fast
+    # elseif f === :vfmsub_fast
+    # elseif f === :vfnmsub_fast
+    # else
+    #     return false
+    # end
     factor = f === :+ ? 1 : -1
     if !(((f === :+) || (f === :-)) && (length(ind.args) == 3))
         if (f === :*)
             # offset 0, reuse that code
-            return addoffsetexpr!(ls, parents, indices, offsets, strides, loopedindex, loopdependencies, reduceddeps, ind, 0, factor, elementbytes)
+            return addoffsetexpr!(ls, parents, indices, offsets, strides, loopedindex, loopdependencies, reduceddeps, ind, 0, 1, elementbytes)
         else
             return false
         end
@@ -179,7 +193,7 @@ function checkforoffset!(
         # 3 + factor * i
         if arg2 isa Symbol
             if arg2 ∈ ls.loopsymbols
-                addoffset!(indices, offsets, strides, loopedindex, loopdependencies, arg2, arg1, factor)
+                addoffset_index!(indices, offsets, strides, loopedindex, loopdependencies, arg2, arg1, factor)
             else
                 addoffsetexpr!(ls, parents, indices, offsets, strides, loopedindex, loopdependencies, reduceddeps, arg2, arg1, factor, elementbytes)
             end
@@ -192,7 +206,7 @@ function checkforoffset!(
         # i + factor * arg2
         if arg1 isa Symbol
             if arg1 ∈ ls.loopsymbols
-                addoffset!(ls, indices, offsets, strides, loopedindex, loopdependencies, arg1, arg2 * factor, 1)
+                addoffset_index!(indices, offsets, strides, loopedindex, loopdependencies, arg1, arg2 * factor, 1)
             else
                 addoffsetexpr!(ls, parents, indices, offsets, strides, loopedindex, loopdependencies, reduceddeps, arg1, arg2 * factor, 1, elementbytes)
             end
