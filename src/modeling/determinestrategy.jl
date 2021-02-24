@@ -982,7 +982,7 @@ function evaluate_cost_tile(
     outer_reduct_penalty = length(ls.outer_reductions) * (u₁ + isodd(u₁))
     favor_bigger_u₂ = u₁ - u₂
     # favor_smaller_vloopsym = (u₁v ? u₁ : -u₁) + (u₂v ?  u₂ : -u₂)
-    favor_smaller_vloopsym = (u₁v ⊻ u₂v) ? (u₁v ? u₁ - u₂ : u₂ - u₁) : 0
+    favor_smaller_vectorized = (u₁v ⊻ u₂v) ? (u₁v ? u₁ - u₂ : u₂ - u₁) : 0
     favor_u₁_vectorized = -0.2u₁v
     favoring_heuristics = favor_bigger_u₂ + 0.5favor_smaller_vectorized + favor_u₁_vectorized
     costpenalty = costpenalty * ucost + stride_penalty(ls, order) + outer_reduct_penalty + favoring_heuristics

@@ -3,6 +3,7 @@ function prefetchisagoodidea(ls::LoopSet, op::Operation, td::UnrollArgs)
     @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, vstep, u₂max, suffix = td
     length(loopdependencies(op)) ≤ 1 && return 0
     isvectorized(op) || return 0
+    ((u₁ > 1) & (u₂max > 1)) || return 0
     u₂loopsym === Symbol("##undefined##") && return 0
     # @show cache_lnsze(ls) reg_size(ls) pointer_from_objref(ls.register_size)
     dontskip = (cache_lnsze(ls) ÷ reg_size(ls)) - 1
@@ -38,7 +39,7 @@ function prefetchisagoodidea(ls::LoopSet, op::Operation, td::UnrollArgs)
     end
     0
 end
-function add_prefetches!(q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, prefetchind::Int, umin::Int)
+function add_prefetches!(q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, prefetchind::Int)
     @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, u₂max = td
     # we should only be here if `unitsride(vloop)`
     dontskip = (cache_lnsze(ls) ÷ reg_size(ls)) - 1
@@ -80,8 +81,7 @@ function add_prefetches!(q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, pr
         (ind == u₁loopsym) && (i = j)
     end
     push!(q.args, Expr(:call, lv(:prefetch0), gptr, copy(inds)))
-
-    for u ∈ 1+umin:u₁
+    for u ∈ 1:u₁-1
         # for u ∈ umin:min(umin,U-1)
         # (u₁loopsym === vloopsym && !iszero(u & dontskip)) && continue
         if u₁loopsym === vloopsym
@@ -93,7 +93,7 @@ function add_prefetches!(q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, pr
             if isone(u)
                 inds.args[i] = VECTORWIDTHSYMBOL
             else
-                inds.args[i] = Expr(:call, lv(:vmul_fast), VECTORWIDTHSYMBOL, staticexpr(u))
+                inds.args[i] = mulexpr(VECTORWIDTHSYMBOL, u)
             end
         else
             inds.args[i] = staticexpr(u)
@@ -144,7 +144,7 @@ function lower_load_no_optranslation!(
     end
     if isvectorized(op)
         prefetchind = prefetchisagoodidea(ls, op, td)
-        iszero(prefetchind) || add_prefetches!(q, ls, op, td, prefetchind, isu₁unrolled(op) - 1)
+        iszero(prefetchind) || add_prefetches!(q, ls, op, td, prefetchind)
     elseif any(isvectorized, children(op))
         pushbroadcast!(q, mvar)
     end
@@ -302,9 +302,8 @@ function _lower_load!(
     omop = offsetloadcollection(ls)
     batchid, opind = omop.batchedcollectionmap[identifier(op)]
     inds_calc_by_ptr_offset = indices_calculated_by_pointer_offsets(ls, op.ref)
-    idsformap = omop.batchedcollections[batchid]
     # @show batchid == 0 (!isvectorized(op)) rejectinterleave(op, td.vloop, idsformap)
-    if batchid == 0 || (!isvectorized(op)) || rejectinterleave(op, td.vloop, idsformap)
+    if batchid == 0 || (!isvectorized(op)) || (rejectinterleave(op, td.vloop, omop.batchedcollections[batchid]))
         lower_load_no_optranslation!(q, ls, op, td, mask, inds_calc_by_ptr_offset)
     elseif opind == 1# only lower loads once
         # I do not believe it is possible for `opind == 1` to be lowered after an  operation depending on a different opind.
@@ -312,6 +311,7 @@ function _lower_load!(
         omop = offsetloadcollection(ls)
         collectionid, copind = omop.opidcollectionmap[identifier(op)]
         opidmap = offsetloadcollection(ls).opids[collectionid]
+        idsformap = omop.batchedcollections[batchid]
         lower_load_collection!(q, ls, opidmap, idsformap, td, mask, inds_calc_by_ptr_offset)
     end
 end

@@ -65,16 +65,20 @@ function lower_store_collection!(
         push!(t.args, mvar)
     end
     
-    offset_dummy_loop = Loop(first(opindices), MaybeKnown(1), MaybeKnown(1024), MaybeKnown(1), Symbol(""), Symbol(""))
-    unrollcurl₂ = unrolled_curly(op, nouter, offset_dummy_loop, vloop, mask, true)
+    offset_dummy_loop = Loop(first(getindices(op)), MaybeKnown(1), MaybeKnown(1024), MaybeKnown(1), Symbol(""), Symbol(""))
+    unrollcurl₂ = unrolled_curly(op, nouter, offset_dummy_loop, vloop, mask, 1)
     inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false)
 
     falseexpr = Expr(:call, lv(:False));
     trueexpr = Expr(:call, lv(:True));
     rs = staticexpr(reg_size(ls));
-    
     if isu₁unrolled(op) && u₁ > 1 # both unrolled
-        unrollcurl₁ = unrolled_curly(op, u₁, ua.u₁loop, vloop, mask, false)
+        if first(getindices(op)) === vloopsym
+            interleaveval = -nouter
+        else
+            interleaveval = 0
+        end
+        unrollcurl₁ = unrolled_curly(op, u₁, ua.u₁loop, vloop, mask, interleaveval)
         inds = Expr(:call, unrollcurl₁, inds)
     end
     uinds = Expr(:call, unrollcurl₂, inds)
@@ -154,10 +158,10 @@ end
 function lower_tiled_store!(
     blockq::Expr, opsv1::Vector{Operation}, opsv2::Vector{Operation}, ls::LoopSet, unrollsyms::UnrollSymbols, u₁::Int, u₂::Int, mask::Bool
 )
-    ua = UnrollArgs(u₁, unrollsyms, u₂, u₂)
+    ua = UnrollArgs(ls, u₁, unrollsyms, u₂, 0)
     for opsv ∈ (opsv1, opsv2)
         for op ∈ opsv
-            lower_tiled_store!(blockq, op, ls, unrollsyms, u₁, u₂, mask)
+            lower_tiled_store!(blockq, op, ls, ua, u₁, u₂, mask)
         end
     end
 end
@@ -165,16 +169,17 @@ end
 # thus we group stores together here to allow for these possibilities.
 # (In particular, it tries to replace scatters with shuffles when there are groups
 #   of stores offset from one another.)
-function lower_tiled_store!(blockq::Expr, op::Operation, ls::LoopSet, unrollsyms::UnrollSymbols, u₁::Int, u₂::Int, mask::Bool)
-    @unpack u₁loopsym, u₂loopsym, vloopsym = unrollsyms
+function lower_tiled_store!(blockq::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs, u₁::Int, u₂::Int, mask::Bool)
+    @unpack u₁loopsym, u₂loopsym, vloopsym, u₁loop, u₂loop, vloop = ua
     reductfunc = storeinstr_preprend(op, vloopsym)
     inds_calc_by_ptr_offset = indices_calculated_by_pointer_offsets(ls, op.ref)
 
     if (!((reductfunc === Symbol("")) && all(op.ref.loopedindex))) || (u₂ ≤ 1) || isconditionalmemop(op)
         # If we have a reductfunc, we're using a reducing store instead of a contiuguous or shuffle store anyway
         # so no benefit to being able to handle that case here, vs just calling the default `lower_store!` method
+        @unpack u₁, u₂max = ua
         for t ∈ 0:u₂-1
-            unrollargs = UnrollArgs(u₁, unrollsyms, u₂, t)
+            unrollargs = UnrollArgs(u₁loop, u₂loop, vloop, u₁, u₂max, t)
             lower_store!(blockq, ls, op, unrollargs, mask, reductfunc, inds_calc_by_ptr_offset)
         end
         return
@@ -194,12 +199,11 @@ function lower_tiled_store!(blockq::Expr, op::Operation, ls::LoopSet, unrollsyms
         push!(tup.args, mvar)
     end
     vut = :(VecUnroll($tup)) # `VecUnroll` of `VecUnroll`s
-    ua = UnrollArgs(u₁, unrollsyms, u₂, 0)
     inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false)
-    unrollcurl₂ = unrolled_curly(op, u₂, u₂loopsym, vloopsym, mask)
+    unrollcurl₂ = unrolled_curly(op, u₂, u₂loop, vloop, mask)
     falseexpr = Expr(:call, lv(:False)); trueexpr = Expr(:call, lv(:True)); rs = staticexpr(reg_size(ls));
     if isu₁ && u₁ > 1 # both unrolled
-        unrollcurl₁ = unrolled_curly(op, u₁, u₁loopsym, vloopsym, mask)
+        unrollcurl₁ = unrolled_curly(op, u₁, u₁loop, vloop, mask)
         inds = Expr(:call, unrollcurl₁, inds)
     end
     uinds = Expr(:call, unrollcurl₂, inds)

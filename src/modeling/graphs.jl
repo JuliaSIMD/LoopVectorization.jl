@@ -72,7 +72,8 @@ function pushexpr!(ex::Expr, mk::MaybeKnown)
     end
     nothing
 end
-pushexpr!(ex::Expr, x::Union{Symbol,Int,Expr}) = (push!(ex.args, x); nothing)
+pushexpr!(ex::Expr, x::Union{Symbol,Expr}) = (push!(ex.args, x); nothing)
+pushexpr!(ex::Expr, x::Integer) = (push!(ex.args, staticexpr(convert(Int, x))); nothing)
 MaybeKnown(x::Integer) = MaybeKnown(convert(Int, x), Symbol("##UNDEFINED##"), true)
 MaybeKnown(x::Integer, default::Int) = MaybeKnown(x)
 MaybeKnown(x::Symbol, default::Int) = MaybeKnown(default, x, false)
@@ -112,8 +113,8 @@ function startloop(loop::Loop, itersymbol)
         Expr(:(=), itersymbol, Expr(:call, lv(:staticm1), Expr(:call, lv(:unwrap), getsym(start))))
     end
 end
-mulexpr(a,b) = Expr(:call, lv(:vmul_fast), a, b)
-mulexpr(a,b::Integer) = Expr(:call, lv(:vmul_fast), a, staticexpr(convert(Int,b)))
+# mulexpr(a,b) = Expr(:call, lv(:vmul_fast), a, b)
+
 pushmulexpr!(q, a, b) = (push!(q.args, mulexpr(a, b)); nothing)
 function pushmulexpr!(q, a, b::Integer)
     if isone(b)
@@ -129,44 +130,73 @@ end
 #     if isa(a, MaybeKnown)
 #         pushexpr!(
 # end
-
-function mulexpr(a, b::MaybeKnown)
-    ex = Expr(:call, lv(:vmul_fast), a)
-    pushexpr!(ex, b)
-    ex
-end
-mulexpr(a, b, c) = mulexpr(mulexpr(a, b), c)
-function mulexpr(a, b, c::MaybeKnown)
-    if isknown(c) && isa(b, Integer)
-        mulexpr(a, b*gethint(c))
-    elseif isone(c)
-        mulexpr(a, b)
+isknown(x::Union{Symbol,Expr}) = false
+isknown(x::Integer) = true
+gethint(a::Integer) = a
+addexpr(a,b) = arithmeticexpr(+, :vadd_fast, a, b)
+subexpr(a,b) = arithmeticexpr(-, :vsub_fast, a, b)
+mulexpr(a,b) = arithmeticexpr(*, :vmul_fast, a, b)
+lazymulexpr(a,b) = arithmeticexpr(*, :lazymul, a, b)
+function arithmeticexpr(op, f, a, b)
+    if isknown(a) & isknown(b)
+        return staticexpr(op(gethint(a), gethint(b)))
     else
-        mulexpr(mulexpr(a, b), c)
-        # mulexpr(a, mulexpr(b, c))
+        ex = Expr(:call, lv(f))
+        pushexpr!(ex, a)
+        pushexpr!(ex, b)
+        return ex
+    end
+end
+mulexpr(a,b,c) = arithmeticexpr(*, 1, :vmul_fast, a, b, c)
+addexpr(a,b,c) = arithmeticexpr(+, 0, :vadd_fast, a, b, c)
+function arithmeticexpr(op, init, f, a, b, c)
+    ex = Expr(:call, lv(f))
+    p = init
+    if isknown(a)
+        p = op(p, gethint(a))
+        known = 1
+    else
+        pushexpr!(ex, a)
+        known = 0
+    end
+    if isknown(b)
+        p = op(p, gethint(b))
+        known += 1
+    else
+        pushexpr!(ex, b)
+    end
+    if isknown(c)
+        p = op(p, gethint(c))
+        known += 1
+    elseif known == 0
+        ex = Expr(:call, lv(f), ex)
+        pushexpr!(ex, c)
+    end
+    if known == 3
+        return staticexpr(p)
+    else
+        if known == 2
+            pushexpr!(ex, p)
+            return ex
+        elseif known == 1
+            return Expr(:call, lv(f), ex, staticexpr(p))
+        else#known == 0
+            return ex
+        end
     end
 end
 
-addexpr(ex, incr) = Expr(:call, lv(:vadd_fast), ex, incr)
 function addexpr(ex, incr::Integer)
-    if iszero(incr)
-        ex
-    elseif incr > 0
-        Expr(:call, lv(:vadd_fast), ex, staticexpr(convert(Int, incr)))
+    if incr > 0
+        f = :vadd_fast
     else
-        Expr(:call, lv(:vsub_fast), ex, staticexpr(convert(Int, -incr)))
+        f = :vsub_fast
+        incr = -incr
     end
-end
-addexpr(a, b::MaybeKnown) = isknown(b) ? addexpr(a, gethint(b)) : addexpr(a, getsym(b))
-addexpr(ex::Number, incr::Integer) = ex + incr
-subexpr(ex, incr) = Expr(:call, lv(:vsub_fast), ex, incr)
-subexpr(ex::Number, incr::Number) = ex - incr
-subexpr(ex, incr::Number) = addexpr(ex,  -incr)
-function subexpr(a::MaybeKnown, b)
-    call = Expr(:call, lv(:vsub_fast))
-    pushexpr!(call, a)
-    pushexpr!(call, b)
-    call
+    expr = Expr(:call, lv(f))
+    pushexpr!(expr, ex)
+    pushexpr!(expr, convert(Int, incr))
+    expr
 end
 
 staticmulincr(ptr, incr) = Expr(:call, lv(:staticmul), Expr(:call, :eltype, ptr), incr)
@@ -229,7 +259,7 @@ function looprange(loop::Loop, incr::Int, mangledname)
         pushexpr!(incex, inc)
         push!(subex.args, incex)
         Expr(:call, :<, mangledname, addexpr(subex, getsym(inc)))
-    end    
+    end
 end
 
 function terminatecondition(
@@ -570,13 +600,13 @@ getloopid(ls::LoopSet, s::Symbol) = getloopid_or_nothing(ls, s)::Int
 # getloop(ls::LoopSet, i::Integer) = getloop(ls, names(ls)[i])
 getloop(ls::LoopSet, i::Integer) = ls.loops[ls.loopordermap[i]] # takes nest level after reordering
 getloop_from_id(ls::LoopSet, i::Integer) = ls.loops[i] # takes w/ respect to original loop order.
-getloop(ls::LoopSet, s::Symbol) = getloop_from_id(ls, getloopid(ls, s)) 
+getloop(ls::LoopSet, s::Symbol) = getloop_from_id(ls, getloopid(ls, s))
 getloopsym(ls::LoopSet, i::Integer) = ls.loopsymbols[i]
 Base.length(ls::LoopSet, s::Symbol) = length(getloop(ls, s))
 function init_loop_map!(ls::LoopSet)
     @unpack loopordermap = ls
     order = names(ls)
-    sortperm!(resize!(loopordermap, length(order)), order, by = Base.Fix2(getloopid, ls))
+    sortperm!(resize!(loopordermap, length(order)), order, by = x -> getloopid(ls,x))
     nothing
 end
 
@@ -1135,11 +1165,12 @@ function fill_offset_memop_collection!(ls::LoopSet)
                 # push!(last(offsets), oppref.offsets)
             end
             opidcollectionmap[identifier(opp)] = (length(opids),length(last(opids)))
+            collectionsize += 1
         end
-    end    
+    end
     for (collectionid,opidc) ∈ enumerate(opids)
         length(opidc) > 1 || continue
-        
+
         # we check if we can turn the offsets into an unroll
         # we have up to `length(opidc)` loads to do, so we allocate that many "base" vectors
         # then we iterate through them, adding them to collections as appropriate
@@ -1148,7 +1179,7 @@ function fill_offset_memop_collection!(ls::LoopSet)
         num_unroll_collections = 0
         # num_ops_considered = length(opidc)
         r = 2:length(getindices(ops[first(opidc)]))
-        
+
         for (i,opid) ∈ enumerate(opidc)
             op = ops[opid]
             offset = getoffsets(op)
@@ -1158,13 +1189,15 @@ function fill_offset_memop_collection!(ls::LoopSet)
             for j ∈ 1:num_unroll_collections
                 collectionⱼ = unroll_collections[j]
                 # giet id (`first`) of first item in collection to get base offsets for comparison
-                if view(getoffsets(ops[first(first(collectionⱼ))]), r) == v
+                # @show op, opid ops[opidc[first(first(collectionⱼ))], first(first(collectionⱼ))
+                if view(getoffsets(ops[opidc[first(first(collectionⱼ))]]), r) == v
                     found_match = true
                     push!(collectionⱼ, (i, o))
                 end
             end
+            # @show opid, found_match
             if !found_match
-                num_unroll_collections += 1
+                num_unroll_collections += 1 # the `i` points to position within `opidc`
                 unroll_collections[num_unroll_collections] = [(i,o)]
             end
         end

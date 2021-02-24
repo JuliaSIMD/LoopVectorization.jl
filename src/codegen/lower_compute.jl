@@ -493,9 +493,11 @@ function lower_compute!(
             # Here, we are evaluating the function, and then `ifelse`-ing it with `hasf == false`.
             # That means we still need to adjust the `instrcall` in case we're reducing/accumulating across the unroll
             if ifelsefunc ≡ :ifelse # ifelse means it's unrolled by 1, no need
+                # push!(q.args, Expr(:(=), varsym, Expr(:call, lv(ifelsefunc), MASKSYMBOL, instrcall, selfopname)))
                 push!(q.args, Expr(:(=), varsym, Expr(:call, lv(ifelsefunc), MASKSYMBOL, instrcall, selfopname)))
             elseif ((u₁ ≡ 1) | (selfdepreduce ≡ 0))
                 # if the current unroll is 1, no need to accumulate. Same if there is no selfdepreduce, but there has to be if we're here?
+                # push!(q.args, Expr(:(=), varsym, Expr(:call, lv(ifelsefunc), MASKSYMBOL, staticexpr(u₁), staticexpr(selfdepreduce), instrcall, selfopname)))
                 push!(q.args, Expr(:(=), varsym, Expr(:call, lv(ifelsefunc), MASKSYMBOL, staticexpr(u₁), staticexpr(selfdepreduce), instrcall, selfopname)))
             else
                 make_partial_map!(instrcall, selfopname, u₁, selfdepreduce)

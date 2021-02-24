@@ -158,7 +158,7 @@ function allinteriorunrolled(ls::LoopSet, us::UnrollSpecification, N)
     unroll_total ≤ 16
 end
 
-function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask::Bool, initialize::Bool = true, maxiters::Int=-1)
+function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask::Bool)#, initialize::Bool = true, maxiters::Int=-1)
     usorig = ls.unrollspecification[]
     nisvectorized = isvectorized(us, n)
     loopsym = names(ls)[n]
@@ -186,17 +186,15 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
         foreach(_ -> push!(q.args, body), 1:(length(loop) ÷ W))
     elseif nisvectorized
             # Expr(:block, loopiteratesatleastonce(loop, true), Expr(:while, expect(tc), body))
-        q = Expr(:block, Expr(maxiters == 1 ? :if : :while, tc, body))
+        # q = Expr(:block, Expr(maxiters == 1 ? :if : :while, tc, body))
+        q = Expr(:block, Expr(:while, tc, body))
     else
+        # push!(body.args, Expr(:(||), tc, Expr(:break)))
+        # q = Expr(:block, Expr(:while, true, body))
+        # using the `termcond` variable leads to better code gen.
         termcond = gensym(:maybeterm)
         push!(body.args, Expr(:(=), termcond, tc))
-        q = Expr(:block, Expr(:(=), termcond, true), Expr(maxiters == 1 ? :if : :while, termcond, body))
-        # Expr(:block, Expr(:while, expect(tc), body))
-        # Expr(:block, assume(tc), Expr(:while, tc, body))
-        # push!(body.args, Expr(:&&, expect(Expr(:call, :!, tc)), Expr(:break)))
-        # Expr(:block, assume(tc), Expr(:while, true, body))
-        # push!(body.args, Expr(:||, expect(tc), Expr(:break)))
-        # Expr(:block, Expr(:while, true, body))
+        q = Expr(:block, Expr(:(=), termcond, true), Expr(:while, termcond, body))
     end
     if nisvectorized && !(loopisstatic && iszero(length(loop) & (W - 1)))
         # tc = terminatecondition(loop, us, n, loopsym, true, 1)
@@ -213,11 +211,11 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
             push!(q.args, Expr(:if, tc, body))
         end
     end
-    if initialize
-        Expr(:let, startloop(ls, us, n), q)
-    else
-        q
-    end
+    # if initialize
+    Expr(:let, startloop(ls, us, n), q)
+    # else
+    #     q
+    # end
 end
 function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask::Bool)
     UF = unrollfactor(us, n)
@@ -266,8 +264,11 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
         # unroll_cleanup = Ureduct > 0 || (nisunrolled ? (u₂ > 1) : (u₁ > 1))
         # remblock = unroll_cleanup ? init_remblock(loop, ls.lssm[], n)#loopsym) : Expr(:block)
         q = if unsigned(Ureduct) < unsigned(UF)
-            push!(body.args, Expr(:(||), tc, Expr(:break)))
-            Expr(:while, true, body)
+            # push!(body.args, Expr(:(||), tc, Expr(:break)))
+            # Expr(:while, true, body)
+            termcond = gensym(:maybeterm)
+            push!(body.args, Expr(:(=), termcond, tc))
+            Expr(:block, Expr(:(=), termcond, true), Expr(:while, termcond, body))
         else
             Expr(:while, tc, body)
         end

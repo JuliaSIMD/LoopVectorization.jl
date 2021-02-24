@@ -47,8 +47,7 @@ function indices_calculated_by_pointer_offsets(ls::LoopSet, ar::ArrayReferenceMe
     for i ∈ eachindex(li)
         ii = i + offset
         ind = indices[ii]
-        ind === CONSTANTZEROINDEX && continue
-        if (!li[i]) || multiple_with_name(vptr(ar), ls.lssm[].uniquearrayrefs) ||
+        if (!li[i]) || (ind === CONSTANTZEROINDEX) || multiple_with_name(vptr(ar), ls.lssm[].uniquearrayrefs) ||
             (iszero(ls.vector_width[]) && isstaticloop(getloop(ls, ind)))# ||
             out[i] = false
         elseif (isone(ii) && (first(looporder) === ind))
@@ -104,6 +103,10 @@ function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, alla
             # push!(gespinds.args, Expr(:call, lv(:Zero)))
             push!(gespinds.args, staticexpr(1))
             push!(offsetprecalc_descript.args, 0)
+        elseif ind === CONSTANTZEROINDEX
+            uliv[i] = 0
+            push!(gespinds.args, staticexpr(1))
+            push!(offsetprecalc_descript.args, 0)
         elseif isbroadcast ||
             ((isone(ii) && (last(looporder) === ind)) && !(otherindexunrolled(ls, ind, ar)) ||
              multiple_with_name(vptr(ar), allarrayrefs)) ||
@@ -118,10 +121,6 @@ function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, alla
             
             push!(offsetprecalc_descript.args, 0) # not doing offset indexing, so push 0
         else
-            if ind === CONSTANTZEROINDEX
-                push!(gespinds.args, staticexpr(1))
-                continue
-            end
             uliv[i] = findfirst(isequal(ind), looporder)::Int
             loop = getloop(ls, ind)
             if isknown(first(loop))
@@ -134,17 +133,19 @@ function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, alla
             # else
             #     push!(gespinds.args, Expr(:call, lv(:staticm1), loop.startsym))
             # end
-            if ind === names(ls)[us.vloopnum]
-                push!(offsetprecalc_descript.args, 0)
-            elseif (ind === names(ls)[us.u₁loopnum]) & (us.u₁ > 3)
-                use_offsetprecalc = true
-                push!(offsetprecalc_descript.args, us.u₁)
-            elseif (ind === names(ls)[us.u₂loopnum]) & (us.u₂ > 3)
-                use_offsetprecalc = true
-                push!(offsetprecalc_descript.args, us.u₂)
-            else
-                push!(offsetprecalc_descript.args, 0)
-            end
+            push!(offsetprecalc_descript.args, max(5,us.u₁,us.u₂))
+            # if ind === names(ls)[us.vloopnum]
+            #     push!(offsetprecalc_descript.args, 0)
+            # elseif (ind === names(ls)[us.u₁loopnum]) & (us.u₁ > 3)
+            #     use_offsetprecalc = true
+            #     push!(offsetprecalc_descript.args, us.u₁)
+            # elseif (ind === names(ls)[us.u₂loopnum]) & (us.u₂ > 3)
+            #     use_offsetprecalc = true
+            #     push!(offsetprecalc_descript.args, us.u₂)
+            # else
+            #     # push!(offsetprecalc_descript.args, 0)
+            #     push!(offsetprecalc_descript.args, 0)
+            # end
         end
     end
     if includeinlet
@@ -173,6 +174,7 @@ function add_loop_start_stop_manager!(ls::LoopSet)
     # Filtered ArrayReferenceMetas, we must increment each
     arrayrefs, includeinlet = uniquearrayrefs(ls)
     use_livs = map((ar,iil) -> use_loop_induct_var!(ls, q, ar, arrayrefs, iil), arrayrefs, includeinlet)
+    # @show use_livs, 
     # loops, sorted from outer-most to inner-most
     looporder = reversenames(ls)
     # For each loop, we need to choose an induction variable
@@ -196,8 +198,8 @@ function add_loop_start_stop_manager!(ls::LoopSet)
                 end
             end
         end
-        loopstarts[i] = loopstartᵢ
-        terminators[i] = if (loopsym ∈ loopinductvars) || (any(r -> any(isequal(-i), r), use_livs)) || iszero(length(loopstartᵢ))
+        loopstarts[nloops+1-i] = loopstartᵢ
+        terminators[nloops+1-i] = if (loopsym ∈ loopinductvars) || (any(r -> any(isequal(-i), r), use_livs)) || iszero(length(loopstartᵢ))
             0
         else
             # @show i, loopsym loopdependencies.(operations(ls)) operations(ls)
@@ -206,7 +208,7 @@ function add_loop_start_stop_manager!(ls::LoopSet)
         end
     end
     ls.lssm[] = LoopStartStopManager(
-        reverse!(terminators), reverse!(loopstarts), arrayrefs
+        terminators, loopstarts, arrayrefs
     )
     q
 end
@@ -270,7 +272,9 @@ function pointermax_index(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int,
     loopsym = names(ls)[n]
     index = Expr(:tuple);
     ind = 0
+    # @show ar loopsym names(ls) n
     for (j,i) ∈ enumerate(getindicesonly(ar))
+        # @show j,i
         if i === loopsym
             ind = j
             if iszero(sub)
@@ -340,6 +344,7 @@ function append_pointer_maxes!(
             # push!(loopstart.args, defpointermax(ls, ptrdefs[termind], n, sub, isvectorized, stopindicator))
         end
     else
+        # @show n, getloop(ls, n) ar
         index, ind = pointermax_index(ls, ar, n, submax, isvectorized, stopindicator, incr)
         vptr_ar = vptr(ar)
         _pointercompbase = maxsym(vptr_ar, submax)
@@ -407,6 +412,7 @@ function startloop(ls::LoopSet, us::UnrollSpecification, n::Int, submax = maxunr
         push!(loopstart.args, startloop(getloop(ls, loopsym), loopsym))
     else
         isvectorized = n == vloopnum
+        # @show ptrdefs
         append_pointer_maxes!(loopstart, ls, ptrdefs[termind], n, submax, isvectorized)
     end
     loopstart
