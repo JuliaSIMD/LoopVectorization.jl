@@ -89,13 +89,18 @@ function cost(ls::LoopSet, op::Operation, (u₁,u₂)::Tuple{Symbol,Symbol}, vlo
                 indices = getindices(op)
                 contigind = first(indices)
                 batchid, _opind = offsetloadcollection(ls).batchedcollectionmap[identifier(op)]
-                if (batchid ≠ 0) && !isdiscontiguous(op)
-                    shifter = 1
+                # @show rejectinterleave(op, getloop(ls, vloopsym), ls.omop.batchedcollections[batchid])
+                if (batchid ≠ 0) && !rejectinterleave(op, getloop(ls, vloopsym), ls.omop.batchedcollections[batchid])
+                # if (batchid ≠ 0) && !isdiscontiguous(op)
+                    shifter = 2
                 else
-                    shifter = (1 << Wshift)
-                    shifter -= ((u₁ === contigind) | (u₂ === contigind))
+                    shifter = Wshift
                 end
-                # @show shifter
+                if ((contigind === CONSTANTZEROINDEX) && ((length(indices) > 1) && (indices[2] === u₁) || (indices[2] === u₂))) ||
+                    ((u₁ === contigind) | (u₂ === contigind))
+
+                    shifter -= 1
+                end
                 r = 1 << shifter
                 srt *= r# * 2
                 sl *= r

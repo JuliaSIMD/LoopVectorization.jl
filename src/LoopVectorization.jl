@@ -3,7 +3,7 @@ module LoopVectorization
 
 using VectorizationBase, SLEEFPirates, UnPack, OffsetArrays
 using VectorizationBase: register_size, register_count, cache_linesize, has_opmask_registers,
-    mask, pick_vector_width, MM, data, grouped_strided_pointer,
+    mask, pick_vector_width, MM, AbstractMask, data, grouped_strided_pointer,
     maybestaticlength, maybestaticsize, staticm1, staticp1, staticmul, vzero,
     maybestaticrange, offsetprecalc, lazymul,
     maybestaticfirst, maybestaticlast, scalar_less, scalar_greaterequal, gep, gesp, pointerforcomparison, NativeTypes,

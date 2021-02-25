@@ -114,7 +114,7 @@ function lower_load_no_optranslation!(
     opu₁ = isu₁unrolled(op)
 
     u = ifelse(opu₁, u₁, 1)
-    mvar = Symbol(variable_name(op, suffix), '_', u)
+    mvar = Symbol(variable_name(op, Core.ifelse(isu₂unrolled(op), suffix,-1)), '_', u)
     falseexpr = Expr(:call, lv(:False)); rs = staticexpr(reg_size(ls))
 
     if all(op.ref.loopedindex)
@@ -359,7 +359,7 @@ function lower_load_collection!(
     u = Core.ifelse(isu₁unrolled(op), u₁, 1)
     for (i,(opid,o)) ∈ enumerate(idsformap)
         _op = ops[opidmap[opid]]
-        mvar = Symbol(variable_name(_op, suffix), '_', u)
+        mvar = Symbol(variable_name(_op, Core.ifelse(isu₂unrolled(_op), suffix, -1)), '_', u)
         push!(q.args, Expr(:(=), mvar, Expr(:call, :getfield, collectionname, i, false)))
     end
 end

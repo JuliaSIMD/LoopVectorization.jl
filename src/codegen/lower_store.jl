@@ -52,16 +52,23 @@ function lower_store_collection!(
     opidmap = offsetloadcollection(ls).opids[collectionid]
     idsformap = omop.batchedcollections[batchid]
 
-    @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, vloop, suffix = ua
+    @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, vloop, u₂max, suffix = ua
     ops = operations(ls)
 
     nouter = length(idsformap)
 
     t = Expr(:tuple)
-    u = Core.ifelse(isu₁unrolled(op), u₁, 1)
+    # u = Core.ifelse(isu₁unrolled(op), u₁, 1)
+    
     for (i,(opid,_)) ∈ enumerate(idsformap)
-        _op = ops[opidmap[opid]]
-        mvar = Symbol(variable_name(_op, suffix), '_', u)
+        opp = first(parents(ops[opidmap[opid]]))
+
+        isu₁, isu₂ = isunrolled_sym(opp, u₁loopsym, u₂loopsym, u₂max)
+        u = Core.ifelse(isu₁, u₁, 1)
+        mvar = Symbol(variable_name(opp, ifelse(isu₂, suffix, -1)), '_', u)
+        # mvar = Symbol(variable_name(_op, suffix), '_', u)
+        # mvar = Symbol(variable_name(_op, ifelse(isu₂, suffix, -1)), '_', u)
+        # @show mvar, isu₂, isu₂unrolled(opp)
         push!(t.args, mvar)
     end
     
@@ -98,11 +105,9 @@ function lower_store!(
 
     omop = offsetloadcollection(ls)
     batchid, opind = omop.batchedcollectionmap[identifier(op)]
-    if ((batchid ≠ 0) && isvectorized(op))
-        if !rejectinterleave(op, vloop, omop.batchedcollections[batchid])
-            (opind == 1) && lower_store_collection!(q, ls, op, ua, mask, inds_calc_by_ptr_offset)
-            return
-        end
+    if ((batchid ≠ 0) && isvectorized(op)) && (!rejectinterleave(op, vloop, omop.batchedcollections[batchid]))
+        (opind == 1) && lower_store_collection!(q, ls, op, ua, mask, inds_calc_by_ptr_offset)
+        return
     end
 
     isunrolled₁ = isu₁unrolled(op) #u₁loopsym ∈ loopdependencies(op)
@@ -165,6 +170,15 @@ function lower_tiled_store!(
         end
     end
 end
+
+function donot_tile_store(ls::LoopSet, op::Operation, vloop::Loop, reductfunc::Symbol, u₂::Int)
+    (!((reductfunc === Symbol("")) && all(op.ref.loopedindex))) || (u₂ ≤ 1) || isconditionalmemop(op) && return true
+
+    omop = offsetloadcollection(ls)
+    batchid, opind = omop.batchedcollectionmap[identifier(op)]
+    return ((batchid ≠ 0) && isvectorized(op)) && (!rejectinterleave(op, vloop, omop.batchedcollections[batchid]))
+end
+
 # VectorizationBase implements optimizations for certain grouped stores
 # thus we group stores together here to allow for these possibilities.
 # (In particular, it tries to replace scatters with shuffles when there are groups
@@ -174,7 +188,7 @@ function lower_tiled_store!(blockq::Expr, op::Operation, ls::LoopSet, ua::Unroll
     reductfunc = storeinstr_preprend(op, vloopsym)
     inds_calc_by_ptr_offset = indices_calculated_by_pointer_offsets(ls, op.ref)
 
-    if (!((reductfunc === Symbol("")) && all(op.ref.loopedindex))) || (u₂ ≤ 1) || isconditionalmemop(op)
+    if donot_tile_store(ls, op, vloop, reductfunc, u₂)
         # If we have a reductfunc, we're using a reducing store instead of a contiuguous or shuffle store anyway
         # so no benefit to being able to handle that case here, vs just calling the default `lower_store!` method
         @unpack u₁, u₂max = ua

@@ -167,19 +167,19 @@ function ifelselastexpr(hasf::Bool, M::Int, vargtypes, K::Int, S::Int, maskearly
     push!(q.args, :(VecUnroll($t)))
     q
 end
-@generated function ifelselast(f::F, m::Mask{W}, ::StaticInt{M}, ::StaticInt{S}, vargs::Vararg{Any,K}) where {F,W,K,M,S}
+@generated function ifelselast(f::F, m::AbstractMask{W}, ::StaticInt{M}, ::StaticInt{S}, vargs::Vararg{Any,K}) where {F,W,K,M,S}
     1+1
     ifelselastexpr(true, M, vargs, K, S, false)
 end
-@generated function ifelselast(m::Mask{W}, ::StaticInt{M}, ::StaticInt{S}, varg_1::V1, varg_2::V2) where {W,V1,V2,M,S}
+@generated function ifelselast(m::AbstractMask{W}, ::StaticInt{M}, ::StaticInt{S}, varg_1::V1, varg_2::V2) where {W,V1,V2,M,S}
     1+1
     ifelselastexpr(false, M, (V1,V2), 2, S, false)
 end
-@generated function ifelsepartial(f::F, m::Mask{W}, ::StaticInt{M}, ::StaticInt{S}, vargs::Vararg{Any,K}) where {F,W,K,M,S}
+@generated function ifelsepartial(f::F, m::AbstractMask{W}, ::StaticInt{M}, ::StaticInt{S}, vargs::Vararg{Any,K}) where {F,W,K,M,S}
     1+1
     ifelselastexpr(true, M, vargs, K, S, true)
 end
-@generated function ifelsepartial(m::Mask{W}, ::StaticInt{M}, ::StaticInt{S}, varg_1::V1, varg_2::V2) where {W,V1,V2,M,S}
+@generated function ifelsepartial(m::AbstractMask{W}, ::StaticInt{M}, ::StaticInt{S}, varg_1::V1, varg_2::V2) where {W,V1,V2,M,S}
     1+1
     ifelselastexpr(false, M, (V1,V2), 2, S, true)
 end
@@ -281,6 +281,7 @@ function parent_op_name(
 
     # end
     if opisvectorized && isload(opp) && (!isvectorized(opp))
+        # @show parents_u₁syms, parents_u₂syms, parent
         parent = Symbol(parent, "##broadcasted##")
     end
     parent

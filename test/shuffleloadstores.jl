@@ -147,17 +147,17 @@ end
         yqm = reinterpret(reshape, Float64, yq);
         @test Base.vect(qdot_simd(xq, yq)...) ≈ Base.vect(qdot_mat(xqm, yqm)...) ≈ Base.vect(qdot_affine(xqv, yqv)...) ≈ Base.vect(qdot_stride(xqv, yqv)...)
 
-        # Ac = rand(Complex{Float64}, i, i);
-        # Bc = rand(Complex{Float64}, i, i);
-        # Cc1 = Ac*Bc;
-        # Cc2 = similar(Cc1);
-        # # Cc3 = similar(Cc1)
-        # Cca = reinterpret(reshape, Float64, Cc2);
-        # Aca = reinterpret(reshape, Float64, Ac);
-        # Bca = reinterpret(reshape, Float64, Bc);
-        # cmatmul_array!(Cca, Aca, Bca)
+        Ac = rand(Complex{Float64}, i, i);
+        Bc = rand(Complex{Float64}, i, i);
+        Cc1 = Ac*Bc;
+        Cc2 = similar(Cc1);
+        # Cc3 = similar(Cc1)
+        Cca = reinterpret(reshape, Float64, Cc2);
+        Aca = reinterpret(reshape, Float64, Ac);
+        Bca = reinterpret(reshape, Float64, Bc);
+        cmatmul_array!(Cca, Aca, Bca)
         
-        # @test Cc1 ≈ Cc2# ≈ Cc3
+        @test Cc1 ≈ Cc2# ≈ Cc3
     end
 end
 
