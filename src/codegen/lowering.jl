@@ -109,7 +109,7 @@ function loopiteratesatleastonce!(ls, loop::Loop)
         pushexpr!(comp, first(loop))
     else
         pushexpr!(comp, last(loop))
-        push!(comp.args, Expr(:call, lv(:vsub_fast), loop.startsym, staticexpr(1)))
+        push!(comp.args, Expr(:call, lv(:vsub_fast), getsym(start), staticexpr(1)))
     end
     pushpreamble!(ls, assume(comp))
     return loop
@@ -657,11 +657,7 @@ function init_remblock(unrolledloop::Loop, lssm::LoopStartStopManager, n::Int)#u
     Expr(:if, condition)
 end
 
-function maskexpr(looplimit)
-    Expr(:(=), MASKSYMBOL, Expr(:call, lv(:mask), VECTORWIDTHSYMBOL, looplimit))
-    # rem = Expr(:call, lv(:valrem), W, looplimit)
-    # Expr(:(=), MASKSYMBOL, Expr(:call, lv(:masktable), W, rem))
-end
+maskexpr(looplimit) = Expr(:(=), MASKSYMBOL, Expr(:call, lv(:mask), VECTORWIDTHSYMBOL, looplimit))
 @inline idiv_fast(a::I, b::I) where {I <: Base.BitInteger} = Base.udiv_int(a, b)
 @inline idiv_fast(a, b) = idiv_fast(Int(a), Int(b))
 # @inline idiv_fast(a, b) = idiv_fast(@show(Int(a)), @show(Int(b)))
@@ -673,19 +669,23 @@ function definemask(loop::Loop)
     start = first(loop)
     incr = step(loop)
     stop = last(loop)
-    if isone(first(loop)) & isone(incr)
-        maskexpr(getsym(last(loop)))
+    if isone(start) & isone(incr)
+        isknown(stop) ? maskexpr(gethint(stop)) : maskexpr(getsym(stop))
     elseif loop.lensym !== Symbol("")
         maskexpr(loop.lensym)
     elseif isone(incr)
-        lexpr = if isknown(first(loop))
-            Expr(:call, lv(:vsub_fast), getsym(last(loop)), gethint(first(loop)) - 1)
-        elseif isknown(last(loop))
-            Expr(:call, lv(:vsub_fast), gethint(last(loop)) + 1, getsym(first(loop)))
+        if isknown(start) & isknown(stop)
+            maskexpr(1 + gethint(stop) - gethint(start))
         else
-            Expr(:call, lv(:vsub_fast), Expr(:call, lv(:vadd_fast), getsym(last(loop)), 1), getsym(first(loop)))
+            lexpr = if isknown(start)
+                subexpr(stop, gethint(start)-1)
+            elseif isknown(stop)
+                subexpr(gethint(stop) + 1, start)
+            else
+                subexpr(stop, subexpr(start,1))
+            end
+            maskexpr(lexpr)
         end
-        maskexpr(lexpr)
     else
         lenexpr = Expr(:call, lv(:idiv_fast), subexpr(stop, start))
         pushexpr!(lenexpr, incr)
@@ -718,7 +718,8 @@ function setup_preamble!(ls::LoopSet, us::UnrollSpecification, Ureduct::Int)
     end
     for op ∈ operations(ls)
         if (iszero(length(loopdependencies(op))) && iscompute(op))
-            lower_compute!(ls.preamble, op, ls, UnrollArgs(u₁, u₁loopsym, u₂loopsym, vectorized, u₂, -1), false)
+            ua = UnrollArgs(getloop(ls, us.u₁loopnum), getloop(ls, us.u₂loopnum), getloop(ls, us.vloopnum), u₁, u₂, -1)
+            lower_compute!(ls.preamble, op, ls, ua, false)
         end
     end
 end

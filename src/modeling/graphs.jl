@@ -32,6 +32,7 @@ UnPack.unpack(ua::UnrollArgs, ::Val{:u₁step}) = getfield(getfield(ua, :u₁loo
 UnPack.unpack(ua::UnrollArgs, ::Val{:u₂step}) = getfield(getfield(ua, :u₂loop), :step)
 UnPack.unpack(ua::UnrollArgs, ::Val{:vstep}) = getfield(getfield(ua, :vloop), :step)
 
+
 function UnrollArgs(ua::UnrollArgs, u₁::Int)
     @unpack u₁loop, u₂loop, vloop, u₂max, suffix = ua
     UnrollArgs(u₁loop, u₂loop, vloop, u₁, u₂max, suffix)
@@ -767,14 +768,18 @@ end
 @inline canonicalize_range(r::AbstractRange) = canonicalize_range(maybestaticfirst(r):static_step(r):maybestaticlast(r))
 @inline canonicalize_range(r::CartesianIndices) = CartesianIndices(map(canonicalize_range, r.indices))
 
-function misc_loop!(ls::LoopSet, r::Union{Expr,Symbol}, itersym::Symbol)::Loop
+function misc_loop!(ls::LoopSet, r::Union{Expr,Symbol}, itersym::Symbol, staticstepone::Bool)::Loop
     rangename = gensym!(ls, "looprange" * string(itersym)); lenname = gensym!(ls, "looplen" * string(itersym));
     pushprepreamble!(ls, Expr(:(=), rangename, Expr(:call, lv(:canonicalize_range), :(@inbounds $(static_literals!(r))))))
     pushprepreamble!(ls, Expr(:(=), lenname, Expr(:call, lv(:maybestaticlength), rangename)))
     L = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticfirst), rangename), false, false)
     U = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticlast), rangename), true, false)
-    S = add_loop_bound!(ls, itersym, Expr(:call, lv(:static_step), rangename), false, true)
-    Loop(itersym, L, U, S, rangename, lenname)
+    if staticstepone
+        Loop(itersym, L, U, MaybeKnown(1), rangename, lenname)
+    else
+        S = add_loop_bound!(ls, itersym, Expr(:call, lv(:static_step), rangename), false, true)
+        Loop(itersym, L, U, S, rangename, lenname)
+    end
 end
 
 function indices_loop!(ls::LoopSet, r::Expr, itersym::Symbol)::Loop
@@ -811,7 +816,7 @@ function indices_loop!(ls::LoopSet, r::Expr, itersym::Symbol)::Loop
             end
         end
     end
-    misc_loop!(ls, r, itersym)
+    misc_loop!(ls, r, itersym, true)
 end
 
 """
@@ -830,10 +835,10 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
         elseif f === :indices || (isexpr(f, :(.), 2) && (f.args[2] === QuoteNode(:indices)) && ((f.args[1] === :ArrayInterface) || (f.args[1] === :LoopVectorization)))
             indices_loop!(ls, r, itersym)
         else
-            misc_loop!(ls, r, itersym)
+            misc_loop!(ls, r, itersym, (f === :eachindex) | (f === :axes))
         end
     elseif isa(r, Symbol)
-        misc_loop!(ls, r, itersym)
+        misc_loop!(ls, r, itersym, false)
     else
         throw(LoopError("Unrecognized loop range type: $r."))
     end
@@ -1253,9 +1258,15 @@ function isouterreduction(ls::LoopSet, op::Operation)
         var = op.variable
         for opid ∈ ls.outer_reductions
             rop = operations(ls)[opid]
-            for (n,opp) ∈ enumerate(parents(op))
-                opp === rop && return n
-                search_tree(parents(opp), rop.variable) && return n
+            if rop === op
+                for (n,opp) ∈ enumerate(parents(op))
+                    opp.variable === var && return n
+                end
+            else
+                for (n,opp) ∈ enumerate(parents(op))
+                    opp === rop && return n
+                    search_tree(parents(opp), rop.variable) && return n
+                end
             end
         end
         -1

@@ -212,13 +212,16 @@ function depchain_cost!(
     for opp ∈ parents(op)
         skip[identifier(opp)] && continue
         rt, sl = depchain_cost!(ls, skip, opp, unrolled, vloopsym, Wshift, size_T, rt, sl)
+        # @show rt,sl, opp
     end
     # Basically assuming memory and compute don't conflict, but everything else does
     # Ie, ignoring the fact that integer and floating point operations likely don't either
     if iscompute(op)
         rtᵢ, slᵢ = cost(ls, op, (unrolled,Symbol("")), vloopsym, Wshift, size_T)
+        # @show rtᵢ, slᵢ, op
         rt += rtᵢ; sl += slᵢ
     end
+    # @show rt, sl
     rt, sl
 end
 function parentsnotreduction(op::Operation)
@@ -303,6 +306,7 @@ function determine_unroll_factor(
         # dependson(op, unrolled) || continue
         if isreduction(op)
             rt, sl = depchain_cost!(ls, visited_nodes, op, unrolled, vloopsym, Wshift, size_T)
+            # @show op, rt, sl
             if isouterreduction(ls, op) ≠ -1 || unrolled ∉ reduceddependencies(op)
                 latency = max(sl, latency)
             end
@@ -663,13 +667,18 @@ function isoptranslation(ls::LoopSet, op::Operation, unrollsyms::UnrollSymbols)
     @unpack u₁loopsym, u₂loopsym, vloopsym = unrollsyms
     (vloopsym == u₁loopsym || vloopsym == u₂loopsym) && return 0, false
     (isu₁unrolled(op) && isu₂unrolled(op)) || return 0, false
+    u₁step = step(getloop(ls, u₁loopsym))
+    u₂step = step(getloop(ls, u₂loopsym))
+    (isknown(u₁step) & isknown(u₂step)) || return 0, false
+    abs(gethint(u₁step)) == abs(gethint(u₂step)) || return 0, false
+    
     istranslation = 0
     inds = getindices(op); li = op.ref.loopedindex
     translationplus = false
     for i ∈ eachindex(li)
         if !li[i]
             opp = findparent(ls, inds[i + (first(inds) === DISCONTIGUOUS)])
-            if instruction(opp).instr ∈ (:+, :-) && u₁loopsym ∈ loopdependencies(opp) && u₂loopsym ∈ loopdependencies(opp)
+            if instruction(opp).instr ∈ (:+, :-) && isu₁unrolled(opp) && isu₂unrolled(opp)
                 istranslation = i
                 translationplus = instruction(opp).instr === :+
             end

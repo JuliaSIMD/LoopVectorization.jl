@@ -102,8 +102,9 @@ function add_prefetches!(q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, pr
     end
     nothing
 end
+broadcastedname(mvar) = Symbol(mvar, "##broadcasted##")
 function pushbroadcast!(q::Expr, mvar::Symbol)
-    push!(q.args, Expr(:(=), Symbol(mvar, "##broadcasted##"), Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, mvar)))
+    push!(q.args, Expr(:(=), broadcastedname(mvar), Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, mvar)))
 end
 function lower_load_no_optranslation!(
     q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, mask::Bool, inds_calc_by_ptr_offset::Vector{Bool}
@@ -119,7 +120,7 @@ function lower_load_no_optranslation!(
 
     if all(op.ref.loopedindex)
         inds = unrolledindex(op, td, mask, inds_calc_by_ptr_offset)
-        loadexpr = Expr(:call, lv(:vload), vptr(op), inds)
+        loadexpr = Expr(:call, lv(:_vload), vptr(op), inds)
         add_memory_mask!(loadexpr, op, td, mask)
         push!(loadexpr.args, falseexpr, rs) # unaligned load
         push!(q.args, Expr(:(=), mvar, loadexpr))
@@ -128,7 +129,7 @@ function lower_load_no_optranslation!(
         # for u ∈ 1:u₁
         let t = u₁, t = q
             inds = mem_offset_u(op, td, inds_calc_by_ptr_offset, true, u-1)
-            loadexpr = Expr(:call, lv(:vload), vptr(op), inds)
+            loadexpr = Expr(:call, lv(:_vload), vptr(op), inds)
             add_memory_mask!(loadexpr, op, td, mask & ((u == u₁) | isvectorized(op)))
             push!(loadexpr.args, falseexpr, rs)
             # push!(t.args, loadexpr)
@@ -137,7 +138,7 @@ function lower_load_no_optranslation!(
         # push!(q.args, Expr(:(=), mvar, Expr(:call, lv(:VecUnroll), t)))
     else
         inds = mem_offset_u(op, td, inds_calc_by_ptr_offset, true, 0)
-        loadexpr = Expr(:call, lv(:vload), vptr(op), inds)
+        loadexpr = Expr(:call, lv(:_vload), vptr(op), inds)
         add_memory_mask!(loadexpr, op, td, mask)
         push!(loadexpr.args, falseexpr, rs)
         push!(q.args, Expr(:(=), mvar, loadexpr))
@@ -183,82 +184,95 @@ function indisvectorized(ls::LoopSet, ind::Symbol)
 end
 @inline firstunroll(vu::VecUnroll) = getfield(getfield(vu,:data),1,false)
 @inline firstunroll(x) = x
+@inline lastunroll(vu::VecUnroll) = last(getfield(vu,:data))
+@inline lastunroll(x) = x
 function lower_load_for_optranslation!(
     q::Expr, op::Operation, ls::LoopSet, td::UnrollArgs, mask::Bool, translationind::Int
 )
-    @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, u₂max, suffix = td
+    @unpack u₁loop, u₂loop, vloop, u₁, u₂max, suffix = td
+
+    # @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, u₂max, suffix = td
     iszero(suffix) || return
 
+    total_unroll = u₁ + u₂max - 1
+    
+    
+    mref = op.ref
+    inds_by_ptroff = indices_calculated_by_pointer_offsets(ls, mref)
     # initial offset pointer
-    gespinds = mem_offset(op, UnrollArgs(td, u₁), indices_calculated_by_pointer_offsets(ls, op.ref), false)
+
+    # Unroll directions can be + or -
+    # we want to start at minimum position.
+    step₁ = gethint(step(u₁loop))
+    step₂ = gethint(step(u₂loop))
+    
+
+    # abs of steps are equal
+    #
+    equal_steps = step₁ == step₂
+    _td = UnrollArgs(u₁loop, u₂loop, vloop, total_unroll, u₂max, Core.ifelse(equal_steps, 0, u₂max - 1))
+    gespinds = mem_offset(op, _td, inds_by_ptroff, false)
     ptr = vptr(op)
     gptr = Symbol(ptr, "##GESPED##")
     for i ∈ eachindex(gespinds.args)
         if i == translationind
-            gespinds.args[i] = Expr(:call, lv(:firstunroll), gespinds.args[i])
+            gespinds.args[i] = Expr(:call, lv(Core.ifelse(equal_steps, :firstunroll, :lastunroll)), gespinds.args[i])
         else
             gespinds.args[i] = Expr(:call, lv(:data), gespinds.args[i])
         end
     end
     push!(q.args, Expr(:(=), gptr, Expr(:call, lv(:gesp), ptr, gespinds)))
 
+    fill!(inds_by_ptroff, true)
+
+    @unpack ref, loopedindex = mref
+    indices = getindicesonly(ref)
+    old_translation_index = indices[translationind]
+    indices[translationind] = u₁loop.itersymbol
+    # getindicesonly returns a view of `getindices`
+    dummyref = ArrayReference(ref.array, getindices(ref), zero(getoffsets(ref)), getstrides(ref))
+    loopedindex[translationind] = true
+    dummymref = ArrayReferenceMeta(dummyref, loopedindex, gptr)
+
+    _td = UnrollArgs(u₁loop, u₂loop, vloop, total_unroll, u₂max, -1)
+    op.ref = dummymref
+    _lower_load!(q, ls, op, _td, mask)
+    # set old values
+    op.ref = mref
+    loopedindex[translationind] = false
+    indices[translationind] = old_translation_index
+    
     shouldbroadcast = (!isvectorized(op)) && any(isvectorized, children(op))
 
-    inds = Expr(:tuple)
-    indices = getindicesonly(op)
-    for (i,ind) ∈ enumerate(indices)
-        if i == translationind # vectorized ind cannot be the translation ind
-            push!(inds.args, Expr(:call, Expr(:curly, lv(:Static), 0)))
-        elseif (ind === vloopsym) || indisvectorized(ls, ind)
-            push!(inds.args, _MMind(Expr(:call, lv(:Zero))))
-        else
-            push!(inds.args, Expr(:call, lv(:Zero)))
-        end
+    # now we need to assign the `Vec`s from the `VecUnroll` to the correct name.
+    variable_name_u = Symbol(variable_name(op, -1), '_', total_unroll)
+    variable_name_data = Symbol(variable_name_u, "##data##")
+    push!(q.args, :($variable_name_data = getfield($variable_name_u, 1)))
+    if shouldbroadcast
+        broadcasted_data = broadcastedname(variable_name_data)
+        push!(q.args, :($broadcasted_data = getfield($(broadcastedname(variable_name_u)), 1)))
     end
-    variable_name0 = variable_name(op, 0)
-    varbase = Symbol("##var##", variable_name0)
-    loadcall = Expr(:call, lv(:vload), gptr, copy(inds))
-    falseexpr = Expr(:call, lv(:False)); rs = staticexpr(reg_size(ls));
-    mask && push!(loadcall.args, MASKSYMBOL)
-    push!(loadcall.args, falseexpr, rs)
-
-    varbase0 = Symbol(varbase, 0)
-    t = Expr(:tuple, varbase0)
-    push!(q.args, Expr(:(=), varbase0, loadcall))
-    for u ∈ 1:u₁-1
-        inds.args[translationind] = Expr(:call, Expr(:curly, lv(:Static), u))
-        loadcall = Expr(:call, lv(:vload), gptr, copy(inds))
-        mask && push!(loadcall.args, MASKSYMBOL)
-        push!(loadcall.args, falseexpr, rs)
-        varbaseu = Symbol(varbase, u)
-        push!(q.args, Expr(:(=), varbaseu, loadcall))
-        push!(t.args, varbaseu)
-    end
-    vecunroll_name = Symbol(variable_name0, '_', u₁)
-    push!(q.args, Expr(:(=), vecunroll_name, Expr(:call, lv(:VecUnroll), t)))
-    shouldbroadcast && pushbroadcast!(q, vecunroll_name)
-    # this takes care of u₂ == 0
-    offset = u₁
-    for u₂ ∈ 1:u₂max-1
+    for u₂ ∈ 0:u₂max-1
+        variable_name_u₂ = Symbol(variable_name(op, u₂), '_', u₁)
         t = Expr(:tuple)
-        varold = varbase
-        varbase = variable_name(op, u₂)
-        for u ∈ 0:u₁-2
-            varbaseu = Symbol(varbase, u)
-            push!(q.args, Expr(:(=), varbaseu, Symbol(varold, u + 1)))
-            push!(t.args, varbaseu)
+        if shouldbroadcast
+            tb = Expr(:tuple)
         end
-        inds.args[translationind] = Expr(:call, Expr(:curly, lv(:Static), offset))
-        loadcall = Expr(:call, lv(:vload), gptr, copy(inds))
-        mask && push!(loadcall.args, MASKSYMBOL)
-        push!(loadcall.args, falseexpr, rs)
-        varload = Symbol(varbase, u₁ - 1)
-        push!(q.args, Expr(:(=), varload, loadcall))
-        push!(t.args, varload)
-        offset += 1
-        vecunroll_name = Symbol(variable_name(op, u₂), '_', u₁)
-        push!(q.args, Expr(:(=), vecunroll_name, Expr(:call, lv(:VecUnroll), t)))
-        shouldbroadcast && pushbroadcast!(q, vecunroll_name)
+        for u ∈ 1:u₁
+            uu = if equal_steps
+                u + u₂
+            else
+                u - u₂ + u₂max - 1
+            end
+            push!(t.args, :(getfield($variable_name_data, $uu)))
+            if shouldbroadcast
+                push!(tb.args, :(getfield($broadcasted_data, $uu)))
+            end
+        end
+        push!(q.args, :($variable_name_u₂ = VecUnroll($t)))
+        if shouldbroadcast
+            push!(q.args, :($(broadcastedname(variable_name_u₂)) = VecUnroll($tb)))
+        end
     end
     nothing
 end
@@ -268,40 +282,34 @@ end
 function lower_load!(
     q::Expr, op::Operation, ls::LoopSet, td::UnrollArgs, mask::Bool
 )
-    @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, suffix = td
+    @unpack u₁, u₂max, u₁loopsym, u₂loopsym, vloopsym, suffix = td
     if (suffix != -1) && ls.loadelimination[]
-        istr, ispl = isoptranslation(ls, op, UnrollSymbols(u₁loopsym, u₂loopsym, vloopsym))
+        if (u₁ > 1) & (u₂max > 1)
+            istr, ispl = isoptranslation(ls, op, UnrollSymbols(u₁loopsym, u₂loopsym, vloopsym))
+        else
+            istr, ispl = 0, false
+        end
         if !iszero(istr) & ispl
             return lower_load_for_optranslation!(q, op, ls, td, mask, istr)
-        elseif suffix > 0
-            if u₂loopsym !== vloopsym
-                mno, id = maxnegativeoffset(ls, op, u₂loopsym)
-                if -suffix < mno < 0 # already checked that `suffix != -1` above
-                    varnew = variable_name(op, suffix)
-                    varold = variable_name(operations(ls)[id], suffix + mno)
-                    opold = operations(ls)[id]
-                    u = isu₁unrolled(op) ? u₁ : 1
-                    push!(q.args, Expr(:(=), Symbol(varnew, '_', u), Symbol(varold, '_', u)))
-                    # if isu₁unrolled(op)
-                    #     for u ∈ 0:u₁-1
-                    #         push!(q.args, Expr(:(=), Symbol(varnew, u), Symbol(varold, u)))
-                    #     end
-                    # else
-
-                    # end
-                    return
-                end
+        elseif (suffix > 0) && (u₂loopsym !== vloopsym)
+            mno, id = maxnegativeoffset(ls, op, u₂loopsym)
+            if -suffix < mno < 0 # already checked that `suffix != -1` above
+                varnew = variable_name(op, suffix)
+                varold = variable_name(operations(ls)[id], suffix + mno)
+                opold = operations(ls)[id]
+                u = isu₁unrolled(op) ? u₁ : 1
+                push!(q.args, Expr(:(=), Symbol(varnew, '_', u), Symbol(varold, '_', u)))
+                return
             end
         end
     end
     _lower_load!(q, ls, op, td, mask)
 end
 function _lower_load!(
-    q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, mask::Bool
+    q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, mask::Bool, inds_calc_by_ptr_offset::Vector{Bool} = indices_calculated_by_pointer_offsets(ls, op.ref)
 )
     omop = offsetloadcollection(ls)
     batchid, opind = omop.batchedcollectionmap[identifier(op)]
-    inds_calc_by_ptr_offset = indices_calculated_by_pointer_offsets(ls, op.ref)
     # @show batchid == 0 (!isvectorized(op)) rejectinterleave(op, td.vloop, idsformap)
     if batchid == 0 || (!isvectorized(op)) || (rejectinterleave(op, td.vloop, omop.batchedcollections[batchid]))
         lower_load_no_optranslation!(q, ls, op, td, mask, inds_calc_by_ptr_offset)
@@ -349,7 +357,7 @@ function lower_load_collection!(
     end
     uinds = Expr(:call, unrollcurl₂, inds)
     vp = vptr(op)
-    loadexpr = Expr(:call, lv(:vload), vp, uinds)
+    loadexpr = Expr(:call, lv(:_vload), vp, uinds)
     # not using `add_memory_mask!(storeexpr, op, ua, mask)` because we checked `isconditionalmemop` earlier in `lower_load_collection!`
     (mask && isvectorized(op)) && push!(loadexpr.args, MASKSYMBOL)
     push!(loadexpr.args, falseexpr, rs)

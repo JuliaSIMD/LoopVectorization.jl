@@ -28,6 +28,8 @@ const START_TIME = time()
     @time include("check_empty.jl")
 
     @time include("loopinductvars.jl")
+
+    @time include("shuffleloadstores.jl")
     
     @time include("zygote.jl")
 

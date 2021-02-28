@@ -1,6 +1,6 @@
 
 @generated function subsetview(
-    ptr::StridedPointer{T,N,C,B,R,X,O}, ::Val{I}, i::Integer
+    ptr::StridedPointer{T,N,C,B,R,X,O}, ::StaticInt{I}, i::Integer
 ) where {T,N,C,B,R,X,O,I}
     I > N && return :ptr
     @assert B ≤ 0 "Batched dims not currently supported."

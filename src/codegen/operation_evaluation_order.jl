@@ -27,11 +27,7 @@ function isnopidentity(ls::LoopSet, op::Operation, u₁loop::Symbol, u₂loop::S
     parents_op = parents(op)
     if iscompute(op) && instruction(op).instr === :identity && name(first(parents_op)) === name(op) && isone(length(parents_op))
         loopistiled = u₂max ≠ -1
-        if isu₂unrolled(op)
-            mvar, u₁unrolledsym, u₂unrolledsym = variable_name_and_unrolled(op, u₁loop, u₂loop, u₂max, u₂max)
-        else
-            mvar, u₁unrolledsym, u₂unrolledsym = variable_name_and_unrolled(op, u₁loop, u₂loop, u₂max, nothing)
-        end
+        mvar, u₁unrolledsym, u₂unrolledsym = variable_name_and_unrolled(op, u₁loop, u₂loop, u₂max, Core.ifelse(isu₂unrolled(op), u₂max, -1))
         parents_u₁syms, parents_u₂syms = parent_unroll_status(op, u₁loop, u₂loop, u₂max)
         if (u₁unrolledsym == first(parents_u₁syms)) && (isu₂unrolled(op) == parents_u₂syms[1])
             #TODO: identifer(first(parents_op)) ∉ ls.outer_reductions is going to miss a lot of cases

@@ -9,7 +9,7 @@ using VectorizationBase: register_size, register_count, cache_linesize, has_opma
     maybestaticfirst, maybestaticlast, scalar_less, scalar_greaterequal, gep, gesp, pointerforcomparison, NativeTypes,
     vfmadd, vfmsub, vfnmadd, vfnmsub, vfmadd_fast, vfmsub_fast, vfnmadd_fast, vfnmsub_fast, vfmadd231, vfmsub231, vfnmadd231, vfnmsub231,
     vfma_fast, vmuladd_fast, vdiv_fast, vadd_fast, vsub_fast, vmul_fast,
-    relu, stridedpointer, StridedPointer, StridedBitPointer, AbstractStridedPointer,
+    relu, stridedpointer, StridedPointer, StridedBitPointer, AbstractStridedPointer, _vload, _vstore!,
     reduced_add, reduced_prod, reduce_to_add, reduce_to_prod, reduced_max, reduced_min, reduce_to_max, reduce_to_min,
     vsum, vprod, vmaximum, vminimum, unwrap, Unroll, VecUnroll,
     preserve_buffer, zero_vecunroll, vbroadcast_vecunroll, _vzero, _vbroadcast,

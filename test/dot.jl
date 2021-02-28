@@ -51,7 +51,7 @@ using Test
     end
     
 
-    selfdotq = :(for i ∈ eachindex(a)
+    selfdotq = :(for i ∈ indices(a,1)
                  s += a[i]*a[i]
                  end)
     lsselfdot = LoopVectorization.loopset(selfdotq);
@@ -210,7 +210,7 @@ using Test
     end
     function mcpi_avx_u4(x, y)
         acc = 0
-        @_avx unroll=4 for i ∈ eachindex(x)
+        @_avx unroll=4 for i ∈ 1:length(x)
             acc += (x[i]*x[i] + y[i]*y[i]) < 1.0
         end
         4acc/length(x)

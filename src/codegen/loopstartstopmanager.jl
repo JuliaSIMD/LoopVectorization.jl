@@ -137,7 +137,7 @@ function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, alla
             # if ind === names(ls)[us.vloopnum]
             #     push!(offsetprecalc_descript.args, 0)
             # elseif (ind === names(ls)[us.u₁loopnum]) & (us.u₁ > 3)
-            #     use_offsetprecalc = true
+            use_offsetprecalc = true
             #     push!(offsetprecalc_descript.args, us.u₁)
             # elseif (ind === names(ls)[us.u₂loopnum]) & (us.u₂ > 3)
             #     use_offsetprecalc = true

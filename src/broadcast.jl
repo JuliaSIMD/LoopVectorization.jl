@@ -111,7 +111,7 @@ function add_broadcast!(
     pushprepreamble!(ls, Expr(:(=), Klen, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), Expr(:ref, Expr(:call, :size, mB), 1))))
     pushpreamble!(ls, Expr(:(=), Krange, Expr(:call, :(:), staticexpr(1), Klen)))
     k = gensym!(ls, "k")
-    add_loop!(ls, Loop(k, 1, Klen, Krange, Klen), k)
+    add_loop!(ls, Loop(k, 1, Klen, 1, Krange, Klen), k)
     m = loopsyms[1];
     if numdims(B) == 1
         bloopsyms = Symbol[k]
@@ -345,7 +345,7 @@ function add_broadcast_loops!(ls::LoopSet, loopsyms::Vector{Symbol}, destsym::Sy
         Nlower = gensym!(ls, "N")
         Nupper = gensym!(ls, "N")
         Nlen = gensym!(ls, "N")
-        add_loop!(ls, Loop(itersym, Nlower, Nupper, Nrange, Nlen), itersym)
+        add_loop!(ls, Loop(itersym, Nlower, Nupper, 1, Nrange, Nlen), itersym)
         push!(axes_tuple.args, Nrange)
         pushpreamble!(ls, Expr(:(=), Nlower, Expr(:call, lv(:maybestaticfirst), Nrange)))
         pushpreamble!(ls, Expr(:(=), Nupper, Expr(:call, lv(:maybestaticlast), Nrange)))

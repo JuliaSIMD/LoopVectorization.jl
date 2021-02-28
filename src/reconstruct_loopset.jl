@@ -461,6 +461,9 @@ function extract_external_functions!(ls::LoopSet, offset::Int, vargs)
     offset
 end
 function sizeofeltypes(v, num_arrays)::Int
+    if num_arrays == 0
+        return 8
+    end
     T = typeeltype(v[1])
     sz = if (VectorizationBase.simd_integer_register_size() != VectorizationBase.register_size()) && T <: Integer # hack
         (VectorizationBase.register_size() ÷ VectorizationBase.simd_integer_register_size()) * sizeof(T)
@@ -488,7 +491,8 @@ function avx_loopset(instr::Vector{Instruction}, ops::Vector{OperationStruct}, a
                      AM::Vector{Any}, LPSYM::Vector{Any}, LB::Core.SimpleVector, @nospecialize(vargs))
     ls = LoopSet(:LoopVectorization)
     num_arrays = length(arf)
-    elementbytes = sizeofeltypes(vargs[1].parameters[1].parameters, num_arrays)
+    # TODO: check outer reduction types instead
+    elementbytes = num_arrays == 0 ? 8 : sizeofeltypes(vargs[1].parameters[1].parameters, num_arrays)
     pushpreamble!(ls, :((lb, vargs) = _vargs))
     add_loops!(ls, LPSYM, LB)
     resize!(ls.loop_order, ls.loopsymbol_offsets[end])
@@ -566,7 +570,7 @@ Execute an `@avx` block. The block's code is represented via the arguments:
 - `vargs...` holds the encoded pointers of all the arrays (see `VectorizationBase`'s various pointer types).
 """
 @generated function _avx_!(::Val{UNROLL}, ::Val{OPS}, ::Val{ARF}, ::Val{AM}, ::Val{LPSYM}, _vargs::Tuple{LB,V}) where {UNROLL, OPS, ARF, AM, LPSYM, LB, V}
-    # 1 + 1 # Irrelevant line you can comment out/in to force recompilation...
+    1 + 1 # Irrelevant line you can comment out/in to force recompilation...
     ls = _avx_loopset(OPS, ARF, AM, LPSYM, LB.parameters, V.parameters)
     # return @show avx_body(ls, UNROLL)
     # @show UNROLL, OPS, ARF, AM, LPSYM, LB
