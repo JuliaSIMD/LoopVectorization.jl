@@ -56,6 +56,7 @@ end
 @inline staticdims(::Any) = One()
 @inline staticdims(::CartesianIndices{N}) where {N} = StaticInt{N}()
 
+
 function append_loop_staticdims!(valcall::Expr, loop::Loop)
     if isstaticloop(loop)
         push!(valcall.args, staticexpr(1))
@@ -64,15 +65,26 @@ function append_loop_staticdims!(valcall::Expr, loop::Loop)
     end
     nothing
 end
-function subset_vptr!(ls::LoopSet, vptr::Symbol, indnum::Int, ind, previndices, loopindex)
-    subsetvptr = Symbol(vptr, "_subset_$(indnum)_with_$(ind)##")
+function subset_vptr!(ls::LoopSet, vptr::Symbol, indnum::Int, ind, previndices, loopindex, subset::Bool)
+    str_typ = subset ? "subset" : "index"
+    subsetvptr = Symbol(vptr, "_##$(str_typ)##_$(indnum)_##with##_$(ind)_##")
     valcall = staticexpr(1)
     if indnum > 1
         offset = first(previndices) === DISCONTIGUOUS
         valcall = Expr(:call, :(+), valcall)
         for i ∈ 1:indnum-1
             loopdep = if loopindex[i]
-                previndices[i+offset]
+                index = previndices[i+offset]
+                if index === CONSTANTZEROINDEX
+                    if indnum == 2 && i == 1
+                        push!(valcall.args, staticexpr(1))
+                    else
+                        valcall.args[2] = staticexpr(2)
+                    end
+                    continue
+                else
+                    index
+                end
             else
                 # assumes all staticdims will be of equal length once expanded...
                 # A[I + J, constindex], I and J may be CartesianIndices. This requires they all be of same number of dims
@@ -82,26 +94,38 @@ function subset_vptr!(ls::LoopSet, vptr::Symbol, indnum::Int, ind, previndices, 
         end
     end
     # indm1 = ind isa Integer ? ind - 1 : Expr(:call, :-, ind, 1)
-    pushpreamble!(ls, Expr(:(=), subsetvptr, Expr(:call, lv(:subsetview), vptr, valcall, ind)))
+    f = lv(Core.ifelse(subset, :subsetview, :_gesp))
+    pushpreamble!(ls, Expr(:(=), subsetvptr, Expr(:call, f, vptr, valcall, ind)))
     subsetvptr
 end
+
+function gesp_const_offset!(ls::LoopSet, vptrarray, ninds, indices, loopedindex, mlt::Integer, sym)
+    if isone(mlt)
+        subset_vptr!(ls, vptrarray, ninds, sym, indices, loopedindex, false)
+    else        
+        mltsym = Symbol(sym, "##multiplied##by##", mlt)
+        pushprepreamble!(ls, Expr(:(=), mltsym, Expr(:call, :(*), mlt, sym))) # want same name for arrays to be given the same name if possible
+        subset_vptr!(ls, vptrarray, ninds, mltsym, indices, loopedindex, false)
+    end
+end
+function gesp_const_offsets!(ls::LoopSet, vptrarray, ninds, indices, loopedindex, mltsyms)
+    length(mltsyms) > 1 && sort!(mltsyms, by = last) # if multiple have same combination of syms, make sure they match even if order is different
+    for (mlt,sym) ∈ mltsyms
+        vptrarray = gesp_const_offset!(ls, vptrarray, ninds, indices, loopedindex, mlt, sym)
+    end
+    vptrarray
+end
+
+
 byterepresentable(x)::Bool = false
-byterepresentable(x::Integer)::Bool = typemin(Int8) < x < typemax(Int8)
+byterepresentable(x::Integer)::Bool = typemin(Int8) ≤ x ≤ typemax(Int8)
 function _addoffset!(indices, offsets, strides, loopedindex, loopdependencies, ind, offset, stride)
     push!(indices, ind)
     push!(offsets, offset % Int8)
-    push!(strides, stride)
+    push!(strides, stride % Int8)
     push!(loopedindex, true)
     push!(loopdependencies, ind)
     true
-end
-
-function addoffset_index!(
-    indices::Vector{Symbol}, offsets::Vector{Int8}, strides::Vector{Int8}, loopedindex::Vector{Bool},
-    loopdependencies::Vector{Symbol}, ind::Symbol, offset, stride
-)::Bool
-    byterepresentable(offset) || return false
-    _addoffset!(indices, offsets, strides, loopedindex, loopdependencies, ind, offset, stride)
 end
 
 function addconstindex!(indices, offsets, strides, loopedindex, offset)
@@ -111,113 +135,219 @@ function addconstindex!(indices, offsets, strides, loopedindex, offset)
     push!(loopedindex, true)
     true
 end
+function addopindex!(
+    parents::Vector{Operation}, loopdependencies::Vector{Symbol}, reduceddeps::Vector{Symbol},
+    indices::Vector{Symbol}, offsets::Vector{Int8}, strides::Vector{Int8}, loopedindex::Vector{Bool}, indop::Operation,
+    stride = one(Int8), offset = zero(Int8)
+)
+    pushparent!(parents, loopdependencies, reduceddeps, indop)
+    push!(indices, name(indop));
+    push!(offsets, offset)
+    push!(strides, stride)
+    push!(loopedindex, false)
+    nothing
+end
 
-# The search for multipliers is recursive
-# TODO: make the search for increments recursive as well.
-function addoffsetexpr!(
-    ls::LoopSet, parents::Vector{Operation}, indices, offsets, strides, loopedindex,
-    loopdependencies::Vector{Symbol}, reduceddeps::Vector{Symbol}, ind, offset, stride::Int, elementbytes
-)::Bool
-    byterepresentable(offset) || return false
-    if isexpr(ind, :call, 3) && ind.args[1] === :(*)
-        arg1 = ind.args[2]
-        arg2 = ind.args[3]
-        arg1int = arg1 isa Integer
-        arg2int = arg2 isa Integer
-        if arg1int
-            arg1f::Int = convert(Int, arg1*stride)
-            if arg2int
-                newoff = convert(Int, arg1f * arg2 + offset)::Int
-                if byterepresentable(newoff)
-                    return addconstindex!(indices, offsets, strides, loopedindex, offset)
-                end
-            elseif byterepresentable(arg1f)
-                if (arg2 isa Symbol) && (arg2 ∈ ls.loopsymbols)
-                    return _addoffset!(indices, offsets, strides, loopedindex, loopdependencies, arg2, offset, arg1f)
-                else
-                    return addoffsetexpr!(ls, parents, indices, offsets, strides, loopedindex, loopdependencies, reduceddeps, arg2, offset, arg1f, elementbytes)
-                end
-            end
-        elseif arg2int
-            arg2f::Int = convert(Int, arg2*stride)
-            if byterepresentable(arg2f)
-                if (arg1 isa Symbol) && (arg1 ∈ ls.loopsymbols)
-                    return _addoffset!(indices, offsets, strides, loopedindex, loopdependencies, arg1, offset, arg2f)
-                else
-                    return addoffsetexpr!(ls, parents, indices, offsets, strides, loopedindex, loopdependencies, reduceddeps, arg1, offset, arg2f, elementbytes)
-                end
-            end                        
+####################################################################################################
+###################################### Index Parsing Helpers #######################################
+####################################################################################################
+
+function add_affine_index_expr!(ls::LoopSet, mult_syms::Vector{Tuple{Int,Symbol}}, constant::Base.RefValue{Int}, stride::Int, expr::Symbol)
+    push!(mult_syms, (stride, expr))
+    return nothing
+end
+function add_affine_index_expr!(ls::LoopSet, mult_syms::Vector{Tuple{Int,Symbol}}, constant::Base.RefValue{Int}, stride::Int, expr::Integer)
+    constant[] += stride*expr
+    return nothing
+end
+function add_affine_op!(ls::LoopSet, mult_syms::Vector{Tuple{Int,Symbol}}, constant::Base.RefValue{Int}, stride::Int, expr::Expr)
+    parent = add_operation!(ls, gensym!(ls, "indexpr"), expr, sizeof(Int), length(ls.loopsymbols))
+    add_affine_index_expr!(ls, mult_syms, constant, stride, name(parent))    
+    return nothing
+end
+function add_mul!(ls::LoopSet, mult_syms::Vector{Tuple{Int,Symbol}}, constant::Base.RefValue{Int}, stride::Int, arg1, arg2)
+    if arg1 isa Integer
+        add_affine_index_expr!(ls, mult_syms, constant, stride * arg1, arg2)
+    elseif arg2 isa Integer
+        add_affine_index_expr!(ls, mult_syms, constant, stride * arg2, arg1)
+    else
+        add_affine_op!(ls, mult_syms, constant, stride, expr)
+    end
+    return nothing
+end
+function add_affine_index_expr!(ls::LoopSet, mult_syms::Vector{Tuple{Int,Symbol}}, constant::Base.RefValue{Int}, stride::Int, expr::Expr)
+    expr.head === :call || return add_affine_op!(ls, mult_syms, constant, stride, expr)
+    f = expr.args[1]
+    if f === :(*)
+        @assert length(expr.args) == 3
+        add_mul!(ls, mult_syms, constant, stride, expr.args[2], expr.args[3])
+    elseif f === :(-)
+        if length(expr.args) == 3
+            add_affine_index_expr!(ls, mult_syms, constant, stride, expr.args[2])
+        elseif length(expr.args) ≠ 2
+            throw("Subtraction expression: $expr has an invalid number of arguments.")            
+        end
+        add_affine_index_expr!(ls, mult_syms, constant, -stride, last(expr.args))
+    elseif f === :(+)
+        for i ∈ 2:length(expr.args)
+            add_affine_index_expr!(ls, mult_syms, constant, stride, expr.args[i])
+        end
+    else
+        add_affine_op!(ls, mult_syms, constant, stride, expr)
+    end
+    return nothing
+end
+function affine_index_expression(ls::LoopSet, expr)::Tuple{Int,Vector{Tuple{Int,Symbol}}}
+    mult_syms = Tuple{Int,Symbol}[]
+    constant = Ref(0)
+    add_affine_index_expr!(ls, mult_syms, constant, 1, expr)
+    return constant[], mult_syms
+end
+
+function muladd_index!(
+    ls::LoopSet, parents, loopdependencies, reduceddeps, indices, offsets, strides, loopedindex,
+    mlt::Int, sym::Symbol, offset::Int
+)
+    muladd_index!(ls, parents, loopdependencies, reduceddeps, indices, offsets, strides, loopedindex, mlt, getop(ls, sym, sizeof(Int)), offset)
+end
+function muladd_op!(ls::LoopSet, mlt::Int, sym::Symbol, offset::Int)
+    muladd_op!(ls, mlt, getop(ls, sym, sizeof(Int)), offset)
+end
+function muladd_op!(ls::LoopSet, mlt::Int, symop::Operation, offset::Int)
+    indsym = gensym!(ls, "affindexop")
+    vparents = [symop]
+    # vparents = [, mltop, offop]
+    if mlt == -1
+        f = :(-)
+        if off ≠ 0
+            pushfirst!(vparents, add_constant!(ls, offset, sizeof(Int)))
+        end
+    elseif mlt == 1
+        off == 0 && return only(vparents)
+        push!(vparents, add_constant!(ls, offset, sizeof(Int)))
+        f = :(+)
+    else
+        push!(vparents, add_constant!(ls, mlt, sizeof(Int)))
+        f = if off == 0
+            :(*)
+        else            
+            push!(vparents, add_constant!(ls, offset, sizeof(Int)))
+            :muladd
         end
     end
-    parent = if ind isa Expr
-        add_operation!(ls, gensym!(ls, "indexpr"), ind, elementbytes, length(ls.loopsymbols))
-    else
-        getop(ls, ind, elementbytes)
-    end
-    pushparent!(parents, loopdependencies, reduceddeps, parent)
-    push!(indices, name(parent));
-    push!(offsets, offset % Int8)
-    push!(strides, stride % Int8)
-    push!(loopedindex, false)
-    true
+    add_compute!(ls, indsym, instruction(f), vparents, sizeof(Int))
+end
+function muladd_index!(
+    ls::LoopSet, parents, loopdependencies, reduceddeps, indices, offsets, strides, loopedindex,
+    mlt::Int, symop::Operation, offset::Int
+)
+    indop = muladd_op!(ls, mlt, symop, offset)
+    addopindex!(parents, loopdependencies, reduceddeps, indices, offsets, strides, loopedindex, indop)
 end
 
 function checkforoffset!(
-    ls::LoopSet, parents::Vector{Operation}, indices::Vector{Symbol}, offsets::Vector{Int8}, strides::Vector{Int8},
-    loopedindex::Vector{Bool}, loopdependencies::Vector{Symbol}, reduceddeps::Vector{Symbol}, ind::Expr, elementbytes::Int
-)
-    ind.head === :call || return false
-    f = first(ind.args)
-    # if f === :add_fast
-    # elseif f === :sub_fast
-    # elseif f === :mul_fast
-    # elseif f === :vfmadd_fast
-    # elseif f === :vfnmadd_fast
-    # elseif f === :vfmsub_fast
-    # elseif f === :vfnmsub_fast
-    # else
-    #     return false
-    # end
-    factor = f === :+ ? 1 : -1
-    if !(((f === :+) || (f === :-)) && (length(ind.args) == 3))
-        if (f === :*)
-            # offset 0, reuse that code
-            return addoffsetexpr!(ls, parents, indices, offsets, strides, loopedindex, loopdependencies, reduceddeps, ind, 0, 1, elementbytes)
+    ls::LoopSet, vptrarray::Symbol, ninds::Int, parents::Vector{Operation}, indices::Vector{Symbol}, offsets::Vector{Int8}, strides::Vector{Int8},
+    loopedindex::Vector{Bool}, loopdependencies::Vector{Symbol}, reduceddeps::Vector{Symbol}, ind::Expr
+)::Symbol
+    
+    offset, mult_syms = affine_index_expression(ls, ind)
+    if !byterepresentable(offset)
+        if length(mult_syms) == 1
+            mlt,sym = only(mult_syms)
+            if !byterepresentable(mlt)
+                # this is so we don't unnecessarilly add a separate offset
+                muladd_index!(ls, parents, loopdependencies, reduceddeps, indices, offsets, strides, loopedindex, mlt, sym, offset)
+                return vptrarray
+            end
+        end
+        r = copysign(abs(offset) & 127, offset)
+        vptrarray = gesp_const_offset!(ls, vptrarray, ninds, indices, loopedindex, 1, offset - r)
+        offset = r
+    end
+    
+    # (success && byterepresentable(offset)) || return false, vptrarray
+    if length(mult_syms) == 0
+        addconstindex!(indices, offsets, strides, loopedindex, offset)
+        return vptrarray
+    elseif length(mult_syms) == 1
+        mlt, sym = only(mult_syms)
+        if sym ∈ ls.loopsymbols
+            if byterepresentable(mlt)
+                _addoffset!(indices, offsets, strides, loopedindex, loopdependencies, sym, offset, mlt)
+            else
+                muladd_index!(ls, parents, loopdependencies, reduceddeps, indices, offsets, strides, loopedindex, mlt, sym, offset)
+            end
+        elseif sym ∈ keys(ls.opdict)
+            muladd_index!(ls, parents, loopdependencies, reduceddeps, indices, offsets, strides, loopedindex, mlt, sym, offset)
         else
-            return false
+            vptrarray = gesp_const_offset!(ls, vptrarray, ninds, indices, loopedindex, mlt, sym)
+            addconstindex!(indices, offsets, strides, loopedindex, offset)
+        end
+        return vptrarray
+    end
+    loopsym_ind = 0
+    operations = Operation[]
+    operation_mults = Int[]
+    deleteat_inds = Int[]
+    for (i,(m,s)) ∈ enumerate(mult_syms)
+        if s ∈ ls.loopsymbols
+            if loopsym_ind == 0
+                loopsym_ind = i
+                push!(deleteat_inds, loopsym_ind)
+            else
+                push!(operations, add_loopvalue!(ls, s, sizeof(Int)))
+                push!(deleteat_inds, i)
+                push!(operation_mults, m)
+            end
+        elseif s ∈ keys(ls.opdict)
+            push!(operations, ls.opdict[s])
+            push!(operation_mults, m)
+            push!(deleteat_inds, i)
         end
     end
-    arg1 = ind.args[2]
-    arg2 = ind.args[3]
-    if arg1 isa Integer
-        # 3 + factor * i
-        if arg2 isa Symbol
-            if arg2 ∈ ls.loopsymbols
-                addoffset_index!(indices, offsets, strides, loopedindex, loopdependencies, arg2, arg1, factor)
-            else
-                addoffsetexpr!(ls, parents, indices, offsets, strides, loopedindex, loopdependencies, reduceddeps, arg2, arg1, factor, elementbytes)
-            end
-        elseif arg2 isa Expr
-            addoffsetexpr!(ls, parents, indices, offsets, strides, loopedindex, loopdependencies, reduceddeps, arg2, arg1, factor, elementbytes)
+    if (length(operations) > 0) & (loopsym_ind > 0) # turn into an operation
+        _m,_s = mult_syms[loopsym_ind]
+        push!(operations, add_loopvalue!(ls, _s, sizeof(Int)))
+        push!(operation_mults, _m)
+    end
+    if length(operations) == 0
+        if loopsym_ind == 0
+            addconstindex!(indices, offsets, strides, loopedindex, offset)
         else
-            false
+            mlt, sym = mult_syms[loopsym_ind]
+            _addoffset!(indices, offsets, strides, loopedindex, loopdependencies, sym, offset, mlt)
+            deleteat!(mult_syms, deleteat_inds)
         end
-    elseif arg2 isa Integer
-        # i + factor * arg2
-        if arg1 isa Symbol
-            if arg1 ∈ ls.loopsymbols
-                addoffset_index!(indices, offsets, strides, loopedindex, loopdependencies, arg1, arg2 * factor, 1)
-            else
-                addoffsetexpr!(ls, parents, indices, offsets, strides, loopedindex, loopdependencies, reduceddeps, arg1, arg2 * factor, 1, elementbytes)
-            end
-        elseif arg1 isa Expr
-            addoffsetexpr!(ls, parents, indices, offsets, strides, loopedindex, loopdependencies, reduceddeps, arg1, arg2 * factor, 1, elementbytes)
-        else
-            false
-        end
+        return gesp_const_offsets!(ls, vptrarray, ninds, indices, loopedindex, mult_syms)
+    end
+    deleteat!(mult_syms, deleteat_inds)
+    vptrarray = gesp_const_offsets!(ls, vptrarray, ninds, indices, loopedindex, mult_syms)
+    if length(operations) == 1
+        _mlt = only(operation_mults)
+        indop = muladd_op!(ls, Core.ifelse(byterepresentable(_mlt), 1, _mlt), only(operations), 0)
+        addopindex!(parents, loopdependencies, reduceddeps, indices, offsets, strides, loopedindex, indop, Core.ifelse(byterepresentable(_mlt), _mlt%Int8, one(Int8)), offset%Int8)
     else
-        false
+        mlt1ind = findfirst(isone, operation_mults)
+        opbase = if mlt1ind === nothing # if none of them have a multiplier of `1`, pick the base arbtirarility
+            muladd_op!(ls, pop!(operation_mults), pop!(operations), 0)
+        else # otherwise, we start accumulating with a 1-multiplier.
+            deleteat!(operation_mults, mlt1ind)
+            popat!(operations, mlt1ind)
+        end
+        for i ∈ eachindex(operations)
+            _op = operations[i]
+            _mlt = operation_mults[i]
+            opbase = if _mlt == -1
+                add_compute!(ls, gensym!(ls, "indexaccum"), instruction(:(-)), [opbase, _op], sizeof(Int))
+            elseif _mlt == 1
+                add_compute!(ls, gensym!(ls, "indexaccum"), instruction(:(+)), [opbase, _op], sizeof(Int))
+            else
+                add_compute!(ls, gensym!(ls, "indexaccum"), instruction(:muladd), [add_constant!(ls, _mlt, sizeof(Int)), _op, opbase], sizeof(Int))
+            end
+        end
+        addopindex!(parents, loopdependencies, reduceddeps, indices, offsets, strides, loopedindex, opbase, one(Int8), offset%Int8)
     end
+    return vptrarray
 end
 
 function move_to_last!(x, i)
@@ -255,19 +385,14 @@ function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementby
             if byterepresentable(ind)
                 addconstindex!(indices, offsets, strides, loopedindex, ind)
             else
-                vptrarray = subset_vptr!(ls, vptrarray, ninds, ind, indices, loopedindex)
+                vptrarray = subset_vptr!(ls, vptrarray, ninds, ind, indices, loopedindex, true)
                 length(indices) == 0 && push!(indices, DISCONTIGUOUS)
             end
         elseif ind isa Expr
             #FIXME: position (in loopnest) wont be length(ls.loopsymbols) in general
-            if !checkforoffset!(ls, parents, indices, offsets, strides, loopedindex, loopdependencies, reduceddeps, ind, elementbytes)
-                parent = add_operation!(ls, gensym!(ls, "indexpr"), ind, elementbytes, length(ls.loopsymbols))
-                pushparent!(parents, loopdependencies, reduceddeps, parent)
-                push!(indices, name(parent));
-                push!(offsets, zero(Int8))
-                push!(strides, one(Int8))
-                push!(loopedindex, false)
-            end
+            vptrarray = checkforoffset!(
+                ls, vptrarray, ninds, parents, indices, offsets, strides, loopedindex, loopdependencies, reduceddeps, ind
+            )
             ninds += 1
         elseif ind isa Symbol
             if ind ∈ loopset
@@ -295,7 +420,7 @@ function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementby
                     push!(offsets, zero(Int8))
                     push!(loopedindex, false)
                 else
-                    vptrarray = subset_vptr!(ls, vptrarray, ninds, ind, indices, loopedindex)
+                    vptrarray = subset_vptr!(ls, vptrarray, ninds, ind, indices, loopedindex, true)
                     length(indices) == 0 && push!(indices, DISCONTIGUOUS)
                 end
             end

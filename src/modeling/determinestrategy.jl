@@ -674,17 +674,19 @@ function isoptranslation(ls::LoopSet, op::Operation, unrollsyms::UnrollSymbols)
     
     istranslation = 0
     inds = getindices(op); li = op.ref.loopedindex
-    translationplus = false
     for i ∈ eachindex(li)
         if !li[i]
             opp = findparent(ls, inds[i + (first(inds) === DISCONTIGUOUS)])
-            if instruction(opp).instr ∈ (:+, :-) && isu₁unrolled(opp) && isu₂unrolled(opp)
-                istranslation = i
-                translationplus = instruction(opp).instr === :+
+            if isu₁unrolled(opp) && isu₂unrolled(opp)
+                isadd = instruction(opp).instr === :(+)
+                issub = instruction(opp).instr === :(-)
+                if isadd | issub
+                    return  i, isadd
+                end
             end
         end
     end
-    istranslation, translationplus
+    0, false
 end
 function maxnegativeoffset(ls::LoopSet, op::Operation, u::Symbol)
     mno = typemin(Int)

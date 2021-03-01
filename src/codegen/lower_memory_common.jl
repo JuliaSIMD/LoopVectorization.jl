@@ -10,14 +10,7 @@ function symbolind(ind::Symbol, op::Operation, td::UnrollArgs)
     @unpack u₁, u₁loopsym, u₂loopsym, u₂max, suffix = td
     parent = parents(op)[id]
     pvar, u₁op, u₂op = variable_name_and_unrolled(parent, u₁loopsym, u₂loopsym, u₂max, suffix)
-    # pvar = if u₂loopsym ∈ loopdependencies(parent)
-    #     variable_name(parent, suffix)
-    # else
-    #     mangledvar(parent)
-    # end
-    u = u₁op ? u₁ : 1
-    ex = Symbol(pvar, '_', u)
-    Expr(:call, lv(:staticm1), ex), parent
+    Symbol(pvar, '_', Core.ifelse(u₁op, u₁, 1)), parent
 end
 
 staticexpr(x::Int) = Expr(:call, Expr(:curly, lv(:Static), x))
@@ -146,6 +139,7 @@ function mem_offset(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Vect
         if loopedindex[n]
             addoffset!(ret, indvectorized, vstep, stride, ind, offset, inds_calc_by_ptr_offset[n] | (ind === CONSTANTZEROINDEX))
         else
+            offset -= 1
             newname, parent = symbolind(ind, op, td)
             # _mmi = indvectorized && parent !== op && (!isvectorized(parent))
             # addoffset!(ret, newname, stride, offset, _mmi)
@@ -213,10 +207,10 @@ function unrolled_curly(op::Operation, u₁::Int, u₁loop::Loop, vloop::Loop, m
                 # Expr(:call, Expr(:curly, lv(:Unroll), AU, 1, u₁, AV, intvecsym, M, 1), ind)
                 Expr(:curly, lv(:Unroll), AU, gethint(step(u₁loop)), u₁, AV, intvecsym, M, X)
             else
-                if isone(step(u₁loop))
+                if isone(X)
                     Expr(:curly, lv(:Unroll), AU, intvecsym, u₁, AV, intvecsym, M, X)
                 else
-                    unrollstepexpr = :(Int($(mulexpr(VECTORWIDTHSYMBOL, step(u₁loop)))))
+                    unrollstepexpr = :(Int($(mulexpr(VECTORWIDTHSYMBOL, X))))
                     Expr(:curly, lv(:Unroll), AU, unrollstepexpr, u₁, AV, intvecsym, M, X)
                 end
             end
@@ -263,11 +257,16 @@ function mem_offset_u(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Ve
             elseif loopedindex[n]
                 addoffset!(ret, indvectorized, vstep, stride, ind, offset, ind_by_offset)
             else
+                offset -= 1
                 newname, parent = symbolind(ind, op, td)
-                # _mmi = _mm && indvectorized && parent !== op && (!isvectorized(parent))
+                _mmi = _mm && indvectorized && parent !== op && (!isvectorized(parent))
                 #                              addoffset!(ret, newname, 1, offset, _mmi)
                 @assert !_mmi "Please file an issue with an example of how you got this."
-                addoffset!(ret, newname, 1, offset, false)
+                if stride == 1
+                    addoffset!(ret, 0, newname, offset, false)
+                else
+                    addoffset!(ret, 0, mulexpr(newname,stride), offset, false)
+                end
             end
         end
     end

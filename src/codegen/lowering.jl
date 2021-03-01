@@ -42,6 +42,7 @@ function lower_block(
     for prepost ∈ 1:2
         # !u₁ && !u₂
         lower!(blockq, ops[1,1,prepost,n], ls, unrollsyms, u₁, u₂, -1, mask, true, true)
+        # isu₁unrolled, isu₂unrolled, after_loop, n
         opsv1 = ops[1,2,prepost,n]
         opsv2 = ops[2,2,prepost,n]
         if length(opsv1) + length(opsv2) > 0
@@ -49,7 +50,7 @@ function lower_block(
             iszero(length(opsv1)) || (nstores += sum(isstore, opsv1))
             iszero(length(opsv2)) || (nstores += sum(isstore, opsv2))
             # if nstores
-            if (length(opsv1) + length(opsv2) == nstores) # all_u₂_ops_store
+            if (length(opsv1) + length(opsv2) == nstores) && u₂ > 1 # all_u₂_ops_store
                 lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, u₂, -1, mask, true, true) # for u ∈ 0:u₁-1
                 lower_tiled_store!(blockq, opsv1, opsv2, ls, unrollsyms, u₁, u₂, mask)
             else

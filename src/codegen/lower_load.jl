@@ -187,7 +187,7 @@ end
 @inline lastunroll(vu::VecUnroll) = last(getfield(vu,:data))
 @inline lastunroll(x) = x
 function lower_load_for_optranslation!(
-    q::Expr, op::Operation, ls::LoopSet, td::UnrollArgs, mask::Bool, translationind::Int
+    q::Expr, op::Operation, posindicator::UInt8, ls::LoopSet, td::UnrollArgs, mask::Bool, translationind::Int
 )
     @unpack u₁loop, u₂loop, vloop, u₁, u₂max, suffix = td
 
@@ -206,10 +206,9 @@ function lower_load_for_optranslation!(
     step₁ = gethint(step(u₁loop))
     step₂ = gethint(step(u₂loop))
     
-
     # abs of steps are equal
     #
-    equal_steps = step₁ == step₂
+    equal_steps = (step₁ == step₂) ⊻ (posindicator ≠ 0x03)
     _td = UnrollArgs(u₁loop, u₂loop, vloop, total_unroll, u₂max, Core.ifelse(equal_steps, 0, u₂max - 1))
     gespinds = mem_offset(op, _td, inds_by_ptroff, false)
     ptr = vptr(op)
@@ -286,12 +285,11 @@ function lower_load!(
     if (suffix != -1) && ls.loadelimination[]
         if (u₁ > 1) & (u₂max > 1)
             istr, ispl = isoptranslation(ls, op, UnrollSymbols(u₁loopsym, u₂loopsym, vloopsym))
-        else
-            istr, ispl = 0, false
+            if istr ≠ 0
+                return lower_load_for_optranslation!(q, op, ispl, ls, td, mask, istr)
+            end
         end
-        if !iszero(istr) & ispl
-            return lower_load_for_optranslation!(q, op, ls, td, mask, istr)
-        elseif (suffix > 0) && (u₂loopsym !== vloopsym)
+        if (suffix > 0) && (u₂loopsym !== vloopsym)
             mno, id = maxnegativeoffset(ls, op, u₂loopsym)
             if -suffix < mno < 0 # already checked that `suffix != -1` above
                 varnew = variable_name(op, suffix)
