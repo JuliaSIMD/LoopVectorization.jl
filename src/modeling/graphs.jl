@@ -607,7 +607,11 @@ Base.length(ls::LoopSet, s::Symbol) = length(getloop(ls, s))
 function init_loop_map!(ls::LoopSet)
     @unpack loopordermap = ls
     order = names(ls)
-    sortperm!(resize!(loopordermap, length(order)), order, by = x -> getloopid(ls,x))
+    orderids = Vector{Int}(undef, length(order))
+    for (i,o) ∈ enumerate(order)
+        orderids[i] = getloopid(ls,o)
+    end
+    sortperm!(resize!(loopordermap, length(order)), orderids)
     nothing
 end
 

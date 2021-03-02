@@ -106,12 +106,12 @@ function ifelselastexpr(hasf::Bool, M::Int, vargtypes, K::Int, S::Int, maskearly
     for k ∈ 1:K
         lengths[k] = l = vecunrolllen(vargtypes[k])
         if hasf
-            if l == -1
-                push!(q.args, :($(vargs[k]) = getfield(vargs, $k, false)))
-            else
-                push!(q.args, :($(vargs[k]) = data(getfield(vargs, $k, false))))
+            gfvarg = Expr(:call, GlobalRef(Core, :getfield), :vargs, k, false)
+            if l ≠ -1 # VecUnroll
+                gfvarg = Expr(:call, GlobalRef(Core, :getfield), gfvarg, 1, false)
             end
-        elseif l != -1
+            push!(q.args, Expr(:(=), vargs[k], gfvarg))
+        elseif l ≠ -1
             varg = vargs[k]
             vargs[k] = dvarg = Symbol(:d, varg)
             push!(q.args, :($dvarg = data($varg)))

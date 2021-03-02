@@ -437,13 +437,12 @@ function offset_ptr(
     end
     Expr(:(=), vptr(ar), Expr(:call, lv(:gesp), vptr(ar), gespinds))
 end
-function incrementloopcounter(ls::LoopSet, us::UnrollSpecification, n::Int, UF::Int)
+function incrementloopcounter!(q::Expr, ls::LoopSet, us::UnrollSpecification, n::Int, UF::Int)
     @unpack u₁loopnum, u₂loopnum, vloopnum, u₁, u₂ = us
     lssm = ls.lssm[]
     ptrdefs = lssm.incrementedptrs[n]
     looporder = names(ls)
     loopsym = looporder[n]
-    q = Expr(:block)
     termind = lssm.terminators[n]
     loop = getloop(ls, n)
     if iszero(termind) # increment liv
@@ -453,7 +452,7 @@ function incrementloopcounter(ls::LoopSet, us::UnrollSpecification, n::Int, UF::
         offsetinds = indices_calculated_by_pointer_offsets(ls, ar)
         push!(q.args, offset_ptr(ar, us, loopsym, n, UF, offsetinds, loop))
     end
-    q
+    nothing
 end
 function terminatecondition(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask::Bool, UF::Int)
     lssm = ls.lssm[]

@@ -1,6 +1,6 @@
 module LoopVectorization
 
-
+using Static: StaticInt, gt
 using VectorizationBase, SLEEFPirates, UnPack, OffsetArrays
 using VectorizationBase: register_size, register_count, cache_linesize, has_opmask_registers,
     mask, pick_vector_width, MM, AbstractMask, data, grouped_strided_pointer,
@@ -18,7 +18,8 @@ using VectorizationBase: register_size, register_count, cache_linesize, has_opma
     contract_max, collapse_max,
     contract_min, collapse_min,
     contract_and, collapse_and,
-    contract_or,  collapse_or
+    contract_or,  collapse_or,
+    num_threads, num_cores
 
 
 using IfElse: ifelse
@@ -76,6 +77,7 @@ include("codegen/lower_load.jl")
 include("codegen/lower_store.jl")
 include("codegen/lowering.jl")
 include("codegen/split_loops.jl")
+include("codegen/lower_threads.jl")
 include("condense_loopset.jl")
 include("reconstruct_loopset.jl")
 include("constructors.jl")

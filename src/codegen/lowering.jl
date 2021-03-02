@@ -82,7 +82,7 @@ function lower_block(
     end
     loopsym = order[n]
     # if n > 1 || iszero(ls.align_loops[])
-    push!(blockq.args, incrementloopcounter(ls, us, n, UF))
+    incrementloopcounter!(blockq, ls, us, n, UF)
     # else
     #     loopsym = names(ls)[n]
     #     push!(blockq.args, Expr(:(=), loopsym, Expr(:call, lv(:vadd_fast), loopsym, Symbol("##ALIGNMENT#STEP##"))))
