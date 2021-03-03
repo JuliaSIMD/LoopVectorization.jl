@@ -54,7 +54,7 @@ function Loop(::LoopSet, ::Expr, sym::Symbol, ::Type{CloseOpen{Static{L}, Static
 end
 
 
-extract_loop(l) = Expr(:call, :getfield, :lb, l, false)
+extract_loop(l) = Expr(:call, GlobalRef(Core,:getfield), Symbol("#loop#bounds#"), l, false)
 
 function add_loops!(ls::LoopSet, LPSYM, LB)
     n = max(length(LPSYM), length(LB))
@@ -72,7 +72,7 @@ function add_loops!(ls::LoopSet, i::Int, sym::Symbol, @nospecialize(l::Type{<:Ca
     N, T = l.parameters
     ssym = String(sym)
     for k = N:-1:1
-        axisexpr = :(getfield(getfield(getfield(lb, $i, false), :indices), $k, false))
+        axisexpr = :(getfield(getfield(getfield(var"#loop#bounds#", $i, false), :indices), $k, false))
         add_loop!(ls, Loop(ls, axisexpr, Symbol(ssym*'#'*string(k)*'#'), T.parameters[k])::Loop)
     end
     push!(ls.loopsymbol_offsets, ls.loopsymbol_offsets[end]+N)
@@ -160,7 +160,7 @@ function ArrayReferenceMeta(
 end
 
 
-extract_varg(i) = :(getfield(vargs, $i, false))
+extract_varg(i) = :(getfield(var"#vargs#", $i, false))
 # _extract(::Type{Static{N}}) where {N} = N
 extract_gsp!(sptrs::Expr, name::Symbol) = (push!(sptrs.args, name); nothing)
 function rank_to_sortperm(R::NTuple{N,Int}) where {N}
@@ -219,7 +219,7 @@ function create_mrefs!(
     mrefs = Vector{ArrayReferenceMeta}(undef, length(arf))
     sptrs = Expr(:tuple)
     # pushpreamble!(ls, Expr(:(=), sptrs, :(VectorizationBase.stridedpointers(getfield(vargs, 1, false)))))
-    pushpreamble!(ls, Expr(:(=), sptrs, :(VectorizationBase.stridedpointers(getfield(vargs, 1, false)))))
+    pushpreamble!(ls, Expr(:(=), sptrs, :(VectorizationBase.stridedpointers(getfield(var"#vargs#", 1, false)))))
     for i ∈ eachindex(arf)
         ar = ArrayReferenceMeta(ls, arf[i], as, os, nopsv, expanded)
         add_mref!(sptrs, ls, ar, P.parameters[i], C[i], B[i], R[i], vptr(ar))
@@ -450,7 +450,7 @@ function extract_external_functions!(ls::LoopSet, offset::Int, vargs)
                 offset += 1
                 instr_new = get(FUNCTIONSYMBOLS, vargs[offset], instr)
                 if instr_new === instr
-                    extractf = Expr(:call, :getfield, :vargs, offset, false)
+                    extractf = Expr(:call, GlobalRef(Core,:getfield), Symbol("#vargs#"), offset, false)
                     pushpreamble!(ls, Expr(:(=), instr.instr, extractf))
                 else
                     op.instruction = instr_new
@@ -493,7 +493,7 @@ function avx_loopset(instr::Vector{Instruction}, ops::Vector{OperationStruct}, a
     num_arrays = length(arf)
     # TODO: check outer reduction types instead
     elementbytes = num_arrays == 0 ? 8 : sizeofeltypes(vargs[1].parameters[1].parameters, num_arrays)
-    pushpreamble!(ls, :((lb, vargs) = _vargs))
+    pushpreamble!(ls, :((var"#loop#bounds#", var"#vargs#") = var"#lv#tuple#args#"))
     add_loops!(ls, LPSYM, LB)
     resize!(ls.loop_order, ls.loopsymbol_offsets[end])
     arraysymbolinds = gen_array_syminds(AM)
@@ -569,7 +569,9 @@ Execute an `@avx` block. The block's code is represented via the arguments:
   `StaticLowerUnitRange(1)` because the lower bound of the iterator can be determined to be 1.
 - `vargs...` holds the encoded pointers of all the arrays (see `VectorizationBase`'s various pointer types).
 """
-@generated function _avx_!(::Val{UNROLL}, ::Val{OPS}, ::Val{ARF}, ::Val{AM}, ::Val{LPSYM}, _vargs::Tuple{LB,V}) where {UNROLL, OPS, ARF, AM, LPSYM, LB, V}
+@generated function _avx_!(
+    ::Val{UNROLL}, ::Val{OPS}, ::Val{ARF}, ::Val{AM}, ::Val{LPSYM}, var"#lv#tuple#args#"::Tuple{LB,V}
+) where {UNROLL, OPS, ARF, AM, LPSYM, LB, V}
     # 1 + 1 # Irrelevant line you can comment out/in to force recompilation...
     ls = _avx_loopset(OPS, ARF, AM, LPSYM, LB.parameters, V.parameters)
     # return @show avx_body(ls, UNROLL)

@@ -285,7 +285,7 @@ function lower_load!(
     if (suffix != -1) && ls.loadelimination[]
         if (u₁ > 1) & (u₂max > 1)
             istr, ispl = isoptranslation(ls, op, UnrollSymbols(u₁loopsym, u₂loopsym, vloopsym))
-            if istr ≠ 0
+            if istr ≠ 0x00
                 return lower_load_for_optranslation!(q, op, ispl, ls, td, mask, istr)
             end
         end

@@ -87,16 +87,16 @@ function search_tree(opv::Vector{Operation}, var::Symbol) # relies on cycles bei
     false
 end
 
-function update_for_ref_reduction!()
-    if varname(mpref) === var
-        id = findfirst(r -> r == mpref.mref, ls.refs_aliasing_syms)
-        mpref.varname = var = id === nothing ? var : ls.syms_aliasing_refs[id]
-        reduction_ind = ind
-        mergesetv!(deps, loopdependencies(add_load!(ls, argref, elementbytes)))
-    else
-        pushparent!(vparents, deps, reduceddeps, add_load!(ls, argref, elementbytes))
-    end
-end
+# function update_for_ref_reduction!()
+#     if varname(mpref) === var
+#         id = findfirst(r -> r == mpref.mref, ls.refs_aliasing_syms)
+#         mpref.varname = var = id === nothing ? var : ls.syms_aliasing_refs[id]
+#         reduction_ind = ind
+#         mergesetv!(deps, loopdependencies(add_load!(ls, argref, elementbytes)))
+#     else
+#         pushparent!(vparents, deps, reduceddeps, add_load!(ls, argref, elementbytes))
+#     end
+# end
 search_tree_for_ref(ls::LoopSet, opv::Vector{Operation}, ::Nothing, var::Symbol) = var, false
 function search_tree_for_ref(ls::LoopSet, opv::Vector{Operation}, mpref::ArrayReferenceMetaPosition, var::Symbol) # relies on cycles being forbidden
     for opp ∈ opv

@@ -665,12 +665,12 @@ function stride_penalty(ls::LoopSet, order::Vector{Symbol})
 end
 function isoptranslation(ls::LoopSet, op::Operation, unrollsyms::UnrollSymbols)
     @unpack u₁loopsym, u₂loopsym, vloopsym = unrollsyms
-    (vloopsym == u₁loopsym || vloopsym == u₂loopsym) && return 0, false
-    (isu₁unrolled(op) && isu₂unrolled(op)) || return 0, false
+    (vloopsym == u₁loopsym || vloopsym == u₂loopsym) && return 0, 0x00
+    (isu₁unrolled(op) && isu₂unrolled(op)) || return 0, 0x00
     u₁step = step(getloop(ls, u₁loopsym))
     u₂step = step(getloop(ls, u₂loopsym))
-    (isknown(u₁step) & isknown(u₂step)) || return 0, false
-    abs(gethint(u₁step)) == abs(gethint(u₂step)) || return 0, false
+    (isknown(u₁step) & isknown(u₂step)) || return 0, 0x00
+    abs(gethint(u₁step)) == abs(gethint(u₂step)) || return 0, 0x00
     
     istranslation = 0
     inds = getindices(op); li = op.ref.loopedindex
@@ -678,15 +678,20 @@ function isoptranslation(ls::LoopSet, op::Operation, unrollsyms::UnrollSymbols)
         if !li[i]
             opp = findparent(ls, inds[i + (first(inds) === DISCONTIGUOUS)])
             if isu₁unrolled(opp) && isu₂unrolled(opp)
-                isadd = instruction(opp).instr === :(+)
-                issub = instruction(opp).instr === :(-)
-                if isadd | issub
-                    return  i, isadd
+                if instruction(opp).instr === :(+)
+                    return i, 0x03 # 00000011 - both positive
+                elseif instruction(opp).instr === :(-)
+                    oppp1 = parents(opp)[1]
+                    if isu₁unrolled(oppp1)
+                        return i, 0x01 # 00000001 - u₁ positive, u₂ negative
+                    else#isu₂unrolled(oppp1)
+                        return i, 0x02 # 00000010 - u₂ positive, u₁ negative
+                    end
                 end
             end
         end
     end
-    0, false
+    0, 0x00
 end
 function maxnegativeoffset(ls::LoopSet, op::Operation, u::Symbol)
     mno = typemin(Int)
