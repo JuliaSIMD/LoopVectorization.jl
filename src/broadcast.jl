@@ -356,8 +356,8 @@ end
 # function vmaterialize!(
 @generated function vmaterialize!(
     dest::AbstractArray{T,N}, bc::BC,
-    ::Val{Mod}, ::StaticInt{RS}, ::StaticInt{RC}, ::StaticInt{CLS}
-) where {T <: NativeTypes, N, BC <: Union{Broadcasted,Product}, Mod, RS, RC, CLS}
+    ::Val{Mod}, ::Val{UNROLL}, ::StaticInt{RS}, ::StaticInt{RC}, ::StaticInt{CLS}
+) where {T <: NativeTypes, N, BC <: Union{Broadcasted,Product}, Mod, UNROLL, RS, RC, CLS}
     # 2+1
     # we have an N dimensional loop.
     # need to construct the LoopSet
@@ -372,7 +372,8 @@ end
     add_simple_store!(ls, :dest, ArrayReference(:dest, loopsyms), elementbytes)
     resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
     # return ls
-    q = lower(ls, 0)
+    inline, u₁, u₂, threads = UNROLL
+    q = lower(ls, u₁ % Int, u₂ % Int, inline % Int)
     push!(q.args, :dest)
     # @show q
     # q
@@ -388,8 +389,8 @@ end
 end
 @generated function vmaterialize!(
     dest′::Union{Adjoint{T,A},Transpose{T,A}}, bc::BC,
-    ::Val{Mod}, ::StaticInt{RS}, ::StaticInt{RC}, ::StaticInt{CLS}
-) where {T <: NativeTypes, N, A <: AbstractArray{T,N}, BC <: Union{Broadcasted,Product}, Mod, RS, RC, CLS}
+    ::Val{Mod}, ::Val{UNROLL}, ::StaticInt{RS}, ::StaticInt{RC}, ::StaticInt{CLS}
+) where {T <: NativeTypes, N, A <: AbstractArray{T,N}, BC <: Union{Broadcasted,Product}, Mod, UNROLL, RS, RC, CLS}
     # we have an N dimensional loop.
     # need to construct the LoopSet
     ls = LoopSet(Mod)
@@ -402,7 +403,8 @@ end
     add_broadcast!(ls, :dest, :bc, loopsyms, BC, elementbytes)
     add_simple_store!(ls, :dest, ArrayReference(:dest, reverse(loopsyms)), elementbytes)
     resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
-    q = lower(ls, 0)
+    inline, u₁, u₂, threads = UNROLL
+    q = lower(ls, u₁ % Int, u₂ % Int, inline % Int)
     push!(q.args, :dest′)
     q = Expr(
         :block,
@@ -414,32 +416,42 @@ end
     # ls
 end
 # these are marked `@inline` so the `@avx` itself can choose whether or not to inline.
-@inline function vmaterialize!(
+@generated function vmaterialize!(
     dest::AbstractArray{T,N}, bc::Broadcasted{Base.Broadcast.DefaultArrayStyle{0},Nothing,typeof(identity),Tuple{T2}},
-    ::Val{Mod}, RS::Static, RC::Static, CLS::Static
-) where {T <: NativeTypes, N, T2 <: Number, Mod}
-    arg = T(first(bc.args))
-    @avx for i ∈ eachindex(dest)
-        dest[i] = arg
+    ::Val{Mod}, ::Val{UNROLL}, ::StaticInt{RS}, ::StaticInt{RC}, ::StaticInt{CLS}
+) where {T <: NativeTypes, N, T2 <: Number, Mod, UNROLL,RS,RC,CLS}
+    inline, u₁, u₂, threads = UNROLL
+    quote
+        $(Expr(:meta,:inline))
+        arg = T(first(bc.args))
+        @avx inline=$inline unroll=($u₁,$u₂) thread=$threads for i ∈ eachindex(dest)
+            dest[i] = arg
+        end
+        dest
     end
-    dest
 end
-@inline function vmaterialize!(
+@generated function vmaterialize!(
     dest′::Union{Adjoint{T,A},Transpose{T,A}}, bc::Broadcasted{Base.Broadcast.DefaultArrayStyle{0},Nothing,typeof(identity),Tuple{T2}},
-    ::Val{Mod}, RS::Static, RC::Static, CLS::Static
-) where {T <: NativeTypes, N, A <: AbstractArray{T,N}, T2 <: Number, Mod}
-    arg = T(first(bc.args))
-    dest = parent(dest′)
-    @avx for i ∈ eachindex(dest)
-        dest[i] = arg
+    ::Val{Mod}, ::Val{UNROLL}, ::StaticInt{RS}, ::StaticInt{RC}, ::StaticInt{CLS}
+) where {T <: NativeTypes, N, A <: AbstractArray{T,N}, T2 <: Number, Mod, UNROLL,RS,RC,CLS}
+    inline, u₁, u₂, threads = UNROLL
+    quote
+        $(Expr(:meta,:inline))
+        arg = T(first(bc.args))
+        dest = parent(dest′)
+        @avx inline=$inline unroll=($u₁,$u₂) thread=$threads for i ∈ eachindex(dest)
+            dest[i] = arg
+        end
+        dest′
     end
-    dest′
 end
 
-@inline function vmaterialize(bc::Broadcasted, ::Val{Mod}, RS::Static, RC::Static, CLS::Static) where {Mod}
+@inline function vmaterialize(
+    bc::Broadcasted, ::Val{Mod}, ::Val{UNROLL}, ::StaticInt{RS}, ::StaticInt{RC}, ::StaticInt{CLS}
+) where {Mod,UNROLL,RS,RC,CLS}
     ElType = Base.Broadcast.combine_eltypes(bc.f, bc.args)
-    vmaterialize!(similar(bc, ElType), bc, Val{Mod}(), RS, RC, CLS)
+    vmaterialize!(similar(bc, ElType), bc, Val{Mod}(), StaticInt{UNROLL}(), StaticInt{RS}(), StaticInt{RC}(), StaticInt{CLS}())
 end
 
-vmaterialize!(dest, bc, ::Val{mod}, ::StaticInt, ::StaticInt, ::StaticInt) where {mod} = Base.Broadcast.materialize!(dest, bc)
+vmaterialize!(dest, bc, ::Val, ::Val, ::StaticInt, ::StaticInt, ::StaticInt) = Base.Broadcast.materialize!(dest, bc)
 

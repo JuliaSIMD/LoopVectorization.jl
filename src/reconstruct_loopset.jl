@@ -487,8 +487,10 @@ function sizeofeltypes(v, num_arrays)::Int
     # sizeof(T)
 end
 
-function avx_loopset(instr::Vector{Instruction}, ops::Vector{OperationStruct}, arf::Vector{ArrayRefStruct},
-                     AM::Vector{Any}, LPSYM::Vector{Any}, LB::Core.SimpleVector, @nospecialize(vargs))
+function avx_loopset(
+    instr::Vector{Instruction}, ops::Vector{OperationStruct}, arf::Vector{ArrayRefStruct},
+    AM::Vector{Any}, LPSYM::Vector{Any}, LB::Core.SimpleVector, vargs::Core.SimpleVector
+)
     ls = LoopSet(:LoopVectorization)
     num_arrays = length(arf)
     # TODO: check outer reduction types instead
@@ -512,9 +514,8 @@ function avx_loopset(instr::Vector{Instruction}, ops::Vector{OperationStruct}, a
     num_params = extract_external_functions!(ls, num_params, vargs)
     ls
 end
-function avx_body(ls::LoopSet, UNROLL::Tuple{Int8,Int8,Int8,Int,Int,Int,Int})
-    inline, u₁, u₂, W, rs, rc, cls = UNROLL
-    set_hw!(ls, rs, rc, cls); ls.vector_width[] = W
+function avx_body(ls::LoopSet, UNROLL::Tuple{Bool,Int8,Int8,Int,Int,Int,Int,Int,Int,Int,UInt})
+    inline, u₁, u₂, W, rs, rc, cls, l1, l2, l3, nt = UNROLL
     q = iszero(u₁) ? lower_and_split_loops(ls, inline % Int) : lower(ls, u₁ % Int, u₂ % Int, inline % Int)
     iszero(length(ls.outer_reductions)) ? push!(q.args, nothing) : push!(q.args, loopset_return_value(ls, Val(true)))
     q
@@ -522,11 +523,7 @@ end
 
 function _avx_loopset_debug(::Val{UNROLL}, ::Val{OPS}, ::Val{ARF}, ::Val{AM}, ::Val{LPSYM}, _vargs::Tuple{LB,V}) where {UNROLL, OPS, ARF, AM, LPSYM, LB, V}
     @show OPS ARF AM LPSYM _vargs
-    inline, u₁, u₂, W, rs, rc, cls = UNROLL
-    ls = _avx_loopset(OPS, ARF, AM, LPSYM, _vargs[1].parameters, V.parameters)
-    # ls = _avx_loopset(OPS, ARF, AM, LPSYM, _vargs[1], _vargs[2])
-    set_hw!(ls, rs, rc, cls); ls.vector_width[] = W
-    ls
+    _avx_loopset(OPS, ARF, AM, LPSYM, _vargs[1].parameters, V.parameters, UNROLL)
 end
 function tovector(@nospecialize(t))
     v = Vector{Any}(undef, length(t))
@@ -540,15 +537,21 @@ function tovector(@nospecialize(t))
     end
     v
 end
-function _avx_loopset(@nospecialize(OPSsv), @nospecialize(ARFsv), @nospecialize(AMsv), @nospecialize(LPSYMsv), LBsv::Core.SimpleVector, @nospecialize(vargs))
+function _avx_loopset(
+    @nospecialize(OPSsv), @nospecialize(ARFsv), @nospecialize(AMsv), @nospecialize(LPSYMsv), LBsv::Core.SimpleVector, vargs::Core.SimpleVector,
+    UNROLL::Tuple{Bool,Int8,Int8,Int,Int,Int,Int,Int,Int,Int,UInt}
+)
     nops = length(OPSsv) ÷ 3
     instr = Instruction[Instruction(OPSsv[3i+1], OPSsv[3i+2]) for i ∈ 0:nops-1]
     ops = OperationStruct[ OPSsv[3i] for i ∈ 1:nops ]
-    avx_loopset(
+    ls = avx_loopset(
         instr, ops,
         ArrayRefStruct[ARFsv...],
         tovector(AMsv), tovector(LPSYMsv), LBsv, vargs
-    )
+    )::LoopSet
+    inline, u₁, u₂, W, rs, rc, cls, l1, l2, l3, nt = UNROLL
+    set_hw!(ls, rs, rc, cls, l1, l2, l3); ls.vector_width[] = W
+    ls
 end
 """
     _avx_!(unroll, ops, arf, am, lpsym, lb, vargs...)
@@ -572,9 +575,18 @@ Execute an `@avx` block. The block's code is represented via the arguments:
 @generated function _avx_!(
     ::Val{UNROLL}, ::Val{OPS}, ::Val{ARF}, ::Val{AM}, ::Val{LPSYM}, var"#lv#tuple#args#"::Tuple{LB,V}
 ) where {UNROLL, OPS, ARF, AM, LPSYM, LB, V}
-    # 1 + 1 # Irrelevant line you can comment out/in to force recompilation...
-    ls = _avx_loopset(OPS, ARF, AM, LPSYM, LB.parameters, V.parameters)
+    1 + 1 # Irrelevant line you can comment out/in to force recompilation...
+    ls = _avx_loopset(OPS, ARF, AM, LPSYM, LB.parameters, V.parameters, UNROLL)
     # return @show avx_body(ls, UNROLL)
+    if last(UNROLL) > 1
+        inline, u₁, u₂, W, rs, rc, cls, l1, l2, l3, nt = UNROLL
+        # wrap in `OPS, ARF, AM, LPSYM` in `Expr` to homogenize types
+        avx_threads_expr(
+            ls, (inline, u₁, u₂, W, rs, rc, cls, l1, l2, l3, one(UInt)), nt,
+            :(Val{$OPS}()), :(Val{$ARF}()), :(Val{$AM}()), :(Val{$LPSYM}())
+        )
+    else
+        avx_body(ls, UNROLL)
+    end
     # @show UNROLL, OPS, ARF, AM, LPSYM, LB
-    avx_body(ls, UNROLL)
 end

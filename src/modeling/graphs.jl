@@ -437,6 +437,7 @@ struct LoopSet
     register_size::Base.RefValue{Int}
     register_count::Base.RefValue{Int}
     cache_linesize::Base.RefValue{Int}
+    cache_size::Base.RefValue{Tuple{Int,Int,Int}}
     ureduct::Base.RefValue{Int}
     equalarraydims::Vector{Tuple{Vector{Symbol},Vector{Int}}}
     omop::OffsetLoadCollection
@@ -475,18 +476,25 @@ function save_tilecost!(ls::LoopSet)
     end
     # ls.reg_pres[5,1] = ls.reg_pres[5,2]
 end
-function set_hw!(ls::LoopSet, rs::Int, rc::Int, cls::Int)
+function set_hw!(ls::LoopSet, rs::Int, rc::Int, cls::Int, l1::Int, l2::Int, l3::Int)
     ls.register_size[] = rs
     ls.register_count[] = rc
     ls.cache_linesize[] = cls
+    ls.cache_size[] = (l1,l2,l3)
     # ls.opmask_register[] = omr
     nothing
 end
 available_registers() = ifelse(has_opmask_registers(), register_count(), register_count() - One())
-set_hw!(ls::LoopSet) = set_hw!(ls, Int(register_size()), Int(available_registers()), Int(cache_linesize()))
+function set_hw!(ls::LoopSet)
+    set_hw!(
+        ls, Int(register_size()), Int(available_registers()), Int(cache_linesize()),
+        Int(cache_size(StaticInt(1))), Int(cache_size(StaticInt(2))), Int(cache_size(StaticInt(3)))
+    )
+end
 reg_size(ls::LoopSet) = ls.register_size[]
 reg_count(ls::LoopSet) = ls.register_count[]
 cache_lnsze(ls::LoopSet) = ls.cache_linesize[]
+cache_sze(ls::LoopSet) = ls.cache_size[]
 # opmask_reg(ls::LoopSet) = ls.opmask_register[]
 
 pushprepreamble!(ls::LoopSet, ex) = push!(ls.prepreamble.args, ex)
@@ -551,7 +559,7 @@ function LoopSet(mod::Symbol)
         Bool[], Bool[], Ref{UnrollSpecification}(),
         Ref(false), Ref{LoopStartStopManager}(),
         Ref(0), Ref(0), Ref(false),
-        Ref(0), Ref(0), Ref(0), #Ref(false),# hw params
+        Ref(0), Ref(0), Ref(0), Ref((0,0,0)),# hw params
         Ref(-1), # Ureduct
         Tuple{Vector{Symbol},Vector{Int}}[],
         OffsetLoadCollection(),

@@ -16,7 +16,7 @@ function Base.copyto!(ls::LoopSet, q::Expr)
     # strip_unneeded_const_deps!(ls)
 end
 
-function add_ci_call!(q::Expr, @nospecialize(f), args, syms, i, mod = nothing)
+function add_ci_call!(q::Expr, @nospecialize(f), args, syms, i, valarg = nothing, mod = nothing)
     call = if f isa Core.SSAValue
         Expr(:call, syms[f.id])
     else
@@ -33,16 +33,17 @@ function add_ci_call!(q::Expr, @nospecialize(f), args, syms, i, mod = nothing)
         reg_size = Expr(:call, lv(:register_size))
         reg_count = Expr(:call, lv(:available_registers))
         cache_lnsze = Expr(:call, lv(:cache_linesize))
-        push!(call.args, Expr(:call, Expr(:curly, :Val, QuoteNode(mod))), reg_size, reg_count, cache_lnsze)
+        push!(call.args, Expr(:call, Expr(:curly, :Val, QuoteNode(mod))), valarg, reg_size, reg_count, cache_lnsze)
     end
     push!(q.args, Expr(:(=), syms[i], call))
 end
 
-function substitute_broadcast(q::Expr, mod::Symbol)
+function substitute_broadcast(q::Expr, mod::Symbol, inline, u₁, u₂, threads)
     ci = first(Meta.lower(LoopVectorization, q).args).code
     nargs = length(ci)-1
     ex = Expr(:block,)
     syms = [gensym() for _ ∈ 1:nargs]
+    valarg = :(Val{$(inline, u₁, u₂, threads)}())
     for n ∈ 1:nargs
         ciₙ = ci[n]
         ciₙargs = ciₙ.args
@@ -50,9 +51,9 @@ function substitute_broadcast(q::Expr, mod::Symbol)
         if ciₙ.head === :(=)
             push!(ex.args, Expr(:(=), f, syms[((ciₙargs[2])::Core.SSAValue).id]))
         elseif isglobalref(f, Base, :materialize!)
-            add_ci_call!(ex, lv(:vmaterialize!), ciₙargs, syms, n, mod)
+            add_ci_call!(ex, lv(:vmaterialize!), ciₙargs, syms, n, valarg, mod)
         elseif isglobalref(f, Base, :materialize)
-            add_ci_call!(ex, lv(:vmaterialize), ciₙargs, syms, n, mod)
+            add_ci_call!(ex, lv(:vmaterialize), ciₙargs, syms, n, valarg, mod)
         else
             add_ci_call!(ex, f, ciₙargs, syms, n)
         end
@@ -76,6 +77,49 @@ function loopset(q::Expr) # for interactive use only
     ls
 end
 
+function check_macro_kwarg(arg, inline::Bool, check_empty::Bool, u₁::Int8, u₂::Int8, threads::Int)
+    ((arg.head === :(=)) && (length(arg.args) == 2)) || throw(ArgumentError("macro kwarg should be of the form `argname = value`."))
+    kw = (arg.args[1])::Symbol
+    value = (arg.args[2])
+    if kw === :inline
+        inline = value::Bool
+    elseif kw === :unroll
+        if value isa Integer
+            u₁ = convert(Int8, tup)::Int8
+        elseif Meta.isexpr(value,:tuple,2)
+            u₁ = convert(Int8, tup.args[1])::Int8
+            u₂ = convert(Int8, tup.args[2])::Int8
+        else
+            throw(ArgumentError("Don't know how to process argument in `unroll=$value`."))
+        end
+    elseif kw === :check_empty
+        check_empty = value::Bool
+    elseif kw === :thread
+        if value isa Bool
+            threads = Core.ifelse(value::Bool, -1, 1)
+        elseif value isa Integer
+            threads = max(1, convert(Int,value)::Int)
+        else
+            throw(ArgumentError("Don't know how to process argument in `thread=$value`."))
+        end
+    else
+        throw(ArgumentError("Received unrecognized keyword argument $kw. Recognized arguments include:\n`inline`, `unroll`, `check_empty`, and `thread`."))
+    end
+    inline, check_empty, u₁, u₂, threads
+end
+function avx_macro(mod, src, q, args...)
+    q = macroexpand(mod, q)
+    inline = false; check_empty = false; u₁ = zero(Int8); u₂ = zero(Int8); threads = 1;
+    for arg ∈ args
+        inline, check_empty, u₁, u₂, threads = check_macro_kwarg(arg, inline, check_empty, u₁, u₂, threads)
+    end
+    ls = LoopSet(q, mod)
+    if q.head === :for
+        esc(setup_call(ls, q, src, inline, check_empty, u₁, u₂, threads))
+    else
+        substitute_broadcast(q, Symbol(mod), inline, u₁, u₂, threads)
+    end
+end
 """
     @avx
 
@@ -122,6 +166,11 @@ using keyword arguments:
 
 where `body` is the code of the block (e.g., `for ... end`).
 
+`thread` is either a Boolean, or an integer.
+The integer's value indicates the number of threads to use.
+It is clamped to be between `1` and `min(Threads.nthreads(),LoopVectorization.num_cores())`.
+`false` is equivalent to `1`, and `true` is equivalent to `min(Threads.nthreads(),LoopVectorization.num_cores())`.
+
 `inline` is a Boolean. When `true`, `body` will be directly inlined
 into the function (via a forced-inlining call to `_avx_!`).
 When `false`, it wont force inlining of the call to `_avx_!` instead, letting Julia's own inlining engine
@@ -152,87 +201,18 @@ ignore `@fastmath`, preserving IEEE semantics both within `@avx` and `@fastmath`
 `check_args` currently returns false for some wrapper types like `LinearAlgebra.UpperTriangular`, requiring you to
 use their `parent`. Triangular loops aren't yet supported.
 """
-macro avx(q)
-    q = macroexpand(__module__, q)
-    isa(q, Expr) || return q
-    q2 = if q.head === :for
-        setup_call(LoopSet(q, __module__), q, __source__)
-    else# assume broadcast
-        substitute_broadcast(q, Symbol(__module__))
-    end
-    esc(q2)
+macro avx(args...)
+    avx_macro(__module__, __source__, last(args), Base.front(args)...)
 end
+"""
+Equivalent to `@avx`, except it adds `thread=true` as the first keyword argument.
+Note that later arguments take precendence.
 
-function check_inline(arg)
-    a1 = (arg.args[1])::Symbol
-    a1 === :inline || return zero(Int8)
-    i = (arg.args[2])::Bool % Int8
-    i + i - one(Int8)
+Meant for convenience, as `@avxt` is shorter than `@avx thread=true`.
+"""
+macro avxt(args...)
+    avx_macro(__module__, __source__, last(args), :(thread=true), Base.front(args)...)
 end
-function check_unroll(arg)
-    a1 = (arg.args[1])::Symbol
-    default = (zero(Int8),zero(Int8))
-    a1 === :unroll || return default
-    tup = arg.args[2]
-    u₂ = -one(Int8)
-    if tup isa Integer
-        u₁ = convert(Int8, tup)
-    elseif isa(tup, Expr)
-        if length(tup.args) == 1
-            u₁ = convert(Int8, tup.args[1])
-        elseif length(tup.args) == 2
-            u₁ = convert(Int8, tup.args[1])
-            u₂ = convert(Int8, tup.args[2])
-        else
-            return default
-        end
-    else
-        return default
-    end
-    u₁, u₂
-end
-function check_checkempty(arg)
-    arg.args[1] === :check_empty ? (arg.args[2])::Bool : nothing
-end
-function check_macro_kwarg(arg, inline::Int8 = zero(Int8), check_empty::Bool = false, u₁::Int8 = zero(Int8), u₂::Int8 = zero(Int8))
-    @assert arg.head === :(=)
-    i = check_inline(arg)
-    if iszero(i)
-        ce = check_checkempty(arg)
-        if ce === nothing
-            u₁, u₂ = check_unroll(arg)
-        else
-            check_empty = ce
-        end
-    else
-        inline = i
-    end
-    inline, check_empty, u₁, u₂
-end
-macro avx(arg, q)
-    @assert q.head === :for
-    @assert arg.head === :(=)
-    q = macroexpand(__module__, q)
-    inline, check_empty, u₁, u₂ = check_macro_kwarg(arg)
-    ls = LoopSet(q, __module__)
-    esc(setup_call(ls, q, __source__, inline, check_empty, u₁, u₂))
-end
-macro avx(arg1, arg2, q)
-    @assert q.head === :for
-    q = macroexpand(__module__, q)
-    inline, check_empty, u₁, u₂ = check_macro_kwarg(arg1)
-    inline, check_empty, u₁, u₂ = check_macro_kwarg(arg2, inline, check_empty, u₁, u₂)
-    esc(setup_call(LoopSet(q, __module__), q, __source__, inline, check_empty, u₁, u₂))
-end
-macro avx(arg1, arg2, arg3, q)
-    @assert q.head === :for
-    q = macroexpand(__module__, q)
-    inline, check_empty, u₁, u₂ = check_macro_kwarg(arg1)
-    inline, check_empty, u₁, u₂ = check_macro_kwarg(arg2, inline, check_empty, u₁, u₂)
-    inline, check_empty, u₁, u₂ = check_macro_kwarg(arg3, inline, check_empty, u₁, u₂)
-    esc(setup_call(LoopSet(q, __module__), q, __source__, inline, check_empty, u₁, u₂))
-end
-
 
 """
     @_avx

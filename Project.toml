@@ -5,6 +5,7 @@ version = "0.12.0"
 
 [deps]
 ArrayInterface = "4fba245c-0d91-5ea0-9b3e-6abc04ee57a9"
+CheapThreads = "b630d9fa-e28e-4980-896d-83ce5e2106b2"
 DocStringExtensions = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
 IfElse = "615f187c-cbe4-4ef1-ba3b-2fcf58d6d173"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -18,6 +19,7 @@ VectorizationBase = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
 
 [compat]
 ArrayInterface = "3"
+CheapThreads = "0.1.1"
 DocStringExtensions = "0.8"
 IfElse = "0.1"
 OffsetArrays = "1.4.1, 1.5"

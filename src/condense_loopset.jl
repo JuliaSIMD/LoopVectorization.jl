@@ -258,8 +258,32 @@ function add_grouped_strided_pointer!(extra_args::Expr, ls::LoopSet)
     nothing
 end
 
+first_cache() = ifelse(gt(num_cache_levels(), StaticInt{2}()), StaticInt{2}(), StaticInt{1}())
+function _first_cache_size(::StaticInt{FCS}) where {FCS}
+    L1inclusive = StaticInt{FCS}() - VectorizationBase.cache_size(One())
+    ifelse(eq(first_cache(), StaticInt(2)) & VectorizationBase.cache_inclusive(StaticInt(2)), L1inclusive, StaticInt{FCS}())
+end
+_first_cache_size(::Nothing) = StaticInt(262144)
+first_cache_size() = _first_cache_size(cache_size(first_cache()))
+
+@generated function _avx_config_val(
+    ::Val{inline}, ::Val{u₁}, ::Val{u₂}, ::Val{thread}, ::StaticInt{W},
+    ::StaticInt{RS}, ::StaticInt{AR}, ::StaticInt{NT},
+    ::StaticInt{CLS}, ::StaticInt{L1}, ::StaticInt{L2}, ::StaticInt{L3}
+) where {inline,u₁,u₂,thread,W,RS,AR,CLS,L1,L2,L3,NT}
+    nt = min(thread, NT % UInt)
+    t = Expr(:tuple, inline, u₁, u₂, W, RS, AR, CLS, L1,L2,L3, nt)
+    Expr(:call, Expr(:curly, :Val, t))
+end
+@inline function avx_config_val(::Val{inline}, ::Val{u₁}, ::Val{u₂}, ::Val{thread}, ::StaticInt{W}) where {inline,u₁,u₂,thread,W}
+    _avx_config_val(
+        Val{inline}(), Val{u₁}(), Val{u₂}(), Val{thread}(), StaticInt{W}(),
+        register_size(), available_registers(), lv_max_num_threads(),
+        cache_linesize(), cache_size(StaticInt(1)), cache_size(StaticInt(2)), cache_size(StaticInt(3))
+    )
+end
 # Try to condense in type stable manner
-function generate_call(ls::LoopSet, inline_unroll::NTuple{3,Int8}, debug::Bool = false)
+function generate_call(ls::LoopSet, (inline,u₁,u₂)::Tuple{Bool,Int8,Int8}, thread::UInt, debug::Bool = false)
     operation_descriptions = Expr(:tuple)
     varnames = Symbol[]; ids = Vector{Int}(undef, length(operations(ls)))
     for op ∈ operations(ls)
@@ -274,20 +298,10 @@ function generate_call(ls::LoopSet, inline_unroll::NTuple{3,Int8}, debug::Bool =
     argmeta = argmeta_and_consts_description(ls, arraysymbolinds)
     loop_bounds = loop_boundaries(ls)
     loop_syms = tuple_expr(QuoteNode, ls.loopsymbols)
-    inline, u₁, u₂ = inline_unroll
     func = debug ? lv(:_avx_loopset_debug) : lv(:_avx_!)
     lbarg = debug ? Expr(:call, :typeof, loop_bounds) : loop_bounds
-    unroll_param_tup = Expr(
-        :tuple, inline, u₁, u₂,
-        Expr(:call, lv(:unwrap), VECTORWIDTHSYMBOL),
-        Expr(:call, lv(:unwrap), Expr(:call, lv(:register_size))),
-        Expr(:call, lv(:unwrap), Expr(:call, lv(:available_registers))),
-        Expr(:call, lv(:unwrap), Expr(:call, lv(:cache_linesize)))
-    )
-    q = Expr(
-        :call, func, val(unroll_param_tup),
-        val(operation_descriptions), val(arrayref_descriptions), val(argmeta), val(loop_syms)
-    )
+    unroll_param_tup = Expr(:call, lv(:avx_config_val), :(Val{$inline}()), :(Val{$u₁}()), :(Val{$u₂}()), :(Val{$thread}()), VECTORWIDTHSYMBOL)
+    q = Expr(:call, func, unroll_param_tup, val(operation_descriptions), val(arrayref_descriptions), val(argmeta), val(loop_syms))
     # debug && deleteat!(q.args, 2)
     vargs_as_tuple = true#!debug
     vargs_as_tuple || push!(q.args, lbarg)
@@ -365,8 +379,8 @@ make_crashy(q) = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,
 @inline vecmemaybe(x::VectorizationBase._Vec) = Vec(x)
 @inline vecmemaybe(x::Tuple) = VectorizationBase.VecUnroll(x)
 
-function setup_call_inline(ls::LoopSet, inline::Int8 = zero(Int8), U::Int8 = zero(Int8), T::Int8 = zero(Int8))
-    call = generate_call(ls, (inline,U,T))
+function setup_call_inline(ls::LoopSet, inline::Bool, u₁::Int8, u₂::Int8, thread::Int)
+    call = generate_call(ls, (inline,u₁,u₂), thread % UInt, false)
     if iszero(length(ls.outer_reductions))
         q = Expr(:block,gc_preserve(ls, call))
         append!(ls.preamble.args, q.args)
@@ -391,10 +405,12 @@ function setup_call_inline(ls::LoopSet, inline::Int8 = zero(Int8), U::Int8 = zer
 end
 function setup_call_debug(ls::LoopSet)
     # avx_loopset(instr, ops, arf, AM, LB, vargs)
-    pushpreamble!(ls, generate_call(ls, (zero(Int8),zero(Int8),zero(Int8)), true))
+    pushpreamble!(ls, generate_call(ls, (false,zero(Int8),zero(Int8)), zero(UInt), true))
     Expr(:block, ls.prepreamble, ls.preamble)
 end
-function setup_call(ls::LoopSet, q::Expr, source::LineNumberNode, inline::Int8 = zero(Int8), check_empty::Bool = false, u₁::Int8 = zero(Int8), u₂::Int8 = zero(Int8))
+function setup_call(
+    ls::LoopSet, q::Expr, source::LineNumberNode, inline::Bool, check_empty::Bool, u₁::Int8, u₂::Int8, thread::Int
+)
     # We outline/inline at the macro level by creating/not creating an anonymous function.
     # The old API instead was based on inlining or not inline the generated function, but
     # the generated function must be inlined into the initial loop preamble for performance reasons.
@@ -402,7 +418,7 @@ function setup_call(ls::LoopSet, q::Expr, source::LineNumberNode, inline::Int8 =
     # inlining the generated function into the loop preamble.
     lnns = extract_all_lnns(q)
     pushfirst!(lnns, source)
-    call = setup_call_inline(ls, inline, u₁, u₂)
+    call = setup_call_inline(ls, inline, u₁, u₂, thread)
     call = check_empty ? check_if_empty(ls, call) : call
     result = Expr(:block, ls.prepreamble, Expr(:if, check_args_call(ls), call, make_crashy(make_fast(q))))
     prepend_lnns!(result, lnns)

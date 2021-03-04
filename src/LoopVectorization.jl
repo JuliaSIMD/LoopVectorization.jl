@@ -2,7 +2,7 @@ module LoopVectorization
 
 using Static: StaticInt, gt
 using VectorizationBase, SLEEFPirates, UnPack, OffsetArrays
-using VectorizationBase: register_size, register_count, cache_linesize, has_opmask_registers,
+using VectorizationBase: register_size, register_count, cache_linesize, cache_size, has_opmask_registers,
     mask, pick_vector_width, MM, AbstractMask, data, grouped_strided_pointer,
     maybestaticlength, maybestaticsize, staticm1, staticp1, staticmul, vzero,
     maybestaticrange, offsetprecalc, lazymul,
@@ -24,7 +24,7 @@ using VectorizationBase: register_size, register_count, cache_linesize, has_opma
 
 using IfElse: ifelse
 
-using ThreadingUtilities
+using ThreadingUtilities, CheapThreads
 using SLEEFPirates: pow
 using Base.Broadcast: Broadcasted, DefaultArrayStyle
 using LinearAlgebra: Adjoint, Transpose
@@ -43,7 +43,7 @@ using Requires
 
 
 export LowDimArray, stridedpointer, indices,
-    @avx, @_avx, *ˡ, _avx_!,
+    @avx, @avxt, @_avx, *ˡ, _avx_!,
     vmap, vmap!, vmapt, vmapt!, vmapnt, vmapnt!, vmapntt, vmapntt!,
     tanh_fast, sigmoid_fast,
     vfilter, vfilter!, vmapreduce, vreduce
