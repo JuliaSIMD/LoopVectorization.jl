@@ -34,7 +34,7 @@ function check_linear_parents(ls::LoopSet, op::Operation, s::Symbol)
 end
 
 function findparent(ls::LoopSet, s::Symbol)#opdict isn't filled when reconstructing
-    id = findfirst(op -> name(op) === s, operations(ls))
+    id = findfirst(Base.Fix2(===,s) ∘ name, operations(ls))
     id === nothing && throw("$s not found")
     operations(ls)[id]
 end
@@ -637,7 +637,7 @@ function stride_penalty(ls::LoopSet, op::Operation, order::Vector{Symbol}, loopf
     end
     penalty = 0.0
     for i ∈ eachindex(order)
-        id = findfirst(isequal(order[i]), loopdeps)
+        id = findfirst(Base.Fix2(===,order[i]), loopdeps)
         if !(id === nothing)
             penalty += loopfreqs[i] * opstrides[id]
         end
@@ -795,8 +795,12 @@ function loadintostore(ls::LoopSet, op::Operation)
 end
 function store_load_deps!(deps::Vector{Symbol}, op::Operation, compref = op.ref)
     for opp ∈ parents(op)
-        foreach(ld -> ((ld ∈ deps) || push!(deps, ld)), loopdependencies(opp))
-        foreach(ld -> ((ld ∈ deps) || push!(deps, ld)), reduceddependencies(opp))
+        for ld ∈ loopdependencies(opp)
+            (ld ∈ deps) || push!(deps, ld)
+        end
+        for ld ∈ reduceddependencies(opp)
+            (ld ∈ deps) || push!(deps, ld)
+        end
         if isload(opp)
             (opp.ref == compref) && return true
         else

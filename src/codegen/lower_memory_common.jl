@@ -145,7 +145,7 @@ function mem_offset(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Vect
             # addoffset!(ret, newname, stride, offset, _mmi)
             _mmi = indvectorized && parent !== op && (!isvectorized(parent))
             @assert !_mmi "Please file an issue with an example of how you got this."
-            addoffset!(ret, newname, 1, offset, false)
+            addoffset!(ret, 0, newname, offset, false)
         end
     end
     ret

@@ -114,14 +114,14 @@ function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, alla
              # ((ls.align_loops[] > 0) && (first(names(ls)) == ind))
 
             # Not doing normal offset indexing
-            uliv[i] = -findfirst(isequal(ind), looporder)::Int
+            uliv[i] = -findfirst(Base.Fix2(===,ind), looporder)::Int
             # push!(gespinds.args, Expr(:call, lv(:Zero)))
             # push!(gespinds.args, staticexpr(1))
             push!(gespinds.args, staticexpr(convert(Int, strides[i])))
             
             push!(offsetprecalc_descript.args, 0) # not doing offset indexing, so push 0
         else
-            uliv[i] = findfirst(isequal(ind), looporder)::Int
+            uliv[i] = findfirst(Base.Fix2(===,ind), looporder)::Int
             loop = getloop(ls, ind)
             if isknown(first(loop))
                 push!(gespinds.args, staticexpr(gethint(first(loop))))

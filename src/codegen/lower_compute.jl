@@ -303,8 +303,7 @@ function getu₁forreduct(ls::LoopSet, op::Operation, u₁::Int)
     # if it is, then op's `u₁` will be the current `u₁`
     # if it is not, then the opp is initialized once per full u₁
     while true
-        opname = name(op)
-        selfparentid = findfirst(opp -> name(opp) === opname, parents(op))
+        selfparentid = findfirst(Base.Fix2(===,name(op)) ∘ name, parents(op))
         selfparentid === nothing && return u₁
         op = parents(op)[selfparentid]
         isreduction(op) || break
@@ -383,7 +382,7 @@ function lower_compute!(
     if Base.libllvm_version < v"11.0.0" && (suffix ≠ -1) && isreduct# && (iszero(suffix) || (ls.unrollspecification[].u₂ - 1 == suffix))
     # if (length(reduceddependencies(op)) > 0) | (length(reducedchildren(op)) > 0)# && (iszero(suffix) || (ls.unrollspecification[].u₂ - 1 == suffix))
         # instrfid = findfirst(isequal(instr.instr), (:vfmadd, :vfnmadd, :vfmsub, :vfnmsub))
-        instrfid = findfirst(isequal(instr.instr), (:vfmadd_fast, :vfnmadd_fast, :vfmsub_fast, :vfnmsub_fast))
+        instrfid = findfirst(Base.Fix2(===,instr.instr), (:vfmadd_fast, :vfnmadd_fast, :vfmsub_fast, :vfnmsub_fast))
         # instrfid = findfirst(isequal(instr.instr), (:vfnmadd_fast, :vfmsub_fast, :vfnmsub_fast))
         # @show isreduct, instrfid, instr.instr sub_fmas(ls, op, ua)
         # want to instcombine when parent load's deps are superset

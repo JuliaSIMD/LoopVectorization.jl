@@ -156,7 +156,7 @@ end
 struct LowDimArray{D,T,N,A<:DenseArray{T,N}} <: DenseArray{T,N}
     data::A
 end
-Base.@propagate_inbounds Base.getindex(A::LowDimArray, i...) = getindex(A.data, i...)
+Base.@propagate_inbounds Base.getindex(A::LowDimArray, i::Vararg{Union{Integer,CartesianIndex},K}) where {K} = getindex(A.data, i...)
 @inline Base.size(A::LowDimArray) = Base.size(A.data)
 @inline Base.size(A::LowDimArray, i) = Base.size(A.data, i)
 @inline Base.strides(A::LowDimArray) = strides(A.data)
@@ -229,7 +229,10 @@ function LowDimArray{D}(data::A) where {D,T,N,A <: AbstractArray{T,N}}
 end
 function extract_all_1_array!(ls::LoopSet, bcname::Symbol, N::Int, elementbytes::Int)
     refextract = gensym!(ls, bcname)
-    ref = Expr(:ref, bcname); foreach(_ -> push!(ref.args, :begin), 1:N)
+    ref = Expr(:ref, bcname);
+    for _ ∈ 1:N
+        push!(ref.args, :begin)
+    end
     pushprepreamble!(ls, Expr(:(=), refextract, ref))
     return add_constant!(ls, refextract, elementbytes) # or replace elementbytes with sizeof(T) ? u
 end
@@ -355,15 +358,15 @@ end
 # size of dest determines loops
 # function vmaterialize!(
 @generated function vmaterialize!(
-    dest::AbstractArray{T,N}, bc::BC,
-    ::Val{Mod}, ::Val{UNROLL}, ::StaticInt{RS}, ::StaticInt{RC}, ::StaticInt{CLS}
-) where {T <: NativeTypes, N, BC <: Union{Broadcasted,Product}, Mod, UNROLL, RS, RC, CLS}
+    dest::AbstractArray{T,N}, bc::BC, ::Val{Mod}, ::Val{UNROLL}
+) where {T <: NativeTypes, N, BC <: Union{Broadcasted,Product}, Mod, UNROLL}
     # 2+1
     # we have an N dimensional loop.
     # need to construct the LoopSet
     # @show typeof(dest)
     ls = LoopSet(Mod)
-    set_hw!(ls, RS, RC, CLS)
+    inline, u₁, u₂, W, rs, rc, cls, l1, l2, l3, threads = UNROLL
+    set_hw!(ls, rs, rc, cls, l1, l2, l3)
     loopsyms = [gensym!(ls, "n") for n ∈ 1:N]
     ls.isbroadcast[] = true
     add_broadcast_loops!(ls, loopsyms, :dest)
@@ -372,8 +375,9 @@ end
     add_simple_store!(ls, :dest, ArrayReference(:dest, loopsyms), elementbytes)
     resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
     # return ls
-    inline, u₁, u₂, threads = UNROLL
-    q = lower(ls, u₁ % Int, u₂ % Int, inline % Int)
+    # @show u₁, u₂, inline
+    q = iszero(u₁) ? lower_and_split_loops(ls, inline % Int) : lower(ls, u₁ % Int, u₂ % Int, inline % Int)
+    # q = lower(ls, u₁ % Int, u₂ % Int, inline % Int)
     push!(q.args, :dest)
     # @show q
     # q
@@ -388,13 +392,13 @@ end
      # ls
 end
 @generated function vmaterialize!(
-    dest′::Union{Adjoint{T,A},Transpose{T,A}}, bc::BC,
-    ::Val{Mod}, ::Val{UNROLL}, ::StaticInt{RS}, ::StaticInt{RC}, ::StaticInt{CLS}
-) where {T <: NativeTypes, N, A <: AbstractArray{T,N}, BC <: Union{Broadcasted,Product}, Mod, UNROLL, RS, RC, CLS}
+    dest′::Union{Adjoint{T,A},Transpose{T,A}}, bc::BC, ::Val{Mod}, ::Val{UNROLL}
+) where {T <: NativeTypes, N, A <: AbstractArray{T,N}, BC <: Union{Broadcasted,Product}, Mod, UNROLL}
     # we have an N dimensional loop.
     # need to construct the LoopSet
     ls = LoopSet(Mod)
-    set_hw!(ls, RS, RC, CLS)
+    inline, u₁, u₂, W, rs, rc, cls, l1, l2, l3, threads = UNROLL
+    set_hw!(ls, rs, rc, cls, l1, l2, l3)
     loopsyms = [gensym!(ls, "n") for n ∈ 1:N]
     ls.isbroadcast[] = true
     pushprepreamble!(ls, Expr(:(=), :dest, Expr(:call, :parent, :dest′)))
@@ -403,8 +407,8 @@ end
     add_broadcast!(ls, :dest, :bc, loopsyms, BC, elementbytes)
     add_simple_store!(ls, :dest, ArrayReference(:dest, reverse(loopsyms)), elementbytes)
     resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
-    inline, u₁, u₂, threads = UNROLL
-    q = lower(ls, u₁ % Int, u₂ % Int, inline % Int)
+    q = iszero(u₁) ? lower_and_split_loops(ls, inline % Int) : lower(ls, u₁ % Int, u₂ % Int, inline % Int)
+    # q = lower(ls, u₁ % Int, u₂ % Int, inline % Int)
     push!(q.args, :dest′)
     q = Expr(
         :block,
@@ -417,10 +421,9 @@ end
 end
 # these are marked `@inline` so the `@avx` itself can choose whether or not to inline.
 @generated function vmaterialize!(
-    dest::AbstractArray{T,N}, bc::Broadcasted{Base.Broadcast.DefaultArrayStyle{0},Nothing,typeof(identity),Tuple{T2}},
-    ::Val{Mod}, ::Val{UNROLL}, ::StaticInt{RS}, ::StaticInt{RC}, ::StaticInt{CLS}
-) where {T <: NativeTypes, N, T2 <: Number, Mod, UNROLL,RS,RC,CLS}
-    inline, u₁, u₂, threads = UNROLL
+    dest::AbstractArray{T,N}, bc::Broadcasted{Base.Broadcast.DefaultArrayStyle{0},Nothing,typeof(identity),Tuple{T2}}, ::Val{Mod}, ::Val{UNROLL}
+) where {T <: NativeTypes, N, T2 <: Number, Mod, UNROLL}
+    inline, u₁, u₂, W, rs, rc, cls, l1, l2, l3, threads = UNROLL
     quote
         $(Expr(:meta,:inline))
         arg = T(first(bc.args))
@@ -431,10 +434,9 @@ end
     end
 end
 @generated function vmaterialize!(
-    dest′::Union{Adjoint{T,A},Transpose{T,A}}, bc::Broadcasted{Base.Broadcast.DefaultArrayStyle{0},Nothing,typeof(identity),Tuple{T2}},
-    ::Val{Mod}, ::Val{UNROLL}, ::StaticInt{RS}, ::StaticInt{RC}, ::StaticInt{CLS}
-) where {T <: NativeTypes, N, A <: AbstractArray{T,N}, T2 <: Number, Mod, UNROLL,RS,RC,CLS}
-    inline, u₁, u₂, threads = UNROLL
+    dest′::Union{Adjoint{T,A},Transpose{T,A}}, bc::Broadcasted{Base.Broadcast.DefaultArrayStyle{0},Nothing,typeof(identity),Tuple{T2}}, ::Val{Mod}, ::Val{UNROLL}
+) where {T <: NativeTypes, N, A <: AbstractArray{T,N}, T2 <: Number, Mod, UNROLL}
+    inline, u₁, u₂, W, rs, rc, cls, l1, l2, l3, threads = UNROLL
     quote
         $(Expr(:meta,:inline))
         arg = T(first(bc.args))
@@ -447,10 +449,10 @@ end
 end
 
 @inline function vmaterialize(
-    bc::Broadcasted, ::Val{Mod}, ::Val{UNROLL}, ::StaticInt{RS}, ::StaticInt{RC}, ::StaticInt{CLS}
-) where {Mod,UNROLL,RS,RC,CLS}
+    bc::Broadcasted, ::Val{Mod}, ::Val{UNROLL}
+) where {Mod,UNROLL}
     ElType = Base.Broadcast.combine_eltypes(bc.f, bc.args)
-    vmaterialize!(similar(bc, ElType), bc, Val{Mod}(), StaticInt{UNROLL}(), StaticInt{RS}(), StaticInt{RC}(), StaticInt{CLS}())
+    vmaterialize!(similar(bc, ElType), bc, Val{Mod}(), Val{UNROLL}())
 end
 
 vmaterialize!(dest, bc, ::Val, ::Val, ::StaticInt, ::StaticInt, ::StaticInt) = Base.Broadcast.materialize!(dest, bc)

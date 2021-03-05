@@ -219,16 +219,16 @@ function muladd_op!(ls::LoopSet, mlt::Int, symop::Operation, offset::Int)
     # vparents = [, mltop, offop]
     if mlt == -1
         f = :(-)
-        if off ≠ 0
+        if offset ≠ 0
             pushfirst!(vparents, add_constant!(ls, offset, sizeof(Int)))
         end
     elseif mlt == 1
-        off == 0 && return only(vparents)
+        offset == 0 && return only(vparents)
         push!(vparents, add_constant!(ls, offset, sizeof(Int)))
         f = :(+)
     else
         push!(vparents, add_constant!(ls, mlt, sizeof(Int)))
-        f = if off == 0
+        f = if offset == 0
             :(*)
         else            
             push!(vparents, add_constant!(ls, offset, sizeof(Int)))
@@ -396,7 +396,7 @@ function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementby
             ninds += 1
         elseif ind isa Symbol
             if ind ∈ loopset
-                ind_prev_index = findfirst(isequal(ind), indices)
+                ind_prev_index = findfirst(Base.Fix2(===,ind), indices)
                 if ind_prev_index === nothing
                     push!(indices, ind); ninds += 1
                     push!(offsets, zero(Int8))

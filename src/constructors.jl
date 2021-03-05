@@ -30,10 +30,7 @@ function add_ci_call!(q::Expr, @nospecialize(f), args, syms, i, valarg = nothing
         end
     end
     if mod !== nothing # indicates it's `vmaterialize(!)`
-        reg_size = Expr(:call, lv(:register_size))
-        reg_count = Expr(:call, lv(:available_registers))
-        cache_lnsze = Expr(:call, lv(:cache_linesize))
-        push!(call.args, Expr(:call, Expr(:curly, :Val, QuoteNode(mod))), valarg, reg_size, reg_count, cache_lnsze)
+        push!(call.args, Expr(:call, Expr(:curly, :Val, QuoteNode(mod))), valarg)
     end
     push!(q.args, Expr(:(=), syms[i], call))
 end
@@ -43,7 +40,7 @@ function substitute_broadcast(q::Expr, mod::Symbol, inline, u₁, u₂, threads)
     nargs = length(ci)-1
     ex = Expr(:block,)
     syms = [gensym() for _ ∈ 1:nargs]
-    valarg = :(Val{$(inline, u₁, u₂, threads)}())
+    valarg = Expr(:call, lv(:avx_config_val), :(Val{$inline}()), :(Val{$u₁}()), :(Val{$u₂}()), :(Val{$threads}()), staticexpr(0))
     for n ∈ 1:nargs
         ciₙ = ci[n]
         ciₙargs = ciₙ.args
@@ -58,7 +55,7 @@ function substitute_broadcast(q::Expr, mod::Symbol, inline, u₁, u₂, threads)
             add_ci_call!(ex, f, ciₙargs, syms, n)
         end
     end
-    ex
+    esc(ex)
 end
 
 
@@ -85,10 +82,10 @@ function check_macro_kwarg(arg, inline::Bool, check_empty::Bool, u₁::Int8, u�
         inline = value::Bool
     elseif kw === :unroll
         if value isa Integer
-            u₁ = convert(Int8, tup)::Int8
+            u₁ = convert(Int8, value)::Int8
         elseif Meta.isexpr(value,:tuple,2)
-            u₁ = convert(Int8, tup.args[1])::Int8
-            u₂ = convert(Int8, tup.args[2])::Int8
+            u₁ = convert(Int8, value.args[1])::Int8
+            u₂ = convert(Int8, value.args[2])::Int8
         else
             throw(ArgumentError("Don't know how to process argument in `unroll=$value`."))
         end
@@ -113,8 +110,8 @@ function avx_macro(mod, src, q, args...)
     for arg ∈ args
         inline, check_empty, u₁, u₂, threads = check_macro_kwarg(arg, inline, check_empty, u₁, u₂, threads)
     end
-    ls = LoopSet(q, mod)
     if q.head === :for
+        ls = LoopSet(q, mod)
         esc(setup_call(ls, q, src, inline, check_empty, u₁, u₂, threads))
     else
         substitute_broadcast(q, Symbol(mod), inline, u₁, u₂, threads)

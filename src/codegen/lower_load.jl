@@ -117,7 +117,6 @@ function lower_load_no_optranslation!(
     u = ifelse(opu₁, u₁, 1)
     mvar = Symbol(variable_name(op, Core.ifelse(isu₂unrolled(op), suffix,-1)), '_', u)
     falseexpr = Expr(:call, lv(:False)); rs = staticexpr(reg_size(ls))
-
     if all(op.ref.loopedindex)
         inds = unrolledindex(op, td, mask, inds_calc_by_ptr_offset)
         loadexpr = Expr(:call, lv(:_vload), vptr(op), inds)
@@ -207,17 +206,18 @@ function lower_load_for_optranslation!(
     step₂ = gethint(step(u₂loop))
     
     # abs of steps are equal
-    #
     equal_steps = (step₁ == step₂) ⊻ (posindicator ≠ 0x03)
-    _td = UnrollArgs(u₁loop, u₂loop, vloop, total_unroll, u₂max, Core.ifelse(equal_steps, 0, u₂max - 1))
+    # @show step₁, step₂, posindicator, equal_steps
+    # _td = UnrollArgs(u₁loop, u₂loop, vloop, total_unroll, u₂max, Core.ifelse(equal_steps, 0, u₂max - 1))
+    _td = UnrollArgs(u₁loop, u₂loop, vloop, u₁, u₂max, Core.ifelse(equal_steps, 0, u₂max - 1))
     gespinds = mem_offset(op, _td, inds_by_ptroff, false)
     ptr = vptr(op)
     gptr = Symbol(ptr, "##GESPED##")
     for i ∈ eachindex(gespinds.args)
         if i == translationind
             gespinds.args[i] = Expr(:call, lv(Core.ifelse(equal_steps, :firstunroll, :lastunroll)), gespinds.args[i])
-        else
-            gespinds.args[i] = Expr(:call, lv(:data), gespinds.args[i])
+        # else
+        #     gespinds.args[i] = Expr(:call, lv(:data), gespinds.args[i])
         end
     end
     push!(q.args, Expr(:(=), gptr, Expr(:call, lv(:gesp), ptr, gespinds)))
@@ -225,21 +225,37 @@ function lower_load_for_optranslation!(
     fill!(inds_by_ptroff, true)
 
     @unpack ref, loopedindex = mref
-    indices = getindicesonly(ref)
-    old_translation_index = indices[translationind]
-    indices[translationind] = u₁loop.itersymbol
+    indices = copy(getindices(ref))
+    # old_translation_index = indices[translationind]
+    # indices[translationind] = u₁loop.itersymbol
+    # @show indices, translationind, vloop
     # getindicesonly returns a view of `getindices`
-    dummyref = ArrayReference(ref.array, getindices(ref), zero(getoffsets(ref)), getstrides(ref))
-    loopedindex[translationind] = true
-    dummymref = ArrayReferenceMeta(dummyref, loopedindex, gptr)
-
+    dummyref = ArrayReference(ref.array, indices, zero(getoffsets(ref)), getstrides(ref))
+    # loopedindex[translationind] = true
+    dummymref = ArrayReferenceMeta(dummyref, fill!(similar(loopedindex), true), gptr)
+    indonly = getindicesonly(dummyref)
+    for i ∈ eachindex(indonly)
+        if i == translationind
+            indonly[i] = u₁loop.itersymbol
+        elseif !loopedindex[i]
+            ind = indonly[i]
+            for indop ∈ operations(ls)
+                if isvectorized(indop) & (name(indop) === ind)
+                    indonly[i] = vloop.itersymbol
+                    break
+                end
+            end
+        end
+    end
+    # @show indices
     _td = UnrollArgs(u₁loop, u₂loop, vloop, total_unroll, u₂max, -1)
     op.ref = dummymref
+    # @show isu₁unrolled(op), isu₂unrolled(op)
     _lower_load!(q, ls, op, _td, mask)
     # set old values
     op.ref = mref
-    loopedindex[translationind] = false
-    indices[translationind] = old_translation_index
+    # loopedindex[translationind] = false
+    # indices[translationind] = old_translation_index
     
     shouldbroadcast = (!isvectorized(op)) && any(isvectorized, children(op))
 

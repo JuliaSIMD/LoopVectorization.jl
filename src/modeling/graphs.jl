@@ -391,7 +391,7 @@ function Base.resize!(lo::LoopOrder, N::Int)
 end
 Base.size(lo::LoopOrder) = (2,2,2,length(lo.loopnames))
 Base.@propagate_inbounds Base.getindex(lo::LoopOrder, i::Int) = lo.oporder[i]
-Base.@propagate_inbounds Base.getindex(lo::LoopOrder, i...) = lo.oporder[LinearIndices(size(lo))[i...]]
+Base.@propagate_inbounds Base.getindex(lo::LoopOrder, i::Vararg{Int,K}) where {K} = lo.oporder[LinearIndices(size(lo))[i...]]
 
 @enum NumberType::Int8 HardInt HardFloat IntOrFloat INVALID
 
@@ -575,10 +575,9 @@ This is used so that identical loops will create identical `_avx_!` calls in the
 gensym!(ls::LoopSet, s) = Symbol("###$(s)###$(ls.symcounter[] += 1)###")
 
 function cacheunrolled!(ls::LoopSet, u₁loop, u₂loop, vloopsym)
-    foreach(op -> setunrolled!(op, u₁loop, u₂loop, vloopsym), operations(ls))
-    foreach(empty! ∘ children, operations(ls))
-    # TODO: WHY?
     for op ∈ operations(ls)
+        setunrolled!(op, u₁loop, u₂loop, vloopsym)
+        empty!(children(op))
         for opp ∈ parents(op)
             push!(children(opp), op)
         end
@@ -808,8 +807,6 @@ function indices_loop!(ls::LoopSet, r::Expr, itersym::Symbol)::Loop
                 for n ∈ 1:narrays
                     a_s::Symbol = arrays.args[n]
                     vptrs[n] = vptr(a_s)
-                    # add_vptr!(ls, a_s, vptr(a_s))
-                    # ids[n] = (findfirst(ls.includedactualarrays, a_s)::Int,_d)
                 end
                 push!(ls.equalarraydims, (vptrs, mdims))
             elseif isexpr(dims, :tuple) && length(dims.args) == narrays && all(i -> i isa Integer, dims.args)
@@ -820,8 +817,6 @@ function indices_loop!(ls::LoopSet, r::Expr, itersym::Symbol)::Loop
                     a_s::Symbol = arrays.args[n]
                     vptrs[n] = vptr(a_s)
                     mdims[n] = dims.args[n]
-                    # add_vptr!(ls, a_s, vptr(a_s))
-                    # ids[n] = (findfirst(ls.includedactualarrays, a_s)::Int,(dims.args[n])::Int)
                 end
                 push!(ls.equalarraydims, (vptrs, mdims))
                 # push!(ls.equalarraydims, ids)
@@ -998,8 +993,6 @@ function prepare_rhs_for_storage!(ls::LoopSet, RHS::Union{Symbol,Expr}, array, r
     mpref = array_reference_meta!(ls, array, rawindices, elementbytes)
     cachedparents = copy(mpref.parents)
     ref = mpref.mref.ref
-    # id = findfirst(r -> r == ref, ls.refs_aliasing_syms)
-    # lrhs = id === nothing ? gensym(:RHS) : ls.syms_aliasing_refs[id]
     lrhs = gensym!(ls, "RHS")
     mpref.varname = lrhs
     add_operation!(ls, lrhs, RHS, mpref, elementbytes, position)
@@ -1088,9 +1081,9 @@ end
 
 function UnrollSpecification(ls::LoopSet, u₁loop::Symbol, u₂loop::Symbol, vloopsym::Symbol, u₁, u₂)
     order = names(ls)
-    nu₁ = findfirst(isequal(u₁loop), order)::Int
-    nu₂ = u₂ == -1 ? nu₁ : findfirst(isequal(u₂loop), order)::Int
-    nv = findfirst(isequal(vloopsym), order)::Int
+    nu₁ = findfirst(Base.Fix2(===,u₁loop), order)::Int
+    nu₂ = u₂ == -1 ? nu₁ : findfirst(Base.Fix2(===,u₂loop), order)::Int
+    nv = findfirst(Base.Fix2(===,vloopsym), order)::Int
     UnrollSpecification(nu₁, nu₂, nv, u₁, u₂)
 end
 

@@ -21,7 +21,7 @@ array(ar::ArrayRefStruct{a,p}) where {a,p} = a
 ptr(ar::ArrayRefStruct{a,p}) where {a,p}   = p
 
 function findindoradd!(v::Vector{T}, s::T) where {T}
-    ind = findfirst(sᵢ -> sᵢ == s, v)
+    ind = findfirst(==(s), v)
     ind === nothing || return ind
     push!(v, s)
     length(v)
@@ -144,7 +144,9 @@ end
 
 function loop_boundaries(ls::LoopSet)
     lbd = Expr(:tuple)
-    foreach(loop -> loop_boundary!(lbd, loop), ls.loops)
+    for loop ∈ ls.loops
+        loop_boundary!(lbd, loop)
+    end
     lbd
 end
 
@@ -225,7 +227,6 @@ end
 val(x) = Expr(:call, Expr(:curly, :Val, x))
 
 function add_grouped_strided_pointer!(extra_args::Expr, ls::LoopSet)
-    # foreach(ref -> push!(extra_args.args, vptr(ref)), ls.refs_aliasing_syms)
     gsp = Expr(:call, lv(:grouped_strided_pointer))
     tgarrays = Expr(:tuple)
     i = 0
@@ -247,7 +248,7 @@ function add_grouped_strided_pointer!(extra_args::Expr, ls::LoopSet)
     for (vptrs,dims) ∈ ls.equalarraydims
         t = Expr(:tuple)
         for (vp,d) ∈ zip(vptrs,dims)
-            _id = findfirst(r -> vptr(r) === vp, ls.refs_aliasing_syms)
+            _id = findfirst(Base.Fix2(===,vp) ∘ vptr, ls.refs_aliasing_syms)
             _id === nothing && continue
             push!(t.args, Expr(:tuple, _id, d))
         end
@@ -258,13 +259,13 @@ function add_grouped_strided_pointer!(extra_args::Expr, ls::LoopSet)
     nothing
 end
 
-first_cache() = ifelse(gt(num_cache_levels(), StaticInt{2}()), StaticInt{2}(), StaticInt{1}())
-function _first_cache_size(::StaticInt{FCS}) where {FCS}
-    L1inclusive = StaticInt{FCS}() - VectorizationBase.cache_size(One())
-    ifelse(eq(first_cache(), StaticInt(2)) & VectorizationBase.cache_inclusive(StaticInt(2)), L1inclusive, StaticInt{FCS}())
-end
-_first_cache_size(::Nothing) = StaticInt(262144)
-first_cache_size() = _first_cache_size(cache_size(first_cache()))
+# first_cache() = ifelse(gt(num_cache_levels(), StaticInt{2}()), StaticInt{2}(), StaticInt{1}())
+# function _first_cache_size(::StaticInt{FCS}) where {FCS}
+#     L1inclusive = StaticInt{FCS}() - VectorizationBase.cache_size(One())
+#     ifelse(eq(first_cache(), StaticInt(2)) & VectorizationBase.cache_inclusive(StaticInt(2)), L1inclusive, StaticInt{FCS}())
+# end
+# _first_cache_size(::Nothing) = StaticInt(262144)
+# first_cache_size() = _first_cache_size(cache_size(first_cache()))
 
 @generated function _avx_config_val(
     ::Val{inline}, ::Val{u₁}, ::Val{u₂}, ::Val{thread}, ::StaticInt{W},
@@ -294,7 +295,9 @@ function generate_call(ls::LoopSet, (inline,u₁,u₂)::Tuple{Bool,Int8,Int8}, t
     end
     arraysymbolinds = Symbol[]
     arrayref_descriptions = Expr(:tuple)
-    foreach(ref -> push!(arrayref_descriptions.args, ArrayRefStruct(ls, ref, arraysymbolinds, ids)), ls.refs_aliasing_syms)
+    for ref ∈ ls.refs_aliasing_syms
+        push!(arrayref_descriptions.args, ArrayRefStruct(ls, ref, arraysymbolinds, ids))
+    end
     argmeta = argmeta_and_consts_description(ls, arraysymbolinds)
     loop_bounds = loop_boundaries(ls)
     loop_syms = tuple_expr(QuoteNode, ls.loopsymbols)
@@ -307,8 +310,9 @@ function generate_call(ls::LoopSet, (inline,u₁,u₂)::Tuple{Bool,Int8,Int8}, t
     vargs_as_tuple || push!(q.args, lbarg)
     extra_args = vargs_as_tuple ? Expr(:tuple) : q
     add_grouped_strided_pointer!(extra_args, ls)
-    
-    foreach(is -> push!(extra_args.args, last(is)), ls.preamble_symsym)
+    for is ∈ ls.preamble_symsym
+        push!(extra_args.args, last(is))
+    end
     append!(extra_args.args, arraysymbolinds)
     add_reassigned_syms!(extra_args, ls)
     add_external_functions!(extra_args, ls)

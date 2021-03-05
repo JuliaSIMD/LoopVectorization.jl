@@ -184,7 +184,9 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
     # elseif nisvectorized
     if loopisstatic && (isone(length(loop) ÷ W) || (n ≤ 3 && length(loop) ≤ 8W && allinteriorunrolled(ls, us, n)))
         q = Expr(:block)
-        foreach(_ -> push!(q.args, body), 1:(length(loop) ÷ W))
+        for _ ∈ 1:(length(loop) ÷ W)
+            push!(q.args, body)
+        end
     elseif nisvectorized
             # Expr(:block, loopiteratesatleastonce(loop, true), Expr(:while, expect(tc), body))
         # q = Expr(:block, Expr(maxiters == 1 ? :if : :while, tc, body))
@@ -253,7 +255,9 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
         iters = length(loop) ÷ UFW
         if (iters ≤ 1) || (iters*UF ≤ 16 && allinteriorunrolled(ls, us, n))# Let's set a limit on total unrolling
             q = Expr(:block)
-            foreach(_ -> push!(q.args, body), 1:iters)
+            for _ ∈ 1:iters
+                push!(q.args, body)
+            end
         else
             q = Expr(:while, tc, body)
         end

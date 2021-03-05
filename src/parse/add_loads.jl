@@ -1,6 +1,6 @@
 function maybeaddref!(ls::LoopSet, op)
     ref = op.ref
-    id = findfirst(r -> r == ref, ls.refs_aliasing_syms)
+    id = findfirst(==(ref), ls.refs_aliasing_syms)
     # try to CSE
     if id === nothing
         push!(ls.syms_aliasing_refs, name(op))

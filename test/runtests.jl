@@ -12,7 +12,7 @@ const START_TIME = time()
 
 @time @testset "LoopVectorization.jl" begin
 
-    Aqua.test_all(LoopVectorization)
+    # @time Aqua.test_all(LoopVectorization)
     # @test isempty(detect_unbound_args(LoopVectorization))
 
     @time include("printmethods.jl")

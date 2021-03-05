@@ -134,30 +134,40 @@ end
         bc = rand(Complex{Float64}, i);
         acv = reinterpret(Float64, ac);
         bcv = reinterpret(Float64, bc);
-        acm = reinterpret(reshape, Float64, ac);
-        bcm = reinterpret(reshape, Float64, bc);
-        @test dot_simd(ac, bc) ≈ cdot_mat(acm, bcm) ≈ cdot_affine(acv, bcv) ≈ cdot_stride(acv, bcv)
+        dsimd = dot_simd(ac, bc)
+        if VERSION ≥ v"1.6.0-rc1"
+            acm = reinterpret(reshape, Float64, ac);
+            bcm = reinterpret(reshape, Float64, bc);
+            @test dsimd ≈ cdot_mat(acm, bcm)
+        end
+        @test dsimd ≈ cdot_affine(acv, bcv) ≈ cdot_stride(acv, bcv)
 
 
         xq = [ntuple(_ -> rand(), Val(4)) for _ ∈ 1:i];
         yq = [ntuple(_ -> rand(), Val(4)) for _ ∈ 1:i];
         xqv = reinterpret(Float64, xq);
         yqv = reinterpret(Float64, yq);
-        xqm = reinterpret(reshape, Float64, xq);
-        yqm = reinterpret(reshape, Float64, yq);
-        @test Base.vect(qdot_simd(xq, yq)...) ≈ Base.vect(qdot_mat(xqm, yqm)...) ≈ Base.vect(qdot_affine(xqv, yqv)...) ≈ Base.vect(qdot_stride(xqv, yqv)...)
+        qsimd = Base.vect(qdot_simd(xq, yq)...);
+        if VERSION ≥ v"1.6.0-rc1"
+            xqm = reinterpret(reshape, Float64, xq);
+            yqm = reinterpret(reshape, Float64, yq);
+            @test qsimd ≈ Base.vect(qdot_mat(xqm, yqm)...)
+        end
+        @test qsimd ≈ Base.vect(qdot_affine(xqv, yqv)...) ≈ Base.vect(qdot_stride(xqv, yqv)...)
 
-        Ac = rand(Complex{Float64}, i, i);
-        Bc = rand(Complex{Float64}, i, i);
-        Cc1 = Ac*Bc;
-        Cc2 = similar(Cc1);
-        # Cc3 = similar(Cc1)
-        Cca = reinterpret(reshape, Float64, Cc2);
-        Aca = reinterpret(reshape, Float64, Ac);
-        Bca = reinterpret(reshape, Float64, Bc);
-        cmatmul_array!(Cca, Aca, Bca)
-        
-        @test Cc1 ≈ Cc2# ≈ Cc3
+        if VERSION ≥ v"1.6.0-rc1"
+            Ac = rand(Complex{Float64}, i, i);
+            Bc = rand(Complex{Float64}, i, i);
+            Cc1 = Ac*Bc;
+            Cc2 = similar(Cc1);
+            # Cc3 = similar(Cc1)
+            Cca = reinterpret(reshape, Float64, Cc2);
+            Aca = reinterpret(reshape, Float64, Ac);
+            Bca = reinterpret(reshape, Float64, Bc);
+            cmatmul_array!(Cca, Aca, Bca)
+            
+            @test Cc1 ≈ Cc2# ≈ Cc3
+        end
     end
 end
 

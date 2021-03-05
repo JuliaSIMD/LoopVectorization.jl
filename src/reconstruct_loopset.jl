@@ -319,14 +319,6 @@ function isexpanded(ls::LoopSet, ops::Vector{OperationStruct}, nopsv::Vector{NOp
         false
     end
 end
-# function addreduct_to_outer_reductions!(ls::LoopSet, op::Operation)
-#     if iscompute(op) && all(in(loopdependencies(op)), reduceddependencies(op))
-#         push!(ls.outer_reductions, identifier(op))
-#     else
-#         foreach(opp -> addreduct_to_outer_reductions!(ls, opp), parents(op))
-#     end
-#     nothing
-# end
 function add_op!(
     ls::LoopSet, instr::Instruction, ops::Vector{OperationStruct}, nopsv::Vector{NOpsType}, expandedv::Vector{Bool}, i::Int,
     mrefs::Vector{ArrayReferenceMeta}, opsymbol, elementbytes::Int
@@ -504,8 +496,9 @@ function avx_loopset(
     expandedv = [isexpanded(ls, ops, nopsv, i) for i ∈ eachindex(ops)]
 
     mrefs = create_mrefs!(ls, arf, arraysymbolinds, opsymbols, nopsv, expandedv, vargs[1])
-    foreach(mref -> push!(ls.includedactualarrays, vptr(mref)), mrefs)
-    
+    for mref ∈ mrefs
+        push!(ls.includedactualarrays, vptr(mref))
+    end    
     # num_params = num_arrays + num_parameters(AM)
     num_params = 1 + num_parameters(AM)
     add_ops!(ls, instr, ops, mrefs, opsymbols, num_params, nopsv, expandedv, elementbytes)
@@ -575,7 +568,7 @@ Execute an `@avx` block. The block's code is represented via the arguments:
 @generated function _avx_!(
     ::Val{UNROLL}, ::Val{OPS}, ::Val{ARF}, ::Val{AM}, ::Val{LPSYM}, var"#lv#tuple#args#"::Tuple{LB,V}
 ) where {UNROLL, OPS, ARF, AM, LPSYM, LB, V}
-    1 + 1 # Irrelevant line you can comment out/in to force recompilation...
+    # 1 + 1 # Irrelevant line you can comment out/in to force recompilation...
     ls = _avx_loopset(OPS, ARF, AM, LPSYM, LB.parameters, V.parameters, UNROLL)
     # return @show avx_body(ls, UNROLL)
     if last(UNROLL) > 1
@@ -586,6 +579,7 @@ Execute an `@avx` block. The block's code is represented via the arguments:
             :(Val{$OPS}()), :(Val{$ARF}()), :(Val{$AM}()), :(Val{$LPSYM}())
         )
     else
+        # @show avx_body(ls, UNROLL)
         avx_body(ls, UNROLL)
     end
     # @show UNROLL, OPS, ARF, AM, LPSYM, LB
