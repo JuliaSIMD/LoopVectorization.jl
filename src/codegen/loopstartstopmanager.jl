@@ -65,7 +65,7 @@ end
     newB = C > 0 ? (C == minrank ? B : 0) : B #TODO: confirm correctness
     quote
         $(Expr(:meta,:inline))
-        VectorizationBase.StridedPointer{$T,1,$newC,$newB,$(R[minrank],)}(pointer(sptr), (sptr.strd[$minrank],), (Zero(),))
+        VectorizationBase.StridedPointer{$T,1,$newC,$newB,$(R[minrank],)}($(lv(llvmptr))(sptr), (sptr.strd[$minrank],), (Zero(),))
     end
 end
 set_first_stride(x) = x # cross fingers that this works
@@ -310,7 +310,7 @@ function pointermax_index(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int,
 end
 function pointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvectorized::Bool, stopsym, incr::MaybeKnown)::Expr
     index = first(pointermax_index(ls, ar, n, sub, isvectorized, stopsym, incr))
-    Expr(:call, lv(:pointerforcomparison), vptr(ar), index)
+    Expr(:call, lv(:gesp), vptr(ar), index)
 end
 
 function defpointermax(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int, isvectorized::Bool)::Expr
@@ -347,16 +347,14 @@ function append_pointer_maxes!(
         # @show n, getloop(ls, n) ar
         index, ind = pointermax_index(ls, ar, n, submax, isvectorized, stopindicator, incr)
         vptr_ar = vptr(ar)
-        _pointercompbase = maxsym(vptr_ar, submax)
-        pointercompbase = gensym(_pointercompbase)
+        pointercompbase = maxsym(vptr_ar, submax)
         push!(loopstart.args, Expr(:(=), pointercompbase, Expr(:call, lv(:gesp), vptr_ar, index)))
-        push!(loopstart.args, Expr(:(=), _pointercompbase, Expr(:call, lv(:pointerforcomparison), pointercompbase)))
         dim = length(getindicesonly(ar))
         # OFFSETPRECALCDEF = true
         # if OFFSETPRECALCDEF
         strd = getstrides(ar)[dim]
         for sub ∈ 0:submax-1
-            ptrcmp = Expr(:call, lv(:pointerforcomparison), pointercompbase, offsetindex(dim, ind, (submax - sub)*strd, isvectorized, incr))
+            ptrcmp = Expr(:call, lv(:gesp), pointercompbase, offsetindex(dim, ind, (submax - sub)*strd, isvectorized, incr))
             push!(loopstart.args, Expr(:(=), maxsym(vptr_ar, sub), ptrcmp))
         end
         # else
@@ -466,9 +464,9 @@ function terminatecondition(ls::LoopSet, us::UnrollSpecification, n::Int, inclma
     ptr = vptr(termar)
     # @show UF, isvectorized(us, n)
     if inclmask && isvectorized(us, n)
-        Expr(:call, :<, callpointerforcomparison(ptr), maxsym(ptr, 0))
+        Expr(:call, :<, ptr, maxsym(ptr, 0))
     else
-        Expr(:call, :≤, callpointerforcomparison(ptr), maxsym(ptr, UF))
+        Expr(:call, :≤, ptr, maxsym(ptr, UF))
     end
 end
 

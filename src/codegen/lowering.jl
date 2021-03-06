@@ -425,12 +425,10 @@ function pointerremcomparison(ls::LoopSet, termind::Int, UFt::Int, n::Int, nisve
     termar = lssm.incrementedptrs[n][termind]
     ptrdef = lssm.incrementedptrs[n][termind]
     ptr = vptr(termar)
-    ptrex = callpointerforcomparison(ptr)
     if remfirst
-        Expr(:call, :<, ptrex, pointermax(ls, ptrdef, n, 1 - UFt, nisvectorized, loop))
+        Expr(:call, :<, ptr, pointermax(ls, ptrdef, n, 1 - UFt, nisvectorized, loop))
     else
-        # Expr(:call, :≥, ptrex, pointermax(ls, ptrdef, n, UFt, nisvectorized, loop))
-        Expr(:call, :≥, ptrex, maxsym(ptr, UFt))
+        Expr(:call, :≥, ptr, maxsym(ptr, UFt))
     end
 end
 
@@ -657,7 +655,7 @@ function init_remblock(unrolledloop::Loop, lssm::LoopStartStopManager, n::Int)#u
     else
         termar = lssm.incrementedptrs[n][termind]
         ptr = vptr(termar)
-        condition = Expr(:call, :<, callpointerforcomparison(ptr), maxsym(ptr, 0))
+        condition = Expr(:call, :<, vptr(ptr), maxsym(ptr, 0))
     end
     Expr(:if, condition)
 end

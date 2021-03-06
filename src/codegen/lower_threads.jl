@@ -7,7 +7,7 @@ function (::AVX{UNROLL,OPS,ARF,AM,LPSYM,LB,V})(p::Ptr{UInt}) where {UNROLL,OPS,A
     (_, _vargs) = ThreadingUtilities.load(p, Tuple{LB,V}, 2*sizeof(UInt))
     # Main.VARGS[Threads.threadid()] = first(_vargs)
     ret = _avx_!(Val{UNROLL}(), Val{OPS}(), Val{ARF}(), Val{AM}(), Val{LPSYM}(), _vargs)
-    ThreadingUtilities.store!(p, ret, 64)
+    ThreadingUtilities.store!(p, ret, Int(register_size()))
     nothing
 end
 @generated function Base.pointer(::AVX{UNROLL,OPS,ARF,AM,LPSYM,LB,V}) where {UNROLL,OPS,ARF,AM,LPSYM,LB,V}
@@ -28,16 +28,11 @@ function launch(
     ::Val{UNROLL}, ::Val{OPS}, ::Val{ARF}, ::Val{AM}, ::Val{LPSYM}, lb::LB, vargs::V, tid
 ) where {UNROLL,OPS,ARF,AM,LPSYM,LB,V}
     p = ThreadingUtilities.taskpointer(tid)
-    f = AVX{UNROLL,OPS,ARF,AM,LPSYM,LB,V}()
-    fptr = pointer(f)
+    launch!(p, pointer(AVX{UNROLL,OPS,ARF,AM,LPSYM,LB,V}()), (lb,vargs))
     while true
-        if ThreadingUtilities._atomic_cas_cmp!(p, ThreadingUtilities.SPIN, ThreadingUtilities.STUP)
-            launch!(p, fptr, (lb,vargs))
-            @assert ThreadingUtilities._atomic_cas_cmp!(p, ThreadingUtilities.STUP, ThreadingUtilities.TASK)
+        if ThreadingUtilities._atomic_cas_cmp!(p, ThreadingUtilities.SPIN, ThreadingUtilities.TASK)
             return
-        elseif ThreadingUtilities._atomic_cas_cmp!(p, ThreadingUtilities.WAIT, ThreadingUtilities.STUP)
-            launch!(p, fptr, (lb,vargs))
-            @assert ThreadingUtilities._atomic_cas_cmp!(p, ThreadingUtilities.STUP, ThreadingUtilities.LOCK)
+        elseif ThreadingUtilities._atomic_cas_cmp!(p, ThreadingUtilities.WAIT, ThreadingUtilities.LOCK)
             ThreadingUtilities.wake_thread!(tid % UInt)
             return
         end

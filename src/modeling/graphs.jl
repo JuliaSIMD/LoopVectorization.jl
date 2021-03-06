@@ -201,7 +201,6 @@ function addexpr(ex, incr::Integer)
 end
 
 staticmulincr(ptr, incr) = Expr(:call, lv(:staticmul), Expr(:call, :eltype, ptr), incr)
-callpointerforcomparison(sym) = Expr(:call, lv(:pointerforcomparison), sym)
 function vec_looprange(loop::Loop, UF::Int, mangledname)
     compexpr = Expr(:call, lv(:vsub_fast))
     pushexpr!(compexpr, last(loop))

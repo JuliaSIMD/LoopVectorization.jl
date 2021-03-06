@@ -107,7 +107,7 @@ end
 #     :(_vmap_thread_call!($(F.instance), p, $D, $A, Val{$NonTemporal}()))
 # end
 function (m::VmapClosure{NonTemporal,F,D,N,A})(p::Ptr{UInt}) where {NonTemporal,F,D,N,A}
-    (offset, dest) = ThreadingUtilities.load(p, D, 1)
+    (offset, dest) = ThreadingUtilities.load(p, D, 2*sizeof(UInt))
     (offset, args) = ThreadingUtilities.load(p, A, offset)
     
     (offset, start) = ThreadingUtilities.load(p, Int, offset)
@@ -132,7 +132,7 @@ end
     p, cfunc, ptry, ptrargs, start, stop
 )
     fptr = _get_fptr(cfunc)
-    offset = ThreadingUtilities.store!(p, fptr, 0)
+    offset = ThreadingUtilities.store!(p, fptr, sizeof(UInt))
     offset = ThreadingUtilities.store!(p, ptry, offset)
     offset = ThreadingUtilities.store!(p, ptrargs, offset)
     offset = ThreadingUtilities.store!(p, start, offset)

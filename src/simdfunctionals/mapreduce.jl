@@ -19,9 +19,9 @@ function mapreduce_simple(f::F, op::OP, args::Vararg{AbstractArray,A}) where {F,
     N = length(first(args))
     iszero(N) && throw("Length of vector is 0!")
     st = ntuple(a -> VectorizationBase.static_sizeof(eltype(args[a])), Val(A))
-    a_0 = f(vload.(ptrargs)...); i = 1
+    a_0 = f(VectorizationBase.__vload.(ptrargs, False(), register_size())...); i = 1
     while i < N
-        a_0 = op(a_0, f(vload.(ptrargs, VectorizationBase.lazymul.(st, i))...)); i += 1
+        a_0 = op(a_0, f(VectorizationBase.vload.(ptrargs, VectorizationBase.lazymul.(st, i), False(), register_size())...)); i += 1
     end
     a_0
 end

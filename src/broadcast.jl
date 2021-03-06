@@ -162,6 +162,7 @@ Base.@propagate_inbounds Base.getindex(A::LowDimArray, i::Vararg{Union{Integer,C
 @inline Base.strides(A::LowDimArray) = strides(A.data)
 @inline ArrayInterface.parent_type(::Type{LowDimArray{D,T,N,A}}) where {T,D,N,A} = A
 @inline ArrayInterface.strides(A::LowDimArray) = ArrayInterface.strides(A.data)
+@inline ArrayInterface.device(::LowDimArray) = ArrayInterface.CPUPointer()
 @generated function ArrayInterface.size(A::LowDimArray{D,T,N}) where {D,T,N}
     t = Expr(:tuple)
     for n ∈ 1:N
@@ -206,7 +207,7 @@ end
         Nnew += 1
     end
     typ = Expr(:curly, :StridedPointer, T, Nnew, Cnew, Bnew, Rtup)
-    ptr = Expr(:call, typ, :(pointer(p)), strd, offsets)
+    ptr = Expr(:call, typ, Expr(:call, lv(:llvmptr), :p), strd, offsets)
     Expr(:block, Expr(:meta,:inline), :(strd = p.strd), :(offs = p.offsets), ptr)
 end
 # @generated function VectorizationBase.stridedpointer(A::LowDimArray{D,T,N}) where {D,T,N}
