@@ -230,6 +230,7 @@ function add_grouped_strided_pointer!(extra_args::Expr, ls::LoopSet)
     gsp = Expr(:call, lv(:grouped_strided_pointer))
     tgarrays = Expr(:tuple)
     i = 0
+    preserve_assignment = Expr(:tuple); preserve = Symbol[];
     for ref ∈ ls.refs_aliasing_syms
         i += 1
         found = false
@@ -242,6 +243,9 @@ function add_grouped_strided_pointer!(extra_args::Expr, ls::LoopSet)
             break
         end
         found || push!(tgarrays.args, vptr(ref))
+        pres = gensym!(ls, "#preserve#")
+        push!(preserve_assignment.args, pres)
+        push!(preserve, pres)
     end
     push!(gsp.args, tgarrays)
     matcheddims = Expr(:tuple)
@@ -255,8 +259,10 @@ function add_grouped_strided_pointer!(extra_args::Expr, ls::LoopSet)
         length(t.args) > 1 && push!(matcheddims.args, t)
     end
     push!(gsp.args, val(matcheddims))
-    push!(extra_args.args, gsp)
-    nothing
+    gsps = gensym!(ls, "#grouped#strided#pointer#")
+    push!(extra_args.args, gsps)
+    pushpreamble!(ls, Expr(:(=), Expr(:tuple, gsps, preserve_assignment), gsp))
+    preserve
 end
 
 # first_cache() = ifelse(gt(num_cache_levels(), StaticInt{2}()), StaticInt{2}(), StaticInt{1}())
@@ -309,7 +315,7 @@ function generate_call(ls::LoopSet, (inline,u₁,u₂)::Tuple{Bool,Int8,Int8}, t
     vargs_as_tuple = true#!debug
     vargs_as_tuple || push!(q.args, lbarg)
     extra_args = vargs_as_tuple ? Expr(:tuple) : q
-    add_grouped_strided_pointer!(extra_args, ls)
+    preserve = add_grouped_strided_pointer!(extra_args, ls)
     for is ∈ ls.preamble_symsym
         push!(extra_args.args, last(is))
     end
@@ -320,7 +326,7 @@ function generate_call(ls::LoopSet, (inline,u₁,u₂)::Tuple{Bool,Int8,Int8}, t
     vargs_as_tuple && push!(q.args, Expr(:tuple, lbarg, extra_args))
     vecwidthdefq = Expr(:block)
     define_eltype_vec_width!(vecwidthdefq, ls, nothing)
-    Expr(:block, vecwidthdefq, q)
+    Expr(:block, vecwidthdefq, q), preserve
 end
 
 
@@ -383,16 +389,22 @@ make_crashy(q) = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,
 @inline vecmemaybe(x::VectorizationBase._Vec) = Vec(x)
 @inline vecmemaybe(x::Tuple) = VectorizationBase.VecUnroll(x)
 
+function gc_preserve(call::Expr, preserve::Vector{Symbol})
+    q = Expr(:gc_preserve, call)
+    append!(q.args, preserve)
+    q
+end
+
 function setup_call_inline(ls::LoopSet, inline::Bool, u₁::Int8, u₂::Int8, thread::Int)
-    call = generate_call(ls, (inline,u₁,u₂), thread % UInt, false)
+    call, preserve = generate_call(ls, (inline,u₁,u₂), thread % UInt, false)
     if iszero(length(ls.outer_reductions))
-        q = Expr(:block,gc_preserve(ls, call))
-        append!(ls.preamble.args, q.args)
+        pushpreamble!(ls, gc_preserve(call, preserve))
+        push!(ls.preamble.args, nothing)
         return ls.preamble
     end
     retv = loopset_return_value(ls, Val(false))
     outer_reducts = Expr(:local)
-    q = Expr(:block,gc_preserve(ls, Expr(:(=), retv, call)))
+    q = Expr(:block,gc_preserve(Expr(:(=), retv, call), preserve))
     for or ∈ ls.outer_reductions
         op = ls.operations[or]
         var = name(op)
@@ -409,7 +421,7 @@ function setup_call_inline(ls::LoopSet, inline::Bool, u₁::Int8, u₂::Int8, th
 end
 function setup_call_debug(ls::LoopSet)
     # avx_loopset(instr, ops, arf, AM, LB, vargs)
-    pushpreamble!(ls, generate_call(ls, (false,zero(Int8),zero(Int8)), zero(UInt), true))
+    pushpreamble!(ls, first(generate_call(ls, (false,zero(Int8),zero(Int8)), zero(UInt), true)))
     Expr(:block, ls.prepreamble, ls.preamble)
 end
 function setup_call(

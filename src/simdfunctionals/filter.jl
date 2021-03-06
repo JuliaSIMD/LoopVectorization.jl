@@ -8,8 +8,8 @@ function vfilter!(f::F, x::Vector{T}, y::AbstractArray{T}) where {F,T <: NativeT
     st = VectorizationBase.static_sizeof(T)
     zero_index = MM(W, Static(0), st)
     GC.@preserve x y begin
-        ptr_x = llvmptr(x)
-        ptr_y = llvmptr(y)
+        # ptr_x = llvmptr(x); ptr_y = llvmptr(y)
+        ptr_x = pointer(x); ptr_y = pointer(y)
         for _ ∈ 1:Nrep
             vy = VectorizationBase.__vload(ptr_y, zero_index, False(), register_size())
             mask = f(vy)

@@ -655,7 +655,7 @@ function init_remblock(unrolledloop::Loop, lssm::LoopStartStopManager, n::Int)#u
     else
         termar = lssm.incrementedptrs[n][termind]
         ptr = vptr(termar)
-        condition = Expr(:call, :<, vptr(ptr), maxsym(ptr, 0))
+        condition = Expr(:call, :<, ptr, maxsym(ptr, 0))
     end
     Expr(:if, condition)
 end

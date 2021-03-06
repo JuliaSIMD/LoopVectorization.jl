@@ -207,7 +207,8 @@ end
         Nnew += 1
     end
     typ = Expr(:curly, :StridedPointer, T, Nnew, Cnew, Bnew, Rtup)
-    ptr = Expr(:call, typ, Expr(:call, lv(:llvmptr), :p), strd, offsets)
+    # ptr = Expr(:call, typ, Expr(:call, lv(:llvmptr), :p), strd, offsets)
+    ptr = Expr(:call, typ, Expr(:call, lv(:pointer), :p), strd, offsets)
     Expr(:block, Expr(:meta,:inline), :(strd = p.strd), :(offs = p.offsets), ptr)
 end
 # @generated function VectorizationBase.stridedpointer(A::LowDimArray{D,T,N}) where {D,T,N}

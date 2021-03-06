@@ -6,7 +6,7 @@ using VectorizationBase: register_size, register_count, cache_linesize, cache_si
     mask, pick_vector_width, MM, AbstractMask, data, grouped_strided_pointer,
     maybestaticlength, maybestaticsize, staticm1, staticp1, staticmul, vzero,
     maybestaticrange, offsetprecalc, lazymul,
-    maybestaticfirst, maybestaticlast, scalar_less, scalar_greaterequal, gep, gesp, llvmptr, NativeTypes,
+    maybestaticfirst, maybestaticlast, scalar_less, scalar_greaterequal, gep, gesp, NativeTypes, #llvmptr,
     vfmadd, vfmsub, vfnmadd, vfnmsub, vfmadd_fast, vfmsub_fast, vfnmadd_fast, vfnmsub_fast, vfmadd231, vfmsub231, vfnmadd231, vfnmsub231,
     vfma_fast, vmuladd_fast, vdiv_fast, vadd_fast, vsub_fast, vmul_fast,
     relu, stridedpointer, StridedPointer, StridedBitPointer, AbstractStridedPointer, _vload, _vstore!,
