@@ -216,7 +216,7 @@ function outer_reduct_combine_expressions(ls::LoopSet, retv)
         mvar = mangledvar(op)
         instr = instruction(op)
         out = Symbol(mvar, "##onevec##")
-        instrcall = callexp(instr)
+        instrcall = callexpr(instr)
         push!(instrcall.args, Expr(:call, lv(:vecmemaybe), out))
         if length(ls.outer_reductions) > 1
             push!(instrcall.args, Expr(:call, lv(:vecmemaybe), Expr(:call, GlobalRef(Core, :getfield), Symbol("#load#thread#ret#"), i, false)))
@@ -344,7 +344,8 @@ function thread_one_loops_expr(
     else
         nothing
     end
-    iterdef = define_block_size(threadedloop, vloop, tn, ls.vector_width[])
+    # @unpack u₁loop, u₂loop, vloop, u₁, u₂max = ua
+    iterdef = define_block_size(threadedloop, ua.vloop, 0, ls.vector_width[])
     q = quote
         var"#nthreads#" = $choose_nthread # UInt
         $define_len
@@ -562,7 +563,10 @@ function valid_thread_loops(ls::LoopSet)
     order, u₁loop, u₂loop, vectorized, u₁, u₂, c, shouldinline = choose_order_cost(ls)
     # NOTE: `names` are being placed in the opposite order here versus normal lowering!
     copyto!(names(ls), order); init_loop_map!(ls)
-    ua = UnrollArgs(getloop(ls, u₁loop), getloop(ls, u₂loop), getloop(ls, vectorized), u₁, u₂, u₂)
+    u₁loop = getloop(ls, u₁loop)
+    _u₂loop = getloopid_or_nothing(ls, u₂loop)
+    u₂loop = _u₂loop === nothing ? u₁loop : _u₂loop
+    ua = UnrollArgs(u₁loop, u₂loop, getloop(ls, vectorized), u₁, u₂, u₂)
     valid_thread_loop = fill(true, length(order))
     for op ∈ operations(ls)
         if isstore(op) && (length(reduceddependencies(op)) > 0)
