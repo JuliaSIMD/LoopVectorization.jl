@@ -174,44 +174,70 @@ end
 # sptrs::Expr, ls::LoopSet, ar::ArrayReferenceMeta, @nospecialize(_::Type{Core.LLVMPtr{T,0}}),
 function add_mref!(
     sptrs::Expr, ls::LoopSet, ar::ArrayReferenceMeta, @nospecialize(_::Type{Ptr{T}}),
-    C::Int, B::Int, R::NTuple{N,Int}, name::Symbol
+    C::Int, B::Int, sp::NTuple{N,Int}, name::Symbol
 ) where {T,N}
+    Tsym::Symbol = get(VectorizationBase.JULIA_TYPES, T) do
+        Symbol(T)
+    end
+    add_mref_ptr!(sptrs, ls, ar, Tsym, C, B, sp, name)
+end
+function add_mref_ptr!(
+    sptrs::Expr, ls::LoopSet, ar::ArrayReferenceMeta, Tsym::Symbol,
+    C::Int, B::Int, sp::NTuple{N,Int}, name::Symbol
+) where {N}
     @assert B ≤ 0 "Batched arrays not supported yet."
-    sp = rank_to_sortperm(R)
     # maybe no change needed? -- optimize common case
     column_major = ntuple(identity, N)
     li = ar.loopedindex;
     if sp === column_major || isone(length(li))
         return extract_gsp!(sptrs, name)
     end
-    lic = copy(li);
-    inds = getindices(ar); indsc = copy(inds);
-    offsets = ar.ref.offsets; offsetsc = copy(offsets);
-
+    permute_mref!(ar, C, sp)
     # must now sort array's inds, and stack pointer's
     tmpsp = gensym(name)
     extract_gsp!(sptrs, tmpsp)
     strd_tup = Expr(:tuple)
     offsets_tup = Expr(:tuple)
+    gf = GlobalRef(Core,:getfield)
+    offsets = gensym(:offsets); strides = gensym(:strides)
+    pushpreamble!(ls, Expr(:(=), offsets, Expr(:call, gf, tmpsp, QuoteNode(:offsets))))
+    pushpreamble!(ls, Expr(:(=), strides, Expr(:call, gf, tmpsp, QuoteNode(:strd))))
+    for (i, p) ∈ enumerate(sp)
+        push!(strd_tup.args, Expr(:call, gf, strides, p, false))
+        push!(offsets_tup.args, Expr(:call, gf, offsets, p, false))
+    end
+    sptype = Expr(:curly, lv(:StridedPointer), Tsym, N, (C == -1 ? -1 : 1), B, column_major)
+    sptr = Expr(:call, sptype, Expr(:call, :pointer, tmpsp), strd_tup, offsets_tup)
+    pushpreamble!(ls, Expr(:(=), name, sptr))
+    nothing
+end
+function permute_mref!(ar::ArrayReferenceMeta, C::Int, sp::NTuple{N,Int}) where {N}
+    sp === ntuple(identity, Val(N)) && return nothing
+    li = ar.loopedindex; lic = copy(li);
+    inds = getindices(ar); indsc = copy(inds);
+    offsets = ar.ref.offsets; offsetsc = copy(offsets);
+    strides = ar.ref.strides; stridesc = copy(strides);
     for (i, p) ∈ enumerate(sp)
         li[i] = lic[p]
         inds[i] = indsc[p]
         offsets[i] = offsetsc[p]
-        push!(strd_tup.args, :($tmpsp.strd[$p]))
-        # push!(offsets_tup.args, Expr(:call, lv(:Zero)))
-        push!(offsets_tup.args, :($tmpsp.offsets[$p]))
+        strides[i] = stridesc[p]
     end
     C == -1 && makediscontiguous!(getindices(ar))
-    sptype = Expr(:curly, lv(:StridedPointer), T, N, (C == -1 ? -1 : 1), 1, column_major)
-    sptr = Expr(:call, sptype, Expr(:call, :pointer, tmpsp), strd_tup, offsets_tup)
-    pushpreamble!(ls, Expr(:(=), name, sptr))
-    nothing
+    return nothing
 end
 function add_mref!(
     sptrs::Expr, ::LoopSet, ::ArrayReferenceMeta, @nospecialize(_::Type{VectorizationBase.FastRange{T,F,S,O}}),
     ::Int, ::Int, ::Any, name::Symbol
 ) where {T,F,S,O}
     extract_gsp!(sptrs, name)
+end
+function create_mrefs!(
+    ls::LoopSet, arf::Vector{ArrayRefStruct}, as::Vector{Symbol}, os::Vector{Symbol},
+    nopsv::Vector{NOpsType}, expanded::Vector{Bool}, ::Type{Tuple{}}
+)
+    length(arf) == 0 || throw(ArgumentError("Length of array ref vector should be 0 if there are no stridedpointers."))
+    Vector{ArrayReferenceMeta}(undef, length(arf))
 end
 function create_mrefs!(
     ls::LoopSet, arf::Vector{ArrayRefStruct}, as::Vector{Symbol}, os::Vector{Symbol},
@@ -222,6 +248,7 @@ function create_mrefs!(
     # pushpreamble!(ls, Expr(:(=), sptrs, :(VectorizationBase.stridedpointers(getfield(vargs, 1, false)))))
     pushpreamble!(ls, Expr(:(=), sptrs, :(VectorizationBase.stridedpointers(getfield(var"#vargs#", 1, false)))))
     j = 0
+    rank_to_sps = Vector{Tuple{Int,NTuple{<:Any,Int}}}(undef, length(arf))
     for i ∈ eachindex(arf)
         ar = ArrayReferenceMeta(ls, arf[i], as, os, nopsv, expanded)
         duplicate = false
@@ -229,12 +256,18 @@ function create_mrefs!(
         for k ∈ 1:i-1
             if vptr(mrefs[k]) === vptrar
                 duplicate = true
+                # if isassigned(rank_to_sps, k)
+                Cₖ, sp = rank_to_sps[k]
+                permute_mref!(ar, Cₖ, sp)
+                # end
                 break
             end
         end
         if !duplicate
             j += 1
-            add_mref!(sptrs, ls, ar, P.parameters[j], C[j], B[j], R[j], vptr(ar))
+            sp = rank_to_sortperm(R[j])
+            rank_to_sps[i] = (C[j],sp)
+            add_mref!(sptrs, ls, ar, P.parameters[j], C[j], B[j], sp, vptr(ar))
         end
         mrefs[i] = ar
     end
@@ -500,7 +533,11 @@ function avx_loopset(
 )
     ls = LoopSet(:LoopVectorization)
     # TODO: check outer reduction types instead
-    elementbytes = sizeofeltypes(vargs[1].parameters[1].parameters)
+    elementbytes = if length(vargs[1].parameters) > 0
+        sizeofeltypes(vargs[1].parameters[1].parameters)
+    else
+        8
+    end
     pushpreamble!(ls, :((var"#loop#bounds#", var"#vargs#") = var"#lv#tuple#args#"))
     add_loops!(ls, LPSYM, LB)
     resize!(ls.loop_order, ls.loopsymbol_offsets[end])

@@ -229,7 +229,7 @@ function unrolled_curly(op::Operation, u₁::Int, u₁loop::Loop, vloop::Loop, m
             end
         end
     else
-        Expr(:curly, lv(:Unroll), AU, gethint(step(u₁loop)), u₁, AV, 1, M, 1)
+        Expr(:curly, lv(:Unroll), AU, gethint(step(u₁loop)), u₁, 0, 1, M, 1)
     end
 end
 function unrolledindex(op::Operation, td::UnrollArgs, mask::Bool, inds_calc_by_ptr_offset::Vector{Bool})

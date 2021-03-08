@@ -649,12 +649,17 @@
     function Base.axes(::SizedMatrix{M,N}) where {M,N}
         (LoopVectorization.CloseOpen(LoopVectorization.Static{M}()), LoopVectorization.CloseOpen(LoopVectorization.Static{N}()))
     end
+    function LoopVectorization.ArrayInterface.axes_types(::Type{SizedMatrix{M,N,T}}) where {M,N,T}
+        Tuple{LoopVectorization.CloseOpen{LoopVectorization.Static{0},LoopVectorization.Static{M}}, LoopVectorization.CloseOpen{LoopVectorization.Static{0},LoopVectorization.Static{N}}}
+    end
     Base.unsafe_convert(::Type{Ptr{T}}, A::SizedMatrix{M,N,T}) where {M,N,T} = pointer(A.data)
     LoopVectorization.ArrayInterface.strides(::SizedMatrix{M}) where {M} = (LoopVectorization.Static{1}(),LoopVectorization.Static{M}())
     LoopVectorization.ArrayInterface.contiguous_axis(::Type{<:SizedMatrix}) = LoopVectorization.One()
     LoopVectorization.ArrayInterface.contiguous_batch_size(::Type{<:SizedMatrix}) = LoopVectorization.Zero()
     LoopVectorization.ArrayInterface.stride_rank(::Type{<:SizedMatrix}) = (LoopVectorization.Static(1), LoopVectorization.Static(2))
+    # LoopVectorization.ArrayInterface.offsets(::Type{SizedMatrix{M,N,T}}) where {M,N,T}  = (LoopVectorization.Static{0}(), LoopVectorization.Static{0}())
     LoopVectorization.ArrayInterface.offsets(::SizedMatrix) = (LoopVectorization.Static{0}(), LoopVectorization.Static{0}())
+    LoopVectorization.ArrayInterface.dense_dims(::Type{SizedMatrix{M,N,T}}) where {M,N,T} = LoopVectorization.ArrayInterface.dense_dims(Matrix{T})
 # struct ZeroInitializedArray{T,N,A<:DenseArray{T,N}} <: DenseArray{T,N}
 #     data::A
 # end
@@ -822,7 +827,7 @@
                 Bs = SizedMatrix{K,N}(B);
                 Bts = SizedMatrix{N,K}(Bt);
                 Cs = SizedMatrix{M,N}(C);
-                C2z = LoopVectorization.OffsetArray(C2, -1, -1)
+                C2z = LoopVectorization.OffsetArray(C2, -1, -1);
                 @time @testset "avx $T static gemm" begin
                     # AmulBavx1!(Cs, As, Bs)
                     # @test Cs ≈ C2

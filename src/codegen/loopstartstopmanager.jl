@@ -324,14 +324,12 @@ function offsetindex(dim::Int, ind::Int, scale::Int, isvectorized::Bool, incr::M
             push!(index.args, Expr(:call, lv(:Zero)))
             continue
         end
-        if isvectorized
-            if isone(scale)
-                pushmulexpr!(index, VECTORWIDTHSYMBOL, incr)
-            else
-                push!(index.args, mulexpr(VECTORWIDTHSYMBOL, staticexpr(scale), incr))
-            end
+        if !isvectorized
+            pushmulexpr!(index, scale, incr)
+        elseif isone(scale)
+            pushmulexpr!(index, VECTORWIDTHSYMBOL, incr)
         else
-            pushmulexpr!(index, staticexpr(scale), incr)
+            push!(index.args, mulexpr(VECTORWIDTHSYMBOL, scale, incr))
         end
     end
     index
@@ -339,15 +337,14 @@ end
 function append_pointer_maxes!(
     loopstart::Expr, ls::LoopSet, ar::ArrayReferenceMeta, n::Int, submax::Int, isvectorized::Bool, stopindicator, incr::MaybeKnown
 )
+    vptr_ar = vptr(ar)
     if submax < 2
         for sub ∈ 0:submax
-            push!(loopstart.args, Expr(:(=), maxsym(vptr(ar), sub), pointermax(ls, ar, n, sub, isvectorized, stopindicator, incr)))
-            # push!(loopstart.args, defpointermax(ls, ptrdefs[termind], n, sub, isvectorized, stopindicator))
+            push!(loopstart.args, Expr(:(=), maxsym(vptr_ar, sub), pointermax(ls, ar, n, sub, isvectorized, stopindicator, incr)))
         end
     else
         # @show n, getloop(ls, n) ar
         index, ind = pointermax_index(ls, ar, n, submax, isvectorized, stopindicator, incr)
-        vptr_ar = vptr(ar)
         pointercompbase = maxsym(vptr_ar, submax)
         push!(loopstart.args, Expr(:(=), pointercompbase, Expr(:call, lv(:gesp), vptr_ar, index)))
         dim = length(getindicesonly(ar))
@@ -378,7 +375,7 @@ function append_pointer_maxes!(loopstart::Expr, ls::LoopSet, ar::ArrayReferenceM
     stop = last(loop)
     incr = step(loop)
     if isknown(start) & isknown(stop)
-        return append_pointer_maxes!(loopstart, ls, ar, n, submax, isvectorized, startstopΔ(loop), incr)
+        return append_pointer_maxes!(loopstart, ls, ar, n, submax, isvectorized, startstopΔ(loop)+1, incr)
     end
     looplensym = isone(start) ? getsym(stop) : loop.lensym
     append_pointer_maxes!(loopstart, ls, ar, n, submax, isvectorized, looplensym, incr)

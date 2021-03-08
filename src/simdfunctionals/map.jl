@@ -21,7 +21,7 @@ function setup_vmap!(
         if N < i
             m &= mask(T, N & (W - 1))
         end
-        vstore!(ptry, f(vload.(ptrargs, ((zero_index,),), m)...), (zero_index,), m, False(), True(), False(), register_size())
+        _vstore!(ptry, f(vload.(ptrargs, ((zero_index,),), m)...), (zero_index,), m, False(), True(), False(), register_size())
         gesp(ptry, (i,)), gesp.(ptrargs, ((i,),)), N - i
     else
         ptry, ptrargs, N
@@ -59,9 +59,9 @@ function vmap_singlethread!(
         index = VectorizationBase.Unroll{1,W,UNROLL,1,W,0x0000000000000000}((i,))
         v = f(vload.(ptrargs, index)...)
         if NonTemporal
-            vstore!(ptry, v, index, True(), True(), True(), register_size())
+            _vstore!(ptry, v, index, True(), True(), True(), register_size())
         else
-            vstore!(ptry, v, index, False(), True(), False(), register_size())
+            _vstore!(ptry, v, index, False(), True(), False(), register_size())
         end
         i = vadd_fast(i, StaticInt{UNROLL}() * W)
     end
@@ -76,18 +76,18 @@ function vmap_singlethread!(
     while i < N - (W - 1) # stops at 16 when
         vᵣ = f(vload.(ptrargs, ((MM{W}(i),),))...)
         if NonTemporal
-            vstore!(ptry, vᵣ, (MM{W}(i),), True(), True(), True(), register_size())
+            _vstore!(ptry, vᵣ, (MM{W}(i),), True(), True(), True(), register_size())
         else
-            vstore!(ptry, vᵣ, (MM{W}(i),), False(), True(), False(), register_size())
+            _vstore!(ptry, vᵣ, (MM{W}(i),), False(), True(), False(), register_size())
         end
         i = vadd_fast(i, W)
     end
     if i < N
         m = mask(T, N & (W - 1))
         if NonTemporal
-            vstore!(ptry, f(vload.(ptrargs, ((MM{W}(i),),), m)...), (MM{W}(i,),), m, True(), True(), False(), register_size())
+            _vstore!(ptry, f(vload.(ptrargs, ((MM{W}(i),),), m)...), (MM{W}(i,),), m, True(), True(), False(), register_size())
         else
-            vstore!(ptry, f(vload.(ptrargs, ((MM{W}(i),),), m)...), (MM{W}(i,),), m, False(), True(), False(), register_size())
+            _vstore!(ptry, f(vload.(ptrargs, ((MM{W}(i),),), m)...), (MM{W}(i,),), m, False(), True(), False(), register_size())
         end
     end
     # end

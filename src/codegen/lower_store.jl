@@ -122,7 +122,6 @@ function lower_store!(
     mvar = Symbol(variable_name(opp, ifelse(isu₂, suffix, -1)), '_', u)
     if all(op.ref.loopedindex)
         inds = unrolledindex(op, ua, mask, inds_calc_by_ptr_offset)
-
         storeexpr = if reductfunc === Symbol("")
             Expr(:call, lv(:_vstore!), vptr(op), mvar, inds)
         else

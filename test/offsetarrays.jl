@@ -109,6 +109,7 @@ using LoopVectorization: Static
         (Static{1}(), (Static{UR}() - Static{LR}() + Static{1}()))
     end
     ArrayInterface.offsets(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (Static{LR}(), Static{LC}())
+    ArrayInterface.dense_dims(::Type{<:SizedOffsetMatrix{T}}) where {T} = ArrayInterface.dense_dims(Matrix{T})
     Base.getindex(A::SizedOffsetMatrix, i, j) = LoopVectorization.vload(LoopVectorization.stridedpointer(A), (i,j))
     function avx2dunrolled!(out::AbstractMatrix, A::AbstractMatrix, kern::SizedOffsetMatrix{T,-1,1,-1,1}) where {T}
         Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> kern_ik_jk = kern[ik-2,jk-2]
