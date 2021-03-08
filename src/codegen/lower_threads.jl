@@ -170,7 +170,7 @@ choose_num_blocks(nt, ::StaticInt{NC} = lv_max_num_threads()) where {NC} = @inbo
 
 function choose_num_threads(::Val{C}, ::Val{NT}, x) where {C,NT}
     fx = Base.uitofp(Float64, x)
-    min(Base.fptoui(UInt, Base.ceil_llvm(5.0852672001495816e-11*C*Base.sqrt_llvm(fx))), NT)
+    min(Base.fptoui(UInt, Base.ceil_llvm(0.05460264079015985*C*Base.sqrt_llvm(fx))), NT)
 end
 function push_loop_length_expr!(q::Expr, ls::LoopSet)
     l = 1
@@ -209,17 +209,18 @@ function divrem_fast(numerator, denominator)
 end
 
 function outer_reduct_combine_expressions(ls::LoopSet, retv)
-    q = Expr(:block, :(var"#load#thread#ret#" = ThreadingUtilities.load(var"#thread#ptr#", typeof($retv), 64)))
+    gf = GlobalRef(Core, :getfield)
+    q = Expr(:block, :(var"#load#thread#ret#" = $gf(ThreadingUtilities.load(var"#thread#ptr#", typeof($retv), 64),2,false)))
     for (i,or) ∈ enumerate(ls.outer_reductions)
         op = ls.operations[or]
         var = name(op)
         mvar = mangledvar(op)
         instr = instruction(op)
         out = Symbol(mvar, "##onevec##")
-        instrcall = callexpr(instr)
+        instrcall = Expr(:call, lv(reduce_to_onevecunroll(instr)))
         push!(instrcall.args, Expr(:call, lv(:vecmemaybe), out))
         if length(ls.outer_reductions) > 1
-            push!(instrcall.args, Expr(:call, lv(:vecmemaybe), Expr(:call, GlobalRef(Core, :getfield), Symbol("#load#thread#ret#"), i, false)))
+            push!(instrcall.args, Expr(:call, lv(:vecmemaybe), Expr(:call, gf, Symbol("#load#thread#ret#"), i, false)))
         else
             push!(instrcall.args, Expr(:call, lv(:vecmemaybe), Symbol("#load#thread#ret#")))
         end
@@ -320,8 +321,15 @@ function thread_one_loops_expr(
     ls::LoopSet, ua::UnrollArgs, valid_thread_loop::Vector{Bool}, ntmax::UInt, c::Float64,
     UNROLL::Tuple{Bool,Int8,Int8,Int,Int,Int,Int,Int,Int,Int,UInt}, OPS::Expr, ARF::Expr, AM::Expr, LPSYM::Expr
 )
-    choose_nthread = :(choose_num_threads(Val{$c}(), Val{$ntmax}()))
-    push_loop_length_expr!(choose_nthread, ls)
+    if all(isstaticloop, ls.loops)
+        _num_threads = choose_num_threads(Val(c), Val(ntmax), 1)::UInt
+        _num_threads > 1 || return avx_body(ls, UNROLL)
+        choose_nthread = Expr(:(=), Symbol("#nthreads#"), _num_threads)
+    else
+        choose_nthread = :(choose_num_threads(Val{$(c/looplengthprod(ls))}(), Val{$ntmax}()))
+        push_loop_length_expr!(choose_nthread, ls)
+        choose_nthread = Expr(:(=), Symbol("#nthreads#"), choose_nthread)
+    end
     threadedid = findfirst(valid_thread_loop)::Int
     threadedloop = getloop(ls, threadedid)
     define_len, define_num_unrolls, loopstart, iterstop, looprange, lastrange = thread_loop_summary!(ls, ua, threadedloop, false)
@@ -336,7 +344,7 @@ function thread_one_loops_expr(
             loop_boundary!(lastboundexpr, loop)
         end
     end
-    _avx_call_ = :(_avx_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, $lastboundexpr, var"#vargs#"))
+    _avx_call_ = :(_avx_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, ($lastboundexpr, var"#vargs#")))
     update_return_values = if length(ls.outer_reductions) > 0
         retv = loopset_return_value(ls, Val(false))
         _avx_call_ = Expr(:(=), retv, _avx_call_)
@@ -347,7 +355,7 @@ function thread_one_loops_expr(
     # @unpack u₁loop, u₂loop, vloop, u₁, u₂max = ua
     iterdef = define_block_size(threadedloop, ua.vloop, 0, ls.vector_width[])
     q = quote
-        var"#nthreads#" = $choose_nthread # UInt
+        $choose_nthread # UInt
         $define_len
         $define_num_unrolls
         var"#nthreads#" = Base.min(var"#nthreads#", var"#num#unrolls#thread#0#")
@@ -365,8 +373,8 @@ function thread_one_loops_expr(
             VectorizationBase.assume(var"#thread#mask#" ≠ zero(var"#thread#mask#"))
             var"#trailzing#zeros#" = Base.trailing_zeros(var"#thread#mask#") % UInt32
             var"#nblock#size#thread#0#" = Core.ifelse(
-                var"#thread#launch#count#" < (var"#nrem#thread#" % UInt32),
-                var"#base#block#size#thread#0#" + var"#block#rem#step#",
+                var"#thread#launch#count#" < (var"#nrem#thread#0#" % UInt32),
+                var"#base#block#size#thread#0#" + var"#block#rem#step#0#",
                 var"#base#block#size#thread#0#"
             )
             var"#trailzing#zeros#" += 0x00000001
@@ -381,7 +389,7 @@ function thread_one_loops_expr(
             var"#thread#mask#" >>>= var"#trailzing#zeros#"
 
             var"#iter#start#0#" = var"#iter#stop#0#"
-            var"#threads#remain#" = (var"#thread#launch#count#" += 0x00000001) ≠ var"$nrequest#"
+            var"#threads#remain#" = (var"#thread#launch#count#" += 0x00000001) ≠ var"#nrequest#"
         end
         $_avx_call_
         var"#thread#id#" = 0x00000000
@@ -427,8 +435,15 @@ function thread_two_loops_expr(
     ls::LoopSet, ua::UnrollArgs, valid_thread_loop::Vector{Bool}, ntmax::UInt, c::Float64,
     UNROLL::Tuple{Bool,Int8,Int8,Int,Int,Int,Int,Int,Int,Int,UInt}, OPS::Expr, ARF::Expr, AM::Expr, LPSYM::Expr
 )
-    choose_nthread = :(choose_num_threads(Val{$c}(), Val{$ntmax}()))
-    push_loop_length_expr!(choose_nthread, ls)
+    if all(isstaticloop, ls.loops)
+        _num_threads = choose_num_threads(Val(c), Val(ntmax), 1)::UInt
+        _num_threads > 1 || return avx_body(ls, UNROLL)
+        choose_nthread = Expr(:(=), Symbol("#nthreads#"), _num_threads)
+    else
+        choose_nthread = :(choose_num_threads(Val{$(c/looplengthprod(ls))}(), Val{$ntmax}()))
+        push_loop_length_expr!(choose_nthread, ls)
+        choose_nthread = Expr(:(=), Symbol("#nthreads#"), choose_nthread)
+    end
     threadedid1 = threadedid2 = 0
     for (i,v) ∈ enumerate(valid_thread_loop)
         v || continue
@@ -472,7 +487,7 @@ function thread_two_loops_expr(
     iterdef1 = define_block_size(threadedloop1, vloop, 0, ls.vector_width[])
     iterdef2 = define_block_size(threadedloop2, vloop, 1, ls.vector_width[])
     q = quote
-        var"#nthreads#" = $choose_nthread # UInt
+        $choose_nthread # UInt
         $define_len1
         $define_len2
         $define_num_unrolls1
