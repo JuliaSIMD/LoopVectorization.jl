@@ -164,6 +164,7 @@ function ifelselastexpr(hasf::Bool, M::Int, vargtypes, K::Int, S::Int, maskearly
         push!(t.args, :(getfield($(vargs[K]), $m, false)))
     end
     # push!(q.args, :(VecUnroll($t)::VecUnroll{$N,$W,$T,$V}))
+    # push!(q.args, Expr(:call, lv(:VecUnroll), t))
     push!(q.args, :(VecUnroll($t)))
     q
 end
@@ -361,7 +362,7 @@ function lower_compute!(
                 newpname = Symbol(newparentname, '_', u₁)
                 push!(q.args, Expr(:(=), newpname, Symbol(parentname, '_', u₁)))
                 # @show newparentop op instruction(newparentop)
-                reduce_expr!(q, newparentname, instruction(newparentop), u₁, -1)
+                reduce_expr!(q, newparentname, instruction(newparentop), u₁, -1, true)
                 push!(q.args, Expr(:(=), Symbol(newparentname, '_', 1), Symbol(newparentname, "##onevec##")))
             end
         end

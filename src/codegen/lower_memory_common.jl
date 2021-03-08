@@ -81,7 +81,7 @@ function addoffset!(ret::Expr, indvectorized::Bool, vloopstride, indexstride, in
     end
 end
 
-function addoffset!(ret::Expr, indvectorized::Bool, unrolledsteps, vloopstride, indexstride, index, offset, calcbypointeroffset::Bool) # 8 -> 7 args
+function addvectoroffset!(ret::Expr, indvectorized::Bool, unrolledsteps, vloopstride, indexstride, index, offset, calcbypointeroffset::Bool) # 8 -> 7 args
     # if _iszero(unrolledsteps) # if no steps, pass through; should be unreachable
     #     addoffset!(ret, indvectorized, vloopstride, indexstride, index, offset, calcbypointeroffset)
     # else
@@ -98,22 +98,22 @@ function addoffset!(ret::Expr, indvectorized::Bool, unrolledsteps, vloopstride, 
     end
 end
 # unrolledloopstride is a stride multiple on `unrolledsteps`
-function addoffset!(
-    ret::Expr, indvectorized::Bool, unrolledsteps::Int, unrolledloopstride, vloopstride, indexstride::Integer, index, offset::Integer, calcbypointeroffset::Bool
-) # 9 -> (7 or 8) args
+function addvectoroffset!(
+    ret::Expr, mm::Bool, unrolledsteps::Int, unrolledloopstride, vloopstride, indexstride::Integer, index, offset::Integer, calcbypointeroffset::Bool, indvectorized::Bool
+) # 10 -> (7 or 8) args
     if unrolledsteps == 0 # neither unrolledloopstride or indexstride can be 0
-        addoffset!(ret, indvectorized, vloopstride, indexstride, index, offset, calcbypointeroffset) # 7 arg
+        addoffset!(ret, mm, vloopstride, indexstride, index, offset, calcbypointeroffset) # 7 arg
     elseif indvectorized
         unrolledsteps *= indexstride
         if isknown(unrolledloopstride)
-            addoffset!(ret, indvectorized, gethint(unrolledloopstride)*unrolledsteps, vloopstride, indexstride, index, offset, calcbypointeroffset) # 8 arg
+            addvectoroffset!(ret, mm, gethint(unrolledloopstride)*unrolledsteps, vloopstride, indexstride, index, offset, calcbypointeroffset) # 8 arg
         elseif unrolledsteps == 1
-            addoffset!(ret, indvectorized, unrolledloopstride, vloopstride, indexstride, index, offset, calcbypointeroffset) # 8 arg
+            addvectoroffset!(ret, mm, unrolledloopstride, vloopstride, indexstride, index, offset, calcbypointeroffset) # 8 arg
         else
-            addoffset!(ret, indvectorized, mulexpr(unrolledloopstride,unrolledsteps), vloopstride, indexstride, index, offset, calcbypointeroffset) # 8 arg
+            addvectoroffset!(ret, mm, mulexpr(unrolledloopstride,unrolledsteps), vloopstride, indexstride, index, offset, calcbypointeroffset) # 8 arg
         end
     else
-        addoffset!(ret, indvectorized, vloopstride, indexstride, index, offset + unrolledsteps, calcbypointeroffset) # 7 arg
+        addoffset!(ret, mm, vloopstride, indexstride, index, offset + unrolledsteps, calcbypointeroffset) # 7 arg
     end
 end
 
@@ -137,7 +137,7 @@ function mem_offset(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Vect
         stride = strides[n] % Int
         @unpack vstep = td
         if loopedindex[n]
-            addoffset!(ret, indvectorized, vstep, stride, ind, offset, inds_calc_by_ptr_offset[n] | (ind === CONSTANTZEROINDEX))
+            addoffset!(ret, indvectorized, vstep, stride, ind, offset, inds_calc_by_ptr_offset[n] | (ind === CONSTANTZEROINDEX)) # 7 arg
         else
             offset -= 1
             newname, parent = symbolind(ind, op, td)
@@ -145,7 +145,20 @@ function mem_offset(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Vect
             # addoffset!(ret, newname, stride, offset, _mmi)
             _mmi = indvectorized && parent !== op && (!isvectorized(parent))
             @assert !_mmi "Please file an issue with an example of how you got this."
-            addoffset!(ret, 0, newname, offset, false)
+            if isu₁unrolled(parent) & (td.u₁ > 1)
+                gf = GlobalRef(Core,:getfield)
+                firstnew = Expr(:call, gf, Expr(:call, gf, newname, 1), 1, false)
+                if isvectorized(parent) & (!_mm)
+                    firstnew = Expr(:call, lv(:unmm), firstnew)
+                end
+                addoffset!(ret, 0, firstnew, offset, false)
+            else
+                if isvectorized(parent) & (!_mm)
+                    addoffset!(ret, 0, Expr(:call, lv(:unmm), newname), offset, false)
+                else
+                    addoffset!(ret, 0, newname, offset, false)
+                end
+            end
         end
     end
     ret
@@ -249,20 +262,42 @@ function mem_offset_u(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Ve
             ind_by_offset = inds_calc_by_ptr_offset[n] | (ind === CONSTANTZEROINDEX)
             offset = convert(Int, offsets[n])
             stride = convert(Int, strides[n])
-            indvectorized = _mm & (ind === vloopsym)
+            indvectorized = ind === vloopsym
+            indvectorizedmm = _mm & indvectorized
             if ind === u₁loopsym
-                addoffset!(ret, indvectorized, incr₁, u₁step, vstep, stride, ind, offset, ind_by_offset)
+                addvectoroffset!(ret, indvectorizedmm, incr₁, u₁step, vstep, stride, ind, offset, ind_by_offset, indvectorized) # 9 arg
             elseif ind === u₂loopsym
-                addoffset!(ret, indvectorized, incr₂, u₂step, vstep, stride, ind, offset, ind_by_offset) 
+                # if isstore(op)
+                #     @show indvectorized, ind === vloopsym, u₂loopsym, incr₂
+                # end
+                addvectoroffset!(ret, indvectorizedmm, incr₂, u₂step, vstep, stride, ind, offset, ind_by_offset, indvectorized) # 9 arg
             elseif loopedindex[n]
-                addoffset!(ret, indvectorized, vstep, stride, ind, offset, ind_by_offset)
+                addoffset!(ret, indvectorizedmm, vstep, stride, ind, offset, ind_by_offset) # 7 arg
             else
                 offset -= 1
                 newname, parent = symbolind(ind, op, td)
-                _mmi = _mm && indvectorized && parent !== op && (!isvectorized(parent))
+                _mmi = indvectorizedmm && parent !== op && (!isvectorized(parent))
                 #                              addoffset!(ret, newname, 1, offset, _mmi)
                 @assert !_mmi "Please file an issue with an example of how you got this."
-                if stride == 1
+                if isvectorized(parent) & (!_mm)
+                    if isu₁unrolled(parent) & (td.u₁ > 1)
+                        gf = GlobalRef(Core,:getfield)
+                        newname_unmm = Expr(:call, lv(:unmm), Expr(:call, gf, Expr(:call, gf, newname, 1), incr₁+1, false))
+                    else
+                        newname_unmm = Expr(:call, lv(:unmm), newname)
+                    end
+                    if stride ≠ 1
+                        newname_unmm = mulexpr(newname_unmm,stride)
+                    end
+                    addoffset!(ret, 0, newname_unmm, offset, false)
+                elseif isu₁unrolled(parent) & (td.u₁ > 1)
+                    gf = GlobalRef(Core,:getfield)
+                    firstnew = Expr(:call, gf, Expr(:call, gf, newname, 1), incr₁+1, false)
+                    if stride ≠ 1
+                        firstnew = mulexpr(firstnew,stride)
+                    end
+                    addoffset!(ret, 0, firstnew, offset, false)
+                elseif stride == 1
                     addoffset!(ret, 0, newname, offset, false)
                 else
                     addoffset!(ret, 0, mulexpr(newname,stride), offset, false)
@@ -276,7 +311,7 @@ end
 @inline and_last(a, b) = a & b
 @generated function and_last(v::VecUnroll{N}, m) where {N}
     q = Expr(:block, Expr(:meta,:inline), :(vd = data(v)))
-    t = Expr(:tuple)
+    t = Expr(:call, lv(:promote))
     for n ∈ 1:N
         push!(t.args, :(getfield(vd, $n, false)))
     end

@@ -231,30 +231,55 @@ function add_grouped_strided_pointer!(extra_args::Expr, ls::LoopSet)
     tgarrays = Expr(:tuple)
     i = 0
     preserve_assignment = Expr(:tuple); preserve = Symbol[];
-    for ref ∈ ls.refs_aliasing_syms
-        i += 1
-        found = false
-        for (vptrs,dims) ∈ ls.equalarraydims
-            _id = findfirst(==(vptr(ref)), vptrs)
-            _id === nothing && continue
-            id::Int = _id
-            found = true
-            push!(tgarrays.args, ref.ref.array)
-            break
+    @unpack equalarraydims, refs_aliasing_syms = ls
+    # duplicate_map = collect(1:length(refs_aliasing_syms))
+    duplicate_map = Vector{Int}(undef, length(refs_aliasing_syms))
+    for (j,ref) ∈ enumerate(refs_aliasing_syms)
+        vpref = vptr(ref)
+        duplicate = false
+        for k ∈ 1:j-1 # quadratic, but should be short enough so that this is faster than O(1) algs
+            if vptr(refs_aliasing_syms[k]) === vpref
+                duplicate = true
+                # duplicate_map[j] = k
+                break
+            end
         end
-        found || push!(tgarrays.args, vptr(ref))
+        duplicate && continue
+        # duplicate_map[j] == j || continue
+        duplicate_map[j] = (i += 1)
+        found = false
+        # for (vptrs,dims) ∈ equalarraydims
+        #     _id = findfirst(==(vpref), vptrs)
+        #     _id === nothing && continue
+        #     id::Int = _id
+        #     found = true
+        #     if vptr(ref.ref.array) === vpref
+        #         push!(tgarrays.args, ref.ref.array)
+        #     else
+        #         push!(tgarrays.args, vpref)
+        #         push!(preserve, ref.ref.array)
+        #     end
+        #     break
+        # end
+        # if !found
         pres = gensym!(ls, "#preserve#")
         push!(preserve_assignment.args, pres)
-        push!(preserve, pres)
+        if vptr(ref.ref.array) === vpref
+            push!(tgarrays.args, ref.ref.array)
+            push!(preserve, pres)
+        else
+            push!(tgarrays.args, vpref)
+            push!(preserve, ref.ref.array)
+        end
     end
     push!(gsp.args, tgarrays)
     matcheddims = Expr(:tuple)
-    for (vptrs,dims) ∈ ls.equalarraydims
+    for (vptrs,dims) ∈ equalarraydims
         t = Expr(:tuple)
         for (vp,d) ∈ zip(vptrs,dims)
-            _id = findfirst(Base.Fix2(===,vp) ∘ vptr, ls.refs_aliasing_syms)
+            _id = findfirst(Base.Fix2(===,vp) ∘ vptr, refs_aliasing_syms)
             _id === nothing && continue
-            push!(t.args, Expr(:tuple, _id, d))
+            push!(t.args, Expr(:tuple, duplicate_map[_id], d))
         end
         length(t.args) > 1 && push!(matcheddims.args, t)
     end
@@ -301,7 +326,11 @@ function generate_call(ls::LoopSet, (inline,u₁,u₂)::Tuple{Bool,Int8,Int8}, t
     end
     arraysymbolinds = Symbol[]
     arrayref_descriptions = Expr(:tuple)
-    for ref ∈ ls.refs_aliasing_syms
+    duplicate_ref = fill(false, length(ls.refs_aliasing_syms))
+    for (j,ref) ∈ enumerate(ls.refs_aliasing_syms)
+        vpref = vptr(ref)
+        # duplicate_ref[j] ≠ 0 && continue
+        duplicate_ref[j] && continue
         push!(arrayref_descriptions.args, ArrayRefStruct(ls, ref, arraysymbolinds, ids))
     end
     argmeta = argmeta_and_consts_description(ls, arraysymbolinds)

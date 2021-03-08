@@ -127,7 +127,7 @@ using LoopVectorization: Static
         @avx unroll=(2,2) for j in axes(out,2), i in axes(out,1)
             Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> kern_ik_jk = kern[ik - 2, jk + (-2)]
             tmp_0 = zero(eltype(out))
-            j1 = j * 1
+            j1 = j * 1 # If you're reading this code for examples, don't do this! The point is to test
             Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> tmp_{ik+(jk-1)*3} = A[i + (ik-2), (jk-2) + j1] * kern_ik_jk + tmp_{ik+(jk-1)*3-1}
             out[i,j] = tmp_9
         end
@@ -221,7 +221,7 @@ using LoopVectorization: Static
             fr = first(r); lr = last(r);
             kern = OffsetArray(rand(T, length(r), length(r)), r, r);
             # We test parent equality so that an accidental write out of bounds leading to test failure.
-            out1 = OffsetArray(view(fill(T(-123456.789), size(A) .+ 32), (1+lr:100-lr) .+ 32, (1+lr:100-lr) .+ 32), lr, lr);   # stay away from the edges of A
+            out1 = OffsetArray(view(fill(T(-123456.789), size(A) .+ 100), (1+lr:100-lr) .+ 32, (1+lr:100-lr) .+ 32), lr, lr);   # stay away from the edges of A
             # out1 = OffsetArray(similar(A, size(A).-2), 1, 1);   # stay away from the edges of A
             out2 = deepcopy(out1); out3 = deepcopy(out1); out4 = deepcopy(out1);
             skern = SizedOffsetMatrix{T,fr,lr,fr,lr}(parent(kern));

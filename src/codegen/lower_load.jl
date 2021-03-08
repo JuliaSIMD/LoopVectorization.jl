@@ -124,17 +124,17 @@ function lower_load_no_optranslation!(
         push!(loadexpr.args, falseexpr, rs) # unaligned load
         push!(q.args, Expr(:(=), mvar, loadexpr))
     elseif u₁ > 1
-        # t = Expr(:tuple)
-        # for u ∈ 1:u₁
-        let t = u₁, t = q
+        t = Expr(:tuple)
+        for u ∈ 1:u₁
             inds = mem_offset_u(op, td, inds_calc_by_ptr_offset, true, u-1)
             loadexpr = Expr(:call, lv(:_vload), vptr(op), inds)
-            add_memory_mask!(loadexpr, op, td, mask & ((u == u₁) | isvectorized(op)))
+            domask = mask && (isvectorized(op) & ((u == u₁) | (vloopsym !== u₁loopsym)))
+            add_memory_mask!(loadexpr, op, td, domask)
             push!(loadexpr.args, falseexpr, rs)
-            # push!(t.args, loadexpr)
-            push!(t.args, Expr(:(=), mvar, loadexpr))
+            push!(t.args, loadexpr)
+            # push!(q.args, Expr(:(=), mvar, loadexpr))
         end
-        # push!(q.args, Expr(:(=), mvar, Expr(:call, lv(:VecUnroll), t)))
+        push!(q.args, Expr(:(=), mvar, Expr(:call, lv(:VecUnroll), t)))
     else
         inds = mem_offset_u(op, td, inds_calc_by_ptr_offset, true, 0)
         loadexpr = Expr(:call, lv(:_vload), vptr(op), inds)
@@ -185,6 +185,8 @@ end
 @inline firstunroll(x) = x
 @inline lastunroll(vu::VecUnroll) = last(getfield(vu,:data))
 @inline lastunroll(x) = x
+@inline unmm(x) = x
+@inline unmm(x::MM) = getfield(x, :i)
 function lower_load_for_optranslation!(
     q::Expr, op::Operation, posindicator::UInt8, ls::LoopSet, td::UnrollArgs, mask::Bool, translationind::Int
 )
@@ -217,7 +219,7 @@ function lower_load_for_optranslation!(
         if i == translationind
             gespinds.args[i] = Expr(:call, lv(Core.ifelse(equal_steps, :firstunroll, :lastunroll)), gespinds.args[i])
         # else
-        #     gespinds.args[i] = Expr(:call, lv(:data), gespinds.args[i])
+        #     gespinds.args[i] = Expr(:call, lv(:unmm), gespinds.args[i])
         end
     end
     push!(q.args, Expr(:(=), gptr, Expr(:call, lv(:gesp), ptr, gespinds)))
@@ -267,6 +269,7 @@ function lower_load_for_optranslation!(
         broadcasted_data = broadcastedname(variable_name_data)
         push!(q.args, :($broadcasted_data = getfield($(broadcastedname(variable_name_u)), 1)))
     end
+    gf = GlobalRef(Core,:getfield)
     for u₂ ∈ 0:u₂max-1
         variable_name_u₂ = Symbol(variable_name(op, u₂), '_', u₁)
         t = Expr(:tuple)
@@ -279,14 +282,14 @@ function lower_load_for_optranslation!(
             else
                 u - u₂ + u₂max - 1
             end
-            push!(t.args, :(getfield($variable_name_data, $uu)))
+            push!(t.args, :($gf($variable_name_data, $uu)))
             if shouldbroadcast
-                push!(tb.args, :(getfield($broadcasted_data, $uu)))
+                push!(tb.args, :($gf($broadcasted_data, $uu)))
             end
         end
-        push!(q.args, :($variable_name_u₂ = VecUnroll($t)))
+        push!(q.args, Expr(:(=), variable_name_u₂, Expr(:call, lv(:VecUnroll), t)))
         if shouldbroadcast
-            push!(q.args, :($(broadcastedname(variable_name_u₂)) = VecUnroll($tb)))
+            push!(q.args, Expr(:(=), broadcastedname(variable_name_u₂), Expr(:call, lv(:VecUnroll), tb)))
         end
     end
     nothing
@@ -324,8 +327,8 @@ function _lower_load!(
 )
     omop = offsetloadcollection(ls)
     batchid, opind = omop.batchedcollectionmap[identifier(op)]
-    # @show batchid == 0 (!isvectorized(op)) rejectinterleave(op, td.vloop, idsformap)
-    if batchid == 0 || (!isvectorized(op)) || (rejectinterleave(op, td.vloop, omop.batchedcollections[batchid]))
+    # @show batchid == 0 (!isvectorized(op)) rejectinterleave(ls, op, td.vloop, idsformap)
+    if batchid == 0 || (!isvectorized(op)) || (rejectinterleave(ls, op, td.vloop, omop.batchedcollections[batchid]))
         lower_load_no_optranslation!(q, ls, op, td, mask, inds_calc_by_ptr_offset)
     elseif opind == 1# only lower loads once
         # I do not believe it is possible for `opind == 1` to be lowered after an  operation depending on a different opind.
@@ -337,9 +340,26 @@ function _lower_load!(
         lower_load_collection!(q, ls, opidmap, idsformap, td, mask, inds_calc_by_ptr_offset)
     end
 end
-function rejectinterleave(op::Operation, vloop::Loop, idsformap::SubArray{Tuple{Int,Int}, 1, Vector{Tuple{Int,Int}}, Tuple{UnitRange{Int}}, true})
+function addive_loopinductvar_only(op::Operation)
+    isloopvalue(op) && return true
+    iscompute(op) || return false
+    additive_instr = (:add_fast, :(+), :vadd, :identity, :sub_fast, :(-), :vsub)
+    Base.sym_in(instruction(op).instr, additive_instr) || return false
+    return all(addive_loopinductvar_only, parents(op))
+end
+
+function rejectinterleave(ls::LoopSet, op::Operation, vloop::Loop, idsformap::SubArray{Tuple{Int,Int}, 1, Vector{Tuple{Int,Int}}, Tuple{UnitRange{Int}}, true})
     vloopsym = vloop.itersymbol; strd = step(vloop)
     isknown(strd) || return true
+    # TODO: reject if there is a vectorized !loopedindex index
+    for (li,ind) ∈ zip(op.ref.loopedindex,getindicesonly(op))
+        li && continue
+        for indop ∈ operations(ls)
+            if (name(indop) === ind) && isvectorized(indop)
+                addive_loopinductvar_only(op) || return true # so that it is `MM`
+            end
+        end
+    end
     (first(getindices(op)) === vloopsym) && (length(idsformap) ≠ first(getstrides(op)) * gethint(strd))
 end
 function lower_load_collection!(
@@ -375,7 +395,7 @@ function lower_load_collection!(
     # not using `add_memory_mask!(storeexpr, op, ua, mask)` because we checked `isconditionalmemop` earlier in `lower_load_collection!`
     (mask && isvectorized(op)) && push!(loadexpr.args, MASKSYMBOL)
     push!(loadexpr.args, falseexpr, rs)
-    collectionname = Symbol(vp, "##collection##number", first(first(idsformap)), "##size##", nouter, "##u₁##", u₁)
+    collectionname = Symbol(vp, "##collection##number#", opidmap[first(first(idsformap))], "#", suffix, "##size##", nouter, "##u₁##", u₁)
     # getfield to extract data from `VecUnroll` object, so we have a tuple
     push!(q.args, Expr(:(=), collectionname, Expr(:call, :getfield, loadexpr, 1)))
     u = Core.ifelse(isu₁unrolled(op), u₁, 1)

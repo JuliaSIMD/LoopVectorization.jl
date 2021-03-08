@@ -613,11 +613,10 @@ Base.length(ls::LoopSet, s::Symbol) = length(getloop(ls, s))
 function init_loop_map!(ls::LoopSet)
     @unpack loopordermap = ls
     order = names(ls)
-    orderids = Vector{Int}(undef, length(order))
+    resize!(loopordermap, length(order))
     for (i,o) ∈ enumerate(order)
-        orderids[i] = getloopid(ls,o)
+        loopordermap[i] = getloopid(ls,o)
     end
-    sortperm!(resize!(loopordermap, length(order)), orderids)
     nothing
 end
 
@@ -763,7 +762,7 @@ function oneto_loop!(ls::LoopSet, r::Expr, itersym::Symbol)::Loop
         pushprepreamble!(ls, Expr(:(=), rangename, Expr(:call, :(:), staticexpr(1), N)))
         MaybeKnown(N, 1024)
     end
-    Loop(itersymbol, l, u, s, rangename, lensym)
+    Loop(itersym, l, u, s, rangename, lensym)
 end
 
 @inline _reverse(r) = maybestaticlast(r):-static_step(r):maybestaticfirst(r)

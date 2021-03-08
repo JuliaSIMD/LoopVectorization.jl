@@ -89,20 +89,23 @@ function cost(ls::LoopSet, op::Operation, (u₁,u₂)::Tuple{Symbol,Symbol}, vlo
                 indices = getindices(op)
                 contigind = first(indices)
                 batchid, _opind = offsetloadcollection(ls).batchedcollectionmap[identifier(op)]
-                # @show rejectinterleave(op, getloop(ls, vloopsym), ls.omop.batchedcollections[batchid])
-                if (batchid ≠ 0) && !rejectinterleave(op, getloop(ls, vloopsym), ls.omop.batchedcollections[batchid])
+                # batchid ≠ 0 && @show rejectinterleave(ls, op, getloop(ls, vloopsym), ls.omop.batchedcollections[batchid])
+                if (batchid ≠ 0) && !rejectinterleave(ls, op, getloop(ls, vloopsym), ls.omop.batchedcollections[batchid])
                 # if (batchid ≠ 0) && !isdiscontiguous(op)
                     shifter = 2
+                    offset = 0.5reg_size(ls) / cache_lnsze(ls)
                 else
                     shifter = Wshift
+                    offset = 0.0 # gather/scatter, alignment doesn't matter
                 end
                 if ((contigind === CONSTANTZEROINDEX) && ((length(indices) > 1) && (indices[2] === u₁) || (indices[2] === u₂))) ||
                     ((u₁ === contigind) | (u₂ === contigind))
 
                     shifter -= 1
+                    offset = 0.5reg_size(ls) / cache_lnsze(ls)
                 end
                 r = 1 << shifter
-                srt *= r# * 2
+                srt *= r + offset
                 sl *= r
             elseif isload(op) & (length(loopdependencies(op)) > 1)# vmov(a/u)pd
                 # penalize vectorized loads with more than 1 loopdep
@@ -693,8 +696,40 @@ function isoptranslation(ls::LoopSet, op::Operation, unrollsyms::UnrollSymbols)
     end
     0, 0x00
 end
+# function maxnegativeoffset_old(ls::LoopSet, op::Operation, u::Symbol)
+#     opmref = op.ref
+#     opref = opmref.ref
+#     mno = typemin(Int)
+#     id = 0
+#     opoffs = opref.offsets
+#     for opp ∈ operations(ls)
+#         opp === op && continue
+#         oppmref = opp.ref
+#         oppref = oppmref.ref
+#         sameref(opref, oppref) || continue
+#         opinds = getindicesonly(op)
+#         oppinds = getindicesonly(opp)
+#         oppoffs = oppref.offsets
+#         # oploopi = opmref.loopedindex
+#         # opploopi = oppmref.loopedindex
+#         mnonew = typemin(Int)
+#         for i ∈ eachindex(opinds)
+#             if opinds[i] === u
+#                 mnonew = (opoffs[i] - oppoffs[i])
+#             elseif opoffs[i] != oppoffs[i]
+#                 mnonew = 1
+#                 break
+#             end
+#         end
+#         if mno < mnonew < 0
+#             mno = mnonew
+#             id = identifier(opp)
+#         end
+#     end
+#     mno, id
+# end
 function maxnegativeoffset(ls::LoopSet, op::Operation, u::Symbol)
-    mno = typemin(Int)
+    mno::Int = typemin(Int)
     id = 0
     omop = offsetloadcollection(ls)
     collectionid, opind = omop.opidcollectionmap[identifier(op)]
@@ -712,10 +747,10 @@ function maxnegativeoffset(ls::LoopSet, op::Operation, u::Symbol)
         opid == oppid && continue
         opp = ops[oppid]
         oppoffs = getoffsets(opp)
-        mnonew = typemin(Int)
+        mnonew::Int = typemin(Int)
         for i ∈ eachindex(opindices)
             if opindices[i] === u
-                mnonew = (opoffs[i] - oppoffs[i])
+                mnonew = ((opoffs[i] % Int) - (oppoffs[i] % Int))
             elseif opoffs[i] != oppoffs[i]
                 mnonew = 1
                 break
@@ -752,8 +787,10 @@ function load_elimination_cost_factor!(
     cost_vec, reg_pressure, choose_to_inline, ls::LoopSet, op::Operation, iters, unrollsyms::UnrollSymbols, Wshift, size_T
 )
     @unpack u₁loopsym, u₂loopsym, vloopsym = unrollsyms
+    # @show isoptranslation(ls, op, unrollsyms)
     if !iszero(first(isoptranslation(ls, op, unrollsyms)))
         rt, lat, rp = cost(ls, op, (u₁loopsym, u₂loopsym), vloopsym, Wshift, size_T)
+        # @show rt
         rto = rt
         rt *= iters
             # rt *= factor1; rp *= factor2;
@@ -968,8 +1005,10 @@ function evaluate_cost_tile(
         u₁reducesrp, u₂reducesrp = reduced_by_unrolling[1,2,id], reduced_by_unrolling[2,2,id]
         if isload(op)
             if add_constant_offset_load_elmination_cost!(cost_vec, reg_pressure, choose_to_inline, ls, op, iters[id], unrollsyms, u₁reducesrp, u₂reducesrp, Wshift, size_T, opisininnerloop)
+                # println("constoffelim")
                 continue
             elseif load_elimination_cost_factor!(cost_vec, reg_pressure, choose_to_inline, ls, op, iters[id], unrollsyms, Wshift, size_T)
+                # println("loadelim")
                 continue
             end
         #elseif isconstant(op)
@@ -998,7 +1037,8 @@ function evaluate_cost_tile(
     costpenalty = ((reg_pressure[1] + reg_pressure[2] + reg_pressure[3]) > reg_pressure[4]) ? 2 : 1
     u₁v = vloopsym === u₁loopsym; u₂v = vloopsym === u₂loopsym
     round_uᵢ = prefetch_good_idea ? (u₁v ? 1 : (u₂v ? 2 : 0)) : 0
-    if (irreducible_storecosts / sum(cost_vec) ≥ 0.25) && !any(op -> loadintostore(ls, op), operations(ls))
+    # @show (irreducible_storecosts / sum(cost_vec))
+    if (irreducible_storecosts / sum(cost_vec) ≥ 0.5) && !any(op -> loadintostore(ls, op), operations(ls))
         u₁, u₂ = (1, 1)
         ucost = unroll_cost(cost_vec, 1, 1, length(getloop(ls, u₁loopsym)), length(getloop(ls, u₂loopsym)))
     else

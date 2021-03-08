@@ -114,9 +114,9 @@
     #         C[m,n] += ΔCₘₙ * factor
     #     end;
     function AmuladdBavx!(C, A, B, α = one(eltype(C)))
-        @avx unroll=(2,2) for m ∈ axes(A,1), n ∈ axes(B,2)
+        @avx unroll=(2,2) for m ∈ indices((A,C),1), n ∈ indices((B,C),2)
             ΔCₘₙ = zero(eltype(C))
-            for k ∈ axes(A,2)
+            for k ∈ indices((A,B),(2,1))
                 ΔCₘₙ += A[m,k] * B[k,n]
             end
             C[m,n] += α * ΔCₘₙ
@@ -621,7 +621,8 @@
     C[m,n] = ΔCₘₙ
     end) |> LoopVectorization.loopset;
     if LoopVectorization.register_count() == 32
-        @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 1, 8)
+        # @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 1, 8)
+        @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :k, :n, :m, 1, 8)
     elseif LoopVectorization.register_count() == 16
         @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 2, 4)
     elseif LoopVectorization.register_count() == 8

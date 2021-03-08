@@ -250,9 +250,9 @@ function pointermax_index(
                 else
                     staticexpr(stophint - sub)
                 end
-                stride = getstrides(ar)[i]
+                stride = getstrides(ar)[j]
                 if isknown(incr)
-                    stride *= gethint
+                    stride *= gethint(incr)
                 else
                     _ind = mulexpr(_ind, getsym(incr))
                 end
@@ -353,7 +353,7 @@ function append_pointer_maxes!(
         dim = length(getindicesonly(ar))
         # OFFSETPRECALCDEF = true
         # if OFFSETPRECALCDEF
-        strd = getstrides(ar)[dim]
+        strd = getstrides(ar)[ind]
         for sub ∈ 0:submax-1
             ptrcmp = Expr(:call, lv(:gesp), pointercompbase, offsetindex(dim, ind, (submax - sub)*strd, isvectorized, incr))
             push!(loopstart.args, Expr(:(=), maxsym(vptr_ar, sub), ptrcmp))
@@ -373,6 +373,7 @@ function append_pointer_maxes!(
 end
 function append_pointer_maxes!(loopstart::Expr, ls::LoopSet, ar::ArrayReferenceMeta, n::Int, submax::Int, isvectorized::Bool)
     loop = getloop(ls, n)
+    @assert loop.itersymbol == names(ls)[n]
     start = first(loop)
     stop = last(loop)
     incr = step(loop)

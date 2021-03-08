@@ -229,7 +229,7 @@ end
 macro _avx(arg, q)
     @assert q.head === :for
     q = macroexpand(__module__, q)
-    inline, check_empty, u₁, u₂ = check_macro_kwarg(arg)
+    inline, check_empty, u₁, u₂ = check_macro_kwarg(arg, false, false, zero(Int8), zero(Int8), 1)
     ls = LoopSet(q, __module__)
     set_hw!(ls)
     esc(Expr(:block, ls.prepreamble, lower(ls, u₁ % Int, u₂ % Int, -1)))

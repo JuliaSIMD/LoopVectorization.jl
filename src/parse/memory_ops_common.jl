@@ -165,7 +165,7 @@ function add_affine_op!(ls::LoopSet, mult_syms::Vector{Tuple{Int,Symbol}}, const
     add_affine_index_expr!(ls, mult_syms, constant, stride, name(parent))    
     return nothing
 end
-function add_mul!(ls::LoopSet, mult_syms::Vector{Tuple{Int,Symbol}}, constant::Base.RefValue{Int}, stride::Int, arg1, arg2)
+function add_mul!(ls::LoopSet, mult_syms::Vector{Tuple{Int,Symbol}}, constant::Base.RefValue{Int}, stride::Int, arg1, arg2, expr)
     if arg1 isa Integer
         add_affine_index_expr!(ls, mult_syms, constant, stride * arg1, arg2)
     elseif arg2 isa Integer
@@ -180,7 +180,7 @@ function add_affine_index_expr!(ls::LoopSet, mult_syms::Vector{Tuple{Int,Symbol}
     f = expr.args[1]
     if f === :(*)
         @assert length(expr.args) == 3
-        add_mul!(ls, mult_syms, constant, stride, expr.args[2], expr.args[3])
+        add_mul!(ls, mult_syms, constant, stride, expr.args[2], expr.args[3], expr)
     elseif f === :(-)
         if length(expr.args) == 3
             add_affine_index_expr!(ls, mult_syms, constant, stride, expr.args[2])
@@ -418,6 +418,7 @@ function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementby
                     pushparent!(parents, loopdependencies, reduceddeps, indop)
                     push!(indices, name(indop)); ninds += 1
                     push!(offsets, zero(Int8))
+                    push!(strides, one(Int8))
                     push!(loopedindex, false)
                 else
                     vptrarray = subset_vptr!(ls, vptrarray, ninds, ind, indices, loopedindex, true)

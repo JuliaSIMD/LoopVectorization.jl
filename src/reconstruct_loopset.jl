@@ -208,9 +208,9 @@ function add_mref!(
     nothing
 end
 function add_mref!(
-    sptrs::Expr, ::LoopSet, ::ArrayReferenceMeta, @nospecialize(_::Type{VectorizationBase.FastRange{T,F,S}}),
+    sptrs::Expr, ::LoopSet, ::ArrayReferenceMeta, @nospecialize(_::Type{VectorizationBase.FastRange{T,F,S,O}}),
     ::Int, ::Int, ::Any, name::Symbol
-) where {T,F,S}
+) where {T,F,S,O}
     extract_gsp!(sptrs, name)
 end
 function create_mrefs!(
@@ -221,9 +221,21 @@ function create_mrefs!(
     sptrs = Expr(:tuple)
     # pushpreamble!(ls, Expr(:(=), sptrs, :(VectorizationBase.stridedpointers(getfield(vargs, 1, false)))))
     pushpreamble!(ls, Expr(:(=), sptrs, :(VectorizationBase.stridedpointers(getfield(var"#vargs#", 1, false)))))
+    j = 0
     for i ∈ eachindex(arf)
         ar = ArrayReferenceMeta(ls, arf[i], as, os, nopsv, expanded)
-        add_mref!(sptrs, ls, ar, P.parameters[i], C[i], B[i], R[i], vptr(ar))
+        duplicate = false
+        vptrar = vptr(ar)
+        for k ∈ 1:i-1
+            if vptr(mrefs[k]) === vptrar
+                duplicate = true
+                break
+            end
+        end
+        if !duplicate
+            j += 1
+            add_mref!(sptrs, ls, ar, P.parameters[j], C[j], B[j], R[j], vptr(ar))
+        end
         mrefs[i] = ar
     end
     mrefs
@@ -427,7 +439,7 @@ end
 # typeeltype(::Type{P}) where {T,P<:VectorizationBase.AbstractStridedPointer{T}} = T
 typeeltype(::Type{Ptr{T}}) where {T} = T
 # typeeltype(::Type{Core.LLVMPtr{T,0}}) where {T} = T
-typeeltype(::Type{VectorizationBase.FastRange{T,F,S}}) where {T,F,S} = T
+typeeltype(::Type{VectorizationBase.FastRange{T,F,S,O}}) where {T,F,S,O} = T
 typeeltype(::Type{T}) where {T<:Real} = T
 # typeeltype(::Any) = Int8
 
@@ -454,7 +466,8 @@ function extract_external_functions!(ls::LoopSet, offset::Int, vargs)
     end
     offset
 end
-function sizeofeltypes(v, num_arrays)::Int
+function sizeofeltypes(v)::Int
+    num_arrays = length(v)::Int
     if num_arrays == 0
         return 8
     end
@@ -486,9 +499,8 @@ function avx_loopset(
     AM::Vector{Any}, LPSYM::Vector{Any}, LB::Core.SimpleVector, vargs::Core.SimpleVector
 )
     ls = LoopSet(:LoopVectorization)
-    num_arrays = length(arf)
     # TODO: check outer reduction types instead
-    elementbytes = num_arrays == 0 ? 8 : sizeofeltypes(vargs[1].parameters[1].parameters, num_arrays)
+    elementbytes = sizeofeltypes(vargs[1].parameters[1].parameters)
     pushpreamble!(ls, :((var"#loop#bounds#", var"#vargs#") = var"#lv#tuple#args#"))
     add_loops!(ls, LPSYM, LB)
     resize!(ls.loop_order, ls.loopsymbol_offsets[end])
