@@ -387,7 +387,8 @@ end
         :block,
         ls.prepreamble,
         # Expr(:if, check_args_call(ls), Expr(:block, :(println("Primary code path!")), q), Expr(:block, :(println("Back up code path!")), :(Base.Broadcast.materialize!(dest, bc))))
-        Expr(:if, check_args_call(ls), q, :(Base.Broadcast.materialize!(dest, bc)))
+        Expr(:if, check_args_call(ls), q, :(Base.Broadcast.materialize!(dest, bc))),
+        :dest
     )
     # isone(N) && pushfirst!(q.args, Expr(:meta,:inline))
     q
@@ -415,7 +416,8 @@ end
     q = Expr(
         :block,
         ls.prepreamble,
-        Expr(:if, check_args_call(ls), q, :(Base.Broadcast.materialize!(dest′, bc)))
+        Expr(:if, check_args_call(ls), q, :(Base.Broadcast.materialize!(dest′, bc))),
+        :dest′
     )
     # isone(N) && pushfirst!(q.args, Expr(:meta,:inline))
     q
