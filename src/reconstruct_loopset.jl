@@ -329,7 +329,7 @@ function loopindexoffset(ls::LoopSet, u::Unsigned, li::Bool, expand::Bool = fals
     expandbyoffset(idxs, offsets, expand)
 end
 function parents_symvec(ls::LoopSet, u::Unsigned, expand, offset)
-    idxs = loopindexoffset(ls, u, true, expand)   # FIXME DRY  (undesirable that this gets hard-coded in multiple places)
+    idxs = loopindexoffset(ls, u, true, expand)   # TODO DRY  (undesirable that this gets hard-coded in multiple places)
     return Symbol[getloopsym(ls, i + offset) for i ∈ idxs]
 end
 loopdependencies(ls::LoopSet, os::OperationStruct, expand = false, offset = 0) = parents_symvec(ls, os.loopdeps, expand, offset)
@@ -347,7 +347,7 @@ function calcnops(ls::LoopSet, os::OperationStruct)
         return 1
     end
     offsets = ls.loopsymbol_offsets
-    idxs = loopindex(ls, os.loopdeps, 0x04)  # FIXME DRY
+    idxs = loopindex(ls, os.loopdeps, 0x04)  # TODO DRY
     iszero(length(idxs)) && return 1
     return maximum(i->offsets[i+1]-offsets[i], idxs)
 end
@@ -619,7 +619,7 @@ Execute an `@avx` block. The block's code is represented via the arguments:
 @generated function _avx_!(
     ::Val{UNROLL}, ::Val{OPS}, ::Val{ARF}, ::Val{AM}, ::Val{LPSYM}, var"#lv#tuple#args#"::Tuple{LB,V}
 ) where {UNROLL, OPS, ARF, AM, LPSYM, LB, V}
-    # 1 + 1 # Irrelevant line you can comment out/in to force recompilation...
+    1 + 1 # Irrelevant line you can comment out/in to force recompilation...
     ls = _avx_loopset(OPS, ARF, AM, LPSYM, LB.parameters, V.parameters, UNROLL)
     # return @show avx_body(ls, UNROLL)
     if last(UNROLL) > 1

@@ -117,7 +117,7 @@ function lower_load_no_optranslation!(
     u = ifelse(opu₁, u₁, 1)
     mvar = Symbol(variable_name(op, Core.ifelse(isu₂unrolled(op), suffix,-1)), '_', u)
     falseexpr = Expr(:call, lv(:False)); rs = staticexpr(reg_size(ls))
-    if all(op.ref.loopedindex)
+    if all(op.ref.loopedindex) && !rejectcurly(op)
         inds = unrolledindex(op, td, mask, inds_calc_by_ptr_offset)
         loadexpr = Expr(:call, lv(:_vload), vptr(op), inds)
         add_memory_mask!(loadexpr, op, td, mask)
@@ -325,29 +325,62 @@ end
 function _lower_load!(
     q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, mask::Bool, inds_calc_by_ptr_offset::Vector{Bool} = indices_calculated_by_pointer_offsets(ls, op.ref)
 )
-    omop = offsetloadcollection(ls)
-    batchid, opind = omop.batchedcollectionmap[identifier(op)]
-    # @show batchid == 0 (!isvectorized(op)) rejectinterleave(ls, op, td.vloop, idsformap)
-    if batchid == 0 || (!isvectorized(op)) || (rejectinterleave(ls, op, td.vloop, omop.batchedcollections[batchid]))
+    if rejectinterleave(op)
         lower_load_no_optranslation!(q, ls, op, td, mask, inds_calc_by_ptr_offset)
-    elseif opind == 1# only lower loads once
-        # I do not believe it is possible for `opind == 1` to be lowered after an  operation depending on a different opind.
-        # lower_load_collection!(q, ls, op, td, mask, collectionid)
+    else        
         omop = offsetloadcollection(ls)
-        collectionid, copind = omop.opidcollectionmap[identifier(op)]
-        opidmap = offsetloadcollection(ls).opids[collectionid]
-        idsformap = omop.batchedcollections[batchid]
-        lower_load_collection!(q, ls, opidmap, idsformap, td, mask, inds_calc_by_ptr_offset)
+        batchid, opind = omop.batchedcollectionmap[identifier(op)]
+        if opind == 1
+            collectionid, copind = omop.opidcollectionmap[identifier(op)]
+            opidmap = offsetloadcollection(ls).opids[collectionid]
+            idsformap = omop.batchedcollections[batchid]
+            lower_load_collection!(q, ls, opidmap, idsformap, td, mask, inds_calc_by_ptr_offset)
+        end
     end
 end
-function addive_loopinductvar_only(op::Operation)
+function additive_vectorized_loopinductvar_only(op::Operation)
+    isvectorized(op) || return true
     isloopvalue(op) && return true
     iscompute(op) || return false
     additive_instr = (:add_fast, :(+), :vadd, :identity, :sub_fast, :(-), :vsub)
     Base.sym_in(instruction(op).instr, additive_instr) || return false
-    return all(addive_loopinductvar_only, parents(op))
+    return all(additive_vectorized_loopinductvar_only, parents(op))
 end
-
+# Checks if we cannot use `Unroll`
+function rejectcurly(ls::LoopSet, op::Operation, td::UnrollArgs)
+    @unpack u₁loopsym, vloopsym = td
+    rejectcurly(ls, op, u₁loopsym, vloopsym)
+end
+function rejectcurly(ls::LoopSet, op::Operation, u₁loopsym::Symbol, vloopsym::Symbol)
+    indices = getindicesonly(op)
+    li = op.ref.loopedindex
+    AV = AU = false
+    for (n,ind) ∈ enumerate(indices)
+        # @show AU, op, n, ind, vloopsym, u₁loopsym
+        if li[n]
+            if ind === vloopsym
+                AV && return true
+                AV = true
+            end
+            if ind === u₁loopsym
+                AU && return true
+                AU = true
+            end
+        else
+            opp = findop(parents(op), ind)
+            # @show opp
+            if isvectorized(opp)
+                AV && return true
+                AV = true
+            end
+            if (u₁loopsym === CONSTANTZEROINDEX) ? (CONSTANTZEROINDEX ∈ loopdependencies(opp)) : (isu₁unrolled(opp))
+                AU && return true
+                AU = true
+            end
+        end
+    end
+    false
+end
 function rejectinterleave(ls::LoopSet, op::Operation, vloop::Loop, idsformap::SubArray{Tuple{Int,Int}, 1, Vector{Tuple{Int,Int}}, Tuple{UnitRange{Int}}, true})
     vloopsym = vloop.itersymbol; strd = step(vloop)
     isknown(strd) || return true
@@ -356,7 +389,7 @@ function rejectinterleave(ls::LoopSet, op::Operation, vloop::Loop, idsformap::Su
         li && continue
         for indop ∈ operations(ls)
             if (name(indop) === ind) && isvectorized(indop)
-                addive_loopinductvar_only(op) || return true # so that it is `MM`
+                additive_vectorized_loopinductvar_only(indop) || return true # so that it is `MM`
             end
         end
     end

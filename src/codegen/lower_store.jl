@@ -26,8 +26,13 @@ function reduce_expr_u₂(toreduct::Symbol, instr::Instruction, u₂::Int)
     end
     Expr(:call, lv(:reduce_tup), reduce_to_onevecunroll(instr), t)
 end
-function reduce_expr!(q::Expr, toreduct::Symbol, instr::Instruction, u₁::Int, u₂::Int, isu₁unrolled::Bool)
-    if u₂ != -1
+function reduce_expr!(q::Expr, toreduct::Symbol, instr::Instruction, u₁::Int, u₂::Int, isu₁unrolled::Bool, isu₂unrolled::Bool)
+    # if u₂ == -1
+    #     u₁u, u₂u = (true, false)
+    # else
+    #     u₁u, u₂u = isunrolled_sym(op, getloop(ls, us.u₁loopnum).itersymbol, getloop(ls, us.u₂loopnum).itersymbol, _Umax)
+    # end
+    if isu₂unrolled# u₂ != -1
         _toreduct = Symbol(toreduct, 0)
         push!(q.args, Expr(:(=), _toreduct, reduce_expr_u₂(toreduct, instr, u₂)))
     else
@@ -105,7 +110,7 @@ function lower_store!(
 
     omop = offsetloadcollection(ls)
     batchid, opind = omop.batchedcollectionmap[identifier(op)]
-    if ((batchid ≠ 0) && isvectorized(op)) && (!rejectinterleave(ls, op, vloop, omop.batchedcollections[batchid]))
+    if ((batchid ≠ 0) && isvectorized(op)) && (!rejectinterleave(op))
         (opind == 1) && lower_store_collection!(q, ls, op, ua, mask, inds_calc_by_ptr_offset)
         return
     end
@@ -173,10 +178,10 @@ end
 
 function donot_tile_store(ls::LoopSet, op::Operation, vloop::Loop, reductfunc::Symbol, u₂::Int)
     (!((reductfunc === Symbol("")) && all(op.ref.loopedindex))) || (u₂ ≤ 1) || isconditionalmemop(op) && return true
-
+    rejectcurly(op) && return true
     omop = offsetloadcollection(ls)
     batchid, opind = omop.batchedcollectionmap[identifier(op)]
-    return ((batchid ≠ 0) && isvectorized(op)) && (!rejectinterleave(ls, op, vloop, omop.batchedcollections[batchid]))
+    return ((batchid ≠ 0) && isvectorized(op)) && (!rejectinterleave(op))
 end
 
 # VectorizationBase implements optimizations for certain grouped stores

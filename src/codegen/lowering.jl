@@ -73,7 +73,8 @@ function lower_block(
             end
         else
             # for u ∈ 0:u₁-1     #  u₁ && !u₂
-            lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, u₂, -1, mask, true, true)
+            lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, u₂, -1, mask, true, false)
+            lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, u₂, -1, mask, false, true)
             # end
         end
         if n > 1 && prepost == 1
@@ -434,7 +435,7 @@ end
 
 # TODO: handle tiled outer reductions; they will require a suffix arg
 function initialize_outer_reductions!(
-    q::Expr, op::Operation, _Umax::Int, vectorized::Symbol, us::UnrollSpecification, rs::Expr
+    q::Expr, ls::LoopSet, op::Operation, _Umax::Int, vectorized::Symbol, us::UnrollSpecification, rs::Expr
 )
     @unpack u₁, u₂ = us
     Umax = u₂ == -1 ? _Umax : u₁
@@ -459,12 +460,18 @@ function initialize_outer_reductions!(
         Expr(:call, reduct_zero, typeTr)
     end
     mvar = variable_name(op, -1)
+    # u1u, u2u = isunrolled_sym(op, getloop(ls, us.u₁loopnum).itersymbol, u₂loop, u₂max)
     if u₂ == -1
         push!(q.args, Expr(:(=), Symbol(mvar, '_', _Umax), z))
     else
-        for u ∈ 0:_Umax-1
-            # push!(q.args, Expr(:(=), Symbol(mvar, '_', u), z))
-            push!(q.args, Expr(:(=), Symbol(mvar, u), z))
+        u₁u, u₂u = isunrolled_sym(op, getloop(ls, us.u₁loopnum).itersymbol, getloop(ls, us.u₂loopnum).itersymbol, u₂)
+        if u₁u
+            push!(q.args, Expr(:(=), Symbol(mvar, '_', _Umax), z))
+        else            
+            for u ∈ 0:_Umax-1
+                # push!(q.args, Expr(:(=), Symbol(mvar, '_', u), z))
+                push!(q.args, Expr(:(=), Symbol(mvar, u), z))
+            end
         end
     end
     nothing
@@ -473,7 +480,7 @@ function initialize_outer_reductions!(q::Expr, ls::LoopSet, Umax::Int, vectorize
     rs = staticexpr(reg_size(ls))
     us = ls.unrollspecification[]
     for or ∈ ls.outer_reductions
-        initialize_outer_reductions!(q, ls.operations[or], Umax, vectorized, us, rs)
+        initialize_outer_reductions!(q, ls, ls.operations[or], Umax, vectorized, us, rs)
     end
 end
 initialize_outer_reductions!(ls::LoopSet, Umax::Int, vectorized::Symbol) = initialize_outer_reductions!(ls.preamble, ls, Umax, vectorized)
@@ -529,18 +536,21 @@ end
 ## This performs reduction to one `Vec`
 function reduce_expr!(q::Expr, ls::LoopSet, U::Int)
     us = ls.unrollspecification[]
-    u1f, u2f = if us.u₂ == -1 # TODO: these multiple meanings make code hard to follow. Simplify.
+    u₁f, u₂f = if us.u₂ == -1 # TODO: these multiple meanings make code hard to follow. Simplify.
         ifelse(U == -1, us.u₁, U), -1
     else
         us.u₁, U
     end
     # u₁loop, u₂loop = getunrolled(ls)
+    u₁loop = getloop(ls, us.u₁loopnum).itersymbol
+    u₂loop = getloop(ls, us.u₂loopnum).itersymbol
     for or ∈ ls.outer_reductions
         op = ls.operations[or]
         var = name(op)
         mvar = mangledvar(op)
         instr = instruction(op)
-        reduce_expr!(q, mvar, instr, u1f, u2f, isu₁unrolled(op))
+        u₁u, u₂u = isunrolled_sym(op, u₁loop, u₂loop, u₂f)
+        reduce_expr!(q, mvar, instr, u₁f, u₂f, u₁u, u₂u)#isu₁unrolled(op))
         if !iszero(length(ls.opdict))
             if (isu₁unrolled(op) | isu₂unrolled(op))
                 push!(q.args, Expr(:(=), var, Expr(:call, lv(reduction_scalar_combine(instr)), Symbol(mvar, "##onevec##"), var)))

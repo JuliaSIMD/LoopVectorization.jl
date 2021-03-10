@@ -249,7 +249,7 @@ function checkforoffset!(
     ls::LoopSet, vptrarray::Symbol, ninds::Int, parents::Vector{Operation}, indices::Vector{Symbol}, offsets::Vector{Int8}, strides::Vector{Int8},
     loopedindex::Vector{Bool}, loopdependencies::Vector{Symbol}, reduceddeps::Vector{Symbol}, ind::Expr
 )::Symbol
-    
+
     offset, mult_syms = affine_index_expression(ls, ind)
     if !byterepresentable(offset)
         if length(mult_syms) == 1
@@ -299,8 +299,8 @@ function checkforoffset!(
                 push!(deleteat_inds, i)
                 push!(operation_mults, m)
             end
-        elseif s ∈ keys(ls.opdict)
-            push!(operations, ls.opdict[s])
+        else
+            push!(operations, getop(ls, s, 8))
             push!(operation_mults, m)
             push!(deleteat_inds, i)
         end

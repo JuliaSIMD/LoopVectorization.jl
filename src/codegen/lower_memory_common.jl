@@ -172,18 +172,34 @@ function unrolled_curly(op::Operation, u₁::Int, u₁loop::Loop, vloop::Loop, m
     vloopsym = vloop.itersymbol
     indices = getindicesonly(op)
     vstep = step(vloop)
-    # loopedindex = op.ref.loopedindex
+    li = op.ref.loopedindex
     # @assert all(loopedindex)
     # @unpack u₁, u₁loopsym, vloopsym = td
     # @show vptr(op), inds_calc_by_ptr_offset
     # isone(u₁) && return mem_offset_u(op, td, inds_calc_by_ptr_offset, true)
     AV = AU = -1
     for (n,ind) ∈ enumerate(indices)
-        if ind === vloopsym
-            AV = n
-        end
-        if ind === u₁loopsym
-            AU = n
+        # @show AU, op, n, ind, vloopsym, u₁loopsym
+        if li[n]
+            if ind === vloopsym
+                @assert AV == -1 # FIXME: these asserts should be replaced with checks that prevent using `unrolled_curly` in these cases (also to be reflected in cost modeling, to avoid those)
+                AV = n
+            end
+            if ind === u₁loopsym
+                @assert AU == -1
+                AU = n
+            end
+        else
+            opp = findop(parents(op), ind)
+            # @show opp
+            if isvectorized(opp)
+                @assert AV == -1
+                AV = n
+            end
+            if (u₁loopsym === CONSTANTZEROINDEX) ? (CONSTANTZEROINDEX ∈ loopdependencies(opp)) : (isu₁unrolled(opp))
+                @assert AU == -1
+                AU = n
+            end
         end
     end
     # if AU == -1

@@ -24,11 +24,11 @@ DocStringExtensions = "0.8"
 IfElse = "0.1"
 OffsetArrays = "1.4.1, 1.5"
 Requires = "1"
-SLEEFPirates = "0.6.11"
+SLEEFPirates = "0.6.12"
 Static = "0.2"
 ThreadingUtilities = "0.3"
 UnPack = "1"
-VectorizationBase = "0.19.3"
+VectorizationBase = "0.19.5"
 julia = "1.5"
 
 [extras]

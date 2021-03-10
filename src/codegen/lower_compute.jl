@@ -1,9 +1,8 @@
 
 
 function load_constrained(op, u₁loop, u₂loop, innermost_loop_or_vloop, forprefetch = false)
-    loopdeps = loopdependencies(op)
-    dependsonu₁ = u₁loop ∈ loopdeps
-    dependsonu₂ = u₂loop ∈ loopdeps
+    dependsonu₁ = isu₁unrolled(op)
+    dependsonu₂ = isu₂unrolled(op)
     if forprefetch
         (dependsonu₁ & dependsonu₂) || return false
     end

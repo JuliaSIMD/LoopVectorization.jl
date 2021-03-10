@@ -187,6 +187,10 @@ mutable struct Operation <: AbstractLoopOperation
     u₂unrolled::Bool
     "Cached value for whether vectorized ∈ loopdependencies(op)"
     vectorized::Bool
+    "Cached value for whether or not to lower memop using `Unrolled`"
+    rejectcurly::Bool
+    "Cached value for whether or not to lower memop by interleaving it with offset operations"
+    rejectinterleave::Bool
     function Operation(
         identifier::Int,
         variable,

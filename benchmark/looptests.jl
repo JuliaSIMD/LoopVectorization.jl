@@ -64,12 +64,51 @@ function jgemm!(𝐂, 𝐀ᵀ::Adjoint, 𝐁ᵀ::Adjoint)
     end
 end
 function gemmavx!(𝐂, 𝐀, 𝐁)
-    @avx for m ∈ axes(𝐀,1), n ∈ axes(𝐁,2)
+    @avx for m ∈ indices((𝐀,𝐂),1), n ∈ indices((𝐁,𝐂),2)
+        𝐂ₘₙ = zero(eltype(𝐂))
+        for k ∈ indices((𝐀,𝐁),(2,1))
+            𝐂ₘₙ += 𝐀[m,k] * 𝐁[k,n]
+        end
+        𝐂[m,n] = 𝐂ₘₙ
+    end
+end
+function gemmavx!(Cc::AbstractMatrix{Complex{T}}, Ac::AbstractMatrix{Complex{T}}, Bc::AbstractMatrix{Complex{T}}) where {T}
+    A = reinterpret(reshape, T, Ac)
+    B = reinterpret(reshape, T, Bc)
+    C = reinterpret(reshape, T, Cc)
+    @avx for m ∈ indices((A,C),2), n ∈ indices((B,C),3)
+        Cre = zero(T)
+        Cim = zero(T)
+        for k ∈ indices((A,B),(3,2))
+            Cre += A[1,m,k]*B[1,k,n] - A[2,m,k]*B[2,k,n]
+            Cim += A[1,m,k]*B[2,k,n] + A[2,m,k]*B[1,k,n]
+        end
+        C[1,m,n] = Cre
+        C[2,m,n] = Cim
+    end
+end
+function gemmavxt!(𝐂, 𝐀, 𝐁)
+    @avxt for m ∈ axes(𝐀,1), n ∈ axes(𝐁,2)
         𝐂ₘₙ = zero(eltype(𝐂))
         for k ∈ axes(𝐀,2)
             𝐂ₘₙ += 𝐀[m,k] * 𝐁[k,n]
         end
         𝐂[m,n] = 𝐂ₘₙ
+    end
+end
+function gemmavxt!(Cc::AbstractMatrix{Complex{T}}, Ac::AbstractMatrix{Complex{T}}, Bc::AbstractMatrix{Complex{T}}) where {T}
+    A = reinterpret(reshape, T, Ac)
+    B = reinterpret(reshape, T, Bc)
+    C = reinterpret(reshape, T, Cc)
+    @avxt for m ∈ indices((A,C),2), n ∈ indices((B,C),3)
+        Cre = zero(T)
+        Cim = zero(T)
+        for k ∈ indices((A,B),(3,2))
+            Cre += A[1,m,k]*B[1,k,n] - A[2,m,k]*B[2,k,n]
+            Cim += A[1,m,k]*B[2,k,n] + A[2,m,k]*B[1,k,n]
+        end
+        C[1,m,n] = Cre
+        C[2,m,n] = Cim
     end
 end
 function jdot(a, b)
@@ -84,6 +123,14 @@ function jdotavx(a, b)
     s = zero(eltype(a))
     # @avx for i ∈ eachindex(a,b)
     @avx for i ∈ eachindex(a)
+        s += a[i] * b[i]
+    end
+    s
+end
+function jdotavxt(a, b)
+    s = zero(eltype(a))
+    # @avx for i ∈ eachindex(a,b)
+    @avxt for i ∈ eachindex(a)
         s += a[i] * b[i]
     end
     s
@@ -324,3 +371,18 @@ function filter2dunrolledavx!(out::AbstractMatrix, A::AbstractMatrix, kern::Size
     end
     out
 end
+
+
+# function smooth_line!(sl,nrm1,j,i1,rl,ih2,denom)
+#     @fastmath @inbounds @simd ivdep for i=i1:2:nrm1
+#         sl[i,j]=denom*(rl[i,j]+ih2*(sl[i,j-1]+sl[i-1,j]+sl[i+1,j]+sl[i,j+1]))
+#     end
+# end
+# function smooth_line_avx!(sl,nrm1,j,i1,sl,rl,ih2,denom)
+#     @avx for i=i1:2:nrm1
+#         sl[i,j]=denom*(rl[i,j]+ih2*(sl[i,j-1]+sl[i-1,j]+sl[i+1,j]+sl[i,j+1]))
+#     end
+# end
+
+
+

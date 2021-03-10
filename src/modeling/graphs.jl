@@ -573,16 +573,29 @@ This is used so that identical loops will create identical `_avx_!` calls in the
 """
 gensym!(ls::LoopSet, s) = Symbol("###$(s)###$(ls.symcounter[] += 1)###")
 
-function cacheunrolled!(ls::LoopSet, u₁loop, u₂loop, vloopsym)
+function cacheunrolled!(ls::LoopSet, u₁loop::Symbol, u₂loop::Symbol, vloopsym::Symbol)
+    vloop = getloop(ls, vloopsym)
     for op ∈ operations(ls)
         setunrolled!(op, u₁loop, u₂loop, vloopsym)
         empty!(children(op))
         for opp ∈ parents(op)
             push!(children(opp), op)
         end
+        if accesses_memory(op)
+            rc = rejectcurly(ls, op, u₁loop, vloopsym)
+            op.rejectcurly = rc
+            if rc
+                op.rejectinterleave = true
+            else
+                omop = ls.omop
+                batchid, opind = omop.batchedcollectionmap[identifier(op)]
+                op.rejectinterleave = ((batchid == 0) || (!isvectorized(op))) || rejectinterleave(ls, op, vloop, omop.batchedcollections[batchid])
+            end
+        end
     end
 end
-
+rejectcurly(op::Operation) = op.rejectcurly
+rejectinterleave(op::Operation) = op.rejectinterleave
 num_loops(ls::LoopSet) = length(ls.loops)
 function oporder(ls::LoopSet)
     N = length(ls.loop_order.loopnames)
@@ -639,6 +652,14 @@ function getop(ls::LoopSet, var::Symbol, deps, elementbytes::Int)
     end
 end
 getop(ls::LoopSet, i::Int) = ls.operations[i]
+
+findop(ls::LoopSet, s::Symbol) = findop(operations(ls), s)
+function findop(ops::Vector{Operation}, s::Symbol)
+    for op ∈ ops
+        name(op) === s && return op
+    end
+    throw(ArgumentError("Symbol $s not found."))
+end
 
 # """
 # Returns an operation with the same name as `s`.

@@ -69,10 +69,7 @@ end
 function cost(ls::LoopSet, op::Operation, (u₁,u₂)::Tuple{Symbol,Symbol}, vloopsym::Symbol, Wshift::Int, size_T::Int = op.elementbytes)
     isconstant(op) && return 0.0, 0, Float64(length(loopdependencies(op)) > 0)
     isloopvalue(op) && return 0.0, 0, 0.0
-    # Wshift == dependson(op, vloopsym) ? Wshift : 0
-    # c = first(cost(instruction(op), Wshift, size_T))::Int
     instr = instruction(op)
-    # instr = instruction(op)
     if length(parents(op)) == 1
         if instr == Instruction(:-) || instr === Instruction(:sub_fast) || instr == Instruction(:+) || instr == Instruction(:add_fast)
             return 0.0, 0, 0.0
@@ -80,7 +77,7 @@ function cost(ls::LoopSet, op::Operation, (u₁,u₂)::Tuple{Symbol,Symbol}, vlo
     elseif iscompute(op) && all(opp -> (isloopvalue(opp) | isconstant(opp)), parents(op))
         return 0.0, 0, 0.0
     end
-    opisvectorized = dependson(op, vloopsym)
+    opisvectorized = isvectorized(op)
     srt, sl, srp = opisvectorized ? vector_cost(instr, Wshift, size_T) : scalar_cost(instr)
     if accesses_memory(op)
         # either vbroadcast/reductionstore, vmov(a/u)pd, or gather/scatter
@@ -88,18 +85,16 @@ function cost(ls::LoopSet, op::Operation, (u₁,u₂)::Tuple{Symbol,Symbol}, vlo
             if !unitstride(ls, op, vloopsym)# || !isdense(op) # need gather/scatter
                 indices = getindices(op)
                 contigind = first(indices)
-                batchid, _opind = offsetloadcollection(ls).batchedcollectionmap[identifier(op)]
-                # batchid ≠ 0 && @show rejectinterleave(ls, op, getloop(ls, vloopsym), ls.omop.batchedcollections[batchid])
-                if (batchid ≠ 0) && !rejectinterleave(ls, op, getloop(ls, vloopsym), ls.omop.batchedcollections[batchid])
-                # if (batchid ≠ 0) && !isdiscontiguous(op)
-                    shifter = 2
-                    offset = 0.5reg_size(ls) / cache_lnsze(ls)
-                else
+                # @show rejectinterleave(op) op
+                if rejectinterleave(op)
                     shifter = Wshift
                     offset = 0.0 # gather/scatter, alignment doesn't matter
+                else
+                    shifter = 2
+                    offset = 0.5reg_size(ls) / cache_lnsze(ls)
                 end
-                if ((contigind === CONSTANTZEROINDEX) && ((length(indices) > 1) && (indices[2] === u₁) || (indices[2] === u₂))) ||
-                    ((u₁ === contigind) | (u₂ === contigind))
+                if !rejectcurly(op) && (((contigind === CONSTANTZEROINDEX) && ((length(indices) > 1) && (indices[2] === u₁) || (indices[2] === u₂))) ||
+                    ((u₁ === contigind) | (u₂ === contigind)))
 
                     shifter -= 1
                     offset = 0.5reg_size(ls) / cache_lnsze(ls)
@@ -175,6 +170,7 @@ function evaluate_cost_unroll(
     W, Wshift = lsvecwidthshift(ls, vloopsym, size_T)
     # Need to check if fusion is possible
     for itersym ∈ order
+        cacheunrolled!(ls, itersym, Symbol(""), vloopsym)
         # Add to set of defined symbles
         push!(nested_loop_syms, itersym)
         looplength = length(ls, itersym)
@@ -257,7 +253,7 @@ function unroll_no_reductions(ls, order, vloopsym)
     compute_l = 0.0
     # rp = 0
     for op ∈ operations(ls)
-        dependson(op, unrolled) || continue
+        isu₁unrolled(op) || continue
         rt, sl, rpop = cost(ls, op, (unrolled,Symbol("")), vloopsym, Wshift, size_T)
         # rp += rpop
         if iscompute(op)
@@ -289,7 +285,7 @@ function unroll_no_reductions(ls, order, vloopsym)
     # commented out here is to decide to align loops
     # if memory_rt > compute_rt && isone(u) && (length(order) > 1) && (last(order) === vloopsym) && length(getloop(ls, last(order))) > 8W
     #     ls.align_loops[] = findfirst(operations(ls)) do op
-    #         isstore(op) && dependson(op, unrolled)
+    #         isstore(op) && isu₁unrolled(op)
     #     end
     # end
     if unrolled === vloopsym
@@ -303,6 +299,7 @@ end
 function determine_unroll_factor(
     ls::LoopSet, order::Vector{Symbol}, unrolled::Symbol, vloopsym::Symbol
 )
+    cacheunrolled!(ls, unrolled, Symbol(""), vloopsym)
     size_T = biggest_type_size(ls)
     W, Wshift = lsvecwidthshift(ls, vloopsym, size_T)
 
@@ -316,10 +313,8 @@ function determine_unroll_factor(
     load_recip_throughput = 0.0
     store_recip_throughput = 0.0
     for op ∈ operations(ls)
-        # dependson(op, unrolled) || continue
         if isreduction(op)
             rt, sl = depchain_cost!(ls, visited_nodes, op, unrolled, vloopsym, Wshift, size_T)
-            # @show op, rt, sl
             if isouterreduction(ls, op) ≠ -1 || unrolled ∉ reduceddependencies(op)
                 latency = max(sl, latency)
             end
