@@ -272,10 +272,10 @@ function unroll_no_reductions(ls, order, vloopsym)
     # heuristic guess
     # roundpow2(min(4, round(Int, (compute_rt + load_rt + 1) / compute_rt)))
     memory_rt = load_rt + store_rt
-    @show memory_rt, load_rt, store_rt, compute_rt, compute_l
+    # @show memory_rt, load_rt, store_rt, compute_rt, compute_l
     
     u = if compute_rt > memory_rt
-        @show clamp(round(Int, compute_l / compute_rt), 1, 4)
+        # @show clamp(round(Int, compute_l / compute_rt), 1, 4)
         # max(1, VectorizationBase.nextpow2( min( 4, round(Int, 8 / compute_rt) ) ))
     elseif iszero(compute_rt)
         4
