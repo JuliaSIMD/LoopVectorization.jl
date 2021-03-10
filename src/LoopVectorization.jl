@@ -36,7 +36,13 @@ using Base.FastMath: add_fast, sub_fast, mul_fast, div_fast, inv_fast, abs2_fast
 
 
 using ArrayInterface
-using ArrayInterface: OptionallyStaticUnitRange, OptionallyStaticRange, Zero, One, StaticBool, True, False, reduce_tup, indices, static_step
+using ArrayInterface: OptionallyStaticUnitRange, OptionallyStaticRange, Zero, One, StaticBool, True, False, reduce_tup, indices
+@static if VERSION ≥ v"1.6.0-rc1" #TODO: delete `else` when dropping 1.5 support
+    using ArrayInterface: static_step
+else # Julia 1.5 did not define `step` on CartesianIndices
+    @inline static_step(x) = ArrayInterface.static_step
+    static_step(x::CartesianIndices) = CartesianIndex(map(step, x.indices))
+end
 const Static = ArrayInterface.StaticInt
 
 using Requires
@@ -49,6 +55,7 @@ export LowDimArray, stridedpointer, indices,
     vfilter, vfilter!, vmapreduce, vreduce
 
 const VECTORWIDTHSYMBOL, ELTYPESYMBOL, MASKSYMBOL = Symbol("##Wvecwidth##"), Symbol("##Tloopeltype##"), Symbol("##mask##")
+
 
 include("vectorizationbase_compat/contract_pass.jl")
 include("vectorizationbase_compat/subsetview.jl")

@@ -351,7 +351,7 @@ function lower_compute!(
             else
                 newpname = Symbol(newparentname, '_', u₁)
                 push!(q.args, Expr(:(=), newpname, Symbol(parentname, '_', u₁)))
-                reduce_expr!(q, newparentname, instruction(newparentop), u₁, -1, true)
+                reduce_expr!(q, newparentname, instruction(newparentop), u₁, -1, true, false)
                 push!(q.args, Expr(:(=), Symbol(newparentname, '_', 1), Symbol(newparentname, "##onevec##")))
             end
         end
