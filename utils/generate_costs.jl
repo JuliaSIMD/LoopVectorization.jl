@@ -93,11 +93,17 @@ let
     vu2 = VectorizationBase.VecUnroll(ntuple(_ -> Vec(ntuple(_ -> 10randn(), pick_vector_width(Float64))...), Val(2)));
     vu4 = VectorizationBase.VecUnroll(ntuple(_ -> Vec(ntuple(_ -> 10randn(), pick_vector_width(Float64))...), Val(4)));
     vu8 = VectorizationBase.VecUnroll(ntuple(_ -> Vec(ntuple(_ -> 10randn(), pick_vector_width(Float64))...), Val(8)));
-    for binaryf ∈ [log, log2, log10, log1p, exp, exp2, exp10, expm1, sin, cos]
+    for unaryf ∈ [log, log2, log10, log1p, exp, exp2, exp10, expm1, sin, cos]
         rt1 = unrolltest(f, vx)
         rt2 = unrolltest(f, vu2)
         rt4 = unrolltest(f, vu4)
         rt8 = unrolltest(f, vu8)
+    end
+    for binaryf ∈ [+, *, ^]
+        rt1 = unrolltest(f, vx, vx)
+        rt2 = unrolltest(f, vu2, vu2)
+        rt4 = unrolltest(f, vu4, vu4)
+        rt8 = unrolltest(f, vu8, vu8)
     end
 end
 
