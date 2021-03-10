@@ -254,21 +254,29 @@ function unroll_no_reductions(ls, order, vloopsym)
         unrolled = order[end-1]
     end
     # latency not a concern, because no depchains
+    compute_l = 0.0
+    # rp = 0
     for op ∈ operations(ls)
         dependson(op, unrolled) || continue
+        rt, sl, rpop = cost(ls, op, (unrolled,Symbol("")), vloopsym, Wshift, size_T)
+        # rp += rpop
         if iscompute(op)
-            compute_rt += first(cost(ls, op, (unrolled,Symbol("")), vloopsym, Wshift, size_T))
+            compute_rt += rt
+            compute_l += sl
         elseif isload(op)
-            load_rt += first(cost(ls, op, (unrolled,Symbol("")), vloopsym, Wshift, size_T))
+            load_rt += rt
         elseif isstore(op)
-            store_rt += first(cost(ls, op, (unrolled,Symbol("")), vloopsym, Wshift, size_T))
+            store_rt += rt
         end
     end 
     # heuristic guess
     # roundpow2(min(4, round(Int, (compute_rt + load_rt + 1) / compute_rt)))
     memory_rt = load_rt + store_rt
+    @show memory_rt, load_rt, store_rt, compute_rt, compute_l
+    
     u = if compute_rt > memory_rt
-        max(1, VectorizationBase.nextpow2( min( 4, round(Int, 8 / compute_rt) ) ))
+        @show clamp(round(Int, compute_l / compute_rt), 1, 4)
+        # max(1, VectorizationBase.nextpow2( min( 4, round(Int, 8 / compute_rt) ) ))
     elseif iszero(compute_rt)
         4
     elseif iszero(load_rt)
@@ -276,6 +284,8 @@ function unroll_no_reductions(ls, order, vloopsym)
     else
         max(1, min(4, round(Int, 2compute_rt / load_rt)))
     end
+    # u = min(u, max(1, (reg_count(ls) ÷ max(1,round(Int,rp)))))
+    # @show u
     # commented out here is to decide to align loops
     # if memory_rt > compute_rt && isone(u) && (length(order) > 1) && (last(order) === vloopsym) && length(getloop(ls, last(order))) > 8W
     #     ls.align_loops[] = findfirst(operations(ls)) do op
