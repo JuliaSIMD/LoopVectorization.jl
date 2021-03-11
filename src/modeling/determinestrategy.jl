@@ -985,7 +985,7 @@ function evaluate_cost_tile(
             end
             included_vars[id] = true
             if isconstant(op)
-                depends_on_u₁, depends_on_u₂ = isunrolled_sym(op, u₁loopsym, u₂loopsym)
+                depends_on_u₁, depends_on_u₂ = isunrolled_sym(op, u₁loopsym, u₂loopsym, vloopsym)
                 reduced_by_unrolling[1,1,id] = !depends_on_u₁
                 reduced_by_unrolling[2,1,id] = !depends_on_u₂
             else

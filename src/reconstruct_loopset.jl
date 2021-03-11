@@ -631,6 +631,7 @@ Execute an `@avx` block. The block's code is represented via the arguments:
         )
     else
         # @show avx_body(ls, UNROLL)
+        # Main.BODY[] = avx_body(ls, UNROLL)
         avx_body(ls, UNROLL)
     end
     # @show UNROLL, OPS, ARF, AM, LPSYM, LB

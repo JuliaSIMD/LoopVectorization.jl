@@ -1,4 +1,5 @@
 
+
 # the `lowernonstore` and `lowerstore` options are there as a means of lowering all non-store operations before lowering the stores.
 function lower!(
     q::Expr, ops::AbstractVector{Operation}, ls::LoopSet, unrollsyms::UnrollSymbols, u₁::Int, u₂::Int,
@@ -443,7 +444,7 @@ function initialize_outer_reductions!(
     isvectorized = vectorized ∈ reduceddependencies(op)
     typeTr = ELTYPESYMBOL
     z = if isvectorized
-        if Umax == 1
+        if Umax == 1 || u₂ ≠ -1
             if reduct_zero === :zero
                 Expr(:call, lv(:_vzero), VECTORWIDTHSYMBOL, typeTr, rs)
             else
@@ -460,14 +461,14 @@ function initialize_outer_reductions!(
         Expr(:call, reduct_zero, typeTr)
     end
     mvar = variable_name(op, -1)
-    # u1u, u2u = isunrolled_sym(op, getloop(ls, us.u₁loopnum).itersymbol, u₂loop, u₂max)
     if u₂ == -1
         push!(q.args, Expr(:(=), Symbol(mvar, '_', _Umax), z))
-    else
-        u₁u, u₂u = isunrolled_sym(op, getloop(ls, us.u₁loopnum).itersymbol, getloop(ls, us.u₂loopnum).itersymbol, u₂)
+    else#if isu₂unrolled(op) #& (us.vloopnum ≠ us.u₂loopnum) # tiled outer reduction, u₂unrolled
+        # TODO: add `(us.vloopnum ≠ us.u₂loopnum)` check to avoid unrolling and vectorizing a reduction along the same axis
+        u₁u, u₂u = isunrolled_sym(op, getloop(ls, us.u₁loopnum).itersymbol, getloop(ls, us.u₂loopnum).itersymbol, getloop(ls, us.vloopnum).itersymbol)#, u₂)
         if u₁u
-            push!(q.args, Expr(:(=), Symbol(mvar, '_', _Umax), z))
-        else            
+            push!(q.args, Expr(:(=), Symbol(mvar, '_', u₁), z))
+        else
             for u ∈ 0:_Umax-1
                 # push!(q.args, Expr(:(=), Symbol(mvar, '_', u), z))
                 push!(q.args, Expr(:(=), Symbol(mvar, u), z))
@@ -536,7 +537,7 @@ end
 ## This performs reduction to one `Vec`
 function reduce_expr!(q::Expr, ls::LoopSet, U::Int)
     us = ls.unrollspecification[]
-    u₁f, u₂f = if us.u₂ == -1 # TODO: these multiple meanings make code hard to follow. Simplify.
+    u₁f, u₂f = if us.u₂ == -1
         ifelse(U == -1, us.u₁, U), -1
     else
         us.u₁, U
@@ -544,13 +545,14 @@ function reduce_expr!(q::Expr, ls::LoopSet, U::Int)
     # u₁loop, u₂loop = getunrolled(ls)
     u₁loop = getloop(ls, us.u₁loopnum).itersymbol
     u₂loop = getloop(ls, us.u₂loopnum).itersymbol
+    vloop  = getloop(ls,  us.vloopnum).itersymbol
     for or ∈ ls.outer_reductions
         op = ls.operations[or]
         var = name(op)
         mvar = mangledvar(op)
         instr = instruction(op)
-        u₁u, u₂u = isunrolled_sym(op, u₁loop, u₂loop, u₂f)
-        reduce_expr!(q, mvar, instr, u₁f, u₂f, u₁u, u₂u)#isu₁unrolled(op))
+        u₁u, u₂u = isunrolled_sym(op, u₁loop, u₂loop, vloop)#, u₂f)
+        reduce_expr!(q, mvar, instr, u₁f, u₂f, u₁u, u₂u)
         if !iszero(length(ls.opdict))
             if (isu₁unrolled(op) | isu₂unrolled(op))
                 push!(q.args, Expr(:(=), var, Expr(:call, lv(reduction_scalar_combine(instr)), Symbol(mvar, "##onevec##"), var)))
@@ -838,7 +840,7 @@ It returns `true`/`false` for each loop, indicating whether they're unrolled.
 If there is a third argument, it will avoid unrolling that symbol along reductions if said symbol is part of the reduction chain.
 
 """
-function isunrolled_sym(op::Operation, u₁loop::Symbol, u₂loop::Symbol)
+function isunrolled_sym(op::Operation, u₁loop::Symbol, u₂loop::Symbol, vloop::Symbol)
     u₁ild = isu₁unrolled(op)
     u₂ild = isu₂unrolled(op)
     (accesses_memory(op) | isloopvalue(op)) && return (u₁ild, u₂ild)
@@ -859,8 +861,16 @@ function isunrolled_sym(op::Operation, u₁loop::Symbol, u₂loop::Symbol)
     u₂reduced = u₂loop ∈ reductops
     # If they're being reduced, we want to only unroll the reduced variable along one of the two loops.
     # @show u₁reduced, u₂reduced
-    if u₂reduced # if both are reduced, we unroll u₁
-        true, false
+    if u₂reduced
+        if u₁reduced# if both are reduced, we unroll u₁
+            if vloop === u₁loop
+                false,true
+            else
+                true, false
+            end
+        else
+            true,false
+        end
     elseif u₁reduced
         false, true
         # true, false
@@ -873,10 +883,8 @@ function isunrolled_sym(op::Operation, u₁loop::Symbol)
     isu₁unrolled(op) || (isconstant(op) & (u₁loop ∈ reducedchildren(op)))
 end
 
-# isunrolled_sym(op::Operation, u₁loop::Symbol, u₂loop::Symbol) = (isunrolled_sym(op, u₁loop), false)
-# isunrolled_sym(op::Operation, u₁loop::Symbol, u₂loop::Symbol, ::Int) = isunrolled_sym(op, u₁loop, u₂loop)
-function isunrolled_sym(op::Operation, u₁loop::Symbol, u₂loop::Symbol, u₂max::Int)
-    ((u₂max > 1) | accesses_memory(op)) ? isunrolled_sym(op, u₁loop, u₂loop) : (isunrolled_sym(op, u₁loop), false)
+function isunrolled_sym(op::Operation, u₁loop::Symbol, u₂loop::Symbol, vloop::Symbol, u₂max::Int)
+    ((u₂max > 1) | accesses_memory(op)) ? isunrolled_sym(op, u₁loop, u₂loop, vloop) : (isunrolled_sym(op, u₁loop), false)
 end
 
 function variable_name(op::Operation, suffix::Int)
@@ -884,13 +892,10 @@ function variable_name(op::Operation, suffix::Int)
     suffix == -1 ? mvar : Symbol(mvar, suffix, :_)
 end
 
-function variable_name_and_unrolled(op::Operation, u₁loop::Symbol, u₂loop::Symbol, u₂max::Int, u₂iter::Int)
-    # we require
-    if (u₂iter == -1) | ((u₂max ≤ 1) & (!accesses_memory(op)))
-        return mangledvar(op), isunrolled_sym(op, u₁loop), false
-    end
-    u₁op, u₂op = isunrolled_sym(op, u₁loop, u₂loop)
+# function variable_name_and_unrolled(op::Operation, u₁loop::Symbol, u₂loop::Symbol, vloop::Symbol, u₂max::Int, u₂iter::Int)
+function variable_name_and_unrolled(op::Operation, u₁loop::Symbol, u₂loop::Symbol, vloop::Symbol, u₂iter::Int)
+    # u₁op, u₂op = isunrolled_sym(op, u₁loop, u₂loop, vloop, Core.ifelse(u₂iter == -1, 1, u₂max))
+    u₁op, u₂op = isunrolled_sym(op, u₁loop, u₂loop, vloop)#, u₂max)
     mvar = u₂op ? variable_name(op, u₂iter) : mangledvar(op)
-    # mvar = mangledvar(op)
     mvar, u₁op, u₂op
 end

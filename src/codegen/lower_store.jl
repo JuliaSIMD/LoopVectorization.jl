@@ -27,11 +27,6 @@ function reduce_expr_u₂(toreduct::Symbol, instr::Instruction, u₂::Int)
     Expr(:call, lv(:reduce_tup), reduce_to_onevecunroll(instr), t)
 end
 function reduce_expr!(q::Expr, toreduct::Symbol, instr::Instruction, u₁::Int, u₂::Int, isu₁unrolled::Bool, isu₂unrolled::Bool)
-    # if u₂ == -1
-    #     u₁u, u₂u = (true, false)
-    # else
-    #     u₁u, u₂u = isunrolled_sym(op, getloop(ls, us.u₁loopnum).itersymbol, getloop(ls, us.u₂loopnum).itersymbol, _Umax)
-    # end
     if isu₂unrolled# u₂ != -1
         _toreduct = Symbol(toreduct, 0)
         push!(q.args, Expr(:(=), _toreduct, reduce_expr_u₂(toreduct, instr, u₂)))
@@ -59,7 +54,7 @@ function lower_store_collection!(
 
     @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, vloop, u₂max, suffix = ua
     ops = operations(ls)
-
+    # __u₂max = ls.unrollspecification[].u₂
     nouter = length(idsformap)
 
     t = Expr(:tuple)
@@ -68,7 +63,7 @@ function lower_store_collection!(
     for (i,(opid,_)) ∈ enumerate(idsformap)
         opp = first(parents(ops[opidmap[opid]]))
 
-        isu₁, isu₂ = isunrolled_sym(opp, u₁loopsym, u₂loopsym, u₂max)
+        isu₁, isu₂ = isunrolled_sym(opp, u₁loopsym, u₂loopsym, vloopsym)#, __u₂max)
         u = Core.ifelse(isu₁, u₁, 1)
         mvar = Symbol(variable_name(opp, ifelse(isu₂, suffix, -1)), '_', u)
         # mvar = Symbol(variable_name(_op, suffix), '_', u)
@@ -122,7 +117,8 @@ function lower_store!(
     if (opp.instruction.instr === reductfunc) && isone(length(parents(opp)))
         opp = only(parents(opp))
     end
-    isu₁, isu₂ = isunrolled_sym(opp, u₁loopsym, u₂loopsym, u₂max)
+    # __u₂max = ls.unrollspecification[].u₂
+    isu₁, isu₂ = isunrolled_sym(opp, u₁loopsym, u₂loopsym, vloopsym)#, __u₂max)
     u = isu₁ ? u₁ : 1
     mvar = Symbol(variable_name(opp, ifelse(isu₂, suffix, -1)), '_', u)
     if all(op.ref.loopedindex)
@@ -208,7 +204,7 @@ function lower_tiled_store!(blockq::Expr, op::Operation, ls::LoopSet, ua::Unroll
         throw("Operation $opp's instruction is $reductfunc, shouldn't be able to reach here.")
         # opp = only(parents(opp))
     end
-    isu₁, isu₂ = isunrolled_sym(opp, u₁loopsym, u₂loopsym, u₂)
+    isu₁, isu₂ = isunrolled_sym(opp, u₁loopsym, u₂loopsym, vloopsym)#, u₂)
     @assert isu₂
     # It's reasonable forthis to be `!isu₁`
     u = Core.ifelse(isu₁, u₁, 1)

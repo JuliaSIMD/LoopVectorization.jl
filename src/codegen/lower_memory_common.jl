@@ -7,9 +7,9 @@ end
 function symbolind(ind::Symbol, op::Operation, td::UnrollArgs)
     id = parentind(ind, op)
     id == -1 && return ind, op
-    @unpack u₁, u₁loopsym, u₂loopsym, u₂max, suffix = td
+    @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, u₂max, suffix = td
     parent = parents(op)[id]
-    pvar, u₁op, u₂op = variable_name_and_unrolled(parent, u₁loopsym, u₂loopsym, u₂max, suffix)
+    pvar, u₁op, u₂op = variable_name_and_unrolled(parent, u₁loopsym, u₂loopsym, vloopsym, suffix)
     Symbol(pvar, '_', Core.ifelse(u₁op, u₁, 1)), parent
 end
 
@@ -57,7 +57,7 @@ function _addoffset!(ret::Expr, vloopstride, indexstride, index, offset, calcbyp
         addoffset!(ret, gethint(vloopstride)*gethint(indexstride), index, offset, calcbypointeroffset)
     else
         addoffset!(ret, mulexpr(vloopstride,indexstride), index, offset, calcbypointeroffset)
-    end    
+    end
 end
 # multiply `index` by `indexstride`
 function addoffset!(ret::Expr, vloopstride, indexstride, index, offset, calcbypointeroffset::Bool) # 6 -> (5 or 6) args
@@ -163,7 +163,6 @@ function mem_offset(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Vect
     end
     ret
 end
-isconditionalmemop(op::Operation) = (instruction(op).instr === :conditionalload) || (instruction(op).instr === :conditionalstore!)
 # function unrolled_curly(op::Operation, u₁::Int, u₁loopsym::Symbol, vectorized::Symbol, mask::Bool)
 
 # interleave: `0` means `false`, positive means literal, negative means multiplier
@@ -328,34 +327,56 @@ end
 @generated function and_last(v::VecUnroll{N}, m) where {N}
     q = Expr(:block, Expr(:meta,:inline), :(vd = data(v)))
     t = Expr(:call, lv(:promote))
+    gf = GlobalRef(Core, :getfield)
     for n ∈ 1:N
-        push!(t.args, :(getfield(vd, $n, false)))
+        push!(t.args, :($gf(vd, $n, false)))
     end
-    push!(t.args, :(getfield(vd, $(N+1), false) & m))
+    push!(t.args, :($gf(vd, $(N+1), false) & m))
     push!(q.args, Expr(:call, lv(:VecUnroll), t))
     q
 end
 
+
+isconditionalmemop(op::Operation) = (instruction(op).instr === :conditionalload) || (instruction(op).instr === :conditionalstore!)
 function add_memory_mask!(memopexpr::Expr, op::Operation, td::UnrollArgs, mask::Bool)
     @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, u₂max, suffix = td
     if isconditionalmemop(op)
         condop = last(parents(op))
         opu₂ = (suffix ≠ -1) && isu₂unrolled(op)
-        condvar, condu₁unrolled = condvarname_and_unroll(condop, u₁loopsym, u₂loopsym, u₂max, suffix, opu₂)
+        condvar, condu₁unrolled = condvarname_and_unroll(condop, u₁loopsym, u₂loopsym, vloopsym, suffix, opu₂)
         # if it isn't unrolled, then `m`
         u = condu₁unrolled ? u₁ : 1
         # u = isu₁unrolled(condop) ? u₁ : 1
         condvar = Symbol(condvar, '_', u)
-        # @show condvar
+        # If we need to apply `MASKSYMBOL` and the condvar
+        # 2 condvar possibilities:
+        #   `VecUnroll` applied everywhere
+        #    single mask "broadcast"
+        # 2 mask possibilities
+        #    u₁loopsym ≠  vloopsym, and we mask all
+        #    u₁loopsym == vloopsym, and we mask last
+        # broadcast both, so can do so implicitly
+        # this is true whether or not `condbroadcast`
         if !mask || (!isvectorized(op))
             push!(memopexpr.args, condvar)
-        else
-            # we only want to apply mask to `u₁`
+        elseif (u₁loopsym ≢ vloopsym) | (u₁ == 1) # mask all equivalenetly
+            push!(memopexpr.args, Expr(:call, lv(:&), condvar, MASKSYMBOL))
+            # if the condition `(u₁loopsym ≢ vloopsym) | (u₁ == 1)` failed, we need to apply `MASKSYMBOL` only to last unroll.
+        elseif !condu₁unrolled && isu₁unrolled(op) # condbroadcast
+            # explicitly broadcast `condvar`, and apply `MASKSYMBOL` to end
+            t = Expr(:call, lv(:promote))
+            for um ∈ 1:u₁-1
+                push!(t.args, condvar)
+            end
+            push!(t.args, Expr(:call, lv(:&), condvar, MASKSYMBOL))
+            push!(memopexpr.args, Expr(:call, lv(:VecUnroll), t))
+        else# !condbroadcast && !vecunrolled
             push!(memopexpr.args, Expr(:call, lv(:and_last), condvar, MASKSYMBOL))
         end
     elseif mask && isvectorized(op)
         push!(memopexpr.args, MASKSYMBOL)
     end
+    nothing
 end
 
 varassignname(var::Symbol, u::Int, isunrolled::Bool) = isunrolled ? Symbol(var, u) : var
@@ -372,7 +393,7 @@ function name_memoffset(var::Symbol, op::Operation, td::UnrollArgs, u₁unrolled
     name, mo
 end
 
-function condvarname_and_unroll(cond, u₁loop, u₂loop, u₂max, suffix, opu₂)
-    condvar, condu₁, condu₂ = variable_name_and_unrolled(cond, u₁loop, u₂loop, u₂max, Core.ifelse(opu₂, suffix, -1))
+function condvarname_and_unroll(cond::Operation, u₁loop::Symbol, u₂loop::Symbol, vloop::Symbol, suffix::Int, opu₂::Bool)
+    condvar, condu₁, condu₂ = variable_name_and_unrolled(cond, u₁loop, u₂loop, vloop, Core.ifelse(opu₂, suffix, -1))
     condvar, condu₁
 end

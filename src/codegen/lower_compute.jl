@@ -41,18 +41,18 @@ end
 
 struct FalseCollection end
 Base.getindex(::FalseCollection, i...) = false
-function parent_unroll_status(op::Operation, u₁loop::Symbol, u₂loop::Symbol)
-    # map(opp -> isunrolled_sym(opp, u₁loop), parents(op)), map(opp -> isunrolled_sym(opp, u₂loop), parents(op))
+function parent_unroll_status(op::Operation, u₁loop::Symbol)
     map(opp -> isunrolled_sym(opp, u₁loop), parents(op)), fill(false, length(parents(op)))
 end
-function parent_unroll_status(op::Operation, u₁loop::Symbol, u₂loop::Symbol, u₂max::Int)
-    u₂max ≥ 0 || return parent_unroll_status(op, u₁loop, u₂loop)
+function parent_unroll_status(op::Operation, u₁loop::Symbol, u₂loop::Symbol, vloop::Symbol, u₂max::Int)
+    # u₂max ≥ 0 || return parent_unroll_status(op, u₁loop)
+    u₂max == -1 && return parent_unroll_status(op, u₁loop)
     vparents = parents(op);
     # parent_names = Vector{Symbol}(undef, length(vparents))
     parents_u₁syms = Vector{Bool}(undef, length(vparents))
     parents_u₂syms = Vector{Bool}(undef, length(vparents))
     for i ∈ eachindex(vparents)
-        parents_u₁syms[i], parents_u₂syms[i] = isunrolled_sym(vparents[i], u₁loop, u₂loop, u₂max)
+        parents_u₁syms[i], parents_u₂syms[i] = isunrolled_sym(vparents[i], u₁loop, u₂loop, vloop)#, u₂max)
     end
     # parent_names, parents_u₁syms, parents_u₂syms
     parents_u₁syms, parents_u₂syms
@@ -317,11 +317,14 @@ function lower_compute!(
     instr = instruction(op)
     parents_op = parents(op)
     nparents = length(parents_op)
-    mvar, u₁unrolledsym, u₂unrolledsym = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, u₂max, suffix)
-    opunrolled = u₁unrolledsym || u₁loopsym ∈ loopdependencies(op)
+    # __u₂max = ls.unrollspecification[].u₂
+    # TODO: perhaps allos for swithcing unrolled axis again
+    # mvar, u₁unrolledsym, u₂unrolledsym = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, vloopsym, u₂max, suffix)
+    mvar, u₁unrolledsym, u₂unrolledsym = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, vloopsym, suffix)
+    opunrolled = u₁unrolledsym || isu₁unrolled(op)
     # parent_names, parents_u₁syms, parents_u₂syms = parent_unroll_status(op, u₁loop, u₂loop, suffix)
-    parents_u₁syms, parents_u₂syms = parent_unroll_status(op, u₁loopsym, u₂loopsym, u₂max)
-    tiledouterreduction = if suffix == -1
+    parents_u₁syms, parents_u₂syms = parent_unroll_status(op, u₁loopsym, u₂loopsym, vloopsym, u₂max)
+    tiledouterreduction = if (suffix == -1)# || (vloopsym === u₂loopsym)
         suffix_ = Symbol("")
         -1
     else
@@ -401,8 +404,15 @@ function lower_compute!(
     varsym = if tiledouterreduction > 0 # then suffix ≠ -1
         # modsuffix = ((u + suffix*(Uiter + 1)) & 7)
         isouterreduct = true
-        modsuffix = suffix % tiled_outerreduct_unroll(ls)
-        Symbol(mangledvar(op), modsuffix)
+        # if u₁unrolledsym
+        #     modsuffix = ls.unrollspecification[].u₁#getu₁full(ls, u₁)#u₁
+        #     Symbol(mangledvar(op), '_', modsuffix)
+        # else
+            modsuffix = suffix % tiled_outerreduct_unroll(ls)
+            Symbol(mangledvar(op), modsuffix)
+        # end
+        # dopartialmap = u₁ > 1
+
         # Symbol(mvar, modsuffix)
         # elseif u₁unrolledsym
         #     Symbol(mvar, u)
@@ -419,7 +429,6 @@ function lower_compute!(
     else
         Symbol(mvar, '_', 1)
     end
-    # @show getu₁forreduct(ls, op, u₁)
     selfopname = varsym
     selfdep = 0
     for n ∈ 1:nparents
@@ -435,7 +444,6 @@ function lower_compute!(
                 selfopname = parent_op_name(ls, parents_op, n, modsuffix, suffix_, parents_u₁syms, parents_u₂syms, u₁, opisvectorized, tiledouterreduction)
                 push!(instrcall.args, selfopname)
             else
-                # @show varsym
                 push!(instrcall.args, varsym)
             end
         elseif ((!isu₂unrolled(op)) & isu₂unrolled(opp)) && (isouterreduction(ls, opp) != -1)
@@ -447,6 +455,11 @@ function lower_compute!(
         end
     end
     selfdepreduce = ifelse(((!u₁unrolledsym) & isu₁unrolled(op)) & (u₁ > 1), selfdep, 0)
+    # if selfdep ≠ 0
+    #     @show mvar
+    #     # @show isu₁unrolled(op), u₁unrolledsym, u₁, u₂max
+    #     # @show selfdep, selfdepreduce#, op
+    # end
     # push!(q.args, (isreduct, u₁, (!u₁unrolledsym), isu₁unrolled(op), dopartialmap, varsym))
     if maskreduct
         ifelsefunc = if ls.unrollspecification[].u₁ == 1
@@ -486,7 +499,7 @@ function lower_compute!(
         end
     elseif selfdep != 0 && (dopartialmap ||
         (isouterreduct && (opunrolled) && (u₁ < ls.unrollspecification[].u₁)) ||
-        (isreduct & (u₁ > 1) & (!u₁unrolledsym) & isu₁unrolled(op)))
+        (isreduct & (u₁ > 1) & (!u₁unrolledsym) & isu₁unrolled(op))) # TODO: DRY `selfdepreduce` definition
         # first possibility (`isouterreduct && opunrolled && (u₁ < ls.unrollspecification[].u₁)`):
         # checks if we're in the "reduct" part of an outer reduction
         #
