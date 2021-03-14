@@ -2,7 +2,7 @@
 
 ## Loop expressions
 
-When applying `@avx` to a loop expression, it creates a `LoopSet` without awareness to type information, and then [condenses the information](https://github.com/chriselrod/LoopVectorization.jl/blob/master/src/condense_loopset.jl) into a summary which is passed as type information to a generated function.
+When applying `@avx` to a loop expression, it creates a `LoopSet` without awareness to type information, and then [condenses the information](https://github.com/JuliaSIMD/LoopVectorization.jl/blob/master/src/condense_loopset.jl) into a summary which is passed as type information to a generated function.
 ```julia
 julia> @macroexpand @avx for m ∈ 1:M, n ∈ 1:N
            C[m,n] = zero(eltype(B))
@@ -19,7 +19,7 @@ quote
     end
 end
 ```
-When the corresponding method gets compiled for specific type of `A`, `B`, and `C`, the call to the `@generated` function `_avx_!` get compiled. This causes the summary to be [reconstructed](https://github.com/chriselrod/LoopVectorization.jl/blob/master/src/reconstruct_loopset.jl) using the available type information. This type information can be used, for example, to realize an array has been transposed, and thus correctly identify which axis contains contiguous elements that are efficient to load from. This kind of information cannot be extracted from the raw expression, which is why these decisions are made when the method gets compiled for specific types via the `@generated` function `_avx_!`.
+When the corresponding method gets compiled for specific type of `A`, `B`, and `C`, the call to the `@generated` function `_avx_!` get compiled. This causes the summary to be [reconstructed](https://github.com/JuliaSIMD/LoopVectorization.jl/blob/master/src/reconstruct_loopset.jl) using the available type information. This type information can be used, for example, to realize an array has been transposed, and thus correctly identify which axis contains contiguous elements that are efficient to load from. This kind of information cannot be extracted from the raw expression, which is why these decisions are made when the method gets compiled for specific types via the `@generated` function `_avx_!`.
 
 The three chief components of the summaries are the definitions of operations, e.g.:
 ```julia
@@ -58,4 +58,4 @@ quote
     var"##266" = LoopVectorization.vmaterialize(var"##265", Val{:Main}())
 end
 ```
-These nested broadcasted objects already express information very similar to what the `LoopSet` objects hold. The dimensionality of the objects provides the information on the associated loop dependencies, but again this information is available only when the method is compiled for specific types. The `@generated` function `vmaterialize` constructs the LoopSet by recursively evaluating [add_broadcast!](https://github.com/chriselrod/LoopVectorization.jl/blob/master/src/broadcast.jl#L166) on all the fields.
+These nested broadcasted objects already express information very similar to what the `LoopSet` objects hold. The dimensionality of the objects provides the information on the associated loop dependencies, but again this information is available only when the method is compiled for specific types. The `@generated` function `vmaterialize` constructs the LoopSet by recursively evaluating [add_broadcast!](https://github.com/JuliaSIMD/LoopVectorization.jl/blob/master/src/broadcast.jl#L166) on all the fields.

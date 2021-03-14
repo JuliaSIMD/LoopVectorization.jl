@@ -19,24 +19,16 @@ end
     end
 end
 
-function launch!(p::Ptr{UInt}, fptr::Ptr{Cvoid}, args::Tuple{LB,V}) where {LB,V}
+@inline function setup_avx_threads!(p::Ptr{UInt}, fptr::Ptr{Cvoid}, args::Tuple{LB,V}) where {LB,V}
     offset = ThreadingUtilities.store!(p, fptr, sizeof(UInt))
     offset = ThreadingUtilities.store!(p, args, offset)
     nothing
 end
-function launch(
+@inline function avx_launch(
     ::Val{UNROLL}, ::Val{OPS}, ::Val{ARF}, ::Val{AM}, ::Val{LPSYM}, lb::LB, vargs::V, tid
 ) where {UNROLL,OPS,ARF,AM,LPSYM,LB,V}
-    p = ThreadingUtilities.taskpointer(tid)
-    launch!(p, pointer(AVX{UNROLL,OPS,ARF,AM,LPSYM,LB,V}()), (lb,vargs))
-    while true
-        if ThreadingUtilities._atomic_cas_cmp!(p, ThreadingUtilities.SPIN, ThreadingUtilities.TASK)
-            return
-        elseif ThreadingUtilities._atomic_cas_cmp!(p, ThreadingUtilities.WAIT, ThreadingUtilities.LOCK)
-            ThreadingUtilities.wake_thread!(tid % UInt)
-            return
-        end
-        ThreadingUtilities.pause()
+    ThreadingUtilities.launch(tid, pointer(AVX{UNROLL,OPS,ARF,AM,LPSYM,LB,V}()), (lb,vargs)) do p, fptr, args
+        setup_avx_threads!(p, fptr, args)
     end
 end
 
@@ -240,10 +232,7 @@ function thread_loop_summary!(ls::LoopSet, ua::UnrollArgs, threadedloop::Loop, i
     else
         :($lensym = $((threadedloop.lensym)) % UInt)
     end
-    unroll_factor = 1
-    if threadedloop === vloop
-        unroll_factor *= W
-    end
+    unroll_factor = Core.ifelse(threadedloop === vloop, W, 1)
     # if threadedloop === u₁loop
     #     unroll_factor *= u₁
     # elseif threadedloop === u₂loop
@@ -268,33 +257,48 @@ function thread_loop_summary!(ls::LoopSet, ua::UnrollArgs, threadedloop::Loop, i
         mf = gethint(step(threadedloop))
         if isone(mf)
             iterstop = :($iterstop_sym::Int = $iterstart_sym + $blksz_sym)
-            looprange = :(CloseOpen($iterstart_sym, $iterstop_sym))
-            lastrange = if isknown(last(threadedloop))
-                :(CloseOpen($iterstart_sym,$(gethint(last(threadedloop))+1)))
-            else # we want all the intervals to have the same type.
-                :(CloseOpen($iterstart_sym,$(getsym(last(threadedloop)))+1))
-            end
+            looprange = :(CloseOpen($iterstart_sym))
+            lastrange = :(CloseOpen($iterstart_sym))
+            push_loopbound_ends!(looprange, lastrange, unroll_factor, threadedloop, iterstop_sym, true)
         else
             iterstop = :($iterstop_sym::Int = $iterstart_sym + $blksz_sym * $mf)
-            looprange = :($iterstart_sym:StaticInt{$mf}():$iterstop_sym-1)
-            lastrange = if isknown(last(threadedloop))
-                :($iterstart_sym:StaticInt{$mf}():$(gethint(last(threadedloop))))
-            else
-                :($iterstart_sym:StaticInt{$mf}():$(getsym(last(threadedloop))))
-            end
+            looprange = :($iterstart_sym:StaticInt{$mf}())
+            lastrange = :($iterstart_sym:StaticInt{$mf}())
+            push_loopbound_ends!(looprange, lastrange, unroll_factor, threadedloop, :($iterstop_sym-one($iterstop_sym)), false)
         end
     else
         stepthread_sym = Symbol("#step#thread#$threadloopnumtag#")
         pushpreamble!(ls, :($stepthread_sym = $(getsym(step(threadedloop)))))
         iterstop = :($iterstop_sym = $iterstart_sym + $blksz_sym * $stepthread_sym)
-        looprange = :($iterstart_sym:$stepthread_sym:$iterstop_sym-1)
-        lastrange = if isknown(last(threadedloop))
-            :($iterstart_sym:$stepthread_sym:$(gethint(last(threadedloop))))
-        else
-            :($iterstart_sym:$stepthread_sym:$(getsym(last(threadedloop))))
-        end
+        looprange = :($iterstart_sym:$stepthread_sym)
+        lastrange = :($iterstart_sym:$stepthread_sym)
+        push_loopbound_ends!(looprange, lastrange, unroll_factor, threadedloop, :($iterstop_sym-one($iterstop_sym)), false)
     end
     define_len, define_num_unrolls, loopstart, iterstop, looprange, lastrange
+end
+function push_last_bound!(looprange::Expr, lastrange::Expr, lastexpr, iterstop, unroll_factor::Int)
+    push!(lastrange.args, lastexpr)
+    unroll_factor ≠ 1 && push!(looprange.args, :(min($lastexpr, $iterstop)))
+    nothing
+end
+function push_loopbound_ends!(
+    looprange::Expr, lastrange::Expr, unroll_factor::Int,
+    threadedloop::Loop, iterstop, offsetlast::Bool
+)
+    if unroll_factor == 1
+        push!(looprange.args, iterstop)
+    end
+    if isknown(last(threadedloop))
+        push_last_bound!(looprange, lastrange, gethint(last(threadedloop)) + offsetlast, iterstop, unroll_factor)
+    else
+        lastsym = getsym(last(threadedloop))
+        if offsetlast
+            push_last_bound!(looprange, lastrange, :($lastsym + one($lastsym)), iterstop, unroll_factor)
+        else
+            push_last_bound!(looprange, lastrange, lastsym, iterstop, unroll_factor)
+        end
+    end
+    nothing
 end
 function define_block_size(threadedloop, vloop, tn, W)
     baseblocksizeuint = Symbol("#base#block#size#thread#uint#$tn#")
@@ -305,13 +309,13 @@ function define_block_size(threadedloop, vloop, tn, W)
     thread_factor = Symbol("#thread#factor#$tn#")
     if threadedloop === vloop
         quote
-            $baseblocksizeuint, $nrem = LoopVectorization.divrem_fast($num_unroll, $thread_factor)
+            $baseblocksizeuint, $nrem = divrem_fast($num_unroll, $thread_factor)
             $baseblocksizeint = ($baseblocksizeuint << $(VectorizationBase.intlog2(W))) % Int
             $remstep = $(Int(W))
-        end        
+        end
     else
         quote
-            $baseblocksizeuint, $nrem = LoopVectorization.divrem_fast($num_unroll, $thread_factor)
+            $baseblocksizeuint, $nrem = divrem_fast($num_unroll, $thread_factor)
             $baseblocksizeint = $baseblocksizeuint % Int
             $remstep = 1
         end
@@ -333,8 +337,8 @@ function thread_one_loops_expr(
     threadedid = findfirst(valid_thread_loop)::Int
     threadedloop = getloop(ls, threadedid)
     define_len, define_num_unrolls, loopstart, iterstop, looprange, lastrange = thread_loop_summary!(ls, ua, threadedloop, false)
-    loopboundexpr = Expr(:tuple)
-    lastboundexpr = Expr(:tuple)
+    loopboundexpr = Expr(:tuple) # for launched threads
+    lastboundexpr = Expr(:tuple) # remainder, started on main thread
     for (i,loop) ∈ enumerate(ls.loops)
         if loop === threadedloop
             push!(loopboundexpr.args, looprange)
@@ -344,7 +348,8 @@ function thread_one_loops_expr(
             loop_boundary!(lastboundexpr, loop)
         end
     end
-    _avx_call_ = :(_avx_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, ($lastboundexpr, var"#vargs#")))
+    _avx_call_core_ = :(_avx_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, ($lastboundexpr, var"#vargs#")))
+    _avx_call_ = _avx_call_core_
     update_return_values = if length(ls.outer_reductions) > 0
         retv = loopset_return_value(ls, Val(false))
         _avx_call_ = Expr(:(=), retv, _avx_call_)
@@ -360,11 +365,11 @@ function thread_one_loops_expr(
         $define_num_unrolls
         var"#nthreads#" = Base.min(var"#nthreads#", var"#num#unrolls#thread#0#")
         var"#nrequest#" = (var"#nthreads#" % UInt32) - 0x00000001
-        var"#nrequest#" == 0x00000000 && return LoopVectorization._avx_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, var"#lv#tuple#args#")
+        $loopstart
+        var"#nrequest#" == 0x00000000 && return $_avx_call_core_
         var"#threads#", var"#torelease#" = CheapThreads.request_threads(Threads.threadid()%UInt32, var"#nrequest#")
         var"#thread#factor#0#" = var"#nthreads#"
         $iterdef
-        $loopstart
         var"#thread#launch#count#" = 0x00000000
         var"#thread#id#" = 0x00000000
         var"#thread#mask#" = CheapThreads.mask(var"#threads#")
@@ -381,7 +386,7 @@ function thread_one_loops_expr(
             $iterstop
             var"#thread#id#" += var"#trailzing#zeros#"
 
-            LoopVectorization.launch(
+            avx_launch(
                 Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM,
                 $loopboundexpr, var"#vargs#", var"#thread#id#"
             )
@@ -402,7 +407,7 @@ function thread_one_loops_expr(
             var"#thread#mask#" >>>= var"#trailzing#zeros#"
             var"#thread#id#" += var"#trailzing#zeros#"
             var"#thread#ptr#" = ThreadingUtilities.taskpointer(var"#thread#id#")
-            ThreadingUtilities.__wait(var"#thread#ptr#")
+            ThreadingUtilities.wait(var"#thread#ptr#")
             $update_return_values
             var"#threads#remain#" = var"#thread#mask#" ≠ 0x00000000
         end
@@ -420,7 +425,7 @@ function define_vthread_blocks(threadedloop, u₁loop, u₂loop, u₁, u₂, ntm
         :(_choose_num_blocks($loopunrollname, StaticInt{$u₂}(), var"#nthreads#", $sntmax))
     else
         :(_choose_num_blocks($loopunrollname, StaticInt{1}(), var"#nthreads#", $sntmax))
-    end    
+    end
 end
 function define_thread_blocks(threadedloop1, threadedloop2, vloop, u₁loop, u₂loop, u₁, u₂, ntmax)
     if vloop === threadedloop1
@@ -475,7 +480,8 @@ function thread_two_loops_expr(
             loop_boundary!(lastboundexpr, loop)
         end
     end
-    _avx_call_ = :(_avx_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, ($lastboundexpr, var"#vargs#")))
+    _avx_call_core_ = :(_avx_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, ($lastboundexpr, var"#vargs#")))
+    _avx_call_ = _avx_call_core_
     update_return_values = if length(ls.outer_reductions) > 0
         retv = loopset_return_value(ls, Val(false))
         _avx_call_ = Expr(:(=), retv, _avx_call_)
@@ -500,16 +506,16 @@ function thread_two_loops_expr(
         else
             (var"#thread#factor#0#", var"#thread#factor#1#") = $blockdef
         end
-        
+
         var"#nrequest#" = (var"#nthreads#" % UInt32) - 0x00000001
-        var"#nrequest#" == 0x00000000 && return LoopVectorization._avx_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, var"#lv#tuple#args#")
+        $loopstart1
+        var"#loop#1#start#init#" = var"#iter#start#0#"
+        $loopstart2
+        var"#nrequest#" == 0x00000000 && return $_avx_call_core_
         var"#threads#", var"#torelease#" = CheapThreads.request_threads(Threads.threadid(), var"#nrequest#")
 
         $iterdef1
         $iterdef2
-        $loopstart1
-        var"#loop#1#start#init#" = var"#iter#start#0#"
-        $loopstart2
         # @show var"#base#block#size#thread#0#", var"#block#rem#step#0#" var"#base#block#size#thread#1#", var"#block#rem#step#1#"
         var"#thread#launch#count#" = 0x00000000
         var"#thread#launch#count#0#" = 0x00000000
@@ -535,7 +541,7 @@ function thread_two_loops_expr(
             $iterstop2
             var"#thread#id#" += var"#trailzing#zeros#"
             # @show var"#thread#id#" $loopboundexpr
-            LoopVectorization.launch(
+            avx_launch(
                 Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM,
                 $loopboundexpr, var"#vargs#", var"#thread#id#"
             )
@@ -548,7 +554,7 @@ function thread_two_loops_expr(
 
             var"#iter#start#0#" = Core.ifelse(endinner, var"#loop#1#start#init#", var"#iter#stop#0#")
             var"#iter#start#1#" = Core.ifelse(endinner, var"#iter#stop#1#", var"#iter#start#1#")
-            
+
             var"#threads#remain#" = (var"#thread#launch#count#" += 0x00000001) ≠ var"#nrequest#"
         end
         # @show $lastboundexpr
@@ -563,7 +569,7 @@ function thread_two_loops_expr(
             var"#thread#mask#" >>>= var"#trailzing#zeros#"
             var"#thread#id#" += var"#trailzing#zeros#"
             var"#thread#ptr#" = ThreadingUtilities.taskpointer(var"#thread#id#")
-            ThreadingUtilities.__wait(var"#thread#ptr#")
+            ThreadingUtilities.wait(var"#thread#ptr#")
             $update_return_values
             var"#threads#remain#" = var"#thread#mask#" ≠ 0x00000000
         end
@@ -580,7 +586,7 @@ function valid_thread_loops(ls::LoopSet)
     copyto!(names(ls), order); init_loop_map!(ls)
     u₁loop = getloop(ls, u₁loop)
     _u₂loop = getloopid_or_nothing(ls, u₂loop)
-    u₂loop = _u₂loop === nothing ? u₁loop : _u₂loop
+    u₂loop = _u₂loop === nothing ? u₁loop : getloop_from_id(ls, _u₂loop)
     ua = UnrollArgs(u₁loop, u₂loop, getloop(ls, vectorized), u₁, u₂, u₂)
     valid_thread_loop = fill(true, length(order))
     for op ∈ operations(ls)
@@ -612,6 +618,3 @@ function avx_threads_expr(
         thread_two_loops_expr(ls, ua, valid_thread_loop, nt, c, UNROLL, OPS, ARF, AM, LPSYM)
     end
 end
-
-
-

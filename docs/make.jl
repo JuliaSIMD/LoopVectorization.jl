@@ -27,12 +27,12 @@ makedocs(;
             "devdocs/reference.md"
         ]
     ],
-    # repo="https://github.com/chriselrod/LoopVectorization.jl/blob/{commit}{path}#L{line}",
+    # repo="https://github.com/JuliaSIMD/LoopVectorization.jl/blob/{commit}{path}#L{line}",
     sitename="LoopVectorization.jl",
     authors="Chris Elrod"
     # assets=[],
 )
 
 deploydocs(;
-    repo="github.com/chriselrod/LoopVectorization.jl",
+    repo="github.com/JuliaSIMD/LoopVectorization.jl",
 )

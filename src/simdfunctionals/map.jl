@@ -140,20 +140,9 @@ end
     nothing
 end
 @inline function launch_thread_vmap!(tid, cfunc, ptry, ptrargs, start, stop)
-    p = ThreadingUtilities.taskpointer(tid)
-    while true
-        if ThreadingUtilities._atomic_cas_cmp!(p, ThreadingUtilities.SPIN, ThreadingUtilities.STUP)
-            setup_thread_vmap!(p, cfunc, ptry, ptrargs, start, stop)
-            @assert ThreadingUtilities._atomic_cas_cmp!(p, ThreadingUtilities.STUP, ThreadingUtilities.TASK)
-            return
-        elseif ThreadingUtilities._atomic_cas_cmp!(p, ThreadingUtilities.WAIT, ThreadingUtilities.STUP)
-            setup_thread_vmap!(p, cfunc, ptry, ptrargs, start, stop)
-            @assert ThreadingUtilities._atomic_cas_cmp!(p, ThreadingUtilities.STUP, ThreadingUtilities.LOCK)
-            ThreadingUtilities.wake_thread!(tid % UInt)
-            return
-        end
-        ThreadingUtilities.pause()
-    end        
+    ThreadingUtilities.launch(tid, cfunc, ptry, ptrargs, start, stop) do p, cfunc, ptry, ptrargs, start, stop
+        setup_thread_vmap!(p, cfunc, ptry, ptrargs, start, stop)
+    end
 end
 
 @inline function vmap_closure(f::F, ptry::D, ptrargs::A, ::Val{NonTemporal}) where {F,D<:StridedPointer,N,A<:Tuple{Vararg{StridedPointer,N}},NonTemporal}
@@ -212,7 +201,7 @@ function vmap_multithread!(
         end
         vmap_singlethread!(f, ptry, start, N, Val{NonTemporal}(), ptrargs)
         for tid ∈ 1:nt-1
-            ThreadingUtilities.__wait(tid)
+            ThreadingUtilities.wait(tid)
         end
     end
     nothing

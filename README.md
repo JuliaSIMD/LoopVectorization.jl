@@ -1,10 +1,10 @@
 # LoopVectorization
 
-[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://chriselrod.github.io/LoopVectorization.jl/stable)
-[![Latest](https://img.shields.io/badge/docs-latest-blue.svg)](https://chriselrod.github.io/LoopVectorization.jl/latest)
-[![CI](https://github.com/chriselrod/LoopVectorization.jl/workflows/CI/badge.svg)](https://github.com/chriselrod/LoopVectorization.jl/actions?query=workflow%3ACI)
-[![CI (Julia nightly)](https://github.com/chriselrod/LoopVectorization.jl/workflows/CI%20(Julia%20nightly)/badge.svg)](https://github.com/chriselrod/LoopVectorization.jl/actions?query=workflow%3A%22CI+%28Julia+nightly%29%22)
-[![Codecov](https://codecov.io/gh/chriselrod/LoopVectorization.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/chriselrod/LoopVectorization.jl)
+[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://JuliaSIMD.github.io/LoopVectorization.jl/stable)
+[![Latest](https://img.shields.io/badge/docs-latest-blue.svg)](https://JuliaSIMD.github.io/LoopVectorization.jl/latest)
+[![CI](https://github.com/JuliaSIMD/LoopVectorization.jl/workflows/CI/badge.svg)](https://github.com/JuliaSIMD/LoopVectorization.jl/actions?query=workflow%3ACI)
+[![CI (Julia nightly)](https://github.com/JuliaSIMD/LoopVectorization.jl/workflows/CI%20(Julia%20nightly)/badge.svg)](https://github.com/JuliaSIMD/LoopVectorization.jl/actions?query=workflow%3A%22CI+%28Julia+nightly%29%22)
+[![Codecov](https://codecov.io/gh/JuliaSIMD/LoopVectorization.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/JuliaSIMD/LoopVectorization.jl)
 
 ## Installation
 
@@ -39,7 +39,7 @@ Please see the documentation for benchmarks versus base Julia, Clang, icc, ifort
 
 LLVM/Julia by default generate essentially optimal code for a primary vectorized part of this loop. In many cases -- such as the dot product -- this vectorized part of the loop computes 4*SIMD-vector-width iterations at a time.
 On the CPU I'm running these benchmarks on with `Float64` data, the SIMD-vector-width is 8, meaning it will compute 32 iterations at a time.
-However, LLVM is very slow at handling the tails, `length(iterations) % 32`. For this reason, [in benchmark plots](https://chriselrod.github.io/LoopVectorization.jl/latest/examples/dot_product/) you can see performance drop as the size of the remainder increases.
+However, LLVM is very slow at handling the tails, `length(iterations) % 32`. For this reason, [in benchmark plots](https://JuliaSIMD.github.io/LoopVectorization.jl/latest/examples/dot_product/) you can see performance drop as the size of the remainder increases.
 
 For simple loops like a dot product, LoopVectorization.jl's most important optimization is to handle these tails more efficiently:
 <details>
@@ -346,7 +346,7 @@ Similar approaches can be taken to make kernels working with a variety of numeri
 * [Gaius.jl](https://github.com/MasonProtter/Gaius.jl)
 * [MaBLAS.jl](https://github.com/YingboMa/MaBLAS.jl)
 * [Octavian.jl](https://github.com/JuliaLinearAlgebra/Octavian.jl)
-* [PaddedMatrices.jl](https://github.com/chriselrod/PaddedMatrices.jl)
+* [PaddedMatrices.jl](https://github.com/JuliaSIMD/PaddedMatrices.jl)
 * [RecursiveFactorization.jl](https://github.com/YingboMa/RecursiveFactorization.jl)
 * [SnpArrays.jl](https://github.com/OpenMendel/SnpArrays.jl)
 * [Tullio.jl](https://github.com/mcabbott/Tullio.jl)

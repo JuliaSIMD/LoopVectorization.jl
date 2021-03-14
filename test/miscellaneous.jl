@@ -68,8 +68,7 @@ using Test
     lssubcol = LoopVectorization.loopset(subcolq);
     # @test LoopVectorization.choose_order(lssubcol) == (Symbol[:i,:j], :i, Symbol("##undefined##"), :j, 1, -1)
     # @test LoopVectorization.choose_order(lssubcol) == (Symbol[:i,:j], :j, :i, :j, 1, 8)
-    @test LoopVectorization.choose_order(lssubcol) == (Symbol[:i,:j], :j, :i, :j, 1, 6)
-
+    @test LoopVectorization.choose_order(lssubcol) == (Symbol[:i,:j], :j, :i, :j, 1, ifelse(LoopVectorization.register_count() == 32, 8, 6))
 
     # if LoopVectorization.register_count() != 8
     #     # @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, :i, :j, Unum, Tnum)

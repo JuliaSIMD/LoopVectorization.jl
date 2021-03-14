@@ -443,8 +443,9 @@ function initialize_outer_reductions!(
     reduct_zero = reduction_zero(op.instruction)
     isvectorized = vectorized ∈ reduceddependencies(op)
     typeTr = ELTYPESYMBOL
+    u₁u, u₂u = isunrolled_sym(op, getloop(ls, us.u₁loopnum).itersymbol, getloop(ls, us.u₂loopnum).itersymbol, getloop(ls, us.vloopnum).itersymbol)#, u₂)
     z = if isvectorized
-        if Umax == 1 || u₂ ≠ -1
+        if Umax == 1 || !u₁u
             if reduct_zero === :zero
                 Expr(:call, lv(:_vzero), VECTORWIDTHSYMBOL, typeTr, rs)
             else
@@ -465,7 +466,6 @@ function initialize_outer_reductions!(
         push!(q.args, Expr(:(=), Symbol(mvar, '_', _Umax), z))
     else#if isu₂unrolled(op) #& (us.vloopnum ≠ us.u₂loopnum) # tiled outer reduction, u₂unrolled
         # TODO: add `(us.vloopnum ≠ us.u₂loopnum)` check to avoid unrolling and vectorizing a reduction along the same axis
-        u₁u, u₂u = isunrolled_sym(op, getloop(ls, us.u₁loopnum).itersymbol, getloop(ls, us.u₂loopnum).itersymbol, getloop(ls, us.vloopnum).itersymbol)#, u₂)
         if u₁u
             push!(q.args, Expr(:(=), Symbol(mvar, '_', u₁), z))
         else
@@ -750,12 +750,12 @@ function isanouterreduction(ls::LoopSet, op::Operation)
     false
 end
 
-tiled_outerreduct_unroll(ls::LoopSet) = tiled_outerreduct_unroll(ls.unrollspecification[])
-function tiled_outerreduct_unroll(us::UnrollSpecification)
-    @unpack u₁, u₂ = us
-    unroll = u₁ ≥ 8 ? 1 : 8 ÷ u₁
-    cld(u₂, cld(u₂, unroll))
-end
+# tiled_outerreduct_unroll(ls::LoopSet) = tiled_outerreduct_unroll(ls.unrollspecification[])
+# function tiled_outerreduct_unroll(us::UnrollSpecification)
+#     @unpack u₁, u₂ = us
+#     unroll = u₁ ≥ 8 ? 1 : 8 ÷ u₁
+#     cld(u₂, cld(u₂, unroll))
+# end
 function calc_Ureduct!(ls::LoopSet, us::UnrollSpecification)
     @unpack u₁loopnum, u₁, u₂, vloopnum = us
     ur = if iszero(length(ls.outer_reductions))
@@ -774,7 +774,35 @@ function calc_Ureduct!(ls::LoopSet, us::UnrollSpecification)
             -1
         end
     else
-        tiled_outerreduct_unroll(us)
+        u₁ui = u₂ui = -1
+        u₁loopsym = getloop(ls,    u₁loopnum).itersymbol
+        u₂loopsym = getloop(ls, us.u₂loopnum).itersymbol
+        vloopsym  = getloop(ls,     vloopnum).itersymbol
+        for or ∈ ls.outer_reductions
+            op = ls.operations[or]
+            u₁u, u₂u = isunrolled_sym(op, u₁loopsym, u₂loopsym, vloopsym)
+            if u₁ui == -1
+                u₁ui = Int(u₁u)
+                u₂ui = Int(u₁u)
+            else
+                @assert (u₁ui == Int(u₁u)) & (u₂ui == Int(u₁u)) "Doesn't currenly andle differently unrolled reductions yet, please file an issue with an example."
+            end
+        end
+        if u₁ui % Bool
+            u₁
+        #     push!(q.args, Expr(:(=), Symbol(mvar, '_', u₁), z))
+        else
+            u₂
+        #     for u ∈ 0:_Umax-1
+        #         # push!(q.args, Expr(:(=), Symbol(mvar, '_', u), z))
+        #         push!(q.args, Expr(:(=), Symbol(mvar, u), z))
+        #     end
+        end
+    #     u₁loopnum == vloopnum
+    #     u₂
+    # else
+    #     u₁
+        # u₁#tiled_outerreduct_unroll(us)
     end
     ls.ureduct[] = ur
 end
@@ -828,6 +856,16 @@ end
 # Base.convert(::Type{Expr}, ls::LoopSet) = lower(ls)
 Base.show(io::IO, ls::LoopSet) = println(io, lower(ls))
 
+function search_children_for_self(op::Operation, target::Symbol = name(op))
+    for opc ∈ children(op)
+        name(opc) === target && return opc
+    end
+    for opc ∈ children(op)#breadth first
+        opcc = search_children_for_self(opc, target)
+        opcc === opc || return opcc
+    end
+    op
+end
 
 # TODO: this is no longer how I generate code...
 """
@@ -845,6 +883,10 @@ function isunrolled_sym(op::Operation, u₁loop::Symbol, u₂loop::Symbol, vloop
     u₂ild = isu₂unrolled(op)
     (accesses_memory(op) | isloopvalue(op)) && return (u₁ild, u₂ild)
     if isconstant(op)
+        if length(loopdependencies(op)) == 0
+            newop = search_children_for_self(op)
+            newop === op || return isunrolled_sym(newop, u₁loop, u₂loop, vloop)
+        end
         if !u₁ild
             u₁ild = u₁loop ∈ reducedchildren(op)
         end
@@ -864,7 +906,7 @@ function isunrolled_sym(op::Operation, u₁loop::Symbol, u₂loop::Symbol, vloop
     if u₂reduced
         if u₁reduced# if both are reduced, we unroll u₁
             if vloop === u₁loop
-                false,true
+                false, true
             else
                 true, false
             end
