@@ -181,6 +181,14 @@ function add_mref!(
     end
     add_mref_ptr!(sptrs, ls, ar, Tsym, C, B, sp, name)
 end
+function loop_indexes_bit!(ls::LoopSet, ar::ArrayReferenceMeta)
+    li = ar.loopedindex;
+    ind = first(getindices(ar))
+    ind === DISCONTIGUOUS && return
+    first(li) || throw(LoopError("The contiguous index of a `BitArray` shouldn't be a complex function.", )ind)
+    ls.loopindexesbit[getloopid(ls,ind)] = true
+    nothing
+end
 function add_mref_ptr!(
     sptrs::Expr, ls::LoopSet, ar::ArrayReferenceMeta, Tsym::Symbol,
     C::Int, B::Int, sp::NTuple{N,Int}, name::Symbol
@@ -190,6 +198,8 @@ function add_mref_ptr!(
     column_major = ntuple(identity, N)
     li = ar.loopedindex;
     if sp === column_major || isone(length(li))
+        # don't set `bit` to true if our vector width is ≥ 8
+        ((Tsym === :Bit) && (ls.vector_width[] < 8)) && loop_indexes_bit!(ls, ar)
         return extract_gsp!(sptrs, name)
     end
     permute_mref!(ar, C, sp)
@@ -206,6 +216,7 @@ function add_mref_ptr!(
         push!(strd_tup.args, Expr(:call, gf, strides, p, false))
         push!(offsets_tup.args, Expr(:call, gf, offsets, p, false))
     end
+    #TODO: fix for `Tsym === Bit`.
     sptype = Expr(:curly, lv(:StridedPointer), Tsym, N, (C == -1 ? -1 : 1), B, column_major)
     sptr = Expr(:call, sptype, Expr(:call, :pointer, tmpsp), strd_tup, offsets_tup)
     pushpreamble!(ls, Expr(:(=), name, sptr))
@@ -527,11 +538,10 @@ function sizeofeltypes(v)::Int
     # sizeof(T)
 end
 
-function avx_loopset(
-    instr::Vector{Instruction}, ops::Vector{OperationStruct}, arf::Vector{ArrayRefStruct},
+function avx_loopset!(
+    ls::LoopSet, instr::Vector{Instruction}, ops::Vector{OperationStruct}, arf::Vector{ArrayRefStruct},
     AM::Vector{Any}, LPSYM::Vector{Any}, LB::Core.SimpleVector, vargs::Core.SimpleVector
 )
-    ls = LoopSet(:LoopVectorization)
     # TODO: check outer reduction types instead
     elementbytes = if length(vargs[1].parameters) > 0
         sizeofeltypes(vargs[1].parameters[1].parameters)
@@ -546,6 +556,7 @@ function avx_loopset(
     nopsv = NOpsType[calcnops(ls, op) for op in ops]
     expandedv = [isexpanded(ls, ops, nopsv, i) for i ∈ eachindex(ops)]
 
+    resize!(ls.loopindexesbit, length(ls.loops)); ls.loopindexesbit .= false;
     mrefs = create_mrefs!(ls, arf, arraysymbolinds, opsymbols, nopsv, expandedv, vargs[1])
     for mref ∈ mrefs
         push!(ls.includedactualarrays, vptr(mref))
@@ -588,15 +599,17 @@ function _avx_loopset(
     nops = length(OPSsv) ÷ 3
     instr = Instruction[Instruction(OPSsv[3i+1], OPSsv[3i+2]) for i ∈ 0:nops-1]
     ops = OperationStruct[ OPSsv[3i] for i ∈ 1:nops ]
-    ls = avx_loopset(
-        instr, ops,
+    ls = LoopSet(:LoopVectorization)
+    inline, u₁, u₂, W, rs, rc, cls, l1, l2, l3, nt = UNROLL
+    set_hw!(ls, rs, rc, cls, l1, l2, l3); ls.vector_width[] = W
+    avx_loopset!(
+        ls, instr, ops,
         ArrayRefStruct[ARFsv...],
         tovector(AMsv), tovector(LPSYMsv), LBsv, vargs
     )::LoopSet
-    inline, u₁, u₂, W, rs, rc, cls, l1, l2, l3, nt = UNROLL
-    set_hw!(ls, rs, rc, cls, l1, l2, l3); ls.vector_width[] = W
     ls
 end
+
 """
     _avx_!(unroll, ops, arf, am, lpsym, lb, vargs...)
 
@@ -619,7 +632,7 @@ Execute an `@avx` block. The block's code is represented via the arguments:
 @generated function _avx_!(
     ::Val{UNROLL}, ::Val{OPS}, ::Val{ARF}, ::Val{AM}, ::Val{LPSYM}, var"#lv#tuple#args#"::Tuple{LB,V}
 ) where {UNROLL, OPS, ARF, AM, LPSYM, LB, V}
-    # 1 + 1 # Irrelevant line you can comment out/in to force recompilation...
+    1 + 1 # Irrelevant line you can comment out/in to force recompilation...
     ls = _avx_loopset(OPS, ARF, AM, LPSYM, LB.parameters, V.parameters, UNROLL)
     # return @show avx_body(ls, UNROLL)
     if last(UNROLL) > 1

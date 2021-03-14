@@ -71,7 +71,7 @@
         end
     end
     function AmulBavx1!(C, A, B)
-        @avx unroll=(1,2) for m ∈ 1:size(A,1), n ∈ axes(B,2)
+        @avx for m ∈ 1:size(A,1), n ∈ axes(B,2)
             Cₘₙ = zero(eltype(C))
             for k ∈ 1:size(A,2)
                 Cₘₙ += A[m,k] * B[k,n]
@@ -624,7 +624,8 @@
         # @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 1, 8)
         @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :k, :n, :m, 1, 8)
     elseif LoopVectorization.register_count() == 16
-        @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 2, 4)
+        # @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 2, 4)
+        @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :n, :m, :n, 2, 4)
     elseif LoopVectorization.register_count() == 8
         @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 1, 4)
     end

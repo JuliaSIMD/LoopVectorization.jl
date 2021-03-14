@@ -125,12 +125,6 @@ end
 function biggest_type_size(ls::LoopSet)
     maximum(elsize, operations(ls))
 end
-# function VectorizationBase.pick_vector_width(ls::LoopSet, u::Symbol)
-#     VectorizationBase.pick_vector_width(length(ls, u), biggest_type_size(ls))
-# end
-# function VectorizationBase.pick_vector_width_shift(ls::LoopSet, u::Symbol)
-#     VectorizationBase.pick_vector_width_shift(length(ls, u), biggest_type_size(ls))
-# end
 function hasintersection(a, b)
     for aᵢ ∈ a, bᵢ ∈ b
         aᵢ === bᵢ && return true
@@ -242,7 +236,6 @@ end
 function unroll_no_reductions(ls, order, vloopsym)
     size_T = biggest_type_size(ls)
     W, Wshift = lsvecwidthshift(ls, vloopsym, size_T)
-    # W, Wshift = VectorizationBase.pick_vector_width_shift(length(ls, vloopsym), size_T)::Tuple{Int,Int}
 
     compute_rt = load_rt = store_rt = 0.0
     unrolled = last(order)
@@ -361,11 +354,25 @@ function determine_unroll_factor(ls::LoopSet, order::Vector{Symbol}, vloopsym::S
     num_reductions = count_reductions(ls)
     # The strategy is to use an unroll factor of 1, unless there appears to be loop carried dependencies (ie, num_reductions > 0)
     # The assumption here is that unrolling provides no real benefit, unless it is needed to enable OOO execution by breaking up these dependency chains
-    if iszero(num_reductions)
-        # if only 1 loop, no need to unroll
-        # if more than 1 loop, there is some cost. Picking 2 here as a heuristic.
-        return unroll_no_reductions(ls, order, vloopsym)
+    loopindexesbit = ls.loopindexesbit
+    if iszero(length(loopindexesbit)) || ((!loopindexesbit[getloopid(ls, vloopsym)]))
+        if iszero(num_reductions)
+            return unroll_no_reductions(ls, order, vloopsym)
+        else
+            return determine_unroll_factor(ls, order, vloopsym, num_reductions)
+        end
+    elseif iszero(num_reductions)
+        return 8 ÷ ls.vector_width[], vloopsym
+    else
+        rttemp, ltemp = determine_unroll_factor(ls, order, vloopsym, vloopsym)
+        UF = min(8, VectorizationBase.nextpow2(max(1, round(Int, ltemp / (rttemp * num_reductions) ) )))
+        UFfactor = 8 ÷ ls.vector_width[]
+        cld(UF, UFfactor)*UFfactor, vloopsym
     end
+end
+# function scale_unrolled()
+# end
+function determine_unroll_factor(ls::LoopSet, order::Vector{Symbol}, vloopsym::Symbol, num_reductions::Int)
     innermost_loop = last(order)
     rt = Inf; rtcomp = Inf; latency = Inf; best_unrolled = Symbol("")
     for unrolled ∈ order
@@ -533,12 +540,17 @@ function solve_unroll(
     W::Int, vloopsym::Symbol, rounduᵢ::Int
 )
     (u₁step, u₂step) = if rounduᵢ == 1 # max is to safeguard against some weird arch I've never heard of.
-        (max(1,cache_lnsze(ls) ÷ reg_size(ls)), 1)
+        (max(1, cache_lnsze(ls) ÷ reg_size(ls)), 1)
     elseif rounduᵢ == 2
         (1, max(1,cache_lnsze(ls) ÷ reg_size(ls)))
+    elseif rounduᵢ == -1
+        (8 ÷ ls.vector_width[], 1)
+    elseif rounduᵢ == -2
+        (1, 8 ÷ ls.vector_width[])
     else
         (1, 1)
     end
+    # @show u₁step, u₂step
     u₁loop = getloop(ls, u₁loopsym)
     u₂loop = getloop(ls, u₂loopsym)
     solve_unroll(
@@ -921,7 +933,7 @@ end
 # But optimal order within tile must still be determined
 # as well as size of the tiles.
 function evaluate_cost_tile(
-    ls::LoopSet, order::Vector{Symbol}, unrollsyms::UnrollSymbols
+    ls::LoopSet, order::Vector{Symbol}, unrollsyms::UnrollSymbols, anyisbit::Bool
 )
     N = length(order)
     @assert N ≥ 2 "Cannot tile merely $N loops!"
@@ -940,7 +952,6 @@ function evaluate_cost_tile(
     # Need to check if fusion is possible
     size_T = biggest_type_size(ls)
     W, Wshift = lsvecwidthshift(ls, vloopsym, size_T)
-    # W, Wshift = VectorizationBase.pick_vector_width_shift(length(ls, vloopsym), size_T)::Tuple{Int,Int}
     # costs =
     # cost_mat[1] / ( unrolled * u₂loopsym)
     # cost_mat[2] / ( u₂loopsym)
@@ -1019,10 +1030,8 @@ function evaluate_cost_tile(
         #elseif isconstant(op)
         end
         rt, lat, rp = cost(ls, op, (u₁loopsym, u₂loopsym), vloopsym, Wshift, size_T)
-        if isload(op)
-            if !prefetch_good_idea
-                prefetch_good_idea = prefetchisagoodidea(ls, op, UnrollArgs(ls, 4, unrollsyms, 4, 0)) ≠ 0
-            end
+        if isload(op) & (!prefetch_good_idea)
+            prefetch_good_idea = prefetchisagoodidea(ls, op, UnrollArgs(ls, 4, unrollsyms, 4, 0)) ≠ 0
         end
         # rp = (opisininnerloop && !(loadintostore(ls, op))) ? rp : zero(rp) # we only care about register pressure within the inner most loop
         rp = opisininnerloop ? rp : zero(rp) # we only care about register pressure within the inner most loop
@@ -1041,10 +1050,22 @@ function evaluate_cost_tile(
     # reg_pres[4] == remaining_registers
     costpenalty = ((reg_pressure[1] + reg_pressure[2] + reg_pressure[3]) > reg_pressure[4]) ? 2 : 1
     u₁v = vloopsym === u₁loopsym; u₂v = vloopsym === u₂loopsym
-    round_uᵢ = prefetch_good_idea ? (u₁v ? 1 : (u₂v ? 2 : 0)) : 0
+    visbit = anyisbit && ls.loopindexesbit[getloopid(ls,vloopsym)]
+    round_uᵢ = if visbit
+        (u₁v ? -1 : (u₂v ? -2 : 0))
+    elseif prefetch_good_idea
+        (u₁v ? 1 : (u₂v ? 2 : 0))
+    else
+        0
+    end
     # @show (irreducible_storecosts / sum(cost_vec))
     if (irreducible_storecosts / sum(cost_vec) ≥ 0.5) && !any(op -> loadintostore(ls, op), operations(ls))
-        u₁, u₂ = (1, 1)
+        u₁, u₂ = if visbit
+            vecsforbyte = 8 ÷ ls.vector_width[]
+            u₁v ? (vecsforbyte,1) : (1,vecsforbyte)
+        else
+            (1, 1)
+        end
         ucost = unroll_cost(cost_vec, 1, 1, length(getloop(ls, u₁loopsym)), length(getloop(ls, u₂loopsym)))
     else
         u₁, u₂, ucost = solve_unroll(ls, u₁loopsym, u₂loopsym, cost_vec, reg_pressure, W, vloopsym, round_uᵢ)
@@ -1198,6 +1219,7 @@ function choose_tile(ls::LoopSet)
     best_order = copyto!(ls.loop_order.bestorder, lo.syms)
     bestu₁ = bestu₂ = best_vec = first(best_order) # filler
     u₁ = u₂ = 0; lowest_cost = Inf; shouldinline = false
+    anyisbit = any(ls.loopindexesbit)
     for newu₂ ∈ lo.syms
         reject_reorder(ls, newu₂) && continue
         for newu₁ ∈ lo.syms#@view(new_order[nt+1:end])
@@ -1207,7 +1229,11 @@ function choose_tile(ls::LoopSet)
             while true
                 for new_vec ∈ new_order # view to skip first
                     reject_reorder(ls, new_vec) && continue
-                    u₁temp, u₂temp, cost_temp, shouldinline_temp = evaluate_cost_tile(ls, new_order, UnrollSymbols(newu₁, newu₂, new_vec))
+                    if anyisbit && ls.loopindexesbit[getloopid(ls,new_vec)]
+                        # ((new_vec === newu₁) || (new_vec === newu₂)) || continue
+                        (new_vec === newu₁) || continue
+                    end
+                    u₁temp, u₂temp, cost_temp, shouldinline_temp = evaluate_cost_tile(ls, new_order, UnrollSymbols(newu₁, newu₂, new_vec), anyisbit)
                     # if cost_temp < lowest_cost # leads to 4 vmovapds
                     if cost_temp ≤ lowest_cost # lead to 2 vmovapds
                         lowest_cost = cost_temp

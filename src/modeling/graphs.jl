@@ -441,6 +441,7 @@ struct LoopSet
     equalarraydims::Vector{Tuple{Vector{Symbol},Vector{Int}}}
     omop::OffsetLoadCollection
     loopordermap::Vector{Int}
+    loopindexesbit::Vector{Bool}
     mod::Symbol
 end
 
@@ -562,7 +563,7 @@ function LoopSet(mod::Symbol)
         Ref(-1), # Ureduct
         Tuple{Vector{Symbol},Vector{Int}}[],
         OffsetLoadCollection(),
-        Int[],
+        Int[], Bool[],
         mod
     )
 end

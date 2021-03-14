@@ -259,8 +259,10 @@ using Test
             y1 = view(y1full, M .+ (1:M));
             y2 = view(y2full, M .+ (1:M));
             Abit = A .> 0.5;
-            fill!(y2, -9999); mygemv_avx!(y2, Abit, x);
-            @test y2 ≈ Abit * x
+            if LoopVectorization.pick_vector_width(T) ≥ 8
+                fill!(y2, -9999); mygemv_avx!(y2, Abit, x);
+                @test y2 ≈ Abit * x
+            end
             fill!(y2, -9999); mygemvavx!(y2, Abit, x);
             @test y2 ≈ Abit * x
             xbit = x .> 0.5;
