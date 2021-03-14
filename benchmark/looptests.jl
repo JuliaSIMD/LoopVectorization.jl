@@ -88,9 +88,9 @@ function gemmavx!(Cc::AbstractMatrix{Complex{T}}, Ac::AbstractMatrix{Complex{T}}
     end
 end
 function gemmavxt!(𝐂, 𝐀, 𝐁)
-    @avxt for m ∈ axes(𝐀,1), n ∈ axes(𝐁,2)
+    @avxt for m ∈ indices((𝐀,𝐂),1), n ∈ indices((𝐁,𝐂),2)
         𝐂ₘₙ = zero(eltype(𝐂))
-        for k ∈ axes(𝐀,2)
+        for k ∈ indices((𝐀,𝐁),(2,1))
             𝐂ₘₙ += 𝐀[m,k] * 𝐁[k,n]
         end
         𝐂[m,n] = 𝐂ₘₙ
