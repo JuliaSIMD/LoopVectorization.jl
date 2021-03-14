@@ -95,12 +95,12 @@ end
 @generated function _choose_num_blocks(M::UInt, ::StaticInt{U}, nt, ::StaticInt{NTMAX}) where {U,NTMAX}
     # valid range for nt: 2 ≤ nt ≤ NTMAX
     if NTMAX > 8
-        quote
+        return quote
             $(Expr(:meta,:inline))
             choose_num_blocks_table(M, StaticInt{$U}(), nt, StaticInt{$NTMAX}())
         end
     elseif NTMAX == 2 # `nt` must be `2`
-        quote
+        return quote
             $(Expr(:meta,:inline))
             choose_num_blocks(M, StaticInt{$U}(), StaticInt{$NTMAX}())
         end
