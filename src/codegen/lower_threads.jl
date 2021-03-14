@@ -202,7 +202,8 @@ end
 
 function outer_reduct_combine_expressions(ls::LoopSet, retv)
     gf = GlobalRef(Core, :getfield)
-    q = Expr(:block, :(var"#load#thread#ret#" = $gf(ThreadingUtilities.load(var"#thread#ptr#", typeof($retv), 64),2,false)))
+    q = Expr(:block, :(var"#load#thread#ret#" = $gf(ThreadingUtilities.load(var"#thread#ptr#", typeof($retv), $(reg_size(ls))),2,false)))
+    # push!(q.args, :(@show var"#load#thread#ret#"))
     for (i,or) ∈ enumerate(ls.outer_reductions)
         op = ls.operations[or]
         var = name(op)
@@ -559,6 +560,7 @@ function thread_two_loops_expr(
         end
         # @show $lastboundexpr
         $_avx_call_
+        # @show $retv
         var"#thread#id#" = 0x00000000
         var"#thread#mask#" = CheapThreads.mask(var"#threads#")
         var"#threads#remain#" = true

@@ -57,6 +57,7 @@ end
 
 @testset "Threading" begin
     for M ∈ 17:399
+        # @show M
         K = M; N = M;
         A = rand(M,K); B = rand(K,N);
         @test dot(A,B) ≈ mydotavx(A,B)
@@ -64,9 +65,9 @@ end
         C1 = A * B; C0 = similar(C1);
         @test AmulB!(C0, A, B) ≈ C1
 
-        x = randn(Complex{Float64}, 1783);
-        W = randn(Complex{Float64}, 1783, 1577);
-        y = randn(Complex{Float64}, 1577);
+        x = randn(Complex{Float64}, 3M-1);
+        W = randn(Complex{Float64}, 3M-1, 3M+1);
+        y = randn(Complex{Float64}, 3M+1);
         @test dot(x,W,y) ≈ dot3(x,W,y)
 
         kern = OffsetArray(randn(3,3),-2,-2)
