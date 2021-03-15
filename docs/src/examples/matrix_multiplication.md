@@ -5,13 +5,13 @@ One of the friendliest problems for vectorization is matrix multiplication. Give
 LoopVectorization currently doesn't do any memory-modeling or memory-based optimizations, so it will still run into problems as the size of matrices increases. But at smaller sizes, it's capable of achieving a healthy percent of potential GFLOPS.
 We can write a single function:
 ```julia
-function A_mul_B!(𝐂, 𝐀, 𝐁)
-    @avx for m ∈ axes(𝐀,1), n ∈ axes(𝐁,2)
-        𝐂mn = zero(eltype(𝐂))
-        for k ∈ axes(𝐀,2)
-            𝐂mn += 𝐀[m,k] * 𝐁[k,n]
+function A_mul_B!(C, A, B)
+	@avx for n ∈ indices((C,B), 2), m ∈ indices((C,A), 1)
+        Cmn = zero(eltype(C))
+        for k ∈ indices((A,B), (2,1))
+            Cmn += C[m,k] * B[k,n]
         end
-        𝐂[m,n] = 𝐂mn
+		C[m,n] = Cmn
     end
 end
 ```

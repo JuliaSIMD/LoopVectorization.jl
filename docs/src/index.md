@@ -8,6 +8,7 @@ Please file an issue if you run into any problems.
 ```@contents
 Pages = [
     "getting_started.md",
+    "examples/multithreading.md",
     "examples/matrix_multiplication.md",
     "examples/array_interface.md",
     "examples/matrix_vector_ops.md",

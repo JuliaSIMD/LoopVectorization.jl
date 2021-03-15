@@ -395,6 +395,7 @@ function check_type(::Type{T}) where {T}
     false
 end
 @inline check_device(::ArrayInterface.CPUPointer) = true
+@inline check_device(::ArrayInterface.CPUTuple) = true
 function check_device(x)
     @info """`LoopVectorization.check_args` returned `false`, because `ArrayInterface.device(::$(typeof(x))) == $x`
         `LoopVectorization` normally requires `ArrayInterface.CPUPointer` (exceptions include ranges, `BitVector`s, and

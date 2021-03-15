@@ -7,6 +7,7 @@ makedocs(;
         "Home" => "index.md",
         "Getting Started" => "getting_started.md",
         "Examples" => [
+            "examples/multithreading.md",
             "examples/matrix_multiplication.md",
             "examples/array_interface.md",
             "examples/matrix_vector_ops.md",
