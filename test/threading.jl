@@ -17,9 +17,9 @@ function AmulB!(C,A,B)
     C
 end
 function dot3(x::AbstractVector{Complex{T}}, A::AbstractMatrix{Complex{T}}, y::AbstractVector{Complex{T}}) where {T}
-    xr = reinterpret(reshape, Float64, x);
-    yr = reinterpret(reshape, Float64, y);
-    Ar = reinterpret(reshape, Float64, A);
+    xr = reinterpret(reshape, T, x);
+    yr = reinterpret(reshape, T, y);
+    Ar = reinterpret(reshape, T, A);
     sre = zero(T)
     sim = zero(T)
     @avxt for n in axes(Ar,3)

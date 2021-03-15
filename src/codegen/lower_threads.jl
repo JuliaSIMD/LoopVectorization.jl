@@ -138,11 +138,11 @@ end
 end
 
 # if a threaded loop is vectorized, call
-function choose_num_blocks(M, ::StaticInt{U}, nt) where {U}
+@inline function choose_num_blocks(M, ::StaticInt{U}, nt) where {U}
     _choose_num_blocks(M % UInt, StaticInt{U}(), nt, lv_max_num_threads())
 end
 # otherwise, call
-choose_num_blocks(nt, ::StaticInt{NC} = lv_max_num_threads()) where {NC} = @inbounds choose_num_block_table(StaticInt{NC}())[nt]
+@inline choose_num_blocks(nt, ::StaticInt{NC} = lv_max_num_threads()) where {NC} = @inbounds choose_num_block_table(StaticInt{NC}())[nt]
 
 
 
@@ -160,7 +160,7 @@ choose_num_blocks(nt, ::StaticInt{NC} = lv_max_num_threads()) where {NC} = @inbo
 #     block_per_m, blocks_per_n
 # end
 
-function choose_num_threads(::Val{C}, ::Val{NT}, x) where {C,NT}
+@inline function choose_num_threads(::Val{C}, ::Val{NT}, x) where {C,NT}
     fx = Base.uitofp(Float64, x)
     min(Base.fptoui(UInt, Base.ceil_llvm(0.05460264079015985*C*Base.sqrt_llvm(fx))), NT)
 end
@@ -194,7 +194,7 @@ function push_loop_length_expr!(q::Expr, ls::LoopSet)
     end
     nothing
 end
-function divrem_fast(numerator, denominator)
+@inline function divrem_fast(numerator, denominator)
     d = Base.udiv_int(numerator, denominator)
     r = numerator - denominator*d
     d, r

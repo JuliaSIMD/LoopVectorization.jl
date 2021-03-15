@@ -8,34 +8,37 @@ function dot_simd(a::AbstractVector, b::AbstractVector)
     end
     s
 end
-function cdot_mat(a::AbstractMatrix, b::AbstractMatrix)
-    re = zero(eltype(a))
-    im = zero(eltype(a))
+function cdot_mat(ca::AbstractVector{Complex{T}}, cb::AbstractVector{Complex{T}}) where {T}
+    a = reinterpret(reshape, T, ca)
+    b = reinterpret(reshape, T, cb)
+    re = zero(T); im = zero(T)
     @avx for i ∈ axes(a,2)
         re += a[1,i] * b[1,i] + a[2,i] * b[2,i]
         im += a[1,i] * b[2,i] - a[2,i] * b[1,i]
     end
-    Complex(re,im)
+    Complex(re, im)
 end
-function cdot_affine(a::AbstractVector, b::AbstractVector)
-    re = zero(eltype(a))
-    im = zero(eltype(a))
+function cdot_affine(ca::AbstractVector{Complex{T}}, cb::AbstractVector{Complex{T}}) where {T}
+    a = reinterpret(T, ca);
+    b = reinterpret(T, cb);
+    re = zero(T); im = zero(T)
     # with a multiplier, we go from `i = 1 -> 2i = 2` to `i = 0 -> 2i = 0
     # 2(i+1-1) = 2i + 2 - 2, so....
     @avx for i ∈ 1:length(a)>>>1
         re += a[2i-1] * b[2i-1] + a[2i] * b[2i  ]
         im += a[2i-1] * b[2i  ] - a[2i] * b[2i-1]
     end
-    Complex(re,im)
+    Complex(re, im)
 end
-function cdot_stride(a::AbstractVector, b::AbstractVector)
-    re = zero(eltype(a))
-    im = zero(eltype(a))
+function cdot_stride(ca::AbstractVector{Complex{T}}, cb::AbstractVector{Complex{T}}) where {T}
+    a = reinterpret(T, ca);
+    b = reinterpret(T, cb);
+    re = zero(T); im = zero(T)
     @avx for i ∈ 1:2:length(a)
         re += a[i] * b[i  ] + a[i+1] * b[i+1]
         im += a[i] * b[i+1] - a[i+1] * b[i  ]
     end
-    Complex(re,im)
+    Complex(re, im)
 end
 function qdot_simd(x::AbstractVector{NTuple{4,T}}, y::AbstractVector{NTuple{4,T}}) where {T}
     a = zero(T)
@@ -132,15 +135,11 @@ end
     for i ∈ 1:128
         ac = rand(Complex{Float64}, i);
         bc = rand(Complex{Float64}, i);
-        acv = reinterpret(Float64, ac);
-        bcv = reinterpret(Float64, bc);
         dsimd = dot_simd(ac, bc)
         if VERSION ≥ v"1.6.0-rc1"
-            acm = reinterpret(reshape, Float64, ac);
-            bcm = reinterpret(reshape, Float64, bc);
-            @test dsimd ≈ cdot_mat(acm, bcm)
+            @test dsimd ≈ cdot_mat(ac, bc)
         end
-        @test dsimd ≈ cdot_affine(acv, bcv) ≈ cdot_stride(acv, bcv)
+        @test dsimd ≈ cdot_affine(ac, bc) ≈ cdot_stride(ac, bc)
 
 
         xq = [ntuple(_ -> rand(), Val(4)) for _ ∈ 1:i];

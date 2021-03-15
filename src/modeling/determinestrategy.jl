@@ -74,7 +74,9 @@ function cost(ls::LoopSet, op::Operation, (u₁,u₂)::Tuple{Symbol,Symbol}, vlo
         if instr == Instruction(:-) || instr === Instruction(:sub_fast) || instr == Instruction(:+) || instr == Instruction(:add_fast)
             return 0.0, 0, 0.0
         end
-    elseif iscompute(op) && all(opp -> (isloopvalue(opp) | isconstant(opp)), parents(op))
+    elseif iscompute(op) &&
+        Base.sym_in(instruction(op).instr, (:(+), :(-), :add_fast, :sub_fast)) &&
+        all(opp -> (isloopvalue(opp) | isconstant(opp)), parents(op))
         return 0.0, 0, 0.0
     end
     opisvectorized = isvectorized(op)
@@ -189,7 +191,8 @@ function evaluate_cost_unroll(
             included_vars[id] = true
             # @show op, cost(ls, op, vloopsym, Wshift, size_T)
             # TODO: use actual unrolls here?
-            total_cost += iter * first(cost(ls, op, (Symbol(""),Symbol("")), vloopsym, Wshift, size_T))
+            c = first(cost(ls, op, (Symbol(""),Symbol("")), vloopsym, Wshift, size_T))
+            total_cost += iter * c
             total_cost > max_cost && return total_cost # abort if more expensive; we only want to know the cheapest
         end
     end
