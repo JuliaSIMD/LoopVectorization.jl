@@ -71,19 +71,19 @@ end
     @inbounds factors[(length(factors) + 1)>>>1]
 end
 
-struct ChooseNumBlocks{U,C} <: Function end
-function (cnb::ChooseNumBlocks{U,C})(M::UInt) where {U,C}
-    choose_num_blocks(M, StaticInt{U}(), StaticInt{C}())
-end
+# struct ChooseNumBlocks{U,C} <: Function end
+# function (cnb::ChooseNumBlocks{U,C})(M::UInt) where {U,C}
+#     choose_num_blocks(M, StaticInt{U}(), StaticInt{C}())
+# end
 
-@generated function choose_num_block_table(::StaticInt{U}, ::StaticInt{NC}) where {U,NC}
-    t = Expr(:tuple)
-    for n ∈ 1:NC
-        cnb = :(ChooseNumBlocks{$U,$n}())
-        push!(t.args, :(@cfunction($cnb, Tuple{UInt,UInt}, (UInt,))))
-    end
-    t
-end
+# @generated function choose_num_block_table(::StaticInt{U}, ::StaticInt{NC}) where {U,NC}
+#     t = Expr(:tuple)
+#     for n ∈ 1:NC
+#         cnb = :(ChooseNumBlocks{$U,$n}())
+#         push!(t.args, :(@cfunction($cnb, Tuple{UInt,UInt}, (UInt,))))
+#     end
+#     t
+# end
 @generated function choose_num_block_table(::StaticInt{NC}) where {NC}
     t = Expr(:tuple)
     for n ∈ 1:NC
@@ -94,48 +94,50 @@ end
 
 @generated function _choose_num_blocks(M::UInt, ::StaticInt{U}, nt, ::StaticInt{NTMAX}) where {U,NTMAX}
     # valid range for nt: 2 ≤ nt ≤ NTMAX
-    if NTMAX > 8
-        return quote
-            $(Expr(:meta,:inline))
-            choose_num_blocks_table(M, StaticInt{$U}(), nt, StaticInt{$NTMAX}())
-        end
-    elseif NTMAX == 2 # `nt` must be `2`
+    # if NTMAX > 8
+    #     return quote
+    #         $(Expr(:meta,:inline))
+    #         choose_num_blocks_table(M, StaticInt{$U}(), nt, StaticInt{$NTMAX}())
+    #     end
+    # else
+    if NTMAX == 2 # `nt` must be `2`
         return quote
             $(Expr(:meta,:inline))
             choose_num_blocks(M, StaticInt{$U}(), StaticInt{$NTMAX}())
         end
     end
-    q = Expr(:block, Expr(:meta,:inline))
+    q = Expr(:block)#, Expr(:meta,:inline))
     ifq = Expr(
         :if,
         :(nt == $NTMAX),
         :(choose_num_blocks(M, StaticInt{$U}(), StaticInt{$NTMAX}()))
     )
-    add_bisecting_if_branches!(ifq, 2, NTMAX-1, U)
+    add_bisecting_if_branches!(ifq, 2, NTMAX-1, U, false)
     push!(q.args, ifq)
     q
 end
-function add_bisecting_if_branches!(q, lb, ub, U)
+function add_bisecting_if_branches!(q, lb, ub, U, isfirst::Bool)
     if lb == ub
         push!(q.args, :(choose_num_blocks(M, StaticInt{$U}(), StaticInt{$lb}())))
         return
     end
     midpoint = (lb + ub) >> 1
-    alt = Expr(:if, :(nt > $midpoint))
-    add_bisecting_if_branches!(q, midpoint+1, ub, U)
-    add_bisecting_if_branches!(q, lb, midpoint, U)
+    alt = Expr(isfirst ? :if : :elseif, :(nt > $midpoint))
+    add_bisecting_if_branches!(alt, midpoint+1, ub, U, true)
+    add_bisecting_if_branches!(alt, lb, midpoint, U, false)
+    push!(q.args, alt)
     return
 end
 
-@inline function choose_num_blocks_table(M, ::StaticInt{U}, nt, ::StaticInt{NTMAX}) where {U,NTMAX}
-    if nt == NTMAX
-        choose_num_blocks(M % UInt, StaticInt{U}(), StaticInt{NTMAX}())
-    else
-        @inbounds fptr = choose_num_block_table(StaticInt{U}(), StaticInt{NTMAX}())[nt]
-        VectorizationBase.assume(fptr ≠ C_NULL)
-        ccall(fptr, Tuple{UInt,UInt}, (UInt,), M%UInt)
-    end
-end
+# @inline function choose_num_blocks_table(M, ::StaticInt{U}, nt, ::StaticInt{NTMAX}) where {U,NTMAX}
+#     if nt == NTMAX
+#         choose_num_blocks(M % UInt, StaticInt{U}(), StaticInt{NTMAX}())
+#     else
+#         @inbounds fptr = choose_num_block_table(StaticInt{U}(), StaticInt{NTMAX}())[nt]
+#         VectorizationBase.assume(fptr ≠ C_NULL)
+#         ccall(fptr, Tuple{UInt,UInt}, (UInt,), M%UInt)
+#     end
+# end
 
 # if a threaded loop is vectorized, call
 @inline function choose_num_blocks(M, ::StaticInt{U}, nt) where {U}
@@ -417,15 +419,16 @@ function thread_one_loops_expr(
     length(ls.outer_reductions) > 0 ? push!(q.args, retv) : push!(q.args, nothing)
     Expr(:block, ls.preamble, q)
 end
-function define_vthread_blocks(threadedloop, u₁loop, u₂loop, u₁, u₂, ntmax, tn)
+function define_vthread_blocks(vloop, u₁loop, u₂loop, u₁, u₂, ntmax, tn)
     loopunrollname = Symbol("#num#unrolls#thread#$tn#")
+    lhs = tn == 0 ? :((var"#thread#factor#0#", var"#thread#factor#1#")) : :((var"#thread#factor#1#", var"#thread#factor#0#"))
     sntmax = staticexpr(ntmax % Int)
-    if threadedloop === u₁loop
-        :(_choose_num_blocks($loopunrollname, StaticInt{$u₁}(), var"#nthreads#", $sntmax))
-    elseif threadedloop === u₂loop
-        :(_choose_num_blocks($loopunrollname, StaticInt{$u₂}(), var"#nthreads#", $sntmax))
+    if vloop === u₁loop
+        :($lhs = _choose_num_blocks($loopunrollname, StaticInt{$u₁}(), var"#nthreads#", $sntmax))
+    elseif vloop === u₂loop
+        :($lhs = _choose_num_blocks($loopunrollname, StaticInt{$u₂}(), var"#nthreads#", $sntmax))
     else
-        :(_choose_num_blocks($loopunrollname, StaticInt{1}(), var"#nthreads#", $sntmax))
+        :($lhs  = _choose_num_blocks($loopunrollname, StaticInt{1}(), var"#nthreads#", $sntmax))
     end
 end
 function define_thread_blocks(threadedloop1, threadedloop2, vloop, u₁loop, u₂loop, u₁, u₂, ntmax)
@@ -434,8 +437,8 @@ function define_thread_blocks(threadedloop1, threadedloop2, vloop, u₁loop, u�
     elseif vloop === threadedloop2
         define_vthread_blocks(threadedloop2, u₁loop, u₂loop, u₁, u₂, ntmax, 1)
     else
-        :(choose_num_blocks(var"#nthreads#", StaticInt{$(Int(nt))}()))
-    end
+        :(choose_num_blocks(var"#nthreads#", StaticInt{$(Int(ntmax))}()))
+   end
 end
 function thread_two_loops_expr(
     ls::LoopSet, ua::UnrollArgs, valid_thread_loop::Vector{Bool}, ntmax::UInt, c::Float64,
@@ -505,9 +508,9 @@ function thread_two_loops_expr(
             var"#thread#factor#0#" = var"#num#unrolls#thread#0#"
             var"#thread#factor#1#" = var"#num#unrolls#thread#1#"
         else
-            (var"#thread#factor#0#", var"#thread#factor#1#") = $blockdef
+            $blockdef
         end
-
+        # @show (var"#thread#factor#0#",var"#thread#factor#1#")
         var"#nrequest#" = (var"#nthreads#" % UInt32) - 0x00000001
         $loopstart1
         var"#loop#1#start#init#" = var"#iter#start#0#"

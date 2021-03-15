@@ -27,8 +27,8 @@ void cdot3(double* c, double* x, double* A, double* y, long M, long N){
   for (long n = 0; n < N; n++){
     double tr = 0.0, ti = 0.0;
     for(long m = 0; m < M; m++){
-      tr += x[2*m] * A[2*m   + n*N] + x[2*m+1] * A[2*m+1 + n*N];
-      ti += x[2*m] * A[2*m+1 + n*N] - x[2*m+1] * A[2*m   + n*N];
+      tr += x[2*m] * A[2*m   + 2*n*N] + x[2*m+1] * A[2*m+1 + 2*n*N];
+      ti += x[2*m] * A[2*m+1 + 2*n*N] - x[2*m+1] * A[2*m   + 2*n*N];
     }
     sr += tr * y[2*n  ] - ti * y[2*n+1];
     si += tr * y[2*n+1] + ti * y[2*n  ];
