@@ -617,11 +617,11 @@ function avx_threads_expr(
     num_candiates = sum(valid_thread_loop)
     # num_to_thread = min(num_candiates, 2)
     # candidate_ids =
-    if num_candiates == 0 # it was called from `avx_body` but now `nt` was set to `1`
+    if (num_candiates == 0) || (nt ≤ 1) # it was called from `avx_body` but now `nt` was set to `1`
         avx_body(ls, UNROLL)
-    elseif num_candiates == 1
+    elseif (num_candiates == 1) || (nt ≤ 3)
         thread_one_loops_expr(ls, ua, valid_thread_loop, nt, c, UNROLL, OPS, ARF, AM, LPSYM)
-    else
+    else # requires at least 4 threads
         thread_two_loops_expr(ls, ua, valid_thread_loop, nt, c, UNROLL, OPS, ARF, AM, LPSYM)
     end
 end
