@@ -252,7 +252,7 @@ function create_mrefs!(
 end
 function create_mrefs!(
     ls::LoopSet, arf::Vector{ArrayRefStruct}, as::Vector{Symbol}, os::Vector{Symbol},
-    nopsv::Vector{NOpsType}, expanded::Vector{Bool}, ::Type{VectorizationBase.GroupedStridedPointers{P,C,B,R,I,X,O}}
+    nopsv::Vector{NOpsType}, expanded::Vector{Bool}, @nospecialize(_::Type{VectorizationBase.GroupedStridedPointers{P,C,B,R,I,X,O}})
 ) where {P,C,B,R,I,X,O}
     mrefs = Vector{ArrayReferenceMeta}(undef, length(arf))
     sptrs = Expr(:tuple)

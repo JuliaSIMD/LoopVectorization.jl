@@ -105,8 +105,8 @@ loop-reordering so as to improve performance:
 """
 LoopVectorization
 
-# include("precompile.jl")
-# _precompile_()
+include("precompile.jl")
+_precompile_()
 
 # import ChainRulesCore, ForwardDiff
 # include("vmap_grad.jl")

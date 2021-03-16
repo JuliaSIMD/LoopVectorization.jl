@@ -98,6 +98,16 @@ end
 @testset "Threading" begin
     dcd = DenseConvDims{2,(5,5),3,6}()
     kern4 = rand(Float32, 5, 5, 3, 6);
+    for M ∈ 17:50:267
+        img = rand(Float32, M, M, 3, 100);
+        outimage1 = Array{Float32}(undef, size(img,1)+1-size(kern4,1), size(img,2)+1-size(kern4,2), size(kern4,4), size(img,4));
+        outimage2 = similar(outimage1);
+
+        convlayer!(outimage1, img, kern4, dcd);
+        convlayer_direct!(outimage2, img, kern4, dcd);
+        @test outimage1 ≈ outimage2
+    end
+
     for M ∈ 17:399
         # @show M
         K = M; N = M;
@@ -116,16 +126,6 @@ end
         out1 = OffsetArray(randn(size(A) .- 2), 1, 1)
         out2 = similar(out1);
         @test conv!(out1, A, kern) ≈ conv_baseline!(out2, A, kern)
-
-
-        img = rand(Float32, M, M, 3, 100);
-        out1 = Array{Float32}(undef, size(img,1)+1-size(kern4,1), size(img,2)+1-size(kern4,2), size(kern4,4), size(img,4));
-        out2 = similar(out1);
-
-        convlayer!(out1, img, kern4, dcd);
-        convlayer_direct!(out2, img, kern4, dcd);
-        @test out1 ≈ out2
-
     end
 end
 
