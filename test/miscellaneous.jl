@@ -66,11 +66,15 @@ using Test
                 B[j,i] = A[j,i] - x[j]
                 end)
     lssubcol = LoopVectorization.loopset(subcolq);
+    # @test LoopVectorization.choose_order(lssubcol) == (Symbol[:i,:j], :i, Symbol("##undefined##"), :j, 1, -1)
+    # @test LoopVectorization.choose_order(lssubcol) == (Symbol[:i,:j], :j, :i, :j, 1, 8)
+    @test LoopVectorization.choose_order(lssubcol) == (Symbol[:i,:j], :j, :i, :j, 1, ifelse(LoopVectorization.register_count() == 32, 8, 6))
+
     # if LoopVectorization.register_count() != 8
     #     # @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, :i, :j, Unum, Tnum)
     #     @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, :i, :j, 1, 1)
     # end
-    @test LoopVectorization.choose_order(lssubcol) == (Symbol[:i,:j], :i, Symbol("##undefined##"), :j, 1, -1)
+    # @test LoopVectorization.choose_order(lssubcol) == (Symbol[:i,:j], :i, Symbol("##undefined##"), :j, 1, -1)
     # @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :i, Symbol("##undefined##"), :j, 4, -1)
     # if LoopVectorization.register_count() == 32
     #     @test LoopVectorization.choose_order(lssubcol) == (Symbol[:i,:j], :j, :i, :j, 2, 10)
@@ -572,7 +576,7 @@ using Test
     #  3.0  4.0  1.0  2.0  7.0  8.0  5.0  6.0  11.0  12.0  9.0  10.0  15.0  16.0  13.0  …  191.0  192.0  189.0  190.0  195.0  196.0  193.0  194.0  197.0  198.0  199.0
      # 1.0  4.0  5.0  2.0  3.0  8.0  9.0  6.0  7.0  12.0  13.0  10.0  11.0  16.0  17.0  …  187.0  192.0  193.0  190.0  191.0  196.0  197.0  194.0  195.0  198.0  199.0
     function instruct_x_avx!(r::AbstractVector, loc::Int)
-      @avx for lhs in 0:(length(r) >> 1) - (1 << (loc - 1))
+        @avx for lhs in 0:(length(r) >> 1) - (1 << (loc - 1))
             # mask locations before
             p = lhs + lhs & ~(1 << (loc - 1) - 1)
             q = lhs + lhs & ~(1 << (loc - 1) - 1) + 1 << (loc - 1)
@@ -662,8 +666,22 @@ function maxavx!(R::AbstractArray{T}, Q, keep=nothing) where T
     end
     R
 end
-function splitintonoloop(U = randn(2,2), E1 = randn(2))
-    t = 1
+    function reductionorder(E1, n)
+        t = 0.5
+        a = 1.0
+        _s = 0.0
+        k = length(E1);
+        @avx for j = 1:k
+            for i = 1:n
+                v = a * (1 - t * t)
+                _s += v
+            end
+            E1[j] = _s / n
+        end
+        E1
+    end
+function splitintonoloop(U, E1)
+    t = 0.5
     a = 1.0
     _s = 0.0
     n, k = size(U)
@@ -678,8 +696,8 @@ function splitintonoloop(U = randn(2,2), E1 = randn(2))
     end
     U, E1
 end
-function splitintonoloop_reference(U = randn(2,2), E1 = randn(2))
-    t = 1
+function splitintonoloop_reference(U, E1)
+    t = 0.5
     a = 1.0
     _s = 0.0
     n, k = size(U)
@@ -965,7 +983,7 @@ end
         @test test_bit_shift(r) == test_bit_shiftavx(r)
         @test test_bit_shift(r) == test_bit_shift_avx(r)
 
-        r = T(-10):T(2.3):T(1000)
+        r = T(-1):T(0.23):T(10)
         s = if VERSION >= v"1.5.0-DEV.255" || T != Float32
             sum(r)
         else
@@ -1020,7 +1038,7 @@ end
 
         @test manyreturntest(Q) ≈ manyreturntestavx(Q)
         
-        U0 = randn(T, 5, 7); E0 = randn(T, 7);
+        U0 = randn(T, 15, 17); E0 = randn(T, 17);
         U1, E1 = splitintonoloop_reference(copy(U0), copy(E0));
         U2, E2 = splitintonoloop(copy(U0), copy(E0));
         @test U1 ≈ U2

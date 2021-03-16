@@ -1,3 +1,7 @@
+const DISCONTIGUOUS = Symbol("##DISCONTIGUOUSSUBARRAY##")
+const CONSTANTZEROINDEX = Symbol("##CONSTANTZEROINDEX##")
+
+
 """
     ArrayReference
 
@@ -17,17 +21,19 @@ struct ArrayReference
     the previous load `x[i-1]` can be "carried over" to the next iteration.
     Only used for small (`Int8`) offsets."""    
     offsets::Vector{Int8}
+    strides::Vector{Int8}
 end
-ArrayReference(array, indices) = ArrayReference(array, indices, zeros(Int8, length(indices)))
+ArrayReference(array, indices) = ArrayReference(array, indices, zeros(Int8, length(indices)), ones(Int8, length(indices)))
 function sameref(x::ArrayReference, y::ArrayReference)
     (x.array === y.array) && (x.indices == y.indices)
 end
 function Base.isequal(x::ArrayReference, y::ArrayReference)
     sameref(x, y) || return false
     xoffs = x.offsets; yoffs = y.offsets
+    xmult = x.strides; ymult = y.strides
     length(xoffs) == length(yoffs) || return false
     for n ∈ eachindex(xoffs)
-        xoffs[n] == yoffs[n] || return false
+        ((xoffs[n] == yoffs[n]) & (xmult[n] == ymult[n])) || return false
     end
     true
 end
@@ -53,6 +59,17 @@ function ArrayReferenceMeta(ref::ArrayReference, loopedindex, ptr = vptr(ref))
     ArrayReferenceMeta(
         ref, loopedindex, ptr
     )
+end
+
+struct OffsetLoadCollection
+    opids::Vector{Vector{Int}}
+    # offsets::Vector{Vector{Vector{Int8}}}
+    opidcollectionmap::Vector{Tuple{Int,Int}}
+    batchedcollections::Vector{SubArray{Tuple{Int,Int}, 1, Vector{Tuple{Int,Int}}, Tuple{UnitRange{Int}}, true}}
+    batchedcollectionmap::Vector{Tuple{Int,Int}}
+    function OffsetLoadCollection()
+        new(Vector{Int}[], Tuple{Int,Int}[], SubArray{Tuple{Int,Int}, 1, Vector{Tuple{Int,Int}}, Tuple{UnitRange{Int}}, true}[], Tuple{Int,Int}[])
+    end
 end
 
 # function Base.hash(x::ArrayReference, h::UInt)
@@ -170,6 +187,10 @@ mutable struct Operation <: AbstractLoopOperation
     u₂unrolled::Bool
     "Cached value for whether vectorized ∈ loopdependencies(op)"
     vectorized::Bool
+    "Cached value for whether or not to lower memop using `Unrolled`"
+    rejectcurly::Bool
+    "Cached value for whether or not to lower memop by interleaving it with offset operations"
+    rejectinterleave::Bool
     function Operation(
         identifier::Int,
         variable,
@@ -294,25 +315,6 @@ These names will be further processed if op is tiled and/or unrolled.
 """
 mangledvar(op::Operation) = op.mangledvariable
 
-"""
-Returns `0` if the op is the declaration of the constant outerreduction variable.
-Returns `n`, where `n` is the constant declarations's index among parents(op), if op is an outter reduction.
-Returns `-1` if not an outerreduction.
-"""
-function isouterreduction(op::Operation)
-    if isconstant(op) # equivalent to checking if length(loopdependencies(op)) == 0
-        op.instruction === LOOPCONSTANT ? 0 : -1
-    elseif iscompute(op)
-        var = op.variable
-        for (n,opp) ∈ enumerate(parents(op))
-            opp.variable === var && opp.instruction === LOOPCONSTANT && return n
-        end
-        -1
-    else
-        -1
-    end
-end
-
 mutable struct ArrayReferenceMetaPosition
     mref::ArrayReferenceMeta
     parents::Vector{Operation}
@@ -341,14 +343,19 @@ arrayref(ref::ArrayReferenceMetaPosition) = ref.ref.ref
 arrayref(op::Operation) = op.ref.ref
 getindices(ref) = arrayref(ref).indices
 getoffsets(ref) = arrayref(ref).offsets
-const DISCONTIGUOUS = Symbol("##DISCONTIGUOUSSUBARRAY##")
+getstrides(ref) = arrayref(ref).strides
+
+isdiscontiguous(ref) = isdiscontiguous_inds(getindices(ref))
+function isdiscontiguous_inds(inds)
+    # (first(inds) === DISCONTIGUOUS) || (first(inds) === CONSTANTZEROINDEX)
+    first(inds) === DISCONTIGUOUS
+end
 function makediscontiguous!(inds)
-    if iszero(length(inds)) || first(inds) !== DISCONTIGUOUS
+    if iszero(length(inds)) || !isdiscontiguous_inds(inds)
         pushfirst!(inds, DISCONTIGUOUS)
     end
     nothing
 end
-isdiscontiguous(ref) = first(getindices(ref)) === DISCONTIGUOUS
 
 function getindicesonly(ref)
     indices = getindices(ref)

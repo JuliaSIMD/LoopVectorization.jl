@@ -15,12 +15,13 @@ struct ArrayRefStruct{array,ptr}
     index_types::UInt64
     indices::UInt64
     offsets::UInt64
+    strides::UInt64
 end
 array(ar::ArrayRefStruct{a,p}) where {a,p} = a
 ptr(ar::ArrayRefStruct{a,p}) where {a,p}   = p
 
 function findindoradd!(v::Vector{T}, s::T) where {T}
-    ind = findfirst(sᵢ -> sᵢ == s, v)
+    ind = findfirst(==(s), v)
     ind === nothing || return ind
     push!(v, s)
     length(v)
@@ -29,21 +30,28 @@ function ArrayRefStruct(ls::LoopSet, mref::ArrayReferenceMeta, arraysymbolinds::
     index_types = zero(UInt64)
     indices = zero(UInt64)
     offsets = zero(UInt64)
-    indv = mref.ref.indices
-    offv = mref.ref.offsets
+    strides = zero(UInt64)
+    @unpack loopedindex, ref = mref
+    indv = ref.indices
+    offv = ref.offsets
+    strv = ref.strides
     # we can discard that the array was considered discontiguous, as it should be recovered from type information
-    start = 1 + (first(indv) === Symbol("##DISCONTIGUOUSSUBARRAY##"))
+    start = 1 + (first(indv) === DISCONTIGUOUS)
     for (n,ind) ∈ enumerate(@view(indv[start:end]))
         index_types <<= 8
         indices <<= 8
         offsets <<= 8
         offsets |= (offv[n] % UInt8)
-        if mref.loopedindex[n]
+        strides <<= 8
+        strides |= (strv[n] % UInt8)
+        if loopedindex[n]
             index_types |= LoopIndex
-            indices |= getloopid(ls, ind)
+            if strv[n] ≠ 0
+                indices |= getloopid(ls, ind)
+            end
         else
             parent = get(ls.opdict, ind, nothing)
-            @assert !isnothing(parent) "Index $ind not found in array."
+            @assert !(parent === nothing) "Index $ind not found in array."
             # if parent === nothing
             #     index_types |= SymbolicIndex
             #     indices |= findindoradd!(arraysymbolinds, ind)
@@ -53,7 +61,7 @@ function ArrayRefStruct(ls::LoopSet, mref::ArrayReferenceMeta, arraysymbolinds::
             # end
         end
     end
-    ArrayRefStruct{mref.ref.array,mref.ptr}( index_types, indices, offsets )
+    ArrayRefStruct{mref.ref.array,mref.ptr}( index_types, indices, offsets, strides )
 end
 
 """
@@ -123,17 +131,12 @@ end
 ## turn a LoopSet into a type object which can be used to reconstruct the LoopSet.
 
 function loop_boundary!(q::Expr, loop::Loop)
-    if loop.startexact & loop.stopexact
-        push!(q.args, Expr(:call, lv(:OptionallyStaticUnitRange), staticexpr(loop.starthint), staticexpr(loop.stophint)))
-    elseif loop.rangesym === Symbol("")
-        lb = if startexact
-            Expr(:call, lv(:OptionallyStaticUnitRange), staticexpr(loop.starthint), loop.stopsym)
-        elseif stopexact
-            Expr(:call, lv(:OptionallyStaticUnitRange), loop.startsym, staticexpr(loop.stophint))
-        else
-            Expr(:call, :(:), loop.startsym, loop.stopsym)
-        end
-        push!(q.args, lb)
+    if isstaticloop(loop) || loop.rangesym === Symbol("")
+        call = Expr(:call, :(:))
+        pushexpr!(call, first(loop))
+        unitstep(loop) || pushexpr!(call, step(loop))
+        pushexpr!(call, last(loop))
+        push!(q.args, call)
     else
         push!(q.args, loop.rangesym)
     end
@@ -141,7 +144,9 @@ end
 
 function loop_boundaries(ls::LoopSet)
     lbd = Expr(:tuple)
-    foreach(loop -> loop_boundary!(lbd, loop), ls.loops)
+    for loop ∈ ls.loops
+        loop_boundary!(lbd, loop)
+    end
     lbd
 end
 
@@ -172,13 +177,13 @@ function loopset_return_value(ls::LoopSet, ::Val{extract}) where {extract}
     if isone(length(ls.outer_reductions))
         op = getop(ls, ls.outer_reductions[1])
         if extract
-            if (isu₁unrolled(op) | isu₂unrolled(op))
-                Expr(:call, :data, Symbol(mangledvar(op), 0))
-            else
-                Expr(:call, :data, mangledvar(op))
-            end
+            # if (isu₁unrolled(op) | isu₂unrolled(op))
+                Expr(:call, :data, Symbol(mangledvar(op), "##onevec##"))
+            # else
+                # Expr(:call, :data, mangledvar(op))
+            # end
         else
-            Symbol(mangledvar(op), 0)
+            Symbol(mangledvar(op), "##onevec##")
         end
     else#if length(ls.outer_reductions) > 1
         ret = Expr(:tuple)
@@ -186,9 +191,9 @@ function loopset_return_value(ls::LoopSet, ::Val{extract}) where {extract}
         for or ∈ ls.outer_reductions
             op = ops[or]
             if extract
-                push!(ret.args, Expr(:call, :data, Symbol(mangledvar(op), 0)))
+                push!(ret.args, Expr(:call, :data, Symbol(mangledvar(op), "##onevec##")))
             else
-                push!(ret.args, Symbol(mangledvar(ops[or]), 0))
+                push!(ret.args, Symbol(mangledvar(ops[or]), "##onevec##"))
             end
         end
         ret
@@ -221,8 +226,96 @@ end
 
 val(x) = Expr(:call, Expr(:curly, :Val, x))
 
+function add_grouped_strided_pointer!(extra_args::Expr, ls::LoopSet)
+    gsp = Expr(:call, lv(:grouped_strided_pointer))
+    tgarrays = Expr(:tuple)
+    i = 0
+    preserve_assignment = Expr(:tuple); preserve = Symbol[];
+    @unpack equalarraydims, refs_aliasing_syms = ls
+    # duplicate_map = collect(1:length(refs_aliasing_syms))
+    duplicate_map = Vector{Int}(undef, length(refs_aliasing_syms))
+    for (j,ref) ∈ enumerate(refs_aliasing_syms)
+        vpref = vptr(ref)
+        duplicate = false
+        for k ∈ 1:j-1 # quadratic, but should be short enough so that this is faster than O(1) algs
+            if vptr(refs_aliasing_syms[k]) === vpref
+                duplicate = true
+                # duplicate_map[j] = k
+                break
+            end
+        end
+        duplicate && continue
+        # duplicate_map[j] == j || continue
+        duplicate_map[j] = (i += 1)
+        found = false
+        # for (vptrs,dims) ∈ equalarraydims
+        #     _id = findfirst(==(vpref), vptrs)
+        #     _id === nothing && continue
+        #     id::Int = _id
+        #     found = true
+        #     if vptr(ref.ref.array) === vpref
+        #         push!(tgarrays.args, ref.ref.array)
+        #     else
+        #         push!(tgarrays.args, vpref)
+        #         push!(preserve, ref.ref.array)
+        #     end
+        #     break
+        # end
+        # if !found
+        pres = gensym!(ls, "#preserve#")
+        push!(preserve_assignment.args, pres)
+        if vptr(ref.ref.array) === vpref
+            push!(tgarrays.args, ref.ref.array)
+            push!(preserve, pres)
+        else
+            push!(tgarrays.args, vpref)
+            push!(preserve, ref.ref.array)
+        end
+    end
+    push!(gsp.args, tgarrays)
+    matcheddims = Expr(:tuple)
+    for (vptrs,dims) ∈ equalarraydims
+        t = Expr(:tuple)
+        for (vp,d) ∈ zip(vptrs,dims)
+            _id = findfirst(Base.Fix2(===,vp) ∘ vptr, refs_aliasing_syms)
+            _id === nothing && continue
+            push!(t.args, Expr(:tuple, duplicate_map[_id], d))
+        end
+        length(t.args) > 1 && push!(matcheddims.args, t)
+    end
+    push!(gsp.args, val(matcheddims))
+    gsps = gensym!(ls, "#grouped#strided#pointer#")
+    push!(extra_args.args, gsps)
+    pushpreamble!(ls, Expr(:(=), Expr(:tuple, gsps, preserve_assignment), gsp))
+    preserve
+end
+
+# first_cache() = ifelse(gt(num_cache_levels(), StaticInt{2}()), StaticInt{2}(), StaticInt{1}())
+# function _first_cache_size(::StaticInt{FCS}) where {FCS}
+#     L1inclusive = StaticInt{FCS}() - VectorizationBase.cache_size(One())
+#     ifelse(eq(first_cache(), StaticInt(2)) & VectorizationBase.cache_inclusive(StaticInt(2)), L1inclusive, StaticInt{FCS}())
+# end
+# _first_cache_size(::Nothing) = StaticInt(262144)
+# first_cache_size() = _first_cache_size(cache_size(first_cache()))
+
+@generated function _avx_config_val(
+    ::Val{inline}, ::Val{u₁}, ::Val{u₂}, ::Val{thread}, ::StaticInt{W},
+    ::StaticInt{RS}, ::StaticInt{AR}, ::StaticInt{NT},
+    ::StaticInt{CLS}, ::StaticInt{L1}, ::StaticInt{L2}, ::StaticInt{L3}
+) where {inline,u₁,u₂,thread,W,RS,AR,CLS,L1,L2,L3,NT}
+    nt = min(thread, NT % UInt)
+    t = Expr(:tuple, inline, u₁, u₂, W, RS, AR, CLS, L1,L2,L3, nt)
+    Expr(:call, Expr(:curly, :Val, t))
+end
+@inline function avx_config_val(::Val{inline}, ::Val{u₁}, ::Val{u₂}, ::Val{thread}, ::StaticInt{W}) where {inline,u₁,u₂,thread,W}
+    _avx_config_val(
+        Val{inline}(), Val{u₁}(), Val{u₂}(), Val{thread}(), StaticInt{W}(),
+        register_size(), available_registers(), lv_max_num_threads(),
+        cache_linesize(), cache_size(StaticInt(1)), cache_size(StaticInt(2)), cache_size(StaticInt(3))
+    )
+end
 # Try to condense in type stable manner
-function generate_call(ls::LoopSet, inline_unroll::NTuple{3,Int8}, debug::Bool = false)
+function generate_call(ls::LoopSet, (inline,u₁,u₂)::Tuple{Bool,Int8,Int8}, thread::UInt, debug::Bool = false)
     operation_descriptions = Expr(:tuple)
     varnames = Symbol[]; ids = Vector{Int}(undef, length(operations(ls)))
     for op ∈ operations(ls)
@@ -233,31 +326,28 @@ function generate_call(ls::LoopSet, inline_unroll::NTuple{3,Int8}, debug::Bool =
     end
     arraysymbolinds = Symbol[]
     arrayref_descriptions = Expr(:tuple)
-    foreach(ref -> push!(arrayref_descriptions.args, ArrayRefStruct(ls, ref, arraysymbolinds, ids)), ls.refs_aliasing_syms)
+    duplicate_ref = fill(false, length(ls.refs_aliasing_syms))
+    for (j,ref) ∈ enumerate(ls.refs_aliasing_syms)
+        vpref = vptr(ref)
+        # duplicate_ref[j] ≠ 0 && continue
+        duplicate_ref[j] && continue
+        push!(arrayref_descriptions.args, ArrayRefStruct(ls, ref, arraysymbolinds, ids))
+    end
     argmeta = argmeta_and_consts_description(ls, arraysymbolinds)
     loop_bounds = loop_boundaries(ls)
     loop_syms = tuple_expr(QuoteNode, ls.loopsymbols)
-    inline, u₁, u₂ = inline_unroll
     func = debug ? lv(:_avx_loopset_debug) : lv(:_avx_!)
     lbarg = debug ? Expr(:call, :typeof, loop_bounds) : loop_bounds
-    unroll_param_tup = Expr(
-        :tuple, inline, u₁, u₂,
-        Expr(:call, lv(:unwrap), VECTORWIDTHSYMBOL),
-        Expr(:call, lv(:unwrap), Expr(:call, lv(:register_size))),
-        Expr(:call, lv(:unwrap), Expr(:call, lv(:available_registers))),
-        Expr(:call, lv(:unwrap), Expr(:call, lv(:cache_linesize)))
-    )
-    q = Expr(
-        :call, func, val(unroll_param_tup),
-        val(operation_descriptions), val(arrayref_descriptions), val(argmeta), val(loop_syms)
-    )
+    unroll_param_tup = Expr(:call, lv(:avx_config_val), :(Val{$inline}()), :(Val{$u₁}()), :(Val{$u₂}()), :(Val{$thread}()), VECTORWIDTHSYMBOL)
+    q = Expr(:call, func, unroll_param_tup, val(operation_descriptions), val(arrayref_descriptions), val(argmeta), val(loop_syms))
     # debug && deleteat!(q.args, 2)
     vargs_as_tuple = true#!debug
     vargs_as_tuple || push!(q.args, lbarg)
     extra_args = vargs_as_tuple ? Expr(:tuple) : q
-    foreach(ref -> push!(extra_args.args, vptr(ref)), ls.refs_aliasing_syms)
-
-    foreach(is -> push!(extra_args.args, last(is)), ls.preamble_symsym)
+    preserve = add_grouped_strided_pointer!(extra_args, ls)
+    for is ∈ ls.preamble_symsym
+        push!(extra_args.args, last(is))
+    end
     append!(extra_args.args, arraysymbolinds)
     add_reassigned_syms!(extra_args, ls)
     add_external_functions!(extra_args, ls)
@@ -265,7 +355,7 @@ function generate_call(ls::LoopSet, inline_unroll::NTuple{3,Int8}, debug::Bool =
     vargs_as_tuple && push!(q.args, Expr(:tuple, lbarg, extra_args))
     vecwidthdefq = Expr(:block)
     define_eltype_vec_width!(vecwidthdefq, ls, nothing)
-    Expr(:block, vecwidthdefq, q)
+    Expr(:block, vecwidthdefq, q), preserve
 end
 
 
@@ -280,12 +370,15 @@ To provide support for a custom array type, ensure that `check_args` returns tru
 Additionally, define `pointer` and `stride` methods.
 """
 @inline function check_args(A::AbstractArray{T}) where {T}
-    check_type(T) && ArrayInterface.device(A) === ArrayInterface.CPUPointer()
+    check_type(T) && check_device(ArrayInterface.device(A))
 end
 @inline check_args(A::BitVector) = true
 @inline check_args(A::BitArray) = iszero(size(A,1) & 7)
 @inline check_args(::VectorizationBase.AbstractStridedPointer) = true
-@inline check_args(_) = false
+@inline function check_args(x)
+    @info "`LoopVectorization.check_args(::$(typeof(x))) == false`, therefore compiling a probably slow `@inbounds @fastmath` fallback loop." maxlog=1
+    false
+end
 @inline check_args(A, B, C::Vararg{Any,K}) where {K} = check_args(A) && check_args(B, C...)
 @inline check_args(::AbstractRange{T}) where {T} = check_type(T)
 @inline check_args(::Type{T}) where {T <: VectorizationBase.NativeTypesV} = true
@@ -294,8 +387,21 @@ end
 
 Returns true if the element type is supported.
 """
-check_type(::Type{T}) where {T <: NativeTypes} = true
-check_type(::Type{T}) where {T} = false
+@inline check_type(::Type{T}) where {T <: NativeTypes} = true
+function check_type(::Type{T}) where {T}
+    @info """`LoopVectorization.check_type` returned `false`, because `LoopVectorization.check_type(::$(T)) == false`.
+        `LoopVectorization` currently only supports `T <: $(NativeTypes)`.
+        Therefore compiling a probably slow `@inbounds @fastmath` fallback loop.""" maxlog=1
+    false
+end
+@inline check_device(::ArrayInterface.CPUPointer) = true
+@inline check_device(::ArrayInterface.CPUTuple) = true
+function check_device(x)
+    @info """`LoopVectorization.check_args` returned `false`, because `ArrayInterface.device(::$(typeof(x))) == $x`
+        `LoopVectorization` normally requires `ArrayInterface.CPUPointer` (exceptions include ranges, `BitVector`s, and
+        `BitArray`s whose number of rows is a multiple of 8). Therefore compiling a probably slow `@inbounds @fastmath` fallback loop.""" maxlog=1
+    false
+end
 
 function check_args_call(ls::LoopSet)
     q = Expr(:call, lv(:check_args))
@@ -313,23 +419,29 @@ make_crashy(q) = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,
 @inline vecmemaybe(x::VectorizationBase._Vec) = Vec(x)
 @inline vecmemaybe(x::Tuple) = VectorizationBase.VecUnroll(x)
 
-function setup_call_inline(ls::LoopSet, inline::Int8 = zero(Int8), U::Int8 = zero(Int8), T::Int8 = zero(Int8))
-    call = generate_call(ls, (inline,U,T))
+function gc_preserve(call::Expr, preserve::Vector{Symbol})
+    q = Expr(:gc_preserve, call)
+    append!(q.args, preserve)
+    q
+end
+
+function setup_call_inline(ls::LoopSet, inline::Bool, u₁::Int8, u₂::Int8, thread::Int)
+    call, preserve = generate_call(ls, (inline,u₁,u₂), thread % UInt, false)
     if iszero(length(ls.outer_reductions))
-        q = Expr(:block,gc_preserve(ls, call))
-        append!(ls.preamble.args, q.args)
+        pushpreamble!(ls, gc_preserve(call, preserve))
+        push!(ls.preamble.args, nothing)
         return ls.preamble
     end
     retv = loopset_return_value(ls, Val(false))
     outer_reducts = Expr(:local)
-    q = Expr(:block,gc_preserve(ls, Expr(:(=), retv, call)))
+    q = Expr(:block,gc_preserve(Expr(:(=), retv, call), preserve))
     for or ∈ ls.outer_reductions
         op = ls.operations[or]
         var = name(op)
         # push!(call.args, Symbol("##TYPEOF##", var))
         mvar = mangledvar(op)
         instr = instruction(op)
-        out = Symbol(mvar, 0)
+        out = Symbol(mvar, "##onevec##")
         push!(outer_reducts.args, out)
         push!(q.args, Expr(:(=), var, Expr(:call, lv(reduction_scalar_combine(instr)), Expr(:call, lv(:vecmemaybe), out), var)))
     end
@@ -339,10 +451,12 @@ function setup_call_inline(ls::LoopSet, inline::Int8 = zero(Int8), U::Int8 = zer
 end
 function setup_call_debug(ls::LoopSet)
     # avx_loopset(instr, ops, arf, AM, LB, vargs)
-    pushpreamble!(ls, generate_call(ls, (zero(Int8),zero(Int8),zero(Int8)), true))
+    pushpreamble!(ls, first(generate_call(ls, (false,zero(Int8),zero(Int8)), zero(UInt), true)))
     Expr(:block, ls.prepreamble, ls.preamble)
 end
-function setup_call(ls::LoopSet, q::Expr, source::LineNumberNode, inline::Int8 = zero(Int8), check_empty::Bool = false, u₁::Int8 = zero(Int8), u₂::Int8 = zero(Int8))
+function setup_call(
+    ls::LoopSet, q::Expr, source::LineNumberNode, inline::Bool, check_empty::Bool, u₁::Int8, u₂::Int8, thread::Int
+)
     # We outline/inline at the macro level by creating/not creating an anonymous function.
     # The old API instead was based on inlining or not inline the generated function, but
     # the generated function must be inlined into the initial loop preamble for performance reasons.
@@ -350,9 +464,8 @@ function setup_call(ls::LoopSet, q::Expr, source::LineNumberNode, inline::Int8 =
     # inlining the generated function into the loop preamble.
     lnns = extract_all_lnns(q)
     pushfirst!(lnns, source)
-    call = setup_call_inline(ls, inline, u₁, u₂)
+    call = setup_call_inline(ls, inline, u₁, u₂, thread)
     call = check_empty ? check_if_empty(ls, call) : call
-    isnothing(q) && return Expr(:block, ls.prepreamble, call)
     result = Expr(:block, ls.prepreamble, Expr(:if, check_args_call(ls), call, make_crashy(make_fast(q))))
     prepend_lnns!(result, lnns)
     return result

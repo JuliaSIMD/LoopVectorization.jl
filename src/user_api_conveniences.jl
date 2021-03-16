@@ -13,7 +13,7 @@ const GEMMLOOPSET = loopset(
 
 
 function matmul_params(rs::Int, rc::Int, cls::Int)
-    set_hw!(GEMMLOOPSET, rs, rc, cls)
+    set_hw!(GEMMLOOPSET, rs, rc, cls, Int(cache_size(StaticInt(1))), Int(cache_size(StaticInt(2))), Int(cache_size(StaticInt(3))))
     order = choose_order(GEMMLOOPSET)
     order[5], last(order)
 end

@@ -109,6 +109,7 @@ using LoopVectorization: Static
         (Static{1}(), (Static{UR}() - Static{LR}() + Static{1}()))
     end
     ArrayInterface.offsets(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (Static{LR}(), Static{LC}())
+    ArrayInterface.dense_dims(::Type{<:SizedOffsetMatrix{T}}) where {T} = ArrayInterface.dense_dims(Matrix{T})
     Base.getindex(A::SizedOffsetMatrix, i, j) = LoopVectorization.vload(LoopVectorization.stridedpointer(A), (i,j))
     function avx2dunrolled!(out::AbstractMatrix, A::AbstractMatrix, kern::SizedOffsetMatrix{T,-1,1,-1,1}) where {T}
         Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> kern_ik_jk = kern[ik-2,jk-2]
@@ -127,7 +128,7 @@ using LoopVectorization: Static
         @avx unroll=(2,2) for j in axes(out,2), i in axes(out,1)
             Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> kern_ik_jk = kern[ik - 2, jk + (-2)]
             tmp_0 = zero(eltype(out))
-            j1 = j * 1
+            j1 = j * 1 # If you're reading this code for examples, don't do this! The point is to test
             Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> tmp_{ik+(jk-1)*3} = A[i + (ik-2), (jk-2) + j1] * kern_ik_jk + tmp_{ik+(jk-1)*3-1}
             out[i,j] = tmp_9
         end
@@ -204,7 +205,10 @@ using LoopVectorization: Static
         end
         out
     end
-
+    function pparent(x) # go through nested parents
+        px = parent(x)
+        px === x ? x : pparent(px)
+    end
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
         Abase = fill(T(NaN), 200, 200);
@@ -218,58 +222,56 @@ using LoopVectorization: Static
             fr = first(r); lr = last(r);
             kern = OffsetArray(rand(T, length(r), length(r)), r, r);
             # We test parent equality so that an accidental write out of bounds leading to test failure.
-            out1 = OffsetArray(view(fill(T(-123456.789), size(A) .+ 32), (1+lr:100-lr) .+ 32, (1+lr:100-lr) .+ 32), lr, lr);   # stay away from the edges of A
+            out1 = OffsetArray(view(fill(T(-123456.789), size(A) .+ 100), (1+lr:100-lr) .+ 32, (1+lr:100-lr) .+ 32), lr, lr);   # stay away from the edges of A
             # out1 = OffsetArray(similar(A, size(A).-2), 1, 1);   # stay away from the edges of A
             out2 = deepcopy(out1); out3 = deepcopy(out1); out4 = deepcopy(out1);
             skern = SizedOffsetMatrix{T,fr,lr,fr,lr}(parent(kern));
 
             old2d!(out1, A, kern);
             avx2d!(out2, A, kern);
-            @test parent(out1) ≈ parent(out2)
+            @test pparent(out1) ≈ pparent(out2)
 
             avx2douter!(out3, A, kern);
-            @test parent(out1) ≈ parent(out3)
+            @test pparent(out1) ≈ pparent(out3)
 
             fill!(out2, NaN); avx2d!(out2, A, skern);
-            @test parent(out1) ≈ parent(out2)
+            @test pparent(out1) ≈ pparent(out2)
 
             fill!(out2, NaN); avx2douter!(out2, At', kern);
-            @test parent(out1) ≈ parent(out2)
+            @test pparent(out1) ≈ pparent(out2)
 
             fill!(out2, NaN); avx2douter!(out2', A, kern);
-            @test parent(out1) ≈ parent(out2)'
+            @test pparent(out1) ≈ pparent(out2)'
 
             fill!(out2, NaN); avx2douter!(out2', At', kern);
-            @test parent(out1) ≈ parent(out2)'
+            @test pparent(out1) ≈ pparent(out2)'
 
             fill!(out3, NaN); avx2douter!(out3, A, skern);
-            @test parent(out1) ≈ parent(out3)
+            @test pparent(out1) ≈ pparent(out3)
 
             if r == -1:1
                 fill!(out3, NaN); avx2dunrolled!(out3, A, skern);
-                @test parent(out1) ≈ parent(out3)
+                @test pparent(out1) ≈ pparent(out3)
 
                 fill!(out3, NaN); avx2dunrolled2x2!(out3, A, skern);
-                @test parent(out1) ≈ parent(out3)
+                @test pparent(out1) ≈ pparent(out3)
 
                 fill!(out3, NaN); avx2dunrolled3x3!(out3, A, skern);
-                @test parent(out1) ≈ parent(out3)
+                @test pparent(out1) ≈ pparent(out3)
             end
             
-            @test parent(avxgeneric!(out4, A, kern)) ≈ parent(out1)
+            @test pparent(avxgeneric!(out4, A, kern)) ≈ pparent(out1)
             fill!(out4, NaN);
-            @test parent(avxgeneric!(out4, A, skern)) ≈ parent(out1)
+            @test pparent(avxgeneric!(out4, A, skern)) ≈ pparent(out1)
 
-            fill!(out4, NaN); @test parent(avxgeneric2!(out4, A, kern)) ≈ parent(out1)
-            fill!(out4, NaN); @test parent(avxgeneric2!(out4, A, skern)) ≈ parent(out1)
-            fill!(out4, NaN); @test parent(avxgeneric2!(out4, At', kern)) ≈ parent(out1)
-            fill!(out4, NaN); @test parent(avxgeneric2!(out4, At', skern)) ≈ parent(out1)
-            fill!(out4, NaN); @test parent(avxgeneric2!(out4', A, kern)')' ≈ parent(out1)
-            fill!(out4, NaN); @test parent(avxgeneric2!(out4', A, skern)')' ≈ parent(out1)
-            fill!(out4, NaN); @test parent(avxgeneric2!(out4', At', kern)')' ≈ parent(out1)
-            fill!(out4, NaN); @test parent(avxgeneric2!(out4', At', skern)')' ≈ parent(out1)
+            fill!(out4, NaN); @test pparent(avxgeneric2!(out4, A, kern)) ≈ pparent(out1)
+            fill!(out4, NaN); @test pparent(avxgeneric2!(out4, A, skern)) ≈ pparent(out1)
+            fill!(out4, NaN); @test pparent(avxgeneric2!(out4, At', kern)) ≈ pparent(out1)
+            fill!(out4, NaN); @test pparent(avxgeneric2!(out4, At', skern)) ≈ pparent(out1)
+            fill!(out4, NaN); @test pparent(avxgeneric2!(out4', A, kern)')' ≈ pparent(out1)
+            fill!(out4, NaN); @test pparent(avxgeneric2!(out4', A, skern)')' ≈ pparent(out1)
+            fill!(out4, NaN); @test pparent(avxgeneric2!(out4', At', kern)')' ≈ pparent(out1)
+            fill!(out4, NaN); @test pparent(avxgeneric2!(out4', At', skern)')' ≈ pparent(out1)
         end
     end
-
-
 end

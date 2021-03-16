@@ -71,7 +71,7 @@
         end
     end
     function AmulBavx1!(C, A, B)
-        @avx unroll=(1,2) for m ∈ 1:size(A,1), n ∈ axes(B,2)
+        @avx for m ∈ 1:size(A,1), n ∈ axes(B,2)
             Cₘₙ = zero(eltype(C))
             for k ∈ 1:size(A,2)
                 Cₘₙ += A[m,k] * B[k,n]
@@ -114,9 +114,9 @@
     #         C[m,n] += ΔCₘₙ * factor
     #     end;
     function AmuladdBavx!(C, A, B, α = one(eltype(C)))
-        @avx unroll=(2,2) for m ∈ axes(A,1), n ∈ axes(B,2)
+        @avx unroll=(2,2) for m ∈ indices((A,C),1), n ∈ indices((B,C),2)
             ΔCₘₙ = zero(eltype(C))
-            for k ∈ axes(A,2)
+            for k ∈ indices((A,B),(2,1))
                 ΔCₘₙ += A[m,k] * B[k,n]
             end
             C[m,n] += α * ΔCₘₙ
@@ -621,9 +621,11 @@
     C[m,n] = ΔCₘₙ
     end) |> LoopVectorization.loopset;
     if LoopVectorization.register_count() == 32
-        @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 1, 8)
+        # @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 1, 8)
+        @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :k, :n, :m, 1, 8)
     elseif LoopVectorization.register_count() == 16
-        @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 2, 4)
+        # @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 2, 4)
+        @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :n, :m, :n, 2, 4)
     elseif LoopVectorization.register_count() == 8
         @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 1, 4)
     end
@@ -648,12 +650,17 @@
     function Base.axes(::SizedMatrix{M,N}) where {M,N}
         (LoopVectorization.CloseOpen(LoopVectorization.Static{M}()), LoopVectorization.CloseOpen(LoopVectorization.Static{N}()))
     end
+    function LoopVectorization.ArrayInterface.axes_types(::Type{SizedMatrix{M,N,T}}) where {M,N,T}
+        Tuple{LoopVectorization.CloseOpen{LoopVectorization.Static{0},LoopVectorization.Static{M}}, LoopVectorization.CloseOpen{LoopVectorization.Static{0},LoopVectorization.Static{N}}}
+    end
     Base.unsafe_convert(::Type{Ptr{T}}, A::SizedMatrix{M,N,T}) where {M,N,T} = pointer(A.data)
     LoopVectorization.ArrayInterface.strides(::SizedMatrix{M}) where {M} = (LoopVectorization.Static{1}(),LoopVectorization.Static{M}())
     LoopVectorization.ArrayInterface.contiguous_axis(::Type{<:SizedMatrix}) = LoopVectorization.One()
     LoopVectorization.ArrayInterface.contiguous_batch_size(::Type{<:SizedMatrix}) = LoopVectorization.Zero()
     LoopVectorization.ArrayInterface.stride_rank(::Type{<:SizedMatrix}) = (LoopVectorization.Static(1), LoopVectorization.Static(2))
+    # LoopVectorization.ArrayInterface.offsets(::Type{SizedMatrix{M,N,T}}) where {M,N,T}  = (LoopVectorization.Static{0}(), LoopVectorization.Static{0}())
     LoopVectorization.ArrayInterface.offsets(::SizedMatrix) = (LoopVectorization.Static{0}(), LoopVectorization.Static{0}())
+    LoopVectorization.ArrayInterface.dense_dims(::Type{SizedMatrix{M,N,T}}) where {M,N,T} = LoopVectorization.ArrayInterface.dense_dims(Matrix{T})
 # struct ZeroInitializedArray{T,N,A<:DenseArray{T,N}} <: DenseArray{T,N}
 #     data::A
 # end
@@ -821,7 +828,7 @@
                 Bs = SizedMatrix{K,N}(B);
                 Bts = SizedMatrix{N,K}(Bt);
                 Cs = SizedMatrix{M,N}(C);
-                C2z = LoopVectorization.OffsetArray(C2, -1, -1)
+                C2z = LoopVectorization.OffsetArray(C2, -1, -1);
                 @time @testset "avx $T static gemm" begin
                     # AmulBavx1!(Cs, As, Bs)
                     # @test Cs ≈ C2

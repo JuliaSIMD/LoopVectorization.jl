@@ -12,7 +12,7 @@ const START_TIME = time()
 
 @time @testset "LoopVectorization.jl" begin
 
-    Aqua.test_all(LoopVectorization)
+    # @time Aqua.test_all(LoopVectorization)
     # @test isempty(detect_unbound_args(LoopVectorization))
 
     @time include("printmethods.jl")
@@ -28,6 +28,8 @@ const START_TIME = time()
     @time include("check_empty.jl")
 
     @time include("loopinductvars.jl")
+
+    @time include("shuffleloadstores.jl")
     
     @time include("zygote.jl")
 
@@ -56,6 +58,8 @@ const START_TIME = time()
     @time include("broadcast.jl")
 
     @time include("gemm.jl")
+
+    @time include("threading.jl")
 end
 
 const ELAPSED_MINUTES = (time() - START_TIME)/60

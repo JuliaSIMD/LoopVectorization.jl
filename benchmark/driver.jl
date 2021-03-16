@@ -196,30 +196,30 @@ end
 sizes = 256:-1:2
 longsizes = 1024:-1:2
 
-logdettriangle_bench = benchmark_logdettriangle(sizes); println("logdet(LowerTriangular(A)) benchmark results:"); println(logdettriangle_bench)
-dot3_bench = benchmark_dot3(sizes); println("x' * A * y benchmark results:"); println(dot3_bench)
+println("logdet(LowerTriangular(A)) benchmark results:"); logdettriangle_bench = benchmark_logdettriangle(sizes); println(logdettriangle_bench)
+println("x' * A * y benchmark results:"); dot3_bench = benchmark_dot3(sizes); println(dot3_bench)
 
-AmulB_bench = benchmark_AmulB(sizes); println("A * B benchmark results:"); println(AmulB_bench)
-AmulBt_bench = benchmark_AmulBt(sizes); println("A * B' benchmark results:"); println(AmulBt_bench)
-AtmulBt_bench = benchmark_AtmulBt(sizes); println("A' * B' benchmark results:"); println(AtmulBt_bench)
-AtmulB_bench = benchmark_AtmulB(sizes); println("A' * B benchmark results:"); println(AtmulB_bench)
+println("A * B benchmark results:"); AmulB_bench = benchmark_AmulB(sizes); println(AmulB_bench)
+println("A * B' benchmark results:"); AmulBt_bench = benchmark_AmulBt(sizes); println(AmulBt_bench)
+println("A' * B' benchmark results:"); AtmulBt_bench = benchmark_AtmulBt(sizes); println(AtmulBt_bench)
+println("A' * B benchmark results:"); AtmulB_bench = benchmark_AtmulB(sizes); println(AtmulB_bench)
 
-Amulvb_bench = benchmark_Amulvb(sizes); println("A * b benchmark results:"); println(Amulvb_bench)
-Atmulvb_bench = benchmark_Atmulvb(sizes); println("A' * b benchmark results:"); println(Atmulvb_bench)
+println("A * b benchmark results:"); Amulvb_bench = benchmark_Amulvb(sizes); println(Amulvb_bench)
+println("A' * b benchmark results:"); Atmulvb_bench = benchmark_Atmulvb(sizes); println(Atmulvb_bench)
 
-dot_bench = benchmark_dot(longsizes); println("a' * b benchmark results:"); println(dot_bench)
-selfdot_bench = benchmark_selfdot(longsizes); println("a' * a benchmark results:"); println(selfdot_bench)
+println("a' * b benchmark results:"); dot_bench = benchmark_dot(longsizes); println(dot_bench)
+println("a' * a benchmark results:"); selfdot_bench = benchmark_selfdot(longsizes); println(selfdot_bench)
 
-sse_bench = benchmark_sse(sizes); println("Benchmark resutls of summing squared error:"); println(sse_bench)
-aplusBc_bench = benchmark_aplusBc(sizes); println("Benchmark results of a .+ B .* c':"); println(aplusBc_bench)
-AplusAt_bench = benchmark_AplusAt(sizes); println("Benchmark results of A .+ A':"); println(AplusAt_bench)
+println("Benchmark resutls of summing squared error:"); sse_bench = benchmark_sse(sizes); println(sse_bench)
+println("Benchmark results of a .+ B .* c':"); aplusBc_bench = benchmark_aplusBc(sizes); println(aplusBc_bench)
+println("Benchmark results of A .+ A':"); AplusAt_bench = benchmark_AplusAt(sizes); println(AplusAt_bench)
 
-filter2d_dynamic_bench = benchmark_filter2ddynamic(sizes); println("Benchmark results for dynamically sized 3x3 convolution:"); println(filter2d_dynamic_bench)
-filter2d_3x3_bench = benchmark_filter2d3x3(sizes); println("Benchmark results for statically sized 3x3 convolution:"); println(filter2d_3x3_bench)
-filter2d_unrolled_bench = benchmark_filter2dunrolled(sizes); println("Benchmark results for unrolled 3x3 convolution:"); println(filter2d_unrolled_bench)
+println("Benchmark results for dynamically sized 3x3 convolution:"); filter2d_dynamic_bench = benchmark_filter2ddynamic(sizes); println(filter2d_dynamic_bench)
+println("Benchmark results for statically sized 3x3 convolution:"); filter2d_3x3_bench = benchmark_filter2d3x3(sizes); println(filter2d_3x3_bench)
+println("Benchmark results for unrolled 3x3 convolution:"); filter2d_unrolled_bench = benchmark_filter2dunrolled(sizes); println(filter2d_unrolled_bench)
 
-vexp_bench = benchmark_exp(sizes); println("Benchmark results of exponentiating a vector:"); println(vexp_bench)
-randomaccess_bench = benchmark_random_access(sizes); println("Benchmark results from using a vector of indices:"); println(randomaccess_bench)
+println("Benchmark results of exponentiating a vector:"); vexp_bench = benchmark_exp(sizes); println(vexp_bench)
+println("Benchmark results from using a vector of indices:"); randomaccess_bench = benchmark_random_access(sizes); println(randomaccess_bench)
 
 const v = 2
 using Cairo, Fontconfig
@@ -241,6 +241,7 @@ saveplot("bench_AtmulB_v", AtmulB_bench);
 saveplot("bench_AtmulBt_v", AtmulBt_bench);
 saveplot("bench_Amulvb_v", Amulvb_bench);
 saveplot("bench_Atmulvb_v", Atmulvb_bench);
+
 
 saveplot("bench_logdettriangle_v", logdettriangle_bench);
 saveplot("bench_filter2d_dynamic_v", filter2d_dynamic_bench);

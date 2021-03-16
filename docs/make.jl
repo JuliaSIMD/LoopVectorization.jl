@@ -7,6 +7,7 @@ makedocs(;
         "Home" => "index.md",
         "Getting Started" => "getting_started.md",
         "Examples" => [
+            "examples/multithreading.md",
             "examples/matrix_multiplication.md",
             "examples/array_interface.md",
             "examples/matrix_vector_ops.md",
@@ -27,12 +28,12 @@ makedocs(;
             "devdocs/reference.md"
         ]
     ],
-    # repo="https://github.com/chriselrod/LoopVectorization.jl/blob/{commit}{path}#L{line}",
+    # repo="https://github.com/JuliaSIMD/LoopVectorization.jl/blob/{commit}{path}#L{line}",
     sitename="LoopVectorization.jl",
     authors="Chris Elrod"
     # assets=[],
 )
 
 deploydocs(;
-    repo="github.com/chriselrod/LoopVectorization.jl",
+    repo="github.com/JuliaSIMD/LoopVectorization.jl",
 )

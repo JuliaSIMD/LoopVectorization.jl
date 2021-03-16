@@ -10,7 +10,7 @@ function add_if!(ls::LoopSet, LHS::Symbol, RHS::Expr, elementbytes::Int, positio
     condition = first(RHS.args)
     condop = if condition isa Symbol
         getop(ls, condition, elementbytes)
-    elseif isnothing(mpref)
+    elseif mpref === nothing
         add_operation!(ls, gensym!(ls, "mask"), condition, elementbytes, position)
     else
         add_operation!(ls, gensym!(ls, "mask"), condition, mpref, elementbytes, position)

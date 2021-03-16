@@ -1,64 +1,60 @@
 const NOpsType = Int#Union{Int,Vector{Int}}
 
-function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{<:AbstractUnitRange})
+function Loop(ls::LoopSet, ex::Expr, sym::Symbol, f, s, l)
+    if (f !== nothing) && (s !== nothing) && (l !== nothing)
+        return static_loop(sym, f, s, l)
+    end
     ssym = String(sym)
-    start = gensym(ssym*"_loopstart"); stop = gensym(ssym*"_loopstop"); loopsym = gensym(ssym * "_loop"); lensym = gensym(ssym * "_looplen")
-    pushpreamble!(ls, Expr(:(=), loopsym, ex))
-    pushpreamble!(ls, Expr(:(=), start, Expr(:call, lv(:first), loopsym)))
-    pushpreamble!(ls, Expr(:(=), stop, Expr(:call, lv(:last), loopsym)))
-    pushpreamble!(ls, Expr(:(=), lensym, Expr(:call, lv(:maybestaticlength), loopsym)))
-    loop = Loop(sym, 1, 1024, start, stop, loopsym, lensym, false, false)::Loop
-    pushpreamble!(ls, loopiteratesatleastonce(loop))
-    loop
+    rangesym = gensym(ssym * "_loop");
+    lensym = gensym(ssym * "_looplen")
+    pushpreamble!(ls, Expr(:(=), rangesym, ex))
+    pushpreamble!(ls, Expr(:(=), lensym, Expr(:call, lv(:maybestaticlength), rangesym)))
+    F = if f === nothing
+        start = gensym(ssym*"_loopstart")
+        pushpreamble!(ls, Expr(:(=), start, Expr(:call, lv(:first), rangesym)))
+        MaybeKnown(start, 1)
+    else
+        MaybeKnown(f)
+    end
+    S = if s === nothing
+        step = gensym(ssym*"_loopstep")
+        pushpreamble!(ls, Expr(:(=), step, Expr(:call, lv(:step), rangesym)))
+        MaybeKnown(step, 1)
+    else
+        MaybeKnown(s)
+    end
+    L = if l === nothing
+        stop = gensym(ssym*"_loopstop")
+        pushpreamble!(ls, Expr(:(=), stop, Expr(:call, lv(:last), rangesym)))
+        MaybeKnown(stop, 1024)
+    else
+        MaybeKnown(l)
+    end
+    loopiteratesatleastonce!(ls, Loop(sym, F, L, S, rangesym, lensym))
+end
+function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{R}) where {R<:AbstractRange}
+    f = ArrayInterface.known_first(R)
+    s = ArrayInterface.known_step(R)
+    l = ArrayInterface.known_last(R)
+    
+    Loop(ls, ex, sym, f, s, l)
 end
 
-function add_static_upper_loop!(ls::LoopSet, ex::Expr, sym::Symbol, U::Int)
-    ssym = String(sym)
-    start = gensym(ssym*"_loopstart"); loopsym = gensym(ssym * "_loop"); lensym = gensym(ssym * "_looplen")
-    pushpreamble!(ls, Expr(:(=), loopsym, ex))
-    pushpreamble!(ls, Expr(:(=), start, Expr(:call, lv(:first), loopsym)))
-    pushpreamble!(ls, Expr(:(=), lensym, Expr(:call, lv(:maybestaticlength), loopsym)))
-    loop = Loop(sym, U - 1023, U, start, Symbol(""), loopsym, lensym, false, true)::Loop
-    pushpreamble!(ls, loopiteratesatleastonce(loop))
-    loop
-end
-function add_static_lower_loop!(ls::LoopSet, ex::Expr, sym::Symbol, L::Int)
-    ssym = String(sym)
-    stop = gensym(ssym*"_loopstop"); loopsym = gensym(ssym * "_loop"); lensym = gensym(ssym * "_looplen")
-    pushpreamble!(ls, Expr(:(=), loopsym, ex))
-    pushpreamble!(ls, Expr(:(=), stop, Expr(:call, lv(:last), loopsym)))
-    pushpreamble!(ls, Expr(:(=), lensym, Expr(:call, lv(:maybestaticlength), loopsym)))
-    loop = Loop(sym, L, L + 1023, Symbol(""), stop, loopsym, lensym, true, false)::Loop
-    pushpreamble!(ls, loopiteratesatleastonce(loop))
-    loop
-end
-function static_loop(sym::Symbol, L::Int, U::Int)
-    Loop(sym, L, U, Symbol(""), Symbol(""), Symbol(""), Symbol(""), true, true)::Loop
-end
-
-function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{OptionallyStaticUnitRange{I, Static{U}}}) where {I<:Integer, U}
-    add_static_upper_loop!(ls, ex, sym, U)
-end
-function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{OptionallyStaticUnitRange{Static{L}, I}}) where {I <: Integer, L}
-    add_static_lower_loop!(ls, ex, sym, L)
+function static_loop(sym::Symbol, L::Int, S::Int, U::Int)
+    Loop(sym, MaybeKnown(L,0), MaybeKnown(U,0), MaybeKnown(S,0), Symbol(""), Symbol(""))
 end
 function Loop(::LoopSet, ::Expr, sym::Symbol, ::Type{OptionallyStaticUnitRange{Static{L}, Static{U}}}) where {L,U}
-    static_loop(sym, L, U)
+    static_loop(sym, L, 1, U)
 end
-function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{CloseOpen{Int, Static{U}}}) where {U}
-    add_static_upper_loop!(ls, ex, sym, U - 1)
-end
-function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{CloseOpen{Static{L}, Int}}) where {L}
-    add_static_lower_loop!(ls, ex, sym, L)
+function Loop(::LoopSet, ::Expr, sym::Symbol, ::Type{ArrayInterface.OptionallyStaticStepRange{StaticInt{L}, StaticInt{S}, StaticInt{U}}}) where {L,S,U}
+    static_loop(sym, L, S, U)
 end
 function Loop(::LoopSet, ::Expr, sym::Symbol, ::Type{CloseOpen{Static{L}, Static{U}}}) where {L,U}
-    static_loop(sym, L, U - 1)
+    static_loop(sym, L, 1, U - 1)
 end
 
 
-function extract_loop(l)
-    Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, :lb, l))
-end
+extract_loop(l) = Expr(:call, GlobalRef(Core,:getfield), Symbol("#loop#bounds#"), l, false)
 
 function add_loops!(ls::LoopSet, LPSYM, LB)
     n = max(length(LPSYM), length(LB))
@@ -76,7 +72,7 @@ function add_loops!(ls::LoopSet, i::Int, sym::Symbol, @nospecialize(l::Type{<:Ca
     N, T = l.parameters
     ssym = String(sym)
     for k = N:-1:1
-        axisexpr = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, Expr(:., Expr(:ref, :lb, i), QuoteNode(:indices)), k))
+        axisexpr = :(getfield(getfield(getfield(var"#loop#bounds#", $i, false), :indices), $k, false))
         add_loop!(ls, Loop(ls, axisexpr, Symbol(ssym*'#'*string(k)*'#'), T.parameters[k])::Loop)
     end
     push!(ls.loopsymbol_offsets, ls.loopsymbol_offsets[end]+N)
@@ -86,21 +82,47 @@ function ArrayReferenceMeta(
     ls::LoopSet, @nospecialize(ar::ArrayRefStruct), arraysymbolinds::Vector{Symbol},
     opsymbols::Vector{Symbol}, nopsv::Vector{NOpsType}, expandedv::Vector{Bool}
 )
-    index_types = ar.index_types
-    indices = ar.indices
-    offsets = ar.offsets
+    # unpack the `ArrayRefStruct`
+    # we don't want to specialize on it, as it is typed on symbols.
+    index_types = (ar.index_types)::UInt64
+    indices = (ar.indices)::UInt64
+    offsets = (ar.offsets)::UInt64
+    strides = (ar.strides)::UInt64
+    arrayar = array(ar)::Symbol
+    ptrar = ptr(ar)::Symbol
+    # TODO, check if this matters at all. The compiler still knows it is an `::ArrayRefStruct`, just not `arrayar` or `ptrar`?
+    ArrayReferenceMeta(
+        ls, index_types, indices, offsets, strides,
+        arrayar, ptrar, arraysymbolinds, opsymbols, nopsv, expandedv
+    )
+end
+function ArrayReferenceMeta(
+    ls::LoopSet, index_types::UInt64, indices::UInt64, offsets::UInt64, strides::UInt64,
+    arrayar::Symbol, ptrar::Symbol, arraysymbolinds::Vector{Symbol},
+    opsymbols::Vector{Symbol}, nopsv::Vector{NOpsType}, expandedv::Vector{Bool}
+)
     ni = filled_8byte_chunks(index_types)
     index_vec = Symbol[]
     offset_vec = Int8[]
+    stride_vec = Int8[]
     loopedindex = Bool[]
     while index_types != zero(UInt64)
         ind = indices % UInt8
-        offset = offsets % Int8
+        offsetᵢ = offsets % Int8
+        strideᵢ = strides % Int8
         if index_types == LoopIndex
-            for inda in ls.loopsymbol_offsets[ind]+1:ls.loopsymbol_offsets[ind+1]
-                pushfirst!(index_vec, ls.loopsymbols[inda])
-                pushfirst!(offset_vec, offset)
+            if ind == zero(Int8) # CONSTANTZEROINDEX
+                pushfirst!(index_vec, CONSTANTZEROINDEX)
+                pushfirst!(offset_vec, offsetᵢ)
+                pushfirst!(stride_vec, strideᵢ)
                 pushfirst!(loopedindex, true)
+            else
+                for inda in ls.loopsymbol_offsets[ind]+1:ls.loopsymbol_offsets[ind+1]
+                    pushfirst!(index_vec, ls.loopsymbols[inda])
+                    pushfirst!(offset_vec, offsetᵢ)
+                    pushfirst!(stride_vec, strideᵢ)
+                    pushfirst!(loopedindex, true)
+                end
             end
         else#if index_types == ComputedIndex
             @assert index_types == ComputedIndex
@@ -109,12 +131,14 @@ function ArrayReferenceMeta(
                 nops = nopsv[ind]
                 for j ∈ 0:nops-1
                     pushfirst!(index_vec, expandedopname(opsym, j))
-                    pushfirst!(offset_vec, offset)
+                    pushfirst!(offset_vec, offsetᵢ)
+                    pushfirst!(stride_vec, strideᵢ)
                     pushfirst!(loopedindex, false)
                 end
             else
                 pushfirst!(index_vec, opsym)
-                pushfirst!(offset_vec, offset)
+                pushfirst!(offset_vec, offsetᵢ)
+                pushfirst!(stride_vec, strideᵢ)
                 pushfirst!(loopedindex, false)
             end
         # else
@@ -126,25 +150,19 @@ function ArrayReferenceMeta(
         index_types >>>= 8
         indices >>>= 8
         offsets >>>= 8
+        strides >>>= 8
         ni -= 1
     end
     ArrayReferenceMeta(
-        ArrayReference(array(ar), index_vec, offset_vec),
-        loopedindex, ptr(ar)
+        ArrayReference(arrayar, index_vec, offset_vec, stride_vec),
+        loopedindex, ptrar
     )
 end
 
-# extract_varg(i) = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, :vargs, i))
-function extract_varg(i)
-    sptr = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, :vargs, i))
-    # Base.libllvm_version ≥ v"10" ? Expr(:call, lv(:noalias!), sptr) : sptr
-    sptr
-end
+
+extract_varg(i) = :(getfield(var"#vargs#", $i, false))
 # _extract(::Type{Static{N}}) where {N} = N
-function pushvarg!(ls::LoopSet, ar::ArrayReferenceMeta, i, name)
-    # pushpreamble!(ls, Expr(:(=), name, Expr(:call, :(VectorizationBase.zero_offsets), extract_varg(i))))
-    pushpreamble!(ls, Expr(:(=), name, extract_varg(i)))
-end
+extract_gsp!(sptrs::Expr, name::Symbol) = (push!(sptrs.args, name); nothing)
 function rank_to_sortperm(R::NTuple{N,Int}) where {N}
     sp = ntuple(zero, Val{N}())
     r = ntuple(n -> sum(R[n] .≥ R), Val{N}())
@@ -153,51 +171,115 @@ function rank_to_sortperm(R::NTuple{N,Int}) where {N}
     end
     sp
 end
+# sptrs::Expr, ls::LoopSet, ar::ArrayReferenceMeta, @nospecialize(_::Type{Core.LLVMPtr{T,0}}),
 function add_mref!(
-    ls::LoopSet, ar::ArrayReferenceMeta, i::Int, @nospecialize(_::Type{S}), name
-) where {T, N, C, B, R, X, O, S <: AbstractStridedPointer{T,N,C,B,R,X,O}}
+    sptrs::Expr, ls::LoopSet, ar::ArrayReferenceMeta, @nospecialize(_::Type{Ptr{T}}),
+    C::Int, B::Int, sp::NTuple{N,Int}, name::Symbol
+) where {T,N}
+    Tsym::Symbol = get(VectorizationBase.JULIA_TYPES, T) do
+        Symbol(T)
+    end
+    add_mref_ptr!(sptrs, ls, ar, Tsym, C, B, sp, name)
+end
+function loop_indexes_bit!(ls::LoopSet, ar::ArrayReferenceMeta)
+    li = ar.loopedindex;
+    ind = first(getindices(ar))
+    ind === DISCONTIGUOUS && return
+    first(li) || throw(LoopError("The contiguous index of a `BitArray` shouldn't be a complex function.", )ind)
+    ls.loopindexesbit[getloopid(ls,ind)] = true
+    nothing
+end
+function add_mref_ptr!(
+    sptrs::Expr, ls::LoopSet, ar::ArrayReferenceMeta, Tsym::Symbol,
+    C::Int, B::Int, sp::NTuple{N,Int}, name::Symbol
+) where {N}
     @assert B ≤ 0 "Batched arrays not supported yet."
-    sp = rank_to_sortperm(R)
     # maybe no change needed? -- optimize common case
     column_major = ntuple(identity, N)
     li = ar.loopedindex;
     if sp === column_major || isone(length(li))
-        return pushvarg!(ls, ar, i, name)
+        # don't set `bit` to true if our vector width is ≥ 8
+        ((Tsym === :Bit) && (ls.vector_width[] < 8)) && loop_indexes_bit!(ls, ar)
+        return extract_gsp!(sptrs, name)
     end
-    lic = copy(li);
-    inds = getindices(ar); indsc = copy(inds);
-    offsets = ar.ref.offsets; offsetsc = copy(offsets);
-
+    permute_mref!(ar, C, sp)
     # must now sort array's inds, and stack pointer's
     tmpsp = gensym(name)
-    pushvarg!(ls, ar, i, tmpsp)
-    # pushpreamble!(ls,
+    extract_gsp!(sptrs, tmpsp)
     strd_tup = Expr(:tuple)
     offsets_tup = Expr(:tuple)
+    gf = GlobalRef(Core,:getfield)
+    offsets = gensym(:offsets); strides = gensym(:strides)
+    pushpreamble!(ls, Expr(:(=), offsets, Expr(:call, gf, tmpsp, QuoteNode(:offsets))))
+    pushpreamble!(ls, Expr(:(=), strides, Expr(:call, gf, tmpsp, QuoteNode(:strd))))
+    for (i, p) ∈ enumerate(sp)
+        push!(strd_tup.args, Expr(:call, gf, strides, p, false))
+        push!(offsets_tup.args, Expr(:call, gf, offsets, p, false))
+    end
+    #TODO: fix for `Tsym === Bit`.
+    sptype = Expr(:curly, lv(:StridedPointer), Tsym, N, (C == -1 ? -1 : 1), B, column_major)
+    sptr = Expr(:call, sptype, Expr(:call, :pointer, tmpsp), strd_tup, offsets_tup)
+    pushpreamble!(ls, Expr(:(=), name, sptr))
+    nothing
+end
+function permute_mref!(ar::ArrayReferenceMeta, C::Int, sp::NTuple{N,Int}) where {N}
+    sp === ntuple(identity, Val(N)) && return nothing
+    li = ar.loopedindex; lic = copy(li);
+    inds = getindices(ar); indsc = copy(inds);
+    offsets = ar.ref.offsets; offsetsc = copy(offsets);
+    strides = ar.ref.strides; stridesc = copy(strides);
     for (i, p) ∈ enumerate(sp)
         li[i] = lic[p]
         inds[i] = indsc[p]
         offsets[i] = offsetsc[p]
-        push!(strd_tup.args, :($tmpsp.strd[$p]))
-        # push!(offsets_tup.args, Expr(:call, lv(:Zero)))
-        push!(offsets_tup.args, :($tmpsp.offsets[$p]))
+        strides[i] = stridesc[p]
     end
     C == -1 && makediscontiguous!(getindices(ar))
-    sptype = Expr(:curly, lv(:StridedPointer), T, N, (C == -1 ? -1 : 1), 1, column_major)
-    sptr = Expr(:call, sptype, Expr(:call, :pointer, tmpsp), strd_tup, offsets_tup)
-    pushpreamble!(ls, Expr(:(=), name, sptr))
+    return nothing
 end
-function add_mref!(ls::LoopSet, ar::ArrayReferenceMeta, i::Int, @nospecialize(_::Type{VectorizationBase.FastRange{T,F,S,O}}), name) where {T,F,S,O}
-    pushpreamble!(ls, Expr(:(=), name, extract_varg(i)))
+function add_mref!(
+    sptrs::Expr, ::LoopSet, ::ArrayReferenceMeta, @nospecialize(_::Type{VectorizationBase.FastRange{T,F,S,O}}),
+    ::Int, ::Int, ::Any, name::Symbol
+) where {T,F,S,O}
+    extract_gsp!(sptrs, name)
 end
 function create_mrefs!(
     ls::LoopSet, arf::Vector{ArrayRefStruct}, as::Vector{Symbol}, os::Vector{Symbol},
-    nopsv::Vector{NOpsType}, expanded::Vector{Bool}, vargs
+    nopsv::Vector{NOpsType}, expanded::Vector{Bool}, ::Type{Tuple{}}
 )
+    length(arf) == 0 || throw(ArgumentError("Length of array ref vector should be 0 if there are no stridedpointers."))
+    Vector{ArrayReferenceMeta}(undef, length(arf))
+end
+function create_mrefs!(
+    ls::LoopSet, arf::Vector{ArrayRefStruct}, as::Vector{Symbol}, os::Vector{Symbol},
+    nopsv::Vector{NOpsType}, expanded::Vector{Bool}, ::Type{VectorizationBase.GroupedStridedPointers{P,C,B,R,I,X,O}}
+) where {P,C,B,R,I,X,O}
     mrefs = Vector{ArrayReferenceMeta}(undef, length(arf))
+    sptrs = Expr(:tuple)
+    # pushpreamble!(ls, Expr(:(=), sptrs, :(VectorizationBase.stridedpointers(getfield(vargs, 1, false)))))
+    pushpreamble!(ls, Expr(:(=), sptrs, :(VectorizationBase.stridedpointers(getfield(var"#vargs#", 1, false)))))
+    j = 0
+    rank_to_sps = Vector{Tuple{Int,NTuple{<:Any,Int}}}(undef, length(arf))
     for i ∈ eachindex(arf)
         ar = ArrayReferenceMeta(ls, arf[i], as, os, nopsv, expanded)
-        add_mref!(ls, ar, i, vargs[i], vptr(ar))
+        duplicate = false
+        vptrar = vptr(ar)
+        for k ∈ 1:i-1
+            if vptr(mrefs[k]) === vptrar
+                duplicate = true
+                # if isassigned(rank_to_sps, k)
+                Cₖ, sp = rank_to_sps[k]
+                permute_mref!(ar, Cₖ, sp)
+                # end
+                break
+            end
+        end
+        if !duplicate
+            j += 1
+            sp = rank_to_sortperm(R[j])
+            rank_to_sps[i] = (C[j],sp)
+            add_mref!(sptrs, ls, ar, P.parameters[j], C[j], B[j], sp, vptr(ar))
+        end
         mrefs[i] = ar
     end
     mrefs
@@ -211,14 +293,14 @@ end
 function gen_array_syminds(AM)
     Symbol[Symbol("##arraysymbolind##"*i*'#') for i ∈ 1:(AM[1])::Int]
 end
-function process_metadata!(ls::LoopSet, AM, num_arrays::Int)
+function process_metadata!(ls::LoopSet, AM)
     opoffsets = ls.operation_offsets
     expandbyoffset!(ls.outer_reductions, AM[2], opoffsets)
     for (i,si) ∈ enumerate(AM[3])
         sii = si::Int
         s = gensym(:symlicm)
         push!(ls.preamble_symsym, (opoffsets[sii] + 1, s))
-        pushpreamble!(ls, Expr(:(=), s, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), Expr(:ref, :vargs, num_arrays + i))))
+        pushpreamble!(ls, Expr(:(=), s, extract_varg(1 + i)))
     end
     expandbyoffset!(ls.preamble_symint, AM[4], opoffsets)
     expandbyoffset!(ls.preamble_symfloat, AM[5], opoffsets)
@@ -258,7 +340,7 @@ function loopindexoffset(ls::LoopSet, u::Unsigned, li::Bool, expand::Bool = fals
     expandbyoffset(idxs, offsets, expand)
 end
 function parents_symvec(ls::LoopSet, u::Unsigned, expand, offset)
-    idxs = loopindexoffset(ls, u, true, expand)   # FIXME DRY  (undesirable that this gets hard-coded in multiple places)
+    idxs = loopindexoffset(ls, u, true, expand)   # TODO DRY  (undesirable that this gets hard-coded in multiple places)
     return Symbol[getloopsym(ls, i + offset) for i ∈ idxs]
 end
 loopdependencies(ls::LoopSet, os::OperationStruct, expand = false, offset = 0) = parents_symvec(ls, os.loopdeps, expand, offset)
@@ -276,7 +358,7 @@ function calcnops(ls::LoopSet, os::OperationStruct)
         return 1
     end
     offsets = ls.loopsymbol_offsets
-    idxs = loopindex(ls, os.loopdeps, 0x04)  # FIXME DRY
+    idxs = loopindex(ls, os.loopdeps, 0x04)  # TODO DRY
     iszero(length(idxs)) && return 1
     return maximum(i->offsets[i+1]-offsets[i], idxs)
 end
@@ -294,14 +376,6 @@ function isexpanded(ls::LoopSet, ops::Vector{OperationStruct}, nopsv::Vector{NOp
         false
     end
 end
-# function addreduct_to_outer_reductions!(ls::LoopSet, op::Operation)
-#     if iscompute(op) && all(in(loopdependencies(op)), reduceddependencies(op))
-#         push!(ls.outer_reductions, identifier(op))
-#     else
-#         foreach(opp -> addreduct_to_outer_reductions!(ls, opp), parents(op))
-#     end
-#     nothing
-# end
 function add_op!(
     ls::LoopSet, instr::Instruction, ops::Vector{OperationStruct}, nopsv::Vector{NOpsType}, expandedv::Vector{Bool}, i::Int,
     mrefs::Vector{ArrayReferenceMeta}, opsymbol, elementbytes::Int
@@ -339,21 +413,28 @@ function add_op!(
     push!(opoffsets, opoffsets[end] + nops)
     nothing
 end
-function add_parents_to_op!(ls::LoopSet, vparents::Vector{Operation}, up::Unsigned, k::Int, Δ::Int)
+function add_parents_to_op!(ls::LoopSet, op::Operation, up::Unsigned, k::Int, Δ::Int)
+    vparents = parents(op)
     ops = operations(ls)
     offsets = ls.operation_offsets
     if isone(Δ) # not expanded
         @assert isone(k)
         for i ∈ parents(ls, up)
+            # FIXME; children also filled in cacheunrolled
             for j ∈ offsets[i]+1:offsets[i+1] # if parents are expanded, add them all
-                pushfirst!(vparents, ops[j])
+                opp = ops[j]
+                pushfirst!(vparents, opp)
+                push!(children(opp), op)
             end
         end
     else#if isexpanded
         # Do we want to require that all Δidxs are equal?
         # Because `CartesianIndex((2,3)) - 1` results in a methoderorr, I think this is reasonable for now
+        # FIXME; children also filled in cacheunrolled
         for i ∈ parents(ls, up)
-            pushfirst!(vparents, ops[offsets[i]+k])
+            opp = ops[offsets[i]+k]
+            pushfirst!(vparents, opp)
+            push!(children(opp), op)
         end
     end
 end
@@ -368,10 +449,10 @@ function add_parents_to_ops!(ls::LoopSet, ops::Vector{OperationStruct}, constoff
                 instr = instruction(op)
                 if instr != LOOPCONSTANT && instr.mod !== :numericconstant
                     constoffset += 1
-                    pushpreamble!(ls, Expr(:(=), instr.instr, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, :vargs, constoffset))))
+                    pushpreamble!(ls, Expr(:(=), instr.instr, extract_varg(constoffset)))
                 end
             elseif !isloopvalue(op)
-                add_parents_to_op!(ls, parents(op), ops[i].parents, k, Δ)
+                add_parents_to_op!(ls, op, ops[i].parents, k, Δ)
             end
         end
     end
@@ -399,29 +480,41 @@ function add_ops!(
 end
 
 # elbytes(::VectorizationBase.AbstractPointer{T}) where {T} = sizeof(T)::Int
-typeeltype(::Type{P}) where {T,P<:VectorizationBase.AbstractStridedPointer{T}} = T
+# typeeltype(::Type{P}) where {T,P<:VectorizationBase.AbstractStridedPointer{T}} = T
+typeeltype(::Type{Ptr{T}}) where {T} = T
+# typeeltype(::Type{Core.LLVMPtr{T,0}}) where {T} = T
 typeeltype(::Type{VectorizationBase.FastRange{T,F,S,O}}) where {T,F,S,O} = T
 typeeltype(::Type{T}) where {T<:Real} = T
 # typeeltype(::Any) = Int8
 
 function add_array_symbols!(ls::LoopSet, arraysymbolinds::Vector{Symbol}, offset::Int)
     for (i,as) ∈ enumerate(arraysymbolinds)
-        pushpreamble!(ls, Expr(:(=), as, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, :vargs, i + offset))))
+        pushpreamble!(ls, Expr(:(=), as, extract_varg(i + offset)))
     end
 end
-function extract_external_functions!(ls::LoopSet, offset::Int)
+function extract_external_functions!(ls::LoopSet, offset::Int, vargs)
     for op ∈ operations(ls)
         if iscompute(op)
             instr = instruction(op)
             if instr.mod != :LoopVectorization
                 offset += 1
-                pushpreamble!(ls, Expr(:(=), instr.instr, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), Expr(:ref, :vargs, offset))))
+                instr_new = get(FUNCTIONSYMBOLS, vargs[offset], instr)
+                if instr_new === instr
+                    extractf = Expr(:call, GlobalRef(Core,:getfield), Symbol("#vargs#"), offset, false)
+                    pushpreamble!(ls, Expr(:(=), instr.instr, extractf))
+                else
+                    op.instruction = instr_new
+                end
             end
         end
     end
     offset
 end
-function sizeofeltypes(v, num_arrays)::Int
+function sizeofeltypes(v)::Int
+    num_arrays = length(v)::Int
+    if num_arrays == 0
+        return 8
+    end
     T = typeeltype(v[1])
     sz = if (VectorizationBase.simd_integer_register_size() != VectorizationBase.register_size()) && T <: Integer # hack
         (VectorizationBase.register_size() ÷ VectorizationBase.simd_integer_register_size()) * sizeof(T)
@@ -445,30 +538,39 @@ function sizeofeltypes(v, num_arrays)::Int
     # sizeof(T)
 end
 
-function avx_loopset(instr::Vector{Instruction}, ops::Vector{OperationStruct}, arf::Vector{ArrayRefStruct},
-                     AM::Vector{Any}, LPSYM::Vector{Any}, LB::Core.SimpleVector, @nospecialize(vargs))
-    ls = LoopSet(:LoopVectorization)
-    num_arrays = length(arf)
-    elementbytes = sizeofeltypes(vargs, num_arrays)
-    pushpreamble!(ls, :((lb, vargs) = _vargs))
+function avx_loopset!(
+    ls::LoopSet, instr::Vector{Instruction}, ops::Vector{OperationStruct}, arf::Vector{ArrayRefStruct},
+    AM::Vector{Any}, LPSYM::Vector{Any}, LB::Core.SimpleVector, vargs::Core.SimpleVector
+)
+    # TODO: check outer reduction types instead
+    elementbytes = if length(vargs[1].parameters) > 0
+        sizeofeltypes(vargs[1].parameters[1].parameters)
+    else
+        8
+    end
+    pushpreamble!(ls, :((var"#loop#bounds#", var"#vargs#") = var"#lv#tuple#args#"))
     add_loops!(ls, LPSYM, LB)
     resize!(ls.loop_order, ls.loopsymbol_offsets[end])
     arraysymbolinds = gen_array_syminds(AM)
     opsymbols = [gensym("op") for _ ∈ eachindex(ops)]
     nopsv = NOpsType[calcnops(ls, op) for op in ops]
     expandedv = [isexpanded(ls, ops, nopsv, i) for i ∈ eachindex(ops)]
-    mrefs = create_mrefs!(ls, arf, arraysymbolinds, opsymbols, nopsv, expandedv, vargs)
-    append!(ls.includedactualarrays, (vptr(mref) for mref ∈ mrefs))
-    num_params = num_arrays + num_parameters(AM)
+
+    resize!(ls.loopindexesbit, length(ls.loops)); ls.loopindexesbit .= false;
+    mrefs = create_mrefs!(ls, arf, arraysymbolinds, opsymbols, nopsv, expandedv, vargs[1])
+    for mref ∈ mrefs
+        push!(ls.includedactualarrays, vptr(mref))
+    end    
+    # num_params = num_arrays + num_parameters(AM)
+    num_params = 1 + num_parameters(AM)
     add_ops!(ls, instr, ops, mrefs, opsymbols, num_params, nopsv, expandedv, elementbytes)
-    process_metadata!(ls, AM, length(arf))
-    add_array_symbols!(ls, arraysymbolinds, num_arrays + length(ls.preamble_symsym))
-    num_params = extract_external_functions!(ls, num_params)
+    process_metadata!(ls, AM)
+    add_array_symbols!(ls, arraysymbolinds, 1 + length(ls.preamble_symsym))
+    num_params = extract_external_functions!(ls, num_params, vargs)
     ls
 end
-function avx_body(ls::LoopSet, UNROLL::Tuple{Int8,Int8,Int8,Int,Int,Int,Int})
-    inline, u₁, u₂, W, rs, rc, cls = UNROLL
-    set_hw!(ls, rs, rc, cls); ls.vector_width[] = W
+function avx_body(ls::LoopSet, UNROLL::Tuple{Bool,Int8,Int8,Int,Int,Int,Int,Int,Int,Int,UInt})
+    inline, u₁, u₂, W, rs, rc, cls, l1, l2, l3, nt = UNROLL
     q = iszero(u₁) ? lower_and_split_loops(ls, inline % Int) : lower(ls, u₁ % Int, u₂ % Int, inline % Int)
     iszero(length(ls.outer_reductions)) ? push!(q.args, nothing) : push!(q.args, loopset_return_value(ls, Val(true)))
     q
@@ -476,11 +578,7 @@ end
 
 function _avx_loopset_debug(::Val{UNROLL}, ::Val{OPS}, ::Val{ARF}, ::Val{AM}, ::Val{LPSYM}, _vargs::Tuple{LB,V}) where {UNROLL, OPS, ARF, AM, LPSYM, LB, V}
     @show OPS ARF AM LPSYM _vargs
-    inline, u₁, u₂, W, rs, rc, cls = UNROLL
-    ls = _avx_loopset(OPS, ARF, AM, LPSYM, _vargs[1].parameters, V.parameters)
-    # ls = _avx_loopset(OPS, ARF, AM, LPSYM, _vargs[1], _vargs[2])
-    set_hw!(ls, rs, rc, cls); ls.vector_width[] = W
-    ls
+    _avx_loopset(OPS, ARF, AM, LPSYM, _vargs[1].parameters, V.parameters, UNROLL)
 end
 function tovector(@nospecialize(t))
     v = Vector{Any}(undef, length(t))
@@ -494,16 +592,24 @@ function tovector(@nospecialize(t))
     end
     v
 end
-function _avx_loopset(@nospecialize(OPSsv), @nospecialize(ARFsv), @nospecialize(AMsv), @nospecialize(LPSYMsv), LBsv::Core.SimpleVector, @nospecialize(vargs))
+function _avx_loopset(
+    @nospecialize(OPSsv), @nospecialize(ARFsv), @nospecialize(AMsv), @nospecialize(LPSYMsv), LBsv::Core.SimpleVector, vargs::Core.SimpleVector,
+    UNROLL::Tuple{Bool,Int8,Int8,Int,Int,Int,Int,Int,Int,Int,UInt}
+)
     nops = length(OPSsv) ÷ 3
     instr = Instruction[Instruction(OPSsv[3i+1], OPSsv[3i+2]) for i ∈ 0:nops-1]
     ops = OperationStruct[ OPSsv[3i] for i ∈ 1:nops ]
-    avx_loopset(
-        instr, ops,
+    ls = LoopSet(:LoopVectorization)
+    inline, u₁, u₂, W, rs, rc, cls, l1, l2, l3, nt = UNROLL
+    set_hw!(ls, rs, rc, cls, l1, l2, l3); ls.vector_width[] = W
+    avx_loopset!(
+        ls, instr, ops,
         ArrayRefStruct[ARFsv...],
         tovector(AMsv), tovector(LPSYMsv), LBsv, vargs
-    )
+    )::LoopSet
+    ls
 end
+
 """
     _avx_!(unroll, ops, arf, am, lpsym, lb, vargs...)
 
@@ -523,10 +629,23 @@ Execute an `@avx` block. The block's code is represented via the arguments:
   `StaticLowerUnitRange(1)` because the lower bound of the iterator can be determined to be 1.
 - `vargs...` holds the encoded pointers of all the arrays (see `VectorizationBase`'s various pointer types).
 """
-@generated function _avx_!(::Val{UNROLL}, ::Val{OPS}, ::Val{ARF}, ::Val{AM}, ::Val{LPSYM}, _vargs::Tuple{LB,V}) where {UNROLL, OPS, ARF, AM, LPSYM, LB, V}
+@generated function _avx_!(
+    ::Val{UNROLL}, ::Val{OPS}, ::Val{ARF}, ::Val{AM}, ::Val{LPSYM}, var"#lv#tuple#args#"::Tuple{LB,V}
+) where {UNROLL, OPS, ARF, AM, LPSYM, LB, V}
     1 + 1 # Irrelevant line you can comment out/in to force recompilation...
-    ls = _avx_loopset(OPS, ARF, AM, LPSYM, LB.parameters, V.parameters)
+    ls = _avx_loopset(OPS, ARF, AM, LPSYM, LB.parameters, V.parameters, UNROLL)
     # return @show avx_body(ls, UNROLL)
+    if last(UNROLL) > 1
+        inline, u₁, u₂, W, rs, rc, cls, l1, l2, l3, nt = UNROLL
+        # wrap in `OPS, ARF, AM, LPSYM` in `Expr` to homogenize types
+        avx_threads_expr(
+            ls, (inline, u₁, u₂, W, rs, rc, cls, l1, l2, l3, one(UInt)), nt,
+            :(Val{$OPS}()), :(Val{$ARF}()), :(Val{$AM}()), :(Val{$LPSYM}())
+        )
+    else
+        # @show avx_body(ls, UNROLL)
+        # Main.BODY[] = avx_body(ls, UNROLL)
+        avx_body(ls, UNROLL)
+    end
     # @show UNROLL, OPS, ARF, AM, LPSYM, LB
-    avx_body(ls, UNROLL)
 end

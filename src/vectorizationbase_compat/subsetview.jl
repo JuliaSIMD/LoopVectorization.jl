@@ -1,6 +1,6 @@
 
 @generated function subsetview(
-    ptr::StridedPointer{T,N,C,B,R,X,O}, ::Val{I}, i::Integer
+    ptr::StridedPointer{T,N,C,B,R,X,O}, ::StaticInt{I}, i::Integer
 ) where {T,N,C,B,R,X,O,I}
     I > N && return :ptr
     @assert B ≤ 0 "Batched dims not currently supported."
@@ -32,4 +32,19 @@
         StridedPointer{$T,$(N-1),$newC,$B,$newR}($gptr, $newstrd, $newoffsets)
     end
 end
+@generated function _gesp(sp::AbstractStridedPointer{T,N}, ::StaticInt{I}, i::Integer) where {I,N,T}
+    t = Expr(:tuple)
+    for j ∈ 1:I-1
+        push!(t.args, staticexpr(0))
+    end
+    push!(t.args, :i)
+    for j ∈ I+1:N
+        push!(t.args, staticexpr(0))
+    end
+    quote
+        $(Expr(:meta,:inline))
+        gesp(sp, $t)
+    end
+end
+
 

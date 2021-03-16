@@ -23,11 +23,6 @@ ArrayInterface.known_step(::Type{<:CloseOpen}) = 1
 ArrayInterface.known_last(::Type{<:CloseOpen{<:Any,StaticInt{L}}}) where {L} = L - 1
 ArrayInterface.known_length(::Type{CloseOpen{StaticInt{F},StaticInt{L}}}) where {F,L} = L - F
 
-@inline canonicalize_range(r::OptionallyStaticUnitRange) = r
-@inline canonicalize_range(r::CloseOpen) = r
-@inline canonicalize_range(r::AbstractUnitRange) = maybestaticfirst(r):maybestaticlast(r)
-@inline canonicalize_range(r::CartesianIndices) = CartesianIndices(map(canonicalize_range, r.indices))
-
 Base.IteratorSize(::Type{<:CloseOpen}) = Base.HasShape{1}()
 Base.IteratorEltype(::Type{<:CloseOpen}) = Base.HasEltype()
 @inline Base.size(r::CloseOpen) = (length(r),)

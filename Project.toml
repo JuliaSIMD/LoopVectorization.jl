@@ -1,30 +1,34 @@
 name = "LoopVectorization"
 uuid = "bdcacae8-1622-11e9-2a5c-532679323890"
 authors = ["Chris Elrod <elrodc@gmail.com>"]
-version = "0.11.2"
+version = "0.12.0"
 
 [deps]
 ArrayInterface = "4fba245c-0d91-5ea0-9b3e-6abc04ee57a9"
+CheapThreads = "b630d9fa-e28e-4980-896d-83ce5e2106b2"
 DocStringExtensions = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
 IfElse = "615f187c-cbe4-4ef1-ba3b-2fcf58d6d173"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
 Requires = "ae029012-a4dd-5104-9daa-d747884805df"
 SLEEFPirates = "476501e8-09a2-5ece-8869-fb82de89a1fa"
+Static = "aedffcd0-7271-4cad-89d0-dc628f76c6d3"
 ThreadingUtilities = "8290d209-cae3-49c0-8002-c8c24d57dab5"
 UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 VectorizationBase = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
 
 [compat]
-ArrayInterface = "3"
+ArrayInterface = "3.1.4"
+CheapThreads = "0.1.2"
 DocStringExtensions = "0.8"
 IfElse = "0.1"
 OffsetArrays = "1.4.1, 1.5"
 Requires = "1"
-SLEEFPirates = "0.6.7"
-ThreadingUtilities = "0.2.3"
+SLEEFPirates = "0.6.12"
+Static = "0.2"
+ThreadingUtilities = "0.4"
 UnPack = "1"
-VectorizationBase = "0.18.1,0.19"
+VectorizationBase = "0.19.8"
 julia = "1.5"
 
 [extras]

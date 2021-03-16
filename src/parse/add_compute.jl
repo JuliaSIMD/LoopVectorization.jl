@@ -87,43 +87,13 @@ function search_tree(opv::Vector{Operation}, var::Symbol) # relies on cycles bei
     false
 end
 
-function update_for_ref_reduction!()
-    if varname(mpref) === var
-        id = findfirst(r -> r == mpref.mref, ls.refs_aliasing_syms)
-        mpref.varname = var = isnothing(id) ? var : ls.syms_aliasing_refs[id]
-        reduction_ind = ind
-        mergesetv!(deps, loopdependencies(add_load!(ls, argref, elementbytes)))
-    else
-        pushparent!(vparents, deps, reduceddeps, add_load!(ls, argref, elementbytes))
-    end
-end
 search_tree_for_ref(ls::LoopSet, opv::Vector{Operation}, ::Nothing, var::Symbol) = var, false
 function search_tree_for_ref(ls::LoopSet, opv::Vector{Operation}, mpref::ArrayReferenceMetaPosition, var::Symbol) # relies on cycles being forbidden
-    # isref, argref = tryrefconvert(ls, arg, elementbytes, varname(mpref))
-    # if isref
-    #     if mpref == argref
-    #         if varname(mpref) === var
-    #             id = findfirst(r -> r == mpref.mref, ls.refs_aliasing_syms)
-    #             mpref.varname = var = isnothing(id) ? var : ls.syms_aliasing_refs[id]
-    #             reduction_ind = ind
-    #             mergesetv!(deps, loopdependencies(add_load!(ls, argref, elementbytes)))
-    #         else
-    #             pushparent!(vparents, deps, reduceddeps, add_load!(ls, argref, elementbytes))
-    #         end
-    #     else
-    #         argref.varname = gensym!(ls, "tempload")
-    #         pushparent!(vparents, deps, reduceddeps, add_load!(ls, argref, elementbytes))
-    #     end
-    # else
-    #     add_parent!(vparents, deps, reduceddeps, ls, arg, elementbytes, position)
-    # end
     for opp ∈ opv
         if opp.ref == mpref.mref
             if varname(mpref) === var
-                id = findfirst(r -> r == mpref.mref, ls.refs_aliasing_syms)
-                # @show var = isnothing(id) ? var : ls.syms_aliasing_refs[id]
-                mpref.varname = var = isnothing(id) ? var : ls.syms_aliasing_refs[id]
-                # @show mpref.varname
+                id = findfirst(==(mpref.mref), ls.refs_aliasing_syms)
+                mpref.varname = var = id === nothing ? var : ls.syms_aliasing_refs[id]
                 return var, true
             end
         end
@@ -219,6 +189,7 @@ function add_reduction_update_parent!(
     # if parent is not an outer reduction...
     # if !isouterreduction && !isreductzero(parent, ls, reduct_zero)
     add_reduct_instruct = !isouterreduction && !isconstant(parent)
+    # @show isouterreduction, isconstant(parent)
     if add_reduct_instruct
         # We add
         reductcombine = reduction_scalar_combine(instrclass)
@@ -263,6 +234,9 @@ function add_reduction_update_parent!(
     child = Operation(
         length(operations(ls)), name(parent), elementbytes, reductcombine, compute, childdeps, childrdeps, childparents
     )
+    # child = Operation(
+    #     length(operations(ls)), name(parent), elementbytes, Instruction(reductcombine,:identity), compute, childdeps, childrdeps, childparents
+    # )
     pushop!(ls, child, name(parent))
     opout
 end
@@ -295,8 +269,8 @@ function add_compute!(
             if isref
                 if mpref == argref
                     if varname(mpref) === var
-                        id = findfirst(r -> r == mpref.mref, ls.refs_aliasing_syms)
-                        mpref.varname = var = isnothing(id) ? var : ls.syms_aliasing_refs[id]
+                        id = findfirst(==(mpref.mref), ls.refs_aliasing_syms)
+                        mpref.varname = var = id === nothing ? var : ls.syms_aliasing_refs[id]
                         reduction_ind = ind
                         mergesetv!(deps, loopdependencies(add_load!(ls, argref, elementbytes)))
                     else
@@ -418,7 +392,7 @@ function add_pow!(
             add_loopvalue!(ls, x, elementbytes)
         else
             xo = get(ls.opdict, x, nothing)
-            if isnothing(xo)
+            if xo === nothing
                 pushpreamble!(ls, Expr(:(=), var, Expr(:call, :(^), x, p)))
                 return add_constant!(ls, var, elementbytes)
             end

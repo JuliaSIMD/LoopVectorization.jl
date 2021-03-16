@@ -38,8 +38,12 @@
         @avx @. c2 = a + bl;
         @test c1 ≈ c2
 
-        xs = rand(T, M);
-        max_ = maximum(xs, dims=1)
+        if T <: Integer
+            xs = rand(-T(100):T(100), M);
+        else
+            xs = rand(T, M);
+        end
+        max_ = maximum(xs, dims=1);
         @test (@avx exp.(xs .- LowDimArray{(false,)}(max_))) ≈ exp.(xs .- LowDimArray{(false,)}(max_))
 
         if T === Int32

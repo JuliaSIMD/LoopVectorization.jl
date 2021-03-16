@@ -5,13 +5,13 @@ One of the friendliest problems for vectorization is matrix multiplication. Give
 LoopVectorization currently doesn't do any memory-modeling or memory-based optimizations, so it will still run into problems as the size of matrices increases. But at smaller sizes, it's capable of achieving a healthy percent of potential GFLOPS.
 We can write a single function:
 ```julia
-function A_mul_B!(𝐂, 𝐀, 𝐁)
-    @avx for m ∈ axes(𝐀,1), n ∈ axes(𝐁,2)
-        𝐂mn = zero(eltype(𝐂))
-        for k ∈ axes(𝐀,2)
-            𝐂mn += 𝐀[m,k] * 𝐁[k,n]
+function A_mul_B!(C, A, B)
+	@avx for n ∈ indices((C,B), 2), m ∈ indices((C,A), 1)
+        Cmn = zero(eltype(C))
+        for k ∈ indices((A,B), (2,1))
+            Cmn += C[m,k] * B[k,n]
         end
-        𝐂[m,n] = 𝐂mn
+		C[m,n] = Cmn
     end
 end
 ```
@@ -19,7 +19,7 @@ and this can handle all transposed/not-tranposed permutations. LoopVectorization
 Letting all three matrices be square and `Size` x `Size`, we attain the following benchmark results:
 
 ![AmulB](../assets/bench_AmulB_v2.png)
-This is classic GEMM, `𝐂 = 𝐀 * 𝐁`. GFortran's intrinsic `matmul` function does fairly well. But all the compilers are well behind LoopVectorization here, which falls behind MKL's `gemm` beyond 70x70 or so. The problem imposed by alignment is also striking: performance is much higher when the sizes are integer multiplies of 8. Padding arrays so that each column is aligned regardless of the number of rows can thus be very profitable. [PaddedMatrices.jl](https://github.com/chriselrod/PaddedMatrices.jl) offers just such arrays in Julia. I believe that is also what the [-pad](https://software.intel.com/en-us/fortran-compiler-developer-guide-and-reference-pad-qpad) compiler flag does when using Intel's compilers.
+This is classic GEMM, `𝐂 = 𝐀 * 𝐁`. GFortran's intrinsic `matmul` function does fairly well. But all the compilers are well behind LoopVectorization here, which falls behind MKL's `gemm` beyond 70x70 or so. The problem imposed by alignment is also striking: performance is much higher when the sizes are integer multiplies of 8. Padding arrays so that each column is aligned regardless of the number of rows can thus be very profitable. [PaddedMatrices.jl](https://github.com/JuliaSIMD/PaddedMatrices.jl) offers just such arrays in Julia. I believe that is also what the [-pad](https://software.intel.com/en-us/fortran-compiler-developer-guide-and-reference-pad-qpad) compiler flag does when using Intel's compilers.
 
 ![AmulBt](../assets/bench_AmulBt_v2.png)
 The optimal pattern for `𝐂 = 𝐀 * 𝐁ᵀ` is almost identical to that for `𝐂 = 𝐀 * 𝐁`. Yet, gfortran's `matmul` instrinsic stumbles, surprisingly doing much worse than gfortran + loops, and almost certainly worse than allocating memory for `𝐁ᵀ` and creating the ecplicit copy.
