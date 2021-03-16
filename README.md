@@ -21,7 +21,6 @@ We expect that any time you use the `@avx` macro with a given block of code that
 1. Are not indexing an array out of bounds. `@avx` does not perform any bounds checking.
 2. Are not iterating over an empty collection. Iterating over an empty loop such as `for i ∈ eachindex(Float64[])` is undefined behavior, and will likely result in the out of bounds memory accesses. Ensure that loops behave correctly.
 3. Are not relying on a specific execution order. `@avx` can and will re-order operations and loops inside its scope, so the correctness cannot depend on a particular order. You cannot implement `cumsum` with `@avx`.
-4. Loops increment by 1 on each iteration, e.g. `1:2:N` is not supported at the moment. (This requirement will eventually be lifted.)
 
 ## Usage
 

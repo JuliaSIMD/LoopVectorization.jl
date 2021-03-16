@@ -162,10 +162,8 @@ end
 #     block_per_m, blocks_per_n
 # end
 
-@inline function choose_num_threads(::Val{C}, ::Val{NT}, x) where {C,NT}
-    fx = Base.uitofp(Float64, x)
-    min(Base.fptoui(UInt, Base.ceil_llvm(0.05460264079015985*C*Base.sqrt_llvm(fx))), NT)
-end
+@inline choose_num_threads(C::Float64, NT::UInt, x::Base.BitInteger) = _choose_num_threads(Base.FastMath.mul_float_fast(C, 0.05460264079015985), NT, x)
+@inline _choose_num_threads(C::Float64, NT::UInt, x::Base.BitInteger) = min(Base.fptoui(UInt, Base.ceil_llvm(Base.FastMath.mul_float_fast(C, Base.sqrt_llvm(Base.uitofp(Float64, x))))), NT)
 function push_loop_length_expr!(q::Expr, ls::LoopSet)
     l = 1
     ndynamic = 0
@@ -328,12 +326,14 @@ function thread_one_loops_expr(
     ls::LoopSet, ua::UnrollArgs, valid_thread_loop::Vector{Bool}, ntmax::UInt, c::Float64,
     UNROLL::Tuple{Bool,Int8,Int8,Int,Int,Int,Int,Int,Int,Int,UInt}, OPS::Expr, ARF::Expr, AM::Expr, LPSYM::Expr
 )
+    looplen = looplengthprod(ls)
+    c = 0.05460264079015985 * c / looplen
     if all(isstaticloop, ls.loops)
-        _num_threads = choose_num_threads(Val(c), Val(ntmax), 1)::UInt
+        _num_threads = _choose_num_threads(c, ntmax, Int64(looplen))::UInt
         _num_threads > 1 || return avx_body(ls, UNROLL)
         choose_nthread = Expr(:(=), Symbol("#nthreads#"), _num_threads)
     else
-        choose_nthread = :(choose_num_threads(Val{$(c/looplengthprod(ls))}(), Val{$ntmax}()))
+        choose_nthread = :(_choose_num_threads($c, $ntmax))
         push_loop_length_expr!(choose_nthread, ls)
         choose_nthread = Expr(:(=), Symbol("#nthreads#"), choose_nthread)
     end
@@ -444,12 +444,14 @@ function thread_two_loops_expr(
     ls::LoopSet, ua::UnrollArgs, valid_thread_loop::Vector{Bool}, ntmax::UInt, c::Float64,
     UNROLL::Tuple{Bool,Int8,Int8,Int,Int,Int,Int,Int,Int,Int,UInt}, OPS::Expr, ARF::Expr, AM::Expr, LPSYM::Expr
 )
+    looplen = looplengthprod(ls)
+    c = 0.05460264079015985 * c / looplen
     if all(isstaticloop, ls.loops)
-        _num_threads = choose_num_threads(Val(c), Val(ntmax), 1)::UInt
+        _num_threads = _choose_num_threads(c, ntmax, Int64(looplen))::UInt
         _num_threads > 1 || return avx_body(ls, UNROLL)
         choose_nthread = Expr(:(=), Symbol("#nthreads#"), _num_threads)
     else
-        choose_nthread = :(choose_num_threads(Val{$(c/looplengthprod(ls))}(), Val{$ntmax}()))
+        choose_nthread = :(_choose_num_threads($c, $ntmax))
         push_loop_length_expr!(choose_nthread, ls)
         choose_nthread = Expr(:(=), Symbol("#nthreads#"), choose_nthread)
     end
