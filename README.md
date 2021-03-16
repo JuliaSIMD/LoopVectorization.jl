@@ -12,7 +12,7 @@
 using Pkg
 Pkg.add("LoopVectorization")
 ```
-LoopVectorization is supported on Julia 1.1 and later. It is tested on Julia 1.1, 1.3, and nightly.
+LoopVectorization is supported on Julia 1.1 and later. It is tested on Julia 1.5 and nightly.
 
 ## Warning
 
