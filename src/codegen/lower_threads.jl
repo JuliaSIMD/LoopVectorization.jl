@@ -437,7 +437,7 @@ function define_thread_blocks(threadedloop1, threadedloop2, vloop, u₁loop, u�
     elseif vloop === threadedloop2
         define_vthread_blocks(threadedloop2, u₁loop, u₂loop, u₁, u₂, ntmax, 1)
     else
-        :(choose_num_blocks(var"#nthreads#", StaticInt{$(Int(ntmax))}()))
+        :((var"#thread#factor#0#", var"#thread#factor#1#") = choose_num_blocks(var"#nthreads#", StaticInt{$(Int(ntmax))}()))
    end
 end
 function thread_two_loops_expr(

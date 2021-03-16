@@ -55,7 +55,49 @@ function conv_baseline!(out, A, kern)
     out
 end
 
+
+struct DenseConvDims{N,K,C_in,C_out} end
+
+function kernaxes(::DenseConvDims{2,K,C_in, C_out}) where {K,C_in, C_out}
+    K₁ =  LoopVectorization.StaticInt(1):LoopVectorization.StaticInt(K[1])
+    K₂ =  LoopVectorization.StaticInt(1):LoopVectorization.StaticInt(K[2])
+    Cᵢₙ =  LoopVectorization.StaticInt(1):LoopVectorization.StaticInt(C_in)
+    Cₒᵤₜ = LoopVectorization.StaticInt(1):LoopVectorization.StaticInt(C_out)
+    (K₁, K₂, Cᵢₙ, Cₒᵤₜ)
+end
+
+function convlayer!(
+    out::AbstractArray{<:Any,4}, img, kern,
+    dcd::DenseConvDims{2, <:Any, <:Any, <:Any}
+)
+    (K₁, K₂, Cᵢₙ, Cₒᵤₜ) = kernaxes(dcd)
+    @avxt for j₁ ∈ axes(out,1), j₂ ∈ axes(out,2), d ∈ axes(out,4), o ∈ Cₒᵤₜ
+        s = zero(eltype(out))
+        for k₁ ∈ K₁, k₂ ∈ K₂, i ∈ Cᵢₙ
+            s += img[j₁ + k₁ - 1, j₂ + k₂ - 1, i, d] * kern[k₁, k₂, i, o]
+        end
+        out[j₁, j₂, o, d] = s
+    end
+    out
+end
+function convlayer_direct!(
+    out::AbstractArray{<:Any,4}, img, kern,
+    dcd::DenseConvDims{2, <:Any, <:Any, <:Any}
+)
+    (K₁, K₂, Cᵢₙ, Cₒᵤₜ) = kernaxes(dcd)
+    @inbounds @fastmath for j₁ ∈ axes(out,1), j₂ ∈ axes(out,2), d ∈ axes(out,4), o ∈ Cₒᵤₜ
+        s = zero(eltype(out))
+        for k₁ ∈ K₁, k₂ ∈ K₂, i ∈ Cᵢₙ
+            s += img[j₁ + k₁ - 1, j₂ + k₂ - 1, i, d] * kern[k₁, k₂, i, o]
+        end
+        out[j₁, j₂, o, d] = s
+    end
+    out
+end
+
 @testset "Threading" begin
+    dcd = DenseConvDims{2,(5,5),3,6}()
+    kern4 = rand(Float32, 5, 5, 3, 6);
     for M ∈ 17:399
         # @show M
         K = M; N = M;
@@ -74,6 +116,16 @@ end
         out1 = OffsetArray(randn(size(A) .- 2), 1, 1)
         out2 = similar(out1);
         @test conv!(out1, A, kern) ≈ conv_baseline!(out2, A, kern)
+
+
+        img = rand(Float32, M, M, 3, 100);
+        out1 = Array{Float32}(undef, size(img,1)+1-size(kern4,1), size(img,2)+1-size(kern4,2), size(kern4,4), size(img,4));
+        out2 = similar(out1);
+
+        convlayer!(out1, img, kern4, dcd);
+        convlayer_direct!(out2, img, kern4, dcd);
+        @test out1 ≈ out2
+
     end
 end
 
