@@ -384,6 +384,7 @@ function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementby
         if ind isa Integer # subset
             if byterepresentable(ind)
                 addconstindex!(indices, offsets, strides, loopedindex, ind)
+                ninds += 1
             else
                 vptrarray = subset_vptr!(ls, vptrarray, ninds, ind, indices, loopedindex, true)
                 length(indices) == 0 && push!(indices, DISCONTIGUOUS)

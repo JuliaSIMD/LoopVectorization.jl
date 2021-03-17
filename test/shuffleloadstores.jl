@@ -131,6 +131,47 @@ function cmatmul_array!(C::AbstractArray{T,3}, A::AbstractArray{T,3}, B::Abstrac
     end
 end
 
+function issue209(M, G, J, H, A, B, ϕ)
+    tmp = similar(ϕ, G-1, (2*J+1)*(H + 1))
+    Bf = reinterpret(reshape, Float64, B)
+    ϕf = reinterpret(reshape, Float64, ϕ)
+    tmpf = reinterpret(reshape, Float64, tmp)
+    jmax = 2*J + 1
+    for mm = 1:M
+        m_idx = M + 2 - mm
+        @avx for hh = 1:H+1
+            h_idx = (hh - 1)*jmax
+            for jj = 1:jmax, gg = 1:G-1
+                tmpf[1, gg, jj + h_idx] = ϕf[1, jj, gg+1, hh, m_idx] +
+                                          Bf[1, jj, gg,   hh, m_idx]
+                tmpf[2, gg, jj + h_idx] = ϕf[2, jj, gg+1, hh, m_idx] +
+                                          Bf[2, jj, gg,   hh, m_idx]
+            end
+        end
+    end
+    tmp
+end
+function issue209_noavx(M, G, J, H, A, B, ϕ)
+    tmp = similar(ϕ, G-1, (2*J+1)*(H + 1))
+    Bf = reinterpret(reshape, Float64, B)
+    ϕf = reinterpret(reshape, Float64, ϕ)
+    tmpf = reinterpret(reshape, Float64, tmp)
+    jmax = 2*J + 1
+    for mm = 1:M
+        m_idx = M + 2 - mm
+        for hh = 1:H+1
+            h_idx = (hh - 1)*jmax
+            for jj = 1:jmax, gg = 1:G-1
+                tmpf[1, gg, jj + h_idx] = ϕf[1, jj, gg+1, hh, m_idx] +
+                                          Bf[1, jj, gg,   hh, m_idx]
+                tmpf[2, gg, jj + h_idx] = ϕf[2, jj, gg+1, hh, m_idx] +
+                                          Bf[2, jj, gg,   hh, m_idx]
+            end
+        end
+    end
+    tmp
+end
+
 @testset "shuffles load/stores" begin
     for i ∈ 1:128
         ac = rand(Complex{Float64}, i);
@@ -168,5 +209,15 @@ end
             @test Cc1 ≈ Cc2# ≈ Cc3
         end
     end
+    M = 100
+    G = 50
+    J = 50
+    H = 300
+
+    A = Matrix(Tridiagonal(rand(G-1,G-1)));
+    B = rand(Complex{Float64}, 2*J+1, G-1, H+1, M+1);
+    ϕ = rand(Complex{Float64}, 2*J+1, G+1, H+1, M+1);
+    @test issue209(M, G, J, H, A, B, ϕ) ≈ issue209_noavx(M, G, J, H, A, B, ϕ)
 end
+
 
