@@ -1,5 +1,5 @@
 
-using VectorizationBase: AbstractSIMD
+using .VectorizationBase: AbstractSIMD
 import .ForwardDiff
 import .ChainRulesCore
 
