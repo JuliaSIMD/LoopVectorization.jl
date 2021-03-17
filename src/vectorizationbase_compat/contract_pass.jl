@@ -208,7 +208,8 @@ end
 # contract_pass(x) = x # x will probably be a symbol
 function contract_pass!(expr::Expr, mod = nothing)
     i = Core.ifelse(expr.head === :for, 1, 0)
-    while i < length(expr.args)
+    Nexpr = length(expr.args)
+    while i < Nexpr
         _ex = expr.args[(i+=1)]
         _ex isa Expr || continue
         ex::Expr = _ex
