@@ -207,8 +207,11 @@ function contract!(expr::Expr, ex::Expr, i::Int, mod)
 end
 # contract_pass(x) = x # x will probably be a symbol
 function contract_pass!(expr::Expr, mod = nothing)
-    for (i,ex) ∈ enumerate(expr.args)
-        ex isa Expr || continue
+    i = Core.ifelse(expr.head === :for, 1, 0)
+    while i < length(expr.args)
+        _ex = expr.args[(i+=1)]
+        _ex isa Expr || continue
+        ex::Expr = _ex
         contract!(expr, ex, i, mod)
     end
 end

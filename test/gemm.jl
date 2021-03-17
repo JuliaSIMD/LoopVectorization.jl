@@ -71,9 +71,12 @@
         end
     end
     function AmulBavx1!(C, A, B)
-        @avx for m ∈ 1:size(A,1), n ∈ axes(B,2)
+        dM, rM = divrem(size(C,1), 3)
+        dN, rN = divrem(size(C,2), 3)
+        dK, rK = divrem(size(B,1), 3)
+        @avx for m ∈ 1:3*dM + rM, n ∈ 1:3*dN + rN
             Cₘₙ = zero(eltype(C))
-            for k ∈ 1:size(A,2)
+            for k ∈ 1:3*dK + rK
                 Cₘₙ += A[m,k] * B[k,n]
             end
             C[m,n] = Cₘₙ
