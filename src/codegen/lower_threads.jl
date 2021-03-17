@@ -554,12 +554,12 @@ function thread_two_loops_expr(
 
             var"#thread#mask#" >>>= var"#trailzing#zeros#"
 
-            endinner = var"#thread#launch#count#0#" == (var"#thread#factor#0#"-0x00000001)
-            var"#thread#launch#count#0#" = Core.ifelse(endinner, 0x00000000, var"#thread#launch#count#0#" + 0x00000001)
-            var"#thread#launch#count#1#" = Core.ifelse(endinner, var"#thread#launch#count#1#" + 0x00000001, var"#thread#launch#count#1#")
+            var"##end#inner##" = var"#thread#launch#count#0#" == (var"#thread#factor#0#"-0x00000001)
+            var"#thread#launch#count#0#" = Core.ifelse(var"##end#inner##", 0x00000000, var"#thread#launch#count#0#" + 0x00000001)
+            var"#thread#launch#count#1#" = Core.ifelse(var"##end#inner##", var"#thread#launch#count#1#" + 0x00000001, var"#thread#launch#count#1#")
 
-            var"#iter#start#0#" = Core.ifelse(endinner, var"#loop#1#start#init#", var"#iter#stop#0#")
-            var"#iter#start#1#" = Core.ifelse(endinner, var"#iter#stop#1#", var"#iter#start#1#")
+            var"#iter#start#0#" = Core.ifelse(var"##end#inner##", var"#loop#1#start#init#", var"#iter#stop#0#")
+            var"#iter#start#1#" = Core.ifelse(var"##end#inner##", var"#iter#stop#1#", var"#iter#start#1#")
 
             var"#threads#remain#" = (var"#thread#launch#count#" += 0x00000001) ≠ var"#nrequest#"
         end

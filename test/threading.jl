@@ -1,4 +1,4 @@
-using OffsetArrays, LinearAlgebra
+using OffsetArrays, LinearAlgebra, LoopVectorization, Test
 function mydotavx(a, b)
     s = zero(eltype(a))
     @avxt for i ∈ eachindex(a,b)
@@ -96,9 +96,10 @@ function convlayer_direct!(
 end
 
 @testset "Threading" begin
+    @show @__LINE__
     dcd = DenseConvDims{2,(5,5),3,6}()
     kern4 = rand(Float32, 5, 5, 3, 6);
-    for M ∈ 17:50:267
+    @time for M ∈ 17:50:267
         img = rand(Float32, M, M, 3, 100);
         outimage1 = Array{Float32}(undef, size(img,1)+1-size(kern4,1), size(img,2)+1-size(kern4,2), size(kern4,4), size(img,4));
         outimage2 = similar(outimage1);
@@ -108,7 +109,7 @@ end
         @test outimage1 ≈ outimage2
     end
 
-    for M ∈ 17:399
+    @time for M ∈ 17:399
         # @show M
         K = M; N = M;
         A = rand(M,K); B = rand(K,N);
