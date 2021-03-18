@@ -51,15 +51,15 @@
             @test sqrt.(Float32.(a)) ≈ @avx sqrt.(a)
         elseif T === Int64
             a = rand(T(1):T(100), 73, 1);
-            @test sqrt.(a) ≈ @avx sqrt.(a)
+            @test sqrt.(a) ≈ @avxt sqrt.(a)
         else
             a = rand(T, 73, 1);
             @test sqrt.(a) ≈ @avx sqrt.(a)
         end
         
         a = rand(R, M); B = rand(R, M, N); c = rand(R, N); c′ = c';
-        d1 =      @. a + B * c′;
-        d2 = @avx @. a + B * c′;
+        d1 =       @. a + B * c′;
+        d2 = @avxt @. a + B * c′;
         @test d1 ≈ d2
         
         @.      d1 = a + B * c′;
@@ -85,7 +85,7 @@
         A = rand(R,M,K); B = rand(R,K,N); C = rand(R,M,N);
         At = copy(A');
         D1 = C .+ A * B;
-        D2 = @avx C .+ A .*ˡ B;
+        D2 = @avxt C .+ A .*ˡ B;
         @test D1 ≈ D2
         if RUN_SLOW_TESTS
             fill!(D2, -999999); D2 = @avx C .+ At' *ˡ B;
@@ -98,24 +98,22 @@
             C3d = rand(R,3,M,N);
             D1 .= view(C3d, 1, :, :) .+ A * B;
             fill!(D2, -999999);
-            @avx D2 .= view(C3d, 1, :, :) .+ A .*ˡ B;
+            @avxt D2 .= view(C3d, 1, :, :) .+ A .*ˡ B;
             @test D1 ≈ D2
         end
         D1 .= 9999;
         @avx D2 .= 9999;
         @test D1 == D2
         D1 .= -99999;
-        @avx D2' .= -99999;
+        @avxt D2' .= -99999;
         @test D1 == D2
         
-        if VERSION > v"1.2"
-            b = rand(T,K); x = rand(R,N);
-            D1 .= C .+ A * (b .+ x');
-            @avx @. D2 = C + A *ˡ (b + x');
-            @test D1 ≈ D2
-            D2 = @avx @. C + A *ˡ (b + x');
-            @test D1 ≈ D2
-        end
+        b = rand(T,K); x = rand(R,N);
+        D1 .= C .+ A * (b .+ x');
+        @avxt @. D2 = C + A *ˡ (b + x');
+        @test D1 ≈ D2
+        D2 = @avx @. C + A *ˡ (b + x');
+        @test D1 ≈ D2
         
         if T <: Union{Float32,Float64}
             D3 = cos.(B');
@@ -125,7 +123,7 @@
             fill!(D3, -1e3); fill!(D4, 9e9);
             Bt = transpose(B);
             @. D3 = exp(Bt);
-            @avx @. D4 = exp(Bt);
+            @avxt @. D4 = exp(Bt);
             @test D3 ≈ D4
 
             D1 = similar(B); D2 = similar(B);
@@ -138,7 +136,7 @@
             fill!(D1, -1e3);
             fill!(D2, 9e9);
             @. D1' = exp(Bt);
-            lset = @avx @. D2' = exp(Bt);
+            lset = @avxt @. D2' = exp(Bt);
             
             @test D1 ≈ D2
 
@@ -147,12 +145,12 @@
             b2 =      @. 3*a + sin(a) + sqrt(a);
             @test b1 ≈ b2
             three = 3; fill!(b1, -9999);
-            @avx @. b1 = three*a + sin(a) + sqrt(a);
+            @avxt @. b1 = three*a + sin(a) + sqrt(a);
             @test b1 ≈ b2
 
             C = rand(100,10,10);
             D1 = C .^ 0.3;
-            D2 = @avx C .^ 0.3;
+            D2 = @avxt C .^ 0.3;
             @test D1 ≈ D2
             @. D1 = C ^ 2;
             @avx @. D2 = C ^ 2;

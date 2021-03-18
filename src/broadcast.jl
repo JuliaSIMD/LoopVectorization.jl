@@ -378,7 +378,7 @@ end
     resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
     # return ls
     # @show u₁, u₂, inline
-    q = iszero(u₁) ? lower_and_split_loops(ls, inline % Int) : lower(ls, u₁ % Int, u₂ % Int, inline % Int)
+    q = avx_body(ls, UNROLL)
     # q = lower(ls, u₁ % Int, u₂ % Int, inline % Int)
     push!(q.args, :dest)
     # @show q
@@ -410,7 +410,7 @@ end
     add_broadcast!(ls, :dest, :bc, loopsyms, BC, elementbytes)
     add_simple_store!(ls, :dest, ArrayReference(:dest, reverse(loopsyms)), elementbytes)
     resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
-    q = iszero(u₁) ? lower_and_split_loops(ls, inline % Int) : lower(ls, u₁ % Int, u₂ % Int, inline % Int)
+    q = avx_body(ls, UNROLL)
     # q = lower(ls, u₁ % Int, u₂ % Int, inline % Int)
     push!(q.args, :dest′)
     q = Expr(
