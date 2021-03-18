@@ -381,7 +381,7 @@ end
 end
 @inline check_args(A, B, C::Vararg{Any,K}) where {K} = check_args(A) && check_args(B, C...)
 @inline check_args(::AbstractRange{T}) where {T} = check_type(T)
-@inline check_args(::Type{T}) where {T <: VectorizationBase.NativeTypesV} = true
+@inline check_args(::Type{T}) where {T} = check_type(T)
 """
     check_type(::Type{T}) where {T}
 
