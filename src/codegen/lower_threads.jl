@@ -27,9 +27,7 @@ end
 @inline function avx_launch(
     ::Val{UNROLL}, ::Val{OPS}, ::Val{ARF}, ::Val{AM}, ::Val{LPSYM}, lb::LB, vargs::V, tid
 ) where {UNROLL,OPS,ARF,AM,LPSYM,LB,V}
-    ThreadingUtilities.launch(tid, pointer(AVX{UNROLL,OPS,ARF,AM,LPSYM,LB,V}()), (lb,vargs)) do p, fptr, args
-        setup_avx_threads!(p, fptr, args)
-    end
+    ThreadingUtilities.launch(setup_avx_threads!, tid, pointer(AVX{UNROLL,OPS,ARF,AM,LPSYM,LB,V}()), (lb,vargs))
 end
 
 # function approx_cbrt(x)
