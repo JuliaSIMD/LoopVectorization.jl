@@ -303,7 +303,7 @@ end
     ::StaticInt{RS}, ::StaticInt{AR}, ::StaticInt{NT},
     ::StaticInt{CLS}, ::StaticInt{L1}, ::StaticInt{L2}, ::StaticInt{L3}
 ) where {inline,u₁,u₂,thread,W,RS,AR,CLS,L1,L2,L3,NT}
-    nt = min(thread, NT % UInt)
+    nt = min(thread % UInt, NT % UInt)
     t = Expr(:tuple, inline, u₁, u₂, W, RS, AR, CLS, L1,L2,L3, nt)
     Expr(:call, Expr(:curly, :Val, t))
 end
