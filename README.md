@@ -350,5 +350,6 @@ Similar approaches can be taken to make kernels working with a variety of numeri
 * [SnpArrays.jl](https://github.com/OpenMendel/SnpArrays.jl)
 * [Tullio.jl](https://github.com/mcabbott/Tullio.jl)
 * [YisyAIFramework.jl](https://github.com/SkyWorld117/YisyAIFramework.jl)
+* [TropicalGEMM.jl](https://github.com/TensorBFS/TropicalGEMM.jl)
 
 If you're using LoopVectorization, please feel free to file a PR adding yours to the list!
