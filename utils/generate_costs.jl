@@ -107,3 +107,12 @@ let
     end
 end
 
+let
+    f, io = mktemp()
+    W = Int(VectorizationBase.pick_vector_width(Float64))
+    code_native(io, exp, (VecUnroll{1,W,Float64,Vec{W,Float64}},); debuginfo=:none)
+    close(io)
+    run(`llvm-mca -mcpu=$(Sys.CPU_NAME) -output-asm-variant=1 -bottleneck-analysis $f`)
+end
+
+
