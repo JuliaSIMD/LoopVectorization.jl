@@ -176,10 +176,7 @@ function add_mref!(
     sptrs::Expr, ls::LoopSet, ar::ArrayReferenceMeta, @nospecialize(_::Type{Ptr{T}}),
     C::Int, B::Int, sp::NTuple{N,Int}, name::Symbol
 ) where {T,N}
-    Tsym::Symbol = get(VectorizationBase.JULIA_TYPES, T) do
-        Symbol(T)
-    end
-    add_mref_ptr!(sptrs, ls, ar, Tsym, C, B, sp, name)
+    add_mref_ptr!(sptrs, ls, ar, T, C, B, sp, name)
 end
 function loop_indexes_bit!(ls::LoopSet, ar::ArrayReferenceMeta)
     li = ar.loopedindex;
@@ -190,16 +187,16 @@ function loop_indexes_bit!(ls::LoopSet, ar::ArrayReferenceMeta)
     nothing
 end
 function add_mref_ptr!(
-    sptrs::Expr, ls::LoopSet, ar::ArrayReferenceMeta, Tsym::Symbol,
+    sptrs::Expr, ls::LoopSet, ar::ArrayReferenceMeta, @nospecialize(_::Type{T}),
     C::Int, B::Int, sp::NTuple{N,Int}, name::Symbol
-) where {N}
+) where {N,T}
     @assert B ≤ 0 "Batched arrays not supported yet."
     # maybe no change needed? -- optimize common case
     column_major = ntuple(identity, N)
     li = ar.loopedindex;
     if sp === column_major || isone(length(li))
         # don't set `bit` to true if our vector width is ≥ 8
-        ((Tsym === :Bit) && (ls.vector_width[] < 8)) && loop_indexes_bit!(ls, ar)
+        ((T=== :Bit) && (ls.vector_width[] < 8)) && loop_indexes_bit!(ls, ar)
         return extract_gsp!(sptrs, name)
     end
     permute_mref!(ar, C, sp)
@@ -217,7 +214,7 @@ function add_mref_ptr!(
         push!(offsets_tup.args, Expr(:call, gf, offsets, p, false))
     end
     #TODO: fix for `Tsym === Bit`.
-    sptype = Expr(:curly, lv(:StridedPointer), Tsym, N, (C == -1 ? -1 : 1), B, column_major)
+    sptype = Expr(:curly, lv(:StridedPointer), T, N, (C == -1 ? -1 : 1), B, column_major)
     sptr = Expr(:call, sptype, Expr(:call, :pointer, tmpsp), strd_tup, offsets_tup)
     pushpreamble!(ls, Expr(:(=), name, sptr))
     nothing
