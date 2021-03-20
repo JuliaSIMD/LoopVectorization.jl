@@ -1,4 +1,4 @@
-module LoopVectorization
+module LoopVectorization 
 
 using Static: StaticInt, gt
 using VectorizationBase, SLEEFPirates, UnPack, OffsetArrays
