@@ -105,6 +105,7 @@ function shifted_loopset(ls::LoopSet, loopsyms::Vector{Symbol})
     end
     ld
 end
+# loopdeps_uint(ls::LoopSet, op::Operation) = (@show op; shifted_loopset(ls, loopdependencies(op)))
 loopdeps_uint(ls::LoopSet, op::Operation) = shifted_loopset(ls, loopdependencies(op))
 reduceddeps_uint(ls::LoopSet, op::Operation) = shifted_loopset(ls, reduceddependencies(op))
 childdeps_uint(ls::LoopSet, op::Operation) = shifted_loopset(ls, reducedchildren(op))
@@ -299,18 +300,19 @@ end
 # first_cache_size() = _first_cache_size(cache_size(first_cache()))
 
 @generated function _avx_config_val(
-    ::Val{inline}, ::Val{u₁}, ::Val{u₂}, ::Val{thread}, ::StaticInt{W},
-    ::StaticInt{RS}, ::StaticInt{AR}, ::StaticInt{NT},
+    ::Val{CNFARG}, ::StaticInt{W}, ::StaticInt{RS}, ::StaticInt{AR}, ::StaticInt{NT},
     ::StaticInt{CLS}, ::StaticInt{L1}, ::StaticInt{L2}, ::StaticInt{L3}
-) where {inline,u₁,u₂,thread,W,RS,AR,CLS,L1,L2,L3,NT}
+) where {CNFARG,W,RS,AR,CLS,L1,L2,L3,NT}
+    inline,u₁,u₂,BROADCAST,thread = CNFARG
     nt = min(thread % UInt, NT % UInt)
-    t = Expr(:tuple, inline, u₁, u₂, W, RS, AR, CLS, L1,L2,L3, nt)
+    t = Expr(:tuple, inline, u₁, u₂, BROADCAST, W, RS, AR, CLS, L1,L2,L3, nt)
     Expr(:call, Expr(:curly, :Val, t))
 end
-@inline function avx_config_val(::Val{inline}, ::Val{u₁}, ::Val{u₂}, ::Val{thread}, ::StaticInt{W}) where {inline,u₁,u₂,thread,W}
+@inline function avx_config_val(
+    ::Val{CNFARG}, ::StaticInt{W}
+) where {CNFARG,W}
     _avx_config_val(
-        Val{inline}(), Val{u₁}(), Val{u₂}(), Val{thread}(), StaticInt{W}(),
-        register_size(), available_registers(), lv_max_num_threads(),
+        Val{CNFARG}(), StaticInt{W}(), register_size(), available_registers(), lv_max_num_threads(),
         cache_linesize(), cache_size(StaticInt(1)), cache_size(StaticInt(2)), cache_size(StaticInt(3))
     )
 end
@@ -338,7 +340,8 @@ function generate_call(ls::LoopSet, (inline,u₁,u₂)::Tuple{Bool,Int8,Int8}, t
     loop_syms = tuple_expr(QuoteNode, ls.loopsymbols)
     func = debug ? lv(:_avx_loopset_debug) : lv(:_avx_!)
     lbarg = debug ? Expr(:call, :typeof, loop_bounds) : loop_bounds
-    unroll_param_tup = Expr(:call, lv(:avx_config_val), :(Val{$inline}()), :(Val{$u₁}()), :(Val{$u₂}()), :(Val{$thread}()), VECTORWIDTHSYMBOL)
+    configarg = (inline,u₁,u₂,ls.isbroadcast[],thread)
+    unroll_param_tup = Expr(:call, lv(:avx_config_val), :(Val{$configarg}()), VECTORWIDTHSYMBOL)
     q = Expr(:call, func, unroll_param_tup, val(operation_descriptions), val(arrayref_descriptions), val(argmeta), val(loop_syms))
     # debug && deleteat!(q.args, 2)
     vargs_as_tuple = true#!debug

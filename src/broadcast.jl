@@ -1,40 +1,133 @@
-
-@inline stridedpointer_for_broadcast(A) = stridedpointer_for_broadcast(ArrayInterface.size(A), stridedpointer(A))
-@inline stridedpointer_for_broadcast(s, ptr) = ptr
-# function stridedpointer_for_broadcast(s, ptr::VectorizationBase.AbstractStridedPointer)
-#      # FIXME: this is unsafe for AbstractStridedPointers
-#     throw("Broadcasting not currently supported for arrays where typeof(stridedpointer(A)) === $(typeof(ptr))")
-# end
-function stridedpointer_for_broadcast_quote(typ, N, S, X)
-    q = Expr(:block, Expr(:meta,:inline), :(strd = ptr.strd))
-    strd_tup = Expr(:tuple)
+struct LowDimArray{D,T,N,A<:DenseArray{T,N}} <: DenseArray{T,N}
+    data::A
+end
+function LowDimArray{D}(data::A) where {D,T,N,A <: AbstractArray{T,N}}
+    LowDimArray{D,T,N,A}(data)
+end
+Base.@propagate_inbounds Base.getindex(A::LowDimArray, i::Vararg{Union{Integer,CartesianIndex},K}) where {K} = getindex(A.data, i...)
+@inline Base.size(A::LowDimArray) = Base.size(A.data)
+@inline Base.size(A::LowDimArray, i) = Base.size(A.data, i)
+@inline Base.strides(A::LowDimArray) = strides(A.data)
+@inline ArrayInterface.parent_type(::Type{LowDimArray{D,T,N,A}}) where {T,D,N,A} = A
+@inline ArrayInterface.strides(A::LowDimArray) = ArrayInterface.strides(A.data)
+@inline ArrayInterface.device(A::LowDimArray) = ArrayInterface.CPUPointer()
+@generated function ArrayInterface.size(A::LowDimArray{D,T,N}) where {D,T,N}
+    t = Expr(:tuple)
+    gf = GlobalRef(Core,:getfield)
     for n ∈ 1:N
-        s_type = S[n]
+        if n > length(D) || D[n]
+            push!(t.args, Expr(:call, gf, :s, n, false))
+        else
+            push!(t.args, Expr(:call, Expr(:curly, lv(:StaticInt), 1)))
+        end
+    end
+    Expr(:block, Expr(:meta,:inline), :(s = ArrayInterface.size(parent(A))), t)
+end
+Base.parent(A::LowDimArray) = getfield(A, :data)
+Base.unsafe_convert(::Type{Ptr{T}}, A::LowDimArray{D,T}) where {D,T} = pointer(parent(A))
+ArrayInterface.contiguous_axis(A::LowDimArray) = ArrayInterface.contiguous_axis(parent(A))
+ArrayInterface.contiguous_batch_size(A::LowDimArray) = ArrayInterface.contiguous_batch_size(parent(A))
+ArrayInterface.stride_rank(A::LowDimArray) = ArrayInterface.stride_rank(parent(A))
+ArrayInterface.offsets(A::LowDimArray) = ArrayInterface.offsets(parent(A))
+
+@generated function _lowdimfilter(::Val{D}, tup::Tuple{Vararg{Any,N}}) where {D,N}
+    t = Expr(:tuple)
+    gf = GlobalRef(Core,:getfield)
+    for n ∈ 1:N
+        if n > length(D) || D[n]
+            push!(t.args, Expr(:call, gf, :tup, n, false))
+        end
+    end
+    Expr(:block, Expr(:meta,:inline), t)
+end
+
+struct ForBroadcast{T,N,A<:AbstractArray{T,N}} <: AbstractArray{T,N}
+    data::A
+end
+@inline Base.parent(fb::ForBroadcast) = getfield(fb, :data)
+Base.@propagate_inbounds Base.getindex(A::ForBroadcast, i::Vararg{Any,K}) where {K} = parent(A)[i...]
+const LowDimArrayForBroadcast{D,T,N,A} = ForBroadcast{T,N,LowDimArray{D,T,N,A}}
+@inline function VectorizationBase.contiguous_axis(fb::LowDimArrayForBroadcast{D,T,N,A}) where {D,T,N,A}
+    _contiguous_axis(Val{D}(), VectorizationBase.contiguous_axis(parent(parent(fb))))
+end
+@inline forbroadcast(A::AbstractArray) = ForBroadcast(A)
+@inline forbroadcast(A::AbstractRange) = A
+@inline forbroadcast(A) = A
+@inline forbroadcast(A::Adjoint) = forbroadcast(parent(A))
+@inline forbroadcast(A::Transpose) = forbroadcast(parent(A))
+Base.size(fb::ForBroadcast) = size(parent(fb))
+
+# @inline function VectorizationBase.contiguous_batch_size(fb::LowDimArrayForBroadcast{D,T,N,A}) where {D,T,N,A}
+#     _contiguous_axis(Val{D}(), VectorizationBase.contiguous_batch_size(parent(parent(fb))))
+# end
+@generated function _contiguous_axis(::Val{D}, ::StaticInt{C}) where {D,C}
+    Dlen = length(D)
+    (C > 0) || return Expr(:block,Expr(:meta,:inline), staticexpr(C))
+    if C ≤ Dlen
+        D[C] || return Expr(:block,Expr(:meta,:inline), staticexpr(-1))
+    end
+    Cnew = 0
+    for n ∈ 1:C
+        Cnew += ((n > Dlen)) || D[n]
+    end
+    Expr(:block,Expr(:meta,:inline), staticexpr(Cnew))
+end
+@inline function VectorizationBase.val_stride_rank(fb::LowDimArrayForBroadcast{D}) where {D}
+    VectorizationBase.asvalint(_lowdimfilter(Val(D), ArrayInterface.stride_rank(parent(parent(fb)))))
+end
+@inline function VectorizationBase.val_dense_dims(fb::LowDimArrayForBroadcast{D}) where {D}
+    VectorizationBase.asvalbool(_lowdimfilter(Val(D), ArrayInterface.dense_dims(parent(parent(fb)))))
+end
+@inline function VectorizationBase.bytestrides(fb::LowDimArrayForBroadcast{D}) where {D}
+    p = parent(parent(fb))
+    s = _bytestrides(ArrayInterface.size(p), ArrayInterface.strides(p), p)
+    _lowdimfilter(Val(D), s)
+end
+@inline function ArrayInterface.offsets(fb::LowDimArrayForBroadcast{D}) where {D}
+    _lowdimfilter(Val(D), ArrayInterface.offsets(parent(parent(fb))))
+end
+
+for f ∈ [ # groupedstridedpointer support
+    :(VectorizationBase.memory_reference),
+    :(ArrayInterface.contiguous_axis),
+    :(ArrayInterface.contiguous_batch_size),
+    :(ArrayInterface.device),
+    :(VectorizationBase.val_stride_rank),
+    :(VectorizationBase.val_dense_dims),
+    :(ArrayInterface.offsets)
+]
+    @eval @inline $f(fb::ForBroadcast) = $f(getfield(fb, :data))
+end
+@inline _bytestrides(s,paren) = VectorizationBase.bytestrides(paren)
+@generated function _bytestrides(s::Tuple{Vararg{Integer,N}}, x::Tuple{Vararg{Integer,N}}, paren::AbstractArray{T,N}) where {T,N}
+    q = Expr(:block, Expr(:meta,:inline))
+    strd_tup = Expr(:tuple)
+    gf = GlobalRef(Core, :getfield)
+    ifel = GlobalRef(Core, :ifelse)
+    st = staticexpr(sizeof(T))
+    for n ∈ 1:N
+        s_type = s.parameters[n]
         if s_type <: Static
-            if s_type === Static{1}
+            if s_type === One
                 push!(strd_tup.args, Expr(:call, lv(:Zero)))
             else
-                push!(strd_tup.args, :(strd[$n]))
+                push!(strd_tup.args, :($gf(x, $n, false) * $st))
             end
         else
-            Xₙ_type = X[n]
+            Xₙ_type = x.parameters[n]
             if Xₙ_type <: Static # FIXME; what to do here? Dynamic dispatch? 
-                push!(strd_tup.args, :(strd[$n]))
+                push!(strd_tup.args, :($gf(x, $n, false)*$st))
             else
-                push!(strd_tup.args, :(Base.ifelse(isone(s[$n]), zero($Xₙ_type), strd[$n])))
+                push!(strd_tup.args, :($ifel(isone($gf(s, $n, false)), zero($Xₙ_type), $gf(x, $n, false)*$st)))
             end
         end
     end
-    push!(q.args, :(@inbounds $typ(ptr.p, $strd_tup, ptr.offsets)))
+    push!(q.args, strd_tup)
     q
 end
-@generated function stridedpointer_for_broadcast(s::Tuple{Vararg{Any,N}}, ptr::StridedPointer{T,N,C,B,R,X,O}) where {T,N,C,B,R,X,O}
-    typ = Expr(:curly, :StridedPointer, T, N, C, B, R)
-    stridedpointer_for_broadcast_quote(typ, N, s.parameters, X.parameters)
-end
-@generated function stridedpointer_for_broadcast(s::Tuple{Vararg{Any,N}}, ptr::VectorizationBase.StridedBitPointer{N,C,B,R,X}) where {N,C,B,R,X}
-    typ = Expr(:curly, lv(:StridedBitPointer), N, C, B, R)
-    stridedpointer_for_broadcast_quote(typ, N, s.parameters, X.parameters)
+@inline function VectorizationBase.bytestrides(fb::ForBroadcast)
+    p = getfield(fb,:data)
+    _bytestrides(ArrayInterface.size(p), ArrayInterface.strides(p), p)
 end
 
 struct Product{A,B}
@@ -106,9 +199,10 @@ function add_broadcast!(
     Klen = gensym!(ls, "K")
     mA = gensym!(ls, "Aₘₖ")
     mB = gensym!(ls, "Bₖₙ")
-    pushprepreamble!(ls, Expr(:(=), mA, Expr(:(.), bcname, QuoteNode(:a))))
-    pushprepreamble!(ls, Expr(:(=), mB, Expr(:(.), bcname, QuoteNode(:b))))
-    pushprepreamble!(ls, Expr(:(=), Klen, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), Expr(:ref, Expr(:call, :size, mB), 1))))
+    gf = GlobalRef(Core,:getfield)
+    pushprepreamble!(ls, Expr(:(=), mA, Expr(:call, :forbroadcast, Expr(:(.), bcname, QuoteNode(:a)))))
+    pushprepreamble!(ls, Expr(:(=), mB, Expr(:call, :forbroadcast, Expr(:(.), bcname, QuoteNode(:b)))))
+    pushprepreamble!(ls, Expr(:(=), Klen, Expr(:call, gf, Expr(:call, :size, mB), 1, false)))
     pushpreamble!(ls, Expr(:(=), Krange, Expr(:call, :(:), staticexpr(1), Klen)))
     k = gensym!(ls, "k")
     add_loop!(ls, Loop(k, 1, Klen, 1, Krange, Klen), k)
@@ -153,91 +247,21 @@ function add_broadcast!(
     pushop!(ls, reductfinal, mCt)
 end
 
-struct LowDimArray{D,T,N,A<:DenseArray{T,N}} <: DenseArray{T,N}
-    data::A
-end
-Base.@propagate_inbounds Base.getindex(A::LowDimArray, i::Vararg{Union{Integer,CartesianIndex},K}) where {K} = getindex(A.data, i...)
-@inline Base.size(A::LowDimArray) = Base.size(A.data)
-@inline Base.size(A::LowDimArray, i) = Base.size(A.data, i)
-@inline Base.strides(A::LowDimArray) = strides(A.data)
-@inline ArrayInterface.parent_type(::Type{LowDimArray{D,T,N,A}}) where {T,D,N,A} = A
-@inline ArrayInterface.strides(A::LowDimArray) = ArrayInterface.strides(A.data)
-@inline ArrayInterface.device(::LowDimArray) = ArrayInterface.CPUPointer()
-@generated function ArrayInterface.size(A::LowDimArray{D,T,N}) where {D,T,N}
-    t = Expr(:tuple)
-    for n ∈ 1:N
-        if n > length(D) || D[n]
-            push!(t.args, Expr(:ref, :s, n))
-        else
-            push!(t.args, Expr(:call, Expr(:curly, lv(:Static), 1)))
-        end
-    end
-    Expr(:block, Expr(:meta,:inline), :(s = ArrayInterface.size(parent(A))), t)
-end
-Base.parent(A::LowDimArray) = A.data
-Base.unsafe_convert(::Type{Ptr{T}}, A::LowDimArray{D,T}) where {D,T} = pointer(A.data)
-ArrayInterface.contiguous_axis(A::LowDimArray) = ArrayInterface.contiguous_axis(A.data)
-ArrayInterface.contiguous_batch_size(A::LowDimArray) = ArrayInterface.contiguous_batch_size(A.data)
-ArrayInterface.stride_rank(A::LowDimArray) = ArrayInterface.stride_rank(A.data)
-ArrayInterface.offsets(A::LowDimArray) = ArrayInterface.offsets(A.data)
-
-@inline function stridedpointer_for_broadcast(A::LowDimArray{D}) where {D}
-    _stridedpointer(stridedpointer_for_broadcast(parent(A)), Val{D}())
-end
-
-@generated function _stridedpointer(p::StridedPointer{T,N,C,B,R}, ::Val{D}) where {T,N,C,B,R,D}
-    lenD = length(D)
-    strd = Expr(:tuple)
-    offsets = Expr(:tuple)
-    Rtup = Expr(:tuple)
-    Cnew = -1
-    Bnew = -1
-    Nnew = 0
-    for n ∈ 1:N
-        ((n ≤ lenD) && (!D[n])) && continue
-        if n == C
-            Cnew = n
-        end
-        if n == B
-            Bnew = n
-        end
-        push!(Rtup.args, R[n])
-        push!(offsets.args, Expr(:ref, :offs, n))
-        push!(strd.args, Expr(:ref, :strd, n))
-        Nnew += 1
-    end
-    typ = Expr(:curly, :StridedPointer, T, Nnew, Cnew, Bnew, Rtup)
-    # ptr = Expr(:call, typ, Expr(:call, lv(:llvmptr), :p), strd, offsets)
-    ptr = Expr(:call, typ, Expr(:call, lv(:pointer), :p), strd, offsets)
-    Expr(:block, Expr(:meta,:inline), :(strd = p.strd), :(offs = p.offsets), ptr)
-end
-# @generated function VectorizationBase.stridedpointer(A::LowDimArray{D,T,N}) where {D,T,N}
-#     smul = Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:VectorizationBase)), QuoteNode(:staticmul))
-#     multup = Expr(:tuple)
-#     for n ∈ D[1]+1:N
-#         if length(D) < n
-#             push!(multup.args, Expr(:call, :ifelse, :(isone(size(A,$n))), 0, Expr(:ref, :strideA, n)))
-#         elseif D[n]
-#             push!(multup.args, Expr(:ref, :strideA, n))
-#         end
-#     end
-#     s = Expr(:call, smul, T, multup)
-#     f = D[1] ? :PackedStridedPointer : :SparseStridedPointer
-#     Expr(:block, Expr(:meta,:inline), Expr(:(=), :strideA, Expr(:call, :strides, Expr(:(.), :A, QuoteNode(:data)))),
-#          Expr(:call, Expr(:(.), :VectorizationBase, QuoteNode(f)), Expr(:call, :pointer, :A), s))
-# end
-function LowDimArray{D}(data::A) where {D,T,N,A <: AbstractArray{T,N}}
-    LowDimArray{D,T,N,A}(data)
-end
 function extract_all_1_array!(ls::LoopSet, bcname::Symbol, N::Int, elementbytes::Int)
     refextract = gensym!(ls, bcname)
     ref = Expr(:ref, bcname);
     for _ ∈ 1:N
         push!(ref.args, :begin)
     end
-    pushprepreamble!(ls, Expr(:(=), refextract, ref))
+    pushprepreamble!(ls, Expr(:(=), refextract, :(@inbounds $ref)))
     return add_constant!(ls, refextract, elementbytes) # or replace elementbytes with sizeof(T) ? u
 end
+function doaddref!(ls::LoopSet, op::Operation)
+    push!(ls.syms_aliasing_refs, name(op))
+    push!(ls.refs_aliasing_syms, op.ref)
+    op
+end
+
 function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
     @nospecialize(LDA::Type{LowDimArray{D,T,N,A}}), elementbytes::Int
@@ -249,26 +273,29 @@ function add_broadcast!(
     end
     fulldims = Symbol[loopsyms[n] for n ∈ 1:N if ((Dlen < n) || D[n]::Bool)]
     ref = ArrayReference(bcname, fulldims)
-    add_simple_load!(ls, destname, ref, elementbytes, true, true )::Operation
+    loadop = add_simple_load!(ls, destname, ref, elementbytes, true, true )::Operation
+    doaddref!(ls, loadop)
 end
 function add_broadcast_adjoint_array!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{A}, elementbytes::Int
 ) where {T,N,A<:AbstractArray{T,N}}
-    parent = gensym!(ls, "parent")
-    pushprepreamble!(ls, Expr(:(=), parent, Expr(:call, :parent, bcname)))
+    # parent = gensym!(ls, "parent")
+    # pushprepreamble!(ls, Expr(:(=), parent, Expr(:call, :parent, bcname)))
     # isone(length(loopsyms)) && return extract_all_1_array!(ls, bcname, N, elementbytes)
-    ref = ArrayReference(parent, Symbol[loopsyms[N + 1 - n] for n ∈ 1:N])
-    add_simple_load!( ls, destname, ref, elementbytes, true, true )::Operation
+    ref = ArrayReference(bcname, Symbol[loopsyms[N + 1 - n] for n ∈ 1:N])
+    loadop = add_simple_load!( ls, destname, ref, elementbytes, true, true )::Operation
+    doaddref!(ls, loadop)
 end
 function add_broadcast_adjoint_array!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{<:AbstractVector}, elementbytes::Int
 )
     # isone(length(loopsyms)) && return extract_all_1_array!(ls, bcname, N, elementbytes)
-    parent = gensym!(ls, "parent")
-    pushprepreamble!(ls, Expr(:(=), parent, Expr(:call, :parent, bcname)))
+    # parent = gensym!(ls, "parent")
+    # pushprepreamble!(ls, Expr(:(=), parent, Expr(:call, :parent, bcname)))
 
-    ref = ArrayReference(parent, Symbol[loopsyms[2]])
-    add_simple_load!( ls, destname, ref, elementbytes, true, true )::Operation
+    ref = ArrayReference(bcname, Symbol[loopsyms[2]])
+    loadop = add_simple_load!( ls, destname, ref, elementbytes, true, true )::Operation
+    doaddref!(ls, loadop)
 end
 function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
@@ -286,7 +313,8 @@ function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
     ::Type{<:AbstractArray{T,N}}, elementbytes::Int
 ) where {T,N}
-    add_simple_load!(ls, destname, ArrayReference(bcname, @view(loopsyms[1:N])), elementbytes, true, true)
+    loadop = add_simple_load!(ls, destname, ArrayReference(bcname, @view(loopsyms[1:N])), elementbytes, true, true)
+    doaddref!(ls, loadop)
 end
 function add_broadcast!(
     ls::LoopSet, ::Symbol, bcname::Symbol, loopsyms::Vector{Symbol}, ::Type{T}, elementbytes::Int
@@ -307,7 +335,8 @@ function add_broadcast!(
     inds = Vector{Symbol}(undef, N+1)
     inds[1] = DISCONTIGUOUS
     inds[2:end] .= @view(loopsyms[1:N])
-    add_simple_load!(ls, destname, ArrayReference(bcname, inds), elementbytes, true, true)
+    loadop = add_simple_load!(ls, destname, ArrayReference(bcname, inds), elementbytes, true, true)
+    doaddref!(ls, loadop)
 end
 const BroadcastedArray{S<:Broadcast.AbstractArrayStyle,F,A} = Broadcasted{S,Nothing,F,A}
 function add_broadcast!(
@@ -323,14 +352,16 @@ function add_broadcast!(
     end
     args = A.parameters
     Nargs = length(args)
-    bcargs = Expr(:(.), bcname, QuoteNode(:args))
+    bcargs = gensym!(ls, "bcargs")
+    pushprepreamble!(ls, Expr(:(=), bcargs, Expr(:(.), bcname, QuoteNode(:args))))
     # this is the var name in the loop
     parents = Operation[]
     deps = Symbol[]
     # reduceddeps = Symbol[]
+    gf = GlobalRef(Core, :getfield)
     for (i,arg) ∈ enumerate(args)
         argname = gensym!(ls, "arg")
-        pushprepreamble!(ls, Expr(:(=), argname, Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,Symbol(@__FILE__)), Expr(:ref, bcargs, i))))
+        pushprepreamble!(ls, Expr(:(=), argname, Expr(:call, :forbroadcast, Expr(:call, gf, bcargs, i, false))))
         # dynamic dispatch
         parent = add_broadcast!(ls, gensym!(ls, "temp"), argname, loopsyms, arg, elementbytes)::Operation
         push!(parents, parent)
@@ -367,32 +398,18 @@ end
     # need to construct the LoopSet
     # @show typeof(dest)
     ls = LoopSet(Mod)
-    inline, u₁, u₂, W, rs, rc, cls, l1, l2, l3, threads = UNROLL
+    inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, threads = UNROLL
     set_hw!(ls, rs, rc, cls, l1, l2, l3)
+    ls.isbroadcast[] = isbroadcast # maybe set `false` in a DiffEq-like `@..` macro
     loopsyms = [gensym!(ls, "n") for n ∈ 1:N]
-    ls.isbroadcast[] = true
     add_broadcast_loops!(ls, loopsyms, :dest)
     elementbytes = sizeof(T)
     add_broadcast!(ls, :dest, :bc, loopsyms, BC, elementbytes)
-    add_simple_store!(ls, :dest, ArrayReference(:dest, loopsyms), elementbytes)
+    storeop = add_simple_store!(ls, :dest, ArrayReference(:dest, loopsyms), elementbytes)
+    doaddref!(ls, storeop)
     resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
     # return ls
-    # @show u₁, u₂, inline
-    q = avx_body(ls, UNROLL)
-    # q = lower(ls, u₁ % Int, u₂ % Int, inline % Int)
-    push!(q.args, :dest)
-    # @show q
-    # q
-    q = Expr(
-        :block,
-        ls.prepreamble,
-        # Expr(:if, check_args_call(ls), Expr(:block, :(println("Primary code path!")), q), Expr(:block, :(println("Back up code path!")), :(Base.Broadcast.materialize!(dest, bc))))
-        Expr(:if, check_args_call(ls), q, :(Base.Broadcast.materialize!(dest, bc))),
-        :dest
-    )
-    # isone(N) && pushfirst!(q.args, Expr(:meta,:inline))
-    q
-     # ls
+    Expr(:block, setup_call(ls, :(Base.Broadcast.materialize!(dest, bc)), LineNumberNode(0), inline, false, u₁, u₂, threads%Int), :dest)
 end
 @generated function vmaterialize!(
     dest′::Union{Adjoint{T,A},Transpose{T,A}}, bc::BC, ::Val{Mod}, ::Val{UNROLL}
@@ -400,34 +417,24 @@ end
     # we have an N dimensional loop.
     # need to construct the LoopSet
     ls = LoopSet(Mod)
-    inline, u₁, u₂, W, rs, rc, cls, l1, l2, l3, threads = UNROLL
+    inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, threads = UNROLL
     set_hw!(ls, rs, rc, cls, l1, l2, l3)
+    ls.isbroadcast[] = isbroadcast # maybe set `false` in a DiffEq-like `@..` macro
     loopsyms = [gensym!(ls, "n") for n ∈ 1:N]
-    ls.isbroadcast[] = true
     pushprepreamble!(ls, Expr(:(=), :dest, Expr(:call, :parent, :dest′)))
     add_broadcast_loops!(ls, loopsyms, :dest′)
     elementbytes = sizeof(T)
     add_broadcast!(ls, :dest, :bc, loopsyms, BC, elementbytes)
-    add_simple_store!(ls, :dest, ArrayReference(:dest, reverse(loopsyms)), elementbytes)
+    storeop = add_simple_store!(ls, :dest, ArrayReference(:dest, reverse(loopsyms)), elementbytes)
+    doaddref!(ls, storeop)
     resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
-    q = avx_body(ls, UNROLL)
-    # q = lower(ls, u₁ % Int, u₂ % Int, inline % Int)
-    push!(q.args, :dest′)
-    q = Expr(
-        :block,
-        ls.prepreamble,
-        Expr(:if, check_args_call(ls), q, :(Base.Broadcast.materialize!(dest′, bc))),
-        :dest′
-    )
-    # isone(N) && pushfirst!(q.args, Expr(:meta,:inline))
-    q
-    # ls
+    Expr(:block, setup_call(ls, :(Base.Broadcast.materialize!(dest′, bc)), LineNumberNode(0), inline, false, u₁, u₂, threads%Int), :dest′)
 end
 # these are marked `@inline` so the `@avx` itself can choose whether or not to inline.
 @generated function vmaterialize!(
     dest::AbstractArray{T,N}, bc::Broadcasted{Base.Broadcast.DefaultArrayStyle{0},Nothing,typeof(identity),Tuple{T2}}, ::Val{Mod}, ::Val{UNROLL}
 ) where {T <: NativeTypes, N, T2 <: Number, Mod, UNROLL}
-    inline, u₁, u₂, W, rs, rc, cls, l1, l2, l3, threads = UNROLL
+    inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, threads = UNROLL
     quote
         $(Expr(:meta,:inline))
         arg = T(first(bc.args))
@@ -440,7 +447,7 @@ end
 @generated function vmaterialize!(
     dest′::Union{Adjoint{T,A},Transpose{T,A}}, bc::Broadcasted{Base.Broadcast.DefaultArrayStyle{0},Nothing,typeof(identity),Tuple{T2}}, ::Val{Mod}, ::Val{UNROLL}
 ) where {T <: NativeTypes, N, A <: AbstractArray{T,N}, T2 <: Number, Mod, UNROLL}
-    inline, u₁, u₂, W, rs, rc, cls, l1, l2, l3, threads = UNROLL
+    inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, threads = UNROLL
     quote
         $(Expr(:meta,:inline))
         arg = T(first(bc.args))
@@ -456,7 +463,8 @@ end
     bc::Broadcasted, ::Val{Mod}, ::Val{UNROLL}
 ) where {Mod,UNROLL}
     ElType = Base.Broadcast.combine_eltypes(bc.f, bc.args)
-    vmaterialize!(similar(bc, ElType), bc, Val{Mod}(), Val{UNROLL}())
+    dest = similar(bc, ElType)
+    vmaterialize!(dest, bc, Val{Mod}(), Val{UNROLL}())
 end
 
 vmaterialize!(dest, bc, ::Val, ::Val, ::StaticInt, ::StaticInt, ::StaticInt) = Base.Broadcast.materialize!(dest, bc)

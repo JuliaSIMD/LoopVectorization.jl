@@ -37,22 +37,11 @@ function add_vptr!(ls::LoopSet, array::Symbol, vptrarray::Symbol, actualarray::B
     if !includesarray(ls, array)
         push!(ls.includedarrays, array)
         actualarray && push!(ls.includedactualarrays, array)
-        func = lv(broadcast ? :stridedpointer_for_broadcast : :stridedpointer)
-        pushpreamble!(ls, Expr(:(=), vptrarray, Expr(:call, func, array)))
-        # if broadcast
-        #     pushpreamble!(ls, Expr(:(=), vptrarray, Expr(:call, lv(:stridedpointer_for_broadcast), array)))
-        # else
-        #     pushpreamble!(ls, Expr(:(=), vptrarray, Expr(:call, lv(:stridedpointer), array)))
-        #     # pushpreamble!(ls, Expr(:(=), vptrarray, Expr(:call, lv(:noaliasstridedpointer), array)))
-        # end
+        broadcast || pushpreamble!(ls, Expr(:(=), vptrarray, Expr(:call, lv(:stridedpointer), array)))
     end
     nothing
 end
 
-# @inline valsum() = Val{0}()
-# @inline valsum(::Val{M}) where {M} = Val{M}()
-# @generated valsum(::Val{M}, ::Val{N}) where {M,N} = Val{M+N}()
-# @inline valsum(::Val{M}, ::Val{N}, ::Val{K}, args...) where {M,N,K} = valsum(valsum(Val{M}(), Val{N}()), Val{K}(), args...)
 @inline staticdims(::Any) = One()
 @inline staticdims(::CartesianIndices{N}) where {N} = StaticInt{N}()
 

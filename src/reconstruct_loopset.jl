@@ -559,9 +559,10 @@ function avx_loopset!(
     num_params = extract_external_functions!(ls, num_params, vargs)
     ls
 end
-function avx_body(ls::LoopSet, UNROLL::Tuple{Bool,Int8,Int8,Int,Int,Int,Int,Int,Int,Int,UInt})
-    inline, u₁, u₂, W, rs, rc, cls, l1, l2, l3, nt = UNROLL
+function avx_body(ls::LoopSet, UNROLL::Tuple{Bool,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt})
+    inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, nt = UNROLL
     q = iszero(u₁) ? lower_and_split_loops(ls, inline % Int) : lower(ls, u₁ % Int, u₂ % Int, inline % Int)
+    ls.isbroadcast[] = isbroadcast
     iszero(length(ls.outer_reductions)) ? push!(q.args, nothing) : push!(q.args, loopset_return_value(ls, Val(true)))
     q
 end
@@ -584,14 +585,14 @@ function tovector(@nospecialize(t))
 end
 function _avx_loopset(
     @nospecialize(OPSsv), @nospecialize(ARFsv), @nospecialize(AMsv), @nospecialize(LPSYMsv), LBsv::Core.SimpleVector, vargs::Core.SimpleVector,
-    UNROLL::Tuple{Bool,Int8,Int8,Int,Int,Int,Int,Int,Int,Int,UInt}
+    UNROLL::Tuple{Bool,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt}
 )
     nops = length(OPSsv) ÷ 3
     instr = Instruction[Instruction(OPSsv[3i+1], OPSsv[3i+2]) for i ∈ 0:nops-1]
     ops = OperationStruct[ OPSsv[3i] for i ∈ 1:nops ]
     ls = LoopSet(:LoopVectorization)
-    inline, u₁, u₂, W, rs, rc, cls, l1, l2, l3, nt = UNROLL
-    set_hw!(ls, rs, rc, cls, l1, l2, l3); ls.vector_width[] = W
+    inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, nt = UNROLL
+    set_hw!(ls, rs, rc, cls, l1, l2, l3); ls.vector_width[] = W; ls.isbroadcast[] = isbroadcast
     avx_loopset!(
         ls, instr, ops,
         ArrayRefStruct[ARFsv...],
@@ -626,10 +627,10 @@ Execute an `@avx` block. The block's code is represented via the arguments:
     ls = _avx_loopset(OPS, ARF, AM, LPSYM, LB.parameters, V.parameters, UNROLL)
     # return @show avx_body(ls, UNROLL)
     if last(UNROLL) > 1
-        inline, u₁, u₂, W, rs, rc, cls, l1, l2, l3, nt = UNROLL
+        inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, nt = UNROLL
         # wrap in `OPS, ARF, AM, LPSYM` in `Expr` to homogenize types
         avx_threads_expr(
-            ls, (inline, u₁, u₂, W, rs, rc, cls, l1, l2, l3, one(UInt)), nt,
+            ls, (inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, one(UInt)), nt,
             :(Val{$OPS}()), :(Val{$ARF}()), :(Val{$AM}()), :(Val{$LPSYM}())
         )
     else

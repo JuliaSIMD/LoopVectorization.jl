@@ -2,7 +2,7 @@ function _precompile_()
     ccall(:jl_generating_output, Cint, ()) == 1 || return nothing
 
     Base.precompile(Tuple{Type{ArrayRefStruct},LoopSet,ArrayReferenceMeta,Vector{Symbol},Vector{Int64}})
-    Base.precompile(Tuple{typeof(_avx_loopset),Any,Any,Any,Any,Core.SimpleVector,Core.SimpleVector,Tuple{Bool, Int8, Int8, Int64, Int64, Int64, Int64, Int64, Int64, Int64, UInt64}})
+    Base.precompile(Tuple{typeof(_avx_loopset),Any,Any,Any,Any,Core.SimpleVector,Core.SimpleVector,Tuple{Bool, Int8, Int8, Bool, Int64, Int64, Int64, Int64, Int64, Int64, Int64, UInt64}})
     Base.precompile(Tuple{typeof(add_broadcast!),LoopSet,Symbol,Symbol,Vector{Symbol},Type{SubArray{Float32, 2, Array{Float32, 3}, Tuple{Int64, Base.Slice{Base.OneTo{Int64}}, Base.Slice{Base.OneTo{Int64}}}, true}},Int64})
     Base.precompile(Tuple{typeof(add_broadcast!),LoopSet,Symbol,Symbol,Vector{Symbol},Type{SubArray{Float64, 2, Array{Float64, 3}, Tuple{Int64, Base.Slice{Base.OneTo{Int64}}, Base.Slice{Base.OneTo{Int64}}}, true}},Int64})
     Base.precompile(Tuple{typeof(add_broadcast!),LoopSet,Symbol,Symbol,Vector{Symbol},Type{SubArray{Int32, 2, Array{Int32, 3}, Tuple{Int64, Base.Slice{Base.OneTo{Int64}}, Base.Slice{Base.OneTo{Int64}}}, true}},Int64})

@@ -1,4 +1,4 @@
-# using LoopVectorization, Test
+using LoopVectorization, Test
 # T = Float32
 
 @testset "broadcast" begin

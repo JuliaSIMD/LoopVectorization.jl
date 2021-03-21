@@ -1,4 +1,4 @@
-function maybeaddref!(ls::LoopSet, op)
+function maybeaddref!(ls::LoopSet, op::Operation)
     ref = op.ref
     id = findfirst(==(ref), ls.refs_aliasing_syms)
     # try to CSE
@@ -40,10 +40,8 @@ function add_simple_load!(
     ls::LoopSet, var::Symbol, ref::ArrayReference, elementbytes::Int,
     actualarray::Bool = true, broadcast::Bool = false
 )
-    loopdeps = Symbol[s for s ∈ ref.indices]
-    mref = ArrayReferenceMeta(
-        ref, fill(true, length(loopdeps) - isdiscontiguous(ref))
-    )
+    loopdeps = copy(getindicesonly(ref))
+    mref = ArrayReferenceMeta(ref, fill(true, length(loopdeps)))
     add_simple_load!(ls, var, mref, loopdeps, elementbytes, actualarray, broadcast)
 end
 function add_simple_load!(

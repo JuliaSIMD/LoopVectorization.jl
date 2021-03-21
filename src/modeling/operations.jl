@@ -23,7 +23,13 @@ struct ArrayReference
     offsets::Vector{Int8}
     strides::Vector{Int8}
 end
-ArrayReference(array, indices) = ArrayReference(array, indices, zeros(Int8, length(indices)), ones(Int8, length(indices)))
+function ArrayReference(array, indices)
+    ninds = length(indices)
+    if ninds > 0
+        ninds -= (first(indices) === DISCONTIGUOUS)
+    end
+    ArrayReference(array, indices, zeros(Int8, ninds), ones(Int8, ninds))
+end
 function sameref(x::ArrayReference, y::ArrayReference)
     (x.array === y.array) && (x.indices == y.indices)
 end
@@ -330,7 +336,7 @@ function Operation(id::Int, var::Symbol, elementbytes::Int, instr, optype::Opera
 end
 Base.:(==)(x::ArrayReferenceMetaPosition, y::ArrayReferenceMetaPosition) = x.mref == y.mref
 # Avoid memory allocations by using this for ops that aren't references
-const NOTAREFERENCE = ArrayReferenceMeta(ArrayReference(Symbol(""), Union{Symbol,Int}[]),Bool[],Symbol(""))
+const NOTAREFERENCE = ArrayReferenceMeta(ArrayReference(Symbol(""), Symbol[]),Bool[],Symbol(""))
 const NOTAREFERENCEMP = ArrayReferenceMetaPosition(NOTAREFERENCE, NOPARENTS, Symbol[], Symbol[],Symbol(""))
 varname(::Nothing) = nothing
 varname(mpref::ArrayReferenceMetaPosition) = mpref.varname

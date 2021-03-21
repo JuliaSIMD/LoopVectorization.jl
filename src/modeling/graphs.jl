@@ -558,7 +558,7 @@ function LoopSet(mod::Symbol)
         Matrix{Float64}(undef, 4, 2), # reg_pres
         Bool[], Bool[], Ref{UnrollSpecification}(),
         Ref(false), Ref{LoopStartStopManager}(),
-        Ref(0), Ref(0), Ref(false),
+        Ref(0), Ref(0), Ref(false), # vector width, sym counter, isbroadcast
         Ref(0), Ref(0), Ref(0), Ref((0,0,0)),# hw params
         Ref(-1), # Ureduct
         Tuple{Vector{Symbol},Vector{Int}}[],

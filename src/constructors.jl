@@ -38,9 +38,10 @@ end
 function substitute_broadcast(q::Expr, mod::Symbol, inline, u₁, u₂, threads)
     ci = first(Meta.lower(LoopVectorization, q).args).code
     nargs = length(ci)-1
-    ex = Expr(:block,)
+    ex = Expr(:block)
     syms = [gensym() for _ ∈ 1:nargs]
-    valarg = Expr(:call, lv(:avx_config_val), :(Val{$inline}()), :(Val{$u₁}()), :(Val{$u₂}()), :(Val{$threads}()), staticexpr(0))
+    configarg = (inline,u₁,u₂,true,threads)
+    unroll_param_tup = Expr(:call, lv(:avx_config_val), :(Val{$configarg}()), staticexpr(0))
     for n ∈ 1:nargs
         ciₙ = ci[n]
         ciₙargs = ciₙ.args
@@ -48,9 +49,9 @@ function substitute_broadcast(q::Expr, mod::Symbol, inline, u₁, u₂, threads)
         if ciₙ.head === :(=)
             push!(ex.args, Expr(:(=), f, syms[((ciₙargs[2])::Core.SSAValue).id]))
         elseif isglobalref(f, Base, :materialize!)
-            add_ci_call!(ex, lv(:vmaterialize!), ciₙargs, syms, n, valarg, mod)
+            add_ci_call!(ex, lv(:vmaterialize!), ciₙargs, syms, n, unroll_param_tup, mod)
         elseif isglobalref(f, Base, :materialize)
-            add_ci_call!(ex, lv(:vmaterialize), ciₙargs, syms, n, valarg, mod)
+            add_ci_call!(ex, lv(:vmaterialize), ciₙargs, syms, n, unroll_param_tup, mod)
         else
             add_ci_call!(ex, f, ciₙargs, syms, n)
         end
