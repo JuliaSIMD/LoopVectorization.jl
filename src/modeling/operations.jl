@@ -228,6 +228,13 @@ function setunrolled!(op::Operation, u₁loopsym, u₂loopsym, vectorized)
     op.u₁unrolled = u₁loopsym ∈ loopdependencies(op)
     op.u₂unrolled = u₂loopsym ∈ loopdependencies(op)
     op.vectorized = vectorized ∈ loopdependencies(op)
+    if isconstant(op)
+        for opp ∈ children(op)
+            op.u₁unrolled = op.u₁unrolled && u₁loopsym ∈ loopdependencies(opp)
+            op.u₂unrolled = op.u₂unrolled && u₂loopsym ∈ loopdependencies(opp)
+            op.vectorized = op.vectorized && vectorized ∈ loopdependencies(opp)            
+        end
+    end
     nothing
 end
 

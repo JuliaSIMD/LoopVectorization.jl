@@ -42,6 +42,9 @@ function typeof_sym(ls::LoopSet, op::Operation, zerotyp::NumberType)
         ELTYPESYMBOL
     end
 end
+function in_reduced_children(op::Operation, s::Symbol)
+    
+end
 
 function lower_zero!(
     q::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs, zerotyp::NumberType = zerotype(ls, op)

@@ -577,11 +577,13 @@ gensym!(ls::LoopSet, s) = Symbol("###$(s)###$(ls.symcounter[] += 1)###")
 function cacheunrolled!(ls::LoopSet, u₁loop::Symbol, u₂loop::Symbol, vloopsym::Symbol)
     vloop = getloop(ls, vloopsym)
     for op ∈ operations(ls)
-        setunrolled!(op, u₁loop, u₂loop, vloopsym)
         empty!(children(op))
         for opp ∈ parents(op)
             push!(children(opp), op)
         end
+    end
+    for op ∈ operations(ls)
+        setunrolled!(op, u₁loop, u₂loop, vloopsym)
         if accesses_memory(op)
             rc = rejectcurly(ls, op, u₁loop, vloopsym)
             op.rejectcurly = rc
@@ -1148,12 +1150,6 @@ function looplength(ls::LoopSet, s::Symbol)
     end
 end
 
-# function getunrolled(ls::LoopSet)
-#     order = names(ls)
-#     us = ls.unrollspecification[]
-#     @unpack u₁loopnum, u₂loopnum = us
-#     order[u₁loopnum], order[u₂loopnum]
-# end
 offsetloadcollection(ls::LoopSet) = ls.omop
 function fill_offset_memop_collection!(ls::LoopSet)
     omop = offsetloadcollection(ls)
