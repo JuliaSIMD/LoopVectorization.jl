@@ -117,8 +117,8 @@ function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, alla
             # Not doing normal offset indexing
             uliv[i] = -findfirst(Base.Fix2(===,ind), looporder)::Int
             # push!(gespinds.args, Expr(:call, lv(:Zero)))
-            # push!(gespinds.args, staticexpr(1))
-            push!(gespinds.args, staticexpr(convert(Int, strides[i])))
+            push!(gespinds.args, staticexpr(1))
+            # push!(gespinds.args, staticexpr(convert(Int, strides[i])))
             
             push!(offsetprecalc_descript.args, 0) # not doing offset indexing, so push 0
         else

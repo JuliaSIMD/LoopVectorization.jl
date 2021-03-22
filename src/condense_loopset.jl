@@ -172,6 +172,9 @@ function argmeta_and_consts_description(ls::LoopSet, arraysymbolinds)
         tuple_expr(ls.preamble_funcofeltypes)
     )
 end
+@inline vdata(v::Vec) = getfield(v, :data)
+@inline vdata(v::VecUnroll) = getfield(v, :data)
+@inline vdata(x) = x
 
 function loopset_return_value(ls::LoopSet, ::Val{extract}) where {extract}
     @assert !iszero(length(ls.outer_reductions))
@@ -179,7 +182,7 @@ function loopset_return_value(ls::LoopSet, ::Val{extract}) where {extract}
         op = getop(ls, ls.outer_reductions[1])
         if extract
             # if (isu₁unrolled(op) | isu₂unrolled(op))
-                Expr(:call, :data, Symbol(mangledvar(op), "##onevec##"))
+                Expr(:call, :vdata, Symbol(mangledvar(op), "##onevec##"))
             # else
                 # Expr(:call, :data, mangledvar(op))
             # end
@@ -192,7 +195,7 @@ function loopset_return_value(ls::LoopSet, ::Val{extract}) where {extract}
         for or ∈ ls.outer_reductions
             op = ops[or]
             if extract
-                push!(ret.args, Expr(:call, :data, Symbol(mangledvar(op), "##onevec##")))
+                push!(ret.args, Expr(:call, :vdata, Symbol(mangledvar(op), "##onevec##")))
             else
                 push!(ret.args, Symbol(mangledvar(ops[or]), "##onevec##"))
             end
@@ -421,6 +424,7 @@ make_crashy(q) = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,
 @inline vecmemaybe(x::NativeTypes) = x
 @inline vecmemaybe(x::VectorizationBase._Vec) = Vec(x)
 @inline vecmemaybe(x::Tuple) = VectorizationBase.VecUnroll(x)
+@inline vecmemaybe(x::Mask) = x
 
 function gc_preserve(call::Expr, preserve::Vector{Symbol})
     q = Expr(:gc_preserve, call)

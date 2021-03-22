@@ -114,11 +114,12 @@ function lower_store!(
     # isunrolled₂ = isu₂unrolled(op)    
     falseexpr = Expr(:call, lv(:False)); trueexpr = Expr(:call, lv(:True)); rs = staticexpr(reg_size(ls));
     opp = first(parents(op))
-    if (opp.instruction.instr === reductfunc) && isone(length(parents(opp)))
+    if ((opp.instruction.instr === reductfunc) || (opp.instruction.instr === :identity)) && isone(length(parents(opp)))
         opp = only(parents(opp))
     end
     # __u₂max = ls.unrollspecification[].u₂
     isu₁, isu₂ = isunrolled_sym(opp, u₁loopsym, u₂loopsym, vloopsym)#, __u₂max)
+    # @show isu₁, isu₂, opp, u₁loopsym, u₂loopsym, vloopsym
     u = isu₁ ? u₁ : 1
     mvar = Symbol(variable_name(opp, ifelse(isu₂, suffix, -1)), '_', u)
     if all(op.ref.loopedindex)
@@ -133,14 +134,21 @@ function lower_store!(
         push!(q.args, storeexpr)
     elseif u₁ > 1
         mvard = Symbol(mvar, "##data##")
-        push!(q.args, Expr(:(=), mvard, Expr(:call, lv(:data), mvar)))
+        isu₁ && push!(q.args, Expr(:(=), mvard, Expr(:call, lv(:data), mvar)))
         for u ∈ 1:u₁
             mvaru = :(getfield($mvard, $u, false))
             inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, true, u-1)
-            storeexpr = if reductfunc === Symbol("")
-                Expr(:call, lv(:_vstore!), vptr(op), mvaru, inds)
+            # @show isu₁unrolled(opp), opp
+            storeexpr = if isu₁
+                if reductfunc === Symbol("")
+                    Expr(:call, lv(:_vstore!), vptr(op), mvaru, inds)
+                else
+                    Expr(:call, lv(:_vstore!), lv(reductfunc), vptr(op), mvaru, inds)
+                end
+            elseif reductfunc === Symbol("")
+                Expr(:call, lv(:_vstore!), vptr(op), mvar, inds)
             else
-                Expr(:call, lv(:_vstore!), lv(reductfunc), vptr(op), mvaru, inds)
+                Expr(:call, lv(:_vstore!), lv(reductfunc), vptr(op), mvar, inds)
             end
             domask = mask && (isvectorized(op) & ((u == u₁) | (vloopsym !== u₁loopsym)))
             add_memory_mask!(storeexpr, op, ua, domask)# & ((u == u₁) | isvectorized(op)))

@@ -31,15 +31,16 @@ function ArrayReference(array, indices)
     ArrayReference(array, indices, zeros(Int8, ninds), ones(Int8, ninds))
 end
 function sameref(x::ArrayReference, y::ArrayReference)
-    (x.array === y.array) && (x.indices == y.indices)
+    (x.array === y.array) && (x.indices == y.indices) && (x.strides == y.strides)
 end
 function Base.isequal(x::ArrayReference, y::ArrayReference)
     sameref(x, y) || return false
     xoffs = x.offsets; yoffs = y.offsets
-    xmult = x.strides; ymult = y.strides
+    # xmult = x.strides; ymult = y.strides
     length(xoffs) == length(yoffs) || return false
     for n ∈ eachindex(xoffs)
-        ((xoffs[n] == yoffs[n]) & (xmult[n] == ymult[n])) || return false
+        # ((xoffs[n] == yoffs[n]) & (xmult[n] == ymult[n])) || return false
+        (xoffs[n] == yoffs[n]) || return false
     end
     true
 end

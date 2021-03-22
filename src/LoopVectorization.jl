@@ -11,7 +11,8 @@ using VectorizationBase: register_size, register_count, cache_linesize, cache_si
     vfma_fast, vmuladd_fast, vdiv_fast, vadd_fast, vsub_fast, vmul_fast,
     relu, stridedpointer, StridedPointer, StridedBitPointer, AbstractStridedPointer, _vload, _vstore!,
     reduced_add, reduced_prod, reduce_to_add, reduce_to_prod, reduced_max, reduced_min, reduce_to_max, reduce_to_min,
-    vsum, vprod, vmaximum, vminimum, unwrap, Unroll, VecUnroll,
+    reduced_all, reduced_any, reduce_to_all, reduce_to_any,
+    vsum, vprod, vmaximum, vminimum, vany, vall, unwrap, Unroll, VecUnroll,
     preserve_buffer, zero_vecunroll, vbroadcast_vecunroll, _vzero, _vbroadcast,
     contract_add, collapse_add,
     contract_mul, collapse_mul,
@@ -19,7 +20,8 @@ using VectorizationBase: register_size, register_count, cache_linesize, cache_si
     contract_min, collapse_min,
     contract_and, collapse_and,
     contract_or,  collapse_or,
-    num_threads, num_cores
+    num_threads, num_cores,
+    max_mask
 
 
 using IfElse: ifelse

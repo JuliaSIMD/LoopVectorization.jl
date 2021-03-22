@@ -60,6 +60,8 @@ const START_TIME = time()
     @time include("gemm.jl")
 
     @time include("threading.jl")
+
+    @time include("tullio.jl")
 end
 
 const ELAPSED_MINUTES = (time() - START_TIME)/60
