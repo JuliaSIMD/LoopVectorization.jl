@@ -1059,6 +1059,13 @@ end
         )
 
         @test grad!(zeros(5), ones(5), ones(3)) ≈ grad_avx!(zeros(5), ones(5), ones(3)) ≈ grad_avx_base!(zeros(5), ones(5), ones(3)) ≈ grad_avx_eval!(zeros(5), ones(5), ones(3))
+
+        nta = rand(2)
+        namedtuple = (a = copy(nta), b = 10.0)
+        @avx for i in 1:2
+            namedtuple.a[i] += namedtuple.b
+        end
+        @test namedtuple.a == nta .+ 10
     end
     for T ∈ [Int16, Int32, Int64]
         n = 8sizeof(T) - 1
