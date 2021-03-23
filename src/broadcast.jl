@@ -409,7 +409,7 @@ end
     doaddref!(ls, storeop)
     resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
     # return ls
-    Expr(:block, setup_call(ls, :(Base.Broadcast.materialize!(dest, bc)), LineNumberNode(0), inline, false, u₁, u₂, threads%Int), :dest)
+    Expr(:block, Expr(:meta,:inline), setup_call(ls, :(Base.Broadcast.materialize!(dest, bc)), LineNumberNode(0), inline, false, u₁, u₂, threads%Int), :dest)
 end
 @generated function vmaterialize!(
     dest′::Union{Adjoint{T,A},Transpose{T,A}}, bc::BC, ::Val{Mod}, ::Val{UNROLL}
@@ -428,7 +428,7 @@ end
     storeop = add_simple_store!(ls, :dest, ArrayReference(:dest, reverse(loopsyms)), elementbytes)
     doaddref!(ls, storeop)
     resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
-    Expr(:block, setup_call(ls, :(Base.Broadcast.materialize!(dest′, bc)), LineNumberNode(0), inline, false, u₁, u₂, threads%Int), :dest′)
+    Expr(:block, Expr(:meta,:inline), setup_call(ls, :(Base.Broadcast.materialize!(dest′, bc)), LineNumberNode(0), inline, false, u₁, u₂, threads%Int), :dest′)
 end
 # these are marked `@inline` so the `@avx` itself can choose whether or not to inline.
 @generated function vmaterialize!(

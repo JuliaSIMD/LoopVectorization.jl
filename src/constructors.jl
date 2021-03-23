@@ -105,16 +105,21 @@ function check_macro_kwarg(arg, inline::Bool, check_empty::Bool, u₁::Int8, u�
     end
     inline, check_empty, u₁, u₂, threads
 end
-function avx_macro(mod, src, q, args...)
-    q = macroexpand(mod, q)
-    inline = false; check_empty = false; u₁ = zero(Int8); u₂ = zero(Int8); threads = 1;
+function process_args(args; inline = false, check_empty = false, u₁ = zero(Int8), u₂ = zero(Int8), threads = 1)
     for arg ∈ args
         inline, check_empty, u₁, u₂, threads = check_macro_kwarg(arg, inline, check_empty, u₁, u₂, threads)
     end
+    inline, check_empty, u₁, u₂, threads
+end
+function avx_macro(mod, src, q, args...)
+    q = macroexpand(mod, q)
+    
     if q.head === :for
         ls = LoopSet(q, mod)
+        inline, check_empty, u₁, u₂, threads = process_args(args)
         esc(setup_call(ls, q, src, inline, check_empty, u₁, u₂, threads))
     else
+        inline, check_empty, u₁, u₂, threads = process_args(args, inline=true)
         substitute_broadcast(q, Symbol(mod), inline, u₁, u₂, threads)
     end
 end
