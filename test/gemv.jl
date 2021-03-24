@@ -31,7 +31,7 @@ using Test
             for j ∈ eachindex(x)
                 yᵢ += A[i,j] * x[j]
             end
-            y[i] = yᵢ
+            y[i] += yᵢ
         end
     end
     function mygemvavx_range!(y, A, x)
@@ -246,8 +246,12 @@ using Test
         # y1 = Vector{TC}(undef, M); y2 = similar(y1);
 
         mygemv!(y1, A, x);
-        mygemvavx!(y2, A, x);
+        fill!(y2, 0); mygemvavx!(y2, A, x);
         @test y1full ≈ y2full
+        mygemvavx!(y2, A, x);
+        @test y1 .* 2 ≈ y2
+        mygemvavx!(y2, A, x);
+        @test y1 .* 3 ≈ y2
         fill!(y2, -9999); mygemv_avx!(y2, A, x);
         @test y1full ≈ y2full
         fill!(y2, -9999);
@@ -263,12 +267,12 @@ using Test
                 fill!(y2, -9999); mygemv_avx!(y2, Abit, x);
                 @test y2 ≈ Abit * x
             end
-            fill!(y2, -9999); mygemvavx!(y2, Abit, x);
+            fill!(y2, 0); mygemvavx!(y2, Abit, x);
             @test y2 ≈ Abit * x
             xbit = x .> 0.5;
             fill!(y2, -9999); mygemv_avx!(y2, A, xbit);
             @test y2 ≈ A * xbit
-            fill!(y2, -9999); mygemvavx!(y2, A, xbit);
+            fill!(y2, 0); mygemvavx!(y2, A, xbit);
             @test y2 ≈ A * xbit
         end
 

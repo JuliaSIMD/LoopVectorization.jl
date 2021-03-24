@@ -333,7 +333,22 @@ function getu₁forreduct(ls::LoopSet, op::Operation, u₁::Int)
         return getu₁full(ls, u₁)
     end    
 end
-
+isidentityop(op::Operation) = iscompute(op) && (instruction(op).instr === :identity) && (length(parents(op)) == 1)
+function reduce_parent!(q::Expr, ls::LoopSet, op::Operation, opp::Operation, parent::Symbol)
+    isvectorized(op) && return parent
+    dependent_outer_reducts(ls, op) && return parent
+    if isvectorized(opp)
+        oppt = opp
+    elseif isidentityop(opp)
+        oppt = only(parents(opp))
+        isvectorized(oppt) || return parent
+    else
+        return parent
+    end
+    newp = gensym(parent)
+    push!(q.args, Expr(:(=), newp, Expr(:call, lv(reduction_to_scalar(oppt.instruction)), parent)))
+    newp
+end
 function lower_compute!(
     q::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs, mask::Bool
 )
@@ -468,25 +483,26 @@ function lower_compute!(
             add_loopvalue!(instrcall, loopval, ua, u₁)
         elseif name(opp) === name(op)
             selfdep = n
-            if ((isvectorized(first(parents_op)) && !isvectorized(op)) && !dependent_outer_reducts(ls, op)) ||
+            if ((isvectorized(opp) && !isvectorized(op)) && !dependent_outer_reducts(ls, op)) ||
                 (parents_u₁syms[n] != u₁unrolledsym) || (parents_u₂syms[n] != u₂unrolledsym)
                 
                 selfopname, uₚ = parent_op_name(ls, parents_op, n, modsuffix, suffix_, parents_u₁syms, parents_u₂syms, u₁, opisvectorized, tiledouterreduction)
                 # if (uₚ ≠ 0) & (uₚ ≠ u₁)
                 #     dopartialmap = true
                 # end
+                # @show selfopname, instr
                 push!(instrcall.args, selfopname)
             else
                 push!(instrcall.args, varsym)
             end
         elseif ((!isu₂unrolled(op)) & isu₂unrolled(opp)) && (isouterreduction(ls, opp) != -1)
             # this checks if the parent is u₂ unrolled but this operation is not, in which case we need to reduce it.
-            push!(instrcall.args, reduce_expr_u₂(mangledvar(opp), instruction(opp), ureduct(ls)))
+            reduced_u₂ = reduce_expr_u₂(mangledvar(opp), instruction(opp), ureduct(ls))
+            reduced_u₂ = reduce_parent!(q, ls, op, opp, reduced_u₂)
+            push!(instrcall.args, reduced_u₂)
         else
             parent, uₚ = parent_op_name(ls, parents_op, n, modsuffix, suffix_, parents_u₁syms, parents_u₂syms, u₁, opisvectorized, tiledouterreduction)
-            # if name(op) === Symbol("##op#9536")
-            #     @show parent
-            # end
+            parent = reduce_parent!(q, ls, op, opp, parent)
             if (selfdep == 0) && search_tree(parents(opp), name(op))
                 selfdep = n
                 push!(instrcall.args, parent)
@@ -495,8 +511,6 @@ function lower_compute!(
             else
                 push!(instrcall.args, parent)
             end
-
-            # @show uₚ, u₁, op
         end
     end
     selfdepreduce = ifelse(((!u₁unrolledsym) & isu₁unrolled(op)) & (u₁ > 1), selfdep, 0)

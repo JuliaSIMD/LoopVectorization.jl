@@ -209,15 +209,17 @@ end
             @test Cc1 ≈ Cc2# ≈ Cc3
         end
     end
-    M = 100
-    G = 50
-    J = 50
-    H = 300
+    if VERSION ≥ v"1.6.0-rc1"
+        M = 100
+        G = 50
+        J = 50
+        H = 300
 
-    A = Matrix(Tridiagonal(rand(G-1,G-1)));
-    B = rand(Complex{Float64}, 2*J+1, G-1, H+1, M+1);
-    ϕ = rand(Complex{Float64}, 2*J+1, G+1, H+1, M+1);
-    @test issue209(M, G, J, H, A, B, ϕ) ≈ issue209_noavx(M, G, J, H, A, B, ϕ)
+        A = Matrix(Tridiagonal(rand(G-1,G-1)));
+        B = rand(Complex{Float64}, 2*J+1, G-1, H+1, M+1);
+        ϕ = rand(Complex{Float64}, 2*J+1, G+1, H+1, M+1);
+        @test issue209(M, G, J, H, A, B, ϕ) ≈ issue209_noavx(M, G, J, H, A, B, ϕ)
+    end
 end
 
 
