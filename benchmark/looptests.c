@@ -7,7 +7,7 @@ void gemm_mnk(double* restrict C, double* restrict A, double* restrict B, long M
   for (long m = 0; m < M; m++){
     for (long n = 0; n < N; n++){
       for (long k = 0; k < K; k++){
-	C[m + n*M] += A[m + k*M] * B[k + n*K];
+        C[m + n*M] += A[m + k*M] * B[k + n*K];
       }
     }
   }
@@ -20,7 +20,7 @@ void gemm_mkn(double* restrict C, double* restrict A, double* restrict B, long M
   for (long m = 0; m < M; m++){
     for (long k = 0; k < K; k++){
       for (long n = 0; n < N; n++){
-	C[m + n*M] += A[m + k*M] * B[k + n*K];
+        C[m + n*M] += A[m + k*M] * B[k + n*K];
       }
     }
   }
@@ -33,7 +33,7 @@ void gemm_nmk(double* restrict C, double* restrict A, double* restrict B, long M
   for (long n = 0; n < N; n++){
     for (long m = 0; m < M; m++){
       for (long k = 0; k < K; k++){
-	C[m + n*M] += A[m + k*M] * B[k + n*K];
+        C[m + n*M] += A[m + k*M] * B[k + n*K];
       }
     }
   }
@@ -46,7 +46,7 @@ void gemm_nkm(double* restrict C, double* restrict A, double* restrict B, long M
   for (long n = 0; n < N; n++){
     for (long k = 0; k < K; k++){
       for (long m = 0; m < M; m++){
-	C[m + n*M] += A[m + k*M] * B[k + n*K];
+        C[m + n*M] += A[m + k*M] * B[k + n*K];
       }
     }
   }
@@ -59,7 +59,7 @@ void gemm_kmn(double* restrict C, double* restrict A, double* restrict B, long M
   for (long k = 0; k < K; k++){
     for (long m = 0; m < M; m++){
       for (long n = 0; n < N; n++){
-	C[m + n*M] += A[m + k*M] * B[k + n*K];
+        C[m + n*M] += A[m + k*M] * B[k + n*K];
       }
     }
   }
@@ -72,7 +72,7 @@ void gemm_knm(double* restrict C, double* restrict A, double* restrict B, long M
   for (long k = 0; k < K; k++){
     for (long n = 0; n < N; n++){
       for (long m = 0; m < M; m++){
-	C[m + n*M] += A[m + k*M] * B[k + n*K];
+        C[m + n*M] += A[m + k*M] * B[k + n*K];
       }
     }
   }
@@ -85,7 +85,7 @@ void AtmulB(double* restrict C, double* restrict At, double* restrict B, long M,
   for (long n = 0; n < N; n++){
     for (long m = 0; m < M; m++){
       for (long k = 0; k < K; k++){
-	C[m + n*M] += At[k + m*K] * B[k + n*K];
+        C[m + n*M] += At[k + m*K] * B[k + n*K];
       }
     }
   }
@@ -98,7 +98,7 @@ void AmulBt(double* restrict C, double* restrict A, double* restrict Bt, long M,
   for (long k = 0; k < K; k++){
     for (long n = 0; n < N; n++){
       for (long m = 0; m < M; m++){
-	C[m + n*M] += A[m + M*k] * Bt[n + N*k];
+        C[m + n*M] += A[m + M*k] * Bt[n + N*k];
       }
     }
   }
@@ -111,7 +111,7 @@ void AtmulBt(double* restrict C, double* restrict A, double* restrict Bt, long M
   for (long n = 0; n < N; n++){
     for (long k = 0; k < K; k++){
       for (long m = 0; m < M; m++){
-	C[m + n*M] += A[k + K*m] * Bt[n + N*k];
+        C[m + n*M] += A[k + K*m] * Bt[n + N*k];
       }
     }
   }
@@ -249,9 +249,9 @@ void filter2d(double* restrict B, double* restrict A, double* restrict K, long M
     for (long ma = offset; ma < M-offset; ma++){
       double tmp = 0.0;
       for (long nk = -offset; nk < offset + 1; nk++){
-	for (long mk = -offset; mk < offset + 1; mk++){
-	  tmp += A[(ma+mk) + (na+nk)*M] * K[(mk+offset) + (nk+offset)*(2*offset+1)];
-	}
+        for (long mk = -offset; mk < offset + 1; mk++){
+          tmp += A[(ma+mk) + (na+nk)*M] * K[(mk+offset) + (nk+offset)*(2*offset+1)];
+        }
       }
       B[(ma-offset) + (na-offset) * (M-2*offset)] = tmp;
     }
@@ -263,9 +263,9 @@ void filter2d3x3(double* restrict B, double* restrict A, double* restrict K, lon
     for (long ma = offset; ma < M-offset; ma++){
       double tmp = 0.0;
       for (long nk = -offset; nk < offset + 1; nk++){
-	for (long mk = -offset; mk < offset + 1; mk++){
-	  tmp += A[(ma+mk) + (na+nk)*M] * K[(mk+offset) + (nk+offset)*(2*offset+1)];
-	}
+        for (long mk = -offset; mk < offset + 1; mk++){
+          tmp += A[(ma+mk) + (na+nk)*M] * K[(mk+offset) + (nk+offset)*(2*offset+1)];
+        }
       }
       B[(ma-offset) + (na-offset) * (M-2*offset)] = tmp;
     }

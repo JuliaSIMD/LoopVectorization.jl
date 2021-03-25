@@ -392,50 +392,50 @@
         @assert size(C, 2) == size(B, 2)
         @assert size(A, 1) == size(B, 1)
         T = eltype(C)
-	for m ∈ 1:2:(M & -2)
-	    m1 = m + 1
-	    for n ∈ 1:2:(N & -2)
-	    	n1 = n + 1
-		C11, C21, C12, C22 = zero(T), zero(T), zero(T), zero(T)
-		@avx inline=true for k ∈ 1:K
-		    C11 += A[k,m] * B[k,n] 
-		    C21 += A[k,m1] * B[k,n] 
-		    C12 += A[k,m] * B[k,n1] 
-		    C22 += A[k,m1] * B[k,n1]
-		end
-		C[m,n] = C11
-		C[m1,n] = C21
-		C[m,n1] = C12
-		C[m1,n1] = C22
-	    end
+        for m ∈ 1:2:(M & -2)
+            m1 = m + 1
+            for n ∈ 1:2:(N & -2)
+                n1 = n + 1
+                C11, C21, C12, C22 = zero(T), zero(T), zero(T), zero(T)
+                @avx inline=true for k ∈ 1:K
+                    C11 += A[k,m] * B[k,n]
+                    C21 += A[k,m1] * B[k,n]
+                    C12 += A[k,m] * B[k,n1]
+                    C22 += A[k,m1] * B[k,n1]
+                end
+                C[m,n] = C11
+                C[m1,n] = C21
+                C[m,n1] = C12
+                C[m1,n1] = C22
+            end
             if isodd(N)
-	    	C1n = 0.0
-	    	C2n = 0.0
-	    	@avx inline=true for k ∈ 1:K
-	    	    C1n += A[k,m] * B[k,N]
-	    	    C2n += A[k,m1] * B[k,N]
-	    	end
-	    	C[m,N] = C1n                    
-	    	C[m1,N] = C2n                    
+                C1n = 0.0
+                C2n = 0.0
+                @avx inline=true for k ∈ 1:K
+                    C1n += A[k,m] * B[k,N]
+                    C2n += A[k,m1] * B[k,N]
+                end
+                C[m,N] = C1n
+                C[m1,N] = C2n
             end
         end
         if isodd(M)
-	    for n ∈ 1:2:(N & -2)
-	    	n1 = n + 1
-		Cm1, Cm2 = zero(T), zero(T)
-		@avx inline=true for k ∈ 1:K
-		    Cm1 += A[k,M] * B[k,n] 
-		    Cm2 += A[k,M] * B[k,n1] 
-		end
-		C[M,n] = Cm1
-		C[M,n1] = Cm2
-	    end
+            for n ∈ 1:2:(N & -2)
+                n1 = n + 1
+                Cm1, Cm2 = zero(T), zero(T)
+                @avx inline=true for k ∈ 1:K
+                    Cm1 += A[k,M] * B[k,n] 
+                    Cm2 += A[k,M] * B[k,n1] 
+                end
+                C[M,n] = Cm1
+                C[M,n1] = Cm2
+            end
             if isodd(N)
-	    	Cmn = 0.0
-	    	@avx inline=true for k ∈ 1:K
-	    	    Cmn += A[k,M] * B[k,N]
-	    	end
-	    	C[M,N] = Cmn
+                Cmn = 0.0
+                @avx inline=true for k ∈ 1:K
+                    Cmn += A[k,M] * B[k,N]
+                end
+                C[M,N] = Cmn
             end
         end
         return C
@@ -446,50 +446,50 @@
         @assert size(C, 2) == size(B, 2)
         @assert size(A, 1) == size(B, 1)
         T = eltype(C)
-	for m ∈ 1:2:(M & -2)
-	    m1 = m + 1
-	    for n ∈ 1:2:(N & -2)
-	    	n1 = n + 1
-		C11, C21, C12, C22 = zero(T), zero(T), zero(T), zero(T)
-		@_avx for k ∈ 1:K
-		    C11 += A[k,m] * B[k,n] 
-		    C21 += A[k,m1] * B[k,n] 
-		    C12 += A[k,m] * B[k,n1] 
-		    C22 += A[k,m1] * B[k,n1]
-		end
-		C[m,n] = C11
-		C[m1,n] = C21
-		C[m,n1] = C12
-		C[m1,n1] = C22
-	    end
+        for m ∈ 1:2:(M & -2)
+            m1 = m + 1
+            for n ∈ 1:2:(N & -2)
+                n1 = n + 1
+                C11, C21, C12, C22 = zero(T), zero(T), zero(T), zero(T)
+                @_avx for k ∈ 1:K
+                    C11 += A[k,m] * B[k,n] 
+                    C21 += A[k,m1] * B[k,n] 
+                    C12 += A[k,m] * B[k,n1] 
+                    C22 += A[k,m1] * B[k,n1]
+                end
+                C[m,n] = C11
+                C[m1,n] = C21
+                C[m,n1] = C12
+                C[m1,n1] = C22
+            end
             if isodd(N)
-	    	C1n = 0.0
-	    	C2n = 0.0
-	    	@_avx for k ∈ 1:K
-	    	    C1n += A[k,m] * B[k,N]
-	    	    C2n += A[k,m1] * B[k,N]
-	    	end
-	    	C[m,N] = C1n                    
-	    	C[m1,N] = C2n                    
+                C1n = 0.0
+                C2n = 0.0
+                @_avx for k ∈ 1:K
+                    C1n += A[k,m] * B[k,N]
+                    C2n += A[k,m1] * B[k,N]
+                end
+                C[m,N] = C1n
+                C[m1,N] = C2n
             end
         end
         if isodd(M)
-	    for n ∈ 1:2:(N & -2)
-	    	n1 = n + 1
-		Cm1, Cm2 = zero(T), zero(T)
-		@_avx for k ∈ 1:K
-		    Cm1 += A[k,M] * B[k,n] 
-		    Cm2 += A[k,M] * B[k,n1] 
-		end
-		C[M,n] = Cm1
-		C[M,n1] = Cm2
-	    end
+            for n ∈ 1:2:(N & -2)
+                n1 = n + 1
+                Cm1, Cm2 = zero(T), zero(T)
+                @_avx for k ∈ 1:K
+                    Cm1 += A[k,M] * B[k,n] 
+                    Cm2 += A[k,M] * B[k,n1] 
+                end
+                C[M,n] = Cm1
+                C[M,n1] = Cm2
+            end
             if isodd(N)
-	    	Cmn = 0.0
-	    	@_avx for k ∈ 1:K
-	    	    Cmn += A[k,M] * B[k,N]
-	    	end
-	    	C[M,N] = Cmn
+                Cmn = 0.0
+                @_avx for k ∈ 1:K
+                    Cmn += A[k,M] * B[k,N]
+                end
+                C[M,N] = Cmn
             end
         end
         return C
@@ -501,50 +501,50 @@
         @assert size(C, 2) == size(B, 2)
         @assert size(A, 1) == size(B, 1)
         T = eltype(C)
-	for m ∈ 1:2:(M & -2)
-	    m1 = m + 1
-	    for n ∈ 1:2:(N & -2)
-	    	n1 = n + 1
-		C11, C21, C12, C22 = zero(T), zero(T), zero(T), zero(T)
-		@avx inline=false for k ∈ 1:K
-		    C11 += A[k,m] * B[k,n] 
-		    C21 += A[k,m1] * B[k,n] 
-		    C12 += A[k,m] * B[k,n1] 
-		    C22 += A[k,m1] * B[k,n1]
-		end
-		C[m,n] = C11
-		C[m1,n] = C21
-		C[m,n1] = C12
-		C[m1,n1] = C22
-	    end
+        for m ∈ 1:2:(M & -2)
+            m1 = m + 1
+            for n ∈ 1:2:(N & -2)
+                n1 = n + 1
+                C11, C21, C12, C22 = zero(T), zero(T), zero(T), zero(T)
+                @avx inline=false for k ∈ 1:K
+                    C11 += A[k,m] * B[k,n] 
+                    C21 += A[k,m1] * B[k,n] 
+                    C12 += A[k,m] * B[k,n1] 
+                    C22 += A[k,m1] * B[k,n1]
+                end
+                C[m,n] = C11
+                C[m1,n] = C21
+                C[m,n1] = C12
+                C[m1,n1] = C22
+            end
             if isodd(N)
-	    	C1n = 0.0
-	    	C2n = 0.0
-	    	@avx inline=false for k ∈ 1:K
-	    	    C1n += A[k,m] * B[k,N]
-	    	    C2n += A[k,m1] * B[k,N]
-	    	end
-	    	C[m,N] = C1n                    
-	    	C[m1,N] = C2n                    
+                C1n = 0.0
+                C2n = 0.0
+                @avx inline=false for k ∈ 1:K
+                    C1n += A[k,m] * B[k,N]
+                    C2n += A[k,m1] * B[k,N]
+                end
+                C[m,N] = C1n                    
+                C[m1,N] = C2n                    
             end
         end
         if isodd(M)
-	    for n ∈ 1:2:(N & -2)
-	    	n1 = n + 1
-		Cm1, Cm2 = zero(T), zero(T)
-		@avx inline=false for k ∈ 1:K
-		    Cm1 += A[k,M] * B[k,n] 
-		    Cm2 += A[k,M] * B[k,n1] 
-		end
-		C[M,n] = Cm1
-		C[M,n1] = Cm2
-	    end
+            for n ∈ 1:2:(N & -2)
+                n1 = n + 1
+                Cm1, Cm2 = zero(T), zero(T)
+                @avx inline=false for k ∈ 1:K
+                    Cm1 += A[k,M] * B[k,n] 
+                    Cm2 += A[k,M] * B[k,n1] 
+                end
+                C[M,n] = Cm1
+                C[M,n1] = Cm2
+            end
             if isodd(N)
-	    	Cmn = 0.0
-	    	@avx inline=false for k ∈ 1:K
-	    	    Cmn += A[k,M] * B[k,N]
-	    	end
-	    	C[M,N] = Cmn
+                Cmn = 0.0
+                @avx inline=false for k ∈ 1:K
+                    Cmn += A[k,M] * B[k,N]
+                end
+                C[M,N] = Cmn
             end
         end
         return C
