@@ -27,7 +27,7 @@ We expect that any time you use the `@avx` macro with a given block of code that
 This library provides the `@avx` macro, which may be used to prefix a `for` loop or broadcast statement.
 It then tries to vectorize the loop to improve runtime performance.
 
-The macro assumes that loop iterations can be reordered. It also currently supports simple nested loops, where loop bounds of inner loops are constant across iterations of the outer loop, and only a single loop at each level of noop lest. These limitations should be removed in a future version.
+The macro assumes that loop iterations can be reordered. It also currently supports simple nested loops, where loop bounds of inner loops are constant across iterations of the outer loop, and only a single loop at each level of loop nest. These limitations should be removed in a future version.
 
 ## Benchmarks
 
