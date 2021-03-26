@@ -18,11 +18,11 @@ Pages = [
     "examples/sum_of_squared_error.md",
     "vectorized_convenience_functions.md",
     "future_work.md",
-	"devdocs/overview.md",
-	"devdocs/loopset_structure.md",
-	"devdocs/constructing_loopsets.md",
-	"devdocs/evaluating_loops.md",
-	"devdocs/lowering.md"
+    "devdocs/overview.md",
+    "devdocs/loopset_structure.md",
+    "devdocs/constructing_loopsets.md",
+    "devdocs/evaluating_loops.md",
+    "devdocs/lowering.md"
 ]
 Depth = 1
 ```

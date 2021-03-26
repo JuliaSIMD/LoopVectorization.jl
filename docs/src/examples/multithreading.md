@@ -33,18 +33,18 @@ relatively primitive arithmetic operations (e.g. `+`, `/`, or `log`), and not, f
 I'll make comparisons with OpenMP through the rest of this, starting with a simple dot product to focus on threading overhead:
 ```julia
 function dotavxt(a::AbstractArray{T}, b::AbstractArray{T}) where {T <: Real}
-	s = zero(T)
-	@avxt for i ∈ eachindex(a,b)
-	    s += a[i] * b[i]
-	end
-	s
+    s = zero(T)
+    @avxt for i ∈ eachindex(a,b)
+        s += a[i] * b[i]
+    end
+    s
 end
 function dotbaseline(a::AbstractArray{T}, b::AbstractArray{T}) where {T}
-	s = zero(T)
-	@fastmath @inbounds @simd for i ∈ eachindex(a,b)
-	    s += a[i]' * b[i]
-	end
-	s
+    s = zero(T)
+    @fastmath @inbounds @simd for i ∈ eachindex(a,b)
+        s += a[i]' * b[i]
+    end
+    s
 end
 ```
 In `C`:

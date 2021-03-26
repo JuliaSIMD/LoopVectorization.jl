@@ -45,9 +45,9 @@ void conv(double* B, double* A, double* K, long M, long N){
     for (long j = offset; j < M-offset; j++){
       double tmp = 0.0;
       for (long k = -offset; k < offset + 1; k++){
-	for (long l = -offset; l < offset + 1; l++){
-	  tmp += A[(j+l) + (i+k)*M] * K[(l+offset) + (k+offset)*(2*offset+1)];
-	}
+        for (long l = -offset; l < offset + 1; l++){
+          tmp += A[(j+l) + (i+k)*M] * K[(l+offset) + (k+offset)*(2*offset+1)];
+        }
       }
       B[(j-offset) + (i-offset) * (M-2*offset)] = tmp;
     }
