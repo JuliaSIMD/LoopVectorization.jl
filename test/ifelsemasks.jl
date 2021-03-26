@@ -562,7 +562,7 @@ T = Float32
     bit = a .> 0.5; bool = copyto!(Vector{Bool}(undef, length(bit)), bit);
     t = Bernoulli_logit(bit, a);
     @test isapprox(t, Bernoulli_logitavx(bit, a), atol = ifelse(Int === Int32, 0.1, 0.0))
-    if VectorizationBase.pick_vector_width(eltype(a)) ≥ 4
+    if LoopVectorization.pick_vector_width(eltype(a)) ≥ 4
         # @_avx isn't really expected to work with bits if you don't have AVX512
         # but it happens to work with AVX2 for this anyway, so may as well keep testing.
         # am ruling out non-avx2 with the `VectorizationBase.pick_vector_width(eltype(a)) ≥ 4` check
