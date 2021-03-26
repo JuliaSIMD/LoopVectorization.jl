@@ -561,10 +561,15 @@ T = Float32
     a = rand(-10:10, 43);
     bit = a .> 0.5; bool = copyto!(Vector{Bool}(undef, length(bit)), bit);
     t = Bernoulli_logit(bit, a);
-    @test isapprox(t, Bernoulli_logitavx(bit, a), atol = Int === Int32 ? 0.1 : 0)
-    @test isapprox(t, Bernoulli_logit_avx(bit, a), atol = Int === Int32 ? 0.1 : 0)
-    @test isapprox(t, Bernoulli_logitavx(bool, a), atol = Int === Int32 ? 0.1 : 0)
-    @test isapprox(t, Bernoulli_logit_avx(bool, a), atol = Int === Int32 ? 0.1 : 0)
+    @test isapprox(t, Bernoulli_logitavx(bit, a), atol = ifelse(Int === Int32, 0.1, 0.0))
+    if LoopVectorization.pick_vector_width(eltype(a)) ≥ 4
+        # @_avx isn't really expected to work with bits if you don't have AVX512
+        # but it happens to work with AVX2 for this anyway, so may as well keep testing.
+        # am ruling out non-avx2 with the `VectorizationBase.pick_vector_width(eltype(a)) ≥ 4` check
+        @test isapprox(t, Bernoulli_logit_avx(bit, a), atol = ifelse(Int === Int32, 0.1, 0.0))
+    end
+    @test isapprox(t, Bernoulli_logitavx(bool, a), atol = ifelse(Int === Int32, 0.1, 0.0))
+    @test isapprox(t, Bernoulli_logit_avx(bool, a), atol = ifelse(Int === Int32, 0.1, 0.0))
     a = rand(43);
     bit = a .> 0.5; bool = copyto!(Vector{Bool}(undef, length(bit)), bit);
     t = Bernoulli_logit(bit, a);

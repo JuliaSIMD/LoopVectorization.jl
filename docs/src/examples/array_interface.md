@@ -61,10 +61,10 @@ function runbenches(sr, ::Type{T}, fa = identity, fb = identity) where {T}
     sa = fill("StaticArrays", length(sr)); lv = fill("LoopVectorization", length(sr));
     matmul_lib = vcat(sa, lv, sa, lv);
     sizes = reduce(vcat, (sr for _ ∈ 1:4))
-	DataFrame(
-	    Size = sizes, Time = vec(bench_results), GFLOPS = vec(gflops),
-		ArrayType = array_type, MatmulLib = matmul_lib, MulType = array_type .* ' ' .* matmul_lib
-	)
+    DataFrame(
+        Size = sizes, Time = vec(bench_results), GFLOPS = vec(gflops),
+        ArrayType = array_type, MatmulLib = matmul_lib, MulType = array_type .* ' ' .* matmul_lib
+    )
 end
 
 df = runbenches(1:24, Float64);

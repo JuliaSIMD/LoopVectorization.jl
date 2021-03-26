@@ -27,29 +27,29 @@ using LoopVectorization, OffsetArrays, Test
     end
     function offset_copy!(A, B)
         @inbounds for i=1:size(A,1), j=1:size(B,2)
-	    A[i,j+2] = B[i,j]
+            A[i,j+2] = B[i,j]
         end
     end
     function offset_copyavx1!(A, B)
         @avx for i=1:size(A,1), j=1:size(B,2)
-	    A[i,j+2] = B[i,j]
+           A[i,j+2] = B[i,j]
         end
     end
     function offset_copy_avx1!(A, B)
         @_avx for i=1:size(A,1), j=1:size(B,2)
-	    @inbounds A[i,j+2] = B[i,j]
+              @inbounds A[i,j+2] = B[i,j]
         end
     end
     function offset_copyavx2!(A, B)
         @avx for i=1:size(A,1), j=1:size(B,2)
             Bᵢⱼ = B[i,j]
-	    A[i,j+2] = Bᵢⱼ
+            A[i,j+2] = Bᵢⱼ
         end
     end
     function offset_copy_avx2!(A, B)
         @_avx for i=1:size(A,1), j=1:size(B,2)
             Bᵢⱼ = B[i,j]
-	    A[i,j+2] = Bᵢⱼ
+            A[i,j+2] = Bᵢⱼ
         end
     end
     function make2point3avx!(x)

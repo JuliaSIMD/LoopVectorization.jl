@@ -7,6 +7,7 @@ function vfilter!(f::F, x::Vector{T}, y::AbstractArray{T}) where {F,T <: NativeT
     j = 0
     st = VectorizationBase.static_sizeof(T)
     zero_index = MM(W, Static(0), st)
+    incr = W * VectorizationBase.static_sizeof(T)
     GC.@preserve x y begin
         # ptr_x = llvmptr(x); ptr_y = llvmptr(y)
         ptr_x = pointer(x); ptr_y = pointer(y)
@@ -14,7 +15,7 @@ function vfilter!(f::F, x::Vector{T}, y::AbstractArray{T}) where {F,T <: NativeT
             vy = VectorizationBase.__vload(ptr_y, zero_index, False(), register_size())
             mask = f(vy)
             VectorizationBase.compressstore!(gep(ptr_x, VectorizationBase.lazymul(st, j)), vy, mask)
-            ptr_y = gep(ptr_y, register_size())
+            ptr_y = gep(ptr_y, incr)
             j = vadd_fast(j, count_ones(mask))
         end
         rem_mask = VectorizationBase.mask(T, Nrem)

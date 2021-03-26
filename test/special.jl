@@ -22,17 +22,17 @@
     end
     function offset_exp!(A, B)
         @avx for i=1:size(A,1), j=1:size(B,2)
-	    A[i,j] = exp(B[i,j])
+            A[i,j] = exp(B[i,j])
         end
     end
     function offset_expavx!(A, B)
         @avx for i=1:size(A,1), j=1:size(B,2)
-	    A[i,j] = exp(B[i,j])
+            A[i,j] = exp(B[i,j])
         end
     end
     function offset_exp_avx!(A, B)
         @_avx for i=1:size(A,1), j=1:size(B,2)
-	    A[i,j] = exp(B[i,j])
+            A[i,j] = exp(B[i,j])
         end
     end
 

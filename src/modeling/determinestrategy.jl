@@ -1,4 +1,5 @@
 
+
 # function indexappearences(op::Operation, s::Symbol)
 #     s ∉ loopdependencies(op) && return 0
 #     appearences = 0
@@ -95,14 +96,15 @@ function cost(ls::LoopSet, op::Operation, (u₁,u₂)::Tuple{Symbol,Symbol}, vlo
                     shifter = 2
                     offset = 0.5reg_size(ls) / cache_lnsze(ls)
                 end
-                if !rejectcurly(op) && (((contigind === CONSTANTZEROINDEX) && ((length(indices) > 1) && (indices[2] === u₁) || (indices[2] === u₂))) ||
-                    ((u₁ === contigind) | (u₂ === contigind)))
+                if shifter > 1 &&
+                    (!rejectcurly(op) && (((contigind === CONSTANTZEROINDEX) && ((length(indices) > 1) && (indices[2] === u₁) || (indices[2] === u₂))) ||
+                    ((u₁ === contigind) | (u₂ === contigind))))
 
                     shifter -= 1
                     offset = 0.5reg_size(ls) / cache_lnsze(ls)
                 end
                 r = 1 << shifter
-                srt *= r + offset
+                srt = srt*r + offset
                 sl *= r
             elseif isload(op) & (length(loopdependencies(op)) > 1)# vmov(a/u)pd
                 # penalize vectorized loads with more than 1 loopdep
