@@ -30,8 +30,12 @@ const START_TIME = time()
     @time include("loopinductvars.jl")
 
     @time include("shuffleloadstores.jl")
-    
-    @time include("zygote.jl")
+
+	if (v"1.5" < VERSION < v"1.7") && Sys.iswindows()
+		println("Skipping Zygote tests.")
+	else
+    	@time include("zygote.jl")
+	end
 
     @time include("offsetarrays.jl")
 

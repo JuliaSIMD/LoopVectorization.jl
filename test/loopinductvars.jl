@@ -1,6 +1,7 @@
 
 # testset for using them in loops
 @testset "Loop Induction Variables" begin
+	@show @__LINE__
     f(x) = cos(x) * log(x)
     function avxmax(v)
         max_x = -Inf

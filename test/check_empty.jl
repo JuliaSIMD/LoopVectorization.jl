@@ -15,6 +15,7 @@ function mysum_unchecked(x)
 end
 
 @testset "Check Empty" begin
+	@show @__LINE__
     x = fill(9999, 100, 10, 10);
     xv = view(x, :, 1:0, :);
     @test mysum_checked(x) == mysum_unchecked(x) == sum(x)

@@ -173,6 +173,7 @@ function issue209_noavx(M, G, J, H, A, B, ϕ)
 end
 
 @testset "shuffles load/stores" begin
+	@show @__LINE__
     for i ∈ 1:128
         ac = rand(Complex{Float64}, i);
         bc = rand(Complex{Float64}, i);
