@@ -382,7 +382,7 @@ end
 @inline check_args(A::BitArray) = iszero(size(A,1) & 7)
 @inline check_args(::VectorizationBase.AbstractStridedPointer) = true
 @inline function check_args(x)
-    @info "`LoopVectorization.check_args(::$(typeof(x))) == false`, therefore compiling a probably slow `@inbounds @fastmath` fallback loop." maxlog=1
+    # @info "`LoopVectorization.check_args(::$(typeof(x))) == false`, therefore compiling a probably slow `@inbounds @fastmath` fallback loop." maxlog=1
     false
 end
 @inline check_args(A, B, C::Vararg{Any,K}) where {K} = check_args(A) && check_args(B, C...)
@@ -394,18 +394,18 @@ end
 Returns true if the element type is supported.
 """
 @inline check_type(::Type{T}) where {T <: NativeTypes} = true
-function check_type(::Type{T}) where {T}
-    @info """`LoopVectorization.check_type` returned `false`, because `LoopVectorization.check_type(::$(T)) == false`.
-        `LoopVectorization` currently only supports `T <: $(NativeTypes)`.
-        Therefore compiling a probably slow `@inbounds @fastmath` fallback loop.""" maxlog=1
+@inline function check_type(::Type{T}) where {T}
+    # @info """`LoopVectorization.check_type` returned `false`, because `LoopVectorization.check_type(::$(T)) == false`.
+    #     `LoopVectorization` currently only supports `T <: $(NativeTypes)`.
+    #     Therefore compiling a probably slow `@inbounds @fastmath` fallback loop.""" maxlog=1
     false
 end
 @inline check_device(::ArrayInterface.CPUPointer) = true
 @inline check_device(::ArrayInterface.CPUTuple) = true
-function check_device(x)
-    @info """`LoopVectorization.check_args` returned `false`, because `ArrayInterface.device(::$(typeof(x))) == $x`
-        `LoopVectorization` normally requires `ArrayInterface.CPUPointer` (exceptions include ranges, `BitVector`s, and
-        `BitArray`s whose number of rows is a multiple of 8). Therefore compiling a probably slow `@inbounds @fastmath` fallback loop.""" maxlog=1
+@inline function check_device(x)
+    # @info """`LoopVectorization.check_args` returned `false`, because `ArrayInterface.device(::$(typeof(x))) == $x`
+    #     `LoopVectorization` normally requires `ArrayInterface.CPUPointer` (exceptions include ranges, `BitVector`s, and
+    #     `BitArray`s whose number of rows is a multiple of 8). Therefore compiling a probably slow `@inbounds @fastmath` fallback loop.""" maxlog=1
     false
 end
 
