@@ -81,6 +81,7 @@ function add_prefetches!(q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, pr
         (ind == u₁loopsym) && (i = j)
     end
     push!(q.args, Expr(:call, lv(:prefetch0), gptr, copy(inds)))
+    i == 0 && return
     for u ∈ 1:u₁-1
         # for u ∈ umin:min(umin,U-1)
         # (u₁loopsym === vloopsym && !iszero(u & dontskip)) && continue
