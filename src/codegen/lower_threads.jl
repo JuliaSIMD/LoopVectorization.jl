@@ -349,8 +349,7 @@ function thread_one_loops_expr(
             loop_boundary!(lastboundexpr, loop)
         end
     end
-    _avx_call_core_ = :(_avx_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, ($lastboundexpr, var"#vargs#")))
-    _avx_call_ = _avx_call_core_
+    _avx_call_ = :(_avx_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, ($lastboundexpr, var"#vargs#")))
     update_return_values = if length(ls.outer_reductions) > 0
         retv = loopset_return_value(ls, Val(false))
         _avx_call_ = Expr(:(=), retv, _avx_call_)
@@ -358,6 +357,7 @@ function thread_one_loops_expr(
     else
         nothing
     end
+    retexpr = length(ls.outer_reductions) > 0 ? :(return $retv) : :(return nothing)
     # @unpack u₁loop, u₂loop, vloop, u₁, u₂max = ua
     iterdef = define_block_size(threadedloop, ua.vloop, 0, ls.vector_width[])
     q = quote
@@ -367,37 +367,43 @@ function thread_one_loops_expr(
         var"#nthreads#" = Base.min(var"#nthreads#", var"#num#unrolls#thread#0#")
         var"#nrequest#" = (var"#nthreads#" % UInt32) - 0x00000001
         $loopstart
-        var"#nrequest#" == 0x00000000 && return $_avx_call_core_
-        var"#threads#", var"#torelease#" = CheapThreads.request_threads(Threads.threadid()%UInt32, var"#nrequest#")
-        var"#thread#factor#0#" = var"#nthreads#"
-        $iterdef
-        var"#thread#launch#count#" = 0x00000000
-        var"#thread#id#" = 0x00000000
-        var"#thread#mask#" = CheapThreads.mask(var"#threads#")
-        var"#threads#remain#" = true
-        while var"#threads#remain#"
-            VectorizationBase.assume(var"#thread#mask#" ≠ zero(var"#thread#mask#"))
-            var"#trailzing#zeros#" = Base.trailing_zeros(var"#thread#mask#") % UInt32
-            var"#nblock#size#thread#0#" = Core.ifelse(
-                var"#thread#launch#count#" < (var"#nrem#thread#0#" % UInt32),
-                var"#base#block#size#thread#0#" + var"#block#rem#step#0#",
-                var"#base#block#size#thread#0#"
-            )
-            var"#trailzing#zeros#" += 0x00000001
-            $iterstop
-            var"#thread#id#" += var"#trailzing#zeros#"
+        var"##do#thread##" = var"#nrequest#" ≠ 0x00000000
+        if var"##do#thread##"
+            var"#threads#", var"#torelease#" = CheapThreads.request_threads(Threads.threadid()%UInt32, var"#nrequest#")
+            var"#thread#factor#0#" = var"#nthreads#"
+            $iterdef
+            var"#thread#launch#count#" = 0x00000000
+            var"#thread#id#" = 0x00000000
+            var"#thread#mask#" = CheapThreads.mask(var"#threads#")
+            var"#threads#remain#" = true
+            while var"#threads#remain#"
+                VectorizationBase.assume(var"#thread#mask#" ≠ zero(var"#thread#mask#"))
+                var"#trailzing#zeros#" = Base.trailing_zeros(var"#thread#mask#") % UInt32
+                var"#nblock#size#thread#0#" = Core.ifelse(
+                    var"#thread#launch#count#" < (var"#nrem#thread#0#" % UInt32),
+                    var"#base#block#size#thread#0#" + var"#block#rem#step#0#",
+                    var"#base#block#size#thread#0#"
+                )
+                var"#trailzing#zeros#" += 0x00000001
+                $iterstop
+                var"#thread#id#" += var"#trailzing#zeros#"
 
-            avx_launch(
-                Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM,
-                $loopboundexpr, var"#vargs#", var"#thread#id#"
-            )
+                avx_launch(
+                    Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM,
+                    $loopboundexpr, var"#vargs#", var"#thread#id#"
+                )
 
-            var"#thread#mask#" >>>= var"#trailzing#zeros#"
+                var"#thread#mask#" >>>= var"#trailzing#zeros#"
 
-            var"#iter#start#0#" = var"#iter#stop#0#"
-            var"#threads#remain#" = (var"#thread#launch#count#" += 0x00000001) ≠ var"#nrequest#"
+                var"#iter#start#0#" = var"#iter#stop#0#"
+                var"#threads#remain#" = (var"#thread#launch#count#" += 0x00000001) ≠ var"#nrequest#"
+            end
+        else# eliminate undef var errors that the compiler should be able to figure out are unreachable, but doesn't
+            var"#torelease#" = zero(CheapThreads.worker_type())
+            var"#threads#" = CheapThreads.UnsignedIteratorEarlyStop(var"#torelease#", 0x00000000)
         end
         $_avx_call_
+        var"##do#thread##" || $retexpr
         var"#thread#id#" = 0x00000000
         var"#thread#mask#" = CheapThreads.mask(var"#threads#")
         var"#threads#remain#" = true
@@ -413,8 +419,8 @@ function thread_one_loops_expr(
             var"#threads#remain#" = var"#thread#mask#" ≠ 0x00000000
         end
         CheapThreads.free_threads!(var"#torelease#")
+        $retexpr
     end
-    length(ls.outer_reductions) > 0 ? push!(q.args, retv) : push!(q.args, nothing)
     Expr(:block, ls.preamble, q)
 end
 function define_vthread_blocks(vloop, u₁loop, u₂loop, u₁, u₂, ntmax, tn)
@@ -484,8 +490,7 @@ function thread_two_loops_expr(
             loop_boundary!(lastboundexpr, loop)
         end
     end
-    _avx_call_core_ = :(_avx_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, ($lastboundexpr, var"#vargs#")))
-    _avx_call_ = _avx_call_core_
+    _avx_call_ = :(_avx_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, ($lastboundexpr, var"#vargs#")))
     update_return_values = if length(ls.outer_reductions) > 0
         retv = loopset_return_value(ls, Val(false))
         _avx_call_ = Expr(:(=), retv, _avx_call_)
@@ -496,6 +501,7 @@ function thread_two_loops_expr(
     blockdef = define_thread_blocks(threadedloop1, threadedloop2, vloop, u₁loop, u₂loop, u₁, u₂, ntmax)
     iterdef1 = define_block_size(threadedloop1, vloop, 0, ls.vector_width[])
     iterdef2 = define_block_size(threadedloop2, vloop, 1, ls.vector_width[])
+    retexpr = length(ls.outer_reductions) > 0 ? :(return $retv) : :(return nothing)
     q = quote
         $choose_nthread # UInt
         $define_len1
@@ -515,54 +521,59 @@ function thread_two_loops_expr(
         $loopstart1
         var"#loop#1#start#init#" = var"#iter#start#0#"
         $loopstart2
-        var"#nrequest#" == 0x00000000 && return $_avx_call_core_
-        var"#threads#", var"#torelease#" = CheapThreads.request_threads(Threads.threadid(), var"#nrequest#")
+        var"##do#thread##" = var"#nrequest#" ≠ 0x00000000
+        if var"##do#thread##"
+            var"#threads#", var"#torelease#" = CheapThreads.request_threads(Threads.threadid(), var"#nrequest#")
+            $iterdef1
+            $iterdef2
+            # @show var"#base#block#size#thread#0#", var"#block#rem#step#0#" var"#base#block#size#thread#1#", var"#block#rem#step#1#"
+            var"#thread#launch#count#" = 0x00000000
+            var"#thread#launch#count#0#" = 0x00000000
+            var"#thread#launch#count#1#" = 0x00000000
+            var"#thread#id#" = 0x00000000
+            var"#thread#mask#" = CheapThreads.mask(var"#threads#")
+            var"#threads#remain#" = true
+            while var"#threads#remain#"
+                VectorizationBase.assume(var"#thread#mask#" ≠ zero(var"#thread#mask#"))
+                var"#trailzing#zeros#" = Base.trailing_zeros(var"#thread#mask#") % UInt32
+                var"#nblock#size#thread#0#" = Core.ifelse(
+                    var"#thread#launch#count#0#" < (var"#nrem#thread#0#" % UInt32),
+                    var"#base#block#size#thread#0#" + var"#block#rem#step#0#",
+                    var"#base#block#size#thread#0#"
+                )
+                var"#nblock#size#thread#1#" = Core.ifelse(
+                    var"#thread#launch#count#1#" < (var"#nrem#thread#1#" % UInt32),
+                    var"#base#block#size#thread#1#" + var"#block#rem#step#1#",
+                    var"#base#block#size#thread#1#"
+                )
+                var"#trailzing#zeros#" += 0x00000001
+                $iterstop1
+                $iterstop2
+                var"#thread#id#" += var"#trailzing#zeros#"
+                # @show var"#thread#id#" $loopboundexpr
+                avx_launch(
+                    Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM,
+                    $loopboundexpr, var"#vargs#", var"#thread#id#"
+                )
 
-        $iterdef1
-        $iterdef2
-        # @show var"#base#block#size#thread#0#", var"#block#rem#step#0#" var"#base#block#size#thread#1#", var"#block#rem#step#1#"
-        var"#thread#launch#count#" = 0x00000000
-        var"#thread#launch#count#0#" = 0x00000000
-        var"#thread#launch#count#1#" = 0x00000000
-        var"#thread#id#" = 0x00000000
-        var"#thread#mask#" = CheapThreads.mask(var"#threads#")
-        var"#threads#remain#" = true
-        while var"#threads#remain#"
-            VectorizationBase.assume(var"#thread#mask#" ≠ zero(var"#thread#mask#"))
-            var"#trailzing#zeros#" = Base.trailing_zeros(var"#thread#mask#") % UInt32
-            var"#nblock#size#thread#0#" = Core.ifelse(
-                var"#thread#launch#count#0#" < (var"#nrem#thread#0#" % UInt32),
-                var"#base#block#size#thread#0#" + var"#block#rem#step#0#",
-                var"#base#block#size#thread#0#"
-            )
-            var"#nblock#size#thread#1#" = Core.ifelse(
-                var"#thread#launch#count#1#" < (var"#nrem#thread#1#" % UInt32),
-                var"#base#block#size#thread#1#" + var"#block#rem#step#1#",
-                var"#base#block#size#thread#1#"
-            )
-            var"#trailzing#zeros#" += 0x00000001
-            $iterstop1
-            $iterstop2
-            var"#thread#id#" += var"#trailzing#zeros#"
-            # @show var"#thread#id#" $loopboundexpr
-            avx_launch(
-                Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM,
-                $loopboundexpr, var"#vargs#", var"#thread#id#"
-            )
+                var"#thread#mask#" >>>= var"#trailzing#zeros#"
 
-            var"#thread#mask#" >>>= var"#trailzing#zeros#"
+                var"##end#inner##" = var"#thread#launch#count#0#" == (var"#thread#factor#0#"-0x00000001)
+                var"#thread#launch#count#0#" = Core.ifelse(var"##end#inner##", 0x00000000, var"#thread#launch#count#0#" + 0x00000001)
+                var"#thread#launch#count#1#" = Core.ifelse(var"##end#inner##", var"#thread#launch#count#1#" + 0x00000001, var"#thread#launch#count#1#")
 
-            var"##end#inner##" = var"#thread#launch#count#0#" == (var"#thread#factor#0#"-0x00000001)
-            var"#thread#launch#count#0#" = Core.ifelse(var"##end#inner##", 0x00000000, var"#thread#launch#count#0#" + 0x00000001)
-            var"#thread#launch#count#1#" = Core.ifelse(var"##end#inner##", var"#thread#launch#count#1#" + 0x00000001, var"#thread#launch#count#1#")
+                var"#iter#start#0#" = Core.ifelse(var"##end#inner##", var"#loop#1#start#init#", var"#iter#stop#0#")
+                var"#iter#start#1#" = Core.ifelse(var"##end#inner##", var"#iter#stop#1#", var"#iter#start#1#")
 
-            var"#iter#start#0#" = Core.ifelse(var"##end#inner##", var"#loop#1#start#init#", var"#iter#stop#0#")
-            var"#iter#start#1#" = Core.ifelse(var"##end#inner##", var"#iter#stop#1#", var"#iter#start#1#")
-
-            var"#threads#remain#" = (var"#thread#launch#count#" += 0x00000001) ≠ var"#nrequest#"
+                var"#threads#remain#" = (var"#thread#launch#count#" += 0x00000001) ≠ var"#nrequest#"
+            end
+        else# eliminate undef var errors that the compiler should be able to figure out are unreachable, but doesn't
+            var"#torelease#" = zero(CheapThreads.worker_type())
+            var"#threads#" = CheapThreads.UnsignedIteratorEarlyStop(var"#torelease#", 0x00000000)
         end
         # @show $lastboundexpr
         $_avx_call_
+        var"##do#thread##" || $retexpr
         # @show $retv
         var"#thread#id#" = 0x00000000
         var"#thread#mask#" = CheapThreads.mask(var"#threads#")
@@ -579,8 +590,8 @@ function thread_two_loops_expr(
             var"#threads#remain#" = var"#thread#mask#" ≠ 0x00000000
         end
         CheapThreads.free_threads!(var"#torelease#")
+        $retexpr
     end
-    length(ls.outer_reductions) > 0 ? push!(q.args, retv) : push!(q.args, nothing)
     # @show
     Expr(:block, ls.preamble, q)
 end
