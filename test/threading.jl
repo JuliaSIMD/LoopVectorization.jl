@@ -118,10 +118,12 @@ end
         C1 = A * B; C0 = similar(C1);
         @test AmulB!(C0, A, B) ≈ C1
 
-        x = randn(Complex{Float64}, 3M-1);
-        W = randn(Complex{Float64}, 3M-1, 3M+1);
-        y = randn(Complex{Float64}, 3M+1);
-        @test dot(x,W,y) ≈ dot3(x,W,y)
+		if VERSION ≥ v"1.6"
+	        x = randn(Complex{Float64}, 3M-1);
+    	    W = randn(Complex{Float64}, 3M-1, 3M+1);
+        	y = randn(Complex{Float64}, 3M+1);
+        	@test dot(x,W,y) ≈ dot3(x,W,y)
+		end
 
         kern = OffsetArray(randn(3,3),-2,-2)
         out1 = OffsetArray(randn(size(A) .- 2), 1, 1)

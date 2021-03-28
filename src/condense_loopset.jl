@@ -394,20 +394,10 @@ end
 Returns true if the element type is supported.
 """
 @inline check_type(::Type{T}) where {T <: NativeTypes} = true
-@inline function check_type(::Type{T}) where {T}
-    # @info """`LoopVectorization.check_type` returned `false`, because `LoopVectorization.check_type(::$(T)) == false`.
-    #     `LoopVectorization` currently only supports `T <: $(NativeTypes)`.
-    #     Therefore compiling a probably slow `@inbounds @fastmath` fallback loop.""" maxlog=1
-    false
-end
+@inline check_type(::Type{T}) where {T} = false
 @inline check_device(::ArrayInterface.CPUPointer) = true
 @inline check_device(::ArrayInterface.CPUTuple) = true
-@inline function check_device(x)
-    # @info """`LoopVectorization.check_args` returned `false`, because `ArrayInterface.device(::$(typeof(x))) == $x`
-    #     `LoopVectorization` normally requires `ArrayInterface.CPUPointer` (exceptions include ranges, `BitVector`s, and
-    #     `BitArray`s whose number of rows is a multiple of 8). Therefore compiling a probably slow `@inbounds @fastmath` fallback loop.""" maxlog=1
-    false
-end
+@inline check_device(x) = false
 
 function check_args_call(ls::LoopSet)
     q = Expr(:call, lv(:check_args))

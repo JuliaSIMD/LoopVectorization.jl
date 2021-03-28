@@ -1,6 +1,7 @@
 using LoopVectorization, Test#, OffsetArrays
 
 @testset "Array Wrappers" begin
+	@show @__LINE__
 
     function addone!(y, x)
         @avx for i ∈ eachindex(x,y)

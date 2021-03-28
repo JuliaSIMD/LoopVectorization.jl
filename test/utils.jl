@@ -2,6 +2,7 @@ using LoopVectorization
 using Test
 
 @testset "Utilities" begin
+	@show @__LINE__
     @test LoopVectorization.isscopedname(:(Base.OneTo), :Base, :OneTo)
     @test LoopVectorization.isscopedname(:(A.B.C.D), (:A, :B, :C), :D)
     @test !LoopVectorization.isscopedname(:(A.B.D),  (:A, :B, :C), :D)
