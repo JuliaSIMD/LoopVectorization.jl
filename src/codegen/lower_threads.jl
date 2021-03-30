@@ -159,8 +159,11 @@ end
 #     ni = cld(N, fN)
 #     block_per_m, blocks_per_n
 # end
-
-@inline choose_num_threads(C::Float64, NT::UInt, x::Base.BitInteger) = _choose_num_threads(Base.FastMath.mul_float_fast(C, 0.05460264079015985), NT, x)
+if Sys.ARCH === :x86_64
+    @inline choose_num_threads(C::Float64, NT::UInt, x::Base.BitInteger) = _choose_num_threads(Base.FastMath.mul_float_fast(C, 0.05460264079015985), NT, x)
+else
+    @inline choose_num_threads(C::Float64, NT::UInt, x::Base.BitInteger) = _choose_num_threads(Base.FastMath.mul_float_fast(C, 0.05460264079015985 * 0.25), NT, x)
+end
 @inline _choose_num_threads(C::Float64, NT::UInt, x::Base.BitInteger) = min(Base.fptoui(UInt, Base.ceil_llvm(Base.FastMath.mul_float_fast(C, Base.sqrt_llvm(Base.uitofp(Float64, x))))), NT)
 function push_loop_length_expr!(q::Expr, ls::LoopSet)
     l = 1
@@ -326,6 +329,9 @@ function thread_one_loops_expr(
 )
     looplen = looplengthprod(ls)
     c = 0.05460264079015985 * c / looplen
+    if Sys.ARCH !== :x86_64
+        c *= 0.25
+    end
     if all(isstaticloop, ls.loops)
         _num_threads = _choose_num_threads(c, ntmax, Int64(looplen))::UInt
         _num_threads > 1 || return avx_body(ls, UNROLL)
@@ -450,6 +456,9 @@ function thread_two_loops_expr(
 )
     looplen = looplengthprod(ls)
     c = 0.05460264079015985 * c / looplen
+    if Sys.ARCH !== :x86_64
+        c *= 0.25
+    end
     if all(isstaticloop, ls.loops)
         _num_threads = _choose_num_threads(c, ntmax, Int64(looplen))::UInt
         _num_threads > 1 || return avx_body(ls, UNROLL)
@@ -521,6 +530,7 @@ function thread_two_loops_expr(
         $loopstart1
         var"#loop#1#start#init#" = var"#iter#start#0#"
         $loopstart2
+        # @show var"#nrequest#"
         var"##do#thread##" = var"#nrequest#" ≠ 0x00000000
         if var"##do#thread##"
             var"#threads#", var"#torelease#" = CheapThreads.request_threads(Threads.threadid(), var"#nrequest#")
