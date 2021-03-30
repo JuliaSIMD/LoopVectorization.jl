@@ -21,10 +21,13 @@ function add_constant!(ls::LoopSet, var::Number, elementbytes::Int = 8)
         end
         push!(ls.preamble_zeros, (identifier(op),typ))
     elseif var isa Integer
-        for (id,ivar) ∈ ls.preamble_symint
-            (instruction(ops[id]) === LOOPCONSTANT && ivar == var) && return ops[id]
+        idescript = integer_description(var)
+        for (id,descript) ∈ ls.preamble_symint
+            if (instruction(ops[id]) === LOOPCONSTANT) && (idescript == descript)
+                return ops[id]
+            end
         end
-        push!(ls.preamble_symint, (identifier(op), var))
+        push!(ls.preamble_symint, (identifier(op), idescript))
     else#if var isa FloatX
         for (id,fvar) ∈ ls.preamble_symfloat
             (instruction(ops[id]) === LOOPCONSTANT && fvar == var) && return ops[id]

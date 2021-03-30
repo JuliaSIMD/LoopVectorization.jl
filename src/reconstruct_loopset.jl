@@ -303,7 +303,14 @@ function expandbyoffset!(indexpand::Vector{T}, inds, offsets::Vector{Int}, expan
         ind = T === Int ? _ind : first(_ind)
         base = offsets[ind] + 1
         for inda ∈ base:(expand ? offsets[ind+1] : base)
-            T === Int ? push!(indexpand, inda) : push!(indexpand, (inda,last(_ind)))
+            if T === Int
+                push!(indexpand, inda)
+            elseif T === Tuple{Int,Tuple{Int,Int32,Bool}}
+                li = last(_ind)
+                push!(indexpand, (inda,(li[1],li[2],li[3])))
+            else
+                push!(indexpand, (inda,last(_ind)))
+            end
         end
     end
     indexpand

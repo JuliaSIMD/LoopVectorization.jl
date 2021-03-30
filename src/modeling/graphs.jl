@@ -415,7 +415,7 @@ struct LoopSet
     preamble::Expr
     prepreamble::Expr # performs extractions that must be performed first, and don't need further registering
     preamble_symsym::Vector{Tuple{Int,Symbol}}
-    preamble_symint::Vector{Tuple{Int,Int}}
+    preamble_symint::Vector{Tuple{Int,Tuple{Int,Int32,Bool}}}
     preamble_symfloat::Vector{Tuple{Int,Float64}}
     preamble_zeros::Vector{Tuple{Int,NumberType}}
     preamble_funcofeltypes::Vector{Tuple{Int,Float64}}
@@ -504,6 +504,15 @@ function pushpreamble!(ls::LoopSet, op::Operation, v::Symbol)
     end
     nothing
 end
+
+function integer_description(@nospecialize(v::Integer))::Tuple{Int,Int32,Bool}
+    if v isa Bool
+        ((v % Int)::Int, one(Int32), false)
+    else
+        ((v % Int)::Int, ((8sizeof(v))%Int32)::Int32, (v isa Signed)::Bool)
+    end
+end
+
 function pushpreamble!(ls::LoopSet, op::Operation, v::Number)
     typ = v isa Integer ? HardInt : HardFloat
     id = identifier(op)
@@ -512,7 +521,7 @@ function pushpreamble!(ls::LoopSet, op::Operation, v::Number)
     elseif isone(v)
         push!(ls.preamble_funcofeltypes, (id, MULTIPLICATIVE_IN_REDUCTIONS))
     elseif v isa Integer
-        push!(ls.preamble_symint, (id, convert(Int,v)))
+        push!(ls.preamble_symint, (id, integer_description(v)))
     else
         push!(ls.preamble_symfloat, (id, convert(Float64,v)))
     end
@@ -549,7 +558,7 @@ function LoopSet(mod::Symbol)
         LoopOrder(),
         Expr(:block),Expr(:block),
         Tuple{Int,Symbol}[],
-        Tuple{Int,Int}[],
+        Tuple{Int,Tuple{Int,Int32,Bool}}[],
         Tuple{Int,Float64}[],
         Tuple{Int,NumberType}[],Tuple{Int,Symbol}[],
         Symbol[], Symbol[], Symbol[],

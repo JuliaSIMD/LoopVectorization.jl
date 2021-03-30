@@ -586,8 +586,16 @@ function typeof_outer_reduction_init(ls::LoopSet, op::Operation)
     for (id, sym) ∈ ls.preamble_symsym
         opid == id && return Expr(:call, :typeof, sym)
     end
-    for (id,intval) ∈ ls.preamble_symint
-        opid == id && return :Int
+    for (id,(intval,intsz,signed)) ∈ ls.preamble_symint
+        if opid == id
+            if intsz == 1
+                return :Bool
+            elseif signed
+                return Symbol(:Int,intsz)
+            else
+                return Symbol(:UInt,intsz)
+            end
+        end
     end
     for (id,floatval) ∈ ls.preamble_symfloat
         opid == id && return :Float64

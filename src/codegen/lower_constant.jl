@@ -181,8 +181,14 @@ function lower_licm_constants!(ls::LoopSet)
         # setconstantop!(ls, ops[id],  sym)
         # setconstantop!(ls, ops[id], Expr(:call, lv(:maybeconvert), ls.T, sym))
     end
-    for (id,intval) ∈ ls.preamble_symint
-        setop!(ls, ops[id], Expr(:call, lv(:sizeequivalentint), ELTYPESYMBOL, intval))
+    for (id,(intval,intsz,signed)) ∈ ls.preamble_symint
+        if intsz == 1
+            setop!(ls, ops[id], intval % Bool)
+        elseif signed
+            setop!(ls, ops[id], Expr(:call, lv(:sizeequivalentint), ELTYPESYMBOL, intval))
+        else
+            setop!(ls, ops[id], Expr(:call, lv(:sizeequivalentint), ELTYPESYMBOL, intval % UInt))
+        end
     end
     for (id,floatval) ∈ ls.preamble_symfloat
         setop!(ls, ops[id], Expr(:call, lv(:sizeequivalentfloat), ELTYPESYMBOL, floatval))
