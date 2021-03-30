@@ -1,4 +1,5 @@
 function prefetchisagoodidea(ls::LoopSet, op::Operation, td::UnrollArgs)
+    # ((Sys.ARCH === :x86_64) || (Sys.ARCH === :i686)) || return false
     # return false
     @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, vstep, u₂max, suffix = td
     length(loopdependencies(op)) ≤ 1 && return 0
@@ -40,6 +41,8 @@ function prefetchisagoodidea(ls::LoopSet, op::Operation, td::UnrollArgs)
     0
 end
 function add_prefetches!(q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, prefetchind::Int)
+    # TODO: maybe prefetch for non-x86_64?
+    ((Sys.ARCH === :x86_64) || (Sys.ARCH === :i686)) || return nothing
     @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, u₂max = td
     # we should only be here if `unitsride(vloop)`
     dontskip = (cache_lnsze(ls) ÷ reg_size(ls)) - 1

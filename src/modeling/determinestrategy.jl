@@ -543,9 +543,9 @@ function solve_unroll(
     W::Int, vloopsym::Symbol, rounduᵢ::Int
 )
     (u₁step, u₂step) = if rounduᵢ == 1 # max is to safeguard against some weird arch I've never heard of.
-        (max(1, cache_lnsze(ls) ÷ reg_size(ls)), 1)
+        (clamp(cache_lnsze(ls) ÷ reg_size(ls), 1, 4), 1)
     elseif rounduᵢ == 2
-        (1, max(1,cache_lnsze(ls) ÷ reg_size(ls)))
+        (1, clamp(cache_lnsze(ls) ÷ reg_size(ls), 1, 4))
     elseif rounduᵢ == -1
         (8 ÷ ls.vector_width[], 1)
     elseif rounduᵢ == -2
@@ -553,7 +553,6 @@ function solve_unroll(
     else
         (1, 1)
     end
-    # @show u₁step, u₂step
     u₁loop = getloop(ls, u₁loopsym)
     u₂loop = getloop(ls, u₂loopsym)
     solve_unroll(
