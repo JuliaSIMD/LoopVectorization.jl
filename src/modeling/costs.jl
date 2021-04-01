@@ -266,7 +266,8 @@ const COST = Dict{Symbol,InstructionCost}(
     :prefetch => InstructionCost(0,0.0,0.0,0),
     :prefetch0 => InstructionCost(0,0.0,0.0,0),
     :prefetch1 => InstructionCost(0,0.0,0.0,0),
-    :prefetch2 => InstructionCost(0,0.0,0.0,0)
+    :prefetch2 => InstructionCost(0,0.0,0.0,0),
+    :convert => InstructionCost(4,0.5)
 )
 @inline prefetch0(x, i) = VectorizationBase.prefetch(gep(stridedpointer(x), (data(i),)), Val{3}(), Val{0}())
 @inline prefetch0(x, I::Tuple) = VectorizationBase.prefetch(gep(stridedpointer(x), data.(I)), Val{3}(), Val{0}())
