@@ -12,10 +12,9 @@
             c2 = vmapnt(foo, a, b);
             @test c1 ≈ c2
             c2 = vmapntt(foo, a, b);
-            sleep(1e-3) # non-temporal stores won't be automatically synced/coherant, so need to wait!
+            c3 = similar(c2); @views vmapnt!(foo, c3[2:end], a[2:end], b[2:end]);
+            @test @views c1[2:end] ≈ c3[2:end]
             @test c1 ≈ c2
-            fill!(c2, NaN); @views vmapnt!(foo, c2[2:end], a[2:end], b[2:end]);
-            @test @views c1[2:end] ≈ c2[2:end]
             fill!(c2, NaN); @views vmapntt!(foo, c2[2:end], a[2:end], b[2:end]);
             sleep(1e-3) # non-temporal stores won't be automatically synced/coherant, so need to wait!
             @test @views c1[2:end] ≈ c2[2:end]
