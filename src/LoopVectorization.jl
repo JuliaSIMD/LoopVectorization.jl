@@ -29,7 +29,7 @@ using IfElse: ifelse
 using ThreadingUtilities, CheapThreads
 using SLEEFPirates: pow
 using Base.Broadcast: Broadcasted, DefaultArrayStyle
-using LinearAlgebra: Adjoint, Transpose
+using LinearAlgebra: Adjoint, Transpose, Diagonal
 using Base.Meta: isexpr
 using DocStringExtensions
 import LinearAlgebra # for check_args
@@ -38,7 +38,7 @@ using Base.FastMath: add_fast, sub_fast, mul_fast, div_fast, inv_fast, abs2_fast
 
 
 using ArrayInterface
-using ArrayInterface: OptionallyStaticUnitRange, OptionallyStaticRange, Zero, One, StaticBool, True, False, reduce_tup, indices
+using ArrayInterface: OptionallyStaticUnitRange, OptionallyStaticRange, Zero, One, StaticBool, True, False, reduce_tup, indices, UpTri, LoTri
 @static if VERSION ≥ v"1.6.0-rc1" #TODO: delete `else` when dropping 1.5 support
     using ArrayInterface: static_step
 else # Julia 1.5 did not define `step` on CartesianIndices
@@ -115,6 +115,9 @@ _precompile_()
 function __init__()
     @require ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4" begin
         @require ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210" include("simdfunctionals/vmap_grad.jl")
+    end
+    @require SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b" begin
+        @eval SpecialFunctions.erf(x::VectorizationBase.AbstractSIMD) = VectorizationBase.verf(float(x))
     end
 end
 
