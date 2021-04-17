@@ -200,8 +200,8 @@ function lower_load_for_optranslation!(
     iszero(suffix) || return
 
     total_unroll = u₁ + u₂max - 1
-    
-    
+
+
     mref = op.ref
     inds_by_ptroff = indices_calculated_by_pointer_offsets(ls, mref)
     # initial offset pointer
@@ -210,7 +210,7 @@ function lower_load_for_optranslation!(
     # we want to start at minimum position.
     step₁ = gethint(step(u₁loop))
     step₂ = gethint(step(u₂loop))
-    
+
     # abs of steps are equal
     equal_steps = (step₁ == step₂) ⊻ (posindicator ≠ 0x03)
     # @show step₁, step₂, posindicator, equal_steps
@@ -262,7 +262,7 @@ function lower_load_for_optranslation!(
     op.ref = mref
     # loopedindex[translationind] = false
     # indices[translationind] = old_translation_index
-    
+
     shouldbroadcast = (!isvectorized(op)) && any(isvectorized, children(op))
 
     # now we need to assign the `Vec`s from the `VecUnroll` to the correct name.
@@ -331,7 +331,7 @@ function _lower_load!(
 )
     if rejectinterleave(op)
         lower_load_no_optranslation!(q, ls, op, td, mask, inds_calc_by_ptr_offset)
-    else        
+    else
         omop = offsetloadcollection(ls)
         batchid, opind = omop.batchedcollectionmap[identifier(op)]
         if opind == 1
@@ -412,7 +412,7 @@ function lower_load_collection!(
     op = ops[opidmap[first(first(idsformap))]]
     opindices = getindices(op)
     interleave = first(opindices) === vloopsym
-    # construct dummy unrolled loop 
+    # construct dummy unrolled loop
     offset_dummy_loop = Loop(first(opindices), MaybeKnown(1), MaybeKnown(1024), MaybeKnown(1), Symbol(""), Symbol(""))
     unrollcurl₂ = unrolled_curly(op, nouter, offset_dummy_loop, vloop, mask, 1) # interleave always 1 here
     inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false)

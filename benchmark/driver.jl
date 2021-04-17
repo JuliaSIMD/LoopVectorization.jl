@@ -18,14 +18,15 @@ function start_workers()
 end
 stop_workers() = rmprocs(workers())
 
-blastests() = [
-    "LoopVectorization",
-    "Julia", "Clang",
-    "GFortran", "icc", "ifort",
-    "g++ & Eigen-3", "clang++ & Eigen-3",
-    "GFortran-builtin", "ifort-builtin",
-    "OpenBLAS", "MKL"
-]    
+
+function blastests()
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran"]
+    INTEL_BENCH && push!(tests, "icc", "ifort")
+    push!(tests, "g++ & Eigen-3", "clang++ & Eigen-3", "GFortran-builtin", "OpenBLAS")
+    INTEL_BENCH && push!(tests, "ifort-builtin")
+    MKL_BENCH && push!(tests, "MKL")
+    tests
+end
 function benchmark_AmulB(sizes)
     tests = blastests()
     start_workers()
@@ -62,8 +63,14 @@ function benchmark_AtmulBt(sizes)
     stop_workers()
     br
 end
+function dot_tests()
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran"]
+    INTEL_BENCH && push!(tests, "icc", "ifort")
+    push!(tests, "g++ & Eigen-3", "clang++ & Eigen-3")
+    tests
+end
 function benchmark_dot(sizes)
-    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "clang++ & Eigen-3"]#, "OpenBLAS"]
+    tests = dot_tests()
     start_workers()
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
     pmap(is -> dot_bench!(sm, is[2], is[1]), enumerate(sizes))
@@ -72,7 +79,7 @@ function benchmark_dot(sizes)
     br
 end
 function benchmark_selfdot(sizes)
-    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "clang++ & Eigen-3"]#, "OpenBLAS"]
+    tests = dot_tests()
     start_workers()
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
     pmap(is -> selfdot_bench!(sm, is[2], is[1]), enumerate(sizes))
@@ -99,7 +106,9 @@ function benchmark_Atmulvb(sizes)
     br
 end
 function benchmark_dot3(sizes)
-    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "clang++ & Eigen-3", "LinearAlgebra" ]
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran"]
+    INTEL_BENCH && push!(tests, "icc", "ifort")
+    push!(test, "g++ & Eigen-3", "clang++ & Eigen-3", "LinearAlgebra")
     start_workers()
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
     pmap(is -> dot3_bench!(sm, is[2], is[1]), enumerate(sizes))
@@ -108,7 +117,11 @@ function benchmark_dot3(sizes)
     br
 end
 function benchmark_sse(sizes)
-    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "clang++ & Eigen-3", "MKL"]
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran"]
+    INTEL_BENCH && push!(tests, "icc", "ifort")
+    push!(test, "g++ & Eigen-3", "clang++ & Eigen-3", "MKL")
+    MKL_BENCH && push!(tests, "MKL")
+
     start_workers()
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
     pmap(is -> sse_bench!(sm, is[2], is[1]), enumerate(sizes))
@@ -117,7 +130,8 @@ function benchmark_sse(sizes)
     br
 end
 function benchmark_exp(sizes)
-    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort"]
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran"]
+    INTEL_BENCH && push!(tests, "icc", "ifort")
     start_workers()
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
     pmap(is -> exp_bench!(sm, is[2], is[1]), enumerate(sizes))
@@ -126,7 +140,9 @@ function benchmark_exp(sizes)
     br
 end
 function benchmark_aplusBc(sizes)
-    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "clang++ & Eigen-3"]
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran"]
+    INTEL_BENCH && push!(tests, "icc", "ifort")
+    push!(tests, "g++ & Eigen-3", "clang++ & Eigen-3")
     start_workers()
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
     pmap(is -> aplusBc_bench!(sm, is[2], is[1]), enumerate(sizes))
@@ -135,7 +151,10 @@ function benchmark_aplusBc(sizes)
     br
 end
 function benchmark_AplusAt(sizes)
-    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "clang++ & Eigen-3", "GFortran-builtin", "ifort-builtin"]
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran"]
+    INTEL_BENCH && push!(tests, "icc", "ifort")
+    push!(tests, "g++ & Eigen-3", "clang++ & Eigen-3", "GFortran-builtin")
+    INTEL_BENCH && push!(tests, "ifort-builtin")
     start_workers()
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
     pmap(is -> AplusAt_bench!(sm, is[2], is[1]), enumerate(sizes))
@@ -144,7 +163,8 @@ function benchmark_AplusAt(sizes)
     br
 end
 function benchmark_random_access(sizes)
-    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort"]
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran"]
+    INTEL_BENCH && push!(tests, "icc", "ifort")
     start_workers()
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
     pmap(is -> randomaccess_bench!(sm, is[2], is[1]), enumerate(sizes))
@@ -154,7 +174,9 @@ function benchmark_random_access(sizes)
 end
 function benchmark_logdettriangle(sizes)
     # tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "g++ & Eigen-3", "clang++ & Eigen-3", "LinearAlgebra"]
-    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort", "LinearAlgebra"]
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran"]
+    INTEL_BENCH && push!(tests, "icc", "ifort")
+    push!(tests, "LinearAlgebra")
     start_workers()
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
     pmap(is -> logdettriangle_bench!(sm, is[2], is[1]), enumerate(sizes))
@@ -163,7 +185,8 @@ function benchmark_logdettriangle(sizes)
     br
 end
 function benchmark_filter2d(sizes, K)
-    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort"]
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran"]
+    INTEL_BENCH && push!(tests, "icc", "ifort")
     start_workers()
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
     pmap(is -> filter2d_bench_run!(sm, is[2], is[1], K), enumerate(sizes))
@@ -180,7 +203,8 @@ function benchmark_filter2d3x3(sizes)
     benchmark_filter2d(sizes, K)
 end
 function benchmark_filter2dunrolled(sizes)
-    tests = ["LoopVectorization", "Julia", "Clang", "GFortran", "icc", "ifort"]
+    tests = ["LoopVectorization", "Julia", "Clang", "GFortran"]
+    INTEL_BENCH && push!(tests, "icc", "ifort")
     start_workers()
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
     K = SizedOffsetMatrix{Float64,-1,1,-1,1}(rand(3,3))

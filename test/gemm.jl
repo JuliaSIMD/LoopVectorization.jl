@@ -1,6 +1,10 @@
 @testset "GEMM" begin
     # using LoopVectorization, LinearAlgebra, Test; T = Float64
-    Unum, Tnum = LoopVectorization.register_count() == 16 ? (2, 6) : (3, 9)
+    if LoopVectorization.cache_linesize() == 64
+        Unum, Tnum = LoopVectorization.register_count() == 16 ? (2, 6) : (3, 9)
+    else
+        Unum, Tnum = LoopVectorization.register_count() == 16 ? (2, 6) : (4, 6)
+    end
     Unumt, Tnumt = LoopVectorization.register_count() == 16 ? (2, 6) : (5, 5)
     if LoopVectorization.register_count() != 8
         @test @inferred(LoopVectorization.matmul_params()) == (Unum, Tnum)
@@ -353,7 +357,11 @@
                end);
     lsr2amb = LoopVectorization.loopset(r2ambq);
     if LoopVectorization.register_count() == 32
-        @test LoopVectorization.choose_order(lsr2amb) == ([:n, :m, :k], :m, :n, :m, 3, 7)
+        if LoopVectorization.cache_linesize() == LoopVectorization.register_size()
+            @test LoopVectorization.choose_order(lsr2amb) == ([:n, :m, :k], :m, :n, :m, 3, 7)
+        else
+            @test LoopVectorization.choose_order(lsr2amb) == ([:m, :n, :k], :n, :m, :m, 5, 4)
+        end
     elseif LoopVectorization.register_count() == 16
         # @test LoopVectorization.choose_order(lsr2amb) == ([:m, :n, :k], :m, :n, :m, 1, 6)
         @test LoopVectorization.choose_order(lsr2amb) == ([:m, :n, :k], :m, :n, :m, 2, 4)
@@ -624,8 +632,12 @@
     C[m,n] = ΔCₘₙ
     end) |> LoopVectorization.loopset;
     if LoopVectorization.register_count() == 32
+        if LoopVectorization.register_size() == 64
         # @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 1, 8)
-        @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :k, :n, :m, 1, 8)
+            @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :k, :n, :m, 1, 8)
+        elseif LoopVectorization.register_size() == 16
+            @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 4, 4)
+        end            
     elseif LoopVectorization.register_count() == 16
         # @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 2, 4)
         @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :n, :m, :n, 2, 4)
@@ -692,6 +704,7 @@
         # M, K, N = 128, 128, 128;
         N = 69;
         for M ∈ 72:80, K ∈ 72:80
+            # @show M,K
         # M, K, N = 73, 75, 69;
             C = Matrix{TC}(undef, M, N);
             A = rand(R, M, K); B = rand(R, K, N);

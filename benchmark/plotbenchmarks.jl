@@ -11,6 +11,10 @@ function Base.show(io::IO, br::BenchmarkResult)
 end
 
 
+if (Sys.ARCH === :aarch64) && Sys.isapple()
+    nothing
+else
+    
 using Colors, ColorSchemes, Gadfly
 const COLORS = [RGB(0.0,0.0,0.0),RGB(1.0,0.0,0.0)]
 # const COLORS = [RGB(0.0,0.0,0.0),RGB(0.0,1.0,0.0)]
@@ -66,6 +70,7 @@ function Gadfly.plot(br::BenchmarkResult)
     p
 end
 
+end
 # using VegaLite, IndexedTables
 # function plot(br::BenchmarkResult)
 #     res = vec(br.sizedresults.results)

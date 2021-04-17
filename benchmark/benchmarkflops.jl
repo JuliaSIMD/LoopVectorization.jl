@@ -49,22 +49,29 @@ function matmul_bench!(br, C, A, B, i)
     @assert C ≈ Cblas "Clang gemm wrong?"; fill!(C, NaN)
     br[4,i] = n_gflop / @belapsed fgemm!($C, $A, $B)
     @assert C ≈ Cblas "Fort gemm wrong?"; fill!(C, NaN)
-    br[5,i] = n_gflop / @belapsed icgemm!($C, $A, $B)
-    @assert C ≈ Cblas "icc gemm wrong?"; fill!(C, NaN)
-    br[6,i] = n_gflop / @belapsed ifgemm!($C, $A, $B)
-    @assert C ≈ Cblas "ifort gemm wrong?"; fill!(C, NaN)
-    br[7,i] = n_gflop / @belapsed egemm!($C, $A, $B)
+    if INTEL_BENCH
+        br[5,i] = n_gflop / @belapsed icgemm!($C, $A, $B)
+        @assert C ≈ Cblas "icc gemm wrong?"; fill!(C, NaN)
+        br[6,i] = n_gflop / @belapsed ifgemm!($C, $A, $B)
+        @assert C ≈ Cblas "ifort gemm wrong?"; fill!(C, NaN)
+    end
+    br[5+2INTEL_BENCH,i] = n_gflop / @belapsed egemm!($C, $A, $B)
     @assert C ≈ Cblas "eigen gemm wrong?"; fill!(C, NaN)
-    br[8,i] = n_gflop / @belapsed iegemm!($C, $A, $B)
+    br[6+2INTEL_BENCH,i] = n_gflop / @belapsed iegemm!($C, $A, $B)
     @assert C ≈ Cblas "i-eigen gemm wrong?"; fill!(C, NaN)
-    br[9,i] = n_gflop / @belapsed fgemm_builtin!($C, $A, $B)
+
+    br[7+2INTEL_BENCH,i] = n_gflop / @belapsed fgemm_builtin!($C, $A, $B)
     @assert C ≈ Cblas "Fort builtin gemm wrong?"; fill!(C, NaN)
-    br[10,i] = n_gflop / @belapsed ifgemm_builtin!($C, $A, $B)
-    @assert C ≈ Cblas "ifort builtin gemm wrong?"; fill!(C, NaN)
-    br[11,i] = n_gflop / @belapsed gemmopenblas!($C, $A, $B);
+    if INTEL_BENCH
+        br[8+2INTEL_BENCH,i] = n_gflop / @belapsed ifgemm_builtin!($C, $A, $B)
+        @assert C ≈ Cblas "ifort builtin gemm wrong?"; fill!(C, NaN)
+    end
+    br[8+3INTEL_BENCH,i] = n_gflop / @belapsed gemmopenblas!($C, $A, $B);
     @assert C ≈ Cblas "OpenBLAS gemm wrong?"
-    br[12,i] = n_gflop / @belapsed gemmmkl!($C, $A, $B)
-    @assert C ≈ Cblas "MKL gemm wrong?"
+    if MKL_BENCH
+        br[9+3INTEL_BENCH,i] = n_gflop / @belapsed gemmmkl!($C, $A, $B)
+        @assert C ≈ Cblas "MKL gemm wrong?"
+    end
     # br[12,i] = n_gflop / @belapsed gemmavx!($C, $A, $B)
 end
 function A_mul_B_bench!(br, s, i)
@@ -116,13 +123,15 @@ function dot_bench!(br, s, i)
     @assert cdot(a,b) ≈ dotblas "Clang dot wrong?"
     br[4,i] = n_gflop / @belapsed fdot($a, $b)
     @assert fdot(a,b) ≈ dotblas "Fort dot wrong?"
-    br[5,i] = n_gflop / @belapsed icdot($a, $b)
-    @assert icdot(a,b) ≈ dotblas "icc dot wrong?"
-    br[6,i] = n_gflop / @belapsed ifdot($a, $b)
-    @assert ifdot(a,b) ≈ dotblas "ifort dot wrong?"
-    br[7,i] = n_gflop / @belapsed edot($a, $b)
+    if INTEL_BENCH
+        br[5,i] = n_gflop / @belapsed icdot($a, $b)
+        @assert icdot(a,b) ≈ dotblas "icc dot wrong?"
+        br[6,i] = n_gflop / @belapsed ifdot($a, $b)
+        @assert ifdot(a,b) ≈ dotblas "ifort dot wrong?"
+    end
+    br[5+2INTEL_BENCH,i] = n_gflop / @belapsed edot($a, $b)
     @assert edot(a,b) ≈ dotblas "eigen dot wrong?"
-    br[8,i] = n_gflop / @belapsed iedot($a, $b)
+    br[6+2INTEL_BENCH,i] = n_gflop / @belapsed iedot($a, $b)
     @assert iedot(a,b) ≈ dotblas "i-eigen dot wrong?"
     # br[9,i] = n_gflop / @belapsed dot($a, $b)
 end
@@ -138,13 +147,15 @@ function selfdot_bench!(br, s, i)
     @assert cselfdot(a) ≈ dotblas "Clang dot wrong?"
     br[4,i] = n_gflop / @belapsed fselfdot($a)
     @assert fselfdot(a) ≈ dotblas "Fort dot wrong?"
-    br[5,i] = n_gflop / @belapsed icselfdot($a)
-    @assert cselfdot(a) ≈ dotblas "icc dot wrong?"
-    br[6,i] = n_gflop / @belapsed ifselfdot($a)
-    @assert fselfdot(a) ≈ dotblas "ifort dot wrong?"
-    br[7,i] = n_gflop / @belapsed eselfdot($a)
+    if INTEL_BENCH
+        br[5,i] = n_gflop / @belapsed icselfdot($a)
+        @assert cselfdot(a) ≈ dotblas "icc dot wrong?"
+        br[6,i] = n_gflop / @belapsed ifselfdot($a)
+        @assert fselfdot(a) ≈ dotblas "ifort dot wrong?"
+    end
+    br[5+2INTEL_BENCH,i] = n_gflop / @belapsed eselfdot($a)
     @assert eselfdot(a) ≈ dotblas "eigen dot wrong?"
-    br[8,i] = n_gflop / @belapsed ieselfdot($a)
+    br[6+2INTEL_BENCH,i] = n_gflop / @belapsed ieselfdot($a)
     @assert ieselfdot(a) ≈ dotblas "i-eigen dot wrong?"
     # br[9,i] = n_gflop / @belapsed dot($a, $a)
 end
@@ -163,21 +174,23 @@ function gemv_bench!(br, x, A, y, i)
     @assert x ≈ xblas "Clang wrong?"; fill!(x, NaN);
     br[4,i] = n_gflop / @belapsed fgemv!($x, $A, $y)
     @assert x ≈ xblas "Fort wrong?"; fill!(x, NaN);
-    br[5,i] = n_gflop / @belapsed icgemv!($x, $A, $y)
-    @assert x ≈ xblas "icc wrong?"; fill!(x, NaN);
-    br[6,i] = n_gflop / @belapsed ifgemv!($x, $A, $y)
-    @assert x ≈ xblas "ifort wrong?"; fill!(x, NaN);
-    br[7,i] = n_gflop / @belapsed egemv!($x, $A, $y)
+    if INTEL_BENCH
+        br[5,i] = n_gflop / @belapsed icgemv!($x, $A, $y)
+        @assert x ≈ xblas "icc wrong?"; fill!(x, NaN);
+        br[6,i] = n_gflop / @belapsed ifgemv!($x, $A, $y)
+        @assert x ≈ xblas "ifort wrong?"; fill!(x, NaN);
+    end
+    br[5+2INTEL_BENCH,i] = n_gflop / @belapsed egemv!($x, $A, $y)
     @assert x ≈ xblas "eigen wrong?"; fill!(x, NaN);
-    br[8,i] = n_gflop / @belapsed iegemv!($x, $A, $y)
+    br[6+2INTEL_BENCH,i] = n_gflop / @belapsed iegemv!($x, $A, $y)
     @assert x ≈ xblas "i-eigen wrong?"; fill!(x, NaN);
-    br[9,i] = n_gflop / @belapsed fgemv_builtin!($x, $A, $y)
+    br[7+2INTEL_BENCH,i] = n_gflop / @belapsed fgemv_builtin!($x, $A, $y)
     @assert x ≈ xblas "Fort wrong?"; fill!(x, NaN);
-    br[10,i] = n_gflop / @belapsed ifgemv_builtin!($x, $A, $y)
+    br[8+2INTEL_BENCH,i] = n_gflop / @belapsed ifgemv_builtin!($x, $A, $y)
     @assert x ≈ xblas "ifort wrong?"; fill!(x, NaN);
-    br[11,i] = n_gflop / @belapsed dgemvopenblas!($x, $A, $y)
+    br[9+2INTEL_BENCH,i] = n_gflop / @belapsed dgemvopenblas!($x, $A, $y)
     @assert x ≈ xblas "gemvopenblas wrong?"; fill!(x, NaN);
-    br[12,i] = n_gflop / @belapsed dgemvmkl!($x, $A, $y)
+    br[10+2INTEL_BENCH,i] = n_gflop / @belapsed dgemvmkl!($x, $A, $y)
     @assert x ≈ xblas "gemvmkl wrong?"; fill!(x, NaN);
 end
 function A_mul_vb_bench!(br, s, i)
@@ -208,15 +221,17 @@ function dot3_bench!(br, s, i)
     @assert cdot3(x, A, y) ≈ dotblas "Clang dot wrong?"
     br[4,i] = n_gflop / @belapsed fdot3($x, $A, $y)
     @assert fdot3(x, A, y) ≈ dotblas "Fort dot wrong?"
-    br[5,i] = n_gflop / @belapsed icdot3($x, $A, $y)
-    @assert icdot3(x, A, y) ≈ dotblas "icc dot wrong?"
-    br[6,i] = n_gflop / @belapsed ifdot3($x, $A, $y)
-    @assert ifdot3(x, A, y) ≈ dotblas "ifort dot wrong?"
-    br[7,i] = n_gflop / @belapsed edot3($x, $A, $y)
+    if INTEL_BENCH
+        br[5,i] = n_gflop / @belapsed icdot3($x, $A, $y)
+        @assert icdot3(x, A, y) ≈ dotblas "icc dot wrong?"
+        br[6,i] = n_gflop / @belapsed ifdot3($x, $A, $y)
+        @assert ifdot3(x, A, y) ≈ dotblas "ifort dot wrong?"
+    end
+    br[5+2INTEL_BENCH,i] = n_gflop / @belapsed edot3($x, $A, $y)
     @assert edot3(x, A, y) ≈ dotblas "eigen dot wrong?"
-    br[8,i] = n_gflop / @belapsed iedot3($x, $A, $y)
+    br[6+2INTEL_BENCH,i] = n_gflop / @belapsed iedot3($x, $A, $y)
     @assert iedot3(x, A, y) ≈ dotblas "c-eigen dot wrong?"
-    br[9,i] = n_gflop / @belapsed dot($x, $A, $y)
+    br[7+2INTEL_BENCH,i] = n_gflop / @belapsed dot($x, $A, $y)
 end
 # BLAS.set_num_threads(1)
 function sse!(Xβ, y, X, β)
@@ -241,15 +256,20 @@ function sse_bench!(br, s, i)
     @assert cOLSlp(y, X, β) ≈ lpblas "Clang wrong?"
     br[4,i] = n_gflop / @belapsed fOLSlp($y, $X, $β)
     @assert fOLSlp(y, X, β) ≈ lpblas "Fort wrong?"
-    br[5,i] = n_gflop / @belapsed icOLSlp($y, $X, $β)
-    @assert icOLSlp(y, X, β) ≈ lpblas "icc wrong?"
-    br[6,i] = n_gflop / @belapsed ifOLSlp($y, $X, $β)
-    @assert ifOLSlp(y, X, β) ≈ lpblas "ifort wrong?"
-    br[7,i] = n_gflop / @belapsed eOLSlp($y, $X, $β)
+    if INTEL_BENCH
+        br[5,i] = n_gflop / @belapsed icOLSlp($y, $X, $β)
+        @assert icOLSlp(y, X, β) ≈ lpblas "icc wrong?"
+        br[6,i] = n_gflop / @belapsed ifOLSlp($y, $X, $β)
+        @assert ifOLSlp(y, X, β) ≈ lpblas "ifort wrong?"
+    end
+    br[5+2INTEL_BENCH,i] = n_gflop / @belapsed eOLSlp($y, $X, $β)
     @assert eOLSlp(y, X, β) ≈ lpblas "eigen wrong?"
-    br[8,i] = n_gflop / @belapsed ieOLSlp($y, $X, $β)
+    br[6+2INTEL_BENCH,i] = n_gflop / @belapsed ieOLSlp($y, $X, $β)
     @assert ieOLSlp(y, X, β) ≈ lpblas "i-eigen wrong?"
-    br[9,i] = n_gflop / @belapsed sse!($Xβ, $y, $X, $β)
+    if MKL_BENCH
+        br[7+2INTEL_BENCH,i] = n_gflop / @belapsed sse!($Xβ, $y, $X, $β)
+        @assert sse!(Xβ, y, X, β) ≈ lpblas "MKL wrong?"
+    end
 end
 
 function exp_bench!(br, s, i)
@@ -263,10 +283,12 @@ function exp_bench!(br, s, i)
     @assert b ≈ baseb "Clang wrong?"
     br[4,i] = n_gflop / @belapsed fvexp!($b, $a)
     @assert b ≈ baseb "Fort wrong?"
-    br[5,i] = n_gflop / @belapsed icvexp!($b, $a)
-    @assert b ≈ baseb "icc wrong?"
-    br[6,i] = n_gflop / @belapsed ifvexp!($b, $a)
-    @assert b ≈ baseb "ifort wrong?"
+    if INTEL_BENCH
+        br[5,i] = n_gflop / @belapsed icvexp!($b, $a)
+        @assert b ≈ baseb "icc wrong?"
+        br[6,i] = n_gflop / @belapsed ifvexp!($b, $a)
+        @assert b ≈ baseb "ifort wrong?"
+    end
 end
 
 function aplusBc_bench!(br, s, i)
@@ -282,10 +304,12 @@ function aplusBc_bench!(br, s, i)
     @assert D ≈ Dcopy "Clang wrong?"; fill!(D, NaN);
     br[4,i] = n_gflop / @belapsed faplusBc!($D, $a, $B, $c)
     @assert D ≈ Dcopy "Fort wrong?"; fill!(D, NaN);
-    br[5,i] = n_gflop / @belapsed icaplusBc!($D, $a, $B, $c)
-    @assert D ≈ Dcopy "icc wrong?"; fill!(D, NaN);
-    br[6,i] = n_gflop / @belapsed ifaplusBc!($D, $a, $B, $c)
-    @assert D ≈ Dcopy "ifort wrong?"; fill!(D, NaN);
+    if INTEL_BENCH
+        br[5,i] = n_gflop / @belapsed icaplusBc!($D, $a, $B, $c)
+        @assert D ≈ Dcopy "icc wrong?"; fill!(D, NaN);
+        br[6,i] = n_gflop / @belapsed ifaplusBc!($D, $a, $B, $c)
+        @assert D ≈ Dcopy "ifort wrong?"; fill!(D, NaN);
+    end
     br[7,i] = n_gflop / @belapsed eaplusBc!($D, $a, $B, $c)
     @assert D ≈ Dcopy "eigen wrong?"; fill!(D, NaN);
     br[8,i] = n_gflop / @belapsed ieaplusBc!($D, $a, $B, $c)
@@ -303,18 +327,22 @@ function AplusAt_bench!(br, s, i)
     @assert B ≈ baseB "Clang wrong?"; fill!(B, NaN);
     br[4,i] = n_gflop / @belapsed fAplusAt!($B, $A)
     @assert B ≈ baseB "Fort wrong?"; fill!(B, NaN);
-    br[5,i] = n_gflop / @belapsed icAplusAt!($B, $A)
-    @assert B ≈ baseB "icc wrong?"; fill!(B, NaN);
-    br[6,i] = n_gflop / @belapsed ifAplusAt!($B, $A)
-    @assert B ≈ baseB "ifort wrong?"; fill!(B, NaN);
-    br[7,i] = n_gflop / @belapsed eAplusAt!($B, $A)
+    if INTEL_BENCH
+        br[5,i] = n_gflop / @belapsed icAplusAt!($B, $A)
+        @assert B ≈ baseB "icc wrong?"; fill!(B, NaN);
+        br[6,i] = n_gflop / @belapsed ifAplusAt!($B, $A)
+        @assert B ≈ baseB "ifort wrong?"; fill!(B, NaN);
+    end
+    br[5+2INTEL_BENCH,i] = n_gflop / @belapsed eAplusAt!($B, $A)
     @assert B ≈ baseB "eigen wrong?"; fill!(B, NaN);
-    br[8,i] = n_gflop / @belapsed ieAplusAt!($B, $A)
+    br[6+2INTEL_BENCH,i] = n_gflop / @belapsed ieAplusAt!($B, $A)
     @assert B ≈ baseB "i-eigen wrong?"; fill!(B, NaN);
-    br[9,i] = n_gflop / @belapsed fAplusAt_builtin!($B, $A)
+    br[7+2INTEL_BENCH,i] = n_gflop / @belapsed fAplusAt_builtin!($B, $A)
     @assert B ≈ baseB "Fort-builtin wrong?"; fill!(B, NaN);
-    br[10,i] = n_gflop / @belapsed ifAplusAt_builtin!($B, $A)
-    @assert B ≈ baseB "ifort-builtin wrong?"; fill!(B, NaN);
+    if INTEL_BENCH
+        br[8+2INTEL_BENCH,i] = n_gflop / @belapsed ifAplusAt_builtin!($B, $A)
+        @assert B ≈ baseB "ifort-builtin wrong?"; fill!(B, NaN);
+    end
 end
 
 function randomaccess_bench!(br, s, i)
@@ -331,10 +359,12 @@ function randomaccess_bench!(br, s, i)
     @assert p ≈ crandomaccess(P, basis, coefs) "Clang wrong?"
     br[4,i] = n_gflop / @belapsed frandomaccess($P, $basis, $coefs)
     @assert p ≈ frandomaccess(P, basis, coefs) "Fort wrong?"
-    br[5,i] = n_gflop / @belapsed icrandomaccess($P, $basis, $coefs)
-    @assert p ≈ icrandomaccess(P, basis, coefs) "icc wrong?"
-    br[6,i] = n_gflop / @belapsed ifrandomaccess($P, $basis, $coefs)
-    @assert p ≈ ifrandomaccess(P, basis, coefs) "ifort wrong?"
+    if INTEL_BENCH
+        br[5,i] = n_gflop / @belapsed icrandomaccess($P, $basis, $coefs)
+        @assert p ≈ icrandomaccess(P, basis, coefs) "icc wrong?"
+        br[6,i] = n_gflop / @belapsed ifrandomaccess($P, $basis, $coefs)
+        @assert p ≈ ifrandomaccess(P, basis, coefs) "ifort wrong?"
+    end
 end
 
 function logdettriangle_bench!(br, s, i)
@@ -350,15 +380,17 @@ function logdettriangle_bench!(br, s, i)
     @assert ld ≈ clogdettriangle(U) "Clang wrong?"
     br[4,i] = n_gflop / @belapsed flogdettriangle($U)
     @assert ld ≈ flogdettriangle(U) "Fort wrong?"
-    br[5,i] = n_gflop / @belapsed iclogdettriangle($U)
-    @assert ld ≈ iclogdettriangle(U) "icc wrong?"
-    br[6,i] = n_gflop / @belapsed iflogdettriangle($U)
-    @assert ld ≈ iflogdettriangle(U) "ifort wrong?"
+    if INTEL_BENCH
+        br[5,i] = n_gflop / @belapsed iclogdettriangle($U)
+        @assert ld ≈ iclogdettriangle(U) "icc wrong?"
+        br[6,i] = n_gflop / @belapsed iflogdettriangle($U)
+        @assert ld ≈ iflogdettriangle(U) "ifort wrong?"
+    end
     # br[7,i] = n_gflop / @belapsed elogdettriangle($U)
     # @assert ld ≈ elogdettriangle(U) "eigen wrong?"; fill!(B, NaN);
     # br[8,i] = n_gflop / @belapsed ielogdettriangle($U)
     # @assert ld ≈ ielogdettriangle(U) "i-eigen wrong?"; fill!(B, NaN);
-    br[7,i] = n_gflop / @belapsed logdet($U)
+    br[5+2INTEL_BENCH,i] = n_gflop / @belapsed logdet($U)
 end
 
 
@@ -375,10 +407,12 @@ function filter2d_bench_run!(br, s, i, K)
     @assert B ≈ Bcopy "Clang wrong?"
     br[4,i] = n_gflop / @belapsed ffilter2d!($B, $A, $K)
     @assert B ≈ Bcopy "Fort wrong?"
-    br[5,i] = n_gflop / @belapsed icfilter2d!($B, $A, $K)
-    @assert B ≈ Bcopy "icc wrong?"
-    br[6,i] = n_gflop / @belapsed iffilter2d!($B, $A, $K)
-    @assert B ≈ Bcopy "ifort wrong?"
+    if INTEL_BENCH
+        br[5,i] = n_gflop / @belapsed icfilter2d!($B, $A, $K)
+        @assert B ≈ Bcopy "icc wrong?"
+        br[6,i] = n_gflop / @belapsed iffilter2d!($B, $A, $K)
+        @assert B ≈ Bcopy "ifort wrong?"
+    end
 end
 
 
@@ -395,8 +429,10 @@ function filter2dunrolled_bench_run!(br, s, i, K)
     @assert B ≈ Bcopy "Clang wrong?"
     br[4,i] = n_gflop / @belapsed ffilter2dunrolled!($B, $A, $K)
     @assert B ≈ Bcopy "Fort wrong?"
-    br[5,i] = n_gflop / @belapsed icfilter2dunrolled!($B, $A, $K)
-    @assert B ≈ Bcopy "icc wrong?"
-    br[6,i] = n_gflop / @belapsed iffilter2dunrolled!($B, $A, $K)
-    @assert B ≈ Bcopy "ifort wrong?"
+    if INTEL_BENCH
+        br[5,i] = n_gflop / @belapsed icfilter2dunrolled!($B, $A, $K)
+        @assert B ≈ Bcopy "icc wrong?"
+        br[6,i] = n_gflop / @belapsed iffilter2dunrolled!($B, $A, $K)
+        @assert B ≈ Bcopy "ifort wrong?"
+    end
 end

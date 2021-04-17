@@ -85,17 +85,19 @@ function cost(ls::LoopSet, op::Operation, (u₁,u₂)::Tuple{Symbol,Symbol}, vlo
     if accesses_memory(op)
         # either vbroadcast/reductionstore, vmov(a/u)pd, or gather/scatter
         if opisvectorized
+            # @show unitstride(ls,op,vloopsym), srt,sl,srp
             if !unitstride(ls, op, vloopsym)# || !isdense(op) # need gather/scatter
                 indices = getindices(op)
                 contigind = first(indices)
                 # @show rejectinterleave(op) op
+                shifter = max(2,Wshift)
                 if rejectinterleave(op)
-                    shifter = Wshift
                     offset = 0.0 # gather/scatter, alignment doesn't matter
                 else
-                    shifter = 2
+                    shifter -= 1
                     offset = 0.5reg_size(ls) / cache_lnsze(ls)
                 end
+                # @show shifter,offset, Wshift
                 if shifter > 1 &&
                     (!rejectcurly(op) && (((contigind === CONSTANTZEROINDEX) && ((length(indices) > 1) && (indices[2] === u₁) || (indices[2] === u₂))) ||
                     ((u₁ === contigind) | (u₂ === contigind))))
@@ -116,6 +118,7 @@ function cost(ls::LoopSet, op::Operation, (u₁,u₂)::Tuple{Symbol,Symbol}, vlo
                 #       this feature is common to all of them.
                 srt += 0.5reg_size(ls) / cache_lnsze(ls)
             end
+            # @show srt,sl,srp
         elseif isstore(op) # broadcast or reductionstore; if store we want to penalize reduction
             srt *= 3
             sl *= 3
