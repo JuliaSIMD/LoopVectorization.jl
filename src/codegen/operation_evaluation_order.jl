@@ -34,17 +34,12 @@ function isnopidentity(ls::LoopSet, op::Operation, u₁loop::Symbol, u₂loop::S
         # if (u₁unrolledsym == first(parents_u₁syms)) && (isu₂unrolled(op) == parents_u₂syms[1])
         opp = only(parents_op)
         if (isu₁unrolled(op) == isu₁unrolled(opp)) & (isu₂unrolled(op) == isu₂unrolled(opp))
-            #TODO: identifer(first(parents_op)) ∉ ls.outer_reductions is going to miss a lot of cases
-            #Should probably replace that with `DVec` (demoting Vec) types, that demote to scalar.
-            #TODO: document (after finding out...) why only checking `isvectorized(first(parents_op))` -- why not `any(isvectorized, parents_op)`???
-            if (isvectorized(opp) && !isvectorized(op)) && !dependent_outer_reducts(ls, op)
+            true
+        else
+            if isvectorized(opp) & (!isvectorized(op))
                 op.instruction = reduction_to_scalar(instruction(opp))
                 op.mangledvariable = gensym(op.mangledvariable)
-                false
-            else
-                true
             end
-        else
             false
         end
     else

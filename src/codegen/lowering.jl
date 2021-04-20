@@ -441,10 +441,9 @@ function initialize_outer_reductions!(
     @unpack u₁, u₂ = us
     Umax = u₂ == -1 ? _Umax : u₁
     reduct_zero = reduction_zero(op.instruction)
-    isvectorized = vectorized ∈ reduceddependencies(op)
     typeTr = ELTYPESYMBOL
     u₁u, u₂u = isunrolled_sym(op, getloop(ls, us.u₁loopnum).itersymbol, getloop(ls, us.u₂loopnum).itersymbol, getloop(ls, us.vloopnum).itersymbol)#, u₂)
-    z = if isvectorized
+    z = if isvectorized(op)
         if Umax == 1 || !u₁u
             if reduct_zero === :zero
                 Expr(:call, lv(:_vzero), VECTORWIDTHSYMBOL, typeTr, rs)
@@ -792,25 +791,15 @@ function calc_Ureduct!(ls::LoopSet, us::UnrollSpecification)
             if u₁ui == -1
                 u₁ui = Int(u₁u)
                 u₂ui = Int(u₁u)
-            else
-                @assert (u₁ui == Int(u₁u)) & (u₂ui == Int(u₁u)) "Doesn't currenly andle differently unrolled reductions yet, please file an issue with an example."
+            elseif !((u₁ui == Int(u₁u)) & (u₂ui == Int(u₁u)))
+                throw(ArgumentError("Doesn't currenly handle differently unrolled reductions yet, please file an issue with an example."))
             end
         end
         if u₁ui % Bool
             u₁
-        #     push!(q.args, Expr(:(=), Symbol(mvar, '_', u₁), z))
         else
             u₂
-        #     for u ∈ 0:_Umax-1
-        #         # push!(q.args, Expr(:(=), Symbol(mvar, '_', u), z))
-        #         push!(q.args, Expr(:(=), Symbol(mvar, u), z))
-        #     end
         end
-    #     u₁loopnum == vloopnum
-    #     u₂
-    # else
-    #     u₁
-        # u₁#tiled_outerreduct_unroll(us)
     end
     ls.ureduct[] = ur
 end
@@ -934,6 +923,8 @@ end
 function isunrolled_sym(op::Operation, u₁loop::Symbol, u₂loop::Symbol, vloop::Symbol, u₂max::Int)
     ((u₂max > 1) | accesses_memory(op)) ? isunrolled_sym(op, u₁loop, u₂loop, vloop) : (isunrolled_sym(op, u₁loop), false)
 end
+
+
 
 function variable_name(op::Operation, suffix::Int)
     mvar = mangledvar(op)

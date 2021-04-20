@@ -1199,6 +1199,39 @@ end
             end
         end
     end
+    @testset "issue 237" begin
+        function obj8(y::AbstractMatrix, s::AbstractArray, θ::AbstractVector)
+            out = 0.0
+            for i in axes(y,2)
+                for j in axes(y,1)
+                    acc = 0.0
+                    for r in axes(θ,1)
+                        acc += abs(θ[r]) * s[r,j,i]
+                    end
+                    out += y[j,i] * log(acc)
+                end
+            end
+            out
+        end
+
+        function obj9(y::AbstractMatrix, s::AbstractArray, θ::AbstractVector)
+            out = 0.0
+            @avxt for i in axes(y,2)
+                for j in axes(y,1)
+                    acc = 0.0
+                    for r in axes(θ,1)
+                        acc += abs(θ[r]) * s[r,j,i]
+                    end
+                    out += y[j,i] * log(acc)
+                end
+            end
+            out
+        end
+
+        y = rand(10,10); s = rand(10,10,10); θ = rand(10);
+
+        @test obj8(y, s, θ) ≈ obj9(y, s, θ)
+    end
 
 end
 

@@ -34,7 +34,8 @@ using Base.Meta: isexpr
 using DocStringExtensions
 import LinearAlgebra # for check_args
 
-using Base.FastMath: add_fast, sub_fast, mul_fast, div_fast, inv_fast, abs2_fast, rem_fast, max_fast, min_fast, log_fast, log2_fast, log10_fast
+using Base.FastMath: add_fast, sub_fast, mul_fast, div_fast, inv_fast, abs2_fast, rem_fast, max_fast, min_fast
+using SLEEFPirates: log_fast, log2_fast, log10_fast
 
 
 using ArrayInterface

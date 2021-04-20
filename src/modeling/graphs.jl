@@ -592,7 +592,7 @@ function cacheunrolled!(ls::LoopSet, u₁loop::Symbol, u₂loop::Symbol, vloopsy
         end
     end
     for op ∈ operations(ls)
-        setunrolled!(op, u₁loop, u₂loop, vloopsym)
+        setunrolled!(ls, op, u₁loop, u₂loop, vloopsym)
         if accesses_memory(op)
             rc = rejectcurly(ls, op, u₁loop, vloopsym)
             op.rejectcurly = rc
@@ -606,6 +606,47 @@ function cacheunrolled!(ls::LoopSet, u₁loop::Symbol, u₂loop::Symbol, vloopsy
         end
     end
 end
+function setunrolled!(ls::LoopSet, op::Operation, u₁loopsym, u₂loopsym, vectorized)
+    op.u₁unrolled =  u₁loopsym ∈ loopdependencies(op)
+    op.u₂unrolled =  u₂loopsym ∈ loopdependencies(op)
+    op.vectorized = vectorized ∈ loopdependencies(op)
+    if isconstant(op)
+        u₁ = op.u₁unrolled
+        u₂ = op.u₂unrolled
+        v  = op.vectorized
+        for opp ∈ children(op)
+            u₁ = u₁ &&  u₁loopsym ∈ loopdependencies(opp)
+            u₂ = u₂ &&  u₂loopsym ∈ loopdependencies(opp)
+            v  = v  && vectorized ∈ loopdependencies(opp)
+        end
+        if isouterreduction(ls, op) ≠ -1 && !all((u₁,u₂,v))
+            opv = true
+            for opp ∈ parents(op)
+                if iscompute(opp) && instruction(opp).instr ≢ :identity
+                    opv = false
+                    break
+                end
+            end
+            if opv
+                if !u₁ && u₁loopsym ∈ reduceddependencies(op)
+                    u₁ = true
+                end
+                if !u₂ && u₂loopsym ∈ reduceddependencies(op)
+                    u₂ = true
+                end
+                if !v && vectorized ∈ reduceddependencies(op)
+                    v = true
+                end
+            end
+        end
+        op.u₁unrolled = u₁
+        op.u₂unrolled = u₂
+        op.vectorized = v
+    end
+    # op.u₁unrolled, op.u₂unrolled = isunrolled_sym(op, u₁loopsym, u₂loopsym, vectorized)
+    nothing
+end
+
 rejectcurly(op::Operation) = op.rejectcurly
 rejectinterleave(op::Operation) = op.rejectinterleave
 num_loops(ls::LoopSet) = length(ls.loops)

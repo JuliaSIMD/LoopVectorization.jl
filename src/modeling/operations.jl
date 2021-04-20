@@ -200,21 +200,19 @@ mutable struct Operation <: AbstractLoopOperation
     rejectinterleave::Bool
     function Operation(
         identifier::Int,
-        variable,
-        elementbytes,
-        instruction,
-        node_type,
-        dependencies = Symbol[],
-        reduced_deps = Symbol[],
-        parents = Operation[],
+        variable::Symbol,
+        elementbytes::Int,
+        instruction::Union{Symbol,Instruction},
+        node_type::OperationType,
+        dependencies::Vector{Symbol} = Symbol[],
+        reduced_deps::Vector{Symbol} = Symbol[],
+        parents::Vector{Operation} = Operation[],
         ref::ArrayReferenceMeta = NOTAREFERENCE,
-        reduced_children = Symbol[]
+        reduced_children::Vector{Symbol} = Symbol[]
     )
         new(
             identifier, variable, elementbytes, instruction, node_type,
-            convert(Vector{Symbol},dependencies),
-            convert(Vector{Symbol},reduced_deps),
-            convert(Vector{Operation},parents), Operation[],
+            dependencies, reduced_deps, parents, Operation[],
             ref, Symbol("##", variable, :_),
             reduced_children
         )
@@ -224,19 +222,6 @@ end
 isu₁unrolled(op::Operation) = op.u₁unrolled
 isu₂unrolled(op::Operation) = op.u₂unrolled
 isvectorized(op::Operation) = op.vectorized
-function setunrolled!(op::Operation, u₁loopsym, u₂loopsym, vectorized)
-    op.u₁unrolled = u₁loopsym ∈ loopdependencies(op)
-    op.u₂unrolled = u₂loopsym ∈ loopdependencies(op)
-    op.vectorized = vectorized ∈ loopdependencies(op)
-    if isconstant(op)
-        for opp ∈ children(op)
-            op.u₁unrolled = op.u₁unrolled && u₁loopsym ∈ loopdependencies(opp)
-            op.u₂unrolled = op.u₂unrolled && u₂loopsym ∈ loopdependencies(opp)
-            op.vectorized = op.vectorized && vectorized ∈ loopdependencies(opp)            
-        end
-    end
-    nothing
-end
 
 function matches(op1::Operation, op2::Operation)
     op1 === op2 && return true

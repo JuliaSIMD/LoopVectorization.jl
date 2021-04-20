@@ -368,7 +368,7 @@ function add_broadcast!(
         mergesetdiffv!(deps, loopdependencies(parent), reduceddependencies(parent))
     end
     op = Operation(
-        length(operations(ls)), destname, elementbytes, instr, compute, deps, NOPARENTS, parents
+        length(operations(ls)), destname, elementbytes, instr, compute, deps, NODEPENDENCY, parents
     )
     pushop!(ls, op, destname)
 end

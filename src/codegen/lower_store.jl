@@ -181,7 +181,7 @@ function lower_tiled_store!(
 end
 
 function donot_tile_store(ls::LoopSet, op::Operation, vloop::Loop, reductfunc::Symbol, u₂::Int)
-    (!((reductfunc === Symbol("")) && all(op.ref.loopedindex))) || (u₂ ≤ 1) || isconditionalmemop(op) && return true
+    ((!((reductfunc === Symbol("")) && all(op.ref.loopedindex))) || (u₂ ≤ 1) || isconditionalmemop(op)) && return true
     rejectcurly(op) && return true
     omop = offsetloadcollection(ls)
     batchid, opind = omop.batchedcollectionmap[identifier(op)]

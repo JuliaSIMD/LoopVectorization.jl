@@ -123,7 +123,7 @@ function add_conditional_store!(ls::LoopSet, LHS, condop::Operation, storeop::Op
     #         return cse_store!(ls, op)
     #     end
     # end
-    op = Operation( id, name(mref), elementbytes, :conditionalstore!, memstore, ldref, NODEPENDENCY, storeparents, mref )
+    op = Operation( id, name(mref), elementbytes, :conditionalstore!, memstore, ldref, reduceddependencies(storeop), storeparents, mref )
     add_unique_store!(ls, op)
 end
 
