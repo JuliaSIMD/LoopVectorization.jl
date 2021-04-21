@@ -204,7 +204,7 @@ function unrolled_curly(op::Operation, u₁::Int, u₁loop::Loop, vloop::Loop, m
                 @assert AV == -1
                 AV = n
             end
-            if (u₁loopsym === CONSTANTZEROINDEX) ? (CONSTANTZEROINDEX ∈ loopdependencies(opp)) : (isu₁unrolled(opp))
+            if (u₁loopsym === CONSTANTZEROINDEX) ? (CONSTANTZEROINDEX ∈ loopdependencies(opp)) : (isu₁unrolled(opp) || (ind === u₁loopsym))
                 @assert AU == -1
                 AU = n
             end
@@ -214,6 +214,11 @@ function unrolled_curly(op::Operation, u₁::Int, u₁loop::Loop, vloop::Loop, m
     #     return mem_offset_u(op, td, inds_calc_by_ptr_offset, true)
     # end
     # ind = mem_offset_u(op, td, inds_calc_by_ptr_offset, false)
+    # if AU == -1
+    #     @show op indices u₁loopsym vloopsym
+    # end
+    AU == -1 && throw(LoopError("Failed to find $(u₁loopsym) in args of $(repr(op))."))
+    # @assert AU ≠ -1
     vecnotunrolled = AU != AV
     conditional_memory_op = isconditionalmemop(op)
     if mask || conditional_memory_op
