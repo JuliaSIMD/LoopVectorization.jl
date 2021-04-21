@@ -52,14 +52,12 @@ function lower_store_collection!(
     opidmap = offsetloadcollection(ls).opids[collectionid]
     idsformap = omop.batchedcollections[batchid]
 
-    @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, vloop, u₂max, suffix = ua
+    @unpack u₁, u₁loop, u₁loopsym, u₂loopsym, vloopsym, vloop, u₂max, suffix = ua
     ops = operations(ls)
     # __u₂max = ls.unrollspecification[].u₂
     nouter = length(idsformap)
 
     t = Expr(:tuple)
-    # u = Core.ifelse(isu₁unrolled(op), u₁, 1)
-    
     for (i,(opid,_)) ∈ enumerate(idsformap)
         opp = first(parents(ops[opidmap[opid]]))
 
@@ -79,22 +77,65 @@ function lower_store_collection!(
     falseexpr = Expr(:call, lv(:False));
     trueexpr = Expr(:call, lv(:True));
     rs = staticexpr(reg_size(ls));
-    if isu₁unrolled(op) && u₁ > 1 # both unrolled
-        if first(getindices(op)) === vloopsym
-            interleaveval = -nouter
+    manualunrollu₁ = if isu₁unrolled(op) && u₁ > 1 # both unrolled
+        if isknown(step(u₁loop)) && sum(Base.Fix2(===,u₁loopsym), getindicesonly(op)) == 1
+            if first(getindices(op)) === vloopsym
+                interleaveval = -nouter
+            else
+                interleaveval = 0
+            end
+            unrollcurl₁ = unrolled_curly(op, u₁, ua.u₁loop, vloop, mask, interleaveval)
+            inds = Expr(:call, unrollcurl₁, inds)
+            false
         else
-            interleaveval = 0
+            true
         end
-        unrollcurl₁ = unrolled_curly(op, u₁, ua.u₁loop, vloop, mask, interleaveval)
-        inds = Expr(:call, unrollcurl₁, inds)
+    else
+        false
     end
     uinds = Expr(:call, unrollcurl₂, inds)
     vp = vptr(op)
     storeexpr = Expr(:call, lv(:_vstore!), vp, Expr(:call, lv(:VecUnroll), t), uinds)
     # not using `add_memory_mask!(storeexpr, op, ua, mask)` because we checked `isconditionalmemop` earlier in `lower_load_collection!`
-    mask && push!(storeexpr.args, MASKSYMBOL)
+    u₁vectorized = u₁loopsym === vloopsym
+    if mask# && isvectorized(op))
+        if !(manualunrollu₁ & u₁vectorized)
+            push!(storeexpr.args, MASKSYMBOL)
+        end
+    end
     push!(storeexpr.args, falseexpr, trueexpr, falseexpr, rs)
-    push!(q.args, storeexpr)
+    if manualunrollu₁
+        masklast = mask & u₁vectorized
+        gf = GlobalRef(Core,:getfield)
+        tv = Vector{Symbol}(undef, length(t.args))
+        for i ∈ eachindex(tv)
+            s = gensym!(ls, "##tmp##collection##store##")
+            tv[i] = s
+            push!(q.args, Expr(:(=), s, Expr(:call, gf, t.args[i], 1)))
+        end
+        # @show u₁, t
+        for u ∈ 0:u₁-1
+            lastiter = (u+1) == u₁
+            storeexpr_tmp = if lastiter
+                storeexpr
+                (((u+1) == u₁) & masklast) && push!(storeexpr.args, MASKSYMBOL)
+                storeexpr
+            else
+                copy(storeexpr)
+            end
+            vut = Expr(:tuple)
+            for i ∈ eachindex(tv)
+                push!(vut.args, Expr(:call, gf, tv[i], u+1, false))
+            end
+            storeexpr_tmp.args[3] = Expr(:call, lv(:VecUnroll), vut)
+            if u ≠ 0
+                storeexpr_tmp.args[4] = Expr(:call, unrollcurl₂, mem_offset_u(op, ua, inds_calc_by_ptr_offset, false, u))
+            end
+            push!(q.args, storeexpr_tmp)
+        end
+    else
+        push!(q.args, storeexpr)
+    end
     nothing
 end
 function lower_store!(

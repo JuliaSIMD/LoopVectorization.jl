@@ -753,6 +753,7 @@ end
 function maxnegativeoffset(ls::LoopSet, op::Operation, u::Symbol)
     mno::Int = typemin(Int)
     id = 0
+    isknown(step(getloop(ls, u))) || return mno, id
     omop = offsetloadcollection(ls)
     collectionid, opind = omop.opidcollectionmap[identifier(op)]
     collectionid == 0 && return mno, id
@@ -1153,6 +1154,14 @@ function choose_unroll_order(ls::LoopSet, lowest_cost::Float64 = Inf)
 end
 
 
+
+function reject_reorder(ls::LoopSet, reordered::Symbol)
+    length(ls.outer_reductions) > 0 || return false
+    for op ∈ operations(ls)
+        reordered ∈ loopdependencies(op) && any(opp -> (iscompute(opp) && isanouterreduction(ls, opp)), parents(op)) && return true
+    end
+    false
+end
 """
 This function searches for unrolling combinations that will cause LoopVectorization to generate invalid code.
 
@@ -1200,14 +1209,6 @@ function reject_candidate(op::Operation, u₁loopsym::Symbol, u₂loopsym::Symbo
         if u₂loopsym ∉ reduceddependencies(op) && !any(opp -> name(opp) === name(op), parents(op))
             return true
         end
-    end
-    false
-end
-
-function reject_reorder(ls::LoopSet, reordered::Symbol)
-    length(ls.outer_reductions) > 0 || return false
-    for op ∈ operations(ls)
-        reordered ∈ loopdependencies(op) && any(opp -> (iscompute(opp) && isanouterreduction(ls, opp)), parents(op)) && return true
     end
     false
 end

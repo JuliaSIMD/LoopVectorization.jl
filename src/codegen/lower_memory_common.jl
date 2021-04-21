@@ -101,6 +101,9 @@ end
 function addvectoroffset!(
     ret::Expr, mm::Bool, unrolledsteps::Int, unrolledloopstride, vloopstride, indexstride::Integer, index, offset::Integer, calcbypointeroffset::Bool, indvectorized::Bool
 ) # 10 -> (7 or 8) args
+    # if !isknown(unrolledloopstride)
+    #     @show unrolledsteps, calcbypointeroffset, _isone(unrolledloopstride)
+    # end
     if unrolledsteps == 0 # neither unrolledloopstride or indexstride can be 0
         addoffset!(ret, mm, vloopstride, indexstride, index, offset, calcbypointeroffset) # 7 arg
     elseif indvectorized
@@ -112,8 +115,10 @@ function addvectoroffset!(
         else
             addvectoroffset!(ret, mm, mulexpr(unrolledloopstride,unrolledsteps), vloopstride, indexstride, index, offset, calcbypointeroffset) # 8 arg
         end
-    else
+    elseif _isone(unrolledloopstride)
         addoffset!(ret, mm, vloopstride, indexstride, index, offset + unrolledsteps, calcbypointeroffset) # 7 arg
+    else
+        addoffset!(ret, mm, vloopstride, mulexpr(unrolledloopstride,indexstride), index, addexpr(offset, lazymulexpr(unrolledloopstride, unrolledsteps)), calcbypointeroffset) # 7 arg
     end
 end
 
@@ -261,7 +266,9 @@ function unrolledindex(op::Operation, td::UnrollArgs, mask::Bool, inds_calc_by_p
     Expr(:call, unrollcurl, ind)
 end
 
-function mem_offset_u(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Vector{Bool}, _mm::Bool, incr₁::Int = 0)
+function mem_offset_u(
+    op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Vector{Bool}, _mm::Bool, incr₁::Int = 0
+)
     @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
     @unpack u₁loopsym, u₂loopsym, vloopsym, u₁step, u₂step, vstep, suffix = td
 

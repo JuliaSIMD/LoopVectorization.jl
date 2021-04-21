@@ -230,8 +230,15 @@ function muladd_index!(
     ls::LoopSet, parents, loopdependencies, reduceddeps, indices, offsets, strides, loopedindex,
     mlt::Int, symop::Operation, offset::Int
 )
-    indop = muladd_op!(ls, mlt, symop, offset)
-    addopindex!(parents, loopdependencies, reduceddeps, indices, offsets, strides, loopedindex, indop)
+    if byterepresentable(offset) & byterepresentable(mlt)
+        addopindex!(
+            parents, loopdependencies, reduceddeps, indices,
+            offsets, strides, loopedindex, symop, mlt, offset
+        )
+    else        
+        indop = muladd_op!(ls, mlt, symop, offset)
+        addopindex!(parents, loopdependencies, reduceddeps, indices, offsets, strides, loopedindex, indop)
+    end
 end
 
 function checkforoffset!(
