@@ -65,13 +65,13 @@ function split_loopset(ls::LoopSet, ids)
     # TODO: allow them to differ. E.g., non-AVX2 x86 cpus don't have efficient integer calculations
     # Therefore, it would be profitable to split for this reason.
     # However, currently the default assumption in vector width will be wrong, so we should calculate
-    # it correctly (like ls.vector_width[]); wrong (too high) value will encourage splitting when
+    # it correctly (like ls.vector_width); wrong (too high) value will encourage splitting when
     # it shouldn't.
     # Current behavior is incorrect when VECWIDTH chosen does actually differ between
     # split loops and the loops are statically sized, because code gen will then assume it is correct...
     l1, l2, l3 = cache_sze(ls)
     set_hw!(ls_new, reg_size(ls), reg_count(ls), cache_lnsze(ls), l1, l2, l3)
-    ls_new.vector_width[] = ls.vector_width[]
+    ls_new.vector_width = ls.vector_width
     fill_offset_memop_collection!(ls)
     ls_new
 end

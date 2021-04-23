@@ -343,7 +343,7 @@ function generate_call(ls::LoopSet, (inline,u₁,u₂)::Tuple{Bool,Int8,Int8}, t
     loop_syms = tuple_expr(QuoteNode, ls.loopsymbols)
     func = debug ? lv(:_avx_loopset_debug) : lv(:_avx_!)
     lbarg = debug ? Expr(:call, :typeof, loop_bounds) : loop_bounds
-    configarg = (inline,u₁,u₂,ls.isbroadcast[],thread)
+    configarg = (inline,u₁,u₂,ls.isbroadcast,thread)
     unroll_param_tup = Expr(:call, lv(:avx_config_val), :(Val{$configarg}()), VECTORWIDTHSYMBOL)
     q = Expr(:call, func, unroll_param_tup, val(operation_descriptions), val(arrayref_descriptions), val(argmeta), val(loop_syms))
     # debug && deleteat!(q.args, 2)

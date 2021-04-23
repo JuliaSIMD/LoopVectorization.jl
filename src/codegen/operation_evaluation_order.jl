@@ -27,7 +27,6 @@ function isnopidentity(ls::LoopSet, op::Operation, u₁loop::Symbol, u₂loop::S
     parents_op = parents(op)
     if iscompute(op) && instruction(op).instr === :identity && isone(length(parents_op)) && name(first(parents_op)) === name(op)
         loopistiled = u₂max ≠ -1
-        # mvar, u₁unrolledsym, u₂unrolledsym = variable_name_and_unrolled(op, u₁loop, u₂loop, vectorized, Core.ifelse(isu₂unrolled(op), u₂max, -1))
         # parents_u₁syms, parents_u₂syms = parent_unroll_status(op, u₁loop, u₂loop, u₂max)
         # @show  (u₁unrolledsym, first(parents_u₁syms)), (isu₂unrolled(op), parents_u₂syms[1])
         # @show op parents(op) isu₁unrolled(op), isu₁unrolled(only(parents(op)))

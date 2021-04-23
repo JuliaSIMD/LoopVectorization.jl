@@ -224,7 +224,7 @@ function outer_reduct_combine_expressions(ls::LoopSet, retv)
 end
 
 function thread_loop_summary!(ls::LoopSet, ua::UnrollArgs, threadedloop::Loop, issecondthreadloop::Bool)
-    W = ls.vector_width[]
+    W = ls.vector_width
     @unpack u₁loop, u₂loop, vloop, u₁, u₂max = ua
     u₂ = u₂max
     threadloopnumtag = Int(issecondthreadloop)
@@ -365,7 +365,7 @@ function thread_one_loops_expr(
     end
     retexpr = length(ls.outer_reductions) > 0 ? :(return $retv) : :(return nothing)
     # @unpack u₁loop, u₂loop, vloop, u₁, u₂max = ua
-    iterdef = define_block_size(threadedloop, ua.vloop, 0, ls.vector_width[])
+    iterdef = define_block_size(threadedloop, ua.vloop, 0, ls.vector_width)
     q = quote
         $choose_nthread # UInt
         $define_len
@@ -480,7 +480,7 @@ function thread_two_loops_expr(
     end
     @unpack u₁loop, u₂loop, vloop, u₁, u₂max = ua
     u₂ = u₂max
-    W = ls.vector_width[]
+    W = ls.vector_width
     threadedloop1 = getloop(ls, threadedid1)
     threadedloop2 = getloop(ls, threadedid2)
     define_len1, define_num_unrolls1, loopstart1, iterstop1, looprange1, lastrange1 = thread_loop_summary!(ls, ua, threadedloop1, false)
@@ -508,8 +508,8 @@ function thread_two_loops_expr(
         nothing
     end
     blockdef = define_thread_blocks(threadedloop1, threadedloop2, vloop, u₁loop, u₂loop, u₁, u₂, ntmax)
-    iterdef1 = define_block_size(threadedloop1, vloop, 0, ls.vector_width[])
-    iterdef2 = define_block_size(threadedloop2, vloop, 1, ls.vector_width[])
+    iterdef1 = define_block_size(threadedloop1, vloop, 0, ls.vector_width)
+    iterdef2 = define_block_size(threadedloop2, vloop, 1, ls.vector_width)
     retexpr = length(ls.outer_reductions) > 0 ? :(return $retv) : :(return nothing)
     q = quote
         $choose_nthread # UInt

@@ -1,6 +1,6 @@
 
 
-function load_constrained(op, u₁loop, u₂loop, innermost_loop_or_vloop, forprefetch = false)
+function load_constrained(op::Operation, u₁loop::Symbol, u₂loop::Symbol, innermost_loop_or_vloop::Symbol, forprefetch::Bool = false)
     dependsonu₁ = isu₁unrolled(op)
     dependsonu₂ = isu₂unrolled(op)
     if forprefetch
@@ -21,8 +21,8 @@ function load_constrained(op, u₁loop, u₂loop, innermost_loop_or_vloop, forpr
         isload(opp) && all(in(loopdependencies(opp)), unrolleddeps)
     end
 end
-function check_if_remfirst(ls, ua)
-    usorig = ls.unrollspecification[]
+function check_if_remfirst(ls::LoopSet, ua::UnrollArgs)
+    usorig = ls.unrollspecification
     @unpack u₁, u₁loopsym, u₂loopsym, u₂max = ua
     u₁loop = getloop(ls, u₁loopsym)
     u₂loop = getloop(ls, u₂loopsym)
@@ -39,20 +39,23 @@ function sub_fmas(ls::LoopSet, op::Operation, ua::UnrollArgs)
     !(load_constrained(op, u₁loopsym, u₂loopsym, vloopsym) || check_if_remfirst(ls, ua))
 end
 
-struct FalseCollection end
-Base.getindex(::FalseCollection, i...) = false
-function parent_unroll_status(op::Operation, u₁loop::Symbol)
-    map(opp -> isunrolled_sym(opp, u₁loop), parents(op)), fill(false, length(parents(op)))
+function parent_unroll_status(op::Operation, u₁loop::Symbol, us::UnrollSpecification)
+    parentsop = parents(op)
+    u2 = fill(false, length(parentsop))
+    u1 = similar(u2)
+    for i ∈ eachindex(parentsop)
+        u1[i] = isunrolled_sym(parentsop[i], u₁loop, us)
+    end
+    u1, u2
 end
-function parent_unroll_status(op::Operation, u₁loop::Symbol, u₂loop::Symbol, vloop::Symbol, u₂max::Int)
-    # u₂max ≥ 0 || return parent_unroll_status(op, u₁loop)
-    u₂max == -1 && return parent_unroll_status(op, u₁loop)
+function parent_unroll_status(op::Operation, u₁loop::Symbol, u₂loop::Symbol, vloop::Symbol, u₂max::Int, us::UnrollSpecification)
+    u₂max == -1 && return parent_unroll_status(op, u₁loop, us)
     vparents = parents(op);
     # parent_names = Vector{Symbol}(undef, length(vparents))
     parents_u₁syms = Vector{Bool}(undef, length(vparents))
     parents_u₂syms = Vector{Bool}(undef, length(vparents))
     for i ∈ eachindex(vparents)
-        parents_u₁syms[i], parents_u₂syms[i] = isunrolled_sym(vparents[i], u₁loop, u₂loop, vloop)#, u₂max)
+        parents_u₁syms[i], parents_u₂syms[i] = isunrolled_sym(vparents[i], u₁loop, u₂loop, vloop, us)#, u₂max)
     end
     # parent_names, parents_u₁syms, parents_u₂syms
     parents_u₁syms, parents_u₂syms
@@ -100,7 +103,10 @@ vecunrolllen(::Type{VecUnroll{N,W,T,V}}) where {N,W,T,V} = (N::Int + 1)
 vecunrolllen(_) = -1
 function ifelselastexpr(hasf::Bool, M::Int, vargtypes, K::Int, S::Int, maskearly::Bool)
     q = Expr(:block, Expr(:meta,:inline))
-    vargs = map(k -> Symbol(:varg_,k), 1:K)
+    vargs = Vector{Symbol}(undef, K)
+    for k ∈ 1:K
+        vargs[k] = Symbol(:varg_,k)
+    end
     lengths = Vector{Int}(undef, K);
     for k ∈ 1:K
         lengths[k] = l = vecunrolllen(vargtypes[k])
@@ -295,7 +301,7 @@ function parent_op_name(
     parent, u
 end
 function getuouterreduct(ls::LoopSet, op::Operation, suffix)
-    us = ls.unrollspecification[]
+    us = ls.unrollspecification
     if us.vloopnum === us.u₁loopnum # unroll u₂
         suffix
     else # unroll u₁
@@ -306,7 +312,7 @@ end
 function getu₁full(ls::LoopSet, u₁::Int)
     Ureduct = ureduct(ls)
     ufull = if Ureduct == -1 # no reducing
-        ls.unrollspecification[].u₁
+        ls.unrollspecification.u₁
     else
         Ureduct
     end
@@ -326,9 +332,9 @@ function getu₁forreduct(ls::LoopSet, op::Operation, u₁::Int)
     end
     if isu₁unrolled(op)
         return u₁
-    elseif (ls.unrollspecification[].u₂ != -1) && length(ls.outer_reductions) > 0
+    elseif (ls.unrollspecification.u₂ != -1) && length(ls.outer_reductions) > 0
         # then `ureduct` doesn't tell us what we need, so
-        return ls.unrollspecification[].u₁
+        return ls.unrollspecification.u₁
     else # we need to find u₁-full
         return getu₁full(ls, u₁)
     end    
@@ -357,13 +363,12 @@ function lower_compute!(
     instr = instruction(op)
     parents_op = parents(op)
     nparents = length(parents_op)
-    # __u₂max = ls.unrollspecification[].u₂
+    # __u₂max = ls.unrollspecification.u₂
     # TODO: perhaps allos for swithcing unrolled axis again
-    # mvar, u₁unrolledsym, u₂unrolledsym = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, vloopsym, u₂max, suffix)
-    mvar, u₁unrolledsym, u₂unrolledsym = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, vloopsym, suffix)
+    mvar, u₁unrolledsym, u₂unrolledsym = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, vloopsym, suffix, ls)
     opunrolled = u₁unrolledsym || isu₁unrolled(op)
-    # parent_names, parents_u₁syms, parents_u₂syms = parent_unroll_status(op, u₁loop, u₂loop, suffix)
-    parents_u₁syms, parents_u₂syms = parent_unroll_status(op, u₁loopsym, u₂loopsym, vloopsym, u₂max)
+    us = ls.unrollspecification
+    parents_u₁syms, parents_u₂syms = parent_unroll_status(op, u₁loopsym, u₂loopsym, vloopsym, u₂max, us)
     # tiledouterreduction = if num_loops(ls) == 1# (suffix == -1)# || (vloopsym === u₂loopsym)
     tiledouterreduction = if (suffix == -1)# || (vloopsym === u₂loopsym)
         suffix_ = Symbol("")
@@ -411,8 +416,8 @@ function lower_compute!(
     # if isreduct
     #     @show u₁unrolledsym, u₂unrolledsym, isu₁unrolled(op), isu₂unrolled(op) op
     # end
-    if Base.libllvm_version < v"11.0.0" && (suffix ≠ -1) && isreduct# && (iszero(suffix) || (ls.unrollspecification[].u₂ - 1 == suffix))
-    # if (length(reduceddependencies(op)) > 0) | (length(reducedchildren(op)) > 0)# && (iszero(suffix) || (ls.unrollspecification[].u₂ - 1 == suffix))
+    if Base.libllvm_version < v"11.0.0" && (suffix ≠ -1) && isreduct# && (iszero(suffix) || (ls.unrollspecification.u₂ - 1 == suffix))
+    # if (length(reduceddependencies(op)) > 0) | (length(reducedchildren(op)) > 0)# && (iszero(suffix) || (ls.unrollspecification.u₂ - 1 == suffix))
         # instrfid = findfirst(isequal(instr.instr), (:vfmadd, :vfnmadd, :vfmsub, :vfnmsub))
         instrfid = findfirst(Base.Fix2(===,instr.instr), (:vfmadd_fast, :vfnmadd_fast, :vfmsub_fast, :vfnmsub_fast))
         # instrfid = findfirst(isequal(instr.instr), (:vfnmadd_fast, :vfmsub_fast, :vfnmsub_fast))
@@ -449,13 +454,13 @@ function lower_compute!(
         # modsuffix = ((u + suffix*(Uiter + 1)) & 7)
         isouterreduct = true
         # if u₁unrolledsym
-        #     modsuffix = ls.unrollspecification[].u₁#getu₁full(ls, u₁)#u₁
+        #     modsuffix = ls.unrollspecification.u₁#getu₁full(ls, u₁)#u₁
         #     Symbol(mangledvar(op), '_', modsuffix)
         # else
         if u₁unrolledsym
             modsuffix = 0
         else
-            modsuffix = suffix % ls.ureduct[]
+            modsuffix = suffix % ls.ureduct
         end
         Symbol(mangledvar(op), modsuffix)
         # end
@@ -538,7 +543,7 @@ function lower_compute!(
     # end
     # push!(q.args, (isreduct, u₁, (!u₁unrolledsym), isu₁unrolled(op), dopartialmap, varsym))
     if maskreduct
-        ifelsefunc = if ls.unrollspecification[].u₁ == 1
+        ifelsefunc = if us.u₁ == 1
             :ifelse # don't need to be fancy
         elseif (u₁loopsym !== vloopsym)
             :ifelsepartial # ifelse all the early ones
@@ -574,9 +579,9 @@ function lower_compute!(
             make_partial_map!(instrcall, selfopname, u₁, selfdepreduce)
         end
     elseif selfdep != 0 && (dopartialmap ||
-        (isouterreduct && (opunrolled) && (u₁ < ls.unrollspecification[].u₁)) ||
+        (isouterreduct && (opunrolled) && (u₁ < us.u₁)) ||
         (isreduct & (u₁ > 1) & (!u₁unrolledsym) & isu₁unrolled(op))) # TODO: DRY `selfdepreduce` definition
-        # first possibility (`isouterreduct && opunrolled && (u₁ < ls.unrollspecification[].u₁)`):
+        # first possibility (`isouterreduct && opunrolled && (u₁ < ls.unrollspecification.u₁)`):
         # checks if we're in the "reduct" part of an outer reduction
         #
         # second possibility (`(isreduct & (u₁ > 1) & (!u₁unrolledsym) & isu₁unrolled(op))`):

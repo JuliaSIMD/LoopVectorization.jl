@@ -400,7 +400,7 @@ end
     ls = LoopSet(Mod)
     inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, threads = UNROLL
     set_hw!(ls, rs, rc, cls, l1, l2, l3)
-    ls.isbroadcast[] = isbroadcast # maybe set `false` in a DiffEq-like `@..` macro
+    ls.isbroadcast = isbroadcast # maybe set `false` in a DiffEq-like `@..` macro
     loopsyms = [gensym!(ls, "n") for n ∈ 1:N]
     add_broadcast_loops!(ls, loopsyms, :dest)
     elementbytes = sizeof(T)
@@ -419,7 +419,7 @@ end
     ls = LoopSet(Mod)
     inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, threads = UNROLL
     set_hw!(ls, rs, rc, cls, l1, l2, l3)
-    ls.isbroadcast[] = isbroadcast # maybe set `false` in a DiffEq-like `@..` macro
+    ls.isbroadcast = isbroadcast # maybe set `false` in a DiffEq-like `@..` macro
     loopsyms = [gensym!(ls, "n") for n ∈ 1:N]
     pushprepreamble!(ls, Expr(:(=), :dest, Expr(:call, :parent, :dest′)))
     add_broadcast_loops!(ls, loopsyms, :dest′)

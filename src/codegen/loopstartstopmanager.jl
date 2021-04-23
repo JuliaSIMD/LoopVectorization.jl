@@ -28,7 +28,7 @@ end
 
 otherindexunrolled(loopsym::Symbol, ind::Symbol, loopdeps::Vector{Symbol}) = (loopsym !== ind) && (loopsym ∈ loopdeps)
 function otherindexunrolled(ls::LoopSet, ind::Symbol, ref::ArrayReferenceMeta)
-    us = ls.unrollspecification[]
+    us = ls.unrollspecification
     u₁sym = names(ls)[us.u₁loopnum]
     u₂sym = us.u₂loopnum > 0 ? names(ls)[us.u₂loopnum] : Symbol("##undefined##")
     otherindexunrolled(u₁sym, ind, loopdependencies(ref)) || otherindexunrolled(u₂sym, ind, loopdependencies(ref))
@@ -37,18 +37,18 @@ multiple_with_name(n::Symbol, v::Vector{ArrayReferenceMeta}) = sum(ref -> n === 
 # TODO: DRY between indices_calculated_by_pointer_offsets and use_loop_induct_var
 function indices_calculated_by_pointer_offsets(ls::LoopSet, ar::ArrayReferenceMeta)
     indices = getindices(ar)
-    ls.isbroadcast[] && return fill(false, length(indices))
+    ls.isbroadcast && return fill(false, length(indices))
     looporder = names(ls)
     offset = isdiscontiguous(ar)
     gespinds = Expr(:tuple)
     out = Vector{Bool}(undef, length(indices))
     li = ar.loopedindex
-    # @show ls.vector_width[]
+    # @show ls.vector_width
     for i ∈ eachindex(li)
         ii = i + offset
         ind = indices[ii]
-        if (!li[i]) || (ind === CONSTANTZEROINDEX) || multiple_with_name(vptr(ar), ls.lssm[].uniquearrayrefs) ||
-            (iszero(ls.vector_width[]) && isstaticloop(getloop(ls, ind)))# ||
+        if (!li[i]) || (ind === CONSTANTZEROINDEX) || multiple_with_name(vptr(ar), ls.lssm.uniquearrayrefs) ||
+            (iszero(ls.vector_width) && isstaticloop(getloop(ls, ind)))# ||
             out[i] = false
         elseif (isone(ii) && (first(looporder) === ind))
             out[i] = otherindexunrolled(ls, ind, ar)
@@ -81,7 +81,7 @@ A value > 0 indicates which loop number that index corresponds to when increment
 A value < 0 indicates that abs(value) is the corresponding loop, and a `loopvalue` will be used.
 """
 function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, allarrayrefs::Vector{ArrayReferenceMeta}, includeinlet::Bool)
-    us = ls.unrollspecification[]
+    us = ls.unrollspecification
     li = ar.loopedindex
     looporder = reversenames(ls)
     uliv = Vector{Int}(undef, length(li))
@@ -92,7 +92,7 @@ function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, alla
         println(ar)
         throw("Length of indices and length of offset do not match!")
     end
-    isbroadcast = ls.isbroadcast[]
+    isbroadcast = ls.isbroadcast
     gespinds = Expr(:tuple)
     offsetprecalc_descript = Expr(:tuple)
     use_offsetprecalc = false
@@ -111,7 +111,7 @@ function use_loop_induct_var!(ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, alla
         elseif isbroadcast ||
             ((isone(ii) && (last(looporder) === ind)) && !(otherindexunrolled(ls, ind, ar)) ||
              multiple_with_name(vptr(ar), allarrayrefs)) ||
-             (iszero(ls.vector_width[]) && isstaticloop(getloop(ls, ind)))# ||
+             (iszero(ls.vector_width) && isstaticloop(getloop(ls, ind)))# ||
              # ((ls.align_loops[] > 0) && (first(names(ls)) == ind))
 
             # Not doing normal offset indexing
@@ -168,13 +168,19 @@ end
 # Plan here is that we increment every unique array
 function add_loop_start_stop_manager!(ls::LoopSet)
     q = Expr(:block)
-    us = ls.unrollspecification[]
+    us = ls.unrollspecification
     # Presence of an explicit use of a loopinducation var means we should use that, so we look for one
     # TODO: replace first with only once you add Compat as a dep or drop support for older Julia versions
-    loopinductvars = map(op -> first(loopdependencies(op)), filter(isloopvalue, operations(ls)))
+    loopinductvars = Symbol[]
+    for op ∈ operations(ls)
+        isloopvalue(op) && push!(loopinductvars, first(loopdependencies(op)))
+    end
     # Filtered ArrayReferenceMetas, we must increment each
     arrayrefs, includeinlet = uniquearrayrefs(ls)
-    use_livs = map((ar,iil) -> use_loop_induct_var!(ls, q, ar, arrayrefs, iil), arrayrefs, includeinlet)
+    use_livs = Vector{Vector{Int}}(undef, length(arrayrefs))
+    for i ∈ eachindex(arrayrefs)
+        use_livs[i] = use_loop_induct_var!(ls, q, arrayrefs[i], arrayrefs, includeinlet[i])
+    end
     # @show use_livs, 
     # loops, sorted from outer-most to inner-most
     looporder = reversenames(ls)
@@ -208,7 +214,7 @@ function add_loop_start_stop_manager!(ls::LoopSet)
             last(ric[argmin(first.(ric))]) # index corresponds to array ref's position in loopstart
         end
     end
-    ls.lssm[] = LoopStartStopManager(
+    ls.lssm = LoopStartStopManager(
         terminators, loopstarts, arrayrefs
     )
     q
@@ -395,7 +401,7 @@ end
 
 function startloop(ls::LoopSet, us::UnrollSpecification, n::Int, submax = maxunroll(us, n))
     @unpack u₁loopnum, u₂loopnum, vloopnum, u₁, u₂ = us
-    lssm = ls.lssm[]
+    lssm = ls.lssm
     termind = lssm.terminators[n]
     ptrdefs = lssm.incrementedptrs[n]
     loopstart = Expr(:block)
@@ -436,7 +442,7 @@ function offset_ptr(
 end
 function incrementloopcounter!(q::Expr, ls::LoopSet, us::UnrollSpecification, n::Int, UF::Int)
     @unpack u₁loopnum, u₂loopnum, vloopnum, u₁, u₂ = us
-    lssm = ls.lssm[]
+    lssm = ls.lssm
     ptrdefs = lssm.incrementedptrs[n]
     looporder = names(ls)
     loopsym = looporder[n]
@@ -452,7 +458,7 @@ function incrementloopcounter!(q::Expr, ls::LoopSet, us::UnrollSpecification, n:
     nothing
 end
 function terminatecondition(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask::Bool, UF::Int)
-    lssm = ls.lssm[]
+    lssm = ls.lssm
     termind = lssm.terminators[n]
     if iszero(termind)
         loop = getloop(ls, n)

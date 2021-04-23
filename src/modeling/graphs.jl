@@ -403,7 +403,7 @@ end
 # Must make it easy to iterate
 # outer_reductions is a vector of indices (within operation vectors) of the reduction operation, eg the vmuladd op in a dot product
 # O(N) search is faster at small sizes
-struct LoopSet
+mutable struct LoopSet
     loopsymbols::Vector{Symbol}
     loopsymbol_offsets::Vector{Int}  # symbol loopsymbols[i] corresponds to loops[lso[i]+1:lso[i+1]] (CartesianIndex handling)
     loops::Vector{Loop}
@@ -427,22 +427,23 @@ struct LoopSet
     reg_pres::Matrix{Float64}
     included_vars::Vector{Bool}
     place_after_loop::Vector{Bool}
-    unrollspecification::Base.RefValue{UnrollSpecification}
-    loadelimination::Base.RefValue{Bool}
-    lssm::Base.RefValue{LoopStartStopManager}
-    vector_width::Base.RefValue{Int}
-    symcounter::Base.RefValue{Int}
-    isbroadcast::Base.RefValue{Bool}
-    register_size::Base.RefValue{Int}
-    register_count::Base.RefValue{Int}
-    cache_linesize::Base.RefValue{Int}
-    cache_size::Base.RefValue{Tuple{Int,Int,Int}}
-    ureduct::Base.RefValue{Int}
+    unrollspecification::UnrollSpecification
+    loadelimination::Bool
+    lssm::LoopStartStopManager
+    vector_width::Int
+    symcounter::Int
+    isbroadcast::Bool
+    register_size::Int
+    register_count::Int
+    cache_linesize::Int
+    cache_size::Tuple{Int,Int,Int}
+    ureduct::Int
     equalarraydims::Vector{Tuple{Vector{Symbol},Vector{Int}}}
     omop::OffsetLoadCollection
     loopordermap::Vector{Int}
     loopindexesbit::Vector{Bool}
     mod::Symbol
+    LoopSet() = new()
 end
 
 function UnrollArgs(ls::LoopSet, u₁::Int, unrollsyms::UnrollSymbols, u₂max::Int, suffix::Int)
@@ -477,10 +478,10 @@ function save_tilecost!(ls::LoopSet)
     # ls.reg_pres[5,1] = ls.reg_pres[5,2]
 end
 function set_hw!(ls::LoopSet, rs::Int, rc::Int, cls::Int, l1::Int, l2::Int, l3::Int)
-    ls.register_size[] = rs
-    ls.register_count[] = rc
-    ls.cache_linesize[] = cls
-    ls.cache_size[] = (l1,l2,l3)
+    ls.register_size = rs
+    ls.register_count = rc
+    ls.cache_linesize = cls
+    ls.cache_size = (l1,l2,l3)
     # ls.opmask_register[] = omr
     nothing
 end
@@ -491,10 +492,10 @@ function set_hw!(ls::LoopSet)
         Int(cache_size(StaticInt(1))), Int(cache_size(StaticInt(2))), Int(cache_size(StaticInt(3)))
     )
 end
-reg_size(ls::LoopSet) = ls.register_size[]
-reg_count(ls::LoopSet) = ls.register_count[]
-cache_lnsze(ls::LoopSet) = ls.cache_linesize[]
-cache_sze(ls::LoopSet) = ls.cache_size[]
+reg_size(ls::LoopSet) = ls.register_size
+reg_count(ls::LoopSet) = ls.register_count
+cache_lnsze(ls::LoopSet) = ls.cache_linesize
+cache_sze(ls::LoopSet) = ls.cache_size
 # opmask_reg(ls::LoopSet) = ls.opmask_register[]
 
 pushprepreamble!(ls::LoopSet, ex) = push!(ls.prepreamble.args, ex)
@@ -550,38 +551,53 @@ end
 includesarray(ls::LoopSet, array::Symbol) = array ∈ ls.includedarrays
 
 function LoopSet(mod::Symbol)
-    LoopSet(
-        Symbol[], [0], Loop[],
-        Dict{Symbol,Operation}(),
-        Operation[], [0],
-        Int[],
-        LoopOrder(),
-        Expr(:block),Expr(:block),
-        Tuple{Int,Symbol}[],
-        Tuple{Int,Tuple{Int,Int32,Bool}}[],
-        Tuple{Int,Float64}[],
-        Tuple{Int,NumberType}[],Tuple{Int,Symbol}[],
-        Symbol[], Symbol[], Symbol[],
-        ArrayReferenceMeta[],
-        Matrix{Float64}(undef, 4, 2), # cost_vec
-        Matrix{Float64}(undef, 4, 2), # reg_pres
-        Bool[], Bool[], Ref{UnrollSpecification}(),
-        Ref(false), Ref{LoopStartStopManager}(),
-        Ref(0), Ref(0), Ref(false), # vector width, sym counter, isbroadcast
-        Ref(0), Ref(0), Ref(0), Ref((0,0,0)),# hw params
-        Ref(-1), # Ureduct
-        Tuple{Vector{Symbol},Vector{Int}}[],
-        OffsetLoadCollection(),
-        Int[], Bool[],
-        mod
-    )
+    ls = LoopSet()
+    ls.loopsymbols = Symbol[]
+    ls.loopsymbol_offsets =  [0]
+    ls.loops = Loop[]
+    ls.opdict = Dict{Symbol,Operation}()
+    ls.operations = Operation[]
+    ls.operation_offsets = Int[0]
+    ls.outer_reductions = Int[]
+    ls.loop_order = LoopOrder()
+    ls.preamble = Expr(:block)
+    ls.prepreamble = Expr(:block)
+    ls.preamble_symsym = Tuple{Int,Symbol}[]
+    ls.preamble_symint = Tuple{Int,Tuple{Int,Int32,Bool}}[]
+    ls.preamble_symfloat = Tuple{Int,Float64}[]
+    ls.preamble_zeros = Tuple{Int,NumberType}[]
+    ls.preamble_funcofeltypes = Tuple{Int,Float64}[]
+    ls.includedarrays = Symbol[]
+    ls.includedactualarrays = Symbol[]
+    ls.syms_aliasing_refs = Symbol[]
+    ls.refs_aliasing_syms = ArrayReferenceMeta[]
+    ls.cost_vec = Matrix{Float64}(undef, 4, 2)
+    ls.reg_pres = Matrix{Float64}(undef, 4, 2)
+    ls.included_vars = Bool[]
+    ls.place_after_loop = Bool[]
+    ls.unrollspecification
+    ls.loadelimination = false
+    ls.vector_width = 0
+    ls.symcounter = 0
+    ls.isbroadcast = 0
+    ls.register_size = 0
+    ls.register_count = 0
+    ls.cache_linesize = 0
+    ls.cache_size = (0,0,0)
+    ls.ureduct = -1
+    ls.equalarraydims = Tuple{Vector{Symbol},Vector{Int}}[]
+    ls.omop = OffsetLoadCollection()
+    ls.loopordermap =  Int[]
+    ls.loopindexesbit = Bool[]
+    ls.mod = mod
+    ls
 end
 
 """
 Used internally to create symbols unique for this loopset.
 This is used so that identical loops will create identical `_avx_!` calls in the macroexpansions, hopefully reducing recompilation.
 """
-gensym!(ls::LoopSet, s) = Symbol("###$(s)###$(ls.symcounter[] += 1)###")
+gensym!(ls::LoopSet, s) = Symbol("###$(s)###$(ls.symcounter += 1)###")
 
 function cacheunrolled!(ls::LoopSet, u₁loop::Symbol, u₂loop::Symbol, vloopsym::Symbol)
     vloop = getloop(ls, vloopsym)
@@ -643,7 +659,6 @@ function setunrolled!(ls::LoopSet, op::Operation, u₁loopsym, u₂loopsym, vect
         op.u₂unrolled = u₂
         op.vectorized = v
     end
-    # op.u₁unrolled, op.u₂unrolled = isunrolled_sym(op, u₁loopsym, u₂loopsym, vectorized)
     nothing
 end
 

@@ -189,7 +189,7 @@ function add_mref!(
     li = ar.loopedindex;
     if sp === column_major || isone(length(li))
         # don't set `bit` to true if our vector width is ≥ 8
-        ((T === VectorizationBase.Bit) && (ls.vector_width[] < 8)) && loop_indexes_bit!(ls, ar)
+        ((T === VectorizationBase.Bit) && (ls.vector_width < 8)) && loop_indexes_bit!(ls, ar)
         return extract_gsp!(sptrs, name)
     end
     permute_mref!(ar, C, sp)
@@ -569,7 +569,7 @@ end
 function avx_body(ls::LoopSet, UNROLL::Tuple{Bool,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt})
     inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, nt = UNROLL
     q = iszero(u₁) ? lower_and_split_loops(ls, inline % Int) : lower(ls, u₁ % Int, u₂ % Int, inline % Int)
-    ls.isbroadcast[] = isbroadcast
+    ls.isbroadcast = isbroadcast
     iszero(length(ls.outer_reductions)) ? push!(q.args, nothing) : push!(q.args, loopset_return_value(ls, Val(true)))
     q
 end
@@ -599,7 +599,7 @@ function _avx_loopset(
     ops = OperationStruct[ OPSsv[3i] for i ∈ 1:nops ]
     ls = LoopSet(:LoopVectorization)
     inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, nt = UNROLL
-    set_hw!(ls, rs, rc, cls, l1, l2, l3); ls.vector_width[] = W; ls.isbroadcast[] = isbroadcast
+    set_hw!(ls, rs, rc, cls, l1, l2, l3); ls.vector_width = W; ls.isbroadcast = isbroadcast
     avx_loopset!(
         ls, instr, ops,
         ArrayRefStruct[ARFsv...],
@@ -630,7 +630,7 @@ Execute an `@avx` block. The block's code is represented via the arguments:
 @generated function _avx_!(
     ::Val{UNROLL}, ::Val{OPS}, ::Val{ARF}, ::Val{AM}, ::Val{LPSYM}, var"#lv#tuple#args#"::Tuple{LB,V}
 ) where {UNROLL, OPS, ARF, AM, LPSYM, LB, V}
-    # 1 + 1 # Irrelevant line you can comment out/in to force recompilation...
+    1 + 1 # Irrelevant line you can comment out/in to force recompilation...
     ls = _avx_loopset(OPS, ARF, AM, LPSYM, LB.parameters, V.parameters, UNROLL)
     # return @show avx_body(ls, UNROLL)
     if last(UNROLL) > 1

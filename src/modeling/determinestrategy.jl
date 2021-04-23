@@ -141,14 +141,14 @@ end
 const num_iterations = cld
 
 function set_vector_width!(ls::LoopSet, vloopsym::Symbol)
-    W = ls.vector_width[]
+    W = ls.vector_width
     if !iszero(W)
-        ls.vector_width[] = min(W, VectorizationBase.nextpow2(length(ls, vloopsym)))
+        ls.vector_width = min(W, VectorizationBase.nextpow2(length(ls, vloopsym)))
     end
     nothing
 end
 function lsvecwidthshift(ls::LoopSet, vloopsym::Symbol, size_T = nothing)
-    W = ls.vector_width[]
+    W = ls.vector_width
     lvec = length(ls, vloopsym)
     W = if iszero(W)
         bytes = size_T === nothing ? biggest_type_size(ls) : size_T
@@ -348,7 +348,7 @@ end
 
 demote_unroll_factor(ls::LoopSet, UF, loop::Symbol) = demote_unroll_factor(ls, UF, getloop(ls, loop))
 function demote_unroll_factor(ls::LoopSet, UF, loop::Loop)
-    W = ls.vector_width[] 
+    W = ls.vector_width 
     if !iszero(W) && isstaticloop(loop)
         UFW = maybedemotesize(UF*W, length(loop))
         UF = cld(UFW, W)
@@ -368,11 +368,11 @@ function determine_unroll_factor(ls::LoopSet, order::Vector{Symbol}, vloopsym::S
             return determine_unroll_factor(ls, order, vloopsym, num_reductions)
         end
     elseif iszero(num_reductions)
-        return 8 ÷ ls.vector_width[], vloopsym
+        return 8 ÷ ls.vector_width, vloopsym
     else
         rttemp, ltemp = determine_unroll_factor(ls, order, vloopsym, vloopsym)
         UF = min(8, VectorizationBase.nextpow2(max(1, round(Int, ltemp / (rttemp * num_reductions) ) )))
-        UFfactor = 8 ÷ ls.vector_width[]
+        UFfactor = 8 ÷ ls.vector_width
         cld(UF, UFfactor)*UFfactor, vloopsym
     end
 end
@@ -550,9 +550,9 @@ function solve_unroll(
     elseif rounduᵢ == 2
         (1, clamp(cache_lnsze(ls) ÷ reg_size(ls), 1, 4))
     elseif rounduᵢ == -1
-        (8 ÷ ls.vector_width[], 1)
+        (8 ÷ ls.vector_width, 1)
     elseif rounduᵢ == -2
-        (1, 8 ÷ ls.vector_width[])
+        (1, 8 ÷ ls.vector_width)
     else
         (1, 1)
     end
@@ -652,7 +652,6 @@ function stride_penalty(ls::LoopSet, op::Operation, order::Vector{Symbol}, loopf
     opstrides = Vector{Int}(undef, length(loopdeps))
     # very minor stride assumption here, because we don't really want to base optimization decisions on it...
     opstrides[1] = 1.0 + (first(loopdependencies(op.ref)) === DISCONTIGUOUS) + (first(loopdependencies(op.ref)) === CONSTANTZEROINDEX)
-    # loops = map(s -> getloop(ls, s), loopdeps)
     l = Float64(length(getloop(ls, first(loopdeps))))
     for i ∈ 2:length(loopdeps)
         looplength = length(getloop(ls, loopdeps[i-1]))
@@ -1067,7 +1066,7 @@ function evaluate_cost_tile(
     # @show (irreducible_storecosts / sum(cost_vec))
     if (irreducible_storecosts / sum(cost_vec) ≥ 0.5) && !any(op -> loadintostore(ls, op), operations(ls))
         u₁, u₂ = if visbit
-            vecsforbyte = 8 ÷ ls.vector_width[]
+            vecsforbyte = 8 ÷ ls.vector_width
             u₁v ? (vecsforbyte,1) : (1,vecsforbyte)
         else
             (1, 1)
@@ -1258,7 +1257,7 @@ function choose_tile(ls::LoopSet)
             end
         end
     end
-    ls.loadelimination[] = shouldinline
+    ls.loadelimination = shouldinline
     best_order, bestu₁, bestu₂, best_vec, u₁, u₂, lowest_cost, looplengthprod(ls) < 4097.0
 end
 # Last in order is the inner most loop

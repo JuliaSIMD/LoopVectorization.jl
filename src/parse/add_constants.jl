@@ -45,7 +45,7 @@ function add_constant!(ls::LoopSet, mpref::ArrayReferenceMetaPosition, elementby
     getoffsets(op) .+= 1
     if nindices > 0
         dummyloop = first(ls.loops)
-        push!(vloadcall.args, mem_offset(op, UnrollArgs(dummyloop, dummyloop, dummyloop, 0, 0, 0), fill(false,nindices), true))
+        push!(vloadcall.args, mem_offset(op, UnrollArgs(dummyloop, dummyloop, dummyloop, 0, 0, 0), fill(false,nindices), true, ls))
     end
     push!(vloadcall.args, Expr(:call, lv(:False)), staticexpr(reg_size(ls)))
     pushpreamble!(ls, Expr(:(=), temp, vloadcall))

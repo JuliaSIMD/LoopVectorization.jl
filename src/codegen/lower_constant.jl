@@ -50,8 +50,7 @@ function lower_zero!(
     q::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs, zerotyp::NumberType = zerotype(ls, op)
 )
     @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, u₂max, suffix = ua
-    # mvar, opu₁, opu₂ = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, vloopsym, u₂max, suffix)
-    mvar, opu₁, opu₂ = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, vloopsym, suffix)
+    mvar, opu₁, opu₂ = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, vloopsym, suffix, ls)
     !opu₂ && suffix > 0 && return
     # TODO: for u₁, needs to consider if reducedchildren are u₁-unrolled
     #       reductions need to consider reduct-status
@@ -98,8 +97,7 @@ function lower_constant!(
     q::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs
 )
     @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, u₂max, suffix = ua
-    # mvar, opu₁, opu₂ = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, vloopsym, u₂max, suffix)
-    mvar, opu₁, opu₂ = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, vloopsym, suffix)
+    mvar, opu₁, opu₂ = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, vloopsym, suffix, ls)
     !opu₂ && suffix > 0 && return
     mvar = Symbol(mvar, '_', Core.ifelse(opu₁, u₁, 1))
     instruction = op.instruction

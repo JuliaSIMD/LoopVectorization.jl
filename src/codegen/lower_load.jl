@@ -22,9 +22,14 @@ function prefetchisagoodidea(ls::LoopSet, op::Operation, td::UnrollArgs)
             uses = Core.ifelse(isu₁unrolled(op), 1, u₁)
             uses = Core.ifelse(isu₂unrolled(op), uses, uses * u₂max)
             uses < 4 && return 0
-            innermostloopindv = findall(map(isequal(innermostloopsym), getindices(op)))
-            isone(length(innermostloopindv)) || return 0
-            innermostloopind = first(innermostloopindv)
+            innermostloopind = -1
+            for (i,inds) ∈ enumerate(getindices(op))
+                if inds === innermostloopsym
+                    innermostloopind == -1 || return 0
+                    innermostloopind = i
+                end
+            end
+            innermostloopind == -1 && return 0
             if prod(s -> Float64(looplength(ls, s)), @view(indices[1:innermostloopind-1])) ≥ 120.0 && length(getloop(ls, innermostloopsym)) ≥ 120
                 if getoffsets(op)[innermostloopind] < 120
                     for opp ∈ operations(ls)
@@ -48,7 +53,7 @@ function add_prefetches!(q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, pr
     dontskip = (cache_lnsze(ls) ÷ reg_size(ls)) - 1
     ptr = vptr(op)
     innermostloopsym = first(names(ls))
-    us = ls.unrollspecification[]
+    us = ls.unrollspecification
     prefetch_distance = u₁loopsym === innermostloopsym ? us.u₁ : ( u₂loopsym === innermostloopsym ? us.u₂ : 1 )
     # prefetch_distance = u₁loopsym === innermostloopsym ? u₁ : ( u₂loopsym === innermostloopsym ? u₂max : 1 )
     prefetch_multiplier = 5
@@ -61,7 +66,7 @@ function add_prefetches!(q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, pr
         prefetchstride *= gethint(prefetchloop_step)
     end
     offsets[prefetchind] = inner_offset + prefetchstride
-    gespinds = mem_offset_u(op, td, indices_calculated_by_pointer_offsets(ls, op.ref), false, 0)
+    gespinds = mem_offset_u(op, td, indices_calculated_by_pointer_offsets(ls, op.ref), false, 0, ls)
     offsets[prefetchind] = inner_offset
     ptr = vptr(op)
     gptr = Symbol(ptr, "##GESPEDPREFETCH##")
@@ -116,32 +121,32 @@ function lower_load_no_optranslation!(
     @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, suffix = td
     loopdeps = loopdependencies(op)
     # @assert isvectorized(op)
-    opu₁ = isu₁unrolled(op)
+    opu₁, opu₂ = isunrolled_sym(op, u₁loopsym, u₂loopsym, vloopsym, ls)
     u = ifelse(opu₁, u₁, 1)
-    mvar = Symbol(variable_name(op, Core.ifelse(isu₂unrolled(op), suffix,-1)), '_', u)
+    mvar = Symbol(variable_name(op, Core.ifelse(opu₂, suffix,-1)), '_', u)
     falseexpr = Expr(:call, lv(:False)); rs = staticexpr(reg_size(ls))
     if all(op.ref.loopedindex) && !rejectcurly(op)
-        inds = unrolledindex(op, td, mask, inds_calc_by_ptr_offset)
+        inds = unrolledindex(op, td, mask, inds_calc_by_ptr_offset, ls)
         loadexpr = Expr(:call, lv(:_vload), vptr(op), inds)
-        add_memory_mask!(loadexpr, op, td, mask)
+        add_memory_mask!(loadexpr, op, td, mask, ls)
         push!(loadexpr.args, falseexpr, rs) # unaligned load
         push!(q.args, Expr(:(=), mvar, loadexpr))
-    elseif u₁ > 1
+    elseif (u₁ > 1) & opu₁
         t = Expr(:tuple)
         for u ∈ 1:u₁
-            inds = mem_offset_u(op, td, inds_calc_by_ptr_offset, true, u-1)
+            inds = mem_offset_u(op, td, inds_calc_by_ptr_offset, true, u-1, ls)
             loadexpr = Expr(:call, lv(:_vload), vptr(op), inds)
             domask = mask && (isvectorized(op) & ((u == u₁) | (vloopsym !== u₁loopsym)))
-            add_memory_mask!(loadexpr, op, td, domask)
+            add_memory_mask!(loadexpr, op, td, domask, ls)
             push!(loadexpr.args, falseexpr, rs)
             push!(t.args, loadexpr)
             # push!(q.args, Expr(:(=), mvar, loadexpr))
         end
         push!(q.args, Expr(:(=), mvar, Expr(:call, lv(:VecUnroll), t)))
     else
-        inds = mem_offset_u(op, td, inds_calc_by_ptr_offset, true, 0)
+        inds = mem_offset_u(op, td, inds_calc_by_ptr_offset, true, 0, ls)
         loadexpr = Expr(:call, lv(:_vload), vptr(op), inds)
-        add_memory_mask!(loadexpr, op, td, mask)
+        add_memory_mask!(loadexpr, op, td, mask, ls)
         push!(loadexpr.args, falseexpr, rs)
         push!(q.args, Expr(:(=), mvar, loadexpr))
     end
@@ -209,7 +214,7 @@ function lower_load_for_optranslation!(
     # @show step₁, step₂, posindicator, equal_steps
     # _td = UnrollArgs(u₁loop, u₂loop, vloop, total_unroll, u₂max, Core.ifelse(equal_steps, 0, u₂max - 1))
     _td = UnrollArgs(u₁loop, u₂loop, vloop, u₁, u₂max, Core.ifelse(equal_steps, 0, u₂max - 1))
-    gespinds = mem_offset(op, _td, inds_by_ptroff, false)
+    gespinds = mem_offset(op, _td, inds_by_ptroff, false, ls)
     ptr = vptr(op)
     gptr = Symbol(ptr, "##GESPED##")
     for i ∈ eachindex(gespinds.args)
@@ -294,7 +299,7 @@ function lower_load!(
     q::Expr, op::Operation, ls::LoopSet, td::UnrollArgs, mask::Bool
 )
     @unpack u₁, u₂max, u₁loopsym, u₂loopsym, vloopsym, suffix = td
-    if (suffix != -1) && ls.loadelimination[]
+    if (suffix != -1) && ls.loadelimination
         if (u₁ > 1) & (u₂max > 1)
             istr, ispl = isoptranslation(ls, op, UnrollSymbols(u₁loopsym, u₂loopsym, vloopsym))
             if istr ≠ 0x00
@@ -426,10 +431,11 @@ function lower_load_collection!(
     # construct dummy unrolled loop
     offset_dummy_loop = Loop(first(opindices), MaybeKnown(1), MaybeKnown(1024), MaybeKnown(1), Symbol(""), Symbol(""))
     unrollcurl₂ = unrolled_curly(op, nouter, offset_dummy_loop, vloop, mask, 1) # interleave always 1 here
-    inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false)
+    inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false, 0, ls)
     falseexpr = Expr(:call, lv(:False)); rs = staticexpr(reg_size(ls));
 
-    manualunrollu₁ = if isu₁unrolled(op) && u₁ > 1 # both unrolled
+    opu₁, opu₂ = isunrolled_sym(op, u₁loopsym, u₂loopsym, vloopsym, ls)
+    manualunrollu₁ = if opu₁ && u₁ > 1 # both unrolled
         if isknown(step(u₁loop)) && sum(Base.Fix2(===,u₁loopsym), getindicesonly(op)) == 1
             if interleave # TODO: handle this better than using `rejectinterleave`
                 interleaveval = -nouter
@@ -448,7 +454,7 @@ function lower_load_collection!(
     uinds = Expr(:call, unrollcurl₂, inds)
     vp = vptr(op)
     loadexpr = Expr(:call, lv(:_vload), vp, uinds)
-    # not using `add_memory_mask!(storeexpr, op, ua, mask)` because we checked `isconditionalmemop` earlier in `lower_load_collection!`
+    # not using `add_memory_mask!(storeexpr, op, ua, mask, ls)` because we checked `isconditionalmemop` earlier in `lower_load_collection!`
     u₁vectorized = u₁loopsym === vloopsym
     if (mask && isvectorized(op))
         if !(manualunrollu₁ & u₁vectorized)
@@ -467,7 +473,7 @@ function lower_load_collection!(
         for u ∈ 0:u₁-1
             collectionname_u = Symbol(collectionname, :_, u)
             if u ≠ 0
-                inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false, u)
+                inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false, u, ls)
                 uinds = Expr(:call, unrollcurl₂, inds)
                 loadexpr = copy(loadexpr)
                 loadexpr.args[3] = Expr(:call, unrollcurl₂, inds)
@@ -480,7 +486,7 @@ function lower_load_collection!(
                 ext = extractedvs[i]
                 if (u+1) == u₁
                     _op = ops[opidmap[opid]]
-                    mvar = Symbol(variable_name(_op, Core.ifelse(isu₂unrolled(_op), suffix, -1)), '_', u₁)
+                    mvar = Symbol(variable_name(_op, Core.ifelse(opu₂, suffix, -1)), '_', u₁)
                     push!(q.args, Expr(:(=), mvar, Expr(:call, lv(:VecUnroll), ext)))
                 end
                 push!(ext.args, Expr(:call, gf, collectionname_u, i, false))
@@ -489,31 +495,15 @@ function lower_load_collection!(
     else
         push!(q.args, Expr(:(=), collectionname, Expr(:call, gf, loadexpr, 1)))
         # getfield to extract data from `VecUnroll` object, so we have a tuple
-        u = Core.ifelse(isu₁unrolled(op), u₁, 1)
+        u = Core.ifelse(opu₁, u₁, 1)
         for (i,(opid,o)) ∈ enumerate(idsformap)
             extractedv = Expr(:call, gf, collectionname, i, false)
             
             _op = ops[opidmap[opid]]
-            mvar = Symbol(variable_name(_op, Core.ifelse(isu₂unrolled(_op), suffix, -1)), '_', u)
+            mvar = Symbol(variable_name(_op, Core.ifelse(opu₂, suffix, -1)), '_', u)
             push!(q.args, Expr(:(=), mvar, extractedv))
         end
         # unpack_collection!(q, ls, opidmap, idsformap, ua, loadexpr, collectionname, op, true)
     end
 end
-# function unpack_collection!(
-#     q::Expr, ls::LoopSet, opidmap::Vector{Int},
-#     idsformap::SubArray{Tuple{Int,Int}, 1, Vector{Tuple{Int,Int}}, Tuple{UnitRange{Int}}, true},
-#     ua::UnrollArgs, loadexpr::Expr, collectionname::Symbol, op::Operation
-# )
-#     gf = GlobalRef(Core,:getfield)
-#     push!(q.args, Expr(:(=), collectionname, Expr(:call, gf, loadexpr, 1)))
-#     # getfield to extract data from `VecUnroll` object, so we have a tuple
-#     u = Core.ifelse(isu₁unrolled(op), u₁, 1)
-#     for (i,(opid,o)) ∈ enumerate(idsformap)
-#         extractedv = Expr(:call, gf, collectionname, i, false)
-        
-#         _op = ops[opidmap[opid]]
-#         mvar = Symbol(variable_name(_op, Core.ifelse(isu₂unrolled(_op), suffix, -1)), '_', u)
-#         push!(q.args, Expr(:(=), mvar, extractedv))
-#     end
-# end
+
