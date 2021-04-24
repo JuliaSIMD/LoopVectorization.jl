@@ -353,7 +353,12 @@ function use_loop_induct_var!(
       loop = getloop(ls, ind)
       if usegespsymbol
         if isknown(first(loop))
-          push!(gespinds.args, Expr(:call, GlobalRef(Base, :(+)), gespsymbol, staticexpr(gethint(first(loop)))))
+          loopfirst = gethint(first(loop))
+          if loopfirst == 0
+            push!(gespinds.args, gespsymbol)
+          else
+            push!(gespinds.args, Expr(:call, GlobalRef(Base, :(+)), gespsymbol, staticexpr(loopfirst)))
+          end
         else
           push!(gespinds.args, Expr(:call, GlobalRef(Base, :(+)), gespsymbol, getsym(first(loop))))
         end
