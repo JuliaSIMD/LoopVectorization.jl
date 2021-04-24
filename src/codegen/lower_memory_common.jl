@@ -148,7 +148,7 @@ function mem_offset(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Vect
         if loopedindex[n]
             addoffset!(ret, indvectorized, vstep, stride, ind, offset, ind_by_offset) # 7 arg
         else
-            offset -= 1
+            # offset -= 1
             newname, parent = symbolind(ind, op, td, ls)
             # _mmi = indvectorized && parent !== op && (!isvectorized(parent))
             # addoffset!(ret, newname, stride, offset, _mmi)
@@ -299,7 +299,7 @@ function mem_offset_u(
             elseif loopedindex[n]
                 addoffset!(ret, indvectorizedmm, vstep, stride, ind, offset, ind_by_offset) # 7 arg
             else
-                offset -= 1
+                # offset -= 1
                 newname, parent = symbolind(ind, op, td, ls)
                 _mmi = indvectorizedmm && parent !== op && (!isvectorized(parent))
                 #                              addoffset!(ret, newname, 1, offset, _mmi)

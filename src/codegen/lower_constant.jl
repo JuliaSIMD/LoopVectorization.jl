@@ -42,9 +42,8 @@ function typeof_sym(ls::LoopSet, op::Operation, zerotyp::NumberType)
         ELTYPESYMBOL
     end
 end
-function in_reduced_children(op::Operation, s::Symbol)
-    
-end
+# function in_reduced_children(op::Operation, s::Symbol)
+# end
 
 function lower_zero!(
     q::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs, zerotyp::NumberType = zerotype(ls, op)
@@ -144,16 +143,18 @@ function lower_constant!(
     nothing
 end
 
-
+isconstantop(op::Operation) = (instruction(op) === LOOPCONSTANT) || (isconstant(op) && length(loopdependencies(op)) == 0)
+function constantopname(op::Operation)
+  instr = instruction(op)
+  if instr === LOOPCONSTANT
+    Symbol(mangledvar(op), '_', 1)
+  else
+    instr.instr
+  end
+end
 function setop!(ls, op, val)
-    if instruction(op) === LOOPCONSTANT# && mangledvar(op) !== val
-        pushpreamble!(ls, Expr(:(=), Symbol(mangledvar(op), '_', 1), val))
-        # pushpreamble!(ls, Expr(:(=), mangledvar(op), val))
-    else
-    #     pushpreamble!(ls, Expr(:(=), Symbol(instruction(op).instr, '_', 1), val))
-        pushpreamble!(ls, Expr(:(=), instruction(op).instr, val))
-    end
-    nothing
+  pushpreamble!(ls, Expr(:(=), constantopname(op), val))
+  nothing
 end
 function setconstantop!(ls, op, val)
     if instruction(op) === LOOPCONSTANT# && mangledvar(op) !== val
