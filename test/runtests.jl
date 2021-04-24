@@ -66,6 +66,8 @@ const START_TIME = time()
     @time include("threading.jl")
 
     @time include("tullio.jl")
+
+    @time include("staticsize.jl")
 end
 
 const ELAPSED_MINUTES = (time() - START_TIME)/60

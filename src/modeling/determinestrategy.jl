@@ -578,22 +578,30 @@ function solve_unroll(
     u₁L = length(u₁loop)
     u₂L = length(u₂loop)
     if isstaticloop(u₂loop)
-        if u₂loopsym !== vloopsym && u₂L ≤ 4
-            u₁ = max(1, solve_unroll_constT(reg_pressure, u₂L))
-            u₁ = isstaticloop(u₁loop) ? maybedemotesize(u₁, u₁loopsym === vloopsym ? cld(u₁L,W) : u₁L) : u₁
-            return u₁, u₂L, unroll_cost(cost_vec, u₁, u₂L, u₁L, u₂L)
+      if u₂loopsym !== vloopsym && u₂L ≤ 4
+        if isstaticloop(u₁loop)
+          u₁ = max(solve_unroll_constT(reg_pressure, u₂L), 1)
+          u₁ = maybedemotesize(u₁, u₁loopsym === vloopsym ? cld(u₁L,W) : u₁L)
+        else
+          u₁ = clamp(solve_unroll_constT(reg_pressure, u₂L), 1, 8)
         end
-        u₂Ltemp = u₂loopsym === vloopsym ? cld(u₂L, W) : u₂L
-        maxu₂ = min(4maxu₂, u₂Ltemp)
+        return u₁, u₂L, unroll_cost(cost_vec, u₁, u₂L, u₁L, u₂L)
+      end
+      u₂Ltemp = u₂loopsym === vloopsym ? cld(u₂L, W) : u₂L
+      maxu₂ = min(4maxu₂, u₂Ltemp)
     end
     if isstaticloop(u₁loop)
-        if u₁loopsym !== vloopsym && u₁L ≤ 4
-            u₂ = max(1, solve_unroll_constU(reg_pressure, u₁L))
-            u₂ = isstaticloop(u₂loop) ? maybedemotesize(u₂, u₂loopsym === vloopsym ? cld(u₂L,W) : u₂L) : u₂
-            return u₁L, u₂, unroll_cost(cost_vec, u₁L, u₂, u₁L, u₂L)
+      if u₁loopsym !== vloopsym && u₁L ≤ 4
+        if isstaticloop(u₂loop)
+          u₂ = max(solve_unroll_constU(reg_pressure, u₁L), 1)
+          u₂ = maybedemotesize(u₂, u₂loopsym === vloopsym ? cld(u₂L,W) : u₂L)
+        else
+          u₂ = clamp(solve_unroll_constU(reg_pressure, u₁L), 1, 8)
         end
-        u₁Ltemp = u₁loopsym === vloopsym ? cld(u₁L, W) : u₁L
-        maxu₁ = min(4maxu₁, u₁Ltemp)
+        return u₁L, u₂, unroll_cost(cost_vec, u₁L, u₂, u₁L, u₂L)
+      end
+      u₁Ltemp = u₁loopsym === vloopsym ? cld(u₁L, W) : u₁L
+      maxu₁ = min(4maxu₁, u₁Ltemp)
     end
     if u₁loopsym === vloopsym
         u₁Lf = u₁L / W

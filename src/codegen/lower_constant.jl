@@ -48,37 +48,41 @@ end
 function lower_zero!(
     q::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs, zerotyp::NumberType = zerotype(ls, op)
 )
-    @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, u₂max, suffix = ua
-    mvar, opu₁, opu₂ = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, vloopsym, suffix, ls)
-    !opu₂ && suffix > 0 && return
-    # TODO: for u₁, needs to consider if reducedchildren are u₁-unrolled
-    #       reductions need to consider reduct-status
-    # if !opu₁
-    #     opu₁ = u₁loopsym ∈ reducedchildren(op)
-    # end
-    mvar = Symbol(mvar, '_', Core.ifelse(opu₁, u₁, 1))
-    typeT = typeof_sym(ls, op, zerotyp)
-    # TODO: make should_broadcast_op handle everything.
-    if isvectorized(op) || vloopsym ∈ reducedchildren(op) || vloopsym ∈ reduceddependencies(op) || should_broadcast_op(op)
-        if opu₁ && u₁ > 1
-            call = Expr(:call, lv(:zero_vecunroll), staticexpr(u₁), VECTORWIDTHSYMBOL, typeT, staticexpr(reg_size(ls)))
-        else
-            call = Expr(:call, lv(:_vzero), VECTORWIDTHSYMBOL, typeT, staticexpr(reg_size(ls)))
-        end
+  @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, u₂max, suffix = ua
+  mvar, opu₁, opu₂ = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, vloopsym, suffix, ls)
+  !opu₂ && suffix > 0 && return
+  # TODO: for u₁, needs to consider if reducedchildren are u₁-unrolled
+  #       reductions need to consider reduct-status
+  # if !opu₁
+  #     opu₁ = u₁loopsym ∈ reducedchildren(op)
+  # end
+  typeT = typeof_sym(ls, op, zerotyp)
+  # TODO: make should_broadcast_op handle everything.
+  if isvectorized(op) || vloopsym ∈ reducedchildren(op) || vloopsym ∈ reduceddependencies(op) || should_broadcast_op(op)
+    if opu₁ && u₁ > 1
+      call = Expr(:call, lv(:zero_vecunroll), staticexpr(u₁), VECTORWIDTHSYMBOL, typeT, staticexpr(reg_size(ls)))
     else
-        call = Expr(:call, :zero, typeT)
-        if opu₁ && u₁ > 1
-            # broadcastsym = Symbol(mvar, "_#init#")
-            # pushpreamble!(ls, Expr(:(=), broadcastsym, call))
-            t = Expr(:tuple)
-            for u ∈ 1:u₁
-                push!(t.args, call)
-            end
-            call = Expr(:call, lv(:VecUnroll), t)
-        end
+      call = Expr(:call, lv(:_vzero), VECTORWIDTHSYMBOL, typeT, staticexpr(reg_size(ls)))
     end
+  else
+    call = Expr(:call, :zero, typeT)
+    if opu₁ && u₁ > 1
+      t = Expr(:tuple)
+      for u ∈ 1:u₁
+        push!(t.args, call)
+      end
+      call = Expr(:call, lv(:VecUnroll), t)
+    end
+  end
+  if (suffix == -1) && opu₂
+    for u ∈ 0:u₂max-1
+      push!(q.args, Expr(:(=), Symbol(mvar, u, "__", Core.ifelse(opu₁, u₁, 1)), call))
+    end
+  else
+    mvar = Symbol(mvar, '_', Core.ifelse(opu₁, u₁, 1))
     push!(q.args, Expr(:(=), mvar, call))
-    nothing
+  end
+  nothing
 end
 # Have to awkwardly search through `operations(ls)` to try and find op's child
 function getparentsreductzero(ls::LoopSet, op::Operation)::Float64
@@ -95,52 +99,65 @@ vecbasefunc(f) = Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:Vectorizat
 function lower_constant!(
     q::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs
 )
-    @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, u₂max, suffix = ua
-    mvar, opu₁, opu₂ = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, vloopsym, suffix, ls)
-    !opu₂ && suffix > 0 && return
-    mvar = Symbol(mvar, '_', Core.ifelse(opu₁, u₁, 1))
-    instruction = op.instruction
-    constsym = instruction.instr
-    # constsym = Symbol(instruction.instr, '_', 1)
-    reducedchildvectorized = vloopsym ∈ reducedchildren(op)
-    if reducedchildvectorized || isvectorized(op) || vloopsym ∈ reduceddependencies(op) || should_broadcast_op(op)
-        # call = Expr(:call, lv(:vbroadcast), W, Expr(:call, lv(:maybeconvert), typeT, constsym))
-        call = if reducedchildvectorized && vloopsym ∉ loopdependencies(op)
-            instrclass = getparentsreductzero(ls, op)
-            if instrclass == ADDITIVE_IN_REDUCTIONS
-                Expr(:call, vecbasefunc(:addscalar), Expr(:call, lv(:vzero), VECTORWIDTHSYMBOL, ELTYPESYMBOL), constsym)
-            elseif instrclass == MULTIPLICATIVE_IN_REDUCTIONS
-                Expr(:call, vecbasefunc(:mulscalar), Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, Expr(:call, :one, ELTYPESYMBOL)), constsym)
-            elseif instrclass == MAX
-                Expr(:call, vecbasefunc(:maxscalar), Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, Expr(:call, :typemin, ELTYPESYMBOL)), constsym)
-            elseif instrclass == MIN
-                Expr(:call, vecbasefunc(:minscalar), Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, Expr(:call, :typemax, ELTYPESYMBOL)), constsym)
-            else
-                throw("Reductions of type $(reduction_zero(reinstrclass)) not yet supported; please file an issue as a reminder to take care of this.")
-            end
-        else
-            Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, constsym)
-        end
-        if opu₁ && u₁ > 1
-            # broadcastsym = Symbol(mvar, "_#init#")
-            # push!(q.args, Expr(:(=), broadcastsym, call))
-            t = Expr(:tuple)
-            for u ∈ 1:u₁
-                push!(t.args, call)
-            end
-            call = Expr(:call, lv(:VecUnroll), t)
-        end
-        push!(q.args, Expr(:(=), mvar, call))
-    elseif opu₁ && u₁ > 1
-        t = Expr(:tuple)
-        for u ∈ 1:u₁
-            push!(t.args, constsym)
-        end
-        push!(q.args, Expr(:(=), mvar, Expr(:call, lv(:VecUnroll), t)))
+  @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, u₂max, suffix = ua
+  mvar, opu₁, opu₂ = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, vloopsym, suffix, ls)
+  !opu₂ && suffix > 0 && return
+  instruction = op.instruction
+  constsym = instruction.instr
+  # constsym = Symbol(instruction.instr, '_', 1)
+  reducedchildvectorized = vloopsym ∈ reducedchildren(op)
+  if reducedchildvectorized || isvectorized(op) || vloopsym ∈ reduceddependencies(op) || should_broadcast_op(op)
+    # call = Expr(:call, lv(:vbroadcast), W, Expr(:call, lv(:maybeconvert), typeT, constsym))
+    call = if reducedchildvectorized && vloopsym ∉ loopdependencies(op)
+      instrclass = getparentsreductzero(ls, op)
+      if instrclass == ADDITIVE_IN_REDUCTIONS
+        Expr(:call, vecbasefunc(:addscalar), Expr(:call, lv(:vzero), VECTORWIDTHSYMBOL, ELTYPESYMBOL), constsym)
+      elseif instrclass == MULTIPLICATIVE_IN_REDUCTIONS
+        Expr(:call, vecbasefunc(:mulscalar), Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, Expr(:call, :one, ELTYPESYMBOL)), constsym)
+      elseif instrclass == MAX
+        Expr(:call, vecbasefunc(:maxscalar), Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, Expr(:call, :typemin, ELTYPESYMBOL)), constsym)
+      elseif instrclass == MIN
+        Expr(:call, vecbasefunc(:minscalar), Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, Expr(:call, :typemax, ELTYPESYMBOL)), constsym)
+      else
+        throw("Reductions of type $(reduction_zero(reinstrclass)) not yet supported; please file an issue as a reminder to take care of this.")
+      end
     else
-        push!(q.args, Expr(:(=), mvar, constsym))
+      Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, constsym)
     end
-    nothing
+    if opu₁ && u₁ > 1
+      # broadcastsym = Symbol(mvar, "_#init#")
+      # push!(q.args, Expr(:(=), broadcastsym, call))
+      t = Expr(:tuple)
+      for u ∈ 1:u₁
+        push!(t.args, call)
+      end
+      call = Expr(:call, lv(:VecUnroll), t)
+    end
+  elseif opu₁ && u₁ > 1
+    t = Expr(:tuple)
+    for u ∈ 1:u₁
+      push!(t.args, constsym)
+    end
+    call = Expr(:call, lv(:VecUnroll), t)
+  elseif opu₂ & (suffix == -1)
+    for u ∈ 0:u₂max-1
+      push!(q.args, Expr(:(=), Symbol(mvar, u, "__", 1), constsym))
+    end
+    return nothing
+  else
+    push!(q.args, Expr(:(=), Symbol(mvar, '_', 1), constsym))
+    return nothing
+  end
+  u₁tag = Core.ifelse(opu₁, u₁, 1)
+  if opu₂ & (suffix == -1)
+    for u ∈ 0:u₂max-1
+      push!(q.args, Expr(:(=), Symbol(mvar, u, "__", u₁tag), call))
+    end
+  else
+    mvar = Symbol(mvar, '_', u₁tag)
+    push!(q.args, Expr(:(=), mvar, call))
+  end
+  nothing
 end
 
 isconstantop(op::Operation) = (instruction(op) === LOOPCONSTANT) || (isconstant(op) && length(loopdependencies(op)) == 0)

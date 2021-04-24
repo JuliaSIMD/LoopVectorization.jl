@@ -641,8 +641,8 @@ Execute an `@avx` block. The block's code is represented via the arguments:
             :(Val{$OPS}()), :(Val{$ARF}()), :(Val{$AM}()), :(Val{$LPSYM}())
         )
     else
-        # @show avx_body(ls, UNROLL)
         # Main.BODY[] = avx_body(ls, UNROLL)
+        # @show avx_body(ls, UNROLL)
         avx_body(ls, UNROLL)
     end
     # @show UNROLL, OPS, ARF, AM, LPSYM, LB
