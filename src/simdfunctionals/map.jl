@@ -264,7 +264,7 @@ end
 
 """
     vmapt!(::Function, dest, args...)
-Like `vmap!` (see `vmap!`), but uses `Threads.@threads` for parallel execution.
+A threaded variant of [`vmap!`](@ref).
 """
 function vmapt!(
     f::F, y::AbstractArray, args::Vararg{AbstractArray,A}
@@ -336,7 +336,7 @@ end
 
 """
     vmapntt!(::Function, dest, args...)
-Like `vmapnt!` (see `vmapnt!`), but uses `Threads.@threads` for parallel execution.
+A threaded variant of [`vmapnt!`](@ref).
 """
 function vmapntt!(
     f::F, y::AbstractArray, args::Vararg{AbstractArray,A}
