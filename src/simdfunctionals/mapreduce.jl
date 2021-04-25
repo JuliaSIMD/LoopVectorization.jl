@@ -15,7 +15,7 @@ vec_vreduce(op, v::Vec{1}) = VectorizationBase.extractelement(v, 0)
 end
 
 function mapreduce_simple(f::F, op::OP, args::Vararg{AbstractArray,A}) where {F,OP,A}
-    ptrargs = ntuple(a -> pointer(args[a]), Val(A))
+    ptrargs = ntuple(a -> VectorizationBase.cpupointer(args[a]), Val(A))
     N = length(first(args))
     iszero(N) && throw("Length of vector is 0!")
     st = ntuple(a -> VectorizationBase.static_sizeof(eltype(args[a])), Val(A))

@@ -84,7 +84,7 @@ end
     quote
         $(Expr(:meta,:inline))
         # VectorizationBase.StridedPointer{$T,1,$newC,$newB,$(R[minrank],)}($(lv(llvmptr))(sptr), (sptr.strd[$minrank],), (Zero(),))
-        VectorizationBase.StridedPointer{$T,1,$newC,$newB,$(R[minrank],)}(pointer(sptr), (sptr.strd[$minrank],), (Zero(),))
+        VectorizationBase.StridedPointer{$T,1,$newC,$newB,$(R[minrank],)}(VectorizationBase.cpupointer(sptr), (sptr.strd[$minrank],), (Zero(),))
     end
 end
 set_first_stride(x) = x # cross fingers that this works

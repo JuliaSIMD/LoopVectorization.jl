@@ -91,7 +91,7 @@ end
 function gesp_const_offset!(ls::LoopSet, vptrarray, ninds, indices, loopedindex, mlt::Integer, sym)
     if isone(mlt)
         subset_vptr!(ls, vptrarray, ninds, sym, indices, loopedindex, false)
-    else        
+    else
         mltsym = Symbol(sym, "##multiplied##by##", mlt)
         pushprepreamble!(ls, Expr(:(=), mltsym, Expr(:call, :(*), mlt, sym))) # want same name for arrays to be given the same name if possible
         subset_vptr!(ls, vptrarray, ninds, mltsym, indices, loopedindex, false)
@@ -151,7 +151,7 @@ function add_affine_index_expr!(ls::LoopSet, mult_syms::Vector{Tuple{Int,Symbol}
 end
 function add_affine_op!(ls::LoopSet, mult_syms::Vector{Tuple{Int,Symbol}}, constant::Base.RefValue{Int}, stride::Int, expr::Expr)
     parent = add_operation!(ls, gensym!(ls, "indexpr"), expr, sizeof(Int), length(ls.loopsymbols))
-    add_affine_index_expr!(ls, mult_syms, constant, stride, name(parent))    
+    add_affine_index_expr!(ls, mult_syms, constant, stride, name(parent))
     return nothing
 end
 function add_mul!(ls::LoopSet, mult_syms::Vector{Tuple{Int,Symbol}}, constant::Base.RefValue{Int}, stride::Int, arg1, arg2, expr)
@@ -174,7 +174,7 @@ function add_affine_index_expr!(ls::LoopSet, mult_syms::Vector{Tuple{Int,Symbol}
         if length(expr.args) == 3
             add_affine_index_expr!(ls, mult_syms, constant, stride, expr.args[2])
         elseif length(expr.args) ≠ 2
-            throw("Subtraction expression: $expr has an invalid number of arguments.")            
+            throw("Subtraction expression: $expr has an invalid number of arguments.")
         end
         add_affine_index_expr!(ls, mult_syms, constant, -stride, last(expr.args))
     elseif f === :(+)
@@ -219,7 +219,7 @@ function muladd_op!(ls::LoopSet, mlt::Int, symop::Operation, offset::Int)
         push!(vparents, add_constant!(ls, mlt, sizeof(Int)))
         f = if offset == 0
             :(*)
-        else            
+        else
             push!(vparents, add_constant!(ls, offset, sizeof(Int)))
             :muladd
         end
@@ -235,7 +235,7 @@ function muladd_index!(
             parents, loopdependencies, reduceddeps, indices,
             offsets, strides, loopedindex, symop, mlt, offset
         )
-    else        
+    else
         indop = muladd_op!(ls, mlt, symop, offset)
         addopindex!(parents, loopdependencies, reduceddeps, indices, offsets, strides, loopedindex, indop)
     end
@@ -260,7 +260,7 @@ function checkforoffset!(
         vptrarray = gesp_const_offset!(ls, vptrarray, ninds, indices, loopedindex, 1, offset - r)
         offset = r
     end
-    
+
     # (success && byterepresentable(offset)) || return false, vptrarray
     if length(mult_syms) == 0
         addconstindex!(indices, offsets, strides, loopedindex, offset)

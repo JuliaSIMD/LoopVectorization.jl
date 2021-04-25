@@ -180,7 +180,7 @@ function loop_indexes_bit!(ls::LoopSet, ar::ArrayReferenceMeta)
     nothing
 end
 function add_mref!(
-    sptrs::Expr, ls::LoopSet, ar::ArrayReferenceMeta, @nospecialize(_::Type{Ptr{T}}),
+    sptrs::Expr, ls::LoopSet, ar::ArrayReferenceMeta, @nospecialize(_::Type{Core.LLVMPtr{T,0}}),
     C::Int, B::Int, sp::NTuple{N,Int}, name::Symbol
 ) where {T,N}
     @assert B ≤ 0 "Batched arrays not supported yet."
@@ -208,7 +208,7 @@ function add_mref!(
     end
     #TODO: fix for `T === Bit`.
     sptype = Expr(:curly, lv(:StridedPointer), T, N, (C == -1 ? -1 : 1), B, column_major)
-    sptr = Expr(:call, sptype, Expr(:call, :pointer, tmpsp), strd_tup, offsets_tup)
+    sptr = Expr(:call, sptype, Expr(:call, GlobalRef(VectorizationBase, :cpupointer), tmpsp), strd_tup, offsets_tup)
     pushpreamble!(ls, Expr(:(=), name, sptr))
     nothing
 end
@@ -479,7 +479,7 @@ end
 # elbytes(::VectorizationBase.AbstractPointer{T}) where {T} = sizeof(T)::Int
 # typeeltype(::Type{P}) where {T,P<:VectorizationBase.AbstractStridedPointer{T}} = T
 typeeltype(::Type{Ptr{T}}) where {T} = T
-# typeeltype(::Type{Core.LLVMPtr{T,0}}) where {T} = T
+typeeltype(::Type{Core.LLVMPtr{T,0}}) where {T} = T
 typeeltype(::Type{VectorizationBase.FastRange{T,F,S,O}}) where {T,F,S,O} = T
 typeeltype(::Type{T}) where {T<:Real} = T
 # typeeltype(::Any) = Int8
