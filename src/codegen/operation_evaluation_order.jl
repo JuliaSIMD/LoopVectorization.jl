@@ -105,7 +105,7 @@ function fillorder!(ls::LoopSet, order::Vector{Symbol}, u₁loop::Symbol, u₂lo
         ro[_n] = loopsym = order[n]
         #loopsym = order[n]
         for op ∈ ops
-            addoptoorder!( ls, included_vars, place_after_loop, op, loopsym, _n, u₁loop, u₂loop, vectorized, u₂max )
+          addoptoorder!( ls, included_vars, place_after_loop, op, loopsym, _n, u₁loop, u₂loop, vectorized, u₂max )
         end
     end
 end

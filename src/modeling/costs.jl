@@ -140,6 +140,7 @@ const COST = Dict{Symbol,InstructionCost}(
     :rem_fast => InstructionCost(13,4.0,-2.0), # FIXME
     :div_fast => InstructionCost(13,4.0,-2.0),
     :vdiv_fast => InstructionCost(20,4.0,-2.0), # FIXME
+    :÷ => InstructionCost(13,4.0,-2.0),
     # :evadd => InstructionCost(4,0.5),
     # :evsub => InstructionCost(4,0.5),
     # :evmul => InstructionCost(4,0.5),
@@ -494,6 +495,8 @@ const FUNCTIONSYMBOLS = IdDict{Type{<:Function},Instruction}(
     # typeof(VectorizationBase.vfdiv) => :(/),
     # typeof(VectorizationBase.vfdiv!) => :(/),
     typeof(VectorizationBase.vdiv) => :(/),
+    typeof(÷) => :(÷),
+    typeof(Base.FastMath.div_fast) => :div_fast,
     typeof(Base.FastMath.div_fast) => :div_fast,
     typeof(Base.FastMath.rem_fast) => :rem_fast,
     typeof(==) => :(==),

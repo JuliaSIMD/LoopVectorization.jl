@@ -469,7 +469,6 @@ function solve_unroll_lagrange(X, R, u₁L, u₂L, u₁step::Int, u₂step::Int,
     u₂low = max(u₂step, floor(Int, 0.8u₂float)) # must be at least 1
     u₁high = solve_unroll_constT(R, u₂low) + u₁step
     u₂high = solve_unroll_constU(R, u₁low) + u₂step
-    # @show u₁low, u₁high, u₂low, u₂high
     if u₁low ≥ u₁high
         u₁low = solve_unroll_constT(R, u₂high)
     end
@@ -477,11 +476,10 @@ function solve_unroll_lagrange(X, R, u₁L, u₂L, u₁step::Int, u₂step::Int,
         u₂low = solve_unroll_constU(R, u₁high)
     end
     maxunroll = atleast32registers ? (((X₂ > 0) & (X₃ > 0)) ? 10 : 8) : 6
-    u₁low = (min(u₁low, maxunroll) ÷ u₁step) * u₁step
-    u₂low = (min(u₂low, maxunroll) ÷ u₂step) * u₂step
-    u₁high = min(u₁high, maxunroll)
-    u₂high = min(u₂high, maxunroll)
-    # @show u₁low, u₁high, u₂low, u₂high, u₁float, u₂float
+    u₁low = (clamp(u₁low, 1, maxunroll) ÷ u₁step) * u₁step
+    u₂low = (clamp(u₂low, 1, maxunroll) ÷ u₂step) * u₂step
+    u₁high = clamp(u₁high, 1, maxunroll)
+    u₂high = clamp(u₂high, 1, maxunroll)
     solve_unroll_iter(X, R, u₁L, u₂L, reverse(u₁low:u₁step:u₁high), reverse(u₂low:u₂step:u₂high))
 end
 
