@@ -13,8 +13,8 @@ function symbolind(ind::Symbol, op::Operation, td::UnrollArgs, ls::LoopSet)
     Symbol(pvar, '_', Core.ifelse(u₁op, u₁, 1)), parent
 end
 
-staticexpr(x::Int) = Expr(:call, Expr(:curly, lv(:Static), x))
-staticexpr(x::Union{Symbol,Expr}) = Expr(:call, lv(:Static), x)
+staticexpr(x::Int) = Expr(:call, Expr(:curly, lv(:StaticInt), x))
+staticexpr(x::Union{Symbol,Expr}) = Expr(:call, lv(:StaticInt), x)
 maybestatic(x::Int) = staticexpr(x)
 maybestatic(x::Union{Symbol,Expr}) = x
 

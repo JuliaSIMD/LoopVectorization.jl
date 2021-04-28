@@ -47,7 +47,7 @@ else # Julia 1.5 did not define `step` on CartesianIndices
     @inline static_step(x) = ArrayInterface.static_step
     static_step(x::CartesianIndices) = CartesianIndex(map(step, x.indices))
 end
-const Static = ArrayInterface.StaticInt
+const Static = StaticInt
 
 using Requires
 

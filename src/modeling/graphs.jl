@@ -207,9 +207,12 @@ staticmulincr(ptr, incr) = Expr(:call, lv(:staticmul), Expr(:call, :eltype, ptr)
 # @inline cmpend(i::Int, r::AbstractRange) = @show i last(r) i ≤ last(r)
 # @inline cmpend(i::Int, r::AbstractRange) = i ≤ vsub_fast(last(r), step(r))
 
-@inline vcmpend(i::Int, r::CloseOpen, ::StaticInt{W}) where {W} = i < vsub_fast(getfield(r,:upper), W)
-@inline vcmpend(i::Int, r::AbstractUnitRange, ::StaticInt{W}) where {W} = i ≤ vsub_fast(last(r), W)
-@inline vcmpend(i::Int, r::AbstractRange, ::StaticInt{W}) where {W} = i ≤ vsub_fast(last(r), W*step(r))
+@inline vcmpend(i::Int, r::CloseOpen, ::StaticInt{W}) where {W} = i ≤ vsub_fast(getfield(r,:upper), W)
+@inline vcmpend(i::Int, r::AbstractUnitRange, ::StaticInt{W}) where {W} = i ≤ vsub_fast(last(r), W-1)
+# i = 0
+# i += 4*3 # i = 12
+@inline vcmpend(i::Int, r::AbstractRange, ::StaticInt{W}) where {W} = i ≤ vsub_fast(last(r), vsub_fast(W*step(r), 1))
+# @inline vcmpend(i::Int, r::AbstractRange, ::StaticInt{W}) where {W} = i ≤ vsub_fast(last(r), W*step(r))
 # @inline vcmpend(i::Int, r::AbstractRange, ::StaticInt{W}) where {W} = @show i m = vsub_fast(last(r), W*step(r)) i ≤ m
 # @inline vcmpend(i::Int, r::AbstractRange, ::StaticInt{W}) where {W} = i ≤ vsub_fast(last(r), W)
 
