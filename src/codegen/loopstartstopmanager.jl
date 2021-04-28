@@ -372,7 +372,7 @@ function cse_constant_offsets!(
       end
     end
     constoffset = normalize_offsets!(ls, i, allarrayrefs, array_refs_with_same_name, arrayref_to_name_op_collection)
-    pushgespind!(gespinds, ls, gespsymbol, constoffset, ind, li, i, check_shouldindbyind(ls, ind, shouldindbyind))
+    pushgespind!(gespinds, ls, gespsymbol, constoffset, ind, li, i, check_shouldindbyind(ls, ind, shouldindbyind), true)
   end
   return gespinds
 end
@@ -394,7 +394,7 @@ end
 #   return nothing
 # end
 function pushgespind!(
-  gespinds::Expr, ls::LoopSet, gespsymbol::Symbol, constoffset::Int, ind::Symbol, li::Vector{Bool}, i::Int, index_by_index::Bool
+  gespinds::Expr, ls::LoopSet, gespsymbol::Symbol, constoffset::Int, ind::Symbol, li::Vector{Bool}, i::Int, index_by_index::Bool, fromgsp::Bool
 )
   if li[i]
     if ind === CONSTANTZEROINDEX
@@ -408,11 +408,15 @@ function pushgespind!(
     else
       if index_by_index
         if gespsymbol === Symbol("")
-          push!(gespinds.args, staticexpr(constoffset))
+          if constoffset == 0
+            push!(gespinds.args, Expr(:call, GlobalRef(VectorizationBase, :NullStep)))
+          else
+            push!(gespinds.args, staticexpr(constoffset))
+          end
         elseif constoffset == 0
-          push!(gespinds.args, Expr(:call, GlobalRef(VectorizationBase, :NullStep)))
+          push!(gespinds.args, gespsymbol)
         else
-          push!(gespinds.args, staticexpr(constoffset))
+          push!(gespinds.args, addexpr(gespsymbol, constoffset))
         end
       else
         loop = getloop(ls, ind)
@@ -440,8 +444,8 @@ function pushgespind!(
           end
         end
       end
-    end
-  else # not a loopindex
+    end # if we hit the following elseif/else, not a loopindex
+  elseif fromgsp # from gsp means that a loop could be a CartesianIndices, so we may need to expand
     #TODO: broadcast dimensions in case of cartesian indices
     rangesym = ind
     for op ∈ operations(ls)
@@ -451,11 +455,29 @@ function pushgespind!(
       end
     end
     @assert rangesym ≢ ind
-    if gespsymbol === Symbol("") 
-      push!(gespinds.args, Expr(:call, lv(:similardims), rangesym, staticexpr(0)))
+    if rangesym === Symbol("") # there is no rangesym, must be statically sized.
+      pushgespsym!(gespinds, gespsymbol)
     else
-      push!(gespinds.args, Expr(:call, lv(:similardims), rangesym, gespsymbol))
+      pushsimdims!(gespinds, rangesym, gespsymbol)
     end
+  else # it is known all inds are 1-dimensional
+    pushgespsym!(gespinds, gespsymbol)
+  end
+  return nothing
+end
+function pushgespsym!(gespinds::Expr, gespsymbol::Symbol)
+  if gespsymbol === Symbol("") 
+    push!(gespinds.args, staticexpr(0))
+  else
+    push!(gespinds.args, gespsymbol)
+  end
+  return nothing
+end
+function pushsimdims!(gespinds::Expr, rangesym::Symbol, gespsymbol::Symbol)
+  if gespsymbol === Symbol("") 
+    push!(gespinds.args, Expr(:call, lv(:similardims), rangesym, staticexpr(0)))
+  else
+    push!(gespinds.args, Expr(:call, lv(:similardims), rangesym, gespsymbol))
   end
   return nothing
 end
@@ -503,11 +525,11 @@ function use_loop_induct_var!(
     if !li[i] # if it wasn't set
       uliv[i] = 0
       push!(offsetprecalc_descript.args, 0)
-      Wisz || pushgespind!(gespinds, ls, Symbol(""), 0, ind, li, i, true)
+      Wisz || pushgespind!(gespinds, ls, Symbol(""), 0, ind, li, i, true, false)
     elseif ind === CONSTANTZEROINDEX
       uliv[i] = 0
       push!(offsetprecalc_descript.args, 0)
-      Wisz || pushgespind!(gespinds, ls, Symbol(""), 0, ind, li, i, true)
+      Wisz || pushgespind!(gespinds, ls, Symbol(""), 0, ind, li, i, true, false)
     elseif isbroadcast ||
       ((isone(ii) && (last(looporder) === ind)) && !(otherindexunrolled(ls, ind, ar)) ||
       multiple_with_name(vptrar, allarrayrefs)) ||
@@ -515,13 +537,13 @@ function use_loop_induct_var!(
       # Not doing normal offset indexing
       uliv[i] = -findfirst(Base.Fix2(===,ind), looporder)::Int
       push!(offsetprecalc_descript.args, 0) # not doing offset indexing, so push 0
-      Wisz || pushgespind!(gespinds, ls, Symbol(""), 0, ind, li, i, true)
+      Wisz || pushgespind!(gespinds, ls, Symbol(""), 0, ind, li, i, true, false)
     else
       uliv[i] = findfirst(Base.Fix2(===,ind), looporder)::Int
       loop = getloop(ls, ind)
       push!(offsetprecalc_descript.args, max(5,us.u₁+1,us.u₂+1))
       use_offsetprecalc = true
-      Wisz || pushgespind!(gespinds, ls, Symbol(""), 0, ind, li, i, false)
+      Wisz || pushgespind!(gespinds, ls, Symbol(""), 0, ind, li, i, false, false)
     end
     # cases for pushgespind! and loopval!
     # if !isloopval, same as before

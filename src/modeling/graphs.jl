@@ -8,7 +8,7 @@ struct Loop
     start::MaybeKnown
     stop::MaybeKnown
     step::MaybeKnown
-    rangesym::Symbol
+    rangesym::Symbol# === Symbol("") means loop is static
     lensym::Symbol
 end
 
@@ -213,18 +213,42 @@ staticmulincr(ptr, incr) = Expr(:call, lv(:staticmul), Expr(:call, :eltype, ptr)
 # @inline vcmpend(i::Int, r::AbstractRange, ::StaticInt{W}) where {W} = @show i m = vsub_fast(last(r), W*step(r)) i ≤ m
 # @inline vcmpend(i::Int, r::AbstractRange, ::StaticInt{W}) where {W} = i ≤ vsub_fast(last(r), W)
 
-function vec_looprange(loop::Loop, UF::Int, mangledname)
-  if isone(UF)
-    Expr(:call, lv(:vcmpend), mangledname, loop.rangesym, VECTORWIDTHSYMBOL)
+function staticloopexpr(loop::Loop)
+  f = first(loop)
+  s = step(loop)
+  l = last(loop)
+  if isone(s)
+    Expr(:call, GlobalRef(Base, :(:)), staticexpr(gethint(f)), staticexpr(gethint(l)))
   else
-    Expr(:call, lv(:vcmpend), mangledname, loop.rangesym, mulexpr(VECTORWIDTHSYMBOL, UF))
+    Expr(:call, GlobalRef(Base, :(:)), staticexpr(gethint(f)), staticexpr(gethint(s)), staticexpr(gethint(l)))
+  end
+end
+function vec_looprange(loop::Loop, UF::Int, mangledname)
+  if loop.rangesym === Symbol("") # means loop is static
+    vec_looprange(UF, mangledname, staticloopexpr(loop))
+  else
+    vec_looprange(UF, mangledname, loop.rangesym)
+  end
+end
+function vec_looprange(UF::Int, mangledname, r::Union{Expr,Symbol})
+  if isone(UF)
+    Expr(:call, lv(:vcmpend), mangledname, r, VECTORWIDTHSYMBOL)
+  else
+    Expr(:call, lv(:vcmpend), mangledname, r, mulexpr(VECTORWIDTHSYMBOL, UF))
   end
 end
 function looprange(loop::Loop, UF::Int, mangledname)
-  if isone(UF)
-    Expr(:call, lv(:cmpend), mangledname, loop.rangesym)
+  if loop.rangesym === Symbol("") # means loop is static
+    looprange(UF, mangledname, staticloopexpr(loop))
   else
-    Expr(:call, lv(:vcmpend), mangledname, loop.rangesym, staticexpr(UF))
+    looprange(UF, mangledname, loop.rangesym)
+  end
+end
+function looprange(UF::Int, mangledname, r::Union{Expr,Symbol})
+  if isone(UF)
+    Expr(:call, lv(:cmpend), mangledname, r)
+  else
+    Expr(:call, lv(:vcmpend), mangledname, r, staticexpr(UF))
   end
 end
 

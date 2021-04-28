@@ -652,7 +652,12 @@ end
 function init_remblock(unrolledloop::Loop, lssm::LoopStartStopManager, n::Int)#u₁loop::Symbol = unrolledloop.itersymbol)
   termind = lssm.terminators[n]
   if iszero(termind)
-    condition = Expr(:call, lv(:cmpend), unrolledloop.itersymbol, unrolledloop.rangesym)
+    rangesym = unrolledloop.rangesym
+    if rangesym === Symbol("")
+      condition = Expr(:call, lv(:cmpend), unrolledloop.itersymbol, staticloopexpr(unrolledloop))
+    else
+      condition = Expr(:call, lv(:cmpend), unrolledloop.itersymbol, rangesym)
+    end
   else
     termar = lssm.incrementedptrs[n][termind]
     ptr = vptr(termar)
