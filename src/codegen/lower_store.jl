@@ -75,7 +75,8 @@ function lower_store_collection!(
     inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false, 0, ls)
 
     falseexpr = Expr(:call, lv(:False));
-    trueexpr = Expr(:call, lv(:True));
+    aliasexpr = falseexpr;
+    # trueexpr = Expr(:call, lv(:True));
     rs = staticexpr(reg_size(ls));
     manualunrollu₁ = if isu₁unrolled(op) && u₁ > 1 # both unrolled
         if isknown(step(u₁loop)) && sum(Base.Fix2(===,u₁loopsym), getindicesonly(op)) == 1
@@ -103,7 +104,7 @@ function lower_store_collection!(
             push!(storeexpr.args, MASKSYMBOL)
         end
     end
-    push!(storeexpr.args, falseexpr, trueexpr, falseexpr, rs)
+    push!(storeexpr.args, falseexpr, aliasexpr, falseexpr, rs)
     if manualunrollu₁
         masklast = mask & u₁vectorized
         gf = GlobalRef(Core,:getfield)
@@ -151,7 +152,10 @@ function lower_store!(
         return
     end
 
-    falseexpr = Expr(:call, lv(:False)); trueexpr = Expr(:call, lv(:True)); rs = staticexpr(reg_size(ls));
+    falseexpr = Expr(:call, lv(:False));
+    aliasexpr = falseexpr;
+    # trueexpr = Expr(:call, lv(:True));
+    rs = staticexpr(reg_size(ls));
     opp = first(parents(op))
     if ((opp.instruction.instr === reductfunc) || (opp.instruction.instr === :identity)) && isone(length(parents(opp)))
         opp = only(parents(opp))
@@ -170,7 +174,7 @@ function lower_store!(
             Expr(:call, lv(:_vstore!), lv(reductfunc), vptr(op), mvar, inds)
         end
         add_memory_mask!(storeexpr, op, ua, mask, ls)
-        push!(storeexpr.args, falseexpr, trueexpr, falseexpr, rs)
+        push!(storeexpr.args, falseexpr, aliasexpr, falseexpr, rs)
         push!(q.args, storeexpr)
     elseif (u₁ > 1) & isu₁
         mvard = Symbol(mvar, "##data##")
@@ -193,7 +197,7 @@ function lower_store!(
             end
             domask = mask && (isvectorized(op) & ((u == u₁) | (vloopsym !== u₁loopsym)))
             add_memory_mask!(storeexpr, op, ua, domask, ls)# & ((u == u₁) | isvectorized(op)))
-            push!(storeexpr.args, falseexpr, trueexpr, falseexpr, rs)
+            push!(storeexpr.args, falseexpr, aliasexpr, falseexpr, rs)
             push!(q.args, storeexpr)
         end
     else
@@ -204,7 +208,7 @@ function lower_store!(
             Expr(:call, lv(:_vstore!), lv(reductfunc), vptr(op), mvar, inds)
         end
         add_memory_mask!(storeexpr, op, ua, mask, ls)
-        push!(storeexpr.args, falseexpr, trueexpr, falseexpr, rs)
+        push!(storeexpr.args, falseexpr, aliasexpr, falseexpr, rs)
         push!(q.args, storeexpr)
     end
     nothing
@@ -265,7 +269,10 @@ function lower_tiled_store!(blockq::Expr, op::Operation, ls::LoopSet, ua::Unroll
     vut = Expr(:call, lv(:VecUnroll), tup) # `VecUnroll` of `VecUnroll`s
     inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false, 0, ls)
     unrollcurl₂ = unrolled_curly(op, u₂, u₂loop, vloop, mask)
-    falseexpr = Expr(:call, lv(:False)); trueexpr = Expr(:call, lv(:True)); rs = staticexpr(reg_size(ls));
+    falseexpr = Expr(:call, lv(:False));
+    aliasexpr = falseexpr;
+    # trueexpr = Expr(:call, lv(:True));
+    rs = staticexpr(reg_size(ls));
     if isu₁ && u₁ > 1 # both unrolled
         unrollcurl₁ = unrolled_curly(op, u₁, u₁loop, vloop, mask)
         inds = Expr(:call, unrollcurl₁, inds)
@@ -278,7 +285,7 @@ function lower_tiled_store!(blockq::Expr, op::Operation, ls::LoopSet, ua::Unroll
         # and just directly take the branch in `add_memory_mask!`
         push!(storeexpr.args, MASKSYMBOL)
     end
-    push!(storeexpr.args, falseexpr, trueexpr, falseexpr, rs)
+    push!(storeexpr.args, falseexpr, aliasexpr, falseexpr, rs)
     push!(blockq.args, storeexpr)
     nothing
 end
