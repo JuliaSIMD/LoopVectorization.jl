@@ -9,7 +9,7 @@ using VectorizationBase: register_size, register_count, cache_linesize, cache_si
     maybestaticfirst, maybestaticlast, scalar_less, scalar_greaterequal, gep, gesp, NativeTypes, #llvmptr,
     vfmadd, vfmsub, vfnmadd, vfnmsub, vfmadd_fast, vfmsub_fast, vfnmadd_fast, vfnmsub_fast, vfmadd231, vfmsub231, vfnmadd231, vfnmsub231,
     vfma_fast, vmuladd_fast, vdiv_fast, vadd_fast, vsub_fast, vmul_fast,
-    relu, stridedpointer, StridedPointer, StridedBitPointer, AbstractStridedPointer, _vload, _vstore!,
+    relu, stridedpointer, stridedpointer_preserve, StridedPointer, StridedBitPointer, AbstractStridedPointer, _vload, _vstore!,
     reduced_add, reduced_prod, reduce_to_add, reduce_to_prod, reduced_max, reduced_min, reduce_to_max, reduce_to_min,
     reduced_all, reduced_any, reduce_to_all, reduce_to_any,
     vsum, vprod, vmaximum, vminimum, vany, vall, unwrap, Unroll, VecUnroll,
@@ -40,6 +40,7 @@ using SLEEFPirates: log_fast, log2_fast, log10_fast
 
 using ArrayInterface
 using ArrayInterface: OptionallyStaticUnitRange, OptionallyStaticRange, Zero, One, StaticBool, True, False, reduce_tup, indices, UpTri, LoTri
+using StrideArraysCore: CloseOpen
 @static if VERSION ≥ v"1.6.0-rc1" #TODO: delete `else` when dropping 1.5 support
     using ArrayInterface: static_step
 else # Julia 1.5 did not define `step` on CartesianIndices
@@ -62,7 +63,6 @@ const VECTORWIDTHSYMBOL, ELTYPESYMBOL, MASKSYMBOL = Symbol("##Wvecwidth##"), Sym
 
 include("vectorizationbase_compat/contract_pass.jl")
 include("vectorizationbase_compat/subsetview.jl")
-include("closeopen.jl")
 include("getconstindexes.jl")
 include("predicates.jl")
 include("simdfunctionals/map.jl")

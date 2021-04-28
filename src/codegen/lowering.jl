@@ -92,30 +92,19 @@ function lower_block(
     blockq
 end
 
-function assume(ex)
-    Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:VectorizationBase)), QuoteNode(:assume)), ex)
-end
+assume(ex) = Expr(:call, GlobalRef(VectorizationBase, :assume), ex)
 function expect(ex)
-    # use_expect() || return ex
-    # Expr(:call, Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:VectorizationBase)), QuoteNode(:expect)), ex)
+  # Expr(:call, GlobalRef(VectorizationBase, :expect), ex)
     ex
 end
 function loopiteratesatleastonce!(ls, loop::Loop)
-    start = first(loop); stop = last(loop)
-    (isknown(start) & isknown(stop)) && return loop
-    comp = Expr(:call, :>)
-    if isknown(start)
-        pushexpr!(comp, last(loop))
-        push!(comp.args, gethint(first(loop)) - 1)
-    elseif isknown(stop)
-        push!(comp.args, gethint(last(loop)) + 1)
-        pushexpr!(comp, first(loop))
-    else
-        pushexpr!(comp, last(loop))
-        push!(comp.args, Expr(:call, lv(:vsub_fast), getsym(start), staticexpr(1)))
-    end
-    pushpreamble!(ls, assume(comp))
-    return loop
+  start = first(loop); stop = last(loop)
+  (isknown(start) & isknown(stop)) && return loop
+  comp = Expr(:call, :≥)
+  pushexpr!(comp, last(loop))
+  pushexpr!(comp, first(loop))
+  pushpreamble!(ls, assume(comp))
+  return loop
 end
 # @inline step_to_align(x, ::Val{W}) where {W} = step_to_align(pointer(x), Val{W}())
 # @inline step_to_align(x::Ptr{T}, ::Val{W}) where {W,T} = vsub_fast(W, reinterpret(Int, x) & (W - 1))
@@ -170,8 +159,6 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
     #     return lower_unroll_for_throughput(ls, us, loop, loopsym)
     #     # return lower_llvm_unroll(ls, us, n, loop)
     # end
-    # sl = startloop(loop, nisvectorized, loopsym)
-
     tc = terminatecondition(ls, us, n, inclmask, 1)
     body = lower_block(ls, us, n, inclmask, 1)
     # align_loop = isone(n) & (ls.align_loops[] > 0)
@@ -244,7 +231,6 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     end
     remmask = inclmask | nisvectorized
     Ureduct = (n == num_loops(ls) && (u₂ == -1)) ? ureduct(ls) : -1
-    # sl = startloop(loop, nisvectorized, loopsym)
     sl = startloop(ls, us, n)
     UFt = loopisstatic ? cld(looplength % UFW, W) : 1
     # Don't place remainder first if we're going to have to mask this loop (i.e., if this loop is vectorized)
@@ -395,30 +381,27 @@ end
 function loopvarremcomparison(loop::Loop, UFt::Int, nisvectorized::Bool, remfirst::Bool)
     loopsym = loop.itersymbol
     loopstep = loop.step
-    # if isknown(loopstep)
-    #     UFt *= gethint(loopstep)
-    # end
     if nisvectorized
         offset = mulexpr(VECTORWIDTHSYMBOL, UFt, loopstep)
         itercount = subexpr(last(loop), offset)
-        Expr(:call, :≥, loopsym, itercount)
+        Expr(:call, GlobalRef(Base,:>), loopsym, itercount)
     elseif remfirst # requires `isstaticloop(loop)`
-        Expr(:call, :<, loopsym, gethint(first(loop)) + UFt*gethint(loopstep) - 1)
+        Expr(:call, GlobalRef(Base,:<), loopsym, gethint(first(loop)) + UFt*gethint(loopstep) - 1)
     elseif isknown(last(loop))
         if isknown(loopstep)
-            Expr(:call, :>, loopsym, gethint(last(loop)) - UFt*gethint(loopstep) - 1)
+            Expr(:call, GlobalRef(Base,:>), loopsym, gethint(last(loop)) - UFt*gethint(loopstep))
         elseif isone(UFt)
-            Expr(:call, :>, loopsym, (gethint(last(loop)) - 1) - getsym(loopstep))
+            Expr(:call, GlobalRef(Base,:>), loopsym, subexpr(gethint(last(loop)), getsym(loopstep)))
         else
-            Expr(:call, :>, loopsym, (gethint(last(loop)) - 1) - mulexpr(getsym(loopstep), UFt))
+            Expr(:call, GlobalRef(Base,:>), loopsym, subexpr(gethint(last(loop)),  mulexpr(getsym(loopstep), UFt)))
         end
     else
         if isknown(loopstep)
-            Expr(:call, :>, loopsym, Expr(:call, lv(:vsub_fast), getsym(last(loop)), UFt*gethint(loopstep) + 1))
+            Expr(:call, GlobalRef(Base,:>), loopsym, Expr(:call, lv(:vsub_fast), getsym(last(loop)), UFt*gethint(loopstep)))
         elseif isone(UFt)
-            Expr(:call, :≥, loopsym, Expr(:call, lv(:vsub_fast), getsym(last(loop)), getsym(loopstep)))
+            Expr(:call, GlobalRef(Base,:>), loopsym, Expr(:call, lv(:vsub_fast), getsym(last(loop)), getsym(loopstep)))
         else
-            Expr(:call, :≥, loopsym, Expr(:call, lv(:vsub_fast), getsym(last(loop)), mulexpr(getsym(loopstep), UFt)))
+            Expr(:call, GlobalRef(Base,:>), loopsym, Expr(:call, lv(:vsub_fast), getsym(last(loop)), mulexpr(getsym(loopstep), UFt)))
         end
     end
 end
@@ -486,19 +469,19 @@ function initialize_outer_reductions!(q::Expr, ls::LoopSet, Umax::Int, vectorize
 end
 initialize_outer_reductions!(ls::LoopSet, Umax::Int, vectorized::Symbol) = initialize_outer_reductions!(ls.preamble, ls, Umax, vectorized)
 function add_upper_comp_check(unrolledloop, loopbuffer)
-
+  
     if isstaticloop(unrolledloop)
-        Expr(:call, lv(:scalar_greaterequal), length(unrolledloop), loopbuffer)
+        Expr(:call, Base.GlobalRef(Base,:≥), length(unrolledloop), loopbuffer)
     elseif isknown(first(unrolledloop))
         if isone(first(unrolledloop))
-            Expr(:call, lv(:scalar_greaterequal), getsym(last(unrolledloop)), loopbuffer)
+            Expr(:call, Base.GlobalRef(Base,:≥), getsym(last(unrolledloop)), loopbuffer)
         else
-            Expr(:call, lv(:scalar_greaterequal), Expr(:call, lv(:vsub_fast), getsym(last(unrolledloop)), gethint(first(unrolledloop))-1), loopbuffer)
+            Expr(:call, Base.GlobalRef(Base,:≥), getsym(last(unrolledloop)), addexpr(loopbuffer,gethint(first(unrolledloop))-1))
         end
     elseif isknown(last(unrolledloop))
-        Expr(:call, lv(:scalar_greaterequal), Expr(:call, lv(:vsub_fast), gethint(last(unrolledloop))+1, getsym(first(unrolledloop))), loopbuffer)
+        Expr(:call, Base.GlobalRef(Base,:≥), Expr(:call, lv(:vsub_fast), gethint(last(unrolledloop))+1, getsym(first(unrolledloop))), loopbuffer)
     else# both are given by symbols
-        Expr(:call, lv(:scalar_greaterequal), Expr(:call, lv(:vsub_fast), getsym(last(unrolledloop)), Expr(:call,lv(:vsub_fast), getsym(first(unrolledloop)), staticexpr(1))), loopbuffer)
+        Expr(:call, Base.GlobalRef(Base,:>), Expr(:call, lv(:vsub_fast), getsym(last(unrolledloop)), Expr(:call,lv(:vsub_fast), getsym(first(unrolledloop)), staticexpr(1))), loopbuffer)
     end
 end
 function add_upper_outer_reductions(ls::LoopSet, loopq::Expr, Ulow::Int, Uhigh::Int, unrolledloop::Loop, vectorized::Symbol, reductisvectorized::Bool)
@@ -667,17 +650,15 @@ function determine_width(
     vwidth_q
 end
 function init_remblock(unrolledloop::Loop, lssm::LoopStartStopManager, n::Int)#u₁loop::Symbol = unrolledloop.itersymbol)
-    termind = lssm.terminators[n]
-    if iszero(termind)
-        loopsym = unrolledloop.itersymbol
-        condition = Expr(:call, :<, loopsym)
-        pushexpr!(condition, last(unrolledloop))
-    else
-        termar = lssm.incrementedptrs[n][termind]
-        ptr = vptr(termar)
-        condition = Expr(:call, :<, ptr, maxsym(ptr, 0))
-    end
-    Expr(:if, condition)
+  termind = lssm.terminators[n]
+  if iszero(termind)
+    condition = Expr(:call, lv(:cmpend), unrolledloop.itersymbol, unrolledloop.rangesym)
+  else
+    termar = lssm.incrementedptrs[n][termind]
+    ptr = vptr(termar)
+    condition = Expr(:call, GlobalRef(Base,:<), ptr, maxsym(ptr, 0))
+  end
+  Expr(:if, condition)
 end
 
 maskexpr(looplimit) = Expr(:(=), MASKSYMBOL, Expr(:call, lv(:mask), VECTORWIDTHSYMBOL, looplimit))

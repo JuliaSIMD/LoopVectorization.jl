@@ -131,12 +131,16 @@ function cmatmul_array!(C::AbstractArray{T,3}, A::AbstractArray{T,3}, B::Abstrac
     end
 end
 
-function issue209(M, G, J, H, A, B, ϕ)
-    tmp = similar(ϕ, G-1, (2*J+1)*(H + 1))
-    Bf = reinterpret(reshape, Float64, B)
-    ϕf = reinterpret(reshape, Float64, ϕ)
-    tmpf = reinterpret(reshape, Float64, tmp)
+function issue209(M, G, J, H, B, ϕ)
+    # tmp = similar(ϕ, G-1, (2*J+1)*(H + 1));
+    tmp = view(fill(eltype(ϕ)(123456789), G+15, (2*J+1)*(H + 1)+16), 9:G+7, 9:(2*J+1)*(H + 1)+8);
+    Bf = reinterpret(reshape, Float64, B);
+    ϕf = reinterpret(reshape, Float64, ϕ);
+    tmpf = reinterpret(reshape, Float64, tmp);
     jmax = 2*J + 1
+    # B is being indexed via ptr offsetting
+    # thus B's initial `gesp`ing must set it up for this
+    # currently, it isn't because  `jj` and `hh` are loop induct vars
     for mm = 1:M
         m_idx = M + 2 - mm
         @avx for hh = 1:H+1
@@ -149,13 +153,13 @@ function issue209(M, G, J, H, A, B, ϕ)
             end
         end
     end
-    tmp
+    parent(tmp)
 end
-function issue209_noavx(M, G, J, H, A, B, ϕ)
-    tmp = similar(ϕ, G-1, (2*J+1)*(H + 1))
-    Bf = reinterpret(reshape, Float64, B)
-    ϕf = reinterpret(reshape, Float64, ϕ)
-    tmpf = reinterpret(reshape, Float64, tmp)
+function issue209_noavx(M, G, J, H, B, ϕ)
+    tmp = view(fill(eltype(ϕ)(123456789), G+15, (2*J+1)*(H + 1)+16), 9:G+7, 9:(2*J+1)*(H + 1)+8);
+    Bf = reinterpret(reshape, Float64, B);
+    ϕf = reinterpret(reshape, Float64, ϕ);
+    tmpf = reinterpret(reshape, Float64, tmp);
     jmax = 2*J + 1
     for mm = 1:M
         m_idx = M + 2 - mm
@@ -169,11 +173,11 @@ function issue209_noavx(M, G, J, H, A, B, ϕ)
             end
         end
     end
-    tmp
+    parent(tmp)
 end
 
 @testset "shuffles load/stores" begin
-	@show @__LINE__
+    @show @__LINE__
     for i ∈ 1:128
         ac = rand(Complex{Float64}, i);
         bc = rand(Complex{Float64}, i);
@@ -182,7 +186,7 @@ end
             @test dsimd ≈ cdot_mat(ac, bc)
         end
         @test dsimd ≈ cdot_affine(ac, bc) ≈ cdot_stride(ac, bc)
-
+        
 
         xq = [ntuple(_ -> rand(), Val(4)) for _ ∈ 1:i];
         yq = [ntuple(_ -> rand(), Val(4)) for _ ∈ 1:i];
@@ -210,16 +214,21 @@ end
             @test Cc1 ≈ Cc2# ≈ Cc3
         end
     end
+    @show @__LINE__
     if VERSION ≥ v"1.6.0-rc1"
-        M = 100
+        M = 10
         G = 50
         J = 50
-        H = 300
+        H = 30
 
-        A = Matrix(Tridiagonal(rand(G-1,G-1)));
-        B = rand(Complex{Float64}, 2*J+1, G-1, H+1, M+1);
-        ϕ = rand(Complex{Float64}, 2*J+1, G+1, H+1, M+1);
-        @test issue209(M, G, J, H, A, B, ϕ) ≈ issue209_noavx(M, G, J, H, A, B, ϕ)
+        # B = rand(Complex{Float64}, 2*J+1, G-1, H+1, M+1);
+        # ϕ = rand(Complex{Float64}, 2*J+1, G+1, H+1, M+1);
+        rbc = let rb = 1.0:((2*J+17) * (G+15) * (H+17) * (M+17)), rbr = reverse(rb)
+          Complex{Float64}[rb[i] + im * rbr[i] for i ∈ eachindex(rb)];
+        end
+        B = view(reshape(rbc, (2*J+17, G+15, H+17, M+17)), 9:2*J+9, 9:G+9, 9:H+9, 9:M+9) .= rand.() .+ rand.().*im;
+        ϕ = view(fill(1e5+1e7im, 2*J+17, G+17, H+17, M+17), 9:2*J+9, 9:G+9, 9:H+9, 9:M+9) .= rand.() .+ rand.().*im;
+        @test issue209(M, G, J, H, B, ϕ) ≈ issue209_noavx(M, G, J, H, B, ϕ)
     end
 end
 

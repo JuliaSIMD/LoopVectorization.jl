@@ -33,13 +33,14 @@ end
 add_vptr!(ls::LoopSet, op::Operation) = add_vptr!(ls, op.ref)
 add_vptr!(ls::LoopSet, mref::ArrayReferenceMeta) = add_vptr!(ls, mref.ref.array, vptr(mref))
 # using VectorizationBase: noaliasstridedpointer
+presbufsym(array) = Symbol('#', array, "#preserve#buffer#")
 function add_vptr!(ls::LoopSet, array::Symbol, vptrarray::Symbol, actualarray::Bool = true, broadcast::Bool = false)
-    if !includesarray(ls, array)
-        push!(ls.includedarrays, array)
-        actualarray && push!(ls.includedactualarrays, array)
-        broadcast || pushpreamble!(ls, Expr(:(=), vptrarray, Expr(:call, lv(:stridedpointer), array)))
-    end
-    nothing
+  if !includesarray(ls, array)
+    push!(ls.includedarrays, array)
+    actualarray && push!(ls.includedactualarrays, array)
+    broadcast || pushpreamble!(ls, Expr(:(=), Expr(:tuple, vptrarray, presbufsym(array)), Expr(:call, lv(:stridedpointer_preserve), array)))
+  end
+  nothing
 end
 
 @inline staticdims(::Any) = One()
@@ -119,7 +120,8 @@ end
 
 function addconstindex!(indices, offsets, strides, loopedindex, offset)
     push!(indices, CONSTANTZEROINDEX)
-    push!(offsets, (offset-1) % Int8)
+    # push!(offsets, (offset-1) % Int8)
+    push!(offsets, (offset) % Int8)
     push!(strides, zero(Int8))
     push!(loopedindex, true)
     true

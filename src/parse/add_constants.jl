@@ -42,7 +42,7 @@ function add_constant!(ls::LoopSet, mpref::ArrayReferenceMetaPosition, elementby
     temp = gensym!(ls, "intermediateconstref")
     vloadcall = Expr(:call, lv(:_vload), mpref.mref.ptr)
     nindices = length(getindices(op))
-    getoffsets(op) .+= 1
+    # getoffsets(op) .+= 1
     if nindices > 0
         dummyloop = first(ls.loops)
         push!(vloadcall.args, mem_offset(op, UnrollArgs(dummyloop, dummyloop, dummyloop, 0, 0, 0), fill(false,nindices), true, ls))

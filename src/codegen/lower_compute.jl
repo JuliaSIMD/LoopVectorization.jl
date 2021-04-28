@@ -65,17 +65,19 @@ function _add_loopvalue!(ex::Expr, loopval::Symbol, vloop::Loop, u::Int)
     vloopsym = vloop.itersymbol
     if loopval === vloopsym
         if iszero(u)
-            push!(ex.args, _MMind(Expr(:call, lv(:staticp1), loopval), step(vloop)))
+            push!(ex.args, _MMind(loopval, step(vloop)))
         else
-            mm = _MMind(Expr(:call, lv(:staticp1), loopval), step(vloop))
+            mm = _MMind(loopval, step(vloop))
             if isone(u)
                 push!(ex.args, Expr(:call, lv(:vadd_fast), VECTORWIDTHSYMBOL, mm))
             else
                 push!(ex.args, Expr(:call, lv(:vadd_fast), Expr(:call, lv(:vmul_fast), VECTORWIDTHSYMBOL, u), mm))
             end
         end
+    elseif u == 0
+        push!(ex.args, loopval)
     else
-        push!(ex.args, Expr(:call, lv(:vadd_fast), loopval, staticexpr(u+1)))
+        push!(ex.args, Expr(:call, lv(:vadd_fast), loopval, staticexpr(u)))
     end
 end
 function add_loopvalue!(instrcall::Expr, loopval, ua::UnrollArgs, u₁::Int)
@@ -93,9 +95,9 @@ function add_loopvalue!(instrcall::Expr, loopval, ua::UnrollArgs, u₁::Int)
     elseif suffix > 0 && loopval === u₂loopsym
         _add_loopvalue!(instrcall, loopval, vloop, suffix)
     elseif loopval === vloopsym
-        push!(instrcall.args, _MMind(Expr(:call, lv(:staticp1), loopval), step(vloop)))
+        push!(instrcall.args, _MMind(loopval, step(vloop)))
     else
-        push!(instrcall.args, Expr(:call, lv(:staticp1), loopval))
+        push!(instrcall.args, loopval)
     end
 end
 
