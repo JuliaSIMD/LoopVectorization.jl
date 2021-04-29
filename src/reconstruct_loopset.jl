@@ -644,7 +644,7 @@ end
 @static if VERSION ≥ v"1.7.0-DEV.421"
   using Base: @aggressive_constprop
 else
-  macro aggressive_constprop(ex); ex; end
+  macro aggressive_constprop(ex); esc(ex); end
 end
 
 """
@@ -667,22 +667,22 @@ Execute an `@avx` block. The block's code is represented via the arguments:
 - `vargs...` holds the encoded pointers of all the arrays (see `VectorizationBase`'s various pointer types).
 """
 @aggressive_constprop @generated function _avx_!(
-    ::Val{UNROLL}, ::Val{OPS}, ::Val{ARF}, ::Val{AM}, ::Val{LPSYM}, var"#lv#tuple#args#"::Tuple{LB,V}
-) where {UNROLL, OPS, ARF, AM, LPSYM, LB, V}
+    ::Val{var"#UNROLL#"}, ::Val{var"#OPS#"}, ::Val{var"#ARF#"}, ::Val{var"#AM#"}, ::Val{var"#LPSYM#"}, var"#lv#tuple#args#"::Tuple{var"#LB#",var"#V#"}
+) where {var"#UNROLL#", var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#", var"#V#"}
     # 1 + 1 # Irrelevant line you can comment out/in to force recompilation...
-    ls = _avx_loopset(OPS, ARF, AM, LPSYM, LB.parameters, V.parameters, UNROLL)
-    # return @show avx_body(ls, UNROLL)
-    if last(UNROLL) > 1
-        inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, nt = UNROLL
-        # wrap in `OPS, ARF, AM, LPSYM` in `Expr` to homogenize types
+    ls = _avx_loopset(var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#".parameters, var"#V#".parameters, var"#UNROLL#")
+    # return @show avx_body(ls, var"#UNROLL#")
+    if last(var"#UNROLL#") > 1
+        inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, nt = var"#UNROLL#"
+        # wrap in `var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#"` in `Expr` to homogenize types
         avx_threads_expr(
             ls, (inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, one(UInt)), nt,
-            :(Val{$OPS}()), :(Val{$ARF}()), :(Val{$AM}()), :(Val{$LPSYM}())
+            :(Val{$(var"#OPS#")}()), :(Val{$(var"#ARF#")}()), :(Val{$(var"#AM#")}()), :(Val{$(var"#LPSYM#")}())
         )
     else
-        # Main.BODY[] = avx_body(ls, UNROLL)
-        # @show avx_body(ls, UNROLL)
-        avx_body(ls, UNROLL)
+        # Main.BODY[] = avx_body(ls, var"#UNROLL#")
+        # @show avx_body(ls, var"#UNROLL#")
+        avx_body(ls, var"#UNROLL#")
     end
-    # @show UNROLL, OPS, ARF, AM, LPSYM, LB
+    # @show var"#UNROLL#", var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#"
 end

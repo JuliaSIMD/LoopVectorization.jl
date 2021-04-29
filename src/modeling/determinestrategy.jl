@@ -1265,7 +1265,7 @@ function choose_tile(ls::LoopSet)
     end
     ls.loadelimination = loadelim
     # `any(...)` is a HACK: specialization can fail in Tullio's codegen, resulting in bad performance. See https://github.com/JuliaSIMD/LoopVectorization.jl/issues/245
-    shouldinline = (looplengthprod(ls) < 4097.0) || any(op -> iscompute(op) && iszero(length(loopdependencies(op))), operations(ls))
+    shouldinline = (looplengthprod(ls) < 4097.0) #|| any(op -> iscompute(op) && iszero(length(loopdependencies(op))), operations(ls))
     best_order, bestu₁, bestu₂, best_vec, u₁, u₂, lowest_cost, shouldinline
 end
 # Last in order is the inner most loop
