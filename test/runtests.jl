@@ -68,6 +68,8 @@ const START_TIME = time()
     @time include("tullio.jl")
 
     @time include("staticsize.jl")
+
+    @time include("quantum.jl")
 end
 
 const ELAPSED_MINUTES = (time() - START_TIME)/60
