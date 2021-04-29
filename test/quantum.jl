@@ -67,7 +67,7 @@ function broutine2x2_avx!(S::AbstractMatrix{Complex{T}}, U::AbstractMatrix, locs
     end
 end
 
-@tesetset begin "Quantum"
+@testset "Quantum" begin
   N = 10
   S = rand(ComplexF64, 100, 1 << N)
   U = rand(ComplexF64, 2, 2)
