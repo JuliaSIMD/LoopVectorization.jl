@@ -843,7 +843,6 @@ end
         𝛥x
     end # LoadError: KeyError: key typeof(first) not found
 
-
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
         A = randn(T, 199, 498);
@@ -1247,6 +1246,37 @@ end
 
         @test obj8(y, s, θ) ≈ obj9(y, s, θ)
     end
-
+  @testset "issue 244" begin
+    function energy(spin_conf)
+      (Nx, Ny) = size(spin_conf)
+      res = 0
+      @avx for i = 1:Nx
+        for j = 1:Ny
+          i0 = (i-1+Nx)%Nx
+          i1 = (i+Nx)%Nx
+          j0 = (j-1+Ny)%Ny
+          j1 = (j+Ny)%Ny
+          res += -spin_conf[i0+1,j0+1]*(spin_conf[i1+1,j0+1] + spin_conf[i0+1,j1+1])
+        end
+      end
+      return res
+    end
+    function energy_base(spin_conf)
+      (Nx, Ny) = size(spin_conf)
+      res = 0
+      for i = 1:Nx
+        for j = 1:Ny
+          i0 = (i-1+Nx)%Nx
+          i1 = (i+Nx)%Nx
+          j0 = (j-1+Ny)%Ny
+          j1 = (j+Ny)%Ny
+          res += -spin_conf[i0+1,j0+1]*(spin_conf[i1+1,j0+1] + spin_conf[i0+1,j1+1])
+        end
+      end
+      return res
+    end
+    spin_conf = rand((-1,1),64,64);
+    @test energy(spin_conf) == energy_base(spin_conf)
+  end
 end
 

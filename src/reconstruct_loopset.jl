@@ -272,7 +272,7 @@ function create_mrefs!(
   Cv,Bv,Rv = stabilize_grouped_stridedpointer_type(C, B, R)
   _create_mrefs!(ls, arf, as, os, nopsv, expanded, P.parameters, Cv, Bv, Rv)
 end
-  
+
 function _create_mrefs!(
   ls::LoopSet, arf::Vector{ArrayRefStruct}, as::Vector{Symbol}, os::Vector{Symbol},
   nopsv::Vector{NOpsType}, expanded::Vector{Bool}, P::Core.SimpleVector, C::Vector{Int}, B::Vector{Int}, R::Vector{Tuple{NTuple{8,Int},Int}}

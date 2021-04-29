@@ -284,10 +284,10 @@ function parent_op_name!(
   parent = mangledvar(opp)
   u = 0
   if n == tiledouterreduction# && isvectorized(opp)
-    parent = if parents_u₁syms[n]
-      Symbol(parent, '_', modsuffix)
-    else
+    parent = if u₂unrolledsym #!parents_u₁syms[n]
       Symbol(parent, modsuffix)
+    else
+      Symbol(parent, '_', modsuffix)
     end
   else
     u = if !parents_u₁syms[n]

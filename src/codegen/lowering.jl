@@ -368,7 +368,7 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
         #     push!(remblock.args, lower_no_unroll(ls, ust, n, inclmask, false, UF-1))
         # end
     end
-  if (length(ls.outer_reductions) > 0) && (n == 2) && length(ls.loops) > 2
+  if (length(ls.outer_reductions) > 0) && (2 ≤ n < length(ls.loops))
     pre, post = reinit_and_update_tiled_outer_reduct!(sl, q, ls, order[u₁loopnum], order[us.u₂loopnum], vectorized)
     Expr(:block, pre, Expr(:let, sl, q), post)
   else
