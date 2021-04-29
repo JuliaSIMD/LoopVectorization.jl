@@ -1346,7 +1346,12 @@ Returns `-1` if not an outerreduction.
 """
 function isouterreduction(ls::LoopSet, op::Operation)
     if isconstant(op) # equivalent to checking if length(loopdependencies(op)) == 0
-        op.instruction === LOOPCONSTANT ? 0 : -1
+        op.instruction == LOOPCONSTANT && return 0
+        ops = operations(ls)
+        for or ∈ ls.outer_reductions
+            name(op) === name(ops[or]) && return 0
+        end
+        -1
     elseif iscompute(op)
         var = op.variable
         for opid ∈ ls.outer_reductions

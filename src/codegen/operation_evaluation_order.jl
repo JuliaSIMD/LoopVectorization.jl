@@ -63,13 +63,13 @@ function addoptoorder!(
 )
     lo = ls.loop_order
     id = identifier(op)
-    included_vars[id] && return nothing
+    included_vars[id] || return nothing
     loopsym ∈ loopdependencies(op) || return nothing
     for opp ∈ parents(op) # ensure parents are added first
         addoptoorder!(ls, included_vars, place_after_loop, opp, loopsym, _n, u₁loop, u₂loop, vectorized, u₂max)
     end
-    included_vars[id] && return nothing
-    included_vars[id] = true
+    included_vars[id] || return nothing
+    included_vars[id] = false
     isunrolled = (isu₁unrolled(op)) + 1
     istiled = isu₂unrolled(op) + 1
     # optype = Int(op.node_type) + 1
@@ -96,7 +96,11 @@ function fillorder!(ls::LoopSet, order::Vector{Symbol}, u₁loop::Symbol, u₂lo
     nloops = length(order)
     ops = operations(ls)
     nops = length(ops)
-    included_vars = fill!(resize!(ls.included_vars, nops), false)
+    included_vars = getroots!(resize!(ls.included_vars, nops), ls)
+    #for i ∈ eachindex(included_vars)
+    #    included_vars[i] = !included_vars[i]
+    #end
+    #included_vars = fill!(resize!(ls.included_vars, nops), false)
     place_after_loop = fill!(resize!(ls.place_after_loop, nops), true)
     # to go inside out, we just have to include all those not-yet included depending on the current sym
     empty!(lo)

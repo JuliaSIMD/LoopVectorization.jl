@@ -44,8 +44,8 @@ using StrideArraysCore: CloseOpen
 @static if VERSION ≥ v"1.6.0-rc1" #TODO: delete `else` when dropping 1.5 support
     using ArrayInterface: static_step
 else # Julia 1.5 did not define `step` on CartesianIndices
-    @inline static_step(x) = ArrayInterface.static_step
-    static_step(x::CartesianIndices) = CartesianIndex(map(step, x.indices))
+    @inline static_step(x) = ArrayInterface.static_step(x)
+    @inline static_step(x::CartesianIndices) = VectorizationBase.CartesianVIndex(map(static_step, x.indices))
 end
 const Static = StaticInt
 

@@ -838,7 +838,8 @@ function load_elimination_cost_factor!(
         # end
         # # (0.25, dynamic_register_count() == 32 ? 1.2 : 1.0)
         # (0.25, 1.0)
-        cost_vec[1] -= 0.1looplengthprod(ls)
+        # cost_vec[1] -= rt
+        cost_vec[1] -= 0.5625 * iters
         reg_pressure[1] += 0.25rp
         cost_vec[2] += rt
         reg_pressure[2] += rp

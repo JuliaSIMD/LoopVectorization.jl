@@ -36,7 +36,7 @@ function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{R}) where {R<:AbstractR
     f = ArrayInterface.known_first(R)
     s = ArrayInterface.known_step(R)
     l = ArrayInterface.known_last(R)
-    
+
     Loop(ls, ex, sym, f, s, l)
 end
 
@@ -316,20 +316,23 @@ end
 function gen_array_syminds(AM)
     Symbol[Symbol("##arraysymbolind##"*i*'#') for i ∈ 1:(AM[1])::Int]
 end
-function process_metadata!(ls::LoopSet, AM)
+function process_metadata!(ls::LoopSet, AM, extractind::Int)
     opoffsets = ls.operation_offsets
     expandbyoffset!(ls.outer_reductions, AM[2], opoffsets)
     for (i,si) ∈ enumerate(AM[3])
         sii = si::Int
-        s = gensym(:symlicm)
-        push!(ls.preamble_symsym, (opoffsets[sii] + 1, s))
-        pushpreamble!(ls, Expr(:(=), s, extract_varg(1 + i)))
+        opid = opoffsets[sii]+1
+        if instruction(operations(ls)[opid]) ≠ DROPPEDCONSTANT
+            s = gensym(:symlicm)
+            push!(ls.preamble_symsym, (opid, s))
+            pushpreamble!(ls, Expr(:(=), s, extract_varg((extractind += 1))))
+        end
     end
     expandbyoffset!(ls.preamble_symint, AM[4], opoffsets)
     expandbyoffset!(ls.preamble_symfloat, AM[5], opoffsets)
     expandbyoffset!(ls.preamble_zeros, AM[6], opoffsets)
     expandbyoffset!(ls.preamble_funcofeltypes, AM[7], opoffsets)
-    nothing
+    return extractind
 end
 function expandbyoffset!(indexpand::Vector{T}, inds, offsets::Vector{Int}, expand::Bool = true) where {T <: Union{Int,Tuple{Int,<:Any}}}
     for _ind ∈ inds
@@ -477,7 +480,7 @@ function add_parents_to_ops!(ls::LoopSet, ops::Vector{OperationStruct}, constoff
             op = ls.operations[pos+k]
             if isconstant(op)
                 instr = instruction(op)
-                if instr != LOOPCONSTANT && instr.mod !== :numericconstant
+                if !skip_constant(instr)
                     constoffset += 1
                     pushpreamble!(ls, Expr(:(=), instr.instr, extract_varg(constoffset)))
                 end
@@ -518,9 +521,10 @@ typeeltype(::Type{T}) where {T<:Real} = T
 # typeeltype(::Any) = Int8
 
 function add_array_symbols!(ls::LoopSet, arraysymbolinds::Vector{Symbol}, offset::Int)
-    for (i,as) ∈ enumerate(arraysymbolinds)
-        pushpreamble!(ls, Expr(:(=), as, extract_varg(i + offset)))
+    for as ∈ arraysymbolinds
+        pushpreamble!(ls, Expr(:(=), as, extract_varg((offset+=1))))
     end
+    return offset   
 end
 function extract_external_functions!(ls::LoopSet, offset::Int, vargs)
     for op ∈ operations(ls)
@@ -586,17 +590,16 @@ function avx_loopset!(
     nopsv = NOpsType[calcnops(ls, op) for op in ops]
     expandedv = [isexpanded(ls, ops, nopsv, i) for i ∈ eachindex(ops)]
 
-    resize!(ls.loopindexesbit, length(ls.loops)); ls.loopindexesbit .= false;
+    resize!(ls.loopindexesbit, length(ls.loops)); fill!(ls.loopindexesbit, false);
     mrefs = create_mrefs!(ls, arf, arraysymbolinds, opsymbols, nopsv, expandedv, vargs[1])
     for mref ∈ mrefs
         push!(ls.includedactualarrays, vptr(mref))
-    end    
-    # num_params = num_arrays + num_parameters(AM)
-    num_params = 1 + num_parameters(AM)
-    add_ops!(ls, instr, ops, mrefs, opsymbols, num_params, nopsv, expandedv, elementbytes)
-    process_metadata!(ls, AM)
-    add_array_symbols!(ls, arraysymbolinds, 1 + length(ls.preamble_symsym))
-    num_params = extract_external_functions!(ls, num_params, vargs)
+    end
+    # extra args extraction
+    extractind = add_ops!(ls, instr, ops, mrefs, opsymbols, 1, nopsv, expandedv, elementbytes)
+    extractind = process_metadata!(ls, AM, extractind)
+    extractind = add_array_symbols!(ls, arraysymbolinds, extractind)
+    extract_external_functions!(ls, extractind, vargs)
     ls
 end
 function avx_body(ls::LoopSet, UNROLL::Tuple{Bool,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt})

@@ -1,4 +1,3 @@
-
 @enum IndexType::UInt8 NotAnIndex=0 LoopIndex=1 ComputedIndex=2 SymbolicIndex=3
 
 Base.:|(u::Unsigned, it::IndexType) = u | UInt8(it)
@@ -118,6 +117,29 @@ function parents_uint(ls::LoopSet, op::Operation)
     end
     p
 end
+function recursively_set_parents_true!(x::Vector{Bool}, op::Operation)
+    x[identifier(op)] && return nothing # don't redescend
+    x[identifier(op)] = true
+    for opp ∈ parents(op)
+        recursively_set_parents_true!(x, opp)
+    end
+    return nothing
+end
+function getroots(ls::LoopSet)::Vector{Bool}
+    rooted = Vector{Bool}(undef, length(operations(ls)))
+    getroots!(rooted, ls)
+end
+function getroots!(rooted::Vector{Bool}, ls::LoopSet)
+    fill!(rooted, false)
+    ops = operations(ls)
+    for or ∈ ls.outer_reductions
+        recursively_set_parents_true!(rooted, ops[or])
+    end
+    for op ∈ ops
+        isstore(op) && recursively_set_parents_true!(rooted, op)
+    end
+    return rooted
+end
 function OperationStruct!(varnames::Vector{Symbol}, ids::Vector{Int}, ls::LoopSet, op::Operation)
     instr = instruction(op)
     ld = loopdeps_uint(ls, op)
@@ -219,12 +241,16 @@ function loopset_return_value(ls::LoopSet, ::Val{extract}) where {extract}
         ret
     end
 end
+const DROPPEDCONSTANT = Instruction(Symbol("##DROPPED#CONSTANT##"),Symbol("##DROPPED#CONSTANT##"))
+function skip_constant(instr::Instruction)
+    ((instr == LOOPCONSTANT) || (instr.mod === :numericconstant)) || (instr == DROPPEDCONSTANT)
+end
 
 function add_reassigned_syms!(q::Expr, ls::LoopSet)
     for op ∈ operations(ls)
         if isconstant(op)
             instr = instruction(op)
-            (instr == LOOPCONSTANT || instr.mod === :numericconstant) || push!(q.args, instr.instr)
+            skip_constant(instr) || push!(q.args, instr.instr)
         end
     end
 end
@@ -293,7 +319,7 @@ function should_zerorangestart(ls::LoopSet, allarrayrefs::Vector{ArrayReferenceM
       shouldindbyind[i] = true
       continue
     end
-    # otherwise, we need 
+    # otherwise, we need
     for namev ∈ name_to_array_map
       # firstcontainsind relies on stripping of duplicate inds in parsing
       firstcontainsind = findfirstcontaining(allarrayrefs[first(namev)], ind)
@@ -411,15 +437,40 @@ end
         cache_linesize(), cache_size(StaticInt(1)), cache_size(StaticInt(2)), cache_size(StaticInt(3))
     )
 end
+function find_samename_constparent(op::Operation, opname::Symbol)
+    for opp ∈ parents(op)
+        (((isconstant(opp) && instruction(opp) == LOOPCONSTANT) && (name(opp) === opname))) && return opp
+        opptemp = find_samename_constparent(opp, opname)
+        opptemp === opp || return opptemp
+    end
+    op
+end
+function remove_outer_reducts!(roots::Vector{Bool}, ls::LoopSet)
+    ops = operations(ls)
+    for or ∈ ls.outer_reductions
+        op = ops[or]
+        optemp = find_samename_constparent(op, name(op))
+        if optemp ≢ op
+            roots[identifier(optemp)] = false
+        end
+    end
+end
+
 # Try to condense in type stable manner
 function generate_call(ls::LoopSet, (inline,u₁,u₂)::Tuple{Bool,Int8,Int8}, thread::UInt, debug::Bool = false)
     extra_args = Expr(:tuple)
     preserve, shouldindbyind = add_grouped_strided_pointer!(extra_args, ls)
-  
+
     operation_descriptions = Expr(:tuple)
     varnames = Symbol[]; ids = Vector{Int}(undef, length(operations(ls)))
-    for op ∈ operations(ls)
-        instr = instruction(op)
+    ops = operations(ls)
+    roots = getroots(ls)
+    length(ls.includedactualarrays) == 0 || remove_outer_reducts!(roots, ls)
+    for op ∈ ops
+        instr::Instruction = instruction(op)
+        if (isconstant(op) && (instr == LOOPCONSTANT)) && (!roots[identifier(op)])
+            instr = op.instruction = DROPPEDCONSTANT
+        end
         push!(operation_descriptions.args, QuoteNode(instr.mod))
         push!(operation_descriptions.args, QuoteNode(instr.instr))
         push!(operation_descriptions.args, OperationStruct!(varnames, ids, ls, op))
@@ -441,12 +492,15 @@ function generate_call(ls::LoopSet, (inline,u₁,u₂)::Tuple{Bool,Int8,Int8}, t
     configarg = (inline,u₁,u₂,ls.isbroadcast,thread)
     unroll_param_tup = Expr(:call, lv(:avx_config_val), :(Val{$configarg}()), VECTORWIDTHSYMBOL)
     q = Expr(:call, func, unroll_param_tup, val(operation_descriptions), val(arrayref_descriptions), val(argmeta), val(loop_syms))
-    for is ∈ ls.preamble_symsym
-        push!(extra_args.args, last(is))
+    
+    add_reassigned_syms!(extra_args, ls) # counterpart to `add_ops!` constants
+    for (opid,sym) ∈ ls.preamble_symsym # counterpart to process_metadata! symsym extraction
+        if instruction(ops[opid]) ≠ DROPPEDCONSTANT
+            push!(extra_args.args, sym)
+        end
     end
-    append!(extra_args.args, arraysymbolinds)
-    add_reassigned_syms!(extra_args, ls)
-    add_external_functions!(extra_args, ls)
+    append!(extra_args.args, arraysymbolinds) # add_array_symbols!
+    add_external_functions!(extra_args, ls) # extract_external_functions!
     push!(q.args, Expr(:tuple, lbarg, extra_args))
     vecwidthdefq = Expr(:block)
     define_eltype_vec_width!(vecwidthdefq, ls, nothing)
