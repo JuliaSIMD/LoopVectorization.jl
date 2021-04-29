@@ -1204,7 +1204,8 @@ end
         end
     end
 
-    @test_throws LoopVectorization.LoopError @macroexpand begin # pull #172
+    # @test_throws LoopVectorization.LoopError @macroexpand begin # pull #172
+    @test_throws LoadError @macroexpand begin # pull #172
         @avx for i in eachindex(xs)
             if i in axes(ys,1)
                 xs[i] = ys[i]

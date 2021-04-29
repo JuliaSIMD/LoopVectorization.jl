@@ -489,7 +489,6 @@ reg_size(ls::LoopSet) = ls.register_size
 reg_count(ls::LoopSet) = ls.register_count
 cache_lnsze(ls::LoopSet) = ls.cache_linesize
 cache_sze(ls::LoopSet) = ls.cache_size
-# opmask_reg(ls::LoopSet) = ls.opmasack_register[]
 
 pushprepreamble!(ls::LoopSet, ex) = push!(ls.prepreamble.args, ex)
 function pushpreamble!(ls::LoopSet, op::Operation, v::Symbol)

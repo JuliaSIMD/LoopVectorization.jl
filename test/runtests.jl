@@ -74,5 +74,5 @@ end
 
 const ELAPSED_MINUTES = (time() - START_TIME)/60
 # @test ELAPSED_MINUTES < 180
-@test ELAPSED_MINUTES < 240
+@test ELAPSED_MINUTES < 300
 

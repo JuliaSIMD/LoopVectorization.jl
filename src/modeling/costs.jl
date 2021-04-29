@@ -158,6 +158,7 @@ const COST = Dict{Symbol,InstructionCost}(
     :abs2_fast => InstructionCost(4,0.5),
     :(==) => InstructionCost(1, 0.5),
     :(!=) => InstructionCost(1, 0.5),
+    :(≠) => InstructionCost(1, 0.5),
     :(===) => InstructionCost(1, 0.5),
     :(!==) => InstructionCost(1, 0.5),
     :(isnan) => InstructionCost(1, 0.5),
