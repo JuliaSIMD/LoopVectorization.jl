@@ -292,7 +292,7 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
             UF_cleanup = UF - Ureduct
             blockhead = :if
         end
-        _q = Expr(:block, add_upper_outer_reductions(ls, q, Ureduct, UF, loop, vectorized, nisvectorized))
+        _q = Expr(:block, add_upper_outer_reductions(ls, q, Ureduct, UF, loop, nisvectorized))
         if add_cleanup
             cleanup_expr = Expr(blockhead)
             blockhead === :block || push!(cleanup_expr.args, terminatecondition(ls, us, n, inclmask, UF_cleanup))
@@ -368,7 +368,12 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
         #     push!(remblock.args, lower_no_unroll(ls, ust, n, inclmask, false, UF-1))
         # end
     end
+  if (length(ls.outer_reductions) > 0) && (n == 2) && length(ls.loops) > 2
+    pre, post = reinit_and_update_tiled_outer_reduct!(sl, q, ls, order[u₁loopnum], order[us.u₂loopnum], vectorized)
+    Expr(:block, pre, Expr(:let, sl, q), post)
+  else
     Expr(:block, Expr(:let, sl, q))
+  end
 end
 function unrollremcomparison(ls::LoopSet, loop::Loop, UFt::Int, n::Int, nisvectorized::Bool, remfirst::Bool)
     termind = ls.lssm.terminators[n]
@@ -417,57 +422,66 @@ function pointerremcomparison(ls::LoopSet, termind::Int, UFt::Int, n::Int, nisve
     end
 end
 
+
+function outer_reduction_zero(op::Operation, u₁u::Bool, Umax::Int, reduct_class::Float64, rs::Expr)
+  reduct_zero = reduction_zero(reduct_class)
+  if isvectorized(op)
+    if Umax == 1 || !u₁u
+      if reduct_zero === :zero
+        Expr(:call, lv(:_vzero), VECTORWIDTHSYMBOL, ELTYPESYMBOL, rs)
+      else
+        Expr(:call, lv(:_vbroadcast), VECTORWIDTHSYMBOL, Expr(:call, reduct_zero, ELTYPESYMBOL), rs)
+      end
+    else
+      if reduct_zero === :zero
+        Expr(:call, lv(:zero_vecunroll), staticexpr(Umax), VECTORWIDTHSYMBOL, ELTYPESYMBOL, rs)
+      else
+        Expr(:call, lv(:vbroadcast_vecunroll), staticexpr(Umax), VECTORWIDTHSYMBOL, Expr(:call, reduct_zero, ELTYPESYMBOL), rs)
+      end
+    end
+  else
+    Expr(:call, reduct_zero, ELTYPESYMBOL)
+  end
+end
+# function outer_reduction_name(mvar::Symbol, _Umax::Int, u₂::Int, u₁u::Bool)
+#   Symbol(mvar, '_', _Umax)
+# end
+
 # TODO: handle tiled outer reductions; they will require a suffix arg
 function initialize_outer_reductions!(
-    q::Expr, ls::LoopSet, op::Operation, _Umax::Int, vectorized::Symbol, us::UnrollSpecification, rs::Expr
+    q::Expr, ls::LoopSet, op::Operation, _Umax::Int, us::UnrollSpecification, rs::Expr
 )
     @unpack u₁, u₂ = us
     Umax = u₂ == -1 ? _Umax : u₁
-    reduct_zero = reduction_zero(op.instruction)
-    typeTr = ELTYPESYMBOL
+  
     u₁u, u₂u = isunrolled_sym(op, getloop(ls, us.u₁loopnum).itersymbol, getloop(ls, us.u₂loopnum).itersymbol, getloop(ls, us.vloopnum).itersymbol, ls)#, u₂)
-    z = if isvectorized(op)
-        if Umax == 1 || !u₁u
-            if reduct_zero === :zero
-                Expr(:call, lv(:_vzero), VECTORWIDTHSYMBOL, typeTr, rs)
-            else
-                Expr(:call, lv(:_vbroadcast), VECTORWIDTHSYMBOL, Expr(:call, reduct_zero, typeTr), rs)
-            end
-        else
-            if reduct_zero === :zero
-                Expr(:call, lv(:zero_vecunroll), staticexpr(Umax), VECTORWIDTHSYMBOL, typeTr, rs)
-            else
-                Expr(:call, lv(:vbroadcast_vecunroll), staticexpr(Umax), VECTORWIDTHSYMBOL, Expr(:call, reduct_zero, typeTr), rs)
-            end
-        end
-    else
-        Expr(:call, reduct_zero, typeTr)
-    end
+    z = outer_reduction_zero(op, u₁u, Umax, reduction_instruction_class(instruction(op)), rs)
     mvar = variable_name(op, -1)
     # @show u₁, u₂, u₁u, _Umax
-    if u₂ == -1
+    if (u₂ == -1)
         push!(q.args, Expr(:(=), Symbol(mvar, '_', _Umax), z))
-    else#if isu₂unrolled(op) #& (us.vloopnum ≠ us.u₂loopnum) # tiled outer reduction, u₂unrolled
-        # TODO: add `(us.vloopnum ≠ us.u₂loopnum)` check to avoid unrolling and vectorizing a reduction along the same axis
-        if u₁u
-            push!(q.args, Expr(:(=), Symbol(mvar, '_', u₁), z))
-        else
-            for u ∈ 0:_Umax-1
-                # push!(q.args, Expr(:(=), Symbol(mvar, '_', u), z))
-                push!(q.args, Expr(:(=), Symbol(mvar, u), z))
-            end
-        end
+    elseif u₁u
+      # if isu₂unrolled(op) # is a tiledouter reduction
+      #   push!(q.args, Expr(:(=), Symbol(mvar, 0), z))
+      # else # is not, because if `suffix == 0`, will return -1
+      push!(q.args, Expr(:(=), Symbol(mvar, '_', u₁), z))
+      # end
+    else # we unroll u₂
+      for u ∈ 0:_Umax-1
+        # push!(q.args, Expr(:(=), Symbol(mvar, '_', u), z))
+        push!(q.args, Expr(:(=), Symbol(mvar, u), z))
+      end
     end
     nothing
 end
-function initialize_outer_reductions!(q::Expr, ls::LoopSet, Umax::Int, vectorized::Symbol)
+function initialize_outer_reductions!(q::Expr, ls::LoopSet, Umax::Int)
     rs = staticexpr(reg_size(ls))
     us = ls.unrollspecification
     for or ∈ ls.outer_reductions
-        initialize_outer_reductions!(q, ls, ls.operations[or], Umax, vectorized, us, rs)
+        initialize_outer_reductions!(q, ls, ls.operations[or], Umax, us, rs)
     end
 end
-initialize_outer_reductions!(ls::LoopSet, Umax::Int, vectorized::Symbol) = initialize_outer_reductions!(ls.preamble, ls, Umax, vectorized)
+initialize_outer_reductions!(ls::LoopSet, Umax::Int) = initialize_outer_reductions!(ls.preamble, ls, Umax)
 function add_upper_comp_check(unrolledloop, loopbuffer)
   
     if isstaticloop(unrolledloop)
@@ -484,10 +498,10 @@ function add_upper_comp_check(unrolledloop, loopbuffer)
         Expr(:call, Base.GlobalRef(Base,:>), Expr(:call, lv(:vsub_fast), getsym(last(unrolledloop)), Expr(:call,lv(:vsub_fast), getsym(first(unrolledloop)), staticexpr(1))), loopbuffer)
     end
 end
-function add_upper_outer_reductions(ls::LoopSet, loopq::Expr, Ulow::Int, Uhigh::Int, unrolledloop::Loop, vectorized::Symbol, reductisvectorized::Bool)
+function add_upper_outer_reductions(ls::LoopSet, loopq::Expr, Ulow::Int, Uhigh::Int, unrolledloop::Loop, reductisvectorized::Bool)
     ifq = Expr(:block)
     ifqlet = Expr(:block)
-    initialize_outer_reductions!(ifqlet, ls, Uhigh, vectorized)
+    initialize_outer_reductions!(ifqlet, ls, Uhigh)
     # @show loopq
     push!(ifq.args, loopq)
     t = Expr(:tuple)
@@ -513,7 +527,7 @@ function add_upper_outer_reductions(ls::LoopSet, loopq::Expr, Ulow::Int, Uhigh::
         add_upper_comp_check(unrolledloop, mulexpr(Uhigh, getsym(step(unrolledloop))))
     end
     elseq = Expr(:block)
-    initialize_outer_reductions!(elseq, ls, Ulow, vectorized)
+    initialize_outer_reductions!(elseq, ls, Ulow)
     push!(elseq.args, mvartl)
     Expr(:(=), mvartl, Expr(:if, ncomparison, ifqfull, elseq))
 end
@@ -536,7 +550,7 @@ function reduce_expr!(q::Expr, ls::LoopSet, U::Int)
         instr = instruction(op)
         u₁u, u₂u = isunrolled_sym(op, u₁loop, u₂loop, vloop, ls)#, u₂f)
         reduce_expr!(q, mvar, instr, u₁f, u₂f, u₁u, u₂u)
-        if !iszero(length(ls.opdict))
+        if length(ls.opdict) ≠ 0
             if (isu₁unrolled(op) | isu₂unrolled(op))
                 push!(q.args, Expr(:(=), var, Expr(:call, lv(reduction_scalar_combine(instr)), Symbol(mvar, "##onevec##"), var)))
             else
@@ -545,7 +559,42 @@ function reduce_expr!(q::Expr, ls::LoopSet, U::Int)
         end
     end
 end
-
+function reinit_push_preblockpost!(letblock::Expr, pre::Expr, block::Expr, post::Expr, z::Expr, s::Symbol, reduct::Symbol)
+  push!(letblock.args, Expr(:(=), s, z))
+  tempsym = gensym(s) # placeholder
+  # push!(pre.args, Expr(:(=), tempsym, Expr(:call, GlobalRef(Base,:Ref), s)))
+  # getref = Expr(:call, GlobalRef(Base,:getindex), tempsym)
+  # push!(block.args, Expr(:call, GlobalRef(Base,:setindex!), tempsym, Expr(:call, lv(reduct), getref, s)))
+  # push!(post.args, Expr(:(=), s, getref))
+  push!(pre.args, Expr(:(=), tempsym, s))
+  push!(block.args, Expr(:(=), tempsym, Expr(:call, lv(reduct), tempsym, s)))
+  push!(post.args, Expr(:(=), s, tempsym))
+  nothing
+end
+function reinit_and_update_tiled_outer_reduct!(letblock::Expr, block::Expr, ls::LoopSet, u₁loopsym::Symbol, u₂loopsym::Symbol, vloopsym::Symbol)
+  rs = staticexpr(reg_size(ls))
+  usorig = ls.unrollspecification
+  Umax = ureduct(ls)
+  pre = Expr(:block)
+  post = Expr(:block)
+  for or ∈ ls.outer_reductions
+    op = ls.operations[or]
+    u₁u, u₂u = isunrolled_sym(op, u₁loopsym, u₂loopsym, vloopsym, ls)
+    reduct_class = reduction_instruction_class(instruction(op))
+    z = outer_reduction_zero(op, u₁u, Umax, reduct_class, rs)
+    reduct = reduce_to_onevecunroll(reduct_class)
+    mvar = variable_name(op, -1)
+    if u₁u # it's u₁unrolled
+      reinit_push_preblockpost!(letblock, pre, block, post, z, Symbol(mvar, '_', usorig.u₁), reduct)
+    else # it's u₂unrolled
+      for u ∈ 0:Umax-1
+        reinit_push_preblockpost!(letblock, pre, block, post, z, Symbol(mvar, u), reduct)
+      end
+    end
+    initialize_outer_reductions!(letblock, ls, ls.operations[or], ureduct(ls), usorig, rs)
+  end
+  pre, post
+end
 
 function gc_preserve(ls::LoopSet, q::Expr)
     length(ls.opdict) == 0 && return q
@@ -717,7 +766,7 @@ function setup_preamble!(ls::LoopSet, us::UnrollSpecification, Ureduct::Int)
     lower_licm_constants!(ls)
     isone(num_loops(ls)) || pushpreamble!(ls, definemask(getloop(ls, vectorized)))#, u₁ > 1 && u₁loopnum == vloopnum))
     if (Ureduct == u₁) || (u₂ != -1) || (Ureduct == -1)
-        initialize_outer_reductions!(ls, ifelse(Ureduct == -1, u₁, Ureduct), vectorized) # TODO: outer reducts?
+        initialize_outer_reductions!(ls, ifelse(Ureduct == -1, u₁, Ureduct)) # TODO: outer reducts?
     elseif length(ls.outer_reductions) > 0
         decl = Expr(:local)
         for or ∈ ls.outer_reductions

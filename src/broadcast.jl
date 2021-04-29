@@ -273,7 +273,7 @@ function add_broadcast!(
     end
     fulldims = Symbol[loopsyms[n] for n ∈ 1:N if ((Dlen < n) || D[n]::Bool)]
     ref = ArrayReference(bcname, fulldims)
-    loadop = add_simple_load!(ls, destname, ref, elementbytes, true, true )::Operation
+    loadop = add_simple_load!(ls, destname, ref, elementbytes, true )::Operation
     doaddref!(ls, loadop)
 end
 function add_broadcast_adjoint_array!(
@@ -283,7 +283,7 @@ function add_broadcast_adjoint_array!(
     # pushprepreamble!(ls, Expr(:(=), parent, Expr(:call, :parent, bcname)))
     # isone(length(loopsyms)) && return extract_all_1_array!(ls, bcname, N, elementbytes)
     ref = ArrayReference(bcname, Symbol[loopsyms[N + 1 - n] for n ∈ 1:N])
-    loadop = add_simple_load!( ls, destname, ref, elementbytes, true, true )::Operation
+    loadop = add_simple_load!( ls, destname, ref, elementbytes, true )::Operation
     doaddref!(ls, loadop)
 end
 function add_broadcast_adjoint_array!(
@@ -294,7 +294,7 @@ function add_broadcast_adjoint_array!(
     # pushprepreamble!(ls, Expr(:(=), parent, Expr(:call, :parent, bcname)))
 
     ref = ArrayReference(bcname, Symbol[loopsyms[2]])
-    loadop = add_simple_load!( ls, destname, ref, elementbytes, true, true )::Operation
+    loadop = add_simple_load!( ls, destname, ref, elementbytes, true )::Operation
     doaddref!(ls, loadop)
 end
 function add_broadcast!(
@@ -313,7 +313,7 @@ function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
     ::Type{<:AbstractArray{T,N}}, elementbytes::Int
 ) where {T,N}
-    loadop = add_simple_load!(ls, destname, ArrayReference(bcname, @view(loopsyms[1:N])), elementbytes, true, true)
+    loadop = add_simple_load!(ls, destname, ArrayReference(bcname, @view(loopsyms[1:N])), elementbytes, true)
     doaddref!(ls, loadop)
 end
 function add_broadcast!(
@@ -335,7 +335,7 @@ function add_broadcast!(
     inds = Vector{Symbol}(undef, N+1)
     inds[1] = DISCONTIGUOUS
     inds[2:end] .= @view(loopsyms[1:N])
-    loadop = add_simple_load!(ls, destname, ArrayReference(bcname, inds), elementbytes, true, true)
+    loadop = add_simple_load!(ls, destname, ArrayReference(bcname, inds), elementbytes, true)
     doaddref!(ls, loadop)
 end
 const BroadcastedArray{S<:Broadcast.AbstractArrayStyle,F,A} = Broadcasted{S,Nothing,F,A}
@@ -408,8 +408,10 @@ end
     storeop = add_simple_store!(ls, :dest, ArrayReference(:dest, loopsyms), elementbytes)
     doaddref!(ls, storeop)
     resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
-    # return ls
-    Expr(:block, Expr(:meta,:inline), setup_call(ls, :(Base.Broadcast.materialize!(dest, bc)), LineNumberNode(0), inline, false, u₁, u₂, threads%Int), :dest)
+  # return ls
+  sc = setup_call(ls, :(Base.Broadcast.materialize!(dest, bc)), LineNumberNode(0), inline, false, u₁, u₂, threads%Int)
+  # return sc
+    Expr(:block, Expr(:meta,:inline), sc, :dest)
 end
 @generated function vmaterialize!(
     dest′::Union{Adjoint{T,A},Transpose{T,A}}, bc::BC, ::Val{Mod}, ::Val{UNROLL}

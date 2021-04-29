@@ -456,29 +456,29 @@ function pushgespind!(
     end
     @assert rangesym ≢ ind
     if rangesym === Symbol("") # there is no rangesym, must be statically sized.
-      pushgespsym!(gespinds, gespsymbol)
+      pushgespsym!(gespinds, gespsymbol, constoffset)
     else
-      pushsimdims!(gespinds, rangesym, gespsymbol)
+      pushsimdims!(gespinds, rangesym, gespsymbol, constoffset)
     end
   else # it is known all inds are 1-dimensional
-    pushgespsym!(gespinds, gespsymbol)
+    pushgespsym!(gespinds, gespsymbol, constoffset)
   end
   return nothing
 end
-function pushgespsym!(gespinds::Expr, gespsymbol::Symbol)
-  if gespsymbol === Symbol("") 
-    push!(gespinds.args, staticexpr(0))
-  else
+function pushgespsym!(gespinds::Expr, gespsymbol::Symbol, constoffset::Int)
+  if gespsymbol === Symbol("")
+    push!(gespinds.args, staticexpr(constoffset))
+  elseif constoffset == 0
     push!(gespinds.args, gespsymbol)
+  else
+    push!(gespinds.args, addexpr(gespsymbol, constoffset))
   end
   return nothing
 end
-function pushsimdims!(gespinds::Expr, rangesym::Symbol, gespsymbol::Symbol)
-  if gespsymbol === Symbol("") 
-    push!(gespinds.args, Expr(:call, lv(:similardims), rangesym, staticexpr(0)))
-  else
-    push!(gespinds.args, Expr(:call, lv(:similardims), rangesym, gespsymbol))
-  end
+function pushsimdims!(gespinds::Expr, rangesym::Symbol, gespsymbol::Symbol, constoffset::Int)
+  simdimscall = Expr(:call, lv(:similardims), rangesym)
+  pushgespsym!(simdimscall, gespsymbol, constoffset)
+  push!(gespinds.args, simdimscall)
   return nothing
 end
 

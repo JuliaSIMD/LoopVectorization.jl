@@ -11,13 +11,13 @@ function maybeaddref!(ls::LoopSet, op::Operation)
     end
 end
 
-function add_load!(ls::LoopSet, op::Operation, actualarray::Bool = true, broadcast::Bool = false)
+function add_load!(ls::LoopSet, op::Operation, actualarray::Bool = true)
     @assert isload(op)
     if (id = maybeaddref!(ls, op)) > 0 # try to CSE
         opp = ls.opdict[ls.syms_aliasing_refs[id]] # throw an error if not found.
         return isstore(opp) ? getop(ls, first(parents(opp))) : opp
     end
-    add_vptr!(ls, op.ref.ref.array, vptr(op), actualarray, broadcast)
+    add_vptr!(ls, op.ref.ref.array, vptr(op), actualarray)
     pushop!(ls, op, name(op))
 end
 
@@ -32,28 +32,28 @@ function add_load!(
 )
     iszero(length(mpref.loopdependencies)) && return add_constant!(ls, mpref, elementbytes)
     op = Operation( ls, varname(mpref), elementbytes, :getindex, memload, mpref )
-    add_load!(ls, op, true, false)
+    add_load!(ls, op, true)
 end
 
 # for use with broadcasting
 function add_simple_load!(
     ls::LoopSet, var::Symbol, ref::ArrayReference, elementbytes::Int,
-    actualarray::Bool = true, broadcast::Bool = false
+    actualarray::Bool = true
 )
     loopdeps = copy(getindicesonly(ref))
     mref = ArrayReferenceMeta(ref, fill(true, length(loopdeps)))
-    add_simple_load!(ls, var, mref, loopdeps, elementbytes, actualarray, broadcast)
+    add_simple_load!(ls, var, mref, loopdeps, elementbytes, actualarray)
 end
 function add_simple_load!(
     ls::LoopSet, var::Symbol, mref::ArrayReferenceMeta, loopdeps::Vector{Symbol},
-    elementbytes::Int, actualarray::Bool = true, broadcast::Bool = false
+    elementbytes::Int, actualarray::Bool = true
 )
     op = Operation(
         length(operations(ls)), var, elementbytes,
         :getindex, memload, loopdeps,
         NODEPENDENCY, NOPARENTS, mref
     )
-    add_vptr!(ls, op.ref.ref.array, vptr(op), actualarray, broadcast)
+    add_vptr!(ls, op.ref.ref.array, vptr(op), actualarray)
     pushop!(ls, op, var)
 end
 function add_load_ref!(ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int)

@@ -17,8 +17,9 @@ struct ArrayRefStruct{array,ptr}
     offsets::UInt64
     strides::UInt64
 end
-array(ar::ArrayRefStruct{a,p}) where {a,p} = a
-ptr(ar::ArrayRefStruct{a,p}) where {a,p}   = p
+array_and_ptr(@nospecialize(ar::ArrayRefStruct{a,p})) where {a,p} = (a::Symbol,p::Symbol)
+# array(@nospecialize(ar::ArrayRefStruct{a,p})) where {a,p} = a::Symbol
+# ptr(@nospecialize(ar::ArrayRefStruct{a,p})) where {a,p}   = p::Symbol
 
 function findindoradd!(v::Vector{T}, s::T) where {T}
     ind = findfirst(==(s), v)

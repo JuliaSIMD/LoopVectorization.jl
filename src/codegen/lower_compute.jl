@@ -284,7 +284,11 @@ function parent_op_name!(
   parent = mangledvar(opp)
   u = 0
   if n == tiledouterreduction# && isvectorized(opp)
-    parent = Symbol(parent, modsuffix)
+    parent = if parents_u₁syms[n]
+      Symbol(parent, '_', modsuffix)
+    else
+      Symbol(parent, modsuffix)
+    end
   else
     u = if !parents_u₁syms[n]
       1
@@ -473,11 +477,14 @@ function lower_compute!(
         #     Symbol(mangledvar(op), '_', modsuffix)
         # else
         if u₁unrolledsym
-            modsuffix = 0
+          # modsuffix = 0
+          modsuffix = ls.unrollspecification.u₁
+          Symbol(mangledvar(op), '_', modsuffix)
         else
-            modsuffix = suffix % ls.ureduct
+          modsuffix = suffix % ls.ureduct
+          Symbol(mangledvar(op), modsuffix)
         end
-        Symbol(mangledvar(op), modsuffix)
+      # @show op, u₁unrolledsym, u₂unrolledsym
         # end
         # dopartialmap = u₁ > 1
 
@@ -498,7 +505,7 @@ function lower_compute!(
         Symbol(mvar, '_', 1)
     end
     selfopname = varsym
-  selfdep = 0
+    selfdep = 0
     for n ∈ 1:nparents
         opp = parents_op[n]
         if isloopvalue(opp)

@@ -30,9 +30,12 @@ function reduce_expr!(q::Expr, toreduct::Symbol, instr::Instruction, u₁::Int, 
     if isu₂unrolled# u₂ != -1
         _toreduct = Symbol(toreduct, 0)
         push!(q.args, Expr(:(=), _toreduct, reduce_expr_u₂(toreduct, instr, u₂)))
-    else
+    else#if u₂ == -1
         _toreduct = Symbol(toreduct, '_', u₁)
+    # else
+        # _toreduct = Symbol(toreduct, 0)
     end
+    # @show toreduct, _toreduct, u₁, u₂, isu₁unrolled, isu₂unrolled
     if (u₁ == 1) | (~isu₁unrolled)
         push!(q.args, Expr(:(=), Symbol(toreduct, "##onevec##"), _toreduct))
     else
