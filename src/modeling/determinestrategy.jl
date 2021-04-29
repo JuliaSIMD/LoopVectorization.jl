@@ -941,11 +941,14 @@ function update_reg_pres!(rp, cost, u₁reduces, u₂reduces)
     end
 end
 
-# Just tile outer two loops?
-# But optimal order within tile must still be determined
-# as well as size of the tiles.
-function evaluate_cost_tile(
-    ls::LoopSet, order::Vector{Symbol}, unrollsyms::UnrollSymbols, anyisbit::Bool
+function evaluate_cost_tile(ls::LoopSet, order::Vector{Symbol}, unrollsyms::UnrollSymbols, anyisbit::Bool)
+  nops = length(operations(ls))
+  iters = Vector{Float64}(undef, nops)
+  reduced_by_unrolling = Array{Bool}(undef, 2, 2, nops)
+  evaluate_cost_tile!(iters, reduced_bu_unrolling, ls, order, unrollsyms, anyisbit)
+end
+function evaluate_cost_tile!(
+  iters::Vector{Float64}, reduced_by_unrolling::Array{Bool,3}, ls::LoopSet, order::Vector{Symbol}, unrollsyms::UnrollSymbols, anyisbit::Bool
 )
     N = length(order)
     @assert N ≥ 2 "Cannot tile merely $N loops!"
@@ -955,11 +958,18 @@ function evaluate_cost_tile(
     # u₁loopsym = order[2]
     ops = operations(ls)
     nops = length(ops)
-    included_vars = fill!(resize!(ls.included_vars, nops), false)
-    reduced_by_unrolling = fill(false, 2, 2, nops)
-    descendentsininnerloop = fill!(resize!(ls.place_after_loop, nops), false)
+    included_vars = resize!(ls.included_vars, nops)
+    descendentsininnerloop = resize!(ls.place_after_loop, nops)
+    @inbounds for i ∈ 1:nops
+      included_vars[i] = false
+      descendentsininnerloop[i] = false
+      reduced_by_unrolling[1,1,i] = false
+      reduced_by_unrolling[2,1,i] = false
+      reduced_by_unrolling[1,2,i] = false
+      reduced_by_unrolling[2,2,i] = false
+      iters[i] = -99.9
+    end
     innerloop = last(order)
-    iters = fill(-99.9, nops)
     nested_loop_syms = Symbol[]# Set{Symbol}()
     # Need to check if fusion is possible
     size_T = biggest_type_size(ls)
@@ -995,7 +1005,23 @@ function evaluate_cost_tile(
             # won't define if already defined...
             included_vars[id] && continue
             # it must also be a subset of defined symbols
-            all(ld -> ld ∈ nested_loop_syms, loopdependencies(op)) || continue
+            _maybe_continue = true
+          for ld ∈ loopdependencies(op)
+            mbc = false
+            for nls ∈ nested_loop_syms
+              if ld === nls
+                mbc = true
+                break
+              end
+            end
+            if !mbc
+              _maybe_continue = false
+              break
+            end
+          end
+          # @assert _maybe_continue == all(ld -> ld ∈ nested_loop_syms, loopdependencies(op))
+            _maybe_continue || continue
+            # all(ld -> ld ∈ nested_loop_syms, loopdependencies(op)) || continue
             rd = reduceddependencies(op)
             if hasintersection(rd, @view(nested_loop_syms[1:end-length(rd)]))
                 return 0,0,Inf,false
@@ -1003,6 +1029,14 @@ function evaluate_cost_tile(
             if isstore(op)
                 loadstoredeps = store_load_deps(op)
                 if !(loadstoredeps === nothing)
+                  # for s ∈ nested_loop_syms
+                  #   contains = false
+                  #   for ds ∈ loadstoredeps
+                  #     contains |= s === ds
+                  #     contains && break
+                  #   end
+                  #   contains || 
+                  # end
                     any(s -> (s ∉ loadstoredeps), nested_loop_syms) && return 0,0,Inf,false
                 end
             end
@@ -1232,6 +1266,11 @@ function choose_tile(ls::LoopSet)
     bestu₁ = bestu₂ = best_vec = first(best_order) # filler
     u₁ = u₂ = 0; lowest_cost = Inf; loadelim = false
     anyisbit = any(ls.loopindexesbit)
+  
+    nops = length(operations(ls))
+    iters = Vector{Float64}(undef, nops)
+    reduced_by_unrolling = Array{Bool}(undef, 2, 2, nops)
+
     for newu₂ ∈ lo.syms
         reject_reorder(ls, newu₂) && continue
         for newu₁ ∈ lo.syms#@view(new_order[nt+1:end])
@@ -1245,7 +1284,7 @@ function choose_tile(ls::LoopSet)
                         # ((new_vec === newu₁) || (new_vec === newu₂)) || continue
                         (new_vec === newu₁) || continue
                     end
-                    u₁temp, u₂temp, cost_temp, loadelim_temp = evaluate_cost_tile(ls, new_order, UnrollSymbols(newu₁, newu₂, new_vec), anyisbit)
+                    u₁temp, u₂temp, cost_temp, loadelim_temp = evaluate_cost_tile!(iters, reduced_by_unrolling, ls, new_order, UnrollSymbols(newu₁, newu₂, new_vec), anyisbit)
                     # if cost_temp < lowest_cost # leads to 4 vmovapds
                     if cost_temp ≤ lowest_cost # lead to 2 vmovapds
                         lowest_cost = cost_temp

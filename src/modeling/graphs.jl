@@ -489,7 +489,7 @@ reg_size(ls::LoopSet) = ls.register_size
 reg_count(ls::LoopSet) = ls.register_count
 cache_lnsze(ls::LoopSet) = ls.cache_linesize
 cache_sze(ls::LoopSet) = ls.cache_size
-# opmask_reg(ls::LoopSet) = ls.opmask_register[]
+# opmask_reg(ls::LoopSet) = ls.opmasack_register[]
 
 pushprepreamble!(ls::LoopSet, ex) = push!(ls.prepreamble.args, ex)
 function pushpreamble!(ls::LoopSet, op::Operation, v::Symbol)
@@ -615,44 +615,44 @@ function cacheunrolled!(ls::LoopSet, u₁loop::Symbol, u₂loop::Symbol, vloopsy
         end
     end
 end
-function setunrolled!(ls::LoopSet, op::Operation, u₁loopsym, u₂loopsym, vectorized)
-    op.u₁unrolled =  u₁loopsym ∈ loopdependencies(op)
-    op.u₂unrolled =  u₂loopsym ∈ loopdependencies(op)
-    op.vectorized = vectorized ∈ loopdependencies(op)
-    if isconstant(op)
-        u₁ = op.u₁unrolled
-        u₂ = op.u₂unrolled
-        v  = op.vectorized
-        for opp ∈ children(op)
-            u₁ = u₁ &&  u₁loopsym ∈ loopdependencies(opp)
-            u₂ = u₂ &&  u₂loopsym ∈ loopdependencies(opp)
-            v  = v  && vectorized ∈ loopdependencies(opp)
-        end
-        if isouterreduction(ls, op) ≠ -1 && !all((u₁,u₂,v))
-            opv = true
-            for opp ∈ parents(op)
-                if iscompute(opp) && instruction(opp).instr ≢ :identity
-                    opv = false
-                    break
-                end
-            end
-            if opv
-                if !u₁ && u₁loopsym ∈ reduceddependencies(op)
-                    u₁ = true
-                end
-                if !u₂ && u₂loopsym ∈ reduceddependencies(op)
-                    u₂ = true
-                end
-                if !v && vectorized ∈ reduceddependencies(op)
-                    v = true
-                end
-            end
-        end
-        op.u₁unrolled = u₁
-        op.u₂unrolled = u₂
-        op.vectorized = v
+function setunrolled!(ls::LoopSet, op::Operation, u₁loopsym::Symbol, u₂loopsym::Symbol, vectorized::Symbol)
+  u₁::Bool = u₂::Bool = v::Bool = false
+  for ld ∈ loopdependencies(op)
+    u₁ |= ld === u₁loopsym
+    u₂ |= ld === u₂loopsym
+    v  |= ld === vectorized
+  end
+  if isconstant(op)
+    for opp ∈ children(op)
+      u₁ = u₁ &&  u₁loopsym ∈ loopdependencies(opp)
+      u₂ = u₂ &&  u₂loopsym ∈ loopdependencies(opp)
+      v  = v  && vectorized ∈ loopdependencies(opp)
     end
-    nothing
+    if isouterreduction(ls, op) ≠ -1 && !all((u₁,u₂,v))
+      opv = true
+      for opp ∈ parents(op)
+        if iscompute(opp) && instruction(opp).instr ≢ :identity
+          opv = false
+          break
+        end
+      end
+      if opv
+        if !u₁ && u₁loopsym ∈ reduceddependencies(op)
+          u₁ = true
+        end
+        if !u₂ && u₂loopsym ∈ reduceddependencies(op)
+          u₂ = true
+        end
+        if !v && vectorized ∈ reduceddependencies(op)
+          v = true
+        end
+      end
+    end
+  end
+  op.u₁unrolled = u₁
+  op.u₂unrolled = u₂
+  op.vectorized = v
+  nothing
 end
 
 rejectcurly(op::Operation) = op.rejectcurly
