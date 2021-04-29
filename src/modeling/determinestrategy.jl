@@ -1229,7 +1229,7 @@ function choose_tile(ls::LoopSet)
     lo = LoopOrders(ls)
     best_order = copyto!(ls.loop_order.bestorder, lo.syms)
     bestu₁ = bestu₂ = best_vec = first(best_order) # filler
-    u₁ = u₂ = 0; lowest_cost = Inf; shouldinline = false
+    u₁ = u₂ = 0; lowest_cost = Inf; loadelim = false
     anyisbit = any(ls.loopindexesbit)
     for newu₂ ∈ lo.syms
         reject_reorder(ls, newu₂) && continue
@@ -1244,7 +1244,7 @@ function choose_tile(ls::LoopSet)
                         # ((new_vec === newu₁) || (new_vec === newu₂)) || continue
                         (new_vec === newu₁) || continue
                     end
-                    u₁temp, u₂temp, cost_temp, shouldinline_temp = evaluate_cost_tile(ls, new_order, UnrollSymbols(newu₁, newu₂, new_vec), anyisbit)
+                    u₁temp, u₂temp, cost_temp, loadelim_temp = evaluate_cost_tile(ls, new_order, UnrollSymbols(newu₁, newu₂, new_vec), anyisbit)
                     # if cost_temp < lowest_cost # leads to 4 vmovapds
                     if cost_temp ≤ lowest_cost # lead to 2 vmovapds
                         lowest_cost = cost_temp
@@ -1252,7 +1252,7 @@ function choose_tile(ls::LoopSet)
                         best_vec = new_vec
                         bestu₂ = newu₂
                         bestu₁ = newu₁
-                        shouldinline = shouldinline_temp
+                        loadelim = loadelim_temp
                         copyto!(best_order, new_order)
                         save_tilecost!(ls)
                     end
@@ -1263,8 +1263,10 @@ function choose_tile(ls::LoopSet)
             end
         end
     end
-    ls.loadelimination = shouldinline
-    best_order, bestu₁, bestu₂, best_vec, u₁, u₂, lowest_cost, looplengthprod(ls) < 4097.0
+    ls.loadelimination = loadelim
+    # `any(...)` is a HACK: specialization can fail in Tullio's codegen, resulting in bad performance. See https://github.com/JuliaSIMD/LoopVectorization.jl/issues/245
+    shouldinline = (looplengthprod(ls) < 4097.0) || any(op -> iscompute(op) && iszero(length(loopdependencies(op))), operations(ls))
+    best_order, bestu₁, bestu₂, best_vec, u₁, u₂, lowest_cost, shouldinline
 end
 # Last in order is the inner most loop
 function choose_order_cost(ls::LoopSet)
