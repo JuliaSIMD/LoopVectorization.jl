@@ -1204,7 +1204,17 @@ end
         end
     end
 
-    # @test_throws LoopVectorization.LoopError @macroexpand begin # pull #172
+  if VERSION ≥ v"1.7.0-DEV.1031"
+    @test_throws LoopVectorization.LoopError @macroexpand begin # pull #172
+      @avx for i in eachindex(xs)
+        if i in axes(ys,1)
+          xs[i] = ys[i]
+        else
+          xs[i] = zero(eltype(ys))
+        end
+      end
+    end
+  else
     @test_throws LoadError @macroexpand begin # pull #172
         @avx for i in eachindex(xs)
             if i in axes(ys,1)
@@ -1214,6 +1224,7 @@ end
             end
         end
     end
+  end
     @testset "issue 237" begin
         function obj8(y::AbstractMatrix, s::AbstractArray, θ::AbstractVector)
             out = 0.0
