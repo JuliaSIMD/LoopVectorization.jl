@@ -69,7 +69,9 @@ const START_TIME = time()
 
     @time include("staticsize.jl")
 
-    @time include("quantum.jl")
+    if VERSION ≥ v"1.6"
+      @time include("quantum.jl")
+    end
 end
 
 const ELAPSED_MINUTES = (time() - START_TIME)/60
