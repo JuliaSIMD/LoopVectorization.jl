@@ -17,20 +17,20 @@ function add_constant!(ls::LoopSet, var::Number, elementbytes::Int = 8)
     rop !== op && return rop
     if iszero(var)
         for (id,typ_) ∈ ls.preamble_zeros
-            (instruction(ops[id]) === LOOPCONSTANT && typ == typ_) && return ops[id]
+            (instruction(ops[id]) == LOOPCONSTANT && typ == typ_) && return ops[id]
         end
         push!(ls.preamble_zeros, (identifier(op),typ))
     elseif var isa Integer
         idescript = integer_description(var)
         for (id,descript) ∈ ls.preamble_symint
-            if (instruction(ops[id]) === LOOPCONSTANT) && (idescript == descript)
+            if (instruction(ops[id]) == LOOPCONSTANT) && (idescript == descript)
                 return ops[id]
             end
         end
         push!(ls.preamble_symint, (identifier(op), idescript))
     else#if var isa FloatX
         for (id,fvar) ∈ ls.preamble_symfloat
-            (instruction(ops[id]) === LOOPCONSTANT && fvar == var) && return ops[id]
+            (instruction(ops[id]) == LOOPCONSTANT && fvar == var) && return ops[id]
         end
         push!(ls.preamble_symfloat, (identifier(op), var))
     end
@@ -42,7 +42,7 @@ function add_constant!(ls::LoopSet, mpref::ArrayReferenceMetaPosition, elementby
     temp = gensym!(ls, "intermediateconstref")
     vloadcall = Expr(:call, lv(:_vload), mpref.mref.ptr)
     nindices = length(getindices(op))
-    getoffsets(op) .+= 1
+    # getoffsets(op) .+= 1
     if nindices > 0
         dummyloop = first(ls.loops)
         push!(vloadcall.args, mem_offset(op, UnrollArgs(dummyloop, dummyloop, dummyloop, 0, 0, 0), fill(false,nindices), true, ls))

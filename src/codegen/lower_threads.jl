@@ -351,8 +351,8 @@ function thread_one_loops_expr(
             push!(loopboundexpr.args, looprange)
             push!(lastboundexpr.args, lastrange)
         else
-            loop_boundary!(loopboundexpr, loop)
-            loop_boundary!(lastboundexpr, loop)
+            loop_boundary!(loopboundexpr, ls, loop, true)
+            loop_boundary!(lastboundexpr, ls, loop, true)
         end
     end
     _avx_call_ = :(_avx_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, ($lastboundexpr, var"#vargs#")))
@@ -495,8 +495,8 @@ function thread_two_loops_expr(
             push!(loopboundexpr.args, looprange2)
             push!(lastboundexpr.args, lastrange2)
         else
-            loop_boundary!(loopboundexpr, loop)
-            loop_boundary!(lastboundexpr, loop)
+            loop_boundary!(loopboundexpr, ls, loop, true)
+            loop_boundary!(lastboundexpr, ls, loop, true)
         end
     end
     _avx_call_ = :(_avx_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, ($lastboundexpr, var"#vargs#")))

@@ -1,4 +1,3 @@
-
 @enum IndexType::UInt8 NotAnIndex=0 LoopIndex=1 ComputedIndex=2 SymbolicIndex=3
 
 Base.:|(u::Unsigned, it::IndexType) = u | UInt8(it)
@@ -17,8 +16,9 @@ struct ArrayRefStruct{array,ptr}
     offsets::UInt64
     strides::UInt64
 end
-array(ar::ArrayRefStruct{a,p}) where {a,p} = a
-ptr(ar::ArrayRefStruct{a,p}) where {a,p}   = p
+array_and_ptr(@nospecialize(ar::ArrayRefStruct{a,p})) where {a,p} = (a::Symbol,p::Symbol)
+# array(@nospecialize(ar::ArrayRefStruct{a,p})) where {a,p} = a::Symbol
+# ptr(@nospecialize(ar::ArrayRefStruct{a,p})) where {a,p}   = p::Symbol
 
 function findindoradd!(v::Vector{T}, s::T) where {T}
     ind = findfirst(==(s), v)
@@ -117,6 +117,29 @@ function parents_uint(ls::LoopSet, op::Operation)
     end
     p
 end
+function recursively_set_parents_true!(x::Vector{Bool}, op::Operation)
+    x[identifier(op)] && return nothing # don't redescend
+    x[identifier(op)] = true
+    for opp ∈ parents(op)
+        recursively_set_parents_true!(x, opp)
+    end
+    return nothing
+end
+function getroots(ls::LoopSet)::Vector{Bool}
+    rooted = Vector{Bool}(undef, length(operations(ls)))
+    getroots!(rooted, ls)
+end
+function getroots!(rooted::Vector{Bool}, ls::LoopSet)
+    fill!(rooted, false)
+    ops = operations(ls)
+    for or ∈ ls.outer_reductions
+        recursively_set_parents_true!(rooted, ops[or])
+    end
+    for op ∈ ops
+        isstore(op) && recursively_set_parents_true!(rooted, op)
+    end
+    return rooted
+end
 function OperationStruct!(varnames::Vector{Symbol}, ids::Vector{Int}, ls::LoopSet, op::Operation)
     instr = instruction(op)
     ld = loopdeps_uint(ls, op)
@@ -131,22 +154,37 @@ function OperationStruct!(varnames::Vector{Symbol}, ids::Vector{Int}, ls::LoopSe
 end
 ## turn a LoopSet into a type object which can be used to reconstruct the LoopSet.
 
-function loop_boundary!(q::Expr, loop::Loop)
-    if isstaticloop(loop) || loop.rangesym === Symbol("")
-        call = Expr(:call, :(:))
-        pushexpr!(call, first(loop))
-        unitstep(loop) || pushexpr!(call, step(loop))
-        pushexpr!(call, last(loop))
-        push!(q.args, call)
-    else
-        push!(q.args, loop.rangesym)
+@inline zerorangestart(r::Base.OneTo) = CloseOpen(length(r))
+@inline zerorangestart(r::CloseOpen) = CloseOpen(length(r))
+@inline zerorangestart(r::AbstractUnitRange) = Zero():One():(maybestaticlast(r)-maybestaticfirst(r))
+@inline zerorangestart(r::AbstractRange) = Zero():static_step(r):(maybestaticlast(r)-maybestaticfirst(r))
+@inline zerorangestart(r::CartesianIndices) = CartesianIndices(map(zerorangestart, r.indices))
+
+function loop_boundary!(q::Expr, ls::LoopSet, loop::Loop, shouldindbyind::Bool)
+  if isstaticloop(loop) || loop.rangesym === Symbol("")
+    call = Expr(:call, :(:))
+    f = gethint(first(loop))
+    s = gethint(step(loop))
+    l = gethint(last(loop))
+    if !shouldindbyind
+      l -= f
+      f = 0
     end
+    pushexpr!(call, staticexpr(f))
+    isone(s) || pushexpr!(call, staticexpr(s))
+    pushexpr!(call, staticexpr(l))
+    push!(q.args, call)
+  elseif shouldindbyind
+    push!(q.args, loop.rangesym)
+  else
+    push!(q.args, Expr(:call, lv(:zerorangestart), loop.rangesym))
+  end
 end
 
-function loop_boundaries(ls::LoopSet)
+function loop_boundaries(ls::LoopSet, shouldindbyind::Vector{Bool})
     lbd = Expr(:tuple)
-    for loop ∈ ls.loops
-        loop_boundary!(lbd, loop)
+    for (ibi, loop) ∈ zip(shouldindbyind, ls.loops)
+        loop_boundary!(lbd, ls, loop, ibi)
     end
     lbd
 end
@@ -203,12 +241,16 @@ function loopset_return_value(ls::LoopSet, ::Val{extract}) where {extract}
         ret
     end
 end
+const DROPPEDCONSTANT = Instruction(Symbol("##DROPPED#CONSTANT##"),Symbol("##DROPPED#CONSTANT##"))
+function skip_constant(instr::Instruction)
+    ((instr == LOOPCONSTANT) || (instr.mod === :numericconstant)) || (instr == DROPPEDCONSTANT)
+end
 
 function add_reassigned_syms!(q::Expr, ls::LoopSet)
     for op ∈ operations(ls)
         if isconstant(op)
             instr = instruction(op)
-            (instr == LOOPCONSTANT || instr.mod === :numericconstant) || push!(q.args, instr.instr)
+            skip_constant(instr) || push!(q.args, instr.instr)
         end
     end
 end
@@ -224,74 +266,150 @@ function add_external_functions!(q::Expr, ls::LoopSet)
 end
 
 function check_if_empty(ls::LoopSet, q::Expr)
-    lb = loop_boundaries(ls)
+    lb = loop_boundaries(ls, fill(false, length(ls.loops)))
     Expr(:if, Expr(:call, :!, Expr(:call, :any, :isempty, lb)), q)
 end
 
 val(x) = Expr(:call, Expr(:curly, :Val, x))
 
+@inline gespf1(x, i) = gesp(x, i)
+@inline gespf1(x::StridedPointer{T,1}, i::Tuple{I}) where {T,I<:Integer} = gesp(x, i)
+@inline gespf1(x::StridedBitPointer{T,1}, i::Tuple{I}) where {T,I<:Integer} = gesp(x, i)
+@inline gespf1(x::StridedPointer{T,1}, i::Tuple{Zero}) where {T} = x
+@inline gespf1(x::StridedBitPointer{T,1}, i::Tuple{Zero}) where {T} = x
+@generated function gespf1(x::StridedPointer{T,N,C,B,R}, i::Tuple{I}) where {T,N,I<:Integer,C,B,R}
+  I === Zero && return :x
+  ri = 0; rm = typemax(Int)
+  for (i, r) ∈ enumerate(R)
+    if r < rm
+      rm = r
+      ri = i
+    end
+  end
+  ri = max(1, ri)
+  quote
+    $(Expr(:meta,:inline))
+    p, li = VectorizationBase.tdot(x, (vsub_fast(getfield(i,1,false),1),), VectorizationBase.strides(x))
+    ptr = gep(p, li)
+    StridedPointer{$T,1,$(C===1 ? 1 : 0),$(B===1 ? 1 : 0),$(R[ri],)}(ptr, (getfield(getfield(x,:strd), $ri, 1),), (Zero(),))
+  end
+end
+@generated function gespf1(x::StridedBitPointer{T,N,C,B,R}, i::Tuple{I}) where {T,N,I<:Integer,C,B,R}
+  I === Zero && return :x
+  quote
+    $(Expr(:meta,:inline))
+    p, li = VectorizationBase.tdot(x, (vsub_fast(getfield(i,1,false),1),), VectorizationBase.strides(x))
+    ptr = gep(p, li)
+    StridedBitPointer{1,$(C===1 ? 1 : 0),$(B===1 ? 1 : 0),$(first(R),)}(ptr, (first(getfield(x,:strd)),), (Zero(),))
+  end
+end
+function findfirstcontaining(ref, ind)
+  for (i,indr) ∈ enumerate(getindices(ref))
+    ind === indr && return i
+  end
+  0
+end
+function should_zerorangestart(ls::LoopSet, allarrayrefs::Vector{ArrayReferenceMeta}, name_to_array_map::Vector{Vector{Int}})
+  loops = ls.loops
+  shouldindbyind = fill(false, length(loops))
+  for (i,loop) ∈ enumerate(loops)
+    ind = loop.itersymbol
+    if isloopvalue(ls, ind)
+      # we don't zero the range if it is used as a loopvalue
+      shouldindbyind[i] = true
+      continue
+    end
+    # otherwise, we need
+    for namev ∈ name_to_array_map
+      # firstcontainsind relies on stripping of duplicate inds in parsing
+      firstcontainsind = findfirstcontaining(allarrayrefs[first(namev)], ind)
+      allsame = true
+      # The idea here is that if any ref to the same array doesn't have `ind`,
+      # we can't offset that dimension because different inds will clash.
+      # Because offseting the array means counter-offseting the range, we need
+      # to be consistent, and check that all arrays are valid first.
+      for j ∈ @view(namev[2:end])
+        ref = allarrayrefs[j]
+        if firstcontainsind ≠ findfirstcontaining(allarrayrefs[j], ind)
+          allsame = false
+          break
+        end
+      end
+      if !allsame
+        shouldindbyind[i] = true
+        break
+      end
+    end
+  end
+  return shouldindbyind
+end
+function check_shouldindbyind(ls::LoopSet, ind::Symbol, shouldindbyind::Vector{Bool})
+  for (i,loop) ∈ enumerate(ls.loops)
+    loop.itersymbol === ind && return shouldindbyind[i]
+  end
+  true
+end
+# write a "check_loops_safe_to_zerorangestart
+# that will be used to
+# 1) decide whether to zerorangestart
+# 2) decide whether to gesp that loopstart inside `add_grouped_strided_pointer`
 function add_grouped_strided_pointer!(extra_args::Expr, ls::LoopSet)
-    gsp = Expr(:call, lv(:grouped_strided_pointer))
-    tgarrays = Expr(:tuple)
-    i = 0
-    preserve_assignment = Expr(:tuple); preserve = Symbol[];
-    @unpack equalarraydims, refs_aliasing_syms = ls
+  allarrayrefs, name_to_array_map, unique_to_name_and_op_map = uniquearrayrefs_csesummary(ls)
+  shouldindbyind = should_zerorangestart(ls, allarrayrefs, name_to_array_map)
+  # @show allarrayrefs
+  gsp = Expr(:call, lv(:grouped_strided_pointer))
+  tgarrays = Expr(:tuple)
+  i = 0
+  preserve_assignment = Expr(:tuple); preserve = Symbol[];
+  @unpack equalarraydims, refs_aliasing_syms = ls
     # duplicate_map = collect(1:length(refs_aliasing_syms))
-    duplicate_map = Vector{Int}(undef, length(refs_aliasing_syms))
-    for (j,ref) ∈ enumerate(refs_aliasing_syms)
-        vpref = vptr(ref)
-        duplicate = false
-        for k ∈ 1:j-1 # quadratic, but should be short enough so that this is faster than O(1) algs
-            if vptr(refs_aliasing_syms[k]) === vpref
-                duplicate = true
-                # duplicate_map[j] = k
-                break
-            end
-        end
-        duplicate && continue
-        # duplicate_map[j] == j || continue
-        duplicate_map[j] = (i += 1)
-        found = false
-        # for (vptrs,dims) ∈ equalarraydims
-        #     _id = findfirst(==(vpref), vptrs)
-        #     _id === nothing && continue
-        #     id::Int = _id
-        #     found = true
-        #     if vptr(ref.ref.array) === vpref
-        #         push!(tgarrays.args, ref.ref.array)
-        #     else
-        #         push!(tgarrays.args, vpref)
-        #         push!(preserve, ref.ref.array)
-        #     end
-        #     break
-        # end
-        # if !found
-        pres = gensym!(ls, "#preserve#")
-        push!(preserve_assignment.args, pres)
-        if vptr(ref.ref.array) === vpref
-            push!(tgarrays.args, ref.ref.array)
-            push!(preserve, pres)
-        else
-            push!(tgarrays.args, vpref)
-            push!(preserve, ref.ref.array)
-        end
+  duplicate_map = Vector{Int}(undef, length(refs_aliasing_syms))
+
+  # for (i,j) ∈ enumerate(array_refs_with_same_name) # iterate over unique names
+  #   ar = allarrayrefs[j]
+  #   gespinds = cse_constant_offsets!(ls, allarrayrefs, j, array_refs_with_same_name, arrayref_to_name_op_collection)
+  # end
+  # @show refs_aliasing_syms
+  for (j,ref) ∈ enumerate(refs_aliasing_syms)
+    vpref = vptr(ref)
+    duplicate = false
+    for k ∈ 1:j-1 # quadratic, but should be short enough so that this is faster than O(1) algs
+      if vptr(refs_aliasing_syms[k]) === vpref
+        duplicate = true
+        break
+      end
     end
-    push!(gsp.args, tgarrays)
-    matcheddims = Expr(:tuple)
-    for (vptrs,dims) ∈ equalarraydims
-        t = Expr(:tuple)
-        for (vp,d) ∈ zip(vptrs,dims)
-            _id = findfirst(Base.Fix2(===,vp) ∘ vptr, refs_aliasing_syms)
-            _id === nothing && continue
-            push!(t.args, Expr(:tuple, duplicate_map[_id], d))
-        end
-        length(t.args) > 1 && push!(matcheddims.args, t)
+    # @show duplicate
+    duplicate && continue
+    duplicate_map[j] = (i += 1)
+    found = false
+    for j ∈ eachindex(allarrayrefs)
+      if sameref(allarrayrefs[j], ref)
+        gespinds = cse_constant_offsets!(ls, allarrayrefs, j, name_to_array_map, unique_to_name_and_op_map, shouldindbyind)
+        push!(tgarrays.args, Expr(:call, lv(:gespf1), vpref, gespinds))
+        found = true
+        break
+      end
     end
-    push!(gsp.args, val(matcheddims))
-    gsps = gensym!(ls, "#grouped#strided#pointer#")
-    push!(extra_args.args, gsps)
-    pushpreamble!(ls, Expr(:(=), Expr(:tuple, gsps, preserve_assignment), gsp))
-    preserve
+    @assert found
+    push!(preserve, presbufsym(ref.ref.array))
+  end
+  push!(gsp.args, tgarrays)
+  matcheddims = Expr(:tuple)
+  for (vptrs,dims) ∈ equalarraydims
+    t = Expr(:tuple)
+    for (vp,d) ∈ zip(vptrs,dims)
+      _id = findfirst(Base.Fix2(===,vp) ∘ vptr, refs_aliasing_syms)
+      _id === nothing && continue
+      push!(t.args, Expr(:tuple, duplicate_map[_id], d))
+    end
+    length(t.args) > 1 && push!(matcheddims.args, t)
+  end
+  push!(gsp.args, val(matcheddims))
+  gsps = gensym!(ls, "#grouped#strided#pointer#")
+  push!(extra_args.args, gsps)
+  pushpreamble!(ls, Expr(:(=), gsps, Expr(:call, GlobalRef(Core,:getfield), gsp, 1)))
+  preserve, shouldindbyind
 end
 
 # first_cache() = ifelse(gt(num_cache_levels(), StaticInt{2}()), StaticInt{2}(), StaticInt{1}())
@@ -319,12 +437,40 @@ end
         cache_linesize(), cache_size(StaticInt(1)), cache_size(StaticInt(2)), cache_size(StaticInt(3))
     )
 end
+function find_samename_constparent(op::Operation, opname::Symbol)
+    for opp ∈ parents(op)
+        (((isconstant(opp) && instruction(opp) == LOOPCONSTANT) && (name(opp) === opname))) && return opp
+        opptemp = find_samename_constparent(opp, opname)
+        opptemp === opp || return opptemp
+    end
+    op
+end
+function remove_outer_reducts!(roots::Vector{Bool}, ls::LoopSet)
+    ops = operations(ls)
+    for or ∈ ls.outer_reductions
+        op = ops[or]
+        optemp = find_samename_constparent(op, name(op))
+        if optemp ≢ op
+            roots[identifier(optemp)] = false
+        end
+    end
+end
+
 # Try to condense in type stable manner
 function generate_call(ls::LoopSet, (inline,u₁,u₂)::Tuple{Bool,Int8,Int8}, thread::UInt, debug::Bool = false)
+    extra_args = Expr(:tuple)
+    preserve, shouldindbyind = add_grouped_strided_pointer!(extra_args, ls)
+
     operation_descriptions = Expr(:tuple)
     varnames = Symbol[]; ids = Vector{Int}(undef, length(operations(ls)))
-    for op ∈ operations(ls)
-        instr = instruction(op)
+    ops = operations(ls)
+    roots = getroots(ls)
+    length(ls.includedactualarrays) == 0 || remove_outer_reducts!(roots, ls)
+    for op ∈ ops
+        instr::Instruction = instruction(op)
+        if (isconstant(op) && (instr == LOOPCONSTANT)) && (!roots[identifier(op)])
+            instr = op.instruction = DROPPEDCONSTANT
+        end
         push!(operation_descriptions.args, QuoteNode(instr.mod))
         push!(operation_descriptions.args, QuoteNode(instr.instr))
         push!(operation_descriptions.args, OperationStruct!(varnames, ids, ls, op))
@@ -339,26 +485,23 @@ function generate_call(ls::LoopSet, (inline,u₁,u₂)::Tuple{Bool,Int8,Int8}, t
         push!(arrayref_descriptions.args, ArrayRefStruct(ls, ref, arraysymbolinds, ids))
     end
     argmeta = argmeta_and_consts_description(ls, arraysymbolinds)
-    loop_bounds = loop_boundaries(ls)
+    loop_bounds = loop_boundaries(ls, shouldindbyind)
     loop_syms = tuple_expr(QuoteNode, ls.loopsymbols)
     func = debug ? lv(:_avx_loopset_debug) : lv(:_avx_!)
     lbarg = debug ? Expr(:call, :typeof, loop_bounds) : loop_bounds
     configarg = (inline,u₁,u₂,ls.isbroadcast,thread)
     unroll_param_tup = Expr(:call, lv(:avx_config_val), :(Val{$configarg}()), VECTORWIDTHSYMBOL)
     q = Expr(:call, func, unroll_param_tup, val(operation_descriptions), val(arrayref_descriptions), val(argmeta), val(loop_syms))
-    # debug && deleteat!(q.args, 2)
-    vargs_as_tuple = true#!debug
-    vargs_as_tuple || push!(q.args, lbarg)
-    extra_args = vargs_as_tuple ? Expr(:tuple) : q
-    preserve = add_grouped_strided_pointer!(extra_args, ls)
-    for is ∈ ls.preamble_symsym
-        push!(extra_args.args, last(is))
+    
+    add_reassigned_syms!(extra_args, ls) # counterpart to `add_ops!` constants
+    for (opid,sym) ∈ ls.preamble_symsym # counterpart to process_metadata! symsym extraction
+        if instruction(ops[opid]) ≠ DROPPEDCONSTANT
+            push!(extra_args.args, sym)
+        end
     end
-    append!(extra_args.args, arraysymbolinds)
-    add_reassigned_syms!(extra_args, ls)
-    add_external_functions!(extra_args, ls)
-    # debug && return q
-    vargs_as_tuple && push!(q.args, Expr(:tuple, lbarg, extra_args))
+    append!(extra_args.args, arraysymbolinds) # add_array_symbols!
+    add_external_functions!(extra_args, ls) # extract_external_functions!
+    push!(q.args, Expr(:tuple, lbarg, extra_args))
     vecwidthdefq = Expr(:block)
     define_eltype_vec_width!(vecwidthdefq, ls, nothing)
     Expr(:block, vecwidthdefq, q), preserve

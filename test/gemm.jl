@@ -703,7 +703,7 @@
         @show T, @__LINE__
         # M, K, N = 128, 128, 128;
         N = 69;
-        for M ∈ 72:80, K ∈ 72:80
+        @time for M ∈ 72:80, K ∈ 72:80
             # @show M,K
         # M, K, N = 73, 75, 69;
             C = Matrix{TC}(undef, M, N);
@@ -711,7 +711,7 @@
             At = copy(A');
             Bt = copy(B');
             C2 = similar(C);
-            @time @testset "avx $T dynamc gemm" begin
+            @testset "avx $T dynamc gemm" begin
                 AmulB!(C2, A, B)
                 AmulBavx1!(C, A, B)
                 @test C ≈ C2
@@ -795,7 +795,7 @@
                 end
             end
             # exceeds_time_limit() && break
-            @time @testset "_avx $T dynamic gemm" begin
+            @testset "_avx $T dynamic gemm" begin
                 AmulB_avx1!(C, A, B)
                 @test C ≈ C2
                 fill!(C, 999.99); AmulB_avx1!(C, At', B)
@@ -845,7 +845,7 @@
                 Bts = SizedMatrix{N,K}(Bt);
                 Cs = SizedMatrix{M,N}(C);
                 C2z = LoopVectorization.OffsetArray(C2, -1, -1);
-                @time @testset "avx $T static gemm" begin
+                @testset "avx $T static gemm" begin
                     # AmulBavx1!(Cs, As, Bs)
                     # @test Cs ≈ C2
                     # fill!(Cs, 999.99); AmulBavx1!(Cs, Ats', Bs)
@@ -892,7 +892,7 @@
                     # @test Cs ≈ C2
                 end
                 # exceeds_time_limit() && break
-                @time @testset "_avx $T static gemm" begin
+                @testset "_avx $T static gemm" begin
                     # AmulB_avx1!(Cs, As, Bs)
                     # @test Cs ≈ C2
                     # fill!(Cs, 999.99); AmulB_avx1!(Cs, Ats', Bs)
@@ -936,7 +936,7 @@
                 end
             end
             # exceeds_time_limit() && break
-            @time @testset "$T rank2mul" begin
+            @testset "$T rank2mul" begin
                 Aₘ= rand(R, M, 2); Aₖ = rand(R, 2, K);
                 Aₖ′ = copy(Aₖ');
                 rank2AmulB!(C2, Aₘ, Aₖ, B)

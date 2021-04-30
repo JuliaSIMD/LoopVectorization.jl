@@ -4,6 +4,8 @@ Here, we convolve a small matrix `kern` with a larger matrix `A`, storing the re
 ```julia
 using LoopVectorization, OffsetArrays, Images
 kern = Images.Kernel.gaussian((1, 1), (3, 3))
+A = rand(130,130);
+out = OffsetArray(similar(A, size(A) .- size(kernel) .+ 1), -1 .- kernel.offsets);
 function filter2davx!(out::AbstractMatrix, A::AbstractMatrix, kern)
     @avx for J in CartesianIndices(out)
         tmp = zero(eltype(out))

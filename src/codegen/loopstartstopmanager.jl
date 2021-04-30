@@ -1,4 +1,4 @@
-function uniquearrayrefs(ls::LoopSet)
+function uniquearrayrefs_csesummary(ls::LoopSet)
   uniquerefs = ArrayReferenceMeta[]
   # each `Vector{Tuple{Int,Int}}` has the same name
   # 1 to ≥1 maps:
@@ -33,6 +33,30 @@ function uniquearrayrefs(ls::LoopSet)
     end
   end
   uniquerefs, name_to_array_map, unique_to_name_and_op_map
+end
+
+function uniquearrayrefs(ls::LoopSet)
+    uniquerefs = ArrayReferenceMeta[]
+    includeinlet = Bool[]
+    # for arrayref ∈ ls.refs_aliasing_syms
+    for op ∈ operations(ls)
+        arrayref = op.ref
+        arrayref === NOTAREFERENCE && continue
+        notunique = false
+        isonlyname = true
+        for ref ∈ uniquerefs
+            notunique = sameref(arrayref, ref)
+            isonlyname &= vptr(arrayref) !== vptr(ref)
+            # if they're not the sameref, they may still have the same name
+            # if they have different names, they're definitely not sameref
+            notunique && break
+        end
+        if !notunique
+            push!(uniquerefs, arrayref)
+            push!(includeinlet, isonlyname)
+        end
+    end
+    uniquerefs, includeinlet
 end
 
 otherindexunrolled(loopsym::Symbol, ind::Symbol, loopdeps::Vector{Symbol}) = (loopsym !== ind) && (loopsym ∈ loopdeps)
@@ -84,7 +108,7 @@ end
     quote
         $(Expr(:meta,:inline))
         # VectorizationBase.StridedPointer{$T,1,$newC,$newB,$(R[minrank],)}($(lv(llvmptr))(sptr), (sptr.strd[$minrank],), (Zero(),))
-        VectorizationBase.StridedPointer{$T,1,$newC,$newB,$(R[minrank],)}(pointer(sptr), (sptr.strd[$minrank],), (Zero(),))
+        VectorizationBase.StridedPointer{$T,1,$newC,$newB,$(R[minrank],)}(VectorizationBase.cpupointer(sptr), (sptr.strd[$minrank],), (Zero(),))
     end
 end
 set_first_stride(x) = x # cross fingers that this works
@@ -169,126 +193,305 @@ function substitute_ops_all!(
     end
   end
 end
-
-function cse_constant_offsets!(
-  ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, allarrayrefs::Vector{ArrayReferenceMeta}, allarrayrefsind::Int,
+function normalize_offsets!(
+  ls::LoopSet, i::Int, allarrayrefs::Vector{ArrayReferenceMeta},
   array_refs_with_same_name::Vector{Int}, arrayref_to_name_op_collection::Vector{Vector{Tuple{Int,Int,Int}}}
-)::Vector{Symbol}
-  
+)
+  ops = operations(ls)
+  length(ops) > 128 && return 0
+  minoffset::Int8 = typemax(Int8)
+  maxoffset::Int8 = typemin(Int8)
+  # we want to store the offsets, because we don't want to require that the `offset` vectors of the variaous `ArrayReferenceMeta`s don't alias
+  offsets::Base.RefValue{NTuple{128,Int8}} = Base.RefValue{NTuple{128,Int8}}();
+  GC.@preserve offsets begin
+    poffsets = Base.unsafe_convert(Ptr{Int8}, offsets)
+    for j ∈ array_refs_with_same_name
+      arrayref_to_name_op = arrayref_to_name_op_collection[j]
+      for (_,__,opid) ∈ arrayref_to_name_op
+        op = ops[opid]
+        off = getoffsets(op.ref)[i]
+        off == zero(Int8) && return 0
+        minoffset = min(off, minoffset)
+        maxoffset = max(off, maxoffset)
+        unsafe_store!(poffsets, off, opid)
+      end
+    end
+    # reaching here means none of the offsets contain `0`
+    # we won't bother if difference between offsets is >127
+    # we don't want `maxoffset` to overflow when subtracting `minoffset`
+    # so we check if it's safe, and give up if it isn't
+    (Int(maxoffset) - Int(minoffset)) > 127 && return 0
+    for j ∈ array_refs_with_same_name
+      arrayref_to_name_op = arrayref_to_name_op_collection[j]
+      for (_,__,opid) ∈ arrayref_to_name_op
+        getoffsets(ops[opid].ref)[i] = unsafe_load(poffsets, opid) - minoffset
+      end
+    end
+  end
+  return Int(minoffset)
+end
+function isloopvalue(ls::LoopSet, ind::Symbol)
+  for op ∈ operations(ls)
+    iscompute(op) || continue
+    for opp ∈ parents(op)# this is to confirm `ind` still has children
+      (isloopvalue(opp) && instruction(opp).instr === ind) && return true
+    end
+  end
+  return false
+end
+function cse_constant_offsets!(
+  ls::LoopSet, allarrayrefs::Vector{ArrayReferenceMeta}, allarrayrefsind::Int, name_to_array_map::Vector{Vector{Int}},
+  arrayref_to_name_op_collection::Vector{Vector{Tuple{Int,Int,Int}}}, shouldindbyind::Vector{Bool}
+)
+  ar = allarrayrefs[allarrayrefsind]
+  # @show ar
   vptrar = vptr(ar)
   arrayref_to_name_op = arrayref_to_name_op_collection[allarrayrefsind]
+  array_refs_with_same_name = name_to_array_map[first(first(arrayref_to_name_op))]
   us = ls.unrollspecification
   li = ar.loopedindex
   indices = getindices(ar)
   strides = getstrides(ar)
   offset = first(indices) === DISCONTIGUOUS
-  gespindoffsets = fill(Symbol(""), length(li))
+  # gespindoffsets = fill(Symbol(""), length(li))
+  gespinds = Expr(:tuple)
   for i ∈ eachindex(li)
-    li[i] && continue
-    ii = i + offset
-    ind = indices[ii]
     gespsymbol::Symbol = Symbol("")    
-    # we try to licm and offset so we can set `li[i] = true`
-    licmoffset = true
-    position_in_array_refs_with_same_name = first(arrayref_to_name_op)[2]
-    # if position_in_array_refs_with_same_name ≠ 1, then we already performed the op substitutions
-    if length(array_refs_with_same_name) > 1 # if it == 1, then there's only 1
-      for j ∈ array_refs_with_same_name
-        j == position_in_array_refs_with_same_name && continue
-        ref = allarrayrefs[j]
-        refinds = getindices(ref)
-        # refinds === indices && continue # fast check, should be covered by `j == position_in_array_refs_with_same_name`
-        if !((refinds[ii] === ind) & (getstrides(ar)[i] == getstrides(ref)[i]))
-          # For now, we'll only bother with `licm` if all share the same indices
-          # This is so that we can apply the same `licm` to each and keep the same array name.
-          # Otherwise, we'll rely on LLVM to optimize indexing.
+    ii = i + offset
+    ind::Symbol = indices[ii]
+    licmoffset = !li[i]
+    if licmoffset
+      # we try to licm and offset so we can set `li[i] = true`
+      position_in_array_refs_with_same_name = first(arrayref_to_name_op)[2]
+      # if position_in_array_refs_with_same_name ≠ 1, then we already performed the op substitutions
+      if length(array_refs_with_same_name) > 1 # if it == 1, then there's only 1
+        for j ∈ array_refs_with_same_name
+          j == position_in_array_refs_with_same_name && continue
+          ref = allarrayrefs[j]
+          refinds = getindices(ref)
+          # refinds === indices && continue # fast check, should be covered by `j == position_in_array_refs_with_same_name`
+          if !((refinds[ii] === ind) & (getstrides(ar)[i] == getstrides(ref)[i]))
+            # For now, we'll only bother with `licm` if all share the same indices
+            # This is so that we can apply the same `licm` to each and keep the same array name.
+            # Otherwise, we'll rely on LLVM to optimize indexing.
+            licmoffset = false
+            break
+          end
+        end
+      end
+      ops = operations(ls)
+      while licmoffset # repeat until we run out
+        # ind = indices[ii]
+        # indices are all the same across operations, so we look to the first for checking compatibility...
+        memop = indop = ops[first(arrayref_to_name_op)[3]] # indop is a dummy placeholder
+        for opp ∈ parents(memop)
+          if name(opp) === ind
+            indop = opp
+          end
+        end
+        # (we found a match) # iscompute(indop) should be guaranteed...
+        ((indop ≢ memop) && iscompute(indop)) || break
+        instr = instruction(indop).instr
+        parents_indop = parents(indop)
+        if instr === :(+)
+          constants_to_licm = if gespsymbol === Symbol("")
+            Expr(:call, GlobalRef(Base,:(+)))
+          else
+            Expr(:call, GlobalRef(Base,:(+)), gespsymbol)
+          end
+          new_parent = indop # dummy, for now we will only licm if it lets us remove `indop`
+          for opp ∈ parents_indop
+            if isconstantop(opp)
+              # NOTE: using `name` because this happens at macroexpansion time
+              # push!(constants_to_licm.args, constantopname(opp))
+              push!(constants_to_licm.args, name(opp))
+            elseif new_parent === indop # first
+              new_parent = opp
+            else # this is the second parent, we give up on `licm`
+              licmoffset = false
+              break
+            end
+          end
+          licmoffset || continue
+          if length(constants_to_licm.args) > 2
+            gespsymbol = gensym!(ls, "#gespsym#")
+            pushpreamble!(ls, Expr(:(=), gespsymbol, constants_to_licm))
+          elseif length(constants_to_licm.args) == 2
+            licmoffset = gespsymbol === Symbol("")
+            if licmoffset
+              gespsymbol = (constants_to_licm.args[2])::Symbol
+            end
+          else
+            licmoffset = false
+          end
+          if licmoffset # prune
+            if new_parent === indop # no parents left
+              ind = CONSTANTZEROINDEX
+              set_all_to_constant_index!(ls, i, ii, indop, allarrayrefs, array_refs_with_same_name, arrayref_to_name_op_collection)
+            else # new_parent is a new parent to replace `indop`
+              ind = maybeloopvaluename(new_parent)
+              substitute_ops_all!(ls, i, ii, indop, new_parent, allarrayrefs, array_refs_with_same_name, arrayref_to_name_op_collection)
+            end
+          end
+        elseif (instr === :(-)) && length(parents_indop) == 2
+          op1 = parents(indop)[1]
+          op2 = parents(indop)[2]
+          op1const = isconstantop(op1)
+          op2const = isconstantop(op2)
+          if op1const # op1 - op2
+            if op2const
+              subexpr = if gespsymbol === Symbol("")
+                Expr(:call, GlobalRef(Base,:(-)), name(op1), name(op2))
+              else
+                Expr(:call, GlobalRef(Base,:(-)), Expr(:call, GlobalRef(Base,:(+)), gespsymbol, name(op1)), name(op2))
+              end
+              gespsymbol = gensym!(ls, "#gespsym#")
+              pushpreamble!(ls, Expr(:(=), gespsymbol, subexpr))
+              ind = CONSTANTZEROINDEX
+              set_all_to_constant_index!(ls, i, ii, indop, allarrayrefs, array_refs_with_same_name, arrayref_to_name_op_collection)
+            else# op1const, op2dynamic
+              # won't bother with this for now
+              licmoffset = false
+            end
+          elseif op2const #op1dynamic
+            subexpr = if gespsymbol === Symbol("")
+              Expr(:call, GlobalRef(Base,:(-)), name(op2))
+            else
+              Expr(:call, GlobalRef(Base,:(-)), gespsymbol, name(op2))
+            end
+            gespsymbol = gensym!(ls, "#gespsym#")
+            push!(q.args, Expr(:(=), gespsymbol, subexpr))
+            ind = maybeloopvaluename(op1)
+            substitute_ops_all!(ls, i, ii, indop, op1, allarrayrefs, array_refs_with_same_name, arrayref_to_name_op_collection)
+          else
+            licmoffset = false
+          end
+        else
           licmoffset = false
-          break
         end
       end
     end
-    licmoffset || continue
-    ops = operations(ls)
-    # indices are all the same across operations, so we look to the first for checking compatibility...
-    memop = indop = ops[first(arrayref_to_name_op)[3]] # indop is a dummy placeholder
-    for opp ∈ parents(memop)
-      if name(opp) === ind
-        indop = opp
-      end
-    end
-    # (we found a match) # iscompute(indop) should be guaranteed...
-    ((indop ≢ memop) && iscompute(indop)) || continue
-    instr = instruction(indop).instr
-    parents_indop = parents(indop)
-    if instr === :(+)
-      constants_to_licm = Expr(:call, GlobalRef(Base,:(+)))
-      new_parent = indop # dummy, for now we will only licm if it lets us remove `indop`
-      for opp ∈ parents_indop
-        if isconstantop(opp)
-          push!(constants_to_licm.args, constantopname(opp))
-        elseif new_parent === indop # first
-          new_parent = opp
-        else # this is the second parent, we give up on `licm`
-          licmoffset = false
-          break
-        end
-      end
-      licmoffset || continue
-      if length(constants_to_licm.args) > 2
-        gespindoffsets[i] = gespsymbol = gensym!(ls, "#gespsym#")
-        push!(q.args, Expr(:(=), gespsymbol, constants_to_licm))
-      elseif length(constants_to_licm.args) == 2
-        gespindoffsets[i] = (constants_to_licm.args[2])::Symbol
+    constoffset = normalize_offsets!(ls, i, allarrayrefs, array_refs_with_same_name, arrayref_to_name_op_collection)
+    pushgespind!(gespinds, ls, gespsymbol, constoffset, ind, li, i, check_shouldindbyind(ls, ind, shouldindbyind), true)
+  end
+  return gespinds
+end
+@inline similardims(_, i) = i
+@inline similardims(::CartesianIndices{N}, i) where {N} = VectorizationBase.CartesianVIndex(ntuple(_ -> i, Val{N}()))
+# @generated function similardims(::CartesianIndices{N}, i) where {N}
+#   t = Expr(:tuple)
+#   for n ∈ 1:N
+#     push!(t.args, :i)
+#   end
+#   Expr(:block,Expr(:meta,:inline),t)
+# end
+# function maybebroadcastpush!(q::Expr, loop::Loop, b::Bool, ex)
+#   if b
+#     push!(q.args, Expr(:call, lv(:similardims), loop.rangesym, ex))
+#   else
+#     push!(q.args, ex)
+#   end
+#   return nothing
+# end
+function pushgespind!(
+  gespinds::Expr, ls::LoopSet, gespsymbol::Symbol, constoffset::Int, ind::Symbol, li::Vector{Bool}, i::Int, index_by_index::Bool, fromgsp::Bool
+)
+  if li[i]
+    if ind === CONSTANTZEROINDEX
+      if gespsymbol === Symbol("")
+        push!(gespinds.args, staticexpr(constoffset))
+      elseif constoffset == 0
+        push!(gespinds.args, gespsymbol)
       else
-        licmoffset = false
-      end
-      if licmoffset
-        if new_parent === indop # no parents left
-          ind = CONSTANTZEROINDEX
-          set_all_to_constant_index!(ls, i, ii, indop, allarrayrefs, array_refs_with_same_name, arrayref_to_name_op_collection)
-        else # new_parent is a new parent to replace `indop`
-          ind = maybeloopvaluename(new_parent)
-          substitute_ops_all!(ls, i, ii, indop, new_parent, allarrayrefs, array_refs_with_same_name, arrayref_to_name_op_collection)
-        end
-      end
-    elseif (instr === :(-)) && length(parents_indop) == 2
-      op1 = parents(indop)[1]
-      op2 = parents(indop)[2]
-      op1const = isconstantop(op1)
-      op2const = isconstantop(op2)
-      if op1const # op1 - op2
-        if op2const
-          gespindoffsets[i] = gespsymbol = gensym!(ls, "#gespsym#")
-          push!(q.args, Expr(:(=), gespsymbol, Expr(:call, GlobalRef(Base,:(-)), constopname(op1), constopname(op2))))
-          ind = CONSTANTZEROINDEX
-          set_all_to_constant_index!(ls, i, ii, indop, allarrayrefs, array_refs_with_same_name, arrayref_to_name_op_collection)
-        else# op1const, op2dynamic
-          # won't bother with this for now
-          licmoffset = false
-        end
-      elseif op2const #op1dynamic
-        gespindoffsets[i] = gespsymbol = gensym!(ls, "#gespsym#")
-        push!(q.args, Expr(:(=), gespsymbol, Expr(:call, GlobalRef(Base,:(-)), constopname(op2))))
-        ind = maybeloopvaluename(op1)
-        substitute_ops_all!(ls, i, ii, indop, op1, allarrayrefs, array_refs_with_same_name, arrayref_to_name_op_collection)
-      else
-        licmoffset = false
+        push!(gespinds.args, Expr(:call, GlobalRef(Base,:(+)), gespsymbol, staticexpr(constoffset)))
       end
     else
-      licmoffset = false
+      if index_by_index
+        if gespsymbol === Symbol("")
+          if constoffset == 0
+            push!(gespinds.args, Expr(:call, GlobalRef(VectorizationBase, :NullStep)))
+          else
+            push!(gespinds.args, staticexpr(constoffset))
+          end
+        elseif constoffset == 0
+          push!(gespinds.args, gespsymbol)
+        else
+          push!(gespinds.args, addexpr(gespsymbol, constoffset))
+        end
+      else
+        loop = getloop(ls, ind)
+        if gespsymbol === Symbol("")
+          if isknown(first(loop))
+            push!(gespinds.args, staticexpr(constoffset + gethint(first(loop))))
+          elseif constoffset == 0
+            push!(gespinds.args, getsym(first(loop)))
+          else
+            push!(gespinds.args, addexpr(getsym(first(loop)), constoffset))
+          end
+        elseif isknown(first(loop))
+          loopfirst = gethint(first(loop)) + constoffset
+          if loopfirst == 0
+            push!(gespinds.args, gespsymbol)
+          else
+            push!(gespinds.args, Expr(:call, GlobalRef(Base, :(+)), gespsymbol, staticexpr(loopfirst)))
+          end
+        else
+          addedstarts = Expr(:call, GlobalRef(Base, :(+)), gespsymbol, getsym(first(loop)))
+          if constoffset == 0
+            push!(gespinds.args, addedstarts)
+          else
+            push!(gespinds.args, Expr(:call, GlobalRef(Base, :(+)), addedstarts, staticexpr(constoffset)))
+          end
+        end
+      end
+    end # if we hit the following elseif/else, not a loopindex
+  elseif fromgsp # from gsp means that a loop could be a CartesianIndices, so we may need to expand
+    #TODO: broadcast dimensions in case of cartesian indices
+    rangesym = ind
+    for op ∈ operations(ls)
+      if name(op) === ind
+        loopsym = first(loopdependencies(op))
+        rangesym = getloop(ls, loopsym).rangesym
+      end
     end
+    @assert rangesym ≢ ind
+    if rangesym === Symbol("") # there is no rangesym, must be statically sized.
+      pushgespsym!(gespinds, gespsymbol, constoffset)
+    else
+      pushsimdims!(gespinds, rangesym, gespsymbol, constoffset)
+    end
+  else # it is known all inds are 1-dimensional
+    pushgespsym!(gespinds, gespsymbol, constoffset)
   end
-  return gespindoffsets    
+  return nothing
+end
+function pushgespsym!(gespinds::Expr, gespsymbol::Symbol, constoffset::Int)
+  if gespsymbol === Symbol("")
+    push!(gespinds.args, staticexpr(constoffset))
+  elseif constoffset == 0
+    push!(gespinds.args, gespsymbol)
+  else
+    push!(gespinds.args, addexpr(gespsymbol, constoffset))
+  end
+  return nothing
+end
+function pushsimdims!(gespinds::Expr, rangesym::Symbol, gespsymbol::Symbol, constoffset::Int)
+  simdimscall = Expr(:call, lv(:similardims), rangesym)
+  pushgespsym!(simdimscall, gespsymbol, constoffset)
+  push!(gespinds.args, simdimscall)
+  return nothing
 end
 
+# if using ptr offsets, need to offset by loopstart
+# if calculating by index, do not offset by loopstart
 """
 Returns a vector of length equal to the number of indices.
 A value > 0 indicates which loop number that index corresponds to when incrementing the pointer.
 A value < 0 indicates that abs(value) is the corresponding loop, and a `loopvalue` will be used.
 """
 function use_loop_induct_var!(
-  ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, allarrayrefs::Vector{ArrayReferenceMeta}, allarrayrefsind::Int,
-  array_refs_with_same_name::Vector{Int}, arrayref_to_name_op_collection::Vector{Vector{Tuple{Int,Int,Int}}}
+  ls::LoopSet, q::Expr, ar::ArrayReferenceMeta, allarrayrefs::Vector{ArrayReferenceMeta}, allarrayrefsind::Int, includeinlet::Bool
+  # array_refs_with_same_name::Vector{Int}, arrayref_to_name_op_collection::Vector{Vector{Tuple{Int,Int,Int}}}
 )::Vector{Int}
   us = ls.unrollspecification
   li = ar.loopedindex
@@ -302,88 +505,57 @@ function use_loop_induct_var!(
   end
   isbroadcast = ls.isbroadcast
   # no constant offsets when broadcasting
-  if (!isbroadcast) && !(all(li))
-    checkforgespind = true
-    gespindoffsets = cse_constant_offsets!(ls, q, ar, allarrayrefs, allarrayrefsind, array_refs_with_same_name, arrayref_to_name_op_collection)
-  else
-    checkforgespind = false
-    gespindoffsets = indices#dummy
-  end
+  # if (!isbroadcast) && !(all(li))
+  #   checkforgespind = true
+  #   gespindoffsets = cse_constant_offsets!(ls, q, ar, allarrayrefs, allarrayrefsind, array_refs_with_same_name, arrayref_to_name_op_collection)
+  # else
+  #   checkforgespind = false
+  #   gespindoffsets = indices#dummy
+  # end
   gespinds = Expr(:tuple)
   offsetprecalc_descript = Expr(:tuple)
   use_offsetprecalc = false
   vptrar = vptr(ar)
   # @show ar
+  Wisz = false#ls.vector_width == 0
   for i ∈ eachindex(li)
     ii = i + offset
     ind = indices[ii]
-    gespsymbol = gespindoffsets[i]
-    usegespsymbol = checkforgespind && (gespsymbol ≢ Symbol(""))
+    Wisz && push!(gespinds.args, staticexpr(0)) # wrong for `@_avx`...
     if !li[i] # if it wasn't set
       uliv[i] = 0
-      if usegespsymbol
-        push!(gespinds.args, gespsymbol)
-      else
-        push!(gespinds.args, staticexpr(0))
-      end
       push!(offsetprecalc_descript.args, 0)
+      Wisz || pushgespind!(gespinds, ls, Symbol(""), 0, ind, li, i, true, false)
     elseif ind === CONSTANTZEROINDEX
       uliv[i] = 0
-      if usegespsymbol
-        push!(gespinds.args, Expr(:call, GlobalRef(Base,:(+)), gespsymbol, staticexpr(1)))
-      else
-        push!(gespinds.args, staticexpr(1))
-      end
       push!(offsetprecalc_descript.args, 0)
+      Wisz || pushgespind!(gespinds, ls, Symbol(""), 0, ind, li, i, true, false)
     elseif isbroadcast ||
       ((isone(ii) && (last(looporder) === ind)) && !(otherindexunrolled(ls, ind, ar)) ||
       multiple_with_name(vptrar, allarrayrefs)) ||
       (iszero(ls.vector_width) && isstaticloop(getloop(ls, ind)))# ||
       # Not doing normal offset indexing
       uliv[i] = -findfirst(Base.Fix2(===,ind), looporder)::Int
-      # push!(gespinds.args, Expr(:call, lv(:Zero)))
-      if usegespsymbol
-        push!(gespinds.args, Expr(:call, GlobalRef(Base,:(+)), gespsymbol, staticexpr(1)))
-      else
-        push!(gespinds.args, staticexpr(1))
-      end
       push!(offsetprecalc_descript.args, 0) # not doing offset indexing, so push 0
+      Wisz || pushgespind!(gespinds, ls, Symbol(""), 0, ind, li, i, true, false)
     else
       uliv[i] = findfirst(Base.Fix2(===,ind), looporder)::Int
       loop = getloop(ls, ind)
-      if usegespsymbol
-        if isknown(first(loop))
-          loopfirst = gethint(first(loop))
-          if loopfirst == 0
-            push!(gespinds.args, gespsymbol)
-          else
-            push!(gespinds.args, Expr(:call, GlobalRef(Base, :(+)), gespsymbol, staticexpr(loopfirst)))
-          end
-        else
-          push!(gespinds.args, Expr(:call, GlobalRef(Base, :(+)), gespsymbol, getsym(first(loop))))
-        end
-      elseif isknown(first(loop))
-        push!(gespinds.args, staticexpr(gethint(first(loop))))
-      else
-        push!(gespinds.args, getsym(first(loop)))
-      end
-      push!(offsetprecalc_descript.args, max(5,us.u₁,us.u₂))
+      push!(offsetprecalc_descript.args, max(5,us.u₁+1,us.u₂+1))
       use_offsetprecalc = true
+      Wisz || pushgespind!(gespinds, ls, Symbol(""), 0, ind, li, i, false, false)
     end
+    # cases for pushgespind! and loopval!
+    # if !isloopval, same as before
+    # if isloopval & `uliv[i] > 0`, then must setup
   end
-  arrayref_to_name_op = arrayref_to_name_op_collection[allarrayrefsind]
-  if first(arrayref_to_name_op)[2] == 1 # if it's the first inside `array_refs_with_same_name`, we need to add the expression to the let block
-    vptr_ar = if isone(length(li))
-      # Workaround for fact that 1-d OffsetArrays are offset when using 1 index, but multi-dim ones are not
-      Expr(:call, lv(:onetozeroindexgephack), vptrar)
-    else
-      vptrar
-    end
+  # arrayref_to_name_op = arrayref_to_name_op_collection[allarrayrefsind]
+  if includeinlet#first(arrayref_to_name_op)[2] == 1 # if it's the first inside `array_refs_with_same_name`, we need to add the expression to the let block
+    vpgesped = Expr(:call, lv(:gesp), vptrar, gespinds)
     if use_offsetprecalc
-      push!(q.args, Expr(:(=), vptrar, Expr(:call, lv(:offsetprecalc), Expr(:call, lv(:gesp), vptr_ar, gespinds), Expr(:call, Expr(:curly, :Val, offsetprecalc_descript)))))
-    else
-      push!(q.args, Expr(:(=), vptrar, Expr(:call, lv(:gesp), vptr_ar, gespinds)))
+      vpgesped = Expr(:call, lv(:offsetprecalc), vpgesped, Expr(:call, Expr(:curly, :Val, offsetprecalc_descript)))
     end
+    push!(q.args, Expr(:(=), vptrar, vpgesped))
   end
   uliv
 end
@@ -399,11 +571,13 @@ function add_loop_start_stop_manager!(ls::LoopSet)
         isloopvalue(op) && push!(loopinductvars, first(loopdependencies(op)))
     end
     # Filtered ArrayReferenceMetas, we must increment each
-    arrayrefs, name_to_array_map, unique_to_name_and_op_map = uniquearrayrefs(ls)
+  # arrayrefs, name_to_array_map, unique_to_name_and_op_map = uniquearrayrefs(ls)
+    arrayrefs, includeinlet = uniquearrayrefs(ls)
     use_livs = Vector{Vector{Int}}(undef, length(arrayrefs))
     # for i ∈ eachindex(name_to_array_map)
     for i ∈ eachindex(arrayrefs)
-        use_livs[i] = use_loop_induct_var!(ls, q, arrayrefs[i], arrayrefs, i, name_to_array_map[first(first(unique_to_name_and_op_map[i]))], unique_to_name_and_op_map)
+      use_livs[i] = use_loop_induct_var!(ls, q, arrayrefs[i], arrayrefs, i, includeinlet[i])
+      #name_to_array_map[first(first(unique_to_name_and_op_map[i]))], unique_to_name_and_op_map)
     end
     # @show use_livs,
     # loops, sorted from outer-most to inner-most
@@ -635,8 +809,8 @@ function startloop(ls::LoopSet, us::UnrollSpecification, n::Int, submax = maxunr
         push!(loopstart.args, Expr(:(=), ptr, ptr))
     end
     if iszero(termind)
-        loopsym = names(ls)[n]
-        push!(loopstart.args, startloop(getloop(ls, loopsym), loopsym))
+      loopsym = names(ls)[n]
+      push!(loopstart.args, startloop(getloop(ls, loopsym), loopsym))
     else
         isvectorized = n == vloopnum
         # @show ptrdefs

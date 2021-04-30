@@ -36,7 +36,7 @@ function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{R}) where {R<:AbstractR
     f = ArrayInterface.known_first(R)
     s = ArrayInterface.known_step(R)
     l = ArrayInterface.known_last(R)
-    
+
     Loop(ls, ex, sym, f, s, l)
 end
 
@@ -88,8 +88,8 @@ function ArrayReferenceMeta(
     indices = (ar.indices)::UInt64
     offsets = (ar.offsets)::UInt64
     strides = (ar.strides)::UInt64
-    arrayar = array(ar)::Symbol
-    ptrar = ptr(ar)::Symbol
+    arrayar, ptrar = array_and_ptr(ar)::Tuple{Symbol,Symbol}
+    # ptrar = ptr(ar)::Symbol
     # TODO, check if this matters at all. The compiler still knows it is an `::ArrayRefStruct`, just not `arrayar` or `ptrar`?
     ArrayReferenceMeta(
         ls, index_types, indices, offsets, strides,
@@ -163,13 +163,14 @@ end
 extract_varg(i) = :(getfield(var"#vargs#", $i, false))
 # _extract(::Type{Static{N}}) where {N} = N
 extract_gsp!(sptrs::Expr, name::Symbol) = (push!(sptrs.args, name); nothing)
-function rank_to_sortperm(R::NTuple{N,Int}) where {N}
-    sp = ntuple(zero, Val{N}())
-    r = ntuple(n -> sum(R[n] .≥ R), Val{N}())
-    @inbounds for n = 1:N
-        sp = Base.setindex(sp, n, r[n])
-    end
-    sp
+tupleranks(R::NTuple{8,Int}) = ntuple(n -> sum(R[n] .≥ R), Val{8}())
+function rank_to_sortperm((R,N)::Tuple{NTuple{8,Int},Int})::Vector{Int}
+  r = tupleranks(R)
+  sp = Vector{Int}(undef, N)
+  @inbounds for n = 1:N
+    sp[r[n]] = n
+  end
+  sp
 end
 function loop_indexes_bit!(ls::LoopSet, ar::ArrayReferenceMeta)
     li = ar.loopedindex;
@@ -181,55 +182,63 @@ function loop_indexes_bit!(ls::LoopSet, ar::ArrayReferenceMeta)
 end
 function add_mref!(
     sptrs::Expr, ls::LoopSet, ar::ArrayReferenceMeta, @nospecialize(_::Type{Ptr{T}}),
-    C::Int, B::Int, sp::NTuple{N,Int}, name::Symbol
-) where {T,N}
-    @assert B ≤ 0 "Batched arrays not supported yet."
-    # maybe no change needed? -- optimize common case
-    column_major = ntuple(identity, N)
-    li = ar.loopedindex;
-    if sp === column_major || isone(length(li))
-        # don't set `bit` to true if our vector width is ≥ 8
-        ((T === VectorizationBase.Bit) && (ls.vector_width < 8)) && loop_indexes_bit!(ls, ar)
-        return extract_gsp!(sptrs, name)
-    end
-    permute_mref!(ar, C, sp)
-    # must now sort array's inds, and stack pointer's
-    tmpsp = gensym(name)
-    extract_gsp!(sptrs, tmpsp)
-    strd_tup = Expr(:tuple)
-    offsets_tup = Expr(:tuple)
-    gf = GlobalRef(Core,:getfield)
-    offsets = gensym(:offsets); strides = gensym(:strides)
-    pushpreamble!(ls, Expr(:(=), offsets, Expr(:call, gf, tmpsp, QuoteNode(:offsets))))
-    pushpreamble!(ls, Expr(:(=), strides, Expr(:call, gf, tmpsp, QuoteNode(:strd))))
-    for (i, p) ∈ enumerate(sp)
-        push!(strd_tup.args, Expr(:call, gf, strides, p, false))
-        push!(offsets_tup.args, Expr(:call, gf, offsets, p, false))
-    end
-    #TODO: fix for `T === Bit`.
-    sptype = Expr(:curly, lv(:StridedPointer), T, N, (C == -1 ? -1 : 1), B, column_major)
-    sptr = Expr(:call, sptype, Expr(:call, :pointer, tmpsp), strd_tup, offsets_tup)
-    pushpreamble!(ls, Expr(:(=), name, sptr))
-    nothing
+    C::Int, B::Int, sp::Vector{Int}, name::Symbol
+) where {T}
+  @assert B ≤ 0 "Batched arrays not supported yet."
+  _add_mref!(sptrs, ls, ar, typetosym(T), C, B, sp, name)
 end
-function permute_mref!(ar::ArrayReferenceMeta, C::Int, sp::NTuple{N,Int}) where {N}
-    sp === ntuple(identity, Val(N)) && return nothing
-    li = ar.loopedindex; lic = copy(li);
-    inds = getindices(ar); indsc = copy(inds);
-    offsets = ar.ref.offsets; offsetsc = copy(offsets);
-    strides = ar.ref.strides; stridesc = copy(strides);
-    for (i, p) ∈ enumerate(sp)
-        li[i] = lic[p]
-        inds[i] = indsc[p]
-        offsets[i] = offsetsc[p]
-        strides[i] = stridesc[p]
-    end
-    C == -1 && makediscontiguous!(getindices(ar))
-    return nothing
+typetosym(::Type{T}) where {T<:NativeTypes} = (VectorizationBase.JULIA_TYPES[T])::Symbol
+typetosym(T) = T
+function _add_mref!(sptrs::Expr, ls::LoopSet, ar::ArrayReferenceMeta, T_sym, C::Int, B::Int, sp::Vector{Int}, name::Symbol)
+    # maybe no change needed? -- optimize common case
+  li = ar.loopedindex;
+  if sp == eachindex(sp) || isone(length(li))
+    # don't set `bit` to true if our vector width is ≥ 8
+    ((T_sym === :Bit) && (ls.vector_width < 8)) && loop_indexes_bit!(ls, ar)
+    return extract_gsp!(sptrs, name)
+  end
+  permute_mref!(ar, C, sp)
+  # must now sort array's inds, and stack pointer's
+  tmpsp = gensym(name)
+  extract_gsp!(sptrs, tmpsp)
+  strd_tup = Expr(:tuple)
+  offsets_tup = Expr(:tuple)
+  gf = GlobalRef(Core,:getfield)
+  offsets = gensym(:offsets); strides = gensym(:strides)
+  pushpreamble!(ls, Expr(:(=), offsets, Expr(:call, gf, tmpsp, QuoteNode(:offsets))))
+  pushpreamble!(ls, Expr(:(=), strides, Expr(:call, gf, tmpsp, QuoteNode(:strd))))
+  for (i, p) ∈ enumerate(sp)
+    push!(strd_tup.args, Expr(:call, gf, strides, p, false))
+    push!(offsets_tup.args, Expr(:call, gf, offsets, p, false))
+  end
+  #TODO: fix for `T === Bit`.
+  column_major = Expr(:tuple)
+  for n ∈ eachindex(sp)
+    push!(column_major.args, n)
+  end
+  sptype = Expr(:curly, lv(:StridedPointer), T_sym, length(sp), (C == -1 ? -1 : 1), B, column_major)
+  sptr = Expr(:call, sptype, Expr(:call, :pointer, tmpsp), strd_tup, offsets_tup)
+  pushpreamble!(ls, Expr(:(=), name, sptr))
+  nothing
+end
+function permute_mref!(ar::ArrayReferenceMeta, C::Int, sp::Vector{Int})
+  sp == eachindex(sp) && return nothing
+  li = ar.loopedindex; lic = copy(li);
+  inds = getindices(ar); indsc = copy(inds);
+  offsets = ar.ref.offsets; offsetsc = copy(offsets);
+  strides = ar.ref.strides; stridesc = copy(strides);
+  for (i, p) ∈ enumerate(sp)
+    li[i] = lic[p]
+    inds[i] = indsc[p]
+    offsets[i] = offsetsc[p]
+    strides[i] = stridesc[p]
+  end
+  C == -1 && makediscontiguous!(getindices(ar))
+  return nothing
 end
 function add_mref!(
     sptrs::Expr, ::LoopSet, ::ArrayReferenceMeta, @nospecialize(_::Type{VectorizationBase.FastRange{T,F,S,O}}),
-    ::Int, ::Int, ::Any, name::Symbol
+    ::Int, ::Int, sp::Vector{Int}, name::Symbol
 ) where {T,F,S,O}
     extract_gsp!(sptrs, name)
 end
@@ -240,16 +249,40 @@ function create_mrefs!(
     length(arf) == 0 || throw(ArgumentError("Length of array ref vector should be 0 if there are no stridedpointers."))
     Vector{ArrayReferenceMeta}(undef, length(arf))
 end
+function stabilize_grouped_stridedpointer_type(C, B, R)
+  N = (length(C))::Int
+  Cv = Vector{Int}(undef, N)
+  Bv = Vector{Int}(undef, N)
+  Rv = Vector{Tuple{NTuple{8,Int},Int}}(undef, N)
+  for n ∈ 1:N
+    Cv[n] = C[n]
+    Bv[n] = B[n]
+    Rₙ = R[n]
+    let L::Int = length(Rₙ)
+      Rv[n] = (ntuple(i -> i > L ? typemax(Int) : (Rₙ[i])::Int, Val(8))::NTuple{8,Int}, L)
+    end
+  end
+  Cv, Bv, Rv
+end
 function create_mrefs!(
-    ls::LoopSet, arf::Vector{ArrayRefStruct}, as::Vector{Symbol}, os::Vector{Symbol},
-    nopsv::Vector{NOpsType}, expanded::Vector{Bool}, @nospecialize(_::Type{VectorizationBase.GroupedStridedPointers{P,C,B,R,I,X,O}})
+  ls::LoopSet, arf::Vector{ArrayRefStruct}, as::Vector{Symbol}, os::Vector{Symbol},
+  nopsv::Vector{NOpsType}, expanded::Vector{Bool}, @nospecialize(_::Type{VectorizationBase.GroupedStridedPointers{P,C,B,R,I,X,O}})
 ) where {P,C,B,R,I,X,O}
-    mrefs = Vector{ArrayReferenceMeta}(undef, length(arf))
+
+  Cv,Bv,Rv = stabilize_grouped_stridedpointer_type(C, B, R)
+  _create_mrefs!(ls, arf, as, os, nopsv, expanded, P.parameters, Cv, Bv, Rv)
+end
+
+function _create_mrefs!(
+  ls::LoopSet, arf::Vector{ArrayRefStruct}, as::Vector{Symbol}, os::Vector{Symbol},
+  nopsv::Vector{NOpsType}, expanded::Vector{Bool}, P::Core.SimpleVector, C::Vector{Int}, B::Vector{Int}, R::Vector{Tuple{NTuple{8,Int},Int}}
+)
+    mrefs::Vector{ArrayReferenceMeta} = Vector{ArrayReferenceMeta}(undef, length(arf))
     sptrs = Expr(:tuple)
     # pushpreamble!(ls, Expr(:(=), sptrs, :(VectorizationBase.stridedpointers(getfield(vargs, 1, false)))))
     pushpreamble!(ls, Expr(:(=), sptrs, :(VectorizationBase.stridedpointers(getfield(var"#vargs#", 1, false)))))
     j = 0
-    rank_to_sps = Vector{Tuple{Int,NTuple{<:Any,Int}}}(undef, length(arf))
+    rank_to_sps = Vector{Tuple{Int,Vector{Int}}}(undef, length(arf))
     for i ∈ eachindex(arf)
         ar = ArrayReferenceMeta(ls, arf[i], as, os, nopsv, expanded)
         duplicate = false
@@ -266,9 +299,9 @@ function create_mrefs!(
         end
         if !duplicate
             j += 1
-            sp = rank_to_sortperm(R[j])
+            sp = rank_to_sortperm(R[j])::Vector{Int}
             rank_to_sps[i] = (C[j],sp)
-            add_mref!(sptrs, ls, ar, P.parameters[j], C[j], B[j], sp, vptr(ar))
+            add_mref!(sptrs, ls, ar, P[j], C[j], B[j], sp, vptr(ar))
         end
         mrefs[i] = ar
     end
@@ -283,20 +316,23 @@ end
 function gen_array_syminds(AM)
     Symbol[Symbol("##arraysymbolind##"*i*'#') for i ∈ 1:(AM[1])::Int]
 end
-function process_metadata!(ls::LoopSet, AM)
+function process_metadata!(ls::LoopSet, AM, extractind::Int)
     opoffsets = ls.operation_offsets
     expandbyoffset!(ls.outer_reductions, AM[2], opoffsets)
     for (i,si) ∈ enumerate(AM[3])
         sii = si::Int
-        s = gensym(:symlicm)
-        push!(ls.preamble_symsym, (opoffsets[sii] + 1, s))
-        pushpreamble!(ls, Expr(:(=), s, extract_varg(1 + i)))
+        opid = opoffsets[sii]+1
+        if instruction(operations(ls)[opid]) ≠ DROPPEDCONSTANT
+            s = gensym(:symlicm)
+            push!(ls.preamble_symsym, (opid, s))
+            pushpreamble!(ls, Expr(:(=), s, extract_varg((extractind += 1))))
+        end
     end
     expandbyoffset!(ls.preamble_symint, AM[4], opoffsets)
     expandbyoffset!(ls.preamble_symfloat, AM[5], opoffsets)
     expandbyoffset!(ls.preamble_zeros, AM[6], opoffsets)
     expandbyoffset!(ls.preamble_funcofeltypes, AM[7], opoffsets)
-    nothing
+    return extractind
 end
 function expandbyoffset!(indexpand::Vector{T}, inds, offsets::Vector{Int}, expand::Bool = true) where {T <: Union{Int,Tuple{Int,<:Any}}}
     for _ind ∈ inds
@@ -444,7 +480,7 @@ function add_parents_to_ops!(ls::LoopSet, ops::Vector{OperationStruct}, constoff
             op = ls.operations[pos+k]
             if isconstant(op)
                 instr = instruction(op)
-                if instr != LOOPCONSTANT && instr.mod !== :numericconstant
+                if !skip_constant(instr)
                     constoffset += 1
                     pushpreamble!(ls, Expr(:(=), instr.instr, extract_varg(constoffset)))
                 end
@@ -485,9 +521,10 @@ typeeltype(::Type{T}) where {T<:Real} = T
 # typeeltype(::Any) = Int8
 
 function add_array_symbols!(ls::LoopSet, arraysymbolinds::Vector{Symbol}, offset::Int)
-    for (i,as) ∈ enumerate(arraysymbolinds)
-        pushpreamble!(ls, Expr(:(=), as, extract_varg(i + offset)))
+    for as ∈ arraysymbolinds
+        pushpreamble!(ls, Expr(:(=), as, extract_varg((offset+=1))))
     end
+    return offset   
 end
 function extract_external_functions!(ls::LoopSet, offset::Int, vargs)
     for op ∈ operations(ls)
@@ -553,17 +590,16 @@ function avx_loopset!(
     nopsv = NOpsType[calcnops(ls, op) for op in ops]
     expandedv = [isexpanded(ls, ops, nopsv, i) for i ∈ eachindex(ops)]
 
-    resize!(ls.loopindexesbit, length(ls.loops)); ls.loopindexesbit .= false;
+    resize!(ls.loopindexesbit, length(ls.loops)); fill!(ls.loopindexesbit, false);
     mrefs = create_mrefs!(ls, arf, arraysymbolinds, opsymbols, nopsv, expandedv, vargs[1])
     for mref ∈ mrefs
         push!(ls.includedactualarrays, vptr(mref))
-    end    
-    # num_params = num_arrays + num_parameters(AM)
-    num_params = 1 + num_parameters(AM)
-    add_ops!(ls, instr, ops, mrefs, opsymbols, num_params, nopsv, expandedv, elementbytes)
-    process_metadata!(ls, AM)
-    add_array_symbols!(ls, arraysymbolinds, 1 + length(ls.preamble_symsym))
-    num_params = extract_external_functions!(ls, num_params, vargs)
+    end
+    # extra args extraction
+    extractind = add_ops!(ls, instr, ops, mrefs, opsymbols, 1, nopsv, expandedv, elementbytes)
+    extractind = process_metadata!(ls, AM, extractind)
+    extractind = add_array_symbols!(ls, arraysymbolinds, extractind)
+    extract_external_functions!(ls, extractind, vargs)
     ls
 end
 function avx_body(ls::LoopSet, UNROLL::Tuple{Bool,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt})
@@ -608,6 +644,12 @@ function _avx_loopset(
     ls
 end
 
+@static if VERSION ≥ v"1.7.0-DEV.421"
+  using Base: @aggressive_constprop
+else
+  macro aggressive_constprop(ex); esc(ex); end
+end
+
 """
     _avx_!(unroll, ops, arf, am, lpsym, lb, vargs...)
 
@@ -627,23 +669,23 @@ Execute an `@avx` block. The block's code is represented via the arguments:
   `StaticLowerUnitRange(1)` because the lower bound of the iterator can be determined to be 1.
 - `vargs...` holds the encoded pointers of all the arrays (see `VectorizationBase`'s various pointer types).
 """
-@generated function _avx_!(
-    ::Val{UNROLL}, ::Val{OPS}, ::Val{ARF}, ::Val{AM}, ::Val{LPSYM}, var"#lv#tuple#args#"::Tuple{LB,V}
-) where {UNROLL, OPS, ARF, AM, LPSYM, LB, V}
+@aggressive_constprop @generated function _avx_!(
+    ::Val{var"#UNROLL#"}, ::Val{var"#OPS#"}, ::Val{var"#ARF#"}, ::Val{var"#AM#"}, ::Val{var"#LPSYM#"}, var"#lv#tuple#args#"::Tuple{var"#LB#",var"#V#"}
+) where {var"#UNROLL#", var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#", var"#V#"}
     # 1 + 1 # Irrelevant line you can comment out/in to force recompilation...
-    ls = _avx_loopset(OPS, ARF, AM, LPSYM, LB.parameters, V.parameters, UNROLL)
-    # return @show avx_body(ls, UNROLL)
-    if last(UNROLL) > 1
-        inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, nt = UNROLL
-        # wrap in `OPS, ARF, AM, LPSYM` in `Expr` to homogenize types
+    ls = _avx_loopset(var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#".parameters, var"#V#".parameters, var"#UNROLL#")
+    # return @show avx_body(ls, var"#UNROLL#")
+    if last(var"#UNROLL#") > 1
+        inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, nt = var"#UNROLL#"
+        # wrap in `var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#"` in `Expr` to homogenize types
         avx_threads_expr(
             ls, (inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, one(UInt)), nt,
-            :(Val{$OPS}()), :(Val{$ARF}()), :(Val{$AM}()), :(Val{$LPSYM}())
+            :(Val{$(var"#OPS#")}()), :(Val{$(var"#ARF#")}()), :(Val{$(var"#AM#")}()), :(Val{$(var"#LPSYM#")}())
         )
     else
-        # Main.BODY[] = avx_body(ls, UNROLL)
-        # @show avx_body(ls, UNROLL)
-        avx_body(ls, UNROLL)
+        # Main.BODY[] = avx_body(ls, var"#UNROLL#")
+        # @show avx_body(ls, var"#UNROLL#")
+        avx_body(ls, var"#UNROLL#")
     end
-    # @show UNROLL, OPS, ARF, AM, LPSYM, LB
+    # @show var"#UNROLL#", var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#"
 end

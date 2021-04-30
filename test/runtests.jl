@@ -68,9 +68,13 @@ const START_TIME = time()
     @time include("tullio.jl")
 
     @time include("staticsize.jl")
+
+    if VERSION ≥ v"1.6"
+      @time include("quantum.jl")
+    end
 end
 
 const ELAPSED_MINUTES = (time() - START_TIME)/60
 # @test ELAPSED_MINUTES < 180
-@test ELAPSED_MINUTES < 240
+@test ELAPSED_MINUTES < 300
 

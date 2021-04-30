@@ -8,7 +8,7 @@ struct Loop
     start::MaybeKnown
     stop::MaybeKnown
     step::MaybeKnown
-    rangesym::Symbol
+    rangesym::Symbol# === Symbol("") means loop is static
     lensym::Symbol
 end
 
@@ -109,9 +109,9 @@ unitstep(l::Loop) = isone(step(l))
 function startloop(loop::Loop, itersymbol)
     start = first(loop)
     if isknown(start)
-        Expr(:(=), itersymbol, gethint(start) - 1)
+        Expr(:(=), itersymbol, gethint(start))
     else
-        Expr(:(=), itersymbol, Expr(:call, lv(:staticm1), Expr(:call, lv(:unwrap), getsym(start))))
+        Expr(:(=), itersymbol, Expr(:call, lv(:Int), getsym(start)))
     end
 end
 # mulexpr(a,b) = Expr(:call, lv(:vmul_fast), a, b)
@@ -188,78 +188,71 @@ function arithmeticexpr(op, init, f, a, b, c)
 end
 
 function addexpr(ex, incr::Integer)
-    if incr > 0
-        f = :vadd_fast
-    else
-        f = :vsub_fast
-        incr = -incr
-    end
-    expr = Expr(:call, lv(f))
-    pushexpr!(expr, ex)
-    pushexpr!(expr, convert(Int, incr))
-    expr
+  if incr > 0
+    f = :vadd_fast
+  else
+    f = :vsub_fast
+    incr = -incr
+  end
+  expr = Expr(:call, lv(f))
+  pushexpr!(expr, ex)
+  pushexpr!(expr, convert(Int, incr))
+  expr
 end
-
 staticmulincr(ptr, incr) = Expr(:call, lv(:staticmul), Expr(:call, :eltype, ptr), incr)
-function vec_looprange(loop::Loop, UF::Int, mangledname)
-    compexpr = Expr(:call, lv(:vsub_fast))
-    pushexpr!(compexpr, last(loop))
-    incr = step(loop)
-    # if isknown(incr)
-    #     UF *= gethint(incr)
-    # end
-    if isone(UF)
-        if isone(incr)
-            push!(compexpr.args, VECTORWIDTHSYMBOL)
-        else
-            push!(compexpr.args, mulexpr(VECTORWIDTHSYMBOL, incr))
-        end
-    else
-        dec = mulexpr(VECTORWIDTHSYMBOL, UF, incr)
-        push!(compexpr.args, dec)
-    end
-    f = if isone(incr)
-        :(≤)
-    else
-        compexpr = addexpr(compexpr, incr)
-        :(<)
-    end
-    Expr(:call, f, mangledname, compexpr)
-end
 
-# looprange(stopcon, mangledname) = Expr(:call, :≤, mangledname, stopcon)
-function looprange(stopcon::Int, incr::Int, loopstep::Int, mangledname)
-    if isone(loopstep)
-        Expr(:call, :≤, mangledname, stopcon - incr*loopstep)
-    else
-        Expr(:call, :<, mangledname, stopcon - incr*loopstep + loopstep)
-    end
+@inline cmpend(i::Int, r::CloseOpen) = i < getfield(r,:upper)
+@inline cmpend(i::Int, r::AbstractUnitRange) = i ≤ last(r)
+@inline cmpend(i::Int, r::AbstractRange) = i ≤ last(r)
+# @inline cmpend(i::Int, r::AbstractRange) = @show i last(r) i ≤ last(r)
+# @inline cmpend(i::Int, r::AbstractRange) = i ≤ vsub_fast(last(r), step(r))
+
+@inline vcmpend(i::Int, r::CloseOpen, ::StaticInt{W}) where {W} = i ≤ vsub_fast(getfield(r,:upper), W)
+@inline vcmpend(i::Int, r::AbstractUnitRange, ::StaticInt{W}) where {W} = i ≤ vsub_fast(last(r), W-1)
+# i = 0
+# i += 4*3 # i = 12
+@inline vcmpend(i::Int, r::AbstractRange, ::StaticInt{W}) where {W} = i ≤ vsub_fast(last(r), vsub_fast(W*step(r), 1))
+# @inline vcmpend(i::Int, r::AbstractRange, ::StaticInt{W}) where {W} = i ≤ vsub_fast(last(r), W*step(r))
+# @inline vcmpend(i::Int, r::AbstractRange, ::StaticInt{W}) where {W} = @show i m = vsub_fast(last(r), W*step(r)) i ≤ m
+# @inline vcmpend(i::Int, r::AbstractRange, ::StaticInt{W}) where {W} = i ≤ vsub_fast(last(r), W)
+
+function staticloopexpr(loop::Loop)
+  f = first(loop)
+  s = step(loop)
+  l = last(loop)
+  if isone(s)
+    Expr(:call, GlobalRef(Base, :(:)), staticexpr(gethint(f)), staticexpr(gethint(l)))
+  else
+    Expr(:call, GlobalRef(Base, :(:)), staticexpr(gethint(f)), staticexpr(gethint(s)), staticexpr(gethint(l)))
+  end
 end
-function looprange(stopcon, incr::Int, loopstep::Int, mangledname)
-    if isone(loopstep)
-        Expr(:call, :≤, mangledname, subexpr(stopcon, incr*loopstep))
-    else
-        Expr(:call, :<, mangledname, subexpr(stopcon, incr*loopstep - loopstep))
-    end
+function vec_looprange(loop::Loop, UF::Int, mangledname)
+  if loop.rangesym === Symbol("") # means loop is static
+    vec_looprange(UF, mangledname, staticloopexpr(loop))
+  else
+    vec_looprange(UF, mangledname, loop.rangesym)
+  end
 end
-function looprange(loop::Loop, incr::Int, mangledname)
-    start = first(loop)
-    stop = last(loop)
-    inc = step(loop)
-    if isknown(inc)
-        if isknown(stop)
-            looprange(gethint(stop), incr, gethint(inc), mangledname)
-        else
-            looprange(getsym(stop), incr, gethint(inc), mangledname)
-        end
-    else
-        subex = Expr(:call, lv(:vsub_fast))
-        pushexpr!(subex, stop)
-        incex = Expr(:call, lv(:vmul_fast), staticexpr(incr))
-        pushexpr!(incex, inc)
-        push!(subex.args, incex)
-        Expr(:call, :<, mangledname, addexpr(subex, getsym(inc)))
-    end
+function vec_looprange(UF::Int, mangledname, r::Union{Expr,Symbol})
+  if isone(UF)
+    Expr(:call, lv(:vcmpend), mangledname, r, VECTORWIDTHSYMBOL)
+  else
+    Expr(:call, lv(:vcmpend), mangledname, r, mulexpr(VECTORWIDTHSYMBOL, UF))
+  end
+end
+function looprange(loop::Loop, UF::Int, mangledname)
+  if loop.rangesym === Symbol("") # means loop is static
+    looprange(UF, mangledname, staticloopexpr(loop))
+  else
+    looprange(UF, mangledname, loop.rangesym)
+  end
+end
+function looprange(UF::Int, mangledname, r::Union{Expr,Symbol})
+  if isone(UF)
+    Expr(:call, lv(:cmpend), mangledname, r)
+  else
+    Expr(:call, lv(:vcmpend), mangledname, r, staticexpr(UF))
+  end
 end
 
 function terminatecondition(
@@ -496,7 +489,6 @@ reg_size(ls::LoopSet) = ls.register_size
 reg_count(ls::LoopSet) = ls.register_count
 cache_lnsze(ls::LoopSet) = ls.cache_linesize
 cache_sze(ls::LoopSet) = ls.cache_size
-# opmask_reg(ls::LoopSet) = ls.opmask_register[]
 
 pushprepreamble!(ls::LoopSet, ex) = push!(ls.prepreamble.args, ex)
 function pushpreamble!(ls::LoopSet, op::Operation, v::Symbol)
@@ -622,44 +614,44 @@ function cacheunrolled!(ls::LoopSet, u₁loop::Symbol, u₂loop::Symbol, vloopsy
         end
     end
 end
-function setunrolled!(ls::LoopSet, op::Operation, u₁loopsym, u₂loopsym, vectorized)
-    op.u₁unrolled =  u₁loopsym ∈ loopdependencies(op)
-    op.u₂unrolled =  u₂loopsym ∈ loopdependencies(op)
-    op.vectorized = vectorized ∈ loopdependencies(op)
-    if isconstant(op)
-        u₁ = op.u₁unrolled
-        u₂ = op.u₂unrolled
-        v  = op.vectorized
-        for opp ∈ children(op)
-            u₁ = u₁ &&  u₁loopsym ∈ loopdependencies(opp)
-            u₂ = u₂ &&  u₂loopsym ∈ loopdependencies(opp)
-            v  = v  && vectorized ∈ loopdependencies(opp)
-        end
-        if isouterreduction(ls, op) ≠ -1 && !all((u₁,u₂,v))
-            opv = true
-            for opp ∈ parents(op)
-                if iscompute(opp) && instruction(opp).instr ≢ :identity
-                    opv = false
-                    break
-                end
-            end
-            if opv
-                if !u₁ && u₁loopsym ∈ reduceddependencies(op)
-                    u₁ = true
-                end
-                if !u₂ && u₂loopsym ∈ reduceddependencies(op)
-                    u₂ = true
-                end
-                if !v && vectorized ∈ reduceddependencies(op)
-                    v = true
-                end
-            end
-        end
-        op.u₁unrolled = u₁
-        op.u₂unrolled = u₂
-        op.vectorized = v
+function setunrolled!(ls::LoopSet, op::Operation, u₁loopsym::Symbol, u₂loopsym::Symbol, vectorized::Symbol)
+  u₁::Bool = u₂::Bool = v::Bool = false
+  for ld ∈ loopdependencies(op)
+    u₁ |= ld === u₁loopsym
+    u₂ |= ld === u₂loopsym
+    v  |= ld === vectorized
+  end
+  if isconstant(op)
+    for opp ∈ children(op)
+      u₁ = u₁ &&  u₁loopsym ∈ loopdependencies(opp)
+      u₂ = u₂ &&  u₂loopsym ∈ loopdependencies(opp)
+      v  = v  && vectorized ∈ loopdependencies(opp)
     end
-    nothing
+    if isouterreduction(ls, op) ≠ -1 && !all((u₁,u₂,v))
+      opv = true
+      for opp ∈ parents(op)
+        if iscompute(opp) && instruction(opp).instr ≢ :identity
+          opv = false
+          break
+        end
+      end
+      if opv
+        if !u₁ && u₁loopsym ∈ reduceddependencies(op)
+          u₁ = true
+        end
+        if !u₂ && u₂loopsym ∈ reduceddependencies(op)
+          u₂ = true
+        end
+        if !v && vectorized ∈ reduceddependencies(op)
+          v = true
+        end
+      end
+    end
+  end
+  op.u₁unrolled = u₁
+  op.u₂unrolled = u₂
+  op.vectorized = v
+  nothing
 end
 
 rejectcurly(op::Operation) = op.rejectcurly
@@ -1353,7 +1345,12 @@ Returns `-1` if not an outerreduction.
 """
 function isouterreduction(ls::LoopSet, op::Operation)
     if isconstant(op) # equivalent to checking if length(loopdependencies(op)) == 0
-        op.instruction === LOOPCONSTANT ? 0 : -1
+        op.instruction == LOOPCONSTANT && return 0
+        ops = operations(ls)
+        for or ∈ ls.outer_reductions
+            name(op) === name(ops[or]) && return 0
+        end
+        -1
     elseif iscompute(op)
         var = op.variable
         for opid ∈ ls.outer_reductions
