@@ -1,5 +1,8 @@
 const DISCONTIGUOUS = Symbol("##DISCONTIGUOUSSUBARRAY##")
 const CONSTANTZEROINDEX = Symbol("##CONSTANTZEROINDEX##")
+const LOOPCONSTANT = Instruction(:LoopVectorization, Symbol("LOOPCONSTANTINSTRUCTION"))
+const GLOBALCONSTANT = Symbol("##GLOBAL##CONSTANT##")
+
 
 
 """
@@ -250,8 +253,9 @@ const NOPARENTS = Operation[]
 function Base.show(io::IO, op::Operation)
     if isconstant(op)
         if op.instruction === LOOPCONSTANT
-
             print(io, Expr(:(=), op.variable, 0))
+        elseif op.instruction.instr === GLOBALCONSTANT
+            print(io, op.instruction.instr)
         else
             print(io, Expr(:(=), op.variable, op.instruction.instr))
         end

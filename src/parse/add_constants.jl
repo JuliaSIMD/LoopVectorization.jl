@@ -1,8 +1,11 @@
+const CONSTANT_SYMBOLS = (:nothing, :Float64, :Float32, :Int8, :UInt8, :Int16, :UInt16, :Int32, :UInt32, :Int64, :UInt64)
 function add_constant!(ls::LoopSet, var::Symbol, elementbytes::Int)
-    op = Operation(length(operations(ls)), var, elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS)
-    rop = pushop!(ls, op, var)
-    rop === op && pushpreamble!(ls, op, var)
-    rop
+  globalconst = Base.sym_in(var, CONSTANT_SYMBOLS)
+  instr = globalconst ? Instruction(GLOBALCONSTANT, var) : LOOPCONSTANT
+  op = Operation(length(operations(ls)), var, elementbytes, instr, constant, NODEPENDENCY, Symbol[], NOPARENTS)
+  rop = pushop!(ls, op, var)
+  (!globalconst && (rop === op)) && pushpreamble!(ls, op, var)
+  rop
 end
 # function add_constant!(ls::LoopSet, var, elementbytes::Int = 8)
 #     sym = gensym(:loopconstant)
@@ -14,7 +17,7 @@ function add_constant!(ls::LoopSet, var::Number, elementbytes::Int = 8)
     ops = operations(ls)
     typ = var isa Integer ? HardInt : HardFloat
     rop = pushop!(ls, op)
-    rop !== op && return rop
+    rop === op || return rop
     if iszero(var)
         for (id,typ_) ∈ ls.preamble_zeros
             (instruction(ops[id]) == LOOPCONSTANT && typ == typ_) && return ops[id]

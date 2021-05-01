@@ -243,7 +243,7 @@ function loopset_return_value(ls::LoopSet, ::Val{extract}) where {extract}
 end
 const DROPPEDCONSTANT = Instruction(Symbol("##DROPPED#CONSTANT##"),Symbol("##DROPPED#CONSTANT##"))
 function skip_constant(instr::Instruction)
-    ((instr == LOOPCONSTANT) || (instr.mod === :numericconstant)) || (instr == DROPPEDCONSTANT)
+  (((instr == LOOPCONSTANT) || (instr.mod === :numericconstant)) || (instr == DROPPEDCONSTANT)) || instr.mod === GLOBALCONSTANT
 end
 
 function add_reassigned_syms!(q::Expr, ls::LoopSet)
@@ -455,6 +455,15 @@ function remove_outer_reducts!(roots::Vector{Bool}, ls::LoopSet)
         end
     end
 end
+
+# function generate_call_split(ls::LoopSet, (inline,u₁,u₂)::Tuple{Bool,Int8,Int8}, thread::UInt, debug::Bool = false)
+#   ops = operations(ls)
+#   for op ∈ ops
+#     if (iscompute(op) && (instruction(op).instr === :ifelse)) && iszero(length(loopdependencies(first(parents(op)))))
+#       # we want to eliminate
+#     end
+#   end
+# end
 
 # Try to condense in type stable manner
 function generate_call(ls::LoopSet, (inline,u₁,u₂)::Tuple{Bool,Int8,Int8}, thread::UInt, debug::Bool = false)

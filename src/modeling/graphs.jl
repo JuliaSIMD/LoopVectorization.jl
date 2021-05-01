@@ -1344,32 +1344,34 @@ Returns `n`, where `n` is the constant declarations's index among parents(op), i
 Returns `-1` if not an outerreduction.
 """
 function isouterreduction(ls::LoopSet, op::Operation)
-    if isconstant(op) # equivalent to checking if length(loopdependencies(op)) == 0
-        op.instruction == LOOPCONSTANT && return 0
-        ops = operations(ls)
-        for or ∈ ls.outer_reductions
-            name(op) === name(ops[or]) && return 0
-        end
-        -1
-    elseif iscompute(op)
-        var = op.variable
-        for opid ∈ ls.outer_reductions
-            rop = operations(ls)[opid]
-            if rop === op
-                for (n,opp) ∈ enumerate(parents(op))
-                    opp.variable === var && return n
-                end
-            else
-                for (n,opp) ∈ enumerate(parents(op))
-                    opp === rop && return n
-                    search_tree(parents(opp), rop.variable) && return n
-                end
-            end
-        end
-        -1
-    else
-        -1
+  if isconstant(op) # equivalent to checking if length(loopdependencies(op)) == 0
+    instr = op.instruction
+    instr == LOOPCONSTANT && return 0
+    instr.mod === GLOBALCONSTANT && return -1
+    ops = operations(ls)
+    for or ∈ ls.outer_reductions
+      name(op) === name(ops[or]) && return 0
     end
+    -1
+  elseif iscompute(op)
+    var = op.variable
+    for opid ∈ ls.outer_reductions
+      rop = operations(ls)[opid]
+      if rop === op
+        for (n,opp) ∈ enumerate(parents(op))
+          opp.variable === var && return n
+        end
+      else
+        for (n,opp) ∈ enumerate(parents(op))
+          opp === rop && return n
+          search_tree(parents(opp), rop.variable) && return n
+        end
+      end
+    end
+    -1
+  else
+    -1
+  end
 end
 
 struct LoopError <: Exception

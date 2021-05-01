@@ -512,7 +512,6 @@ function lower_compute!(
             loopval = first(loopdependencies(opp))
             add_loopvalue!(instrcall, loopval, ua, u₁)
         elseif name(opp) === name(op)
-          
             selfdep = n
             if ((isvectorized(opp) && !isvectorized(op))) ||
                 (parents_u₁syms[n] != u₁unrolledsym) || (parents_u₂syms[n] != u₂unrolledsym)
@@ -531,6 +530,8 @@ function lower_compute!(
             push!(q.args, Expr(:(=), reducedparentname, reduced_u₂))
             reduced_u₂ = reduce_parent!(q, ls, op, opp, reducedparentname)
             push!(instrcall.args, reduced_u₂)
+        elseif isconstant(opp) && instruction(opp).mod === GLOBALCONSTANT
+            push!(instrcall.args, GlobalRef(Base, instruction(opp).instr))
         else
             parent, uₚ = parent_op_name!(q, ls, parents_op, n, modsuffix, suffix_, parents_u₁syms, parents_u₂syms, u₁, u₂max, u₂unrolledsym, op, tiledouterreduction)
             parent = reduce_parent!(q, ls, op, opp, parent)

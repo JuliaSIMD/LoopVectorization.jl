@@ -36,8 +36,6 @@ Base.hash(instr::Instruction, h::UInt64) = hash(instr.instr, hash(instr.mod, h))
 # end
 Base.isequal(ins1::Instruction, ins2::Instruction) = (ins1.instr === ins2.instr) && (ins1.mod === ins2.mod)
 
-const LOOPCONSTANT = Instruction(:LoopVectorization, Symbol("LOOPCONSTANTINSTRUCTION"))
-
 """
     InstructionCost
 

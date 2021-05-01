@@ -102,9 +102,9 @@ function lower_constant!(
   @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, u₂max, suffix = ua
   mvar, opu₁, opu₂ = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, vloopsym, suffix, ls)
   !opu₂ && suffix > 0 && return
-  instruction = op.instruction
-  constsym = instruction.instr
-  # constsym = Symbol(instruction.instr, '_', 1)
+  instr = instruction(op)
+  instr.mod === GLOBALCONSTANT && return
+  constsym = instr.instr
   reducedchildvectorized = vloopsym ∈ reducedchildren(op)
   if reducedchildvectorized || isvectorized(op) || vloopsym ∈ reduceddependencies(op) || should_broadcast_op(op)
     # call = Expr(:call, lv(:vbroadcast), W, Expr(:call, lv(:maybeconvert), typeT, constsym))
@@ -160,7 +160,7 @@ function lower_constant!(
   nothing
 end
 
-isconstantop(op::Operation) = (instruction(op) === LOOPCONSTANT) || (isconstant(op) && length(loopdependencies(op)) == 0)
+isconstantop(op::Operation) = (instruction(op) == LOOPCONSTANT) || (isconstant(op) && length(loopdependencies(op)) == 0)
 function constantopname(op::Operation)
   instr = instruction(op)
   if instr === LOOPCONSTANT
