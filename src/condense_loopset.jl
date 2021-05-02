@@ -159,6 +159,7 @@ end
 @inline zerorangestart(r::AbstractUnitRange) = Zero():One():(maybestaticlast(r)-maybestaticfirst(r))
 @inline zerorangestart(r::AbstractRange) = Zero():static_step(r):(maybestaticlast(r)-maybestaticfirst(r))
 @inline zerorangestart(r::CartesianIndices) = CartesianIndices(map(zerorangestart, r.indices))
+@inline zerorangestart(r::ArrayInterface.OptionallyStaticUnitRange{StaticInt{1}}) = CloseOpen(last(r)) 
 
 function loop_boundary!(q::Expr, ls::LoopSet, loop::Loop, shouldindbyind::Bool)
   if isstaticloop(loop) || loop.rangesym === Symbol("")
@@ -309,12 +310,12 @@ function findfirstcontaining(ref, ind)
   end
   0
 end
-function should_zerorangestart(ls::LoopSet, allarrayrefs::Vector{ArrayReferenceMeta}, name_to_array_map::Vector{Vector{Int}})
+function should_zerorangestart(ls::LoopSet, allarrayrefs::Vector{ArrayReferenceMeta}, name_to_array_map::Vector{Vector{Int}}, isrooted::Vector{Bool})
   loops = ls.loops
   shouldindbyind = fill(false, length(loops))
   for (i,loop) ∈ enumerate(loops)
     ind = loop.itersymbol
-    if isloopvalue(ls, ind)
+    if isloopvalue(ls, ind, isrooted)
       # we don't zero the range if it is used as a loopvalue
       shouldindbyind[i] = true
       continue
@@ -355,10 +356,11 @@ end
 # 2) decide whether to gesp that loopstart inside `add_grouped_strided_pointer`
 function add_grouped_strided_pointer!(extra_args::Expr, ls::LoopSet)
   allarrayrefs, name_to_array_map, unique_to_name_and_op_map = uniquearrayrefs_csesummary(ls)
-  shouldindbyind = should_zerorangestart(ls, allarrayrefs, name_to_array_map)
   # @show allarrayrefs
   gsp = Expr(:call, lv(:grouped_strided_pointer))
   tgarrays = Expr(:tuple)
+  # refs_to_gesp = ArrayReferenceMeta[]
+  gespsummaries = Tuple{Int,Vector{Tuple{Symbol,Int}}}[]
   i = 0
   preserve_assignment = Expr(:tuple); preserve = Symbol[];
   @unpack equalarraydims, refs_aliasing_syms = ls
@@ -383,16 +385,23 @@ function add_grouped_strided_pointer!(extra_args::Expr, ls::LoopSet)
     duplicate && continue
     duplicate_map[j] = (i += 1)
     found = false
-    for j ∈ eachindex(allarrayrefs)
-      if sameref(allarrayrefs[j], ref)
-        gespinds = cse_constant_offsets!(ls, allarrayrefs, j, name_to_array_map, unique_to_name_and_op_map, shouldindbyind)
-        push!(tgarrays.args, Expr(:call, lv(:gespf1), vpref, gespinds))
+    for k ∈ eachindex(allarrayrefs)
+      if sameref(allarrayrefs[k], ref)
+        gespindsummary = cse_constant_offsets!(ls, allarrayrefs, k, name_to_array_map, unique_to_name_and_op_map)
+        push!(gespsummaries, (k, gespindsummary))
         found = true
         break
       end
     end
     @assert found
     push!(preserve, presbufsym(ref.ref.array))
+  end
+  roots = getroots(ls)
+  shouldindbyind = should_zerorangestart(ls, allarrayrefs, name_to_array_map, roots)
+  for (k,gespindsummary) ∈ gespsummaries
+    ref = allarrayrefs[k]
+    gespinds = calcgespinds(ls, ref, gespindsummary, shouldindbyind)
+    push!(tgarrays.args, Expr(:call, lv(:gespf1), vptr(ref), gespinds))
   end
   push!(gsp.args, tgarrays)
   matcheddims = Expr(:tuple)
@@ -409,7 +418,7 @@ function add_grouped_strided_pointer!(extra_args::Expr, ls::LoopSet)
   gsps = gensym!(ls, "#grouped#strided#pointer#")
   push!(extra_args.args, gsps)
   pushpreamble!(ls, Expr(:(=), gsps, Expr(:call, GlobalRef(Core,:getfield), gsp, 1)))
-  preserve, shouldindbyind
+  preserve, shouldindbyind, roots
 end
 
 # first_cache() = ifelse(gt(num_cache_levels(), StaticInt{2}()), StaticInt{2}(), StaticInt{1}())
@@ -468,12 +477,11 @@ end
 # Try to condense in type stable manner
 function generate_call(ls::LoopSet, (inline,u₁,u₂)::Tuple{Bool,Int8,Int8}, thread::UInt, debug::Bool = false)
     extra_args = Expr(:tuple)
-    preserve, shouldindbyind = add_grouped_strided_pointer!(extra_args, ls)
+    preserve, shouldindbyind, roots = add_grouped_strided_pointer!(extra_args, ls)
 
     operation_descriptions = Expr(:tuple)
     varnames = Symbol[]; ids = Vector{Int}(undef, length(operations(ls)))
     ops = operations(ls)
-    roots = getroots(ls)
     length(ls.includedactualarrays) == 0 || remove_outer_reducts!(roots, ls)
     for op ∈ ops
         instr::Instruction = instruction(op)

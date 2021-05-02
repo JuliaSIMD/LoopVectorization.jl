@@ -477,7 +477,7 @@ function lower_load_collection!(
                 uinds = Expr(:call, unrollcurl₂, inds)
                 loadexpr = copy(loadexpr)
                 loadexpr.args[3] = Expr(:call, unrollcurl₂, inds)
-                (((u+1) == u₁) & masklast) && push!(loadexpr.args, MASKSYMBOL)
+                (((u+1) == u₁) & masklast) && insert!(loadexpr.args, length(loadexpr.args)-1, MASKSYMBOL) # 1 for `falseexpr` pushed at end
             end
             # unpack_collection!(q, ls, opidmap, idsformap, ua, loadexpr, collectionname, op, false)
             push!(q.args, Expr(:(=), collectionname_u, Expr(:call, gf, loadexpr, 1)))

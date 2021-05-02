@@ -746,15 +746,35 @@ end
 
 operations(ls::LoopSet) = ls.operations
 function pushop!(ls::LoopSet, op::Operation, var::Symbol = name(op))
-    for opp ∈ operations(ls)
-        if matches(op, opp)
-            ls.opdict[var] = opp
-            return opp
-        end
+  if iscompute(op) && length(loopdependencies(op)) == 0
+    op.node_type = constant
+    opdef = callexpr(instruction(op))
+    opparents = parents(op)
+    mangledname = Symbol('#', instruction(op).instr, '#')
+    while length(opparents) > 0
+      oppname = name(popfirst!(opparents))
+      mangledname = Symbol(mangledname, oppname, '#')
+      push!(opdef.args, oppname)
+      # if opp.instruction == LOOPCONSTANT 
+      #   push!(opdef.args, name(opp))
+      # else
+
+      # end
     end
-    push!(ls.operations, op)
-    ls.opdict[var] = op
-    op
+    op.mangledvariable = mangledname
+    pushpreamble!(ls, Expr(:(=), name(op), opdef))
+    op.instruction = LOOPCONSTANT
+    push!(ls.preamble_symsym, (identifier(op), name(op)))
+  end
+  for opp ∈ operations(ls)
+    if matches(op, opp)
+      ls.opdict[var] = opp
+      return opp
+    end
+  end
+  push!(ls.operations, op)
+  ls.opdict[var] = op
+  op
 end
 function add_block!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
     for x ∈ ex.args

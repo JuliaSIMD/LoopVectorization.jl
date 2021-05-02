@@ -1258,7 +1258,7 @@ end
 
         @test obj8(y, s, θ) ≈ obj9(y, s, θ)
     end
-  @testset "issue 244" begin
+  @testset "issues 244,256,257" begin
     function energy(spin_conf)
       (Nx, Ny) = size(spin_conf)
       res = 0
@@ -1289,6 +1289,29 @@ end
     end
     spin_conf = rand((-1,1),64,64);
     @test energy(spin_conf) == energy_base(spin_conf)
+
+    function issue_257_avx!(A,G)
+      N = length(G)
+      @avx for i = 1:N-1
+        A[i] = G[(1-1)*N+i] + G[(1-1)*N+i+1]
+      end
+      A
+    end
+    function issue_257!(A,G)
+      N = length(G)
+      @inbounds for i = 1:N-1
+        A[i] = G[(1-1)*N+i] + G[(1-1)*N+i+1]
+      end
+      A
+    end
+    for i in 2:1000
+      G = rand(i);
+      A0 = Vector{Float64}(undef, i-1); A1 = similar(A0);
+      @test issue_257!(A0,G) ≈ issue_257_avx!(A1,G)
+    end
+    
   end
+
+
 end
 

@@ -122,7 +122,7 @@ function lower_store_collection!(
             lastiter = (u+1) == u₁
             storeexpr_tmp = if lastiter
                 storeexpr
-                (((u+1) == u₁) & masklast) && push!(storeexpr.args, MASKSYMBOL)
+                (((u+1) == u₁) & masklast) && insert!(storeexpr.args, length(storeexpr.args)-3, MASKSYMBOL) # 3 for falseexpr, aliasexpr, falseexpr
                 storeexpr
             else
                 copy(storeexpr)

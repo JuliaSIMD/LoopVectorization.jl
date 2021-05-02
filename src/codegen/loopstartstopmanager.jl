@@ -230,22 +230,27 @@ function normalize_offsets!(
   end
   return Int(minoffset)
 end
-function isloopvalue(ls::LoopSet, ind::Symbol)
-  for op ∈ operations(ls)
+function isloopvalue(ls::LoopSet, ind::Symbol, isrooted::Union{Nothing,Vector{Bool}} = nothing)
+  for (i,op) ∈ enumerate(operations(ls))
+    if (isrooted ≢ nothing)
+      isrooted[i] || continue
+    end
     iscompute(op) || continue
     for opp ∈ parents(op)# this is to confirm `ind` still has children
-      (isloopvalue(opp) && instruction(opp).instr === ind) && return true
+      # (isloopvalue(opp) && instruction(opp).instr === ind) && return true
+      if (isloopvalue(opp) && instruction(opp).instr === ind)
+        return true
+      end
     end
   end
   return false
 end
 function cse_constant_offsets!(
-  ls::LoopSet, allarrayrefs::Vector{ArrayReferenceMeta}, allarrayrefsind::Int, name_to_array_map::Vector{Vector{Int}},
-  arrayref_to_name_op_collection::Vector{Vector{Tuple{Int,Int,Int}}}, shouldindbyind::Vector{Bool}
+  ls::LoopSet, allarrayrefs::Vector{ArrayReferenceMeta}, allarrayrefsind::Int, name_to_array_map::Vector{Vector{Int}}, arrayref_to_name_op_collection::Vector{Vector{Tuple{Int,Int,Int}}}
 )
   ar = allarrayrefs[allarrayrefsind]
   # @show ar
-  vptrar = vptr(ar)
+  # vptrar = vptr(ar)
   arrayref_to_name_op = arrayref_to_name_op_collection[allarrayrefsind]
   array_refs_with_same_name = name_to_array_map[first(first(arrayref_to_name_op))]
   us = ls.unrollspecification
@@ -254,7 +259,7 @@ function cse_constant_offsets!(
   strides = getstrides(ar)
   offset = first(indices) === DISCONTIGUOUS
   # gespindoffsets = fill(Symbol(""), length(li))
-  gespinds = Expr(:tuple)
+  gespindsummary = Vector{Tuple{Symbol,Int}}(undef, length(li))
   for i ∈ eachindex(li)
     gespsymbol::Symbol = Symbol("")    
     ii = i + offset
@@ -372,9 +377,10 @@ function cse_constant_offsets!(
       end
     end
     constoffset = normalize_offsets!(ls, i, allarrayrefs, array_refs_with_same_name, arrayref_to_name_op_collection)
-    pushgespind!(gespinds, ls, gespsymbol, constoffset, ind, li, i, check_shouldindbyind(ls, ind, shouldindbyind), true)
+    gespindsummary[i] = (gespsymbol, constoffset)
+    # pushgespind!(gespinds, ls, gespsymbol, constoffset, ind, li, i, check_shouldindbyind(ls, ind, shouldindbyind), true)
   end
-  return gespinds
+  return gespindsummary
 end
 @inline similardims(_, i) = i
 @inline similardims(::CartesianIndices{N}, i) where {N} = VectorizationBase.CartesianVIndex(ntuple(_ -> i, Val{N}()))
@@ -393,10 +399,22 @@ end
 #   end
 #   return nothing
 # end
+function calcgespinds(ls::LoopSet, ar::ArrayReferenceMeta, gespindsummary::Vector{Tuple{Symbol,Int}}, shouldindbyind::Vector{Bool})
+  gespinds = Expr(:tuple)
+  li = ar.loopedindex
+  indices = getindicesonly(ar)
+  for i ∈ eachindex(li)
+    ind = indices[i]
+    gespsymbol, constoffset = gespindsummary[i]
+    pushgespind!(gespinds, ls, gespsymbol, constoffset, ind, li[i], check_shouldindbyind(ls, ind, shouldindbyind), true)
+  end
+  gespinds
+end
+
 function pushgespind!(
-  gespinds::Expr, ls::LoopSet, gespsymbol::Symbol, constoffset::Int, ind::Symbol, li::Vector{Bool}, i::Int, index_by_index::Bool, fromgsp::Bool
+  gespinds::Expr, ls::LoopSet, gespsymbol::Symbol, constoffset::Int, ind::Symbol, isli::Bool, index_by_index::Bool, fromgsp::Bool
 )
-  if li[i]
+  if isli
     if ind === CONSTANTZEROINDEX
       if gespsymbol === Symbol("")
         push!(gespinds.args, staticexpr(constoffset))
@@ -448,13 +466,21 @@ function pushgespind!(
   elseif fromgsp # from gsp means that a loop could be a CartesianIndices, so we may need to expand
     #TODO: broadcast dimensions in case of cartesian indices
     rangesym = ind
+    foundind = false
     for op ∈ operations(ls)
       if name(op) === ind
-        loopsym = first(loopdependencies(op))
-        rangesym = getloop(ls, loopsym).rangesym
+        loopdeps = loopdependencies(op)
+        foundind = true
+        if length(loopdeps) ≠ 0
+          rangesym = getloop(ls, first(loopdeps)).rangesym
+        else
+          isconstantop(op) || throw(LoopError("Please file an issue with LoopVectorization.jl with a reproducer; tried to eliminate a non-constant operation."))
+          rangesym = name(op)
+        end
+        break
       end
     end
-    @assert rangesym ≢ ind
+    @assert foundind
     if rangesym === Symbol("") # there is no rangesym, must be statically sized.
       pushgespsym!(gespinds, gespsymbol, constoffset)
     else
@@ -518,18 +544,18 @@ function use_loop_induct_var!(
   vptrar = vptr(ar)
   # @show ar
   Wisz = false#ls.vector_width == 0
-  for i ∈ eachindex(li)
+  for (i,isli) ∈ enumerate(li)
     ii = i + offset
     ind = indices[ii]
     Wisz && push!(gespinds.args, staticexpr(0)) # wrong for `@_avx`...
     if !li[i] # if it wasn't set
       uliv[i] = 0
       push!(offsetprecalc_descript.args, 0)
-      Wisz || pushgespind!(gespinds, ls, Symbol(""), 0, ind, li, i, true, false)
+      Wisz || pushgespind!(gespinds, ls, Symbol(""), 0, ind, isli, true, false)
     elseif ind === CONSTANTZEROINDEX
       uliv[i] = 0
       push!(offsetprecalc_descript.args, 0)
-      Wisz || pushgespind!(gespinds, ls, Symbol(""), 0, ind, li, i, true, false)
+      Wisz || pushgespind!(gespinds, ls, Symbol(""), 0, ind, isli, true, false)
     elseif isbroadcast ||
       ((isone(ii) && (last(looporder) === ind)) && !(otherindexunrolled(ls, ind, ar)) ||
       multiple_with_name(vptrar, allarrayrefs)) ||
@@ -537,13 +563,13 @@ function use_loop_induct_var!(
       # Not doing normal offset indexing
       uliv[i] = -findfirst(Base.Fix2(===,ind), looporder)::Int
       push!(offsetprecalc_descript.args, 0) # not doing offset indexing, so push 0
-      Wisz || pushgespind!(gespinds, ls, Symbol(""), 0, ind, li, i, true, false)
+      Wisz || pushgespind!(gespinds, ls, Symbol(""), 0, ind, isli, true, false)
     else
       uliv[i] = findfirst(Base.Fix2(===,ind), looporder)::Int
       loop = getloop(ls, ind)
       push!(offsetprecalc_descript.args, max(5,us.u₁+1,us.u₂+1))
       use_offsetprecalc = true
-      Wisz || pushgespind!(gespinds, ls, Symbol(""), 0, ind, li, i, false, false)
+      Wisz || pushgespind!(gespinds, ls, Symbol(""), 0, ind, isli, false, false)
     end
     # cases for pushgespind! and loopval!
     # if !isloopval, same as before
