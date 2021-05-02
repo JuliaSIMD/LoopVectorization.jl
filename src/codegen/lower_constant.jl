@@ -103,7 +103,7 @@ function lower_constant!(
   !opu₂ && suffix > 0 && return
   instr = instruction(op)
   instr.mod === GLOBALCONSTANT && return
-  constsym = instr.instr
+  constsym = constantopname(op)# instr.instr
   reducedchildvectorized = vloopsym ∈ reducedchildren(op)
   if reducedchildvectorized || isvectorized(op) || vloopsym ∈ reduceddependencies(op) || should_broadcast_op(op)
     # call = Expr(:call, lv(:vbroadcast), W, Expr(:call, lv(:maybeconvert), typeT, constsym))

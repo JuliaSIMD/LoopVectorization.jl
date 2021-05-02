@@ -1,4 +1,4 @@
-using Test, Aqua
+using Test
 using LoopVectorization
 
 using LinearAlgebra

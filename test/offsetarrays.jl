@@ -196,15 +196,19 @@ using LoopVectorization: Static
        end
        out
     end
-    function avxgeneric2!(out, A, kern)
-        @avx for I in CartesianIndices(out)
-            tmp = zero(eltype(out))
-            for J in CartesianIndices(kern)
-                tmp += A[I+J]*kern[J]
-            end
-            out[I] = tmp
+    function avxgeneric2!(out, A, kern, keep = nothing)
+      @avx for I in CartesianIndices(out)
+        tmp = if keep === nothing
+          zero(eltype(out))
+        else
+          out[I]
         end
-        out
+        for J in CartesianIndices(kern)
+          tmp += A[I+J]*kern[J]
+        end
+        out[I] = tmp
+      end
+      out
     end
     function pparent(x) # go through nested parents
         px = parent(x)

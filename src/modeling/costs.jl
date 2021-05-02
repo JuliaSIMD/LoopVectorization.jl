@@ -474,6 +474,23 @@ function reduction_zero(x::Float64)
         throw("Reduction not found.")
     end
 end
+function reduction_zero_class(x::Symbol)::Float64
+  if x === :one
+    MULTIPLICATIVE_IN_REDUCTIONS
+  elseif x === :typemin
+    MAX
+  elseif x === :typemax
+    MIN
+  elseif x === :max_mask
+    ALL
+  elseif x === :zero_mask
+    ANY
+  elseif x === :zero#sorted last, as should go into preamble_zeros
+    ADDITIVE_IN_REDUCTIONS
+  else
+    throw("Reduction not found.")
+  end
+end
 reduction_zero(x) = reduction_zero(reduction_instruction_class(x))
 
 function isreductcombineinstr(instr::Symbol)

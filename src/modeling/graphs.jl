@@ -1028,13 +1028,13 @@ function add_operation!(
         f = first(RHS.args)
         if f === :getindex
             add_load_getindex!(ls, LHS, RHS, elementbytes)
-        elseif f === :zero || f === :one
+        elseif f isa Symbol && Base.sym_in(f, (:zero, :one, :typemin, :typemax))
             c = gensym!(ls, f)
             op = add_constant!(ls, c, ls.loopsymbols[1:position], LHS, elementbytes, :numericconstant)
             if f === :zero
                 push!(ls.preamble_zeros, (identifier(op), IntOrFloat))
             else
-                push!(ls.preamble_funcofeltypes, (identifier(op), MULTIPLICATIVE_IN_REDUCTIONS))
+                push!(ls.preamble_funcofeltypes, (identifier(op), reduction_zero_class(f)))
             end
             op
         else
@@ -1070,14 +1070,14 @@ function add_operation!(
         f = first(RHS.args)
         if f === :getindex
             add_load!(ls, LHS_sym, LHS_ref, elementbytes)
-        elseif f === :zero || f === :one
+        elseif f isa Symbol && Base.sym_in(f, (:zero, :one, :typemin, :typemax))
             c = gensym!(ls, f)
             op = add_constant!(ls, c, ls.loopsymbols[1:position], LHS_sym, elementbytes, :numericconstant)
             # op = add_constant!(ls, c, Symbol[], LHS_sym, elementbytes, :numericconstant)
             if f === :zero
                 push!(ls.preamble_zeros, (identifier(op), IntOrFloat))
             else
-                push!(ls.preamble_funcofeltypes, (identifier(op), MULTIPLICATIVE_IN_REDUCTIONS))
+                push!(ls.preamble_funcofeltypes, (identifier(op), reduction_zero_class(f)))
             end
             op
         else

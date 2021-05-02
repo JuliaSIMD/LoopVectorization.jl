@@ -483,12 +483,26 @@ function split_ifelse!(
   falseops = operations(lsfalse)
   true_op = parents(true_ops[k])[2]
   falseop = parents_op[3]
+  true_op.dependencies = loopdependencies(op)
+  falseop.dependencies = loopdependencies(op)
+  true_op.reduced_children = reducedchildren(op)
+  falseop.reduced_children = reducedchildren(op)
   condop_count = 0
   for i ∈ eachindex(falseops)
     fop = falseops[i]
     parents_false = parents(fop)
     for (j,opp) ∈ enumerate(parents_false)
       if opp === op # then ops[i]'s jth parent is the ifelse
+        # These reduction to scalar instructions are added for non-outer reductions initialized with non-constant ops
+        # So we check if now 
+        # if (j == 2) && (Base.sym_in(instruction(fop).instr, (:reduced_add, :reduced_prod, :reduced_max, :reduced_min, :reduced_all, :reduced_any)))
+          # if isconstantop(true_op)
+          #   (true_ops[i]).instruction = Instruction(:identity)
+          # end
+          # if isconstantop(falseop)
+          #   fop.instruction = Instruction(:identity)
+          # end
+        # end
         parents(true_ops[i])[j] = true_op
         parents_false[j] = falseop
       end
@@ -513,12 +527,10 @@ end
 function generate_call_split(
   ls::LoopSet, preserve::Vector{Symbol}, shouldindbyind::Vector{Bool}, roots::Vector{Bool}, extra_args::Expr, inlineu₁u₂::Tuple{Bool,Int8,Int8}, thread::UInt, debug::Bool
 )
-  if !debug
-    for (k,op) ∈ enumerate(operations(ls))
-      parents_op = parents(op)
-      if (iscompute(op) && (instruction(op).instr === :ifelse)) && (length(parents_op) == 3) && isconstantop(first(parents_op))
-        return split_ifelse!(ls, preserve, shouldindbyind, roots, extra_args, k, inlineu₁u₂, thread, debug)
-      end
+  for (k,op) ∈ enumerate(operations(ls))
+    parents_op = parents(op)
+    if (iscompute(op) && (instruction(op).instr === :ifelse)) && (length(parents_op) == 3) && isconstantop(first(parents_op))
+      return split_ifelse!(ls, preserve, shouldindbyind, roots, extra_args, k, inlineu₁u₂, thread, debug)
     end
   end
   return generate_call_types(ls, preserve, shouldindbyind, roots, extra_args, inlineu₁u₂, thread, debug)

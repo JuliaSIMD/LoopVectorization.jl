@@ -1,6 +1,6 @@
 include("testsetup.jl")
 
-import InteractiveUtils
+import InteractiveUtils, Aqua
 
 InteractiveUtils.versioninfo(stdout; verbose = true)
 
@@ -12,7 +12,7 @@ const START_TIME = time()
 
 @time @testset "LoopVectorization.jl" begin
 
-    # @time Aqua.test_all(LoopVectorization)
+    @time Aqua.test_all(LoopVectorization)
     # @test isempty(detect_unbound_args(LoopVectorization))
 
     @time include("printmethods.jl")
