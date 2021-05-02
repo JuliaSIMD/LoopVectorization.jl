@@ -21,7 +21,7 @@ using VectorizationBase: register_size, register_count, cache_linesize, cache_si
     contract_and, collapse_and,
     contract_or,  collapse_or,
     num_threads, num_cores,
-    max_mask
+    max_mask#,zero_mask
 
 
 using IfElse: ifelse

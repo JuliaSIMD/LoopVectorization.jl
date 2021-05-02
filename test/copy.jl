@@ -138,7 +138,19 @@ using LoopVectorization, OffsetArrays, Test
         end
         m
     end
-
+  function scattercopyavx!(H,a,j)
+    @avx for i ∈ eachindex(j), k ∈ eachindex(a)
+      H[j[i],k] = A[k]
+    end
+    H
+  end
+  function scattercopy!(H,a,j)
+    @inbounds for i ∈ eachindex(j), k ∈ eachindex(a)
+      H[j[i],k] = A[k]
+    end
+    H
+  end
+  
     for T ∈ (Float32, Float64, Int32, Int64)
         @show T, @__LINE__
         R = T <: Integer ? (-T(100):T(100)) : T 
@@ -215,6 +227,10 @@ using LoopVectorization, OffsetArrays, Test
         @test copy3!(y, x) == x
         fill!(y,0);
         @test copyselfdot!(y, x) ≈ x[1]^2 + x[2]^2
-        @test view(x, 1:2) == view(y, 1:2)
+      @test view(x, 1:2) == view(y, 1:2)
+
+      H0 = zeros(10,10); H1 = zeros(10,10);
+      j = [1,2,5,8]; a = rand(10);
+      @test scattercopyavx!(H0, a, j) == scattercopy!(H1, a, j)
     end
 end

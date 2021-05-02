@@ -142,6 +142,7 @@ function lower_store_collection!(
     end
     nothing
 end
+gf(s::Symbol, n::Int) = Expr(:call, GlobalRef(Core,:getfield), s, n, false)
 function lower_store!(
     q::Expr, ls::LoopSet, op::Operation, ua::UnrollArgs, mask::Bool,
     reductfunc::Symbol = storeinstr_preprend(op, ua.vloop.itersymbol), inds_calc_by_ptr_offset = indices_calculated_by_pointer_offsets(ls, op.ref)
@@ -154,7 +155,6 @@ function lower_store!(
         (opind == 1) && lower_store_collection!(q, ls, op, ua, mask, inds_calc_by_ptr_offset)
         return
     end
-
     falseexpr = Expr(:call, lv(:False));
     aliasexpr = falseexpr;
     # trueexpr = Expr(:call, lv(:True));
@@ -179,40 +179,48 @@ function lower_store!(
         add_memory_mask!(storeexpr, op, ua, mask, ls)
         push!(storeexpr.args, falseexpr, aliasexpr, falseexpr, rs)
         push!(q.args, storeexpr)
-    elseif (u₁ > 1) & isu₁
+    else
+      parents_op = parents(op)
+      data_u₁ = isu₁ & (u₁ > 1)
+      
+      indices_u₁ = data_u₁
+      if !data_u₁ & (length(parents_op) > 1)
+        indices_u₁ = first(isunrolled_sym(op, u₁loopsym, u₂loopsym, vloopsym, ls))
+      end
+      if indices_u₁
         mvard = Symbol(mvar, "##data##")
         # isu₁ &&
-        push!(q.args, Expr(:(=), mvard, Expr(:call, lv(:data), mvar)))
+        data_u₁ && push!(q.args, Expr(:(=), mvard, Expr(:call, lv(:data), mvar)))
         for u ∈ 1:u₁
-            mvaru = :(getfield($mvard, $u, false))
-            inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, true, u-1, ls)
-            # @show isu₁unrolled(opp), opp
-            storeexpr = if isu₁
-                if reductfunc === Symbol("")
-                    Expr(:call, lv(:_vstore!), vptr(op), mvaru, inds)
-                else
-                    Expr(:call, lv(:_vstore!), lv(reductfunc), vptr(op), mvaru, inds)
-                end
-            elseif reductfunc === Symbol("")
-                Expr(:call, lv(:_vstore!), vptr(op), mvar, inds)
+          inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, true, u-1, ls)
+          # @show isu₁unrolled(opp), opp
+          storeexpr = if data_u₁
+            if reductfunc === Symbol("")
+              Expr(:call, lv(:_vstore!), vptr(op), gf(mvard,u), inds)
             else
-                Expr(:call, lv(:_vstore!), lv(reductfunc), vptr(op), mvar, inds)
+              Expr(:call, lv(:_vstore!), lv(reductfunc), vptr(op), mvaru, inds)
             end
-            domask = mask && (isvectorized(op) & ((u == u₁) | (vloopsym !== u₁loopsym)))
-            add_memory_mask!(storeexpr, op, ua, domask, ls)# & ((u == u₁) | isvectorized(op)))
-            push!(storeexpr.args, falseexpr, aliasexpr, falseexpr, rs)
-            push!(q.args, storeexpr)
+          elseif reductfunc === Symbol("")
+            Expr(:call, lv(:_vstore!), vptr(op), mvar, inds)
+          else
+            Expr(:call, lv(:_vstore!), lv(reductfunc), vptr(op), mvar, inds)
+          end
+          domask = mask && (isvectorized(op) & ((u == u₁) | (vloopsym !== u₁loopsym)))
+          add_memory_mask!(storeexpr, op, ua, domask, ls)# & ((u == u₁) | isvectorized(op)))
+          push!(storeexpr.args, falseexpr, aliasexpr, falseexpr, rs)
+          push!(q.args, storeexpr)
         end
-    else
+      else
         inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, true, 0, ls)
         storeexpr = if reductfunc === Symbol("")
-            Expr(:call, lv(:_vstore!), vptr(op), mvar, inds)
+          Expr(:call, lv(:_vstore!), vptr(op), mvar, inds)
         else
-            Expr(:call, lv(:_vstore!), lv(reductfunc), vptr(op), mvar, inds)
+          Expr(:call, lv(:_vstore!), lv(reductfunc), vptr(op), mvar, inds)
         end
         add_memory_mask!(storeexpr, op, ua, mask, ls)
         push!(storeexpr.args, falseexpr, aliasexpr, falseexpr, rs)
         push!(q.args, storeexpr)
+      end
     end
     nothing
 end
