@@ -105,7 +105,6 @@ function shifted_loopset(ls::LoopSet, loopsyms::Vector{Symbol})
     end
     ld
 end
-# loopdeps_uint(ls::LoopSet, op::Operation) = (@show op; shifted_loopset(ls, loopdependencies(op)))
 loopdeps_uint(ls::LoopSet, op::Operation) = shifted_loopset(ls, loopdependencies(op))
 reduceddeps_uint(ls::LoopSet, op::Operation) = shifted_loopset(ls, reduceddependencies(op))
 childdeps_uint(ls::LoopSet, op::Operation) = shifted_loopset(ls, reducedchildren(op))
@@ -356,7 +355,6 @@ end
 # 2) decide whether to gesp that loopstart inside `add_grouped_strided_pointer`
 function add_grouped_strided_pointer!(extra_args::Expr, ls::LoopSet)
   allarrayrefs, name_to_array_map, unique_to_name_and_op_map = uniquearrayrefs_csesummary(ls)
-  # @show allarrayrefs
   gsp = Expr(:call, lv(:grouped_strided_pointer))
   tgarrays = Expr(:tuple)
   # refs_to_gesp = ArrayReferenceMeta[]
@@ -371,7 +369,6 @@ function add_grouped_strided_pointer!(extra_args::Expr, ls::LoopSet)
   #   ar = allarrayrefs[j]
   #   gespinds = cse_constant_offsets!(ls, allarrayrefs, j, array_refs_with_same_name, arrayref_to_name_op_collection)
   # end
-  # @show refs_aliasing_syms
   for (j,ref) ∈ enumerate(refs_aliasing_syms)
     vpref = vptr(ref)
     duplicate = false
@@ -381,7 +378,6 @@ function add_grouped_strided_pointer!(extra_args::Expr, ls::LoopSet)
         break
       end
     end
-    # @show duplicate
     duplicate && continue
     duplicate_map[j] = (i += 1)
     found = false

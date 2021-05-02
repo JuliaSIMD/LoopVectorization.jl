@@ -85,7 +85,6 @@ function indices_calculated_by_pointer_offsets(ls::LoopSet, ar::ArrayReferenceMe
     gespinds = Expr(:tuple)
     out = Vector{Bool}(undef, length(indices))
     li = ar.loopedindex
-    # @show ls.vector_width
     for i ∈ eachindex(li)
         ii = i + offset
         ind = indices[ii]
@@ -249,7 +248,6 @@ function cse_constant_offsets!(
   ls::LoopSet, allarrayrefs::Vector{ArrayReferenceMeta}, allarrayrefsind::Int, name_to_array_map::Vector{Vector{Int}}, arrayref_to_name_op_collection::Vector{Vector{Tuple{Int,Int,Int}}}
 )
   ar = allarrayrefs[allarrayrefsind]
-  # @show ar
   # vptrar = vptr(ar)
   arrayref_to_name_op = arrayref_to_name_op_collection[allarrayrefsind]
   array_refs_with_same_name = name_to_array_map[first(first(arrayref_to_name_op))]
@@ -542,7 +540,6 @@ function use_loop_induct_var!(
   offsetprecalc_descript = Expr(:tuple)
   use_offsetprecalc = false
   vptrar = vptr(ar)
-  # @show ar
   Wisz = false#ls.vector_width == 0
   for (i,isli) ∈ enumerate(li)
     ii = i + offset
@@ -605,7 +602,6 @@ function add_loop_start_stop_manager!(ls::LoopSet)
       use_livs[i] = use_loop_induct_var!(ls, q, arrayrefs[i], arrayrefs, i, includeinlet[i])
       #name_to_array_map[first(first(unique_to_name_and_op_map[i]))], unique_to_name_and_op_map)
     end
-    # @show use_livs,
     # loops, sorted from outer-most to inner-most
     looporder = reversenames(ls)
     # For each loop, we need to choose an induction variable
@@ -633,7 +629,6 @@ function add_loop_start_stop_manager!(ls::LoopSet)
         terminators[nloops+1-i] = if (loopsym ∈ loopinductvars) || (any(r -> any(isequal(-i), r), use_livs)) || iszero(length(loopstartᵢ))
             0
         else
-            # @show i, loopsym loopdependencies.(operations(ls)) operations(ls)
             # @assert !iszero(length(loopstartᵢ))
             last(ric[argmin(first.(ric))]) # index corresponds to array ref's position in loopstart
         end
@@ -703,9 +698,7 @@ function pointermax_index(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int,
     loopsym = names(ls)[n]
     index = Expr(:tuple);
     ind = 0
-    # @show ar loopsym names(ls) n
     for (j,i) ∈ enumerate(getindicesonly(ar))
-        # @show j,i
         if i === loopsym
             ind = j
             if iszero(sub)
@@ -773,7 +766,6 @@ function append_pointer_maxes!(
             push!(loopstart.args, Expr(:(=), maxsym(vptr_ar, sub), pointermax(ls, ar, n, sub, isvectorized, stopindicator, incr)))
         end
     else
-        # @show n, getloop(ls, n) ar
         index, ind = pointermax_index(ls, ar, n, submax, isvectorized, stopindicator, incr)
         pointercompbase = maxsym(vptr_ar, submax)
         push!(loopstart.args, Expr(:(=), pointercompbase, Expr(:call, lv(:gesp), vptr_ar, index)))
@@ -839,7 +831,6 @@ function startloop(ls::LoopSet, us::UnrollSpecification, n::Int, submax = maxunr
       push!(loopstart.args, startloop(getloop(ls, loopsym), loopsym))
     else
         isvectorized = n == vloopnum
-        # @show ptrdefs
         append_pointer_maxes!(loopstart, ls, ptrdefs[termind], n, submax, isvectorized)
     end
     loopstart
@@ -891,7 +882,6 @@ function terminatecondition(ls::LoopSet, us::UnrollSpecification, n::Int, inclma
 
     termar = lssm.incrementedptrs[n][termind]
     ptr = vptr(termar)
-    # @show UF, isvectorized(us, n)
     if inclmask && isvectorized(us, n)
         Expr(:call, :<, ptr, maxsym(ptr, 0))
     else

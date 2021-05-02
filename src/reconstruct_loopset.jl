@@ -672,7 +672,7 @@ Execute an `@avx` block. The block's code is represented via the arguments:
 @aggressive_constprop @generated function _avx_!(
     ::Val{var"#UNROLL#"}, ::Val{var"#OPS#"}, ::Val{var"#ARF#"}, ::Val{var"#AM#"}, ::Val{var"#LPSYM#"}, var"#lv#tuple#args#"::Tuple{var"#LB#",var"#V#"}
 ) where {var"#UNROLL#", var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#", var"#V#"}
-    # 1 + 1 # Irrelevant line you can comment out/in to force recompilation...
+    1 + 1 # Irrelevant line you can comment out/in to force recompilation...
     ls = _avx_loopset(var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#".parameters, var"#V#".parameters, var"#UNROLL#")
     # return @show avx_body(ls, var"#UNROLL#")
     if last(var"#UNROLL#") > 1

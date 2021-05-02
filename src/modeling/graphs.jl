@@ -204,7 +204,6 @@ staticmulincr(ptr, incr) = Expr(:call, lv(:staticmul), Expr(:call, :eltype, ptr)
 @inline cmpend(i::Int, r::CloseOpen) = i < getfield(r,:upper)
 @inline cmpend(i::Int, r::AbstractUnitRange) = i ≤ last(r)
 @inline cmpend(i::Int, r::AbstractRange) = i ≤ last(r)
-# @inline cmpend(i::Int, r::AbstractRange) = @show i last(r) i ≤ last(r)
 # @inline cmpend(i::Int, r::AbstractRange) = i ≤ vsub_fast(last(r), step(r))
 
 @inline vcmpend(i::Int, r::CloseOpen, ::StaticInt{W}) where {W} = i ≤ vsub_fast(getfield(r,:upper), W)
@@ -213,7 +212,6 @@ staticmulincr(ptr, incr) = Expr(:call, lv(:staticmul), Expr(:call, :eltype, ptr)
 # i += 4*3 # i = 12
 @inline vcmpend(i::Int, r::AbstractRange, ::StaticInt{W}) where {W} = i ≤ vsub_fast(last(r), vsub_fast(W*step(r), 1))
 # @inline vcmpend(i::Int, r::AbstractRange, ::StaticInt{W}) where {W} = i ≤ vsub_fast(last(r), W*step(r))
-# @inline vcmpend(i::Int, r::AbstractRange, ::StaticInt{W}) where {W} = @show i m = vsub_fast(last(r), W*step(r)) i ≤ m
 # @inline vcmpend(i::Int, r::AbstractRange, ::StaticInt{W}) where {W} = i ≤ vsub_fast(last(r), W)
 
 function staticloopexpr(loop::Loop)
@@ -664,20 +662,12 @@ end
 names(ls::LoopSet) = ls.loop_order.loopnames
 reversenames(ls::LoopSet) = ls.loop_order.bestorder
 function getloopid_or_nothing(ls::LoopSet, s::Symbol)
-    # @show ls.loopsymbols, s
     for (loopnum,sym) ∈ enumerate(ls.loopsymbols)
         s === sym && return loopnum
     end
 end
 
 getloopid(ls::LoopSet, s::Symbol) = getloopid_or_nothing(ls, s)::Int
-# function getloopid(ls::LoopSet, s::Symbol)::Int
-#     @show ls.loops
-#     id = getloopid_or_nothing(ls, s)
-#     @show id
-#     id
-# end
-# getloop(ls::LoopSet, i::Integer) = getloop(ls, names(ls)[i])
 getloop(ls::LoopSet, i::Integer) = ls.loops[ls.loopordermap[i]] # takes nest level after reordering
 getloop_from_id(ls::LoopSet, i::Integer) = ls.loops[i] # takes w/ respect to original loop order.
 getloop(ls::LoopSet, s::Symbol) = getloop_from_id(ls, getloopid(ls, s))
@@ -1270,7 +1260,6 @@ function fill_offset_memop_collection!(ls::LoopSet)
             else
                 isstore(opp) || continue
             end
-            # @show op opp
             oppref = opp.ref.ref
             sameref(opref, oppref) || continue
             if collectionsize == 0
@@ -1306,13 +1295,11 @@ function fill_offset_memop_collection!(ls::LoopSet)
             for j ∈ 1:num_unroll_collections
                 collectionⱼ = unroll_collections[j]
                 # giet id (`first`) of first item in collection to get base offsets for comparison
-                # @show op, opid ops[opidc[first(first(collectionⱼ))], first(first(collectionⱼ))
                 if view(getoffsets(ops[opidc[first(first(collectionⱼ))]]), r) == v
                     found_match = true
                     push!(collectionⱼ, (i, o))
                 end
             end
-            # @show opid, found_match
             if !found_match
                 num_unroll_collections += 1 # the `i` points to position within `opidc`
                 unroll_collections[num_unroll_collections] = [(i,o)]

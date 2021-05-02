@@ -155,7 +155,7 @@ using LoopVectorization, OffsetArrays, Test
         @test x == q2
         fill!(q2, -999999); @avx q2 .= x;
         @test x == q2
-        @test all(iszero, issue_256!(x))
+        @test all(iszero, issue_256!(reshape(x,(length(x),1))))
 
         B = rand(R, 79, 83);
         A1 = zeros(T, 79, 85);

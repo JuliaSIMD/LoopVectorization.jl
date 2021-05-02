@@ -92,7 +92,6 @@ function getparentsreductzero(ls::LoopSet, op::Operation)::Float64
             return reduction_instruction_class(instruction(opp))
         end
     end
-    @show identifier(op)
     throw("Reduct zero not found for operation $(name(op)).")
 end
 vecbasefunc(f) = Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:VectorizationBase)), QuoteNode(f))

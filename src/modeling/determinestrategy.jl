@@ -44,7 +44,6 @@ function unitstride(ls::LoopSet, op::Operation, s::Symbol)
     li = op.ref.loopedindex
     # The first index is allowed to be indexed by `s`
     fi = first(inds)
-    # @show (fi === DISCONTIGUOUS), (fi === CONSTANTZEROINDEX), (first(getstrides(op)) ≠ 1), unitstep(getloop(ls,s))
     if ((fi === DISCONTIGUOUS) | (fi === CONSTANTZEROINDEX)) || (first(getstrides(op)) ≠ 1) || !unitstep(getloop(ls,s))
         return false
     # elseif !first(li)
@@ -77,7 +76,8 @@ function cost(ls::LoopSet, op::Operation, (u₁,u₂)::Tuple{Symbol,Symbol}, vlo
         end
     elseif iscompute(op) &&
         Base.sym_in(instruction(op).instr, (:(+), :(-), :add_fast, :sub_fast)) &&
-        all(opp -> (isloopvalue(opp) | isconstant(opp)), parents(op))
+        all(opp -> (isloopvalue(opp)), parents(op))
+        # all(opp -> (isloopvalue(opp) | isconstant(opp)), parents(op))
         return 0.0, 0, 0.0
     end
     opisvectorized = isvectorized(op)
@@ -85,11 +85,9 @@ function cost(ls::LoopSet, op::Operation, (u₁,u₂)::Tuple{Symbol,Symbol}, vlo
     if accesses_memory(op)
         # either vbroadcast/reductionstore, vmov(a/u)pd, or gather/scatter
         if opisvectorized
-            # @show unitstride(ls,op,vloopsym), srt,sl,srp
             if !unitstride(ls, op, vloopsym)# || !isdense(op) # need gather/scatter
                 indices = getindices(op)
                 contigind = first(indices)
-                # @show rejectinterleave(op) op
                 shifter = max(2,Wshift)
                 if rejectinterleave(op)
                     offset = 0.0 # gather/scatter, alignment doesn't matter
@@ -97,7 +95,6 @@ function cost(ls::LoopSet, op::Operation, (u₁,u₂)::Tuple{Symbol,Symbol}, vlo
                     shifter -= 1
                     offset = 0.5reg_size(ls) / cache_lnsze(ls)
                 end
-                # @show shifter,offset, Wshift
                 if shifter > 1 &&
                     (!rejectcurly(op) && (((contigind === CONSTANTZEROINDEX) && ((length(indices) > 1) && (indices[2] === u₁) || (indices[2] === u₂))) ||
                     ((u₁ === contigind) | (u₂ === contigind))))
@@ -118,7 +115,6 @@ function cost(ls::LoopSet, op::Operation, (u₁,u₂)::Tuple{Symbol,Symbol}, vlo
                 #       this feature is common to all of them.
                 srt += 0.5reg_size(ls) / cache_lnsze(ls)
             end
-            # @show srt,sl,srp
         elseif isstore(op) # broadcast or reductionstore; if store we want to penalize reduction
             srt *= 3
             sl *= 3
@@ -184,7 +180,7 @@ function evaluate_cost_unroll(
             included_vars[id] && continue
             # it must also be a subset of defined symbols
             loopdependencies(op) ⊆ nested_loop_syms || continue
-            # hasintersection(reduceddependencies(op), nested_loop_syms) && return Inf
+          # hasintersection(reduceddependencies(op), nested_loop_syms) && return Inf
             rd = reduceddependencies(op)
             hasintersection(rd, @view(nested_loop_syms[1:end-length(rd)])) && return Inf
             if isstore(op) #TODO: DRY (this is repeated in evaluate_cost_tile)
@@ -194,7 +190,6 @@ function evaluate_cost_unroll(
                 end
             end
             included_vars[id] = true
-            # @show op, cost(ls, op, vloopsym, Wshift, size_T)
             # TODO: use actual unrolls here?
             c = first(cost(ls, op, (Symbol(""),Symbol("")), vloopsym, Wshift, size_T))
             total_cost += iter * c
@@ -213,16 +208,13 @@ function depchain_cost!(
     for opp ∈ parents(op)
         skip[identifier(opp)] && continue
         rt, sl = depchain_cost!(ls, skip, opp, unrolled, vloopsym, Wshift, size_T, rt, sl)
-        # @show rt,sl, opp
     end
     # Basically assuming memory and compute don't conflict, but everything else does
     # Ie, ignoring the fact that integer and floating point operations likely don't either
     if iscompute(op)
         rtᵢ, slᵢ = cost(ls, op, (unrolled,Symbol("")), vloopsym, Wshift, size_T)
-        # @show rtᵢ, slᵢ, op
         rt += rtᵢ; sl += slᵢ
     end
-    # @show rt, sl
     rt, sl
 end
 function parentsnotreduction(op::Operation)
@@ -280,7 +272,6 @@ function unroll_no_reductions(ls, order, vloopsym)
         max(1, min(4, round(Int, 2compute_rt / load_rt)))
     end
     # u = min(u, max(1, (reg_count(ls) ÷ max(1,round(Int,rp)))))
-    # @show u
     # commented out here is to decide to align loops
     # if memory_rt > compute_rt && isone(u) && (length(order) > 1) && (last(order) === vloopsym) && length(getloop(ls, last(order))) > 8W
     #     ls.align_loops[] = findfirst(operations(ls)) do op
@@ -333,7 +324,6 @@ function determine_unroll_factor(
         load_recip_throughput,
         store_recip_throughput
     )
-    # @show recip_throughput, latency
     recip_throughput, latency
 end
 function count_reductions(ls::LoopSet)
@@ -393,9 +383,9 @@ function determine_unroll_factor(ls::LoopSet, order::Vector{Symbol}, vloopsym::S
         end
     end
     # min(8, roundpow2(max(1, round(Int, latency / (rt * num_reductions) ) ))), best_unrolled
-    UF = min(8, VectorizationBase.nextpow2(max(1, round(Int, latency / (rt * num_reductions) ) )))
+    UF = VectorizationBase.nextpow2(round(Int, clamp(latency / (rt * num_reductions), 1.0, 8.0)))
     if UF == 1 && num_reductions > 1
-        UF = min(8, VectorizationBase.nextpow2(max(1, round(Int, latency / (rt * cld(num_reductions, 2)) ) )))
+        UF = VectorizationBase.nextpow2(round(Int, clamp(latency / (rt * cld(num_reductions, 2)), 1.0, 8.0)))
     end
     if best_unrolled === vloopsym
         UF = demote_unroll_factor(ls, UF, vloopsym)
@@ -406,8 +396,6 @@ end
 function unroll_cost(X, u₁, u₂, u₁L, u₂L)
     u₂factor = (num_iterations(u₂L, u₂)/u₂L)
     u₁factor = (num_iterations(u₁L, u₁)/u₁L)
-    # @show num_iterations(u₂L, u₂)/u₂L, u₂, u₂L
-    # @show num_iterations(u₁L, u₁)/u₁L, u₁, u₁L
     # X[1]*u₂factor*u₁factor + X[4] + X[2] * u₂factor + X[3] * u₁factor
     X[1] + X[2] * u₂factor + X[3] * u₁factor + X[4] * u₁factor * u₂factor
 end
@@ -433,8 +421,6 @@ function solve_unroll_iter(X, R, u₁L, u₂L, u₁range, u₂range)
         for u₂temp ∈ u₂range
             RR ≥ u₁temp*u₂temp*R₁ + u₁temp*R₂ + u₂temp*R₃ || continue
             tempcost = unroll_cost(X, u₁temp, u₂temp, u₁L, u₂L)
-            # @show u₁temp, u₂temp, tempcost
-            # @show u₁temp*u₂temp*R₁ + u₁temp*R₂ + u₂temp*R₃
             if tempcost ≤ bestcost
                 bestcost = tempcost
                 u₁best, u₂best = u₁temp, u₂temp
@@ -455,10 +441,8 @@ function solve_unroll_lagrange(X, R, u₁L, u₂L, u₁step::Int, u₂step::Int,
     c = X₃*RR^2
     discriminant = b^2 - 4a*c
     discriminant < 0 && return -1,-1,Inf
-    # @show R₁, R₂, R₃, R₄
     u₁float = max((sqrt(discriminant) + b) / (-2a), float(u₁step)) # must be at least 1
     u₂float = (RR - u₁float*R₂)/(u₁float*R₁)
-    # @show u₁float, u₂float
     if !(isfinite(u₂float) & isfinite(u₁float)) # brute force
         u₁low = u₂low = 1
         u₁high = iszero(X₂) ? 2 : (atleast32registers ? 8 : 6)
@@ -611,7 +595,6 @@ function solve_unroll(
     else
         u₂Lf = Float64(u₂L)
     end
-    # @show u₁Lf, u₂Lf, u₁L, length(u₁loop)
     u₁, u₂, cost = solve_unroll(cost_vec, reg_pressure, maxu₁, maxu₂, u₁Lf, u₂Lf, u₁step, u₂step, atleast32registers)
     # heuristic to more evenly divide small numbers of iterations
     if isstaticloop(u₂loop)
@@ -635,7 +618,6 @@ function loopdepindices(ls::LoopSet, op::Operation)
     isdiscontig = first(loopdeps) === DISCONTIGUOUS
     # isdiscontig = isdiscontiguous(op.ref)
     loopedindex = op.ref.loopedindex
-    # @show loopdeps
     if !isdiscontig && all(loopedindex) && !(any(==(CONSTANTZEROINDEX), loopdeps))
         return loopdeps
     end
@@ -654,7 +636,6 @@ function loopdepindices(ls::LoopSet, op::Operation)
 end
 function stride_penalty(ls::LoopSet, op::Operation, order::Vector{Symbol}, loopfreqs)
     loopdeps = loopdepindices(ls, op)
-    # @show op loopdeps
     opstrides = Vector{Int}(undef, length(loopdeps))
     # very minor stride assumption here, because we don't really want to base optimization decisions on it...
     opstrides[1] = 1.0 + (first(loopdependencies(op.ref)) === DISCONTIGUOUS) + (first(loopdependencies(op.ref)) === CONSTANTZEROINDEX)
@@ -815,10 +796,8 @@ function load_elimination_cost_factor!(
     cost_vec, reg_pressure, choose_to_inline, ls::LoopSet, op::Operation, iters, unrollsyms::UnrollSymbols, Wshift, size_T
 )
     @unpack u₁loopsym, u₂loopsym, vloopsym = unrollsyms
-    # @show isoptranslation(ls, op, unrollsyms)
     if !iszero(first(isoptranslation(ls, op, unrollsyms)))
         rt, lat, rp = cost(ls, op, (u₁loopsym, u₂loopsym), vloopsym, Wshift, size_T)
-        # @show rt
         rto = rt
         rt *= iters
             # rt *= factor1; rp *= factor2;
@@ -1086,7 +1065,6 @@ function evaluate_cost_tile!(
         if isstore(op) & (!u₁reducesrt) & (!u₂reducesrt)
             irreducible_storecosts += rt
         end
-        # iiter = convert(Int, iters[id]); @show u₁reducesrt, u₂reducesrt, op, rt, rto, rp, iiter
         update_cost_vec!(cost_vec, rt, u₁reducesrt, u₂reducesrt)
         update_reg_pres!(reg_pressure, rp, u₁reducesrp, u₂reducesrp)
         # update_costs!(reg_pressure, rp, u₁reducesrp, u₂reducesrp)
@@ -1104,7 +1082,6 @@ function evaluate_cost_tile!(
     else
         0
     end
-    # @show (irreducible_storecosts / sum(cost_vec))
     if (irreducible_storecosts / sum(cost_vec) ≥ 0.5) && !any(op -> loadintostore(ls, op), operations(ls))
         u₁, u₂ = if visbit
             vecsforbyte = 8 ÷ ls.vector_width
