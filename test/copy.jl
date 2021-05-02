@@ -140,13 +140,13 @@ using LoopVectorization, OffsetArrays, Test
     end
   function scattercopyavx!(H,a,j)
     @avx for i ∈ eachindex(j), k ∈ eachindex(a)
-      H[j[i],k] = A[k]
+      H[j[i],k] = a[k]
     end
     H
   end
   function scattercopy!(H,a,j)
     @inbounds for i ∈ eachindex(j), k ∈ eachindex(a)
-      H[j[i],k] = A[k]
+      H[j[i],k] = a[k]
     end
     H
   end
