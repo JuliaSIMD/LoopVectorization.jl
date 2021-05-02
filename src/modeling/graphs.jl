@@ -207,10 +207,13 @@ staticmulincr(ptr, incr) = Expr(:call, lv(:staticmul), Expr(:call, :eltype, ptr)
 # @inline cmpend(i::Int, r::AbstractRange) = i ≤ vsub_fast(last(r), step(r))
 
 @inline vcmpend(i::Int, r::CloseOpen, ::StaticInt{W}) where {W} = i ≤ vsub_fast(getfield(r,:upper), W)
+@inline vcmpendzs(i::Int, r::CloseOpen, ::StaticInt{W}) where {W} = i ≠ (getfield(r,:upper) &  (-W))
 @inline vcmpend(i::Int, r::AbstractUnitRange, ::StaticInt{W}) where {W} = i ≤ vsub_fast(last(r), W-1)
+@inline vcmpendzs(i::Int, r::AbstractUnitRange, ::StaticInt{W}) where {W} = i ≠ (length(r) &  (-W))
 # i = 0
 # i += 4*3 # i = 12
 @inline vcmpend(i::Int, r::AbstractRange, ::StaticInt{W}) where {W} = i ≤ vsub_fast(last(r), vsub_fast(W*step(r), 1))
+@inline vcmpendzs(i::Int, r::AbstractRange, ::StaticInt{W}) where {W} = i ≤ vsub_fast(last(r), vsub_fast(W*step(r), 1))
 # @inline vcmpend(i::Int, r::AbstractRange, ::StaticInt{W}) where {W} = i ≤ vsub_fast(last(r), W*step(r))
 # @inline vcmpend(i::Int, r::AbstractRange, ::StaticInt{W}) where {W} = i ≤ vsub_fast(last(r), W)
 
@@ -225,17 +228,19 @@ function staticloopexpr(loop::Loop)
   end
 end
 function vec_looprange(loop::Loop, UF::Int, mangledname)
+  fast = ispow2(UF) && iszero(first(loop))
   if loop.rangesym === Symbol("") # means loop is static
-    vec_looprange(UF, mangledname, staticloopexpr(loop))
+    vec_looprange(UF, mangledname, staticloopexpr(loop), fast)
   else
-    vec_looprange(UF, mangledname, loop.rangesym)
+    vec_looprange(UF, mangledname, loop.rangesym, fast)
   end
 end
-function vec_looprange(UF::Int, mangledname, r::Union{Expr,Symbol})
+function vec_looprange(UF::Int, mangledname, r::Union{Expr,Symbol}, zerostart::Bool)
+  cmp = zerostart ? lv(:vcmpendzs) : lv(:vcmpend)
   if isone(UF)
-    Expr(:call, lv(:vcmpend), mangledname, r, VECTORWIDTHSYMBOL)
+    Expr(:call, cmp, mangledname, r, VECTORWIDTHSYMBOL)
   else
-    Expr(:call, lv(:vcmpend), mangledname, r, mulexpr(VECTORWIDTHSYMBOL, UF))
+    Expr(:call, cmp, mangledname, r, mulexpr(VECTORWIDTHSYMBOL, UF))
   end
 end
 function looprange(loop::Loop, UF::Int, mangledname)
