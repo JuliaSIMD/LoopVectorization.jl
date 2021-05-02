@@ -594,14 +594,17 @@ This is used so that identical loops will create identical `_avx_!` calls in the
 """
 gensym!(ls::LoopSet, s) = Symbol("###$(s)###$(ls.symcounter += 1)###")
 
-function cacheunrolled!(ls::LoopSet, u₁loop::Symbol, u₂loop::Symbol, vloopsym::Symbol)
-    vloop = getloop(ls, vloopsym)
-    for op ∈ operations(ls)
-        empty!(children(op))
-        for opp ∈ parents(op)
-            push!(children(opp), op)
-        end
+function fill_children!(ls::LoopSet)
+  for op ∈ operations(ls)
+    empty!(children(op))
+    for opp ∈ parents(op)
+      push!(children(opp), op)
     end
+  end
+end
+function cacheunrolled!(ls::LoopSet, u₁loop::Symbol, u₂loop::Symbol, vloopsym::Symbol)
+    fill_children!(ls)
+    vloop = getloop(ls, vloopsym)
     for op ∈ operations(ls)
         setunrolled!(ls, op, u₁loop, u₂loop, vloopsym)
         if accesses_memory(op)

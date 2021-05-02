@@ -137,6 +137,7 @@ function getroots!(rooted::Vector{Bool}, ls::LoopSet)
     for op ∈ ops
         isstore(op) && recursively_set_parents_true!(rooted, op)
     end
+    length(ls.includedactualarrays) == 0 || remove_outer_reducts!(rooted, ls)
     return rooted
 end
 function OperationStruct!(varnames::Vector{Symbol}, ids::Vector{Int}, ls::LoopSet, op::Operation)
@@ -461,28 +462,79 @@ function remove_outer_reducts!(roots::Vector{Bool}, ls::LoopSet)
     end
 end
 
-# function generate_call_split(ls::LoopSet, (inline,u₁,u₂)::Tuple{Bool,Int8,Int8}, thread::UInt, debug::Bool = false)
-#   ops = operations(ls)
-#   for op ∈ ops
-#     if (iscompute(op) && (instruction(op).instr === :ifelse)) && iszero(length(loopdependencies(first(parents(op)))))
-#       # we want to eliminate
-#     end
-#   end
-# end
 
+
+function split_ifelse!(
+  ls::LoopSet, preserve::Vector{Symbol}, shouldindbyind::Vector{Bool}, roots::Vector{Bool}, extra_args::Expr, k::Int, inlineu₁u₂::Tuple{Bool,Int8,Int8}, thread::UInt, debug::Bool
+)
+  roots[k] = false
+  op = operations(ls)[k]
+  op.instruction = DROPPEDCONSTANT
+  op.node_type = constant
+  # we want to eliminate
+  parents_op = parents(op)
+  condop = first(parents_op)
+  # create one loop where `opp` is true, and a second where it is `false`
+  prepre = ls.prepreamble; append!(prepre.args, ls.preamble.args)
+  ls.prepreamble = Expr(:block); ls.preamble = Expr(:block);
+  ls_true = deepcopy(ls)
+  lsfalse = ls
+  true_ops = operations(ls_true)
+  falseops = operations(lsfalse)
+  true_op = parents(true_ops[k])[2]
+  falseop = parents_op[3]
+  condop_count = 0
+  for i ∈ eachindex(falseops)
+    fop = falseops[i]
+    parents_false = parents(fop)
+    for (j,opp) ∈ enumerate(parents_false)
+      if opp === op # then ops[i]'s jth parent is the ifelse
+        parents(true_ops[i])[j] = true_op
+        parents_false[j] = falseop
+      end
+      condop_count += roots[i] & (condop === opp)
+    end
+  end
+  roots[identifier(condop)] &= condop_count > 0
+  q = :(if $(name(condop))
+      $(generate_call_split(ls_true, preserve, shouldindbyind, roots, copy(extra_args), inlineu₁u₂, thread, debug))
+    else
+      $(generate_call_split(lsfalse, preserve, shouldindbyind, roots, extra_args, inlineu₁u₂, thread, debug))
+    end)
+  push!(prepre.args, q)
+  prepre
+end
+
+function generate_call(ls::LoopSet, inlineu₁u₂::Tuple{Bool,Int8,Int8}, thread::UInt, debug::Bool)
+  extra_args = Expr(:tuple)
+  preserve, shouldindbyind, roots = add_grouped_strided_pointer!(extra_args, ls)
+  generate_call_split(ls, preserve, shouldindbyind, roots, extra_args, inlineu₁u₂, thread, debug)
+end
+function generate_call_split(
+  ls::LoopSet, preserve::Vector{Symbol}, shouldindbyind::Vector{Bool}, roots::Vector{Bool}, extra_args::Expr, inlineu₁u₂::Tuple{Bool,Int8,Int8}, thread::UInt, debug::Bool
+)
+  if !debug
+    for (k,op) ∈ enumerate(operations(ls))
+      parents_op = parents(op)
+      if (iscompute(op) && (instruction(op).instr === :ifelse)) && (length(parents_op) == 3) && isconstantop(first(parents_op))
+        return split_ifelse!(ls, preserve, shouldindbyind, roots, extra_args, k, inlineu₁u₂, thread, debug)
+      end
+    end
+  end
+  return generate_call_types(ls, preserve, shouldindbyind, roots, extra_args, inlineu₁u₂, thread, debug)
+end
 # Try to condense in type stable manner
-function generate_call(ls::LoopSet, (inline,u₁,u₂)::Tuple{Bool,Int8,Int8}, thread::UInt, debug::Bool = false)
-    extra_args = Expr(:tuple)
-    preserve, shouldindbyind, roots = add_grouped_strided_pointer!(extra_args, ls)
-
+function generate_call_types(
+  ls::LoopSet, preserve::Vector{Symbol}, shouldindbyind::Vector{Bool}, roots::Vector{Bool}, extra_args::Expr, (inline,u₁,u₂)::Tuple{Bool,Int8,Int8}, thread::UInt, debug::Bool
+)
+  # good place to check for split  
     operation_descriptions = Expr(:tuple)
     varnames = Symbol[]; ids = Vector{Int}(undef, length(operations(ls)))
     ops = operations(ls)
-    length(ls.includedactualarrays) == 0 || remove_outer_reducts!(roots, ls)
     for op ∈ ops
         instr::Instruction = instruction(op)
         if (isconstant(op) && (instr == LOOPCONSTANT)) && (!roots[identifier(op)])
-            instr = op.instruction = DROPPEDCONSTANT
+            instr = op.instruction = DROPPEDCONSTANT 
         end
         push!(operation_descriptions.args, QuoteNode(instr.mod))
         push!(operation_descriptions.args, QuoteNode(instr.instr))
@@ -505,7 +557,7 @@ function generate_call(ls::LoopSet, (inline,u₁,u₂)::Tuple{Bool,Int8,Int8}, t
     configarg = (inline,u₁,u₂,ls.isbroadcast,thread)
     unroll_param_tup = Expr(:call, lv(:avx_config_val), :(Val{$configarg}()), VECTORWIDTHSYMBOL)
     q = Expr(:call, func, unroll_param_tup, val(operation_descriptions), val(arrayref_descriptions), val(argmeta), val(loop_syms))
-    
+
     add_reassigned_syms!(extra_args, ls) # counterpart to `add_ops!` constants
     for (opid,sym) ∈ ls.preamble_symsym # counterpart to process_metadata! symsym extraction
         if instruction(ops[opid]) ≠ DROPPEDCONSTANT
@@ -517,7 +569,13 @@ function generate_call(ls::LoopSet, (inline,u₁,u₂)::Tuple{Bool,Int8,Int8}, t
     push!(q.args, Expr(:tuple, lbarg, extra_args))
     vecwidthdefq = Expr(:block)
     define_eltype_vec_width!(vecwidthdefq, ls, nothing)
-    Expr(:block, vecwidthdefq, q), preserve
+    push!(vecwidthdefq.args, q)
+    if debug
+        pushpreamble!(ls,vecwidthdefq)
+        Expr(:block, ls.prepreamble, ls.preamble)
+    else
+        setup_call_final(ls, setup_outerreduct_preserve(ls, vecwidthdefq, preserve))
+    end
 end
 
 
@@ -581,34 +639,32 @@ function gc_preserve(call::Expr, preserve::Vector{Symbol})
     q
 end
 
-function setup_call_inline(ls::LoopSet, inline::Bool, u₁::Int8, u₂::Int8, thread::Int)
-    call, preserve = generate_call(ls, (inline,u₁,u₂), thread % UInt, false)
-    if iszero(length(ls.outer_reductions))
-        pushpreamble!(ls, gc_preserve(call, preserve))
-        push!(ls.preamble.args, nothing)
-        return ls.preamble
-    end
-    retv = loopset_return_value(ls, Val(false))
-    outer_reducts = Expr(:local)
-    q = Expr(:block,gc_preserve(Expr(:(=), retv, call), preserve))
-    for or ∈ ls.outer_reductions
-        op = ls.operations[or]
-        var = name(op)
-        # push!(call.args, Symbol("##TYPEOF##", var))
-        mvar = mangledvar(op)
-        instr = instruction(op)
-        out = Symbol(mvar, "##onevec##")
-        push!(outer_reducts.args, out)
-        push!(q.args, Expr(:(=), var, Expr(:call, lv(reduction_scalar_combine(instr)), Expr(:call, lv(:vecmemaybe), out), var)))
-    end
-    pushpreamble!(ls, outer_reducts)
-    append!(ls.preamble.args, q.args)
-    ls.preamble
+# function setup_call_inline(ls::LoopSet, inline::Bool, u₁::Int8, u₂::Int8, thread::Int)
+#   call, preserve = generate_call_split(ls, (inline,u₁,u₂), thread % UInt, false)
+#   setup_call_ret!(ls, call, preserve)
+# end
+function setup_outerreduct_preserve(ls::LoopSet, call::Expr, preserve::Vector{Symbol})
+  iszero(length(ls.outer_reductions)) && return gc_preserve(call, preserve)
+  retv = loopset_return_value(ls, Val(false))
+  q = Expr(:block, gc_preserve(Expr(:(=), retv, call), preserve))
+  for or ∈ ls.outer_reductions
+    op = ls.operations[or]
+    var = name(op)
+    # push!(call.args, Symbol("##TYPEOF##", var))
+    mvar = mangledvar(op)
+    instr = instruction(op)
+    out = Symbol(mvar, "##onevec##")
+    push!(q.args, Expr(:(=), var, Expr(:call, lv(reduction_scalar_combine(instr)), Expr(:call, lv(:vecmemaybe), out), var)))
+  end
+  q
+end
+function setup_call_final(ls::LoopSet, q::Expr)
+  pushpreamble!(ls, q)
+  push!(ls.preamble.args, nothing)
+  return ls.preamble
 end
 function setup_call_debug(ls::LoopSet)
-    # avx_loopset(instr, ops, arf, AM, LB, vargs)
-    pushpreamble!(ls, first(generate_call(ls, (false,zero(Int8),zero(Int8)), zero(UInt), true)))
-    Expr(:block, ls.prepreamble, ls.preamble)
+  generate_call(ls, (false,zero(Int8),zero(Int8)), zero(UInt), true)
 end
 function setup_call(
     ls::LoopSet, q::Expr, source::LineNumberNode, inline::Bool, check_empty::Bool, u₁::Int8, u₂::Int8, thread::Int
@@ -620,9 +676,9 @@ function setup_call(
     # inlining the generated function into the loop preamble.
     lnns = extract_all_lnns(q)
     pushfirst!(lnns, source)
-    call = setup_call_inline(ls, inline, u₁, u₂, thread)
+    call = generate_call(ls, (inline, u₁, u₂), thread%UInt, false)
     call = check_empty ? check_if_empty(ls, call) : call
-    result = Expr(:block, ls.prepreamble, Expr(:if, check_args_call(ls), call, make_crashy(make_fast(q))))
-    prepend_lnns!(result, lnns)
-    return result
+    pushprepreamble!(ls, Expr(:if, check_args_call(ls), call, make_crashy(make_fast(q))))
+    prepend_lnns!(ls.prepreamble, lnns)
+    return ls.prepreamble
 end
