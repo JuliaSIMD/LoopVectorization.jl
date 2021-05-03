@@ -350,6 +350,11 @@ function check_shouldindbyind(ls::LoopSet, ind::Symbol, shouldindbyind::Vector{B
   end
   true
 end
+
+
+@inline dummy_ptrarray(sp, A) = sp
+@inline dummy_ptrarray(sp::AbstractStridedPointer{T,N}, A::AbstractArray{T,N}) where {T,N} = PtrArray(sp, VectorizationBase.zerotuple(Val{N}()), VectorizationBase.val_dense_dims(A))
+
 # write a "check_loops_safe_to_zerorangestart
 # that will be used to
 # 1) decide whether to zerorangestart
@@ -398,7 +403,7 @@ function add_grouped_strided_pointer!(extra_args::Expr, ls::LoopSet)
   for (k,gespindsummary) ∈ gespsummaries
     ref = allarrayrefs[k]
     gespinds = calcgespinds(ls, ref, gespindsummary, shouldindbyind)
-    push!(tgarrays.args, Expr(:call, lv(:gespf1), vptr(ref), gespinds))
+    push!(tgarrays.args, Expr(:call, lv(:dummy_ptrarray), Expr(:call, lv(:gespf1), vptr(ref), gespinds), name(ref)))
   end
   push!(gsp.args, tgarrays)
   matcheddims = Expr(:tuple)
