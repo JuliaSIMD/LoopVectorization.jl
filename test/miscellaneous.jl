@@ -975,12 +975,10 @@ end
         s = sum(x); p = prod(x)
         s1, p1 = sumprodavx(x)
         @test s ≈ s1
-        @test p ≈ p1
+        isfinite(p) && @test p ≈ p1
         s1, p1 = sumprod_avx(vec(x)) # FIXME: should use `gespf` so that `vec` is no longer necessary
         @test s ≈ s1
-        if isfinite(p)
-          @test p ≈ p1
-        end
+        isfinite(p) && @test p ≈ p1
         r = T == Float32 ? (Int32(-10):Int32(107)) : (Int64(-10):Int64(107))
         s = sum(r); p = prod(r)
         s1, p1 = sumprodavx(r)
