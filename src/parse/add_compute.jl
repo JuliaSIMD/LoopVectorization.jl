@@ -154,21 +154,27 @@ function add_reduced_deps!(op::Operation, reduceddeps::Vector{Symbol})
 end
 
 function substitute_op_in_parents!(
-    vparents::Vector{Operation}, replacer::Operation, replacee::Operation, reduceddeps::Vector{Symbol}
+    vparents::Vector{Operation}, replacer::Operation, replacee::Operation, reduceddeps::Vector{Symbol}, reductsym::Symbol
 )
-    found = false
-    for i ∈ eachindex(vparents)
-        opp = vparents[i]
-        if opp === replacee
-            vparents[i] = replacer
-            found = true
-        else
-            fopp = substitute_op_in_parents!(parents(opp), replacer, replacee, reduceddeps)
-            fopp && add_reduced_deps!(opp, reduceddeps)
-            found |= fopp
-        end
+  found = false
+  for i ∈ eachindex(vparents)
+    opp = vparents[i]
+    if opp === replacee
+      vparents[i] = replacer
+      found = true
+    else
+      fopp = substitute_op_in_parents!(parents(opp), replacer, replacee, reduceddeps, reductsym)
+      if fopp
+        add_reduced_deps!(opp, reduceddeps)
+        # FIXME: https://github.com/JuliaSIMD/LoopVectorization.jl/issues/259
+        # 
+        opp.variable = reductsym
+        opp.mangledvariable = Symbol("##", reductsym, :_)
+      end
+      found |= fopp
     end
-    found
+  end
+  found
 end
 
 
@@ -216,7 +222,7 @@ function add_reduction_update_parent!(
             update_deps!(deps, reduceddeps, reductinit)#parent) # deps and reduced deps will not be disjoint
         end
     elseif !isouterreduction && reductinit !== parent
-        substitute_op_in_parents!(vparents, reductinit, parent, reduceddeps)
+        substitute_op_in_parents!(vparents, reductinit, parent, reduceddeps, reductsym)
     end
     update_reduction_status!(vparents, reduceddeps, name(reductinit))
     # this is the op added by add_compute

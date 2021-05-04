@@ -425,7 +425,14 @@ function pushgespind!(
       if index_by_index
         if gespsymbol === Symbol("")
           if constoffset == 0
-            push!(gespinds.args, Expr(:call, GlobalRef(VectorizationBase, :NullStep)))
+            ns = Expr(:call, GlobalRef(VectorizationBase, :NullStep))
+            if fromgsp
+              loop = getloop(ls, ind)
+              if loop.rangesym ≢ Symbol("")
+                ns = Expr(:call, lv(:similardims), loop.rangesym, ns)
+              end
+            end
+            push!(gespinds.args, ns)
           else
             push!(gespinds.args, staticexpr(constoffset))
           end

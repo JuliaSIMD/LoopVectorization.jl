@@ -227,6 +227,13 @@ using Test
         end
     end
 
+  function depchain_with_different_deps!(c1,c2,A,b)
+    @avx for j in axes(A,1), k in axes(A,2)
+      c1[j] += A[j,k] * b[k]
+      c2[j] += A[j,k] * b[k] - 0 * b[j]
+    end
+  end
+
     M, K, N = 51, 49, 61
     for T ∈ (Float32, Float64, Int32, Int64)
         @show T, @__LINE__
@@ -324,5 +331,9 @@ using Test
         @test Y0 ≈ Y1
         @test dY0 ≈ dY1
 
+        Y2 = zeros(TC, N, 2); Y3 = zeros(TC,N,2);
+        depchain_with_different_deps!(Y2, Y3, A, b)
+        @test view(Y2,:,1) == view(Y3,:,1)
+        @test view(Y2,:,1) ≈ A*b
     end
 end
