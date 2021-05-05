@@ -78,8 +78,8 @@ function add_prefetches!(q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, pr
             # gespinds.args[i] = Expr(:call, lv(:data), gespinds.args[i])
         end
     end
-    push!(q.args, Expr(:(=), gptr, Expr(:call, lv(:gesp), ptr, gespinds)))
-
+    ip = GlobalRef(VectorizationBase, :increment_ptr)
+    push!(q.args, Expr(:(=), gptr, Expr(:call, ip, ptr, vptr_offset(ptr), gespinds)))
     inds = Expr(:tuple)
     indices = getindicesonly(op)
 
@@ -88,7 +88,9 @@ function add_prefetches!(q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, pr
         push!(inds.args, Expr(:call, lv(:Zero)))
         (ind == u₁loopsym) && (i = j)
     end
-    push!(q.args, Expr(:call, lv(:prefetch0), gptr, copy(inds)))
+    prefetch0 = GlobalRef(VectorizationBase, :prefetch)
+    push!(q.args, Expr(:call, prefetch0, Expr(:call, ip, ptr, gptr, copy(inds))))
+    # push!(q.args, Expr(:call, lv(:prefetch0), gptr, copy(inds)))
     i == 0 && return
     for u ∈ 1:u₁-1
         # for u ∈ umin:min(umin,U-1)
@@ -107,7 +109,7 @@ function add_prefetches!(q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, pr
         else
             inds.args[i] = staticexpr(u)
         end
-        push!(q.args, Expr(:call, lv(:prefetch0), gptr, copy(inds)))
+        push!(q.args, Expr(:call, prefetch0, Expr(:call, ip, ptr, gptr, copy(inds))))
     end
     nothing
 end
@@ -115,6 +117,7 @@ broadcastedname(mvar) = Symbol(mvar, "##broadcasted##")
 function pushbroadcast!(q::Expr, mvar::Symbol)
     push!(q.args, Expr(:(=), broadcastedname(mvar), Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, mvar)))
 end
+
 function lower_load_no_optranslation!(
     q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, mask::Bool, inds_calc_by_ptr_offset::Vector{Bool}
 )
@@ -127,15 +130,16 @@ function lower_load_no_optranslation!(
     falseexpr = Expr(:call, lv(:False)); rs = staticexpr(reg_size(ls))
     if all(op.ref.loopedindex) && !rejectcurly(op)
         inds = unrolledindex(op, td, mask, inds_calc_by_ptr_offset, ls)
-        loadexpr = Expr(:call, lv(:_vload), vptr(op), inds)
+        loadexpr = Expr(:call, lv(:_vload), sptr(op), inds)
         add_memory_mask!(loadexpr, op, td, mask, ls)
         push!(loadexpr.args, falseexpr, rs) # unaligned load
         push!(q.args, Expr(:(=), mvar, loadexpr))
     elseif (u₁ > 1) & opu₁
         t = Expr(:tuple)
+        sptrsym = sptr!(q, op)
         for u ∈ 1:u₁
             inds = mem_offset_u(op, td, inds_calc_by_ptr_offset, true, u-1, ls)
-            loadexpr = Expr(:call, lv(:_vload), vptr(op), inds)
+            loadexpr = Expr(:call, lv(:_vload), sptrsym, inds)
             domask = mask && (isvectorized(op) & ((u == u₁) | (vloopsym !== u₁loopsym)))
             add_memory_mask!(loadexpr, op, td, domask, ls)
             push!(loadexpr.args, falseexpr, rs)
@@ -145,7 +149,7 @@ function lower_load_no_optranslation!(
         push!(q.args, Expr(:(=), mvar, Expr(:call, lv(:VecUnroll), t)))
     else
         inds = mem_offset_u(op, td, inds_calc_by_ptr_offset, true, 0, ls)
-        loadexpr = Expr(:call, lv(:_vload), vptr(op), inds)
+        loadexpr = Expr(:call, lv(:_vload), sptr(op), inds)
         add_memory_mask!(loadexpr, op, td, mask, ls)
         push!(loadexpr.args, falseexpr, rs)
         push!(q.args, Expr(:(=), mvar, loadexpr))
@@ -224,7 +228,8 @@ function lower_load_for_optranslation!(
         #     gespinds.args[i] = Expr(:call, lv(:unmm), gespinds.args[i])
         end
     end
-    push!(q.args, Expr(:(=), gptr, Expr(:call, lv(:gesp), ptr, gespinds)))
+    ip = GlobalRef(VectorizationBase, :increment_ptr)
+    push!(q.args, Expr(:(=), vptr_offset(gptr), Expr(:call, ip, ptr, vptr_offset(ptr), gespinds)))
     fill!(inds_by_ptroff, true)
     @unpack ref, loopedindex = mref
     indices = copy(getindices(ref))
@@ -452,8 +457,8 @@ function lower_load_collection!(
         false
     end
     uinds = Expr(:call, unrollcurl₂, inds)
-    vp = vptr(op)
-    loadexpr = Expr(:call, lv(:_vload), vp, uinds)
+    sptrsym = sptr!(q, op)
+    loadexpr = Expr(:call, lv(:_vload), sptrsym, uinds)
     # not using `add_memory_mask!(storeexpr, op, ua, mask, ls)` because we checked `isconditionalmemop` earlier in `lower_load_collection!`
     u₁vectorized = u₁loopsym === vloopsym
     if (mask && isvectorized(op))
@@ -462,7 +467,7 @@ function lower_load_collection!(
         end
     end
     push!(loadexpr.args, falseexpr, rs)
-    collectionname = Symbol(vp, "##collection##number#", opidmap[first(first(idsformap))], "#", suffix, "##size##", nouter, "##u₁##", u₁)
+    collectionname = Symbol(vptr(op), "##collection##number#", opidmap[first(first(idsformap))], "#", suffix, "##size##", nouter, "##u₁##", u₁)
     gf = GlobalRef(Core,:getfield)
     if manualunrollu₁
         masklast = mask & u₁vectorized & isvectorized(op)

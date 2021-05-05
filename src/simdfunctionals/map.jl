@@ -8,10 +8,10 @@ function setup_vmap!(
 ) where {F, T <: Base.HWReal, A}
     N = length(y)
     ptry = VectorizationBase.zstridedpointer(y)
-    ptrargs = VectorizationBase.zstridedpointer.(args)
+    ptrargs = map(VectorizationBase.zstridedpointer, args)
     V = pick_vector_width(T)
     W = unwrap(V)
-    zero_index = MM{W}(Static(0))
+    zero_index = (MM{W}(Static(0)),)
     uintptry = reinterpret(UInt, pointer(ptry))
     @assert iszero(uintptry & (sizeof(T) - 1)) "The destination vector (`dest`) must be aligned to `sizeof(eltype(dest)) == $(sizeof(T))` bytes."
     alignment = uintptry & (register_size() - 1)
@@ -21,17 +21,31 @@ function setup_vmap!(
         if N < i
             m &= mask(T, N & (W - 1))
         end
-        _vstore!(ptry, f(vload.(ptrargs, ((zero_index,),), m)...), (zero_index,), m, False(), True(), False(), register_size())
-        gesp(ptry, (i,)), gesp.(ptrargs, ((i,),)), N - i
+        _vstore!(ptry, f(map1(vload, ptrargs, zero_index, m)...), zero_index, m, False(), True(), False(), register_size())
+        gesp(ptry, (i,)), map1(gesp, ptrargs, (i,)), N - i
     else
         ptry, ptrargs, N
     end
 end
+function map1_quote(K::Int, args::Int)
+  t = Expr(:tuple)
+  gf = GlobalRef(Core,:getfield)
+  for k ∈ 1:K
+    c = Expr(:call, :f, Expr(:call, gf, :x_1, k, false))
+    for a ∈ 2:args
+      push!(c.args, Symbol(:x_,a))
+    end
+    push!(t.args, c)
+  end
+  Expr(:block, Expr(:meta,:inline), t)
+end
+@generated map1(f::F, x_1::Tuple{Vararg{Any,K}}, x_2) where {F,K} = map1_quote(K, 2)
+@generated map1(f::F, x_1::Tuple{Vararg{Any,K}}, x_2, x_3) where {F,K} = map1_quote(K, 3)
 
 @inline function setup_vmap!(f, y, ::Val{false}, args::Vararg{AbstractArray,A}) where {A}
     N = length(y)
     ptry = VectorizationBase.zstridedpointer(y)
-    ptrargs = VectorizationBase.zstridedpointer.(args)
+    ptrargs = map(VectorizationBase.zstridedpointer, args)
     ptry, ptrargs, N
 end
 
@@ -57,7 +71,7 @@ function vmap_singlethread!(
     LOG2UNROLL = 2
     while i < N - ((W << LOG2UNROLL) - 1)
         index = VectorizationBase.Unroll{1,W,UNROLL,1,W,0x0000000000000000}((i,))
-        v = f(vload.(ptrargs, index)...)
+        v = f(VectorizationBase.fmap(vload, ptrargs, index)...)
         if NonTemporal
             _vstore!(ptry, v, index, True(), True(), True(), register_size())
         else
@@ -74,7 +88,7 @@ function vmap_singlethread!(
     #     end
     # else
     while i < N - (W - 1) # stops at 16 when
-        vᵣ = f(vload.(ptrargs, ((MM{W}(i),),))...)
+        vᵣ = f(map1(vload, ptrargs, (MM{W}(i),))...)
         if NonTemporal
             _vstore!(ptry, vᵣ, (MM{W}(i),), True(), True(), True(), register_size())
         else
@@ -83,12 +97,13 @@ function vmap_singlethread!(
         i = vadd_fast(i, W)
     end
     if i < N
-        m = mask(T, N & (W - 1))
-        if NonTemporal
-            _vstore!(ptry, f(vload.(ptrargs, ((MM{W}(i),),), m)...), (MM{W}(i,),), m, True(), True(), False(), register_size())
-        else
-            _vstore!(ptry, f(vload.(ptrargs, ((MM{W}(i),),), m)...), (MM{W}(i,),), m, False(), True(), False(), register_size())
-        end
+      m = mask(T, N & (W - 1))
+      vfinal = f(map1(vload, ptrargs, (MM{W}(i),), m)...)
+      if NonTemporal
+        _vstore!(ptry, vfinal, (MM{W}(i,),), m, True(), True(), False(), register_size())
+      else
+        _vstore!(ptry, vfinal, (MM{W}(i,),), m, False(), True(), False(), register_size())
+      end
     end
     # end
     nothing

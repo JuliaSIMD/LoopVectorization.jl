@@ -154,12 +154,12 @@ function OperationStruct!(varnames::Vector{Symbol}, ids::Vector{Int}, ls::LoopSe
 end
 ## turn a LoopSet into a type object which can be used to reconstruct the LoopSet.
 
-@inline zerorangestart(r::Base.OneTo) = CloseOpen(length(r))
+@inline zerorangestart(r::Base.OneTo) = CloseOpen(maybestaticlast(r))
 @inline zerorangestart(r::CloseOpen) = CloseOpen(length(r))
 @inline zerorangestart(r::AbstractUnitRange) = Zero():One():(maybestaticlast(r)-maybestaticfirst(r))
 @inline zerorangestart(r::AbstractRange) = Zero():static_step(r):(maybestaticlast(r)-maybestaticfirst(r))
 @inline zerorangestart(r::CartesianIndices) = CartesianIndices(map(zerorangestart, r.indices))
-@inline zerorangestart(r::ArrayInterface.OptionallyStaticUnitRange{StaticInt{1}}) = CloseOpen(last(r)) 
+@inline zerorangestart(r::ArrayInterface.OptionallyStaticUnitRange{StaticInt{1}}) = CloseOpen(maybestaticlast(r))
 
 function loop_boundary!(q::Expr, ls::LoopSet, loop::Loop, shouldindbyind::Bool)
   if isstaticloop(loop) || loop.rangesym === Symbol("")

@@ -99,7 +99,8 @@ function lower_store_collection!(
     end
     uinds = Expr(:call, unrollcurl₂, inds)
     vp = vptr(op)
-    storeexpr = Expr(:call, lv(:_vstore!), vp, Expr(:call, lv(:VecUnroll), t), uinds)
+    sptrsym = sptr!(q, op)
+    storeexpr = Expr(:call, lv(:_vstore!), sptrsym, Expr(:call, lv(:VecUnroll), t), uinds)
     # not using `add_memory_mask!(storeexpr, op, ua, mask, ls)` because we checked `isconditionalmemop` earlier in `lower_load_collection!`
     u₁vectorized = u₁loopsym === vloopsym
     if mask# && isvectorized(op))
@@ -172,9 +173,9 @@ function lower_store!(
     if all(op.ref.loopedindex)
         inds = unrolledindex(op, ua, mask, inds_calc_by_ptr_offset, ls)
         storeexpr = if reductfunc === Symbol("")
-            Expr(:call, lv(:_vstore!), vptr(op), mvar, inds)
+            Expr(:call, lv(:_vstore!), sptr(op), mvar, inds)
         else
-            Expr(:call, lv(:_vstore!), lv(reductfunc), vptr(op), mvar, inds)
+            Expr(:call, lv(:_vstore!), lv(reductfunc), sptr(op), mvar, inds)
         end
         add_memory_mask!(storeexpr, op, ua, mask, ls)
         push!(storeexpr.args, falseexpr, aliasexpr, falseexpr, rs)
@@ -191,19 +192,20 @@ function lower_store!(
         mvard = Symbol(mvar, "##data##")
         # isu₁ &&
         data_u₁ && push!(q.args, Expr(:(=), mvard, Expr(:call, lv(:data), mvar)))
+        sptrsym = sptr!(q, op)
         for u ∈ 1:u₁
           inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, true, u-1, ls)
           # @show isu₁unrolled(opp), opp
           storeexpr = if data_u₁
             if reductfunc === Symbol("")
-              Expr(:call, lv(:_vstore!), vptr(op), gf(mvard,u), inds)
+              Expr(:call, lv(:_vstore!), sptrsym, gf(mvard,u), inds)
             else
-              Expr(:call, lv(:_vstore!), lv(reductfunc), vptr(op), mvaru, inds)
+              Expr(:call, lv(:_vstore!), lv(reductfunc), sptrsym, mvaru, inds)
             end
           elseif reductfunc === Symbol("")
-            Expr(:call, lv(:_vstore!), vptr(op), mvar, inds)
+            Expr(:call, lv(:_vstore!), sptrsym, mvar, inds)
           else
-            Expr(:call, lv(:_vstore!), lv(reductfunc), vptr(op), mvar, inds)
+            Expr(:call, lv(:_vstore!), lv(reductfunc), sptrsym, mvar, inds)
           end
           domask = mask && (isvectorized(op) & ((u == u₁) | (vloopsym !== u₁loopsym)))
           add_memory_mask!(storeexpr, op, ua, domask, ls)# & ((u == u₁) | isvectorized(op)))
@@ -213,9 +215,9 @@ function lower_store!(
       else
         inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, true, 0, ls)
         storeexpr = if reductfunc === Symbol("")
-          Expr(:call, lv(:_vstore!), vptr(op), mvar, inds)
+          Expr(:call, lv(:_vstore!), sptr(op), mvar, inds)
         else
-          Expr(:call, lv(:_vstore!), lv(reductfunc), vptr(op), mvar, inds)
+          Expr(:call, lv(:_vstore!), lv(reductfunc), sptr(op), mvar, inds)
         end
         add_memory_mask!(storeexpr, op, ua, mask, ls)
         push!(storeexpr.args, falseexpr, aliasexpr, falseexpr, rs)
@@ -289,7 +291,7 @@ function lower_tiled_store!(blockq::Expr, op::Operation, ls::LoopSet, ua::Unroll
         inds = Expr(:call, unrollcurl₁, inds)
     end
     uinds = Expr(:call, unrollcurl₂, inds)
-    storeexpr = Expr(:call, lv(:_vstore!), vptr(op), vut, uinds)
+    storeexpr = Expr(:call, lv(:_vstore!), sptr(op), vut, uinds)
     if mask && isvectorized(op)
         # add_memory_mask!(storeexpr, op, ua, mask, ls)
         # we checked for `isconditionalmemop` earlier, so we skip this check

@@ -36,7 +36,7 @@ function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{R}) where {R<:AbstractR
     f = ArrayInterface.known_first(R)
     s = ArrayInterface.known_step(R)
     l = ArrayInterface.known_last(R)
-
+  @show R f,s,l
     Loop(ls, ex, sym, f, s, l)
 end
 
@@ -673,19 +673,19 @@ Execute an `@avx` block. The block's code is represented via the arguments:
     ::Val{var"#UNROLL#"}, ::Val{var"#OPS#"}, ::Val{var"#ARF#"}, ::Val{var"#AM#"}, ::Val{var"#LPSYM#"}, var"#lv#tuple#args#"::Tuple{var"#LB#",var"#V#"}
 ) where {var"#UNROLL#", var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#", var"#V#"}
     # 1 + 1 # Irrelevant line you can comment out/in to force recompilation...
-    ls = _avx_loopset(var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#".parameters, var"#V#".parameters, var"#UNROLL#")
-    # return @show avx_body(ls, var"#UNROLL#")
-    if last(var"#UNROLL#") > 1
-        inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, nt = var"#UNROLL#"
-        # wrap in `var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#"` in `Expr` to homogenize types
-        avx_threads_expr(
-            ls, (inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, one(UInt)), nt,
-            :(Val{$(var"#OPS#")}()), :(Val{$(var"#ARF#")}()), :(Val{$(var"#AM#")}()), :(Val{$(var"#LPSYM#")}())
-        )
-    else
-        # Main.BODY[] = avx_body(ls, var"#UNROLL#")
-        # @show avx_body(ls, var"#UNROLL#")
-        avx_body(ls, var"#UNROLL#")
-    end
-    # @show var"#UNROLL#", var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#"
+  ls = _avx_loopset(var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#".parameters, var"#V#".parameters, var"#UNROLL#")
+  # return @show avx_body(ls, var"#UNROLL#")
+  if last(var"#UNROLL#") > 1
+    inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, nt = var"#UNROLL#"
+    # wrap in `var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#"` in `Expr` to homogenize types
+    avx_threads_expr(
+      ls, (inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, one(UInt)), nt,
+      :(Val{$(var"#OPS#")}()), :(Val{$(var"#ARF#")}()), :(Val{$(var"#AM#")}()), :(Val{$(var"#LPSYM#")}())
+    )
+  else
+    # Main.BODY[] = avx_body(ls, var"#UNROLL#")
+    # @show avx_body(ls, var"#UNROLL#")
+    avx_body(ls, var"#UNROLL#")
+  end
+  # @show var"#UNROLL#", var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#"
 end

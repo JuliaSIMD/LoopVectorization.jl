@@ -411,15 +411,18 @@ function loopvarremcomparison(loop::Loop, UFt::Int, nisvectorized::Bool, remfirs
     end
 end
 function pointerremcomparison(ls::LoopSet, termind::Int, UFt::Int, n::Int, nisvectorized::Bool, remfirst::Bool, loop::Loop)
-    lssm = ls.lssm
-    termar = lssm.incrementedptrs[n][termind]
-    ptrdef = lssm.incrementedptrs[n][termind]
-    ptr = vptr(termar)
-    if remfirst
-        Expr(:call, :<, ptr, pointermax(ls, ptrdef, n, 1 - UFt, nisvectorized, loop))
-    else
-        Expr(:call, :≥, ptr, maxsym(ptr, UFt))
-    end
+  lssm = ls.lssm
+  termar = lssm.incrementedptrs[n][termind]
+  ptrdef = lssm.incrementedptrs[n][termind]
+  ptr = vptr(termar)
+  ptroff = vptr_offset(ptr)
+  if remfirst
+    cmp = GlobalRef(VectorizationBase, :vlt)
+    Expr(:call, cmp, ptroff, pointermax(ls, ptrdef, n, 1 - UFt, nisvectorized, loop), ptr)
+  else
+    cmp = GlobalRef(VectorizationBase, :vge)
+    Expr(:call, cmp, ptroff, maxsym(ptr, UFt), ptr)
+  end
 end
 
 
@@ -710,7 +713,8 @@ function init_remblock(unrolledloop::Loop, lssm::LoopStartStopManager, n::Int)#u
   else
     termar = lssm.incrementedptrs[n][termind]
     ptr = vptr(termar)
-    condition = Expr(:call, GlobalRef(Base,:<), ptr, maxsym(ptr, 0))
+    ptroff = vptr_offset(ptr)
+    condition = Expr(:call, GlobalRef(VectorizationBase,:vlt), ptroff, maxsym(ptr, 0), ptr)
   end
   Expr(:if, condition)
 end

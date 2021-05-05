@@ -172,6 +172,17 @@ function mem_offset(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Vect
     end
     ret
 end
+function sptr(op::Operation)
+  vp = vptr(op)
+  Expr(:call, GlobalRef(VectorizationBase, :reconstruct_ptr), vp, vptr_offset(vp))
+end
+function sptr!(q::Expr, op::Operation)
+  vp = vptr(op)
+  sptrsym = gensym(vp)
+  push!(q.args, Expr(:(=), sptrsym, sptr(op)))
+  sptrsym
+end
+
 # function unrolled_curly(op::Operation, u₁::Int, u₁loopsym::Symbol, vectorized::Symbol, mask::Bool)
 
 # interleave: `0` means `false`, positive means literal, negative means multiplier
@@ -183,7 +194,6 @@ function unrolled_curly(op::Operation, u₁::Int, u₁loop::Loop, vloop::Loop, m
     li = op.ref.loopedindex
     # @assert all(loopedindex)
     # @unpack u₁, u₁loopsym, vloopsym = td
-    # @show vptr(op), inds_calc_by_ptr_offset
     AV = AU = -1
     for (n,ind) ∈ enumerate(indices)
         # @show AU, op, n, ind, vloopsym, u₁loopsym
