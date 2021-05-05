@@ -229,7 +229,9 @@ function lower_load_for_optranslation!(
         end
     end
     ip = GlobalRef(VectorizationBase, :increment_ptr)
-    push!(q.args, Expr(:(=), vptr_offset(gptr), Expr(:call, ip, ptr, vptr_offset(ptr), gespinds)))
+    vpo = vptr_offset(gptr)
+    push!(q.args, Expr(:(=), vpo, Expr(:call, ip, ptr, vptr_offset(ptr), gespinds)))
+    push!(q.args, Expr(:(=), gptr, ptr))#Expr(:call, GlobalRef(VectorizationBase, :reconstruct_ptr), 
     fill!(inds_by_ptroff, true)
     @unpack ref, loopedindex = mref
     indices = copy(getindices(ref))

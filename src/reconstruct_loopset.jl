@@ -36,7 +36,6 @@ function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{R}) where {R<:AbstractR
     f = ArrayInterface.known_first(R)
     s = ArrayInterface.known_step(R)
     l = ArrayInterface.known_last(R)
-  @show R f,s,l
     Loop(ls, ex, sym, f, s, l)
 end
 
