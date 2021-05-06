@@ -27,16 +27,14 @@ using VectorizationBase: register_size, register_count, cache_linesize, cache_si
 using IfElse: ifelse
 
 using ThreadingUtilities, CheapThreads
-using SLEEFPirates: pow
 using Base.Broadcast: Broadcasted, DefaultArrayStyle
 using LinearAlgebra: Adjoint, Transpose, Diagonal
 using Base.Meta: isexpr
 using DocStringExtensions
 import LinearAlgebra # for check_args
 
-using Base.FastMath: add_fast, sub_fast, mul_fast, div_fast, inv_fast, abs2_fast, rem_fast, max_fast, min_fast
-using SLEEFPirates: log_fast, log2_fast, log10_fast
-
+using Base.FastMath: add_fast, sub_fast, mul_fast, div_fast, inv_fast, abs2_fast, rem_fast, max_fast, min_fast, pow_fast
+using SLEEFPirates: log_fast, log2_fast, log10_fast, pow
 
 using ArrayInterface
 using ArrayInterface: OptionallyStaticUnitRange, OptionallyStaticRange, Zero, One, StaticBool, True, False, reduce_tup, indices, UpTri, LoTri
