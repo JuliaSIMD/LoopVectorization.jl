@@ -256,7 +256,7 @@ function add_compute!(
     # instr = instruction(first(ex.args))::Symbol
     instr = instruction!(ls, first(ex.args))::Instruction
     args = @view(ex.args[2:end])
-    if instr.instr === :(^) && length(args) == 2
+    if (instr.instr === :pow_fast || instr.instr === :(^)) && length(args) == 2
         arg2 = args[2]
         arg2 isa Number && return add_pow!(ls, var, args[1], arg2, elementbytes, position)
     end

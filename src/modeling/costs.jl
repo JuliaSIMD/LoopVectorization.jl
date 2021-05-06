@@ -238,6 +238,7 @@ const COST = Dict{Symbol,InstructionCost}(
     :exp10 => InstructionCost(-3.0,13.0,26.0,14),
     :expm1 => InstructionCost(-3.0,30.0,60.0,19),
     :(^) => InstructionCost(-3.0,200.0,400.0,26), # FIXME
+    :pow_fast => InstructionCost(-3.0,200.0,400.0,26), # FIXME
     :sin => InstructionCost(-3,30.0,60.0,23),
     :cos => InstructionCost(-3,27.0,60.0,26),
     :sincos => InstructionCost(-3,37.0,85.0,26),
