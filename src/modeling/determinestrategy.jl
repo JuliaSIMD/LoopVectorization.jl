@@ -114,6 +114,7 @@ function cost(ls::LoopSet, op::Operation, (u₁,u₂)::Tuple{Symbol,Symbol}, vlo
                 #       Also, once more SVE (scalable vector extension) CPUs are released, would be nice to know if
                 #       this feature is common to all of them.
                 srt += 0.5reg_size(ls) / cache_lnsze(ls)
+                # srt += 0.25reg_size(ls) / cache_lnsze(ls)
             end
         elseif isstore(op) # broadcast or reductionstore; if store we want to penalize reduction
             srt *= 3
@@ -798,6 +799,7 @@ function load_elimination_cost_factor!(
     @unpack u₁loopsym, u₂loopsym, vloopsym = unrollsyms
     if !iszero(first(isoptranslation(ls, op, unrollsyms)))
         rt, lat, rp = cost(ls, op, (u₁loopsym, u₂loopsym), vloopsym, Wshift, size_T)
+        # rt = Core.ifelse(isvectorized(op), 0.5rt, rt)
         rto = rt
         rt *= iters
             # rt *= factor1; rp *= factor2;
@@ -818,7 +820,9 @@ function load_elimination_cost_factor!(
         # # (0.25, dynamic_register_count() == 32 ? 1.2 : 1.0)
         # (0.25, 1.0)
         # cost_vec[1] -= rt
-        cost_vec[1] -= 0.5625 * iters
+        # cost_vec[1] -= 0.5625 * iters
+      # cost_vec[1] -= 0.5625 * iters / 2
+      # @show rto, 0.8rt, op
         reg_pressure[1] += 0.25rp
         cost_vec[2] += rt
         reg_pressure[2] += rp
@@ -924,7 +928,7 @@ function evaluate_cost_tile(ls::LoopSet, order::Vector{Symbol}, unrollsyms::Unro
   nops = length(operations(ls))
   iters = Vector{Float64}(undef, nops)
   reduced_by_unrolling = Array{Bool}(undef, 2, 2, nops)
-  evaluate_cost_tile!(iters, reduced_bu_unrolling, ls, order, unrollsyms, anyisbit)
+  evaluate_cost_tile!(iters, reduced_by_unrolling, ls, order, unrollsyms, anyisbit)
 end
 function evaluate_cost_tile!(
   iters::Vector{Float64}, reduced_by_unrolling::Array{Bool,3}, ls::LoopSet, order::Vector{Symbol}, unrollsyms::UnrollSymbols, anyisbit::Bool
@@ -1062,6 +1066,7 @@ function evaluate_cost_tile!(
         rp = opisininnerloop ? rp : zero(rp) # we only care about register pressure within the inner most loop
         rto = rt
         rt *= iters[id]
+        # @show (u₁reducesrt, u₂reducesrt), rto, rt, lat, rp, op 
         if isstore(op) & (!u₁reducesrt) & (!u₂reducesrt)
             irreducible_storecosts += rt
         end
