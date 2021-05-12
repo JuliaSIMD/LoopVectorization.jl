@@ -4,30 +4,20 @@ Base.:|(u::Unsigned, it::IndexType) = u | UInt8(it)
 Base.:(==)(u::Unsigned, it::IndexType) = (u % UInt8) == UInt8(it)
 
 function _append_fields!(t::Expr, body::Expr, sym::Symbol, ::Type{T}) where {T}
-  if T <: DataType
-    push!(t.args, Expr(:call, GlobalRef(Base,:Val), sym))
-    return
-  end
-  numfields = fieldcount(T)
-  if numfields === 0
-    if (sizeof(T) ≢ 0)
-      push!(t.args, sym)
-    end
-    return
-  end
   gf = GlobalRef(Core,:getfield)
-  for f ∈ 1:numfields
+  for f ∈ 1:fieldcount(T)
     TF = fieldtype(T, f)
-    TFC = fieldcount(TF)
     gfcall = Expr(:call, gf, sym, f)
-    if TF <: DataType
+    if Base.issingletontype(TF)
+      nothing
+    elseif fieldcount(TF) ≡ 0
+      push!(t.args, gfcall)
+    elseif TF <: DataType
       push!(t.args, Expr(:call, GlobalRef(Base,:Val), gfcall))
-    elseif TFC ≢ 0
+    else
       newsym = gensym(sym)
       push!(body.args, Expr(:(=), newsym, gfcall))
       _append_fields!(t, body, newsym, TF)
-    elseif (sizeof(TF) ≢ 0)
-      push!(t.args, gfcall)
     end
   end
   return nothing
@@ -36,42 +26,47 @@ end
   numfields = fieldcount(T)
   body = Expr(:block, Expr(:meta,:inline))
   t = Expr(:tuple)
-  _append_fields!(t, body, :r, T)
+  if Base.issingletontype(T)
+    nothing
+  elseif fieldcount(T) ≡ 0
+    push!(t.args, :r)
+  elseif T <: DataType
+    push!(t.args, Expr(:call, GlobalRef(Base,:Val), :r))
+  else
+    _append_fields!(t, body, :r, T)
+  end
   push!(body.args, t)
   body
 end
-function rebuild_fields(sym::Symbol, offset::Int, ::Type{T}) where {T}
+function rebuild_fields(offset::Int, ::Type{T}) where {T}
   numfields = fieldcount(T)
   gf = GlobalRef(Core,:getfield)
-  if numfields === 0
-    if sizeof(T) === 0
-      return Expr(:new, T), offset
-    else
-      ret = Expr(:call, gf, sym, (offset += 1), false)
-      return ret, offset
-    end
-  elseif T <: DataType
-    ret = Expr(:call, gf, sym, (offset += 1), false)
-    ret = Expr(:call, GlobalRef(VectorizationBase, :unwrap), ret)
-    return ret, offset
-  end
   call = (T <: Tuple) ? Expr(:tuple) : Expr(:new, T)
   for f ∈ 1:numfields
     TF = fieldtype(T, f)
-    TFC = fieldcount(TF)
-    if TFC ≢ 0
-      arg, offset = rebuild_fields(sym, offset, TF)
-      push!(call.args, arg)
-    elseif sizeof(TF) === 0
-      push!(call.args, Expr(:new, TF))
+    if Base.issingletontype(TF)
+      push!(call.args, TF.instance)
+    elseif fieldcount(TF) ≡ 0
+      push!(call.args, Expr(:call, gf, :t, (offset += 1), false))
+    elseif TF <: DataType
+      push!(call.args, Expr(:call, GlobalRef(VectorizationBase, :unwrap), Expr(:call, gf, :t, (offset += 1), false)))
     else
-      push!(call.args, Expr(:call, gf, sym, (offset += 1), false))
+      arg, offset = rebuild_fields(offset, TF)
+      push!(call.args, arg)      
     end
   end
   return call, offset
 end
 @generated function reassemble_tuple(::Type{T}, t::Tuple) where {T}
-  call, offset = rebuild_fields(:t, 0, T)
+  if Base.issingletontype(T)
+    return T.instance
+  elseif fieldcount(T) ≡ 0
+    call = Expr(:call, GlobalRef(Core,:getfield), :t, 1, false)
+  elseif T <: DataType
+    call = Expr(:call, GlobalRef(VectorizationBase, :unwrap), Expr(:call, GlobalRef(Core,:getfield), :t, 1, false))
+  else
+    call, _ = rebuild_fields(0, T)
+  end
   Expr(:block, Expr(:meta,:inline), call)
 end
 
@@ -362,7 +357,7 @@ val(x) = Expr(:call, Expr(:curly, :Val, x))
   ri = max(1, ri)
   quote
     $(Expr(:meta,:inline))
-    p, li = VectorizationBase.tdot(x, (vsub_fast(getfield(i,1,false),1),), VectorizationBase.strides(x))
+    p, li = VectorizationBase.tdot(x, (vsub_nsw(getfield(i,1,false),1),), VectorizationBase.strides(x))
     ptr = gep(p, li)
     StridedPointer{$T,1,$(C===1 ? 1 : 0),$(B===1 ? 1 : 0),$(R[ri],)}(ptr, (getfield(getfield(x,:strd), $ri, 1),), (Zero(),))
   end
@@ -399,7 +394,7 @@ end
   I === Zero && return :x
   quote
     $(Expr(:meta,:inline))
-    p, li = VectorizationBase.tdot(x, (vsub_fast(getfield(i,1,false),1),), VectorizationBase.strides(x))
+    p, li = VectorizationBase.tdot(x, (vsub_nsw(getfield(i,1,false),1),), VectorizationBase.strides(x))
     ptr = gep(p, li)
     StridedBitPointer{1,$(C===1 ? 1 : 0),$(B===1 ? 1 : 0),$(first(R),)}(ptr, (first(getfield(x,:strd)),), (Zero(),))
   end

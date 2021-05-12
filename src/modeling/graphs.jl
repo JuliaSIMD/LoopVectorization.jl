@@ -118,7 +118,6 @@ function startloop(loop::Loop, itersymbol, staticinit::Bool=false)
     Expr(:(=), itersymbol, Expr(:call, lv(:Int), getsym(start)))
   end
 end
-# mulexpr(a,b) = Expr(:call, lv(:vmul_fast), a, b)
 
 pushmulexpr!(q, a, b) = (push!(q.args, mulexpr(a, b)); nothing)
 function pushmulexpr!(q, a, b::Integer)
@@ -138,9 +137,9 @@ end
 isknown(x::Union{Symbol,Expr}) = false
 isknown(x::Integer) = true
 gethint(a::Integer) = a
-addexpr(a,b) = arithmeticexpr(+, :vadd_fast, a, b)
-subexpr(a,b) = arithmeticexpr(-, :vsub_fast, a, b)
-mulexpr(a,b) = arithmeticexpr(*, :vmul_fast, a, b)
+addexpr(a,b) = arithmeticexpr(+, :vadd_nsw, a, b)
+subexpr(a,b) = arithmeticexpr(-, :vsub_nsw, a, b)
+mulexpr(a,b) = arithmeticexpr(*, :vmul_nsw, a, b)
 lazymulexpr(a,b) = arithmeticexpr(*, :lazymul, a, b)
 function arithmeticexpr(op, f, a, b)
     if isknown(a) & isknown(b)
@@ -152,8 +151,8 @@ function arithmeticexpr(op, f, a, b)
         return ex
     end
 end
-mulexpr(a,b,c) = arithmeticexpr(*, 1, :vmul_fast, a, b, c)
-addexpr(a,b,c) = arithmeticexpr(+, 0, :vadd_fast, a, b, c)
+mulexpr(a,b,c) = arithmeticexpr(*, 1, :vmul_nsw, a, b, c)
+addexpr(a,b,c) = arithmeticexpr(+, 0, :vadd_nsw, a, b, c)
 function arithmeticexpr(op, init, f, a, b, c)
     ex = Expr(:call, lv(f))
     p = init
@@ -193,9 +192,9 @@ end
 
 function addexpr(ex, incr::Integer)
   if incr > 0
-    f = :vadd_fast
+    f = :vadd_nsw
   else
-    f = :vsub_fast
+    f = :vsub_nsw
     incr = -incr
   end
   expr = Expr(:call, lv(f))
@@ -208,18 +207,15 @@ staticmulincr(ptr, incr) = Expr(:call, lv(:staticmul), Expr(:call, :eltype, ptr)
 @inline cmpend(i::Int, r::CloseOpen) = i < getfield(r,:upper)
 @inline cmpend(i::Int, r::AbstractUnitRange) = i ≤ last(r)
 @inline cmpend(i::Int, r::AbstractRange) = i ≤ last(r)
-# @inline cmpend(i::Int, r::AbstractRange) = i ≤ vsub_fast(last(r), step(r))
 
-@inline vcmpend(i::Int, r::CloseOpen, ::StaticInt{W}) where {W} = i ≤ vsub_fast(getfield(r,:upper), W)
+@inline vcmpend(i::Int, r::CloseOpen, ::StaticInt{W}) where {W} = i ≤ vsub_nsw(getfield(r,:upper), W)
 @inline vcmpendzs(i::Int, r::CloseOpen, ::StaticInt{W}) where {W} = i ≠ (getfield(r,:upper) &  (-W))
-@inline vcmpend(i::Int, r::AbstractUnitRange, ::StaticInt{W}) where {W} = i ≤ vsub_fast(last(r), W-1)
+@inline vcmpend(i::Int, r::AbstractUnitRange, ::StaticInt{W}) where {W} = i ≤ vsub_nsw(last(r), W-1)
 @inline vcmpendzs(i::Int, r::AbstractUnitRange, ::StaticInt{W}) where {W} = i ≠ (length(r) &  (-W))
 # i = 0
 # i += 4*3 # i = 12
-@inline vcmpend(i::Int, r::AbstractRange, ::StaticInt{W}) where {W} = i ≤ vsub_fast(last(r), vsub_fast(W*step(r), 1))
-@inline vcmpendzs(i::Int, r::AbstractRange, ::StaticInt{W}) where {W} = i ≤ vsub_fast(last(r), vsub_fast(W*step(r), 1))
-# @inline vcmpend(i::Int, r::AbstractRange, ::StaticInt{W}) where {W} = i ≤ vsub_fast(last(r), W*step(r))
-# @inline vcmpend(i::Int, r::AbstractRange, ::StaticInt{W}) where {W} = i ≤ vsub_fast(last(r), W)
+@inline vcmpend(i::Int, r::AbstractRange, ::StaticInt{W}) where {W} = i ≤ vsub_nsw(last(r), vsub_nsw(W*step(r), 1))
+@inline vcmpendzs(i::Int, r::AbstractRange, ::StaticInt{W}) where {W} = i ≤ vsub_nsw(last(r), vsub_nsw(W*step(r), 1))
 
 function staticloopexpr(loop::Loop)
   f = first(loop)
@@ -335,34 +331,6 @@ function incrementloopcounter!(q, us::UnrollSpecification, n::Int, UF::Int, incr
         push!(q.args, mulexpr(staticexpr(UF), incr))
     end
 end
-# function looplengthexpr(loop::Loop)
-#     if loop.stopexact
-#         if loop.startexact
-#             return length(loop)
-#         # elseif loop.rangename === Symbol("")
-#             # return Expr(:call, lv(:vsub_fast), loop.stophint + 1, loop.startsym)
-#         end
-#     elseif loop.startexact
-#         if isone(loop.starthint)
-#             return loop.stopsym
-#         # elseif loop.rangename === Symbol("")
-#             # return Expr(:call, lv(:vsub_fast), loop.stopsym, loop.starthint - 1)
-#         end
-#     # elseif loop.rangename === Symbol("")
-#         # return Expr(:call, lv(:vsub_fast), loop.stopsym, Expr(:call, lv(:staticm1), loop.startsym))
-#     end
-#     Expr(:call, lv(:static_length), loop.rangename)
-# end
-# use_expect() = false
-# use_expect() = true
-# function looplengthexpr(loop, n)
-#     le = looplengthexpr(loop)
-#     # if false && use_expect() && isone(n) && !isstaticloop(loop)
-#     #     le = expect(le)
-#     #     push!(le.args, Expr(:call, Expr(:curly, :Val, length(loop))))
-#     # end
-#     le
-# end
 
 # load/compute/store × isunrolled × istiled × pre/post loop × Loop number
 struct LoopOrder <: AbstractArray{Vector{Operation},5}

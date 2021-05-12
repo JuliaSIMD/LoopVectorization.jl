@@ -103,16 +103,16 @@ function ∂vmap_singlethread!(
     W = Int(V)
     st = VectorizationBase.static_sizeof(T)
     zero_index = MM{W}(StaticInt(0), st)
-    while i < N - ((W << 2) - 1)
+    while i < vsub_nsw(N, ((W << 2) - 1))
         index = VectorizationBase.Unroll{1,W,4,1,W,0x0000000000000000}((i,))
         v = f(init_dual(vload.(ptrargs, index))...)
         dual_store!(ptr∂y, ptry, v, index)
-        i = vadd_fast(i, 4W)
+        i = vadd_nw(i, 4W)
     end
-    while i < N - (W - 1) 
+    while i < vsub_nsw(N, (W - 1))
         vᵣ = f(init_dual(vload.(ptrargs, ((MM{W}(i),),)))...)
         dual_store!(ptr∂y, ptry, vᵣ, (MM{W}(i),))
-        i = vadd_fast(i, W)
+        i = vadd_nw(i, W)
     end
     if i < N
         m = mask(T, N & (W - 1))

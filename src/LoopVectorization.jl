@@ -3,10 +3,10 @@ module LoopVectorization
 using Static: StaticInt, gt
 using VectorizationBase, SLEEFPirates, UnPack, OffsetArrays
 using VectorizationBase: register_size, register_count, cache_linesize, cache_size, has_opmask_registers,
-    mask, pick_vector_width, MM, AbstractMask, data, grouped_strided_pointer,
-    maybestaticlength, maybestaticsize, staticm1, staticp1, staticmul, vzero,
-    maybestaticrange, offsetprecalc, lazymul,
-    maybestaticfirst, maybestaticlast, scalar_less, scalar_greaterequal, gep, gesp, NativeTypes, #llvmptr,
+  mask, pick_vector_width, MM, AbstractMask, data, grouped_strided_pointer,
+  maybestaticlength, maybestaticsize, vzero, maybestaticrange, offsetprecalc, lazymul,
+  vadd_nw, vadd_nsw, vadd_nuw, vsub_nw, vsub_nsw, vsub_nuw, vmul_nw, vmul_nsw, vmul_nuw,
+    maybestaticfirst, maybestaticlast, gep, gesp, NativeTypes, #llvmptr,
     vfmadd, vfmsub, vfnmadd, vfnmsub, vfmadd_fast, vfmsub_fast, vfnmadd_fast, vfnmsub_fast, vfmadd231, vfmsub231, vfnmadd231, vfnmsub231,
     vfma_fast, vmuladd_fast, vdiv_fast, vadd_fast, vsub_fast, vmul_fast,
     relu, stridedpointer, stridedpointer_preserve, StridedPointer, StridedBitPointer, AbstractStridedPointer, _vload, _vstore!,

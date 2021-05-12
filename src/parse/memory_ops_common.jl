@@ -209,18 +209,18 @@ function muladd_op!(ls::LoopSet, mlt::Int, symop::Operation, offset::Int)
     vparents = [symop]
     # vparents = [, mltop, offop]
     if mlt == -1
-        f = :(-)
+        f = :vsub_nsw
         if offset ≠ 0
             pushfirst!(vparents, add_constant!(ls, offset, sizeof(Int)))
         end
     elseif mlt == 1
         offset == 0 && return only(vparents)
         push!(vparents, add_constant!(ls, offset, sizeof(Int)))
-        f = :(+)
+        f = :vadd_nsw
     else
         push!(vparents, add_constant!(ls, mlt, sizeof(Int)))
         f = if offset == 0
-            :(*)
+            :vmul_nsw
         else            
             push!(vparents, add_constant!(ls, offset, sizeof(Int)))
             :muladd

@@ -72,9 +72,13 @@ function recursive_muladd_search!(call, argv, mod, cnmul::Bool = false, csub::Bo
     fun = first(argv)
     isadd = fun === :+ || fun === :add_fast || fun === :vadd || (fun == :(Base.FastMath.add_fast))::Bool
     issub = fun === :- || fun === :sub_fast || fun === :vsub || (fun == :(Base.FastMath.sub_fast))::Bool
-    if !(isadd | issub)
-        muladd_arguments!(argv, mod, fun)
-        return length(call.args) == 4, cnmul, csub
+    if isadd
+      argv[1] = :add_fast
+    elseif issub
+      argv[1] = :sub_fast
+    else
+      muladd_arguments!(argv, mod, fun)
+      return length(call.args) == 4, cnmul, csub
     end
     exargs = @view(argv[2:end])
     issub && @assert length(exargs) == 2

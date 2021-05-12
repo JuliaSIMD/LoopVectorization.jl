@@ -679,9 +679,9 @@ function pointermax_index(
             else
                 _ind = if isvectorized
                     if isone(sub)
-                        Expr(:call, lv(:vsub_fast), staticexpr(stophint), VECTORWIDTHSYMBOL)
+                        Expr(:call, lv(:vsub_nsw), staticexpr(stophint), VECTORWIDTHSYMBOL)
                     else
-                        Expr(:call, lv(:vsub_fast), staticexpr(stophint), mulexpr(VECTORWIDTHSYMBOL, sub))
+                        Expr(:call, lv(:vsub_nsw), staticexpr(stophint), mulexpr(VECTORWIDTHSYMBOL, sub))
                     end
                 else
                     staticexpr(stophint - sub)
@@ -717,9 +717,9 @@ function pointermax_index(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int,
             else
                 _ind = if isvectorized
                     if isone(sub)
-                        Expr(:call, lv(:vsub_fast), stopsym, VECTORWIDTHSYMBOL)
+                        Expr(:call, lv(:vsub_nsw), stopsym, VECTORWIDTHSYMBOL)
                     else
-                        Expr(:call, lv(:vsub_fast), stopsym, mulexpr(VECTORWIDTHSYMBOL, sub))
+                        Expr(:call, lv(:vsub_nsw), stopsym, mulexpr(VECTORWIDTHSYMBOL, sub))
                     end
                 else
                      subexpr(stopsym, sub)
