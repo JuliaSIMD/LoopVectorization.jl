@@ -163,15 +163,17 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
     body = lower_block(ls, us, n, inclmask, 1)
     # align_loop = isone(n) & (ls.align_loops[] > 0)
     loopisstatic = isstaticloop(loop)
-    if !loopisstatic && (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !inclmask
-        tc = expect(tc)
-    end
+    # if !loopisstatic && (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !inclmask
+    #     tc = expect(tc)
+    # end
     W = nisvectorized ? ls.vector_width : 1
     loopisstatic &= (!iszero(W))
     # q = if align_loop
     #     Expr(:block, align_inner_loop_expr(ls, us, loop), Expr(:while, tc, body))
     # elseif nisvectorized
+    completely_unrolled = false
     if loopisstatic && (!ls.loadelimination) && (isone(length(loop) ÷ W) || (n ≤ 3 && length(loop) ≤ 8W && allinteriorunrolled(ls, us, n)))
+        completely_unrolled = true      
         q = Expr(:block)
         for _ ∈ 1:(length(loop) ÷ W)
             push!(q.args, body)
@@ -204,7 +206,7 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
         end
     end
     # if initialize
-    Expr(:let, startloop(ls, us, n), q)
+    Expr(:let, startloop(ls, us, n, completely_unrolled), q)
     # else
     #     q
     # end
@@ -231,7 +233,7 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     end
     remmask = inclmask | nisvectorized
     Ureduct = (n == num_loops(ls) && (u₂ == -1)) ? ureduct(ls) : -1
-    sl = startloop(ls, us, n)
+    sl = startloop(ls, us, n, false)
     UFt = loopisstatic ? cld(looplength % UFW, W) : 1
     # Don't place remainder first if we're going to have to mask this loop (i.e., if this loop is vectorized)
     remfirst = loopisstatic & (!nisvectorized) & (UFt > 0) & !(unsigned(Ureduct) < unsigned(UF))

@@ -3,6 +3,78 @@
 Base.:|(u::Unsigned, it::IndexType) = u | UInt8(it)
 Base.:(==)(u::Unsigned, it::IndexType) = (u % UInt8) == UInt8(it)
 
+function _append_fields!(t::Expr, body::Expr, sym::Symbol, ::Type{T}) where {T}
+  if T <: DataType
+    push!(t.args, Expr(:call, GlobalRef(Base,:Val), sym))
+    return
+  end
+  numfields = fieldcount(T)
+  if numfields === 0
+    if (sizeof(T) ≢ 0)
+      push!(t.args, sym)
+    end
+    return
+  end
+  gf = GlobalRef(Core,:getfield)
+  for f ∈ 1:numfields
+    TF = fieldtype(T, f)
+    TFC = fieldcount(TF)
+    gfcall = Expr(:call, gf, sym, f)
+    if TF <: DataType
+      push!(t.args, Expr(:call, GlobalRef(Base,:Val), gfcall))
+    elseif TFC ≢ 0
+      newsym = gensym(sym)
+      push!(body.args, Expr(:(=), newsym, gfcall))
+      _append_fields!(t, body, newsym, TF)
+    elseif (sizeof(TF) ≢ 0)
+      push!(t.args, gfcall)
+    end
+  end
+  return nothing
+end
+@generated function flatten_to_tuple(r::T) where {T}
+  numfields = fieldcount(T)
+  body = Expr(:block, Expr(:meta,:inline))
+  t = Expr(:tuple)
+  _append_fields!(t, body, :r, T)
+  push!(body.args, t)
+  body
+end
+function rebuild_fields(sym::Symbol, offset::Int, ::Type{T}) where {T}
+  numfields = fieldcount(T)
+  gf = GlobalRef(Core,:getfield)
+  if numfields === 0
+    if sizeof(T) === 0
+      return Expr(:call, T), offset
+    else
+      ret = Expr(:call, gf, sym, (offset += 1), false)
+      return ret, offset
+    end
+  elseif T <: DataType
+    ret = Expr(:call, gf, sym, (offset += 1), false)
+    ret = Expr(:call, GlobalRef(VectorizationBase, :unwrap), ret)
+    return ret, offset
+  end
+  call = (T <: Tuple) ? Expr(:tuple) : Expr(:call, T)
+  for f ∈ 1:numfields
+    TF = fieldtype(T, f)
+    TFC = fieldcount(TF)
+    if TFC ≢ 0
+      arg, offset = rebuild_fields(sym, offset, TF)
+      push!(call.args, arg)
+    elseif sizeof(TF) === 0
+      push!(call.args, Expr(:call, TF))
+    else
+      push!(call.args, Expr(:call, gf, sym, (offset += 1), false))
+    end
+  end
+  return call, offset
+end
+@generated function reassemble_tuple(::Type{T}, t::Tuple) where {T}
+  call, offset = rebuild_fields(:t, 0, T)
+  Expr(:block, Expr(:meta,:inline), call)
+end
+
 """
     ArrayRefStruct
 
@@ -610,9 +682,15 @@ function generate_call_types(
         end
     end
     append!(extra_args.args, arraysymbolinds) # add_array_symbols!
-    add_external_functions!(extra_args, ls) # extract_external_functions!
-    push!(q.args, Expr(:tuple, lbarg, extra_args))
+  add_external_functions!(extra_args, ls) # extract_external_functions!
+  if debug
     vecwidthdefq = Expr(:block)
+    push!(q.args, Expr(:tuple, lbarg, extra_args))
+  else
+    vargsym = gensym(:vargsym)
+    vecwidthdefq = Expr(:block, Expr(:(=), vargsym, Expr(:tuple, lbarg, extra_args)))
+    push!(q.args, Expr(:call, GlobalRef(Base,:Val), Expr(:call, GlobalRef(Base,:typeof), vargsym)), Expr(:(...), Expr(:call, lv(:flatten_to_tuple), vargsym)))
+  end
     define_eltype_vec_width!(vecwidthdefq, ls, nothing)
     push!(vecwidthdefq.args, q)
     if debug

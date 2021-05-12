@@ -106,13 +106,17 @@ unitstep(l::Loop) = isone(step(l))
 
 
 
-function startloop(loop::Loop, itersymbol)
-    start = first(loop)
-    if isknown(start)
-        Expr(:(=), itersymbol, gethint(start))
+function startloop(loop::Loop, itersymbol, staticinit::Bool=false)
+  start = first(loop)
+  if isknown(start)
+    if staticinit
+      Expr(:(=), itersymbol, staticexpr(gethint(start)))
     else
-        Expr(:(=), itersymbol, Expr(:call, lv(:Int), getsym(start)))
+      Expr(:(=), itersymbol, gethint(start))
     end
+  else
+    Expr(:(=), itersymbol, Expr(:call, lv(:Int), getsym(start)))
+  end
 end
 # mulexpr(a,b) = Expr(:call, lv(:vmul_fast), a, b)
 
@@ -895,27 +899,44 @@ function indices_loop!(ls::LoopSet, r::Expr, itersym::Symbol)::Loop
         arrays = r.args[2]
         dims = r.args[3]
         if isexpr(arrays, :tuple) && length(arrays.args) > 1 && all(s -> s isa Symbol, arrays.args)
-            narrays =  length(arrays.args)::Int
-            if dims isa Integer
-                # ids = Vector{NTuple{2,Int}}(undef, narrays)
-                vptrs = Vector{Symbol}(undef, narrays)
-                mdims = fill(dims::Int, narrays)
-                # _d::Int = dims
-                for n ∈ 1:narrays
-                    a_s::Symbol = arrays.args[n]
-                    vptrs[n] = vptr(a_s)
-                end
-                push!(ls.equalarraydims, (vptrs, mdims))
+          narrays =  length(arrays.args)::Int
+          axessyms = Vector{Symbol}(undef, narrays)
+          if dims isa Integer
+            # ids = Vector{NTuple{2,Int}}(undef, narrays)
+            vptrs = Vector{Symbol}(undef, narrays)
+            mdims = fill(dims::Int, narrays)
+            # _d::Int = dims
+            for n ∈ 1:narrays
+              a_s::Symbol = arrays.args[n]
+              vptrs[n] = vptr(a_s)
+              axessyms[n] = axsym = gensym!(ls, "#axes#$(a_s)#")
+              pushprepreamble!(ls, Expr(:(=), axsym, Expr(:call, GlobalRef(ArrayInterface, :axes), a_s, staticexpr(dims::Int))))
+              if n > 1
+                axsym_prev = axessyms[n-1]
+                pushprepreamble!(ls, Expr(:call, GlobalRef(VectorizationBase,:assume), Expr(:call, GlobalRef(Base,:(==)), Expr(:call, GlobalRef(ArrayInterface, :static_first), axsym), Expr(:call, GlobalRef(ArrayInterface, :static_first), axsym_prev))))
+                pushprepreamble!(ls, Expr(:call, GlobalRef(VectorizationBase,:assume), Expr(:call, GlobalRef(Base,:(==)), Expr(:call, GlobalRef(ArrayInterface, :static_last), axsym), Expr(:call, GlobalRef(ArrayInterface, :static_last), axsym_prev))))
+              end
+            end
+            push!(ls.equalarraydims, (vptrs, mdims))
             elseif isexpr(dims, :tuple) && length(dims.args) == narrays && all(i -> i isa Integer, dims.args)
-                # ids = Vector{NTuple{2,Int}}(undef, narrays)
-                vptrs = Vector{Symbol}(undef, narrays)
-                mdims = Vector{Int}(undef, narrays)
-                for n ∈ 1:narrays
-                    a_s::Symbol = arrays.args[n]
-                    vptrs[n] = vptr(a_s)
-                    mdims[n] = dims.args[n]
+              # ids = Vector{NTuple{2,Int}}(undef, narrays)
+              vptrs = Vector{Symbol}(undef, narrays)
+              mdims = Vector{Int}(undef, narrays)
+              axessyms = Vector{Symbol}(undef, narrays)
+              for n ∈ 1:narrays
+                a_s::Symbol = arrays.args[n]
+                vptrs[n] = vptr(a_s)
+                mdim::Int = dims.args[n]
+                mdims[n] = mdim
+                axessyms[n] = axsym = gensym!(ls, "#axes#$(a_s)#")
+                pushprepreamble!(ls, Expr(:(=), axsym, Expr(:call, GlobalRef(ArrayInterface, :axes), a_s, staticexpr(mdim))))
+                if n > 1
+                  axsym_prev = axessyms[n-1]
+                  pushprepreamble!(ls, Expr(:call, GlobalRef(VectorizationBase,:assume), Expr(:call, GlobalRef(Base,:(==)), Expr(:call, GlobalRef(ArrayInterface, :static_first), axsym), Expr(:call, GlobalRef(ArrayInterface, :static_first), axsym_prev))))
+                  pushprepreamble!(ls, Expr(:call, GlobalRef(VectorizationBase,:assume), Expr(:call, GlobalRef(Base,:(==)), Expr(:call, GlobalRef(ArrayInterface, :static_last), axsym), Expr(:call, GlobalRef(ArrayInterface, :static_last), axsym_prev))))
                 end
-                push!(ls.equalarraydims, (vptrs, mdims))
+              end
+              push!(ls.equalarraydims, (vptrs, mdims))
                 # push!(ls.equalarraydims, ids)
             end
         end

@@ -6,7 +6,7 @@ struct AVX{UNROLL,OPS,ARF,AM,LPSYM,LB,V} <: Function end
 function (::AVX{UNROLL,OPS,ARF,AM,LPSYM,LB,V})(p::Ptr{UInt}) where {UNROLL,OPS,ARF,AM,LPSYM,LB,V}
     (_, _vargs) = ThreadingUtilities.load(p, Tuple{LB,V}, 2*sizeof(UInt))
     # Main.VARGS[Threads.threadid()] = first(_vargs)
-    ret = _avx_!(Val{UNROLL}(), Val{OPS}(), Val{ARF}(), Val{AM}(), Val{LPSYM}(), _vargs)
+    ret = _avx_!(Val{UNROLL}(), Val{OPS}(), Val{ARF}(), Val{AM}(), Val{LPSYM}(), Val(Tuple{LB,V}), flatten_to_tuple(_vargs)...)
     ThreadingUtilities.store!(p, ret, Int(register_size()))
     nothing
 end
@@ -355,7 +355,8 @@ function thread_one_loops_expr(
       loop_boundary!(lastboundexpr, ls, loop, true)
     end
   end
-  _avx_call_ = :(_avx_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, ($lastboundexpr, var"#vargs#")))
+  avxcall_args = Expr(:tuple, lastboundexpr, Symbol("#vargs#"))
+  _avx_call_ = :(_avx_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, Val(typeof(var"#avx#call#args#")), flatten_to_tuple(var"#avx#call#args#")...))
   update_return_values = if length(ls.outer_reductions) > 0
     retv = loopset_return_value(ls, Val(false))
     _avx_call_ = Expr(:(=), retv, _avx_call_)
@@ -409,6 +410,7 @@ function thread_one_loops_expr(
       var"#torelease#" = zero(CheapThreads.worker_type())
       var"#threads#" = CheapThreads.UnsignedIteratorEarlyStop(var"#torelease#", 0x00000000)
     end
+    var"#avx#call#args#" = $avxcall_args
     $_avx_call_
     var"##do#thread##" || $retexpr
     var"#thread#id#" = 0x00000000
@@ -504,10 +506,13 @@ function thread_two_loops_expr(
       loop_boundary!(lastboundexpr, ls, loop, true)
     end
   end
-  _avx_call_ = :(_avx_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, ($lastboundexpr, var"#vargs#")))
+  avxcall_args = Expr(:tuple, lastboundexpr, Symbol("#vargs#"))
+  _avx_call_ = :(_avx_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, Val(typeof(var"#avx#call#args#")), flatten_to_tuple(var"#avx#call#args#")...))
+  # _avx_orig_ = :(_avx_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, var"#lv#tuple#args#"))
   update_return_values = if length(ls.outer_reductions) > 0
     retv = loopset_return_value(ls, Val(false))
     _avx_call_ = Expr(:(=), retv, _avx_call_)
+    # _avx_orig_ = Expr(:(=), retv, _avx_orig_)
     outer_reduct_combine_expressions(ls, retv)
   else
     nothing
@@ -518,6 +523,12 @@ function thread_two_loops_expr(
   retexpr = length(ls.outer_reductions) > 0 ? :(return $retv) : :(return nothing)
   q = quote
     $choose_nthread # UInt
+    $loopstart1
+    $loopstart2
+    # if var"#nthreads#" ≤ 1
+    #   $_avx_orig_
+    #   return $retexpr
+    # end
     $define_len1
     $define_len2
     $define_num_unrolls1
@@ -543,9 +554,7 @@ function thread_two_loops_expr(
     end
     # @show (var"#thread#factor#0#", var"#thread#factor#1#")
     var"#nrequest#" = vsub_fast((var"#nthreads#" % UInt32), 0x00000001)
-    $loopstart1
     var"#loop#1#start#init#" = var"#iter#start#0#"
-    $loopstart2
     var"##do#thread##" = var"#nrequest#" ≠ 0x00000000
     if var"##do#thread##"
       var"#threads#", var"#torelease#" = CheapThreads.request_threads(Threads.threadid(), var"#nrequest#")
@@ -597,6 +606,7 @@ function thread_two_loops_expr(
       var"#threads#" = CheapThreads.UnsignedIteratorEarlyStop(var"#torelease#", 0x00000000)
     end
     # @show $lastboundexpr
+    var"#avx#call#args#" = $avxcall_args
     $_avx_call_
     var"##do#thread##" || $retexpr
     # @show $retv
@@ -617,6 +627,7 @@ function thread_two_loops_expr(
     $retexpr
   end
   # @show
+  # Expr(:block, Expr(:meta,:inline), ls.preamble, q)
   Expr(:block, ls.preamble, q)
 end
 
