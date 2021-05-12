@@ -45,7 +45,7 @@ function rebuild_fields(sym::Symbol, offset::Int, ::Type{T}) where {T}
   gf = GlobalRef(Core,:getfield)
   if numfields === 0
     if sizeof(T) === 0
-      return Expr(:call, T), offset
+      return Expr(:new, T), offset
     else
       ret = Expr(:call, gf, sym, (offset += 1), false)
       return ret, offset
@@ -55,7 +55,7 @@ function rebuild_fields(sym::Symbol, offset::Int, ::Type{T}) where {T}
     ret = Expr(:call, GlobalRef(VectorizationBase, :unwrap), ret)
     return ret, offset
   end
-  call = (T <: Tuple) ? Expr(:tuple) : Expr(:call, T)
+  call = (T <: Tuple) ? Expr(:tuple) : Expr(:new, T)
   for f ∈ 1:numfields
     TF = fieldtype(T, f)
     TFC = fieldcount(TF)
@@ -63,7 +63,7 @@ function rebuild_fields(sym::Symbol, offset::Int, ::Type{T}) where {T}
       arg, offset = rebuild_fields(sym, offset, TF)
       push!(call.args, arg)
     elseif sizeof(TF) === 0
-      push!(call.args, Expr(:call, TF))
+      push!(call.args, Expr(:new, TF))
     else
       push!(call.args, Expr(:call, gf, sym, (offset += 1), false))
     end
