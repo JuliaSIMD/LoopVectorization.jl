@@ -1,7 +1,6 @@
 function extract_all_lnns(x)
-    lnns = Vector{LineNumberNode}(undef, 0)
-    extract_all_lnns!(lnns, x)
-    return lnns
+  lnns = Vector{LineNumberNode}(undef, 0)
+  return extract_all_lnns!(lnns, x)
 end
 
 function extract_all_lnns!(lnns::AbstractVector{<:LineNumberNode}, lnn::LineNumberNode)

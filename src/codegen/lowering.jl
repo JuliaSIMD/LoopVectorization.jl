@@ -93,10 +93,6 @@ function lower_block(
 end
 
 assume(ex) = Expr(:call, GlobalRef(VectorizationBase, :assume), ex)
-function expect(ex)
-  # Expr(:call, GlobalRef(VectorizationBase, :expect), ex)
-    ex
-end
 function loopiteratesatleastonce!(ls, loop::Loop)
   start = first(loop); stop = last(loop)
   (isknown(start) & isknown(stop)) && return loop

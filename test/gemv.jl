@@ -73,34 +73,36 @@ using Test
     # LoopVectorization.lower(ls, 2, 2, 0)
 
 
-    function AtmulvB!(G, B,κ)
-        d = size(G,1)
-        @inbounds for d1=1:d
-            G[d1,κ] = B[1,d1]*B[1,κ]
-            for d2=2:d
-                G[d1,κ] += B[d2,d1]*B[d2,κ]
-            end
-        end
+  function AtmulvB!(G, B, κ)
+    d = size(G,1)
+    @inbounds for d1=1:d
+      G[d1,κ] = B[1,d1]*B[1,κ]
+      for d2=2:d
+        G[d1,κ] += B[d2,d1]*B[d2,κ]
+      end
     end
-    function AtmulvBavx1!(G, B,κ)
-        d = size(G,1)
-        z = zero(eltype(G))
-        @avx for d1=1:d
-            G[d1,κ] = z
-            for d2=1:d
-                G[d1,κ] += B[d2,d1]*B[d2,κ]
-            end
-        end
+  end
+  function AtmulvBavx1!(G, B, κ)
+    d = size(G,1)
+    δ = 0
+    z = zero(eltype(G))
+    @avx for d1=1:d
+      G[d1,κ] = z
+      for d2=1:d
+        G[d1, κ - δ] += B[d2, d1] * B[d2, κ + δ]
+      end
     end
+  end
     function AtmulvBavx2!(G, B,κ)
-        d = size(G,1)
-        @avx for d1=1:d
-            z = zero(eltype(G))
-            for d2=1:d
-                z += B[d2,d1]*B[d2,κ]
-            end
-            G[d1,κ] = z
+      d = size(G,1)
+      δ = 0
+      @avx for d1=1:d
+        z = zero(eltype(G))
+        for d2=1:d
+          z += B[d2 - δ, d1]*B[d2, κ - δ]
         end
+        G[d1,κ] = z
+      end
     end
     function AtmulvBavx3!(G, B,κ)
         d = size(G,1)

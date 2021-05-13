@@ -12,66 +12,68 @@ const START_TIME = time()
 
 @time @testset "LoopVectorization.jl" begin
 
-    @time Aqua.test_all(LoopVectorization)
-    # @test isempty(detect_unbound_args(LoopVectorization))
+  @time Aqua.test_all(LoopVectorization)
+  # @test isempty(detect_unbound_args(LoopVectorization))
 
-    @time include("printmethods.jl")
+  @time include("printmethods.jl")
 
-    @time include("can_avx.jl")
+  @time include("can_avx.jl")
 
-    @time include("fallback.jl")
+  @time include("fallback.jl")
 
-    @time include("utils.jl")
+  @time include("utils.jl")
 
-    @time include("arraywrappers.jl")
+  @time include("arraywrappers.jl")
 
-    @time include("check_empty.jl")
+  @time include("check_empty.jl")
 
-    @time include("loopinductvars.jl")
+  @time include("loopinductvars.jl")
 
-    @time include("shuffleloadstores.jl")
+  @time include("shuffleloadstores.jl")
 
-	if (v"1.5" < VERSION < v"1.7") && Sys.iswindows()
-		println("Skipping Zygote tests.")
-	else
-    	@time include("zygote.jl")
-	end
+  if (v"1.5" < VERSION < v"1.7") && Sys.iswindows()
+    println("Skipping Zygote tests.")
+  else
+    @time include("zygote.jl")
+  end
 
-    @time include("offsetarrays.jl")
+  @time include("offsetarrays.jl")
 
-    @time include("tensors.jl")
+  @time include("tensors.jl")
 
-    @time include("map.jl")
+  @time include("map.jl")
 
-    @time include("filter.jl")
-    
-    @time include("mapreduce.jl")
+  @time include("filter.jl")
+  
+  @time include("mapreduce.jl")
 
-    @time include("ifelsemasks.jl")
+  @time include("ifelsemasks.jl")
 
-    @time include("dot.jl")
+  @time include("dot.jl")
 
-    @time include("special.jl")
+  @time include("special.jl")
 
-    @time include("gemv.jl")
+  @time include("gemv.jl")
 
-    @time include("miscellaneous.jl")
+  @time include("miscellaneous.jl")
 
-    @time include("copy.jl")
+  @time include("copy.jl")
 
-    @time include("broadcast.jl")
+  @time include("broadcast.jl")
 
-    @time include("gemm.jl")
+  @time include("gemm.jl")
 
-    @time include("threading.jl")
+  @time include("threading.jl")
 
-    @time include("tullio.jl")
+  @time include("tullio.jl")
 
-    @time include("staticsize.jl")
+  @time include("staticsize.jl")
 
-    if VERSION ≥ v"1.6"
-      @time include("quantum.jl")
-    end
+  @time include("iteration_bound_tests.jl")
+  
+  if VERSION ≥ v"1.6"
+    @time include("quantum.jl")
+  end
 end
 
 const ELAPSED_MINUTES = (time() - START_TIME)/60

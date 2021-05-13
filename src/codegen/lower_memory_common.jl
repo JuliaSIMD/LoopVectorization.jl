@@ -15,8 +15,6 @@ end
 
 staticexpr(x::Int) = Expr(:call, Expr(:curly, lv(:StaticInt), x))
 staticexpr(x::Union{Symbol,Expr}) = Expr(:call, lv(:StaticInt), x)
-maybestatic(x::Int) = staticexpr(x)
-maybestatic(x::Union{Symbol,Expr}) = x
 
 _MMind(ind::Union{Symbol,Expr}, str::Int) = Expr(:call, lv(:MM), VECTORWIDTHSYMBOL, ind, staticexpr(str))
 _MMind(ind::Int, str::Int) = Expr(:call, lv(:MM), VECTORWIDTHSYMBOL, staticexpr(ind), staticexpr(str))
