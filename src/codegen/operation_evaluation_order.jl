@@ -56,40 +56,94 @@ function set_upstream_family!(adal::Vector{T}, op::Operation, val::T, ld::Vector
         set_upstream_family!(adal, opp, val, ld, id)
     end
 end
-
+function search_for_reductinit!(op::Operation, opswap::Operation, var::Symbol, loopdeps::Vector{Symbol})
+  for (i,opp) ∈ enumerate(parents(op))
+    if (name(opp) === var) && (length(reduceddependencies(opp)) == 0) && (length(loopdependencies(opp)) == length(loopdeps)) && (length(children(opp)) == 1)
+      if all(in(loopdeps), loopdependencies(opp))
+        parents(op)[i] = opswap
+        return opp
+      end
+    end
+    opcheck = search_for_reductinit!(opp, opswap, var, loopdeps)
+    opcheck === opp || return opcheck
+  end
+  return op
+end
 function addoptoorder!(
     ls::LoopSet, included_vars::Vector{Bool}, place_after_loop::Vector{Bool}, op::Operation,
     loopsym::Symbol, _n::Int, u₁loop::Symbol, u₂loop::Symbol, vectorized::Symbol, u₂max::Int
 )
-    lo = ls.loop_order
-    id = identifier(op)
-    included_vars[id] || return nothing
-    loopsym ∈ loopdependencies(op) || return nothing
-    for opp ∈ parents(op) # ensure parents are added first
-        addoptoorder!(ls, included_vars, place_after_loop, opp, loopsym, _n, u₁loop, u₂loop, vectorized, u₂max)
+  lo = ls.loop_order
+  id = identifier(op)
+  included_vars[id] || return nothing
+  loopsym ∈ loopdependencies(op) || return nothing
+  for opp ∈ parents(op) # ensure parents are added first
+    addoptoorder!(ls, included_vars, place_after_loop, opp, loopsym, _n, u₁loop, u₂loop, vectorized, u₂max)
+  end
+  included_vars[id] || return nothing
+  included_vars[id] = false
+  isunrolled = (isu₁unrolled(op)) + 1
+  istiled = isu₂unrolled(op) + 1
+  # optype = Int(op.node_type) + 1
+  after_loop = place_after_loop[id] + 1
+  if !isloopvalue(op)
+    isnopidentity(ls, op, u₁loop, u₂loop, vectorized, u₂max) || push!(lo[isunrolled,istiled,after_loop,_n], op)
+    # if istiled
+    #     isnopidentity(ls, op, u₁loop, u₂loop, vectorized, u₂max, u₂max) || push!(lo[isunrolled,2,after_loop,_n], op)
+    # else
+    #     isnopidentity(ls, op, u₁loop, u₂loop, vectorized, u₂max, nothing) || push!(lo[isunrolled,1,after_loop,_n], op)
+    # end
+  end
+  # @show op, after_loop
+  # isloopvalue(op) || push!(lo[isunrolled,istiled,after_loop,_n], op)
+  # all(opp -> iszero(length(reduceddependencies(opp))), parents(op)) &&
+  set_upstream_family!(place_after_loop, op, false, loopdependencies(op), identifier(op)) # parents that have already been included are not moved, so no need to check included_vars to filter
+  nothing
+end
+function replace_reduct_init!(ls::LoopSet, op::Operation, opsub::Operation, opcheck::Operation)
+  deleteat!(parents(op), 2)
+  op.variable = opcheck.variable
+  opsub.variable = opcheck.variable
+  op.mangledvariable = opcheck.mangledvariable
+  opsub.mangledvariable = opcheck.mangledvariable
+  op.instruction = instruction(:identity)
+  fill_children!(ls)
+end
+function nounrollreduction(op::Operation, u₁loop::Symbol, u₂loop::Symbol, vectorized::Symbol)
+  reduceddeps = reduceddependencies(op)
+  (vectorized ∉ reduceddeps) &&
+    (u₁loop ∉ reduceddeps) &&
+    (u₂loop ∉ reduceddeps)
+end
+function load_short_static_reduction_first!(ls::LoopSet, u₁loop::Symbol, u₂loop::Symbol, vectorized::Symbol)
+  for op ∈ operations(ls)
+    iscompute(op) || continue
+    length(reduceddependencies(op)) == 0 && continue
+    if (instruction(op).instr === :reduced_add)
+      vecloop = getloop(ls, vectorized)
+      if isstaticloop(vecloop) && (length(vecloop) ≤ 16) && nounrollreduction(op, u₁loop, u₂loop, vectorized)
+        opsub = parents(op)[2]
+        length(children(opsub)) == 1 || continue
+        opsearch = parents(op)[1]
+        opcheck = search_for_reductinit!(opsearch, opsub, name(opsearch), loopdependencies(op))
+        opcheck === opsearch || replace_reduct_init!(ls, op, opsub, opcheck)
+        
+      end
+    elseif (instruction(op).instr === :add_fast) && (instruction(first(parents(op))).instr === :identity)
+      vecloop = getloop(ls, vectorized)
+      if isstaticloop(vecloop) && (length(vecloop) ≤ 16) && nounrollreduction(op, u₁loop, u₂loop, vectorized)
+        opsub = parents(op)[2]
+        ((length(reduceddependencies(opsub)) == 0) & (length(children(opsub)) == 1)) || continue
+        opsearch = parents(op)[1]
+        opcheck = search_for_reductinit!(opsearch, opsub, name(opsearch), loopdependencies(op))
+        opcheck === opsearch || replace_reduct_init!(ls, op, opsub, opcheck)
+      end
     end
-    included_vars[id] || return nothing
-    included_vars[id] = false
-    isunrolled = (isu₁unrolled(op)) + 1
-    istiled = isu₂unrolled(op) + 1
-    # optype = Int(op.node_type) + 1
-    after_loop = place_after_loop[id] + 1
-    if !isloopvalue(op)
-        isnopidentity(ls, op, u₁loop, u₂loop, vectorized, u₂max) || push!(lo[isunrolled,istiled,after_loop,_n], op)
-        # if istiled
-        #     isnopidentity(ls, op, u₁loop, u₂loop, vectorized, u₂max, u₂max) || push!(lo[isunrolled,2,after_loop,_n], op)
-        # else
-        #     isnopidentity(ls, op, u₁loop, u₂loop, vectorized, u₂max, nothing) || push!(lo[isunrolled,1,after_loop,_n], op)
-        # end
-    end
-    # @show op, after_loop
-    # isloopvalue(op) || push!(lo[isunrolled,istiled,after_loop,_n], op)
-    # all(opp -> iszero(length(reduceddependencies(opp))), parents(op)) &&
-    set_upstream_family!(place_after_loop, op, false, loopdependencies(op), identifier(op)) # parents that have already been included are not moved, so no need to check included_vars to filter
-    nothing
+  end
 end
 
 function fillorder!(ls::LoopSet, order::Vector{Symbol}, u₁loop::Symbol, u₂loop::Symbol, u₂max::Int, vectorized::Symbol)
+  load_short_static_reduction_first!(ls, u₁loop, u₂loop, vectorized)
     lo = ls.loop_order
     resize!(lo, length(ls.loopsymbols))
     ro = lo.loopnames # reverse order; will have same order as lo

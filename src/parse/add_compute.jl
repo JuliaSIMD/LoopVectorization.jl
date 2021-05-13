@@ -179,72 +179,71 @@ end
 
 
 function add_reduction_update_parent!(
-    vparents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet,
-    parent::Operation, instr::Instruction, reduction_ind::Int, elementbytes::Int
+  vparents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet,
+  parent::Operation, instr::Instruction, reduction_ind::Int, elementbytes::Int
 )
-    var = name(parent)
-    isouterreduction = parent.instruction === LOOPCONSTANT
-    # @show instr, vparents, parent, reduction_ind
-    if instr.instr === :ifelse
-        @assert length(vparents) == 2
-        instrclass = reduction_instruction_class(instruction(vparents[2])) # key allows for faster lookups
+  var = name(parent)
+  isouterreduction = parent.instruction === LOOPCONSTANT
+  # @show instr, vparents, parent, reduction_ind
+  if instr.instr === :ifelse
+    @assert length(vparents) == 2
+    instrclass = reduction_instruction_class(instruction(vparents[2])) # key allows for faster lookups
+  else
+    instrclass = reduction_instruction_class(instr) # key allows for faster lookups
+  end
+  reduct_zero = reduction_zero(instrclass)
+  # if parent is not an outer reduction...
+  # if !isouterreduction && !isreductzero(parent, ls, reduct_zero)
+  add_reduct_instruct = !isouterreduction && !isconstant(parent)
+  if add_reduct_instruct
+    # We add
+    reductcombine = reduction_scalar_combine(instrclass)
+    # reductcombine = :identity
+    reductsym = gensym!(ls, "reduction")
+    reductzero_sym = gensym!(ls, "reduction##zero")
+    # reductsym = gensym(:reduction)
+    reductinit = add_constant!(ls, reductzero_sym, loopdependencies(parent), reductsym, elementbytes, :numericconstant)
+    if reduct_zero === :zero
+      push!(ls.preamble_zeros, (identifier(reductinit), IntOrFloat))
     else
-        instrclass = reduction_instruction_class(instr) # key allows for faster lookups
+      push!(ls.preamble_funcofeltypes, (identifier(reductinit), instrclass))
     end
-    reduct_zero = reduction_zero(instrclass)
-    # if parent is not an outer reduction...
-    # if !isouterreduction && !isreductzero(parent, ls, reduct_zero)
-    add_reduct_instruct = !isouterreduction && !isconstant(parent)
-    # @show isouterreduction, isconstant(parent)
-    if add_reduct_instruct
-        # We add
-        reductcombine = reduction_scalar_combine(instrclass)
-        # reductcombine = :identity
-        reductsym = gensym!(ls, "reduction")
-        reductzero_sym = gensym!(ls, "reduction##zero")
-        # reductsym = gensym(:reduction)
-        reductinit = add_constant!(ls, reductzero_sym, loopdependencies(parent), reductsym, elementbytes, :numericconstant)
-        if reduct_zero === :zero
-            push!(ls.preamble_zeros, (identifier(reductinit), IntOrFloat))
-        else
-            push!(ls.preamble_funcofeltypes, (identifier(reductinit), instrclass))
-        end
-    else
-        reductinit = parent
-        reductsym = var
-        reductcombine = :identity#Symbol("")
+  else
+    reductinit = parent
+    reductsym = var
+    reductcombine = :identity#Symbol("")
+  end
+  combineddeps = copy(deps); mergesetv!(combineddeps, reduceddeps)
+  # directdependency && pushparent!(vparents, deps, reduceddeps, reductinit)#parent) # deps and reduced deps will not be disjoint
+  if reduction_ind > 0 # if is directdependency
+    insert!(vparents, reduction_ind, reductinit)
+    if instr.instr ∈ (:-, :vsub!, :vsub, :/, :vfdiv!, :vfidiv!)
+      update_deps!(deps, reduceddeps, reductinit)#parent) # deps and reduced deps will not be disjoint
     end
-    combineddeps = copy(deps); mergesetv!(combineddeps, reduceddeps)
-    # directdependency && pushparent!(vparents, deps, reduceddeps, reductinit)#parent) # deps and reduced deps will not be disjoint
-    if reduction_ind > 0 # if is directdependency
-        insert!(vparents, reduction_ind, reductinit)
-        if instr.instr ∈ (:-, :vsub!, :vsub, :/, :vfdiv!, :vfidiv!)
-            update_deps!(deps, reduceddeps, reductinit)#parent) # deps and reduced deps will not be disjoint
-        end
-    elseif !isouterreduction && reductinit !== parent
-        substitute_op_in_parents!(vparents, reductinit, parent, reduceddeps, reductsym)
-    end
-    update_reduction_status!(vparents, reduceddeps, name(reductinit))
-    # this is the op added by add_compute
-    op = Operation(length(operations(ls)), reductsym, elementbytes, instr, compute, deps, reduceddeps, vparents)
-    parent.instruction === LOOPCONSTANT && push!(ls.outer_reductions, identifier(op))
-    opout = pushop!(ls, op, var) # note this overwrites the entry in the operations dict, but not the vector
-    # isouterreduction || iszero(length(reduceddeps)) && return opout
-    # return opout
-    isouterreduction && return opout
-    # create child op, which is the reduction combination
-    childrdeps = Symbol[]; childparents = Operation[ op ]#, parent ]
-    add_reduct_instruct && push!(childparents, parent)
-    childdeps = loopdependencies(reductinit)
-    setdiffv!(childrdeps, loopdependencies(op), childdeps)
-    child = Operation(
-        length(operations(ls)), name(parent), elementbytes, reductcombine, compute, childdeps, childrdeps, childparents
-    )
-    # child = Operation(
-    #     length(operations(ls)), name(parent), elementbytes, Instruction(reductcombine,:identity), compute, childdeps, childrdeps, childparents
-    # )
-    pushop!(ls, child, name(parent))
-    opout
+  elseif !isouterreduction && reductinit !== parent
+    substitute_op_in_parents!(vparents, reductinit, parent, reduceddeps, reductsym)
+  end
+  update_reduction_status!(vparents, reduceddeps, name(reductinit))
+  # this is the op added by add_compute
+  op = Operation(length(operations(ls)), reductsym, elementbytes, instr, compute, deps, reduceddeps, vparents)
+  parent.instruction === LOOPCONSTANT && push!(ls.outer_reductions, identifier(op))
+  opout = pushop!(ls, op, var) # note this overwrites the entry in the operations dict, but not the vector
+  # isouterreduction || iszero(length(reduceddeps)) && return opout
+  # return opout
+  isouterreduction && return opout
+  # create child op, which is the reduction combination
+  childrdeps = Symbol[]; childparents = Operation[ op ]#, parent ]
+  add_reduct_instruct && push!(childparents, parent)
+  childdeps = loopdependencies(reductinit)
+  setdiffv!(childrdeps, loopdependencies(op), childdeps)
+  child = Operation(
+    length(operations(ls)), name(parent), elementbytes, reductcombine, compute, childdeps, childrdeps, childparents
+  )
+  # child = Operation(
+  #     length(operations(ls)), name(parent), elementbytes, Instruction(reductcombine,:identity), compute, childdeps, childrdeps, childparents
+  # )
+  pushop!(ls, child, name(parent))
+  opout
 end
 
 

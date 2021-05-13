@@ -111,7 +111,7 @@ function process_args(args; inline = false, check_empty = false, u₁ = zero(Int
     end
     inline, check_empty, u₁, u₂, threads
 end
-function spmd_macro(mod, src, q, args...)
+function brrr_macro(mod, src, q, args...)
     q = macroexpand(mod, q)
     
     if q.head === :for
@@ -124,12 +124,12 @@ function spmd_macro(mod, src, q, args...)
     end
 end
 """
-    @spmd
+    @brrr
 
 Annotate a `for` loop, or a set of nested `for` loops whose bounds are constant across iterations, to optimize the computation. For example:
 
     function AmulB!(C, A, B)
-        @spmd for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+        @brrr for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
             Cₘₙ = zero(eltype(C))
             for k ∈ 1:size(A,2)
                 Cₘₙ += A[m,k] * B[k,n]
@@ -148,11 +148,11 @@ julia> using LoopVectorization
 
 julia> a = rand(100);
 
-julia> b = @spmd exp.(2 .* a);
+julia> b = @brrr exp.(2 .* a);
 
 julia> c = similar(b);
 
-julia> @spmd @. c = exp(2a);
+julia> @brrr @. c = exp(2a);
 
 julia> b ≈ c
 true
@@ -160,11 +160,11 @@ true
 
 # Extended help
 
-Advanced users can customize the implementation of the `@spmd`-annotated block
+Advanced users can customize the implementation of the `@brrr`-annotated block
 using keyword arguments:
 
 ```
-@spmd inline=false unroll=2 body
+@brrr inline=false unroll=2 body
 ```
 
 where `body` is the code of the block (e.g., `for ... end`).
@@ -197,42 +197,42 @@ but it applies to the loop ordering and unrolling that will be chosen by LoopVec
 `uᵢ=0` (the default) indicates that LoopVectorization should pick its own value,
 and `uᵢ=-1` disables unrolling for the correspond loop.
 
-The `@spmd` macro also checks the array arguments using `LoopVectorization.check_args` to try and determine
+The `@brrr` macro also checks the array arguments using `LoopVectorization.check_args` to try and determine
 if they are compatible with the macro. If `check_args` returns false, a fall back loop annotated with `@inbounds`
 and `@fastmath` is generated. Note that `VectorizationBase` provides functions such as `vadd` and `vmul` that will
-ignore `@fastmath`, preserving IEEE semantics both within `@spmd` and `@fastmath`.
+ignore `@fastmath`, preserving IEEE semantics both within `@brrr` and `@fastmath`.
 `check_args` currently returns false for some wrapper types like `LinearAlgebra.UpperTriangular`, requiring you to
 use their `parent`. Triangular loops aren't yet supported.
 """
-macro spmd(args...)
-    spmd_macro(__module__, __source__, last(args), Base.front(args)...)
+macro brrr(args...)
+    brrr_macro(__module__, __source__, last(args), Base.front(args)...)
 end
 """
-Equivalent to `@spmd`, except it adds `thread=true` as the first keyword argument.
+Equivalent to `@brrr`, except it adds `thread=true` as the first keyword argument.
 Note that later arguments take precendence.
 
-Meant for convenience, as `@spmdt` is shorter than `@spmd thread=true`.
+Meant for convenience, as `@tbrrr` is shorter than `@brrr thread=true`.
 """
-macro spmdt(args...)
-    spmd_macro(__module__, __source__, last(args), :(thread=true), Base.front(args)...)
+macro tbrrr(args...)
+    brrr_macro(__module__, __source__, last(args), :(thread=true), Base.front(args)...)
 end
 
 """
-    @_spmd
+    @_brrr
 
-This macro mostly exists for debugging/testing purposes. It does not support many of the use cases of [`@spmd`](@ref).
+This macro mostly exists for debugging/testing purposes. It does not support many of the use cases of [`@brrr`](@ref).
 It emits loops directly, rather than punting to an `@generated` function, meaning it doesn't have access to type
 information when generating code or analyzing the loops, often leading to bad performance.
 
-This macro accepts the `inline` and `unroll` keyword arguments like `@spmd`, but ignores the `check_empty` argument.
+This macro accepts the `inline` and `unroll` keyword arguments like `@brrr`, but ignores the `check_empty` argument.
 """
-macro _spmd(q)
+macro _brrr(q)
     q = macroexpand(__module__, q)
     ls = LoopSet(q, __module__)
     set_hw!(ls)
     esc(Expr(:block, ls.prepreamble, lower_and_split_loops(ls, -1)))
 end
-macro _spmd(arg, q)
+macro _brrr(arg, q)
     @assert q.head === :for
     q = macroexpand(__module__, q)
     inline, check_empty, u₁, u₂ = check_macro_kwarg(arg, false, false, zero(Int8), zero(Int8), 1)
@@ -241,14 +241,14 @@ macro _spmd(arg, q)
     esc(Expr(:block, ls.prepreamble, lower(ls, u₁ % Int, u₂ % Int, -1)))
 end
 
-macro spmd_debug(q)
+macro brrr_debug(q)
     q = macroexpand(__module__, q)
     ls = LoopSet(q, __module__)
     esc(LoopVectorization.setup_call_debug(ls))
 end
 
 # define aliases
-const var"@avx" = var"@spmd"
-const var"@avxt" = var"@spmdt"
-const var"@avx_debug" = var"@spmd_debug"
+const var"@avx" = var"@brrr"
+const var"@avxt" = var"@tbrrr"
+const var"@avx_debug" = var"@brrr_debug"
 

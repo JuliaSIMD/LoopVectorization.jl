@@ -19,17 +19,17 @@ function storeinstr_preprend(op::Operation, vloopsym::Symbol)
     reduction_to_scalar(reduction_instruction_class(instruction(opp)))
 end
 
-function reduce_expr_u₂(toreduct::Symbol, instr::Instruction, u₂::Int)
+function reduce_expr_u₂(toreduct::Symbol, instr::Instruction, u₂::Int, suffix::Symbol)
     t = Expr(:tuple)
     for u ∈ 0:u₂-1
-        push!(t.args, Symbol(toreduct, u))
+        push!(t.args, Symbol(toreduct, u, suffix))
     end
     Expr(:call, lv(:reduce_tup), reduce_to_onevecunroll(instr), t)
 end
 function reduce_expr!(q::Expr, toreduct::Symbol, instr::Instruction, u₁::Int, u₂::Int, isu₁unrolled::Bool, isu₂unrolled::Bool)
     if isu₂unrolled# u₂ != -1
         _toreduct = Symbol(toreduct, 0)
-        push!(q.args, Expr(:(=), _toreduct, reduce_expr_u₂(toreduct, instr, u₂)))
+        push!(q.args, Expr(:(=), _toreduct, reduce_expr_u₂(toreduct, instr, u₂, Symbol(""))))
     else#if u₂ == -1
         _toreduct = Symbol(toreduct, '_', u₁)
     # else

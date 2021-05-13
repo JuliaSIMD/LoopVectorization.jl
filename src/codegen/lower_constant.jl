@@ -42,13 +42,11 @@ function typeof_sym(ls::LoopSet, op::Operation, zerotyp::NumberType)
         ELTYPESYMBOL
     end
 end
-# function in_reduced_children(op::Operation, s::Symbol)
-# end
 
 function lower_zero!(
     q::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs, zerotyp::NumberType = zerotype(ls, op)
 )
-  @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, u₂max, suffix = ua
+  @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, vloop, u₂max, suffix = ua
   mvar, opu₁, opu₂ = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, vloopsym, suffix, ls)
   !opu₂ && suffix > 0 && return
   # TODO: for u₁, needs to consider if reducedchildren are u₁-unrolled
