@@ -16,22 +16,17 @@
 #     newapp * factor
 # end
 function check_linear_parents(ls::LoopSet, op::Operation, s::Symbol)
-    (s ∈ loopdependencies(op)) || return true
-    if isload(op) # TODO: handle loading from ranges.
-        return false
-    elseif !iscompute(op)
-        return true
-    end
-    op_is_linear = false
-    instr_op = instruction(op).instr
-    for instr ∈ (:(+), :vadd, :vadd1, :add_fast, :(-), :vsub, :sub_fast)
-        (op_is_linear = instr === instr_op) && break
-    end
-    op_is_linear || return false
-    for opp ∈ parents(op)
-        check_linear_parents(ls, opp, s) || return false
-    end
-    true
+  (s ∈ loopdependencies(op)) || return true
+  if isload(op) # TODO: handle loading from ranges.
+    return false
+  elseif !iscompute(op)
+    return true
+  end
+  Base.sym_in(instruction(op).instr, (:vadd_nsw, :vadd_nuw, :vadd_nw, :vsub_nsw, :vsub_nuw, :vsub_nw, :(+), :vadd, :add_fast, :(-), :vsub, :sub_fast)) || return false
+  for opp ∈ parents(op)
+    check_linear_parents(ls, opp, s) || return false
+  end
+  true
 end
 
 function findparent(ls::LoopSet, s::Symbol)#opdict isn't filled when reconstructing
@@ -75,7 +70,7 @@ function cost(ls::LoopSet, op::Operation, (u₁,u₂)::Tuple{Symbol,Symbol}, vlo
             return 0.0, 0, 0.0
         end
     elseif iscompute(op) &&
-        Base.sym_in(instruction(op).instr, (:(+), :(-), :add_fast, :sub_fast)) &&
+        Base.sym_in(instruction(op).instr, (:vadd_nsw, :vsub_nsw, :(+), :(-), :add_fast, :sub_fast)) &&
         all(opp -> (isloopvalue(opp)), parents(op))
         # all(opp -> (isloopvalue(opp) | isconstant(opp)), parents(op))
         return 0.0, 0, 0.0
@@ -690,9 +685,9 @@ function isoptranslation(ls::LoopSet, op::Operation, unrollsyms::UnrollSymbols)
         if !li[i]
             opp = findparent(ls, inds[i + (first(inds) === DISCONTIGUOUS)])
             if isu₁unrolled(opp) && isu₂unrolled(opp)
-                if instruction(opp).instr === :(+)
+                if Base.sym_in(instruction(opp).instr, (:vadd_nsw, :(+)))
                     return i, 0x03 # 00000011 - both positive
-                elseif instruction(opp).instr === :(-)
+                elseif Base.sym_in(instruction(opp).instr, (:vsub_nsw, :(-)))
                     oppp1 = parents(opp)[1]
                     if isu₁unrolled(oppp1)
                         return i, 0x01 # 00000001 - u₁ positive, u₂ negative

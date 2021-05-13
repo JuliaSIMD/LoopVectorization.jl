@@ -679,9 +679,9 @@ function pointermax_index(
             else
                 _ind = if isvectorized
                     if isone(sub)
-                        Expr(:call, lv(:vsub_fast), staticexpr(stophint), VECTORWIDTHSYMBOL)
+                        Expr(:call, lv(:vsub_nsw), staticexpr(stophint), VECTORWIDTHSYMBOL)
                     else
-                        Expr(:call, lv(:vsub_fast), staticexpr(stophint), mulexpr(VECTORWIDTHSYMBOL, sub))
+                        Expr(:call, lv(:vsub_nsw), staticexpr(stophint), mulexpr(VECTORWIDTHSYMBOL, sub))
                     end
                 else
                     staticexpr(stophint - sub)
@@ -717,9 +717,9 @@ function pointermax_index(ls::LoopSet, ar::ArrayReferenceMeta, n::Int, sub::Int,
             else
                 _ind = if isvectorized
                     if isone(sub)
-                        Expr(:call, lv(:vsub_fast), stopsym, VECTORWIDTHSYMBOL)
+                        Expr(:call, lv(:vsub_nsw), stopsym, VECTORWIDTHSYMBOL)
                     else
-                        Expr(:call, lv(:vsub_fast), stopsym, mulexpr(VECTORWIDTHSYMBOL, sub))
+                        Expr(:call, lv(:vsub_nsw), stopsym, mulexpr(VECTORWIDTHSYMBOL, sub))
                     end
                 else
                      subexpr(stopsym, sub)
@@ -817,25 +817,26 @@ function maxunroll(us::UnrollSpecification, n)
 end
 
 
-function startloop(ls::LoopSet, us::UnrollSpecification, n::Int, submax = maxunroll(us, n))
-    @unpack u₁loopnum, u₂loopnum, vloopnum, u₁, u₂ = us
-    lssm = ls.lssm
-    termind = lssm.terminators[n]
-    ptrdefs = lssm.incrementedptrs[n]
-    loopstart = Expr(:block)
-    firstloop = n == num_loops(ls)
-    for ar ∈ ptrdefs
-      ptr_offset = vptr_offset(ar)
-      push!(loopstart.args, Expr(:(=), ptr_offset, ptr_offset))
-    end
-    if iszero(termind)
-      loopsym = names(ls)[n]
-      push!(loopstart.args, startloop(getloop(ls, loopsym), loopsym))
-    else
-        isvectorized = n == vloopnum
-        append_pointer_maxes!(loopstart, ls, ptrdefs[termind], n, submax, isvectorized)
-    end
-    loopstart
+function startloop(ls::LoopSet, us::UnrollSpecification, n::Int, staticinit::Bool = false)
+  @unpack u₁loopnum, u₂loopnum, vloopnum, u₁, u₂ = us
+  lssm = ls.lssm
+  termind = lssm.terminators[n]
+  ptrdefs = lssm.incrementedptrs[n]
+  loopstart = Expr(:block)
+  firstloop = n == num_loops(ls)
+  for ar ∈ ptrdefs
+    ptr_offset = vptr_offset(ar)
+    push!(loopstart.args, Expr(:(=), ptr_offset, ptr_offset))
+  end
+  if iszero(termind)
+    loopsym = names(ls)[n]
+    push!(loopstart.args, startloop(getloop(ls, loopsym), loopsym, staticinit))
+  else
+    isvectorized = n == vloopnum
+    submax = maxunroll(us, n)
+    append_pointer_maxes!(loopstart, ls, ptrdefs[termind], n, submax, isvectorized)
+  end
+  loopstart
 end
 function offset_ptr(
     ar::ArrayReferenceMeta, us::UnrollSpecification, loopsym::Symbol, n::Int, UF::Int, offsetinds::Vector{Bool}, loop::Loop

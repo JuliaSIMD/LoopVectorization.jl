@@ -6,7 +6,7 @@ struct AVX{UNROLL,OPS,ARF,AM,LPSYM,LB,V} <: Function end
 function (::AVX{UNROLL,OPS,ARF,AM,LPSYM,LB,V})(p::Ptr{UInt}) where {UNROLL,OPS,ARF,AM,LPSYM,LB,V}
     (_, _vargs) = ThreadingUtilities.load(p, Tuple{LB,V}, 2*sizeof(UInt))
     # Main.VARGS[Threads.threadid()] = first(_vargs)
-    ret = _avx_!(Val{UNROLL}(), Val{OPS}(), Val{ARF}(), Val{AM}(), Val{LPSYM}(), _vargs)
+    ret = _avx_!(Val{UNROLL}(), Val{OPS}(), Val{ARF}(), Val{AM}(), Val{LPSYM}(), Val(Tuple{LB,V}), flatten_to_tuple(_vargs)...)
     ThreadingUtilities.store!(p, ret, Int(register_size()))
     nothing
 end
@@ -46,7 +46,7 @@ lv_max_num_threads() = ifelse(gt(num_threads(), num_cores()), num_cores(), num_t
     end
     t
 end
-@inline cld_fast(x,y) = Base.udiv_int(vsub_fast(vadd_fast(x, y), one(y)), y)
+@inline cld_fast(x,y) = Base.udiv_int(vsub_nw(vadd_nw(x, y), one(y)), y)
 @inline function choose_num_blocks(MoW::UInt, ::StaticInt{U}, ::StaticInt{T}) where {U,T}
     factors = calc_factors(StaticInt{T}())
     for i ∈ 1:length(factors)-1
@@ -160,15 +160,15 @@ end
 #     block_per_m, blocks_per_n
 # end
 if Sys.ARCH === :x86_64
-    @inline choose_num_threads(C::Float64, NT::UInt, x::Base.BitInteger) = _choose_num_threads(Base.FastMath.mul_float_fast(C, 0.05460264079015985), NT, x)
+    @inline choose_num_threads(C::Float64, NT::UInt, x::Base.BitInteger) = _choose_num_threads(Base.mul_float_fast(C, 0.05460264079015985), NT, x)
 else
-    @inline choose_num_threads(C::Float64, NT::UInt, x::Base.BitInteger) = _choose_num_threads(Base.FastMath.mul_float_fast(C, 0.05460264079015985 * 0.25), NT, x)
+    @inline choose_num_threads(C::Float64, NT::UInt, x::Base.BitInteger) = _choose_num_threads(Base.mul_float_fast(C, 0.05460264079015985 * 0.25), NT, x)
 end
-@inline _choose_num_threads(C::Float64, NT::UInt, x::Base.BitInteger) = min(Base.fptoui(UInt, Base.ceil_llvm(Base.FastMath.mul_float_fast(C, Base.sqrt_llvm(Base.uitofp(Float64, x))))), NT)
+@inline _choose_num_threads(C::Float64, NT::UInt, x::Base.BitInteger) = min(Base.fptoui(UInt, Base.ceil_llvm(Base.mul_float_fast(C, Base.sqrt_llvm(Base.uitofp(Float64, x))))), NT)
 function push_loop_length_expr!(q::Expr, ls::LoopSet)
     l = 1
     ndynamic = 0
-    mulexpr = length(ls.loops) == 1 ? q : Expr(:call, lv(:vmul_fast))
+    mulexpr = length(ls.loops) == 1 ? q : Expr(:call, lv(:vmul_nw))
     for loop ∈ ls.loops
         if isstaticloop(loop)
             l *= length(loop)
@@ -177,7 +177,7 @@ function push_loop_length_expr!(q::Expr, ls::LoopSet)
             if ndynamic < 3
                 push!(mulexpr.args, loop.lensym)
             else
-                mulexpr = Expr(:call, lv(:vmul_fast), mulexpr, loop.lensym)
+                mulexpr = Expr(:call, lv(:vmul_nw), mulexpr, loop.lensym)
             end
         end
     end
@@ -191,7 +191,7 @@ function push_loop_length_expr!(q::Expr, ls::LoopSet)
         push!(mulexpr.args, l)
         push!(q.args, mulexpr)
     else
-        push!(q.args, Expr(:call, :vmul_fast, mulexpr, l))
+        push!(q.args, Expr(:call, :vmul_nw, mulexpr, l))
     end
     nothing
 end
@@ -245,7 +245,7 @@ function thread_loop_summary!(ls::LoopSet, ua::UnrollArgs, threadedloop::Loop, i
       :($num_unroll_sym = $lensym)
     else
         # :($num_unroll_sym = Base.udiv_int($lensym, $(UInt(unroll_factor))))
-      :($num_unroll_sym = Base.udiv_int(vadd_fast($lensym, $(UInt(unroll_factor-1))), $(UInt(unroll_factor))))
+      :($num_unroll_sym = Base.udiv_int(vadd_nw($lensym, $(UInt(unroll_factor-1))), $(UInt(unroll_factor))))
     end
     iterstart_sym = Symbol("#iter#start#$threadloopnumtag#")
     iterstop_sym = Symbol("#iter#stop#$threadloopnumtag#")
@@ -258,23 +258,23 @@ function thread_loop_summary!(ls::LoopSet, ua::UnrollArgs, threadedloop::Loop, i
     if isknown(step(threadedloop))
         mf = gethint(step(threadedloop))
         if isone(mf)
-            iterstop = :($iterstop_sym::Int = vadd_fast($iterstart_sym, $blksz_sym))
+            iterstop = :($iterstop_sym::Int = vadd_nsw($iterstart_sym, $blksz_sym))
             looprange = :(CloseOpen($iterstart_sym))
             lastrange = :(CloseOpen($iterstart_sym))
             push_loopbound_ends!(looprange, lastrange, unroll_factor, threadedloop, iterstop_sym, true)
         else
-            iterstop = :($iterstop_sym::Int = vadd_fast($iterstart_sym, vmul_fast($blksz_sym, $mf)))
+            iterstop = :($iterstop_sym::Int = vadd_nsw($iterstart_sym, vmul_nw($blksz_sym, $mf)))
             looprange = :($iterstart_sym:StaticInt{$mf}())
             lastrange = :($iterstart_sym:StaticInt{$mf}())
-            push_loopbound_ends!(looprange, lastrange, unroll_factor, threadedloop, :(vsub_fast($iterstop_sym,one($iterstop_sym))), false)
+            push_loopbound_ends!(looprange, lastrange, unroll_factor, threadedloop, :(vsub_nsw($iterstop_sym,one($iterstop_sym))), false)
         end
     else
         stepthread_sym = Symbol("#step#thread#$threadloopnumtag#")
         pushpreamble!(ls, :($stepthread_sym = $(getsym(step(threadedloop)))))
-        iterstop = :($iterstop_sym = vadd_fast($iterstart_sym, vmul_fast($blksz_sym, $stepthread_sym)))
+        iterstop = :($iterstop_sym = vadd_nsw($iterstart_sym, vmul_nw($blksz_sym, $stepthread_sym)))
         looprange = :($iterstart_sym:$stepthread_sym)
         lastrange = :($iterstart_sym:$stepthread_sym)
-        push_loopbound_ends!(looprange, lastrange, unroll_factor, threadedloop, :(vsub_fast($iterstop_sym,one($iterstop_sym))), false)
+        push_loopbound_ends!(looprange, lastrange, unroll_factor, threadedloop, :(vsub_nsw($iterstop_sym,one($iterstop_sym))), false)
     end
     define_len, define_num_unrolls, loopstart, iterstop, looprange, lastrange
 end
@@ -295,7 +295,7 @@ function push_loopbound_ends!(
     else
         lastsym = getsym(last(threadedloop))
         if offsetlast
-            push_last_bound!(looprange, lastrange, :(vadd_fast($lastsym, one($lastsym))), iterstop, unroll_factor)
+            push_last_bound!(looprange, lastrange, :(vadd_nsw($lastsym, one($lastsym))), iterstop, unroll_factor)
         else
             push_last_bound!(looprange, lastrange, lastsym, iterstop, unroll_factor)
         end
@@ -355,7 +355,8 @@ function thread_one_loops_expr(
       loop_boundary!(lastboundexpr, ls, loop, true)
     end
   end
-  _avx_call_ = :(_avx_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, ($lastboundexpr, var"#vargs#")))
+  avxcall_args = Expr(:tuple, lastboundexpr, Symbol("#vargs#"))
+  _avx_call_ = :(_avx_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, Val(typeof(var"#avx#call#args#")), flatten_to_tuple(var"#avx#call#args#")...))
   update_return_values = if length(ls.outer_reductions) > 0
     retv = loopset_return_value(ls, Val(false))
     _avx_call_ = Expr(:(=), retv, _avx_call_)
@@ -371,7 +372,7 @@ function thread_one_loops_expr(
     $define_len
     $define_num_unrolls
     var"#nthreads#" = Base.min(var"#nthreads#", var"#num#unrolls#thread#0#")
-    var"#nrequest#" = vsub_fast((var"#nthreads#" % UInt32), 0x00000001)
+    var"#nrequest#" = vsub_nw((var"#nthreads#" % UInt32), 0x00000001)
     $loopstart
     var"##do#thread##" = var"#nrequest#" ≠ 0x00000000
     if var"##do#thread##"
@@ -387,12 +388,12 @@ function thread_one_loops_expr(
         var"#trailzing#zeros#" = Base.trailing_zeros(var"#thread#mask#") % UInt32
         var"#nblock#size#thread#0#" = Core.ifelse(
           var"#thread#launch#count#" < (var"#nrem#thread#0#" % UInt32),
-          vadd_fast(var"#base#block#size#thread#0#", var"#block#rem#step#0#"),
+          vadd_nw(var"#base#block#size#thread#0#", var"#block#rem#step#0#"),
           var"#base#block#size#thread#0#"
         )
-        var"#trailzing#zeros#" = vadd_fast(var"#trailzing#zeros#", 0x00000001)
+        var"#trailzing#zeros#" = vadd_nw(var"#trailzing#zeros#", 0x00000001)
         $iterstop
-        var"#thread#id#" = vadd_fast(var"#thread#id#", var"#trailzing#zeros#")
+        var"#thread#id#" = vadd_nw(var"#thread#id#", var"#trailzing#zeros#")
 
         avx_launch(
           Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM,
@@ -402,13 +403,14 @@ function thread_one_loops_expr(
         var"#thread#mask#" >>>= var"#trailzing#zeros#"
 
         var"#iter#start#0#" = var"#iter#stop#0#"
-        var"#thread#launch#count#" = vadd_fast(var"#thread#launch#count#", 0x00000001)
+        var"#thread#launch#count#" = vadd_nw(var"#thread#launch#count#", 0x00000001)
         var"#threads#remain#" = var"#thread#launch#count#" ≠ var"#nrequest#"
       end
     else# eliminate undef var errors that the compiler should be able to figure out are unreachable, but doesn't
       var"#torelease#" = zero(CheapThreads.worker_type())
       var"#threads#" = CheapThreads.UnsignedIteratorEarlyStop(var"#torelease#", 0x00000000)
     end
+    var"#avx#call#args#" = $avxcall_args
     $_avx_call_
     var"##do#thread##" || $retexpr
     var"#thread#id#" = 0x00000000
@@ -416,9 +418,9 @@ function thread_one_loops_expr(
     var"#threads#remain#" = true
     while var"#threads#remain#"
       VectorizationBase.assume(var"#thread#mask#" ≠ zero(var"#thread#mask#"))
-      var"#trailzing#zeros#" = vadd_fast(Base.trailing_zeros(var"#thread#mask#") % UInt32, 0x00000001)
+      var"#trailzing#zeros#" = vadd_nw(Base.trailing_zeros(var"#thread#mask#") % UInt32, 0x00000001)
       var"#thread#mask#" >>>= var"#trailzing#zeros#"
-      var"#thread#id#" = vadd_fast(var"#thread#id#", var"#trailzing#zeros#")
+      var"#thread#id#" = vadd_nw(var"#thread#id#", var"#trailzing#zeros#")
       var"#thread#ptr#" = ThreadingUtilities.taskpointer(var"#thread#id#")
       ThreadingUtilities.wait(var"#thread#ptr#")
       $update_return_values
@@ -504,10 +506,13 @@ function thread_two_loops_expr(
       loop_boundary!(lastboundexpr, ls, loop, true)
     end
   end
-  _avx_call_ = :(_avx_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, ($lastboundexpr, var"#vargs#")))
+  avxcall_args = Expr(:tuple, lastboundexpr, Symbol("#vargs#"))
+  _avx_call_ = :(_avx_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, Val(typeof(var"#avx#call#args#")), flatten_to_tuple(var"#avx#call#args#")...))
+  # _avx_orig_ = :(_avx_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, var"#lv#tuple#args#"))
   update_return_values = if length(ls.outer_reductions) > 0
     retv = loopset_return_value(ls, Val(false))
     _avx_call_ = Expr(:(=), retv, _avx_call_)
+    # _avx_orig_ = Expr(:(=), retv, _avx_orig_)
     outer_reduct_combine_expressions(ls, retv)
   else
     nothing
@@ -518,11 +523,17 @@ function thread_two_loops_expr(
   retexpr = length(ls.outer_reductions) > 0 ? :(return $retv) : :(return nothing)
   q = quote
     $choose_nthread # UInt
+    $loopstart1
+    $loopstart2
+    # if var"#nthreads#" ≤ 1
+    #   $_avx_orig_
+    #   return $retexpr
+    # end
     $define_len1
     $define_len2
     $define_num_unrolls1
     $define_num_unrolls2
-    var"#unroll#prod#" = vmul_fast(var"#num#unrolls#thread#0#", var"#num#unrolls#thread#1#")
+    var"#unroll#prod#" = vmul_nw(var"#num#unrolls#thread#0#", var"#num#unrolls#thread#1#")
     if var"#nthreads#" ≥ var"#unroll#prod#"
       var"#nthreads#" = var"#unroll#prod#"
       var"#thread#factor#0#" = var"#num#unrolls#thread#0#"
@@ -542,10 +553,8 @@ function thread_two_loops_expr(
       var"#thread#factor#1#" = min(var"#thread#factor#1#", var"#num#unrolls#thread#1#")
     end
     # @show (var"#thread#factor#0#", var"#thread#factor#1#")
-    var"#nrequest#" = vsub_fast((var"#nthreads#" % UInt32), 0x00000001)
-    $loopstart1
+    var"#nrequest#" = vsub_nsw((var"#nthreads#" % UInt32), 0x00000001)
     var"#loop#1#start#init#" = var"#iter#start#0#"
-    $loopstart2
     var"##do#thread##" = var"#nrequest#" ≠ 0x00000000
     if var"##do#thread##"
       var"#threads#", var"#torelease#" = CheapThreads.request_threads(Threads.threadid(), var"#nrequest#")
@@ -563,18 +572,18 @@ function thread_two_loops_expr(
         var"#trailzing#zeros#" = Base.trailing_zeros(var"#thread#mask#") % UInt32
         var"#nblock#size#thread#0#" = Core.ifelse(
           var"#thread#launch#count#0#" < (var"#nrem#thread#0#" % UInt32),
-          vadd_fast(var"#base#block#size#thread#0#", var"#block#rem#step#0#"),
+          vadd_nw(var"#base#block#size#thread#0#", var"#block#rem#step#0#"),
           var"#base#block#size#thread#0#"
         )
         var"#nblock#size#thread#1#" = Core.ifelse(
           var"#thread#launch#count#1#" < (var"#nrem#thread#1#" % UInt32),
-          vadd_fast(var"#base#block#size#thread#1#", var"#block#rem#step#1#"),
+          vadd_nw(var"#base#block#size#thread#1#", var"#block#rem#step#1#"),
           var"#base#block#size#thread#1#"
         )
-        var"#trailzing#zeros#" = vadd_fast(var"#trailzing#zeros#", 0x00000001)
+        var"#trailzing#zeros#" = vadd_nw(var"#trailzing#zeros#", 0x00000001)
         $iterstop1
         $iterstop2
-        var"#thread#id#" = vadd_fast(var"#thread#id#", var"#trailzing#zeros#")
+        var"#thread#id#" = vadd_nw(var"#thread#id#", var"#trailzing#zeros#")
         # @show var"#thread#id#" $loopboundexpr
         avx_launch(
           Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM,
@@ -582,14 +591,14 @@ function thread_two_loops_expr(
         )
         var"#thread#mask#" >>>= var"#trailzing#zeros#"
 
-        var"##end#inner##" = var"#thread#launch#count#0#" == vsub_fast(var"#thread#factor#0#", 0x00000001)
-        var"#thread#launch#count#0#" = Core.ifelse(var"##end#inner##", 0x00000000, vadd_fast(var"#thread#launch#count#0#", 0x00000001))
+        var"##end#inner##" = var"#thread#launch#count#0#" == vsub_nw(var"#thread#factor#0#", 0x00000001)
+        var"#thread#launch#count#0#" = Core.ifelse(var"##end#inner##", 0x00000000, vadd_nw(var"#thread#launch#count#0#", 0x00000001))
         var"#thread#launch#count#1#" = Core.ifelse(var"##end#inner##", var"#thread#launch#count#1#" + 0x00000001, var"#thread#launch#count#1#")
 
         var"#iter#start#0#" = Core.ifelse(var"##end#inner##", var"#loop#1#start#init#", var"#iter#stop#0#")
         var"#iter#start#1#" = Core.ifelse(var"##end#inner##", var"#iter#stop#1#", var"#iter#start#1#")
 
-        var"#thread#launch#count#" = vadd_fast(var"#thread#launch#count#", 0x00000001)
+        var"#thread#launch#count#" = vadd_nw(var"#thread#launch#count#", 0x00000001)
         var"#threads#remain#" = var"#thread#launch#count#" ≠ var"#nrequest#"
       end
     else# eliminate undef var errors that the compiler should be able to figure out are unreachable, but doesn't
@@ -597,6 +606,7 @@ function thread_two_loops_expr(
       var"#threads#" = CheapThreads.UnsignedIteratorEarlyStop(var"#torelease#", 0x00000000)
     end
     # @show $lastboundexpr
+    var"#avx#call#args#" = $avxcall_args
     $_avx_call_
     var"##do#thread##" || $retexpr
     # @show $retv
@@ -605,9 +615,9 @@ function thread_two_loops_expr(
     var"#threads#remain#" = true
     while var"#threads#remain#"
       VectorizationBase.assume(var"#thread#mask#" ≠ zero(var"#thread#mask#"))
-      var"#trailzing#zeros#" = vadd_fast(Base.trailing_zeros(var"#thread#mask#") % UInt32, 0x00000001)
+      var"#trailzing#zeros#" = vadd_nw(Base.trailing_zeros(var"#thread#mask#") % UInt32, 0x00000001)
       var"#thread#mask#" >>>= var"#trailzing#zeros#"
-      var"#thread#id#" = vadd_fast(var"#thread#id#", var"#trailzing#zeros#")
+      var"#thread#id#" = vadd_nw(var"#thread#id#", var"#trailzing#zeros#")
       var"#thread#ptr#" = ThreadingUtilities.taskpointer(var"#thread#id#")
       ThreadingUtilities.wait(var"#thread#ptr#")
       $update_return_values
@@ -617,6 +627,7 @@ function thread_two_loops_expr(
     $retexpr
   end
   # @show
+  # Expr(:block, Expr(:meta,:inline), ls.preamble, q)
   Expr(:block, ls.preamble, q)
 end
 

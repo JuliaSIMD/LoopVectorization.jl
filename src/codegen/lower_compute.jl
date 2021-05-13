@@ -69,15 +69,15 @@ function _add_loopvalue!(ex::Expr, loopval::Symbol, vloop::Loop, u::Int)
         else
             mm = _MMind(loopval, step(vloop))
             if isone(u)
-                push!(ex.args, Expr(:call, lv(:vadd_fast), VECTORWIDTHSYMBOL, mm))
+                push!(ex.args, Expr(:call, lv(:vadd_nsw), VECTORWIDTHSYMBOL, mm))
             else
-                push!(ex.args, Expr(:call, lv(:vadd_fast), Expr(:call, lv(:vmul_fast), VECTORWIDTHSYMBOL, u), mm))
+                push!(ex.args, Expr(:call, lv(:vadd_nsw), Expr(:call, lv(:vmul_nsw), VECTORWIDTHSYMBOL, u), mm))
             end
         end
     elseif u == 0
         push!(ex.args, loopval)
     else
-        push!(ex.args, Expr(:call, lv(:vadd_fast), loopval, staticexpr(u)))
+        push!(ex.args, Expr(:call, lv(:vadd_nsw), loopval, staticexpr(u)))
     end
 end
 function add_loopvalue!(instrcall::Expr, loopval, ua::UnrollArgs, u₁::Int)

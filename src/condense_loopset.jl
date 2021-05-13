@@ -3,6 +3,73 @@
 Base.:|(u::Unsigned, it::IndexType) = u | UInt8(it)
 Base.:(==)(u::Unsigned, it::IndexType) = (u % UInt8) == UInt8(it)
 
+function _append_fields!(t::Expr, body::Expr, sym::Symbol, ::Type{T}) where {T}
+  gf = GlobalRef(Core,:getfield)
+  for f ∈ 1:fieldcount(T)
+    TF = fieldtype(T, f)
+    gfcall = Expr(:call, gf, sym, f)
+    if Base.issingletontype(TF)
+      nothing
+    elseif fieldcount(TF) ≡ 0
+      push!(t.args, gfcall)
+    elseif TF <: DataType
+      push!(t.args, Expr(:call, GlobalRef(Base,:Val), gfcall))
+    else
+      newsym = gensym(sym)
+      push!(body.args, Expr(:(=), newsym, gfcall))
+      _append_fields!(t, body, newsym, TF)
+    end
+  end
+  return nothing
+end
+@generated function flatten_to_tuple(r::T) where {T}
+  numfields = fieldcount(T)
+  body = Expr(:block, Expr(:meta,:inline))
+  t = Expr(:tuple)
+  if Base.issingletontype(T)
+    nothing
+  elseif fieldcount(T) ≡ 0
+    push!(t.args, :r)
+  elseif T <: DataType
+    push!(t.args, Expr(:call, GlobalRef(Base,:Val), :r))
+  else
+    _append_fields!(t, body, :r, T)
+  end
+  push!(body.args, t)
+  body
+end
+function rebuild_fields(offset::Int, ::Type{T}) where {T}
+  numfields = fieldcount(T)
+  gf = GlobalRef(Core,:getfield)
+  call = (T <: Tuple) ? Expr(:tuple) : Expr(:new, T)
+  for f ∈ 1:numfields
+    TF = fieldtype(T, f)
+    if Base.issingletontype(TF)
+      push!(call.args, TF.instance)
+    elseif fieldcount(TF) ≡ 0
+      push!(call.args, Expr(:call, gf, :t, (offset += 1), false))
+    elseif TF <: DataType
+      push!(call.args, Expr(:call, GlobalRef(VectorizationBase, :unwrap), Expr(:call, gf, :t, (offset += 1), false)))
+    else
+      arg, offset = rebuild_fields(offset, TF)
+      push!(call.args, arg)      
+    end
+  end
+  return call, offset
+end
+@generated function reassemble_tuple(::Type{T}, t::Tuple) where {T}
+  if Base.issingletontype(T)
+    return T.instance
+  elseif fieldcount(T) ≡ 0
+    call = Expr(:call, GlobalRef(Core,:getfield), :t, 1, false)
+  elseif T <: DataType
+    call = Expr(:call, GlobalRef(VectorizationBase, :unwrap), Expr(:call, GlobalRef(Core,:getfield), :t, 1, false))
+  else
+    call, _ = rebuild_fields(0, T)
+  end
+  Expr(:block, Expr(:meta,:inline), call)
+end
+
 """
     ArrayRefStruct
 
@@ -290,7 +357,7 @@ val(x) = Expr(:call, Expr(:curly, :Val, x))
   ri = max(1, ri)
   quote
     $(Expr(:meta,:inline))
-    p, li = VectorizationBase.tdot(x, (vsub_fast(getfield(i,1,false),1),), VectorizationBase.strides(x))
+    p, li = VectorizationBase.tdot(x, (vsub_nsw(getfield(i,1,false),1),), VectorizationBase.strides(x))
     ptr = gep(p, li)
     StridedPointer{$T,1,$(C===1 ? 1 : 0),$(B===1 ? 1 : 0),$(R[ri],)}(ptr, (getfield(getfield(x,:strd), $ri, 1),), (Zero(),))
   end
@@ -327,7 +394,7 @@ end
   I === Zero && return :x
   quote
     $(Expr(:meta,:inline))
-    p, li = VectorizationBase.tdot(x, (vsub_fast(getfield(i,1,false),1),), VectorizationBase.strides(x))
+    p, li = VectorizationBase.tdot(x, (vsub_nsw(getfield(i,1,false),1),), VectorizationBase.strides(x))
     ptr = gep(p, li)
     StridedBitPointer{1,$(C===1 ? 1 : 0),$(B===1 ? 1 : 0),$(first(R),)}(ptr, (first(getfield(x,:strd)),), (Zero(),))
   end
@@ -610,9 +677,15 @@ function generate_call_types(
         end
     end
     append!(extra_args.args, arraysymbolinds) # add_array_symbols!
-    add_external_functions!(extra_args, ls) # extract_external_functions!
-    push!(q.args, Expr(:tuple, lbarg, extra_args))
+  add_external_functions!(extra_args, ls) # extract_external_functions!
+  if debug
     vecwidthdefq = Expr(:block)
+    push!(q.args, Expr(:tuple, lbarg, extra_args))
+  else
+    vargsym = gensym(:vargsym)
+    vecwidthdefq = Expr(:block, Expr(:(=), vargsym, Expr(:tuple, lbarg, extra_args)))
+    push!(q.args, Expr(:call, GlobalRef(Base,:Val), Expr(:call, GlobalRef(Base,:typeof), vargsym)), Expr(:(...), Expr(:call, lv(:flatten_to_tuple), vargsym)))
+  end
     define_eltype_vec_width!(vecwidthdefq, ls, nothing)
     push!(vecwidthdefq.args, q)
     if debug

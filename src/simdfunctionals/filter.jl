@@ -16,13 +16,13 @@ function vfilter!(f::F, x::Vector{T}, y::AbstractArray{T}) where {F,T <: NativeT
             mask = f(vy)
             VectorizationBase.compressstore!(gep(ptr_x, VectorizationBase.lazymul(st, j)), vy, mask)
             ptr_y = gep(ptr_y, incr)
-            j = vadd_fast(j, count_ones(mask))
+            j = vadd_nw(j, count_ones(mask))
         end
         rem_mask = VectorizationBase.mask(T, Nrem)
         vy = VectorizationBase.__vload(ptr_y, zero_index, rem_mask, False(), register_size())
         mask = rem_mask & f(vy)
         VectorizationBase.compressstore!(gep(ptr_x, VectorizationBase.lazymul(st, j)), vy, mask)
-        j = vadd_fast(j, count_ones(mask))
+        j = vadd_nw(j, count_ones(mask))
         Base._deleteend!(x, N-j) # resize!(x, j)
     end
     x
