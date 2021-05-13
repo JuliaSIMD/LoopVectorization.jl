@@ -1,6 +1,8 @@
 using Test
 using LoopVectorization
 
+const var"@_avx" = LoopVectorization.var"@_spmd"
+
 using LinearAlgebra
 function clenshaw(x, coeff)
     len_c = length(coeff)

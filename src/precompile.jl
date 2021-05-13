@@ -2,7 +2,7 @@ function _precompile_()
     ccall(:jl_generating_output, Cint, ()) == 1 || return nothing
     # Base.precompile(Tuple{typeof(which(_avx_!,(Val{UNROLL},Val{OPS},Val{ARF},Val{AM},Val{LPSYM},Tuple{LB, V},)).generator.gen),Any,Any,Any,Any,Any,Any,Any,Any,Type,Type,Type,Type,Any,Any})   # time: 1.0198073
     # Base.precompile(Tuple{typeof(gespf1),Any,Tuple{Any, VectorizationBase.NullStep}})   # time: 0.1096832
-    Base.precompile(Tuple{typeof(avx_macro),Module,LineNumberNode,Expr})   # time: 0.09183489
+    Base.precompile(Tuple{typeof(spmd_macro),Module,LineNumberNode,Expr})   # time: 0.09183489
     Base.precompile(Tuple{typeof(gespf1),StridedPointer{Float64, 1, 1, 0, (1,), Tuple{StaticInt{8}}, Tuple{StaticInt{1}}},Tuple{StaticInt{1}}})   # time: 0.05469272
     Base.precompile(Tuple{typeof(zerorangestart),UnitRange{Int}})   # time: 0.04291692
     Base.precompile(Tuple{Type{LoopSet},Symbol})   # time: 0.03362425
@@ -32,9 +32,9 @@ function _precompile_()
     Base.precompile(Tuple{typeof(array_reference_meta!),LoopSet,Symbol,SubArray{Any, 1, Vector{Any}, Tuple{UnitRange{Int}}, true},Int,Nothing})   # time: 0.008658403
     Base.precompile(Tuple{typeof(gespf1),StridedPointer{Int, 3, 1, 0, (1, 2, 3), Tuple{StaticInt{8}, Int, Int}, Tuple{StaticInt{1}, StaticInt{1}, StaticInt{1}}},Tuple{StaticInt{1}}})   # time: 0.008647886
     Base.precompile(Tuple{typeof(uniquearrayrefs_csesummary),LoopSet})   # time: 0.008355928
-    Base.precompile(Tuple{typeof(avx_macro),Module,LineNumberNode,Expr,Expr,Vararg{Expr}})   # time: 0.007974428
+    Base.precompile(Tuple{typeof(spmd_macro),Module,LineNumberNode,Expr,Expr,Vararg{Expr}})   # time: 0.007974428
     Base.precompile(Tuple{typeof(tryrefconvert),LoopSet,Expr,Int,Nothing})   # time: 0.007913027
-    Base.precompile(Tuple{typeof(avx_macro),Module,LineNumberNode,Expr,Expr})   # time: 0.007347188
+    Base.precompile(Tuple{typeof(spmd_macro),Module,LineNumberNode,Expr,Expr})   # time: 0.007347188
     Base.precompile(Tuple{typeof(show),IOContext{IOBuffer},Operation})   # time: 0.007273663
     Base.precompile(Tuple{typeof(loop_boundaries),LoopSet,Vector{Bool}})   # time: 0.006810827
     Base.precompile(Tuple{typeof(gespf1),StridedPointer{Float32, 4, 1, 0, (1, 2, 3, 4), Tuple{StaticInt{4}, Int, Int, Int}, NTuple{4, StaticInt{1}}},Tuple{StaticInt{-1}, StaticInt{-1}, StaticInt{1}, StaticInt{1}}})   # time: 0.006164707

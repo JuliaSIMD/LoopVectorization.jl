@@ -280,7 +280,7 @@ function unroll_no_reductions(ls, order, vloopsym)
         u = demote_unroll_factor(ls, u, vloopsym)
     end
     remaining_reg = max(8, (reg_count(ls) - round(Int,rpc))) # spilling a few consts isn't so bad
-    reg_constraint = max(1, remaining_reg ÷ round(Int,rpp))
+    reg_constraint = max(1, remaining_reg ÷ max(1,round(Int,rpp)))
     clamp(u, 1, reg_constraint), unrolled
     # rt = max(compute_rt, load_rt + store_rt)
     # # (iszero(rt) ? 4 : max(1, roundpow2( min( 4, round(Int, 16 / rt) ) ))), unrolled

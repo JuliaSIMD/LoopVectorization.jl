@@ -111,7 +111,7 @@ function process_args(args; inline = false, check_empty = false, u₁ = zero(Int
     end
     inline, check_empty, u₁, u₂, threads
 end
-function avx_macro(mod, src, q, args...)
+function spmd_macro(mod, src, q, args...)
     q = macroexpand(mod, q)
     
     if q.head === :for
@@ -124,12 +124,12 @@ function avx_macro(mod, src, q, args...)
     end
 end
 """
-    @avx
+    @spmd
 
 Annotate a `for` loop, or a set of nested `for` loops whose bounds are constant across iterations, to optimize the computation. For example:
 
-    function AmulBavx!(C, A, B)
-        @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+    function AmulB!(C, A, B)
+        @spmd for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
             Cₘₙ = zero(eltype(C))
             for k ∈ 1:size(A,2)
                 Cₘₙ += A[m,k] * B[k,n]
@@ -148,11 +148,11 @@ julia> using LoopVectorization
 
 julia> a = rand(100);
 
-julia> b = @avx exp.(2 .* a);
+julia> b = @spmd exp.(2 .* a);
 
 julia> c = similar(b);
 
-julia> @avx @. c = exp(2a);
+julia> @spmd @. c = exp(2a);
 
 julia> b ≈ c
 true
@@ -160,11 +160,11 @@ true
 
 # Extended help
 
-Advanced users can customize the implementation of the `@avx`-annotated block
+Advanced users can customize the implementation of the `@spmd`-annotated block
 using keyword arguments:
 
 ```
-@avx inline=false unroll=2 body
+@spmd inline=false unroll=2 body
 ```
 
 where `body` is the code of the block (e.g., `for ... end`).
@@ -197,42 +197,42 @@ but it applies to the loop ordering and unrolling that will be chosen by LoopVec
 `uᵢ=0` (the default) indicates that LoopVectorization should pick its own value,
 and `uᵢ=-1` disables unrolling for the correspond loop.
 
-The `@avx` macro also checks the array arguments using `LoopVectorization.check_args` to try and determine
+The `@spmd` macro also checks the array arguments using `LoopVectorization.check_args` to try and determine
 if they are compatible with the macro. If `check_args` returns false, a fall back loop annotated with `@inbounds`
 and `@fastmath` is generated. Note that `VectorizationBase` provides functions such as `vadd` and `vmul` that will
-ignore `@fastmath`, preserving IEEE semantics both within `@avx` and `@fastmath`.
+ignore `@fastmath`, preserving IEEE semantics both within `@spmd` and `@fastmath`.
 `check_args` currently returns false for some wrapper types like `LinearAlgebra.UpperTriangular`, requiring you to
 use their `parent`. Triangular loops aren't yet supported.
 """
-macro avx(args...)
-    avx_macro(__module__, __source__, last(args), Base.front(args)...)
+macro spmd(args...)
+    spmd_macro(__module__, __source__, last(args), Base.front(args)...)
 end
 """
-Equivalent to `@avx`, except it adds `thread=true` as the first keyword argument.
+Equivalent to `@spmd`, except it adds `thread=true` as the first keyword argument.
 Note that later arguments take precendence.
 
-Meant for convenience, as `@avxt` is shorter than `@avx thread=true`.
+Meant for convenience, as `@spmdt` is shorter than `@spmd thread=true`.
 """
-macro avxt(args...)
-    avx_macro(__module__, __source__, last(args), :(thread=true), Base.front(args)...)
+macro spmdt(args...)
+    spmd_macro(__module__, __source__, last(args), :(thread=true), Base.front(args)...)
 end
 
 """
-    @_avx
+    @_spmd
 
-This macro transforms loops similarly to [`@avx`](@ref).
-While `@avx` punts to a generated function to enable type-based analysis, `_@avx`
-works on just the expressions. This requires that it makes a number of default assumptions. Use of `@avx` is preferred.
+This macro mostly exists for debugging/testing purposes. It does not support many of the use cases of [`@spmd`](@ref).
+It emits loops directly, rather than punting to an `@generated` function, meaning it doesn't have access to type
+information when generating code or analyzing the loops, often leading to bad performance.
 
-This macro accepts the `inline` and `unroll` keyword arguments like `@avx`, but ignores the `check_empty` argument.
+This macro accepts the `inline` and `unroll` keyword arguments like `@spmd`, but ignores the `check_empty` argument.
 """
-macro _avx(q)
+macro _spmd(q)
     q = macroexpand(__module__, q)
     ls = LoopSet(q, __module__)
     set_hw!(ls)
     esc(Expr(:block, ls.prepreamble, lower_and_split_loops(ls, -1)))
 end
-macro _avx(arg, q)
+macro _spmd(arg, q)
     @assert q.head === :for
     q = macroexpand(__module__, q)
     inline, check_empty, u₁, u₂ = check_macro_kwarg(arg, false, false, zero(Int8), zero(Int8), 1)
@@ -241,8 +241,14 @@ macro _avx(arg, q)
     esc(Expr(:block, ls.prepreamble, lower(ls, u₁ % Int, u₂ % Int, -1)))
 end
 
-macro avx_debug(q)
+macro spmd_debug(q)
     q = macroexpand(__module__, q)
     ls = LoopSet(q, __module__)
     esc(LoopVectorization.setup_call_debug(ls))
 end
+
+# define aliases
+const var"@avx" = var"@spmd"
+const var"@avxt" = var"@spmdt"
+const var"@avx_debug" = var"@spmd_debug"
+
