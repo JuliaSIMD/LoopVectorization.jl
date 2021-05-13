@@ -240,16 +240,18 @@ function unroll_no_reductions(ls, order, vloopsym)
     end
     # latency not a concern, because no depchains
     compute_l = 0.0
-    # rp = 0
+    rpp = 0 # register pressure proportional to unrolling
+    rpc = 0 # register pressure independent of unroll factor
     for op ∈ operations(ls)
         isu₁unrolled(op) || continue
         rt, sl, rpop = cost(ls, op, (unrolled,Symbol("")), vloopsym, Wshift, size_T)
-        # rp += rpop
         if iscompute(op)
             compute_rt += rt
             compute_l += sl
+            rpc += rpop # constant loads for special functions reused with unrolling
         elseif isload(op)
             load_rt += rt
+            rpp += rpop # loads are proportional to unrolling
         elseif isstore(op)
             store_rt += rt
         end
@@ -277,7 +279,9 @@ function unroll_no_reductions(ls, order, vloopsym)
     if unrolled === vloopsym
         u = demote_unroll_factor(ls, u, vloopsym)
     end
-    u, unrolled
+    remaining_reg = max(8, (reg_count(ls) - round(Int,rpc))) # spilling a few consts isn't so bad
+    reg_constraint = max(1, remaining_reg ÷ round(Int,rpp))
+    clamp(u, 1, reg_constraint), unrolled
     # rt = max(compute_rt, load_rt + store_rt)
     # # (iszero(rt) ? 4 : max(1, roundpow2( min( 4, round(Int, 16 / rt) ) ))), unrolled
     # (iszero(rt) ? 4 : max(1, VectorizationBase.nextpow2( min( 4, round(Int, 8 / rt) ) ))), unrolled
