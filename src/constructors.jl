@@ -111,7 +111,7 @@ function process_args(args; inline = false, check_empty = false, u₁ = zero(Int
     end
     inline, check_empty, u₁, u₂, threads
 end
-function brrr_macro(mod, src, q, args...)
+function vectorize_macro(mod, src, q, args...)
     q = macroexpand(mod, q)
     
     if q.head === :for
@@ -124,12 +124,12 @@ function brrr_macro(mod, src, q, args...)
     end
 end
 """
-    @brrr
+    @vectorize
 
 Annotate a `for` loop, or a set of nested `for` loops whose bounds are constant across iterations, to optimize the computation. For example:
 
     function AmulB!(C, A, B)
-        @brrr for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+        @vectorize for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
             Cₘₙ = zero(eltype(C))
             for k ∈ 1:size(A,2)
                 Cₘₙ += A[m,k] * B[k,n]
@@ -148,11 +148,11 @@ julia> using LoopVectorization
 
 julia> a = rand(100);
 
-julia> b = @brrr exp.(2 .* a);
+julia> b = @vectorize exp.(2 .* a);
 
 julia> c = similar(b);
 
-julia> @brrr @. c = exp(2a);
+julia> @vectorize @. c = exp(2a);
 
 julia> b ≈ c
 true
@@ -160,11 +160,11 @@ true
 
 # Extended help
 
-Advanced users can customize the implementation of the `@brrr`-annotated block
+Advanced users can customize the implementation of the `@vectorize`-annotated block
 using keyword arguments:
 
 ```
-@brrr inline=false unroll=2 body
+@vectorize inline=false unroll=2 body
 ```
 
 where `body` is the code of the block (e.g., `for ... end`).
@@ -197,42 +197,46 @@ but it applies to the loop ordering and unrolling that will be chosen by LoopVec
 `uᵢ=0` (the default) indicates that LoopVectorization should pick its own value,
 and `uᵢ=-1` disables unrolling for the correspond loop.
 
-The `@brrr` macro also checks the array arguments using `LoopVectorization.check_args` to try and determine
+The `@vectorize` macro also checks the array arguments using `LoopVectorization.check_args` to try and determine
 if they are compatible with the macro. If `check_args` returns false, a fall back loop annotated with `@inbounds`
 and `@fastmath` is generated. Note that `VectorizationBase` provides functions such as `vadd` and `vmul` that will
-ignore `@fastmath`, preserving IEEE semantics both within `@brrr` and `@fastmath`.
+ignore `@fastmath`, preserving IEEE semantics both within `@vectorize` and `@fastmath`.
 `check_args` currently returns false for some wrapper types like `LinearAlgebra.UpperTriangular`, requiring you to
 use their `parent`. Triangular loops aren't yet supported.
 """
-macro brrr(args...)
-    brrr_macro(__module__, __source__, last(args), Base.front(args)...)
+macro vectorize(args...)
+    vectorize_macro(__module__, __source__, last(args), Base.front(args)...)
 end
 """
-Equivalent to `@brrr`, except it adds `thread=true` as the first keyword argument.
+Equivalent to `@vectorize`, except it adds `thread=true` as the first keyword argument.
 Note that later arguments take precendence.
 
-Meant for convenience, as `@tbrrr` is shorter than `@brrr thread=true`.
+Meant for convenience, as `@tvectorize` is shorter than `@vectorize thread=true`.
 """
-macro tbrrr(args...)
-    brrr_macro(__module__, __source__, last(args), :(thread=true), Base.front(args)...)
+macro tvectorize(args...)
+    vectorize_macro(__module__, __source__, last(args), :(thread=true), Base.front(args)...)
 end
 
 """
-    @_brrr
+    @_vectorize
 
-This macro mostly exists for debugging/testing purposes. It does not support many of the use cases of [`@brrr`](@ref).
+This macro mostly exists for debugging/testing purposes. It does not support many of the use cases of [`@vectorize`](@ref).
 It emits loops directly, rather than punting to an `@generated` function, meaning it doesn't have access to type
 information when generating code or analyzing the loops, often leading to bad performance.
 
-This macro accepts the `inline` and `unroll` keyword arguments like `@brrr`, but ignores the `check_empty` argument.
+This macro accepts the `inline` and `unroll` keyword arguments like `@vectorize`, but ignores the `check_empty` argument.
 """
-macro _brrr(q)
-    q = macroexpand(__module__, q)
-    ls = LoopSet(q, __module__)
-    set_hw!(ls)
-    esc(Expr(:block, ls.prepreamble, lower_and_split_loops(ls, -1)))
+macro _vectorize(q)
+  q = macroexpand(__module__, q)
+  ls = LoopSet(q, __module__)
+  set_hw!(ls)
+  for or ∈ ls.outer_reductions
+    op = operations(ls)[or]
+    pushpreamble!(ls, Expr(:(=), outer_reduct_init_typename(op), typeof_expr(op)))
+  end
+  esc(Expr(:block, ls.prepreamble, lower_and_split_loops(ls, -1)))
 end
-macro _brrr(arg, q)
+macro _vectorize(arg, q)
     @assert q.head === :for
     q = macroexpand(__module__, q)
     inline, check_empty, u₁, u₂ = check_macro_kwarg(arg, false, false, zero(Int8), zero(Int8), 1)
@@ -241,14 +245,14 @@ macro _brrr(arg, q)
     esc(Expr(:block, ls.prepreamble, lower(ls, u₁ % Int, u₂ % Int, -1)))
 end
 
-macro brrr_debug(q)
+macro vectorize_debug(q)
     q = macroexpand(__module__, q)
     ls = LoopSet(q, __module__)
     esc(LoopVectorization.setup_call_debug(ls))
 end
 
 # define aliases
-const var"@avx" = var"@brrr"
-const var"@avxt" = var"@tbrrr"
-const var"@avx_debug" = var"@brrr_debug"
+const var"@avx" = var"@vectorize"
+const var"@avxt" = var"@tvectorize"
+const var"@avx_debug" = var"@vectorize_debug"
 

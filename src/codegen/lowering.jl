@@ -426,22 +426,23 @@ end
 
 function outer_reduction_zero(op::Operation, u₁u::Bool, Umax::Int, reduct_class::Float64, rs::Expr)
   reduct_zero = reduction_zero(reduct_class)
+  Tsym = outer_reduct_init_typename(op)
   if isvectorized(op)
     if Umax == 1 || !u₁u
       if reduct_zero === :zero
-        Expr(:call, lv(:_vzero), VECTORWIDTHSYMBOL, ELTYPESYMBOL, rs)
+        Expr(:call, lv(:_vzero), VECTORWIDTHSYMBOL, Tsym, rs)
       else
-        Expr(:call, lv(:_vbroadcast), VECTORWIDTHSYMBOL, Expr(:call, reduct_zero, ELTYPESYMBOL), rs)
+        Expr(:call, lv(:_vbroadcast), VECTORWIDTHSYMBOL, Expr(:call, reduct_zero, Tsym), rs)
       end
     else
       if reduct_zero === :zero
-        Expr(:call, lv(:zero_vecunroll), staticexpr(Umax), VECTORWIDTHSYMBOL, ELTYPESYMBOL, rs)
+        Expr(:call, lv(:zero_vecunroll), staticexpr(Umax), VECTORWIDTHSYMBOL, Tsym, rs)
       else
-        Expr(:call, lv(:vbroadcast_vecunroll), staticexpr(Umax), VECTORWIDTHSYMBOL, Expr(:call, reduct_zero, ELTYPESYMBOL), rs)
+        Expr(:call, lv(:vbroadcast_vecunroll), staticexpr(Umax), VECTORWIDTHSYMBOL, Expr(:call, reduct_zero, Tsym), rs)
       end
     end
   else
-    Expr(:call, reduct_zero, ELTYPESYMBOL)
+    Expr(:call, reduct_zero, Tsym)
   end
 end
 # function outer_reduction_name(mvar::Symbol, _Umax::Int, u₂::Int, u₁u::Bool)
@@ -614,68 +615,37 @@ function gc_preserve(ls::LoopSet, q::Expr)
     # Expr(:block, gcp)
 end
 
-function typeof_outer_reduction_init(ls::LoopSet, op::Operation)
-    opid = identifier(op)
-    for (id, sym) ∈ ls.preamble_symsym
-        opid == id && return Expr(:call, :typeof, sym)
+function determine_eltype(ls::LoopSet, ortypdefined::Bool)::Union{Symbol,Expr}
+  narrays = length(ls.includedactualarrays)
+  noreduc = length(ls.outer_reductions)
+  ntyp = narrays + noreduc
+  if ntyp == 0
+    return Expr(:call, lv(:typeof), 0)
+  elseif ntyp == 1
+    if narrays == 1
+      return Expr(:call, lv(:eltype), first(ls.includedactualarrays))
+    else
+      oreducop = ls.operations[only(ls.outer_reductions)]
+      if ortypdefined
+        return typeof_expr(oreducop)
+      else
+        return outer_reduct_init_typename(oreducop)
+      end
     end
-    for (id,(intval,intsz,signed)) ∈ ls.preamble_symint
-        if opid == id
-            if intsz == 1
-                return :Bool
-            elseif signed
-                return Symbol(:Int,intsz)
-            else
-                return Symbol(:UInt,intsz)
-            end
-        end
+  end
+  pt = Expr(:call, lv(:promote_type))
+  for array ∈ ls.includedactualarrays
+    push!(pt.args, Expr(:call, lv(:eltype), array))
+  end
+  for j ∈ ls.outer_reductions
+    oreducop = ls.operations[j]
+    if ortypdefined
+      push!(pt.args, typeof_expr(oreducop))
+    else
+      push!(pt.args, outer_reduct_init_typename(oreducop))
     end
-    for (id,floatval) ∈ ls.preamble_symfloat
-        opid == id && return :Float64
-    end
-    for (id,typ) ∈ ls.preamble_zeros
-        instruction(ops[id]) === LOOPCONSTANT || continue
-        opid == id || continue
-        if typ == IntOrFloat
-            return :Float64
-        elseif typ == HardInt
-            return :Int
-        else#if typ == HardFloat
-            return :Float64
-        end
-    end
-    throw("Could not find initializing constant.")
-end
-function typeof_outer_reduction(ls::LoopSet, op::Operation)
-    for opp ∈ operations(ls)
-        opp === op && continue
-        name(op) === name(opp) && return typeof_outer_reduction_init(ls, opp)
-    end
-    throw("Could not find initialization op.")
-end
-
-function determine_eltype(ls::LoopSet)::Union{Symbol,Expr}
-    if length(ls.includedactualarrays) == 0
-        if length(ls.outer_reductions) == 0
-            return Expr(:call, lv(:typeof), 0)
-        elseif length(ls.outer_reductions) == 1
-            op = ls.operations[only(ls.outer_reductions)]
-            return typeof_outer_reduction(ls, op)
-        else
-            pt = Expr(:call, lv(:promote_type))
-            for j ∈ ls.outer_reductions
-                push!(pt.args, typeof_outer_reduction(ls, ls.operations[j]))
-            end
-            return pt
-        end
-    elseif length(ls.includedactualarrays) == 1
-        return Expr(:call, lv(:eltype), first(ls.includedactualarrays))
-    end
-    promote_q = Expr(:call, lv(:promote_type))
-    for array ∈ ls.includedactualarrays
-        push!(promote_q.args, Expr(:call, lv(:eltype), array))
-    end
-    promote_q
+  end
+  return pt
 end
 @inline _eltype(x) = eltype(x)
 @inline _eltype(::BitArray) = VectorizationBase.Bit
@@ -752,8 +722,8 @@ function definemask(loop::Loop)
         maskexpr(addexpr(lenexpr, 1))
     end
 end
-function define_eltype_vec_width!(q::Expr, ls::LoopSet, vectorized)
-    push!(q.args, Expr(:(=), ELTYPESYMBOL, determine_eltype(ls)))
+function define_eltype_vec_width!(q::Expr, ls::LoopSet, vectorized, ortypdefined::Bool)
+    push!(q.args, Expr(:(=), ELTYPESYMBOL, determine_eltype(ls, ortypdefined)))
     push!(q.args, Expr(:(=), VECTORWIDTHSYMBOL, determine_width(ls, vectorized)))
     nothing
 end
@@ -764,7 +734,7 @@ function setup_preamble!(ls::LoopSet, us::UnrollSpecification, Ureduct::Int)
     u₂loopsym = order[u₂loopnum]
     vectorized = order[vloopnum]
     set_vector_width!(ls, vectorized)
-    iszero(length(ls.includedactualarrays) + length(ls.outer_reductions)) || define_eltype_vec_width!(ls.preamble, ls, vectorized)
+    iszero(length(ls.includedactualarrays) + length(ls.outer_reductions)) || define_eltype_vec_width!(ls.preamble, ls, vectorized, false)
     lower_licm_constants!(ls)
     isone(num_loops(ls)) || pushpreamble!(ls, definemask(getloop(ls, vectorized)))#, u₁ > 1 && u₁loopnum == vloopnum))
     if (Ureduct == u₁) || (u₂ != -1) || (Ureduct == -1)

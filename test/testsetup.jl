@@ -1,7 +1,7 @@
 using Test
 using LoopVectorization
 
-const var"@_avx" = LoopVectorization.var"@_brrr"
+const var"@_avx" = LoopVectorization.var"@_vectorize"
 
 using LinearAlgebra
 function clenshaw(x, coeff)

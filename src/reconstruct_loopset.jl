@@ -543,6 +543,15 @@ function extract_external_functions!(ls::LoopSet, offset::Int, vargs)
     end
     offset
 end
+outer_reduct_init_typename(op::Operation) = Symbol(mangledvar(op), "#or#init#type#")
+function extract_outerreduct_types!(ls::LoopSet, offset::Int, vargs)
+  # for op
+  for or ∈ ls.outer_reductions
+    extractt = Expr(:call, GlobalRef(Core,:getfield), Symbol("#vargs#"), (offset+=1), false)
+    pushpreamble!(ls, Expr(:(=), outer_reduct_init_typename(operations(ls)[or]), extractt))
+  end
+  offset
+end
 function sizeofeltypes(v)::Int
     num_arrays = length(v)::Int
     if num_arrays == 0
@@ -599,6 +608,7 @@ function avx_loopset!(
     extractind = process_metadata!(ls, AM, extractind)
     extractind = add_array_symbols!(ls, arraysymbolinds, extractind)
     extract_external_functions!(ls, extractind, vargs)
+    extract_outerreduct_types!(ls, extractind, vargs)
     ls
 end
 function avx_body(ls::LoopSet, UNROLL::Tuple{Bool,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt})
@@ -671,7 +681,7 @@ Execute an `@avx` block. The block's code is represented via the arguments:
 @aggressive_constprop @generated function _avx_!(
     ::Val{var"#UNROLL#"}, ::Val{var"#OPS#"}, ::Val{var"#ARF#"}, ::Val{var"#AM#"}, ::Val{var"#LPSYM#"}, ::Val{Tuple{var"#LB#",var"#V#"}}, var"#flattened#var#arguments#"::Vararg{Any,var"#num#vargs#"}
 ) where {var"#UNROLL#", var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#", var"#V#", var"#num#vargs#"}
-  1 + 1 # Irrelevant line you can comment out/in to force recompilation...
+  # 1 + 1 # Irrelevant line you can comment out/in to force recompilation...
   ls = _avx_loopset(var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#".parameters, var"#V#".parameters, var"#UNROLL#")
   pushfirst!(ls.preamble.args, :(var"#lv#tuple#args#" = reassemble_tuple(Tuple{var"#LB#",var"#V#"}, var"#flattened#var#arguments#")))
   # return @show avx_body(ls, var"#UNROLL#")

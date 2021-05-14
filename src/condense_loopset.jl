@@ -3,6 +3,8 @@
 Base.:|(u::Unsigned, it::IndexType) = u | UInt8(it)
 Base.:(==)(u::Unsigned, it::IndexType) = (u % UInt8) == UInt8(it)
 
+struct StaticType{T} end
+@inline gettype(::StaticType{T}) where {T} = T
 function _append_fields!(t::Expr, body::Expr, sym::Symbol, ::Type{T}) where {T}
   gf = GlobalRef(Core,:getfield)
   for f ∈ 1:fieldcount(T)
@@ -13,7 +15,7 @@ function _append_fields!(t::Expr, body::Expr, sym::Symbol, ::Type{T}) where {T}
     elseif fieldcount(TF) ≡ 0
       push!(t.args, gfcall)
     elseif TF <: DataType
-      push!(t.args, Expr(:call, GlobalRef(Base,:Val), gfcall))
+      push!(t.args, Expr(:call, Expr(:curly, lv(:StaticType), gfcall)))
     else
       newsym = gensym(sym)
       push!(body.args, Expr(:(=), newsym, gfcall))
@@ -31,7 +33,7 @@ end
   elseif fieldcount(T) ≡ 0
     push!(t.args, :r)
   elseif T <: DataType
-    push!(t.args, Expr(:call, GlobalRef(Base,:Val), :r))
+    push!(t.args, Expr(:call, Expr(:curly, lv(:StaticType), :r)))
   else
     _append_fields!(t, body, :r, T)
   end
@@ -49,7 +51,7 @@ function rebuild_fields(offset::Int, ::Type{T}) where {T}
     elseif fieldcount(TF) ≡ 0
       push!(call.args, Expr(:call, gf, :t, (offset += 1), false))
     elseif TF <: DataType
-      push!(call.args, Expr(:call, GlobalRef(VectorizationBase, :unwrap), Expr(:call, gf, :t, (offset += 1), false)))
+      push!(call.args, Expr(:call, lv(:gettype), Expr(:call, gf, :t, (offset += 1), false)))
     else
       arg, offset = rebuild_fields(offset, TF)
       push!(call.args, arg)      
@@ -63,7 +65,7 @@ end
   elseif fieldcount(T) ≡ 0
     call = Expr(:call, GlobalRef(Core,:getfield), :t, 1, false)
   elseif T <: DataType
-    call = Expr(:call, GlobalRef(VectorizationBase, :unwrap), Expr(:call, GlobalRef(Core,:getfield), :t, 1, false))
+    call = Expr(:call, lv(:gettype), Expr(:call, GlobalRef(Core,:getfield), :t, 1, false))
   else
     call, _ = rebuild_fields(0, T)
   end
@@ -196,16 +198,16 @@ function getroots(ls::LoopSet)::Vector{Bool}
     getroots!(rooted, ls)
 end
 function getroots!(rooted::Vector{Bool}, ls::LoopSet)
-    fill!(rooted, false)
-    ops = operations(ls)
-    for or ∈ ls.outer_reductions
-        recursively_set_parents_true!(rooted, ops[or])
-    end
-    for op ∈ ops
-        isstore(op) && recursively_set_parents_true!(rooted, op)
-    end
-    length(ls.includedactualarrays) == 0 || remove_outer_reducts!(rooted, ls)
-    return rooted
+  fill!(rooted, false)
+  ops = operations(ls)
+  for or ∈ ls.outer_reductions
+    recursively_set_parents_true!(rooted, ops[or])
+  end
+  for op ∈ ops
+    isstore(op) && recursively_set_parents_true!(rooted, op)
+  end
+  remove_outer_reducts!(rooted, ls)
+  return rooted
 end
 function OperationStruct!(varnames::Vector{Symbol}, ids::Vector{Int}, ls::LoopSet, op::Operation)
     instr = instruction(op)
@@ -635,49 +637,51 @@ function generate_call_split(
   end
   return generate_call_types(ls, preserve, shouldindbyind, roots, extra_args, inlineu₁u₂, thread, debug)
 end
+
 # Try to condense in type stable manner
 function generate_call_types(
   ls::LoopSet, preserve::Vector{Symbol}, shouldindbyind::Vector{Bool}, roots::Vector{Bool}, extra_args::Expr, (inline,u₁,u₂)::Tuple{Bool,Int8,Int8}, thread::UInt, debug::Bool
 )
   # good place to check for split  
-    operation_descriptions = Expr(:tuple)
-    varnames = Symbol[]; ids = Vector{Int}(undef, length(operations(ls)))
-    ops = operations(ls)
-    for op ∈ ops
-        instr::Instruction = instruction(op)
-        if (isconstant(op) && (instr == LOOPCONSTANT)) && (!roots[identifier(op)])
-            instr = op.instruction = DROPPEDCONSTANT 
-        end
-        push!(operation_descriptions.args, QuoteNode(instr.mod))
-        push!(operation_descriptions.args, QuoteNode(instr.instr))
-        push!(operation_descriptions.args, OperationStruct!(varnames, ids, ls, op))
+  operation_descriptions = Expr(:tuple)
+  varnames = Symbol[]; ids = Vector{Int}(undef, length(operations(ls)))
+  ops = operations(ls)
+  for op ∈ ops
+    instr::Instruction = instruction(op)
+    if (isconstant(op) && (instr == LOOPCONSTANT)) && (!roots[identifier(op)])
+      instr = op.instruction = DROPPEDCONSTANT 
     end
-    arraysymbolinds = Symbol[]
-    arrayref_descriptions = Expr(:tuple)
-    duplicate_ref = fill(false, length(ls.refs_aliasing_syms))
-    for (j,ref) ∈ enumerate(ls.refs_aliasing_syms)
-        vpref = vptr(ref)
-        # duplicate_ref[j] ≠ 0 && continue
-        duplicate_ref[j] && continue
-        push!(arrayref_descriptions.args, ArrayRefStruct(ls, ref, arraysymbolinds, ids))
-    end
-    argmeta = argmeta_and_consts_description(ls, arraysymbolinds)
-    loop_bounds = loop_boundaries(ls, shouldindbyind)
-    loop_syms = tuple_expr(QuoteNode, ls.loopsymbols)
-    func = debug ? lv(:_avx_loopset_debug) : lv(:_avx_!)
-    lbarg = debug ? Expr(:call, :typeof, loop_bounds) : loop_bounds
-    configarg = (inline,u₁,u₂,ls.isbroadcast,thread)
-    unroll_param_tup = Expr(:call, lv(:avx_config_val), :(Val{$configarg}()), VECTORWIDTHSYMBOL)
-    q = Expr(:call, func, unroll_param_tup, val(operation_descriptions), val(arrayref_descriptions), val(argmeta), val(loop_syms))
+    push!(operation_descriptions.args, QuoteNode(instr.mod))
+    push!(operation_descriptions.args, QuoteNode(instr.instr))
+    push!(operation_descriptions.args, OperationStruct!(varnames, ids, ls, op))
+  end
+  arraysymbolinds = Symbol[]
+  arrayref_descriptions = Expr(:tuple)
+  duplicate_ref = fill(false, length(ls.refs_aliasing_syms))
+  for (j,ref) ∈ enumerate(ls.refs_aliasing_syms)
+    vpref = vptr(ref)
+    # duplicate_ref[j] ≠ 0 && continue
+    duplicate_ref[j] && continue
+    push!(arrayref_descriptions.args, ArrayRefStruct(ls, ref, arraysymbolinds, ids))
+  end
+  argmeta = argmeta_and_consts_description(ls, arraysymbolinds)
+  loop_bounds = loop_boundaries(ls, shouldindbyind)
+  loop_syms = tuple_expr(QuoteNode, ls.loopsymbols)
+  func = debug ? lv(:_avx_loopset_debug) : lv(:_avx_!)
+  lbarg = debug ? Expr(:call, :typeof, loop_bounds) : loop_bounds
+  configarg = (inline,u₁,u₂,ls.isbroadcast,thread)
+  unroll_param_tup = Expr(:call, lv(:avx_config_val), :(Val{$configarg}()), VECTORWIDTHSYMBOL)
+  q = Expr(:call, func, unroll_param_tup, val(operation_descriptions), val(arrayref_descriptions), val(argmeta), val(loop_syms))
 
-    add_reassigned_syms!(extra_args, ls) # counterpart to `add_ops!` constants
-    for (opid,sym) ∈ ls.preamble_symsym # counterpart to process_metadata! symsym extraction
-        if instruction(ops[opid]) ≠ DROPPEDCONSTANT
-            push!(extra_args.args, sym)
-        end
+  add_reassigned_syms!(extra_args, ls) # counterpart to `add_ops!` constants
+  for (opid,sym) ∈ ls.preamble_symsym # counterpart to process_metadata! symsym extraction
+    if instruction(ops[opid]) ≠ DROPPEDCONSTANT
+      push!(extra_args.args, sym)
     end
-    append!(extra_args.args, arraysymbolinds) # add_array_symbols!
+  end
+  append!(extra_args.args, arraysymbolinds) # add_array_symbols!
   add_external_functions!(extra_args, ls) # extract_external_functions!
+  add_outerreduct_types!(extra_args, ls) # extract_outerreduct_types!
   if debug
     vecwidthdefq = Expr(:block)
     push!(q.args, Expr(:tuple, lbarg, extra_args))
@@ -686,17 +690,22 @@ function generate_call_types(
     vecwidthdefq = Expr(:block, Expr(:(=), vargsym, Expr(:tuple, lbarg, extra_args)))
     push!(q.args, Expr(:call, GlobalRef(Base,:Val), Expr(:call, GlobalRef(Base,:typeof), vargsym)), Expr(:(...), Expr(:call, lv(:flatten_to_tuple), vargsym)))
   end
-    define_eltype_vec_width!(vecwidthdefq, ls, nothing)
-    push!(vecwidthdefq.args, q)
-    if debug
-        pushpreamble!(ls,vecwidthdefq)
-        Expr(:block, ls.prepreamble, ls.preamble)
-    else
-        setup_call_final(ls, setup_outerreduct_preserve(ls, vecwidthdefq, preserve))
-    end
+  define_eltype_vec_width!(vecwidthdefq, ls, nothing, true)
+  push!(vecwidthdefq.args, q)
+  if debug
+    pushpreamble!(ls,vecwidthdefq)
+    Expr(:block, ls.prepreamble, ls.preamble)
+  else
+    setup_call_final(ls, setup_outerreduct_preserve(ls, vecwidthdefq, preserve))
+  end
 end
-
-
+# @inline reductinittype(::T) where {T} = StaticType{T}()
+typeof_expr(op::Operation) = Expr(:call, GlobalRef(Base,:typeof), name(op))
+function add_outerreduct_types!(extra_args::Expr, ls::LoopSet) # extract_outerreduct_types!
+  for or ∈ ls.outer_reductions
+    push!(extra_args.args, typeof_expr(operations(ls)[or]))
+  end
+end
 """
     check_args(::Vararg{AbstractArray})
 

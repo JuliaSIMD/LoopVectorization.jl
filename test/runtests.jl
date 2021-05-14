@@ -70,6 +70,8 @@ const START_TIME = time()
   @time include("staticsize.jl")
 
   @time include("iteration_bound_tests.jl")
+
+  @time include("outer_reductions.jl")
   
   if VERSION ≥ v"1.6"
     @time include("quantum.jl")
