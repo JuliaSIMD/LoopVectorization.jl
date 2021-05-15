@@ -393,7 +393,7 @@ function determine_unroll_factor(ls::LoopSet, order::Vector{Symbol}, vloopsym::S
     UF, best_unrolled
 end
 
-function unroll_cost(X, u₁, u₂, u₁L, u₂L)
+@inline function unroll_cost(X, u₁, u₂, u₁L, u₂L)
     u₂factor = (num_iterations(u₂L, u₂)/u₂L)
     u₁factor = (num_iterations(u₁L, u₁)/u₁L)
     # X[1]*u₂factor*u₁factor + X[4] + X[2] * u₂factor + X[3] * u₁factor
