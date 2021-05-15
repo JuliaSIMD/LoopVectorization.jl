@@ -426,7 +426,8 @@ end
 
 function outer_reduction_zero(op::Operation, u₁u::Bool, Umax::Int, reduct_class::Float64, rs::Expr)
   reduct_zero = reduction_zero(reduct_class)
-  Tsym = outer_reduct_init_typename(op)
+  # Tsym = outer_reduct_init_typename(op)
+  Tsym = ELTYPESYMBOL
   if isvectorized(op)
     if Umax == 1 || !u₁u
       if reduct_zero === :zero
@@ -614,7 +615,16 @@ function gc_preserve(ls::LoopSet, q::Expr)
     q2
     # Expr(:block, gcp)
 end
-
+function push_outer_reduct_types!(pt::Expr, ls::LoopSet, ortypdefined::Bool)
+  for j ∈ ls.outer_reductions
+    oreducop = ls.operations[j]
+    if ortypdefined
+      push!(pt.args, typeof_expr(oreducop))
+    else
+      push!(pt.args, outer_reduct_init_typename(oreducop))
+    end
+  end
+end
 function determine_eltype(ls::LoopSet, ortypdefined::Bool)::Union{Symbol,Expr}
   narrays = length(ls.includedactualarrays)
   noreduc = length(ls.outer_reductions)
@@ -637,14 +647,7 @@ function determine_eltype(ls::LoopSet, ortypdefined::Bool)::Union{Symbol,Expr}
   for array ∈ ls.includedactualarrays
     push!(pt.args, Expr(:call, lv(:eltype), array))
   end
-  for j ∈ ls.outer_reductions
-    oreducop = ls.operations[j]
-    if ortypdefined
-      push!(pt.args, typeof_expr(oreducop))
-    else
-      push!(pt.args, outer_reduct_init_typename(oreducop))
-    end
-  end
+  push_outer_reduct_types!(pt, ls, ortypdefined)
   return pt
 end
 @inline _eltype(x) = eltype(x)
@@ -653,20 +656,21 @@ function determine_width(
     ls::LoopSet, vectorized::Union{Symbol,Nothing}
 )
     vwidth_q = Expr(:call, lv(:pick_vector_width))
-    if !(vectorized === nothing)
+    if vectorized ≢ nothing
         vloop = getloop(ls, vectorized)
         if isstaticloop(vloop)
             push!(vwidth_q.args, Expr(:call, Expr(:curly, :Val, length(vloop))))
         end
     end
     # push!(vwidth_q.args, ls.T)
-    if length(ls.includedactualarrays) < 2
-        push!(vwidth_q.args, ELTYPESYMBOL)
-    else
-        for array ∈ ls.includedactualarrays
-            push!(vwidth_q.args, Expr(:call, lv(:_eltype), array))
-        end
-    end
+    # if length(ls.includedactualarrays) < 2
+    push!(vwidth_q.args, ELTYPESYMBOL)
+    # else
+    # for array ∈ ls.includedactualarrays
+    #     push!(vwidth_q.args, Expr(:call, lv(:_eltype), array))
+    # end
+    # push_outer_reduct_types!(vwidth_q, 
+    # end
     vwidth_q
 end
 function init_remblock(unrolledloop::Loop, lssm::LoopStartStopManager, n::Int)#u₁loop::Symbol = unrolledloop.itersymbol)

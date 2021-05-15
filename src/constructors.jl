@@ -217,6 +217,12 @@ macro tvectorize(args...)
     vectorize_macro(__module__, __source__, last(args), :(thread=true), Base.front(args)...)
 end
 
+function def_outer_reduct_types!(ls::LoopSet)
+  for or ∈ ls.outer_reductions
+    op = operations(ls)[or]
+    pushpreamble!(ls, Expr(:(=), outer_reduct_init_typename(op), typeof_expr(op)))
+  end
+end
 """
     @_vectorize
 
@@ -230,19 +236,17 @@ macro _vectorize(q)
   q = macroexpand(__module__, q)
   ls = LoopSet(q, __module__)
   set_hw!(ls)
-  for or ∈ ls.outer_reductions
-    op = operations(ls)[or]
-    pushpreamble!(ls, Expr(:(=), outer_reduct_init_typename(op), typeof_expr(op)))
-  end
+  def_outer_reduct_types!(ls)
   esc(Expr(:block, ls.prepreamble, lower_and_split_loops(ls, -1)))
 end
 macro _vectorize(arg, q)
-    @assert q.head === :for
-    q = macroexpand(__module__, q)
-    inline, check_empty, u₁, u₂ = check_macro_kwarg(arg, false, false, zero(Int8), zero(Int8), 1)
-    ls = LoopSet(q, __module__)
-    set_hw!(ls)
-    esc(Expr(:block, ls.prepreamble, lower(ls, u₁ % Int, u₂ % Int, -1)))
+  @assert q.head === :for
+  q = macroexpand(__module__, q)
+  inline, check_empty, u₁, u₂ = check_macro_kwarg(arg, false, false, zero(Int8), zero(Int8), 1)
+  ls = LoopSet(q, __module__)
+  set_hw!(ls)
+  def_outer_reduct_types!(ls)
+  esc(Expr(:block, ls.prepreamble, lower(ls, u₁ % Int, u₂ % Int, -1)))
 end
 
 macro vectorize_debug(q)

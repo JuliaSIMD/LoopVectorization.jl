@@ -607,8 +607,8 @@ function avx_loopset!(
     extractind = add_ops!(ls, instr, ops, mrefs, opsymbols, 1, nopsv, expandedv, elementbytes)
     extractind = process_metadata!(ls, AM, extractind)
     extractind = add_array_symbols!(ls, arraysymbolinds, extractind)
-    extract_external_functions!(ls, extractind, vargs)
-    extract_outerreduct_types!(ls, extractind, vargs)
+    extractind = extract_external_functions!(ls, extractind, vargs)
+    extractind = extract_outerreduct_types!(ls, extractind, vargs)
     ls
 end
 function avx_body(ls::LoopSet, UNROLL::Tuple{Bool,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt})
