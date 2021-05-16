@@ -1,17 +1,18 @@
-struct AVX{UNROLL,OPS,ARF,AM,LPSYM,LB,V} <: Function end
+struct AVX{UNROLL,OPS,ARF,AM,LPSYM,LBV,FLBV} <: Function end
 
 # This should call the same `_avx_!(Val{UNROLL}(), Val{OPS}(), Val{ARF}(), Val{AM}(), Val{LPSYM}(), _vargs)` as normal so that this
 # hopefully shouldn't add much to compile time.
 
-function (::AVX{UNROLL,OPS,ARF,AM,LPSYM,LB,V})(p::Ptr{UInt}) where {UNROLL,OPS,ARF,AM,LPSYM,LB,V}
-    (_, _vargs) = ThreadingUtilities.load(p, Tuple{LB,V}, 2*sizeof(UInt))
-    # Main.VARGS[Threads.threadid()] = first(_vargs)
-    ret = _avx_!(Val{UNROLL}(), Val{OPS}(), Val{ARF}(), Val{AM}(), Val{LPSYM}(), Val(Tuple{LB,V}), flatten_to_tuple(_vargs)...)
+function (::AVX{UNROLL,OPS,ARF,AM,LPSYM,LBV,FLBV})(p::Ptr{UInt}) where {UNROLL,OPS,ARF,AM,LPSYM,K,LBV,FLBV<:Tuple{Vararg{Any,K}}}
+    (_, _vargs) = ThreadingUtilities.load(p, FLBV, 2*sizeof(UInt))
+  # Main.VARGS[Threads.threadid()] = first(_vargs)
+  # Threads.threadid() == 2 && Core.println(typeof(_vargs))
+    ret = _avx_!(Val{UNROLL}(), Val{OPS}(), Val{ARF}(), Val{AM}(), Val{LPSYM}(), Val{LBV}(), _vargs...)
     ThreadingUtilities.store!(p, ret, Int(register_size()))
     nothing
 end
-@generated function Base.pointer(::AVX{UNROLL,OPS,ARF,AM,LPSYM,LB,V}) where {UNROLL,OPS,ARF,AM,LPSYM,LB,V}
-    f = AVX{UNROLL,OPS,ARF,AM,LPSYM,LB,V}()
+@generated function Base.pointer(::AVX{UNROLL,OPS,ARF,AM,LPSYM,LBV,FLBV}) where {UNROLL,OPS,ARF,AM,LPSYM,K,LBV,FLBV<:Tuple{Vararg{Any,K}}}
+    f = AVX{UNROLL,OPS,ARF,AM,LPSYM,LBV,FLBV}()
     precompile(f, (Ptr{UInt},))
     quote
         $(Expr(:meta,:inline))
@@ -19,15 +20,16 @@ end
     end
 end
 
-@inline function setup_avx_threads!(p::Ptr{UInt}, fptr::Ptr{Cvoid}, args::Tuple{LB,V}) where {LB,V}
+@inline function setup_avx_threads!(p::Ptr{UInt}, fptr::Ptr{Cvoid}, args::LBV) where {K,LBV<:Tuple{Vararg{Any,K}}}
     offset = ThreadingUtilities.store!(p, fptr, sizeof(UInt))
     offset = ThreadingUtilities.store!(p, args, offset)
     nothing
 end
 @inline function avx_launch(
-    ::Val{UNROLL}, ::Val{OPS}, ::Val{ARF}, ::Val{AM}, ::Val{LPSYM}, lb::LB, vargs::V, tid
-) where {UNROLL,OPS,ARF,AM,LPSYM,LB,V}
-    ThreadingUtilities.launch(setup_avx_threads!, tid, pointer(AVX{UNROLL,OPS,ARF,AM,LPSYM,LB,V}()), (lb,vargs))
+    ::Val{UNROLL}, ::Val{OPS}, ::Val{ARF}, ::Val{AM}, ::Val{LPSYM}, lbvargs::LBV, tid
+) where {UNROLL,OPS,ARF,AM,LPSYM,K,LBV<:Tuple{Vararg{Any,K}}}
+    fargs = flatten_to_tuple(lbvargs)
+    ThreadingUtilities.launch(setup_avx_threads!, tid, pointer(AVX{UNROLL,OPS,ARF,AM,LPSYM,LBV,typeof(fargs)}()), fargs)
 end
 
 # function approx_cbrt(x)
@@ -397,7 +399,7 @@ function thread_one_loops_expr(
 
         avx_launch(
           Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM,
-          $loopboundexpr, var"#vargs#", var"#thread#id#"
+          ($loopboundexpr, var"#vargs#"), var"#thread#id#"
         )
 
         var"#thread#mask#" >>>= var"#trailzing#zeros#"
@@ -587,7 +589,7 @@ function thread_two_loops_expr(
         # @show var"#thread#id#" $loopboundexpr
         avx_launch(
           Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM,
-          $loopboundexpr, var"#vargs#", var"#thread#id#"
+          ($loopboundexpr, var"#vargs#"), var"#thread#id#"
         )
         var"#thread#mask#" >>>= var"#trailzing#zeros#"
 

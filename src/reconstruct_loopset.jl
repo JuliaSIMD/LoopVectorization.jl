@@ -185,6 +185,7 @@ function add_mref!(
 ) where {T}
   @assert B ≤ 0 "Batched arrays not supported yet."
   _add_mref!(sptrs, ls, ar, typetosym(T), C, B, sp, name)
+  sizeof(T)
 end
 typetosym(::Type{T}) where {T<:NativeTypes} = (VectorizationBase.JULIA_TYPES[T])::Symbol
 typetosym(T) = T
@@ -239,14 +240,15 @@ function add_mref!(
     sptrs::Expr, ::LoopSet, ::ArrayReferenceMeta, @nospecialize(_::Type{VectorizationBase.FastRange{T,F,S,O}}),
     ::Int, ::Int, sp::Vector{Int}, name::Symbol
 ) where {T,F,S,O}
-    extract_gsp!(sptrs, name)
+  extract_gsp!(sptrs, name)
+  sizeof(T)
 end
 function create_mrefs!(
     ls::LoopSet, arf::Vector{ArrayRefStruct}, as::Vector{Symbol}, os::Vector{Symbol},
     nopsv::Vector{NOpsType}, expanded::Vector{Bool}, ::Type{Tuple{}}
 )
     length(arf) == 0 || throw(ArgumentError("Length of array ref vector should be 0 if there are no stridedpointers."))
-    Vector{ArrayReferenceMeta}(undef, length(arf))
+    Vector{ArrayReferenceMeta}(undef, length(arf)), Int[]
 end
 function stabilize_grouped_stridedpointer_type(C, B, R)
   N = (length(C))::Int
@@ -271,12 +273,12 @@ function create_mrefs!(
   Cv,Bv,Rv = stabilize_grouped_stridedpointer_type(C, B, R)
   _create_mrefs!(ls, arf, as, os, nopsv, expanded, P.parameters, Cv, Bv, Rv)
 end
-
 function _create_mrefs!(
   ls::LoopSet, arf::Vector{ArrayRefStruct}, as::Vector{Symbol}, os::Vector{Symbol},
   nopsv::Vector{NOpsType}, expanded::Vector{Bool}, P::Core.SimpleVector, C::Vector{Int}, B::Vector{Int}, R::Vector{Tuple{NTuple{8,Int},Int}}
 )
     mrefs::Vector{ArrayReferenceMeta} = Vector{ArrayReferenceMeta}(undef, length(arf))
+    elementbytes::Vector{Int} = Vector{Int}(undef, length(arf))
     sptrs = Expr(:tuple)
     # pushpreamble!(ls, Expr(:(=), sptrs, :(VectorizationBase.stridedpointers(getfield(vargs, 1, false)))))
     pushpreamble!(ls, Expr(:(=), sptrs, :(VectorizationBase.stridedpointers(getfield(var"#vargs#", 1, false)))))
@@ -292,6 +294,7 @@ function _create_mrefs!(
                 # if isassigned(rank_to_sps, k)
                 Cₖ, sp = rank_to_sps[k]
                 permute_mref!(ar, Cₖ, sp)
+                elementbytes[i] = elementbytes[k]
                 # end
                 break
             end
@@ -300,11 +303,11 @@ function _create_mrefs!(
             j += 1
             sp = rank_to_sortperm(R[j])::Vector{Int}
             rank_to_sps[i] = (C[j],sp)
-            add_mref!(sptrs, ls, ar, P[j], C[j], B[j], sp, vptr(ar))
+            elementbytes[i] = add_mref!(sptrs, ls, ar, P[j], C[j], B[j], sp, vptr(ar))
         end
         mrefs[i] = ar
     end
-    mrefs
+    mrefs, elementbytes
 end
 
 function num_parameters(AM)
@@ -408,11 +411,19 @@ function isexpanded(ls::LoopSet, ops::Vector{OperationStruct}, nopsv::Vector{NOp
         false
     end
 end
+function mref_elbytes(os::OperationStruct, mrefs::Vector{ArrayReferenceMeta}, elementbytes::Vector{Int})
+  if isload(os) | isstore(os)
+    mrefs[os.array], elementbytes[os.array]
+  else
+    NOTAREFERENCE, 4
+  end
+end
 function add_op!(
     ls::LoopSet, instr::Instruction, ops::Vector{OperationStruct}, nopsv::Vector{NOpsType}, expandedv::Vector{Bool}, i::Int,
-    mrefs::Vector{ArrayReferenceMeta}, opsymbol, elementbytes::Int
+    mrefs::Vector{ArrayReferenceMeta}, opsymbol, elementbytes::Vector{Int}
 )
     os = ops[i]
+    mref, elbytes = mref_elbytes(os, mrefs, elementbytes)
     # opsymbol = (isconstant(os) && instr != LOOPCONSTANT) ? instr.instr : opsymbol
     # If it's a CartesianIndex add or subtract, we may have to add multiple operations
     expanded = expandedv[i]# isexpanded(ls, ops, nopsv, i)
@@ -421,10 +432,9 @@ function add_op!(
     optyp = optype(os)
     if !expanded
         op = Operation(
-            length(operations(ls)), opsymbol, elementbytes, instr,
+            length(operations(ls)), opsymbol, elbytes, instr,
             optyp, loopdependencies(ls, os, true), reduceddependencies(ls, os, true),
-            Operation[], (isload(os) | isstore(os)) ? mrefs[os.array] : NOTAREFERENCE,
-            childdependencies(ls, os, true)
+            Operation[], mref, childdependencies(ls, os, true)
         )
         push!(ls.operations, op)
         push!(opoffsets, opoffsets[end] + 1)
@@ -435,10 +445,9 @@ function add_op!(
     for offset = 0:nops-1
         sym = nops === 1 ? opsymbol : expandedopname(opsymbol, offset)
         op = Operation(
-            length(operations(ls)), sym, elementbytes, instr,
-            optyp, loopdependencies(ls, os, false, offset), reduceddependencies(ls, os, false, offset),
-            Operation[], (isload(os) | isstore(os)) ? mrefs[os.array] : NOTAREFERENCE,
-            childdependencies(ls, os, false, offset)
+            length(operations(ls)), sym, elbytes, instr, optyp,
+            loopdependencies(ls, os, false, offset), reduceddependencies(ls, os, false, offset),
+            Operation[], mref, childdependencies(ls, os, false, offset)
         )
         push!(ls.operations, op)
     end
@@ -491,8 +500,8 @@ function add_parents_to_ops!(ls::LoopSet, ops::Vector{OperationStruct}, constoff
     constoffset
 end
 function add_ops!(
-    ls::LoopSet, instr::Vector{Instruction}, ops::Vector{OperationStruct}, mrefs::Vector{ArrayReferenceMeta},
-    opsymbols::Vector{Symbol}, constoffset::Int, nopsv::Vector{NOpsType}, expandedv::Vector{Bool}, elementbytes::Int
+    ls::LoopSet, instr::Vector{Instruction}, ops::Vector{OperationStruct}, mrefs::Vector{ArrayReferenceMeta}, elementbytes::Vector{Int},
+    opsymbols::Vector{Symbol}, constoffset::Int, nopsv::Vector{NOpsType}, expandedv::Vector{Bool}
 )
     # @show ls.loopsymbols ls.loopsymbol_offsets
     for i ∈ eachindex(ops)
@@ -584,12 +593,6 @@ function avx_loopset!(
     ls::LoopSet, instr::Vector{Instruction}, ops::Vector{OperationStruct}, arf::Vector{ArrayRefStruct},
     AM::Vector{Any}, LPSYM::Vector{Any}, LB::Core.SimpleVector, vargs::Core.SimpleVector
 )
-    # TODO: check outer reduction types instead
-    elementbytes = if length(vargs[1].parameters) > 0
-        sizeofeltypes(vargs[1].parameters[1].parameters)
-    else
-        8
-    end
     pushpreamble!(ls, :((var"#loop#bounds#", var"#vargs#") = var"#lv#tuple#args#"))
     add_loops!(ls, LPSYM, LB)
     resize!(ls.loop_order, ls.loopsymbol_offsets[end])
@@ -599,12 +602,12 @@ function avx_loopset!(
     expandedv = [isexpanded(ls, ops, nopsv, i) for i ∈ eachindex(ops)]
 
     resize!(ls.loopindexesbit, length(ls.loops)); fill!(ls.loopindexesbit, false);
-    mrefs = create_mrefs!(ls, arf, arraysymbolinds, opsymbols, nopsv, expandedv, vargs[1])
+    mrefs, elementbytes = create_mrefs!(ls, arf, arraysymbolinds, opsymbols, nopsv, expandedv, vargs[1])
     for mref ∈ mrefs
         push!(ls.includedactualarrays, vptr(mref))
     end
     # extra args extraction
-    extractind = add_ops!(ls, instr, ops, mrefs, opsymbols, 1, nopsv, expandedv, elementbytes)
+    extractind = add_ops!(ls, instr, ops, mrefs, elementbytes, opsymbols, 1, nopsv, expandedv)
     extractind = process_metadata!(ls, AM, extractind)
     extractind = add_array_symbols!(ls, arraysymbolinds, extractind)
     extractind = extract_external_functions!(ls, extractind, vargs)
@@ -645,12 +648,11 @@ function _avx_loopset(
     ls = LoopSet(:LoopVectorization)
     inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, nt = UNROLL
     set_hw!(ls, rs, rc, cls, l1, l2, l3); ls.vector_width = W; ls.isbroadcast = isbroadcast
-    avx_loopset!(
-        ls, instr, ops,
-        ArrayRefStruct[ARFsv...],
-        tovector(AMsv), tovector(LPSYMsv), LBsv, vargs
-    )::LoopSet
-    ls
+    arsv = Vector{ArrayRefStruct}(undef, length(ARFsv))
+    for i ∈ eachindex(arsv)
+        arsv[i] = ARFsv[i]
+    end
+    avx_loopset!(ls, instr, ops, arsv, tovector(AMsv), tovector(LPSYMsv), LBsv, vargs)
 end
 
 @static if VERSION ≥ v"1.7.0-DEV.421"

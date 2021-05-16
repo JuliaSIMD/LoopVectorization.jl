@@ -5,6 +5,7 @@ Base.:(==)(u::Unsigned, it::IndexType) = (u % UInt8) == UInt8(it)
 
 struct StaticType{T} end
 @inline gettype(::StaticType{T}) where {T} = T
+
 function _append_fields!(t::Expr, body::Expr, sym::Symbol, ::Type{T}) where {T}
   gf = GlobalRef(Core,:getfield)
   for f ∈ 1:fieldcount(T)

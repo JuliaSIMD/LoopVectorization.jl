@@ -31,10 +31,10 @@ const START_TIME = time()
 
   @time include("shuffleloadstores.jl")
 
-  if (v"1.5" < VERSION < v"1.7") && Sys.iswindows()
-    println("Skipping Zygote tests.")
-  else
+  if VERSION < v"1.7-DEV"
     @time include("zygote.jl")
+  else
+    println("Skipping Zygote tests.")
   end
 
   @time include("offsetarrays.jl")

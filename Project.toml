@@ -30,7 +30,7 @@ Static = "0.2"
 StrideArraysCore = "0.1.5"
 ThreadingUtilities = "0.4.2"
 UnPack = "1"
-VectorizationBase = "0.20.1"
+VectorizationBase = "0.20.4"
 julia = "1.5"
 
 [extras]
