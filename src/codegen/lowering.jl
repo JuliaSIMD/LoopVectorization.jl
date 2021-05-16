@@ -423,11 +423,25 @@ function pointerremcomparison(ls::LoopSet, termind::Int, UFt::Int, n::Int, nisve
   end
 end
 
-
+@generated function of_same_size(::Type{T}, ::Type{S}) where {T,S}
+  sizeof_S = sizeof(S)
+  sizeof(T) == sizeof_S && return T
+  Tfloat = T <: Union{Float32,Float64}
+  if T <: Union{Float32,Float64}
+    sizeof_S ≥ 8 ? Float64 : Float32
+  elseif T <: Signed
+    Symbol(:Int, 8sizeof_S)
+  elseif (T <: Unsigned) | (T === Bool)
+    Symbol(:UInt, 8sizeof_S)
+  else
+    S
+  end
+end
 function outer_reduction_zero(op::Operation, u₁u::Bool, Umax::Int, reduct_class::Float64, rs::Expr)
   reduct_zero = reduction_zero(reduct_class)
   # Tsym = outer_reduct_init_typename(op)
-  Tsym = ELTYPESYMBOL
+  # Tsym = ELTYPESYMBOL
+  Tsym = Expr(:call, lv(:of_same_size), outer_reduct_init_typename(op), ELTYPESYMBOL)
   if isvectorized(op)
     if Umax == 1 || !u₁u
       if reduct_zero === :zero

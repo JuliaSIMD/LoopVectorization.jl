@@ -291,11 +291,11 @@ using Test
         @test dot33(a,b) ≈ @view(a[1:33])' * @view(b[1:33])
 
         if T <: Union{Float32,Float64}
-            πest = T(mcpi(a, b))
-            @test πest == mcpiavx(a, b)
-            @test πest == mcpiavx_u4(a, b)
-            @test πest == mcpi_avx(a, b)
-            @test πest == mcpi_avx_u4(a, b)
+            πest = mcpi(a, b)
+            @test πest ≈ mcpiavx(a, b)
+            @test πest ≈ mcpiavx_u4(a, b)
+            @test πest ≈ mcpi_avx(a, b)
+            @test πest ≈ mcpi_avx_u4(a, b)
         end
 
         if !(!Bool(LoopVectorization.VectorizationBase.has_feature(Val(:x86_64_avx2))) && T === Int32)

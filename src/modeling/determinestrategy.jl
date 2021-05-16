@@ -70,8 +70,8 @@ function cost(ls::LoopSet, op::Operation, (u₁,u₂)::Tuple{Symbol,Symbol}, vlo
             return 0.0, 0, 0.0
         end
     elseif iscompute(op) &&
-        Base.sym_in(instruction(op).instr, (:vadd_nsw, :vsub_nsw, :(+), :(-), :add_fast, :sub_fast)) &&
-        all(opp -> (isloopvalue(opp)), parents(op))
+        (Base.sym_in(instruction(op).instr, (:vadd_nsw, :vsub_nsw, :(+), :(-), :add_fast, :sub_fast)) &&
+        all(opp -> (isloopvalue(opp)), parents(op)))# || (reg_count(ls) == 32) && (instruction(op).instr === :ifelse))
         # all(opp -> (isloopvalue(opp) | isconstant(opp)), parents(op))
         return 0.0, 0, 0.0
     end
@@ -202,14 +202,14 @@ function depchain_cost!(
     skip[identifier(op)] = true
     # depth first search
     for opp ∈ parents(op)
-        skip[identifier(opp)] && continue
+      skip[identifier(opp)] && continue
         rt, sl = depchain_cost!(ls, skip, opp, unrolled, vloopsym, Wshift, size_T, rt, sl)
     end
     # Basically assuming memory and compute don't conflict, but everything else does
     # Ie, ignoring the fact that integer and floating point operations likely don't either
     if iscompute(op)
-        rtᵢ, slᵢ = cost(ls, op, (unrolled,Symbol("")), vloopsym, Wshift, size_T)
-        rt += rtᵢ; sl += slᵢ
+      rtᵢ, slᵢ = cost(ls, op, (unrolled,Symbol("")), vloopsym, Wshift, size_T)
+      rt += rtᵢ; sl += slᵢ
     end
     rt, sl
 end
@@ -357,11 +357,11 @@ function determine_unroll_factor(ls::LoopSet, order::Vector{Symbol}, vloopsym::S
         else
             return determine_unroll_factor(ls, order, vloopsym, num_reductions)
         end
-    elseif iszero(num_reductions)
+    elseif iszero(num_reductions) # handle `BitArray` loops w/out reductions
         return 8 ÷ ls.vector_width, vloopsym
-    else
+    else # handle `BitArray` loops with reductions
         rttemp, ltemp = determine_unroll_factor(ls, order, vloopsym, vloopsym)
-        UF = min(8, VectorizationBase.nextpow2(max(1, round(Int, ltemp / (rttemp * num_reductions) ) )))
+        UF = min(8, VectorizationBase.nextpow2(max(1, round(Int, ltemp / (rttemp) ) )))
         UFfactor = 8 ÷ ls.vector_width
         cld(UF, UFfactor)*UFfactor, vloopsym
     end
@@ -383,9 +383,11 @@ function determine_unroll_factor(ls::LoopSet, order::Vector{Symbol}, vloopsym::S
         end
     end
     # min(8, roundpow2(max(1, round(Int, latency / (rt * num_reductions) ) ))), best_unrolled
-    UF = VectorizationBase.nextpow2(round(Int, clamp(latency / (rt * num_reductions), 1.0, 8.0)))
-    if UF == 1 && num_reductions > 1
-        UF = VectorizationBase.nextpow2(round(Int, clamp(latency / (rt * cld(num_reductions, 2)), 1.0, 8.0)))
+    lrtratio  = latency / rt
+    if lrtratio ≥ 7.0
+        UF = 8
+    else
+        UF = VectorizationBase.nextpow2(round(Int, clamp(lrtratio, 1.0, 4.0)))
     end
     if best_unrolled === vloopsym
         UF = demote_unroll_factor(ls, UF, vloopsym)
