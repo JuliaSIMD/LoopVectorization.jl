@@ -146,13 +146,13 @@ using Test
     lsvar = LoopVectorization.loopset(varq);
     # LoopVectorization.choose_order(lsvar)
     # @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, Unum, Tnum)
-    if LoopVectorization.register_count() == 32
+    # if LoopVectorization.register_count() == 32
         @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, Symbol("##undefined##"), :j, 4, -1)
     #     @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, 2, 10)
-    else#if LoopVectorization.register_count() == 16
-        @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, Symbol("##undefined##"), :j, 8, -1)
+    # else#if LoopVectorization.register_count() == 16
+        # @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, Symbol("##undefined##"), :j, 8, -1)
     #     @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, 2, 6)
-    end
+    # end
     
     function myvar!(s², A, x̄)
         @. s² = 0
