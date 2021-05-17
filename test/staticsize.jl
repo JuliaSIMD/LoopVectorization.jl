@@ -31,7 +31,7 @@ function issue238_v2!(output, matrix, input)
   end
   return nothing
 end
-const MAXTESTSIXE = 10 # N^3 loop iterations, meaning N^3 different functions compiled
+const MAXTESTSIXE = 8 # N^3 loop iterations, meaning N^3 different functions compiled
 function n2testloop(output1,output2,output3,output_nonstatic0,output_nonstatic1)
   n1, n3 = size(output1)
   for n2 ∈ 1:MAXTESTSIXE;
