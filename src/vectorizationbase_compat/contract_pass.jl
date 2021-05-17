@@ -50,7 +50,14 @@ function append_args_skip!(call, args, i, mod)
     call
 end
 
-fastfunc(f) = get(VectorizationBase.FASTDICT, f, f)
+function fastfunc(f)
+  i = findfirst(Base.Fix2(===,f), (:sin,:cos,:sincos))
+  if i === nothing
+    get(VectorizationBase.FASTDICT, f, f)
+  else
+    (:sin_fast,:cos_fast,:sincos_fast)[i]
+  end
+end
 function muladd_arguments!(argv, mod, f = first(argv))
     if f === :*
         argv[1] = :mul_fast
