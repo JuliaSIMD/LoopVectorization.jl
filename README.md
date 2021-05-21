@@ -350,7 +350,7 @@ Similar approaches can be taken to make kernels working with a variety of numeri
 * [RecursiveFactorization.jl](https://github.com/YingboMa/RecursiveFactorization.jl)
 * [SnpArrays.jl](https://github.com/OpenMendel/SnpArrays.jl)
 * [Tullio.jl](https://github.com/mcabbott/Tullio.jl)
-* [DianoiaML](https://github.com/SkyWorld117/DianoiaML.jl)
+* [DianoiaML.jl](https://github.com/SkyWorld117/DianoiaML.jl)
 * [TropicalGEMM.jl](https://github.com/TensorBFS/TropicalGEMM.jl)
 * [Trixi.jl](https://github.com/trixi-framework/Trixi.jl)
 
