@@ -27,6 +27,8 @@ using VectorizationBase: register_size, register_count, cache_linesize, cache_si
 using IfElse: ifelse
 
 using ThreadingUtilities, CheapThreads
+const Polyester = CheapThreads
+# using ThreadingUtilities, Polyester
 using Base.Broadcast: Broadcasted, DefaultArrayStyle
 using LinearAlgebra: Adjoint, Transpose, Diagonal
 using Base.Meta: isexpr

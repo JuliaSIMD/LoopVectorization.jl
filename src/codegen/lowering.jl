@@ -218,10 +218,17 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     nisunrolled = isunrolled1(us, n)
     nisvectorized = isvectorized(us, n)
     W = nisvectorized ? ls.vector_width : 1
-    loopisstatic = isstaticloop(loop) & (!iszero(W))
     UFW = UF * W
     looplength = length(loop)
-    if loopisstatic & (UFW > looplength)
+  if W ≠ 0 & isknown(first(loop)) & isknown(step(loop))
+    loopisstatic = isknown(last(loop))
+    # something other than the default hint currently means an UpperBoundedInteger was passed as an argument
+    loopisbounded = (looplength < UFW) & (loopisstatic | (gethint(last(loop)) ≠ 1024))
+  else
+    loopisstatic = false
+    loopisbounded = false
+  end
+    if loopisstatic & loopisbounded
         UFWnew = cld(looplength, cld(looplength, UFW))
         UF = cld(UFWnew, W)
         UFW = UF * W
@@ -235,9 +242,11 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     remfirst = loopisstatic & (!nisvectorized) & (UFt > 0) & !(unsigned(Ureduct) < unsigned(UF))
     tc = terminatecondition(ls, us, n, inclmask, remfirst ? 1 : UF)
     # usorig = ls.unrollspecification
-    # tc = (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !loopisstatic && !inclmask && !ls.loadelimination ? expect(tc) : tc
-    body = lower_block(ls, us, n, inclmask, UF)
-    if loopisstatic
+  # tc = (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !loopisstatic && !inclmask && !ls.loadelimination ? expect(tc) : tc
+  # Don't need to create the body if loop is dynamic and bounded
+  dynamicbounded = ((!loopisstatic) & loopisbounded)
+  body = dynamicbounded ? tc : lower_block(ls, us, n, inclmask, UF)
+  if loopisstatic
         iters = length(loop) ÷ UFW
         if (iters ≤ 1) || (iters*UF ≤ 16 && allinteriorunrolled(ls, us, n))# Let's set a limit on total unrolling
             q = Expr(:block)
@@ -254,16 +263,18 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
         remblock = init_remblock(loop, ls.lssm, n)#loopsym)
         # unroll_cleanup = Ureduct > 0 || (nisunrolled ? (u₂ > 1) : (u₁ > 1))
         # remblock = unroll_cleanup ? init_remblock(loop, ls.lssm, n)#loopsym) : Expr(:block)
-        q = if unsigned(Ureduct) < unsigned(UF)
-            # push!(body.args, Expr(:(||), tc, Expr(:break)))
-            # Expr(:while, true, body)
-            termcond = gensym(:maybeterm)
-            push!(body.args, Expr(:(=), termcond, tc))
-            Expr(:block, Expr(:(=), termcond, true), Expr(:while, termcond, body))
-        else
-            Expr(:while, tc, body)
-        end
-    end
+      q = if loopisbounded
+        Expr(:block)
+      elseif unsigned(Ureduct) < unsigned(UF)
+        # push!(body.args, Expr(:(||), tc, Expr(:break)))
+        # Expr(:while, true, body)
+        termcond = gensym(:maybeterm)
+        push!(body.args, Expr(:(=), termcond, tc))
+        Expr(:block, Expr(:(=), termcond, true), Expr(:while, termcond, body))
+      else
+        Expr(:while, tc, body)
+      end
+  end
     q = if unsigned(Ureduct) < unsigned(UF) # unsigned(-1) == typemax(UInt); 
         add_cleanup = true
         if isone(Ureduct)
@@ -290,7 +301,11 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
             UF_cleanup = UF - Ureduct
             blockhead = :if
         end
-        _q = Expr(:block, add_upper_outer_reductions(ls, q, Ureduct, UF, loop, nisvectorized))
+        _q = if dynamicbounded
+            initialize_outer_reductions!(q, ls, Ureduct); q
+        else
+            Expr(:block, add_upper_outer_reductions(ls, q, Ureduct, UF, loop, nisvectorized))
+        end
         if add_cleanup
             cleanup_expr = Expr(blockhead)
             blockhead === :block || push!(cleanup_expr.args, terminatecondition(ls, us, n, inclmask, UF_cleanup))

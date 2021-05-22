@@ -378,12 +378,12 @@ function thread_one_loops_expr(
     $loopstart
     var"##do#thread##" = var"#nrequest#" ≠ 0x00000000
     if var"##do#thread##"
-      var"#threads#", var"#torelease#" = CheapThreads.request_threads(Threads.threadid()%UInt32, var"#nrequest#")
+      var"#threads#", var"#torelease#" = Polyester.request_threads(Threads.threadid()%UInt32, var"#nrequest#")
       var"#thread#factor#0#" = var"#nthreads#"
       $iterdef
       var"#thread#launch#count#" = 0x00000000
       var"#thread#id#" = 0x00000000
-      var"#thread#mask#" = CheapThreads.mask(var"#threads#")
+      var"#thread#mask#" = Polyester.mask(var"#threads#")
       var"#threads#remain#" = true
       while var"#threads#remain#"
         VectorizationBase.assume(var"#thread#mask#" ≠ zero(var"#thread#mask#"))
@@ -409,14 +409,14 @@ function thread_one_loops_expr(
         var"#threads#remain#" = var"#thread#launch#count#" ≠ var"#nrequest#"
       end
     else# eliminate undef var errors that the compiler should be able to figure out are unreachable, but doesn't
-      var"#torelease#" = zero(CheapThreads.worker_type())
-      var"#threads#" = CheapThreads.UnsignedIteratorEarlyStop(var"#torelease#", 0x00000000)
+      var"#torelease#" = zero(Polyester.worker_type())
+      var"#threads#" = Polyester.UnsignedIteratorEarlyStop(var"#torelease#", 0x00000000)
     end
     var"#avx#call#args#" = $avxcall_args
     $_avx_call_
     var"##do#thread##" || $retexpr
     var"#thread#id#" = 0x00000000
-    var"#thread#mask#" = CheapThreads.mask(var"#threads#")
+    var"#thread#mask#" = Polyester.mask(var"#threads#")
     var"#threads#remain#" = true
     while var"#threads#remain#"
       VectorizationBase.assume(var"#thread#mask#" ≠ zero(var"#thread#mask#"))
@@ -428,7 +428,7 @@ function thread_one_loops_expr(
       $update_return_values
       var"#threads#remain#" = var"#thread#mask#" ≠ 0x00000000
     end
-    CheapThreads.free_threads!(var"#torelease#")
+    Polyester.free_threads!(var"#torelease#")
     $retexpr
   end
   Expr(:block, ls.preamble, q)
@@ -559,7 +559,7 @@ function thread_two_loops_expr(
     var"#loop#1#start#init#" = var"#iter#start#0#"
     var"##do#thread##" = var"#nrequest#" ≠ 0x00000000
     if var"##do#thread##"
-      var"#threads#", var"#torelease#" = CheapThreads.request_threads(Threads.threadid(), var"#nrequest#")
+      var"#threads#", var"#torelease#" = Polyester.request_threads(Threads.threadid(), var"#nrequest#")
       $iterdef1
       $iterdef2
       # @show var"#base#block#size#thread#0#", var"#block#rem#step#0#" var"#base#block#size#thread#1#", var"#block#rem#step#1#"
@@ -567,7 +567,7 @@ function thread_two_loops_expr(
       var"#thread#launch#count#0#" = 0x00000000
       var"#thread#launch#count#1#" = 0x00000000
       var"#thread#id#" = 0x00000000
-      var"#thread#mask#" = CheapThreads.mask(var"#threads#")
+      var"#thread#mask#" = Polyester.mask(var"#threads#")
       var"#threads#remain#" = true
       while var"#threads#remain#"
         VectorizationBase.assume(var"#thread#mask#" ≠ zero(var"#thread#mask#"))
@@ -604,8 +604,8 @@ function thread_two_loops_expr(
         var"#threads#remain#" = var"#thread#launch#count#" ≠ var"#nrequest#"
       end
     else# eliminate undef var errors that the compiler should be able to figure out are unreachable, but doesn't
-      var"#torelease#" = zero(CheapThreads.worker_type())
-      var"#threads#" = CheapThreads.UnsignedIteratorEarlyStop(var"#torelease#", 0x00000000)
+      var"#torelease#" = zero(Polyester.worker_type())
+      var"#threads#" = Polyester.UnsignedIteratorEarlyStop(var"#torelease#", 0x00000000)
     end
     # @show $lastboundexpr
     var"#avx#call#args#" = $avxcall_args
@@ -613,7 +613,7 @@ function thread_two_loops_expr(
     var"##do#thread##" || $retexpr
     # @show $retv
     var"#thread#id#" = 0x00000000
-    var"#thread#mask#" = CheapThreads.mask(var"#threads#")
+    var"#thread#mask#" = Polyester.mask(var"#threads#")
     var"#threads#remain#" = true
     while var"#threads#remain#"
       VectorizationBase.assume(var"#thread#mask#" ≠ zero(var"#thread#mask#"))
@@ -625,7 +625,7 @@ function thread_two_loops_expr(
       $update_return_values
       var"#threads#remain#" = var"#thread#mask#" ≠ 0x00000000
     end
-    CheapThreads.free_threads!(var"#torelease#")
+    Polyester.free_threads!(var"#torelease#")
     $retexpr
   end
   # @show

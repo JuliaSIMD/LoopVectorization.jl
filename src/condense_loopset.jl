@@ -226,6 +226,7 @@ end
 
 @inline zerorangestart(r::Base.OneTo) = CloseOpen(maybestaticlast(r))
 @inline zerorangestart(r::CloseOpen) = CloseOpen(length(r))
+@inline zerorangestart(r::CloseOpen{Zero}) = r
 @inline zerorangestart(r::AbstractUnitRange) = Zero():One():(maybestaticlast(r)-maybestaticfirst(r))
 @inline zerorangestart(r::AbstractRange) = Zero():static_step(r):(maybestaticlast(r)-maybestaticfirst(r))
 @inline zerorangestart(r::CartesianIndices) = CartesianIndices(map(zerorangestart, r.indices))

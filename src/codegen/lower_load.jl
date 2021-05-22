@@ -30,7 +30,8 @@ function prefetchisagoodidea(ls::LoopSet, op::Operation, td::UnrollArgs)
                 end
             end
             innermostloopind == -1 && return 0
-            if prod(s -> Float64(looplength(ls, s)), @view(indices[1:innermostloopind-1])) ≥ 120.0 && length(getloop(ls, innermostloopsym)) ≥ 120
+          # if prod(s -> Float64(looplength(ls, s)), @view(indices[1:innermostloopind-1])) ≥ 120.0 &&
+            if length(getloop(ls, innermostloopsym)) ≥ 120
                 if getoffsets(op)[innermostloopind] < 120
                     for opp ∈ operations(ls)
                         if iscompute(opp) && (innermostloopsym ∈ loopdependencies(opp)) &&

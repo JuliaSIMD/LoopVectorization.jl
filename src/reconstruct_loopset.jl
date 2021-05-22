@@ -1,6 +1,25 @@
 const NOpsType = Int#Union{Int,Vector{Int}}
 
-function Loop(ls::LoopSet, ex::Expr, sym::Symbol, f, s, l)
+struct UpperBoundedInteger{N, T<: Integer} <: Integer
+  i::T
+end
+@inline UpperBoundedInteger{N}(i::T) where {N,T<:Integer} = UpperBoundedInteger{N,T}(i)
+@inline UpperBoundedInteger(i::T, ::StaticInt{N}) where {N,T<:Integer} = UpperBoundedInteger{N,T}(i)
+@inline Base.:(%)(a::UpperBoundedInteger, ::Type{T}) where {T<:Integer} = a.i % T
+Base.promote_rule(::Type{T}, ::Type{UpperBoundedInteger{N,S}}) where {N,T,S} = promote_rule(T,S)
+Base.promote_rule(::Type{UpperBoundedInteger{N,S}}, ::Type{T}) where {N,T,S} = promote_rule(S,T)
+Base.convert(::Type{T}, i::UpperBoundedInteger) where {T<:Number} = convert(T, i.i)
+Base.convert(::Type{UpperBoundedInteger{N,T}}, i::UpperBoundedInteger{N,T}) where {N,T<:Integer} = i
+Base.convert(::Type{Any}, i::UpperBoundedInteger) = i
+upper_bound(_) = typemax(Int)
+upper_bound(::Type{CloseOpen{T,UpperBoundedInteger{N,S}}}) where {T,N,S} = N - 1
+
+@inline Base.last(r::CloseOpen{<:Integer,<:UpperBoundedInteger}) = getfield(getfield(r,:upper),:i) - One()
+@inline ArrayInterface.static_last(r::CloseOpen{<:Integer,<:UpperBoundedInteger}) = getfield(getfield(r,:upper),:i) - One()
+@inline Base.length(r::CloseOpen{<:Integer,<:UpperBoundedInteger}) = getfield(getfield(r,:upper),:i) - getfield(r,:start)
+@inline Base.length(r::CloseOpen{Zero,<:UpperBoundedInteger}) = getfield(getfield(r,:upper),:i)
+
+function Loop(ls::LoopSet, ex::Expr, sym::Symbol, f, s, l, ub::Int)
     if (f !== nothing) && (s !== nothing) && (l !== nothing)
         return static_loop(sym, f, s, l)
     end
@@ -11,32 +30,33 @@ function Loop(ls::LoopSet, ex::Expr, sym::Symbol, f, s, l)
     pushpreamble!(ls, Expr(:(=), lensym, Expr(:call, lv(:maybestaticlength), rangesym)))
     F = if f === nothing
         start = gensym(ssym*"_loopstart")
-        pushpreamble!(ls, Expr(:(=), start, Expr(:call, lv(:first), rangesym)))
+        pushpreamble!(ls, Expr(:(=), start, Expr(:call, %, Expr(:call, lv(:first), rangesym), Int)))
         MaybeKnown(start, 1)
     else
         MaybeKnown(f)
     end
     S = if s === nothing
         step = gensym(ssym*"_loopstep")
-        pushpreamble!(ls, Expr(:(=), step, Expr(:call, lv(:step), rangesym)))
+        pushpreamble!(ls, Expr(:(=), step, Expr(:call, %, Expr(:call, lv(:step), rangesym), Int)))
         MaybeKnown(step, 1)
     else
         MaybeKnown(s)
     end
     L = if l === nothing
         stop = gensym(ssym*"_loopstop")
-        pushpreamble!(ls, Expr(:(=), stop, Expr(:call, lv(:last), rangesym)))
-        MaybeKnown(stop, 1024)
+        pushpreamble!(ls, Expr(:(=), stop, Expr(:call, %, Expr(:call, lv(:last), rangesym), Int)))
+        MaybeKnown(stop, min(ub, 1024))
     else
         MaybeKnown(l)
     end
     loopiteratesatleastonce!(ls, Loop(sym, F, L, S, rangesym, lensym))
 end
 function Loop(ls::LoopSet, ex::Expr, sym::Symbol, ::Type{R}) where {R<:AbstractRange}
-    f = ArrayInterface.known_first(R)
-    s = ArrayInterface.known_step(R)
-    l = ArrayInterface.known_last(R)
-    Loop(ls, ex, sym, f, s, l)
+  f = ArrayInterface.known_first(R)
+  s = ArrayInterface.known_step(R)
+  l = ArrayInterface.known_last(R)
+  ub = upper_bound(R)
+  Loop(ls, ex, sym, f, s, l, ub)
 end
 
 function static_loop(sym::Symbol, L::Int, S::Int, U::Int)
@@ -683,7 +703,7 @@ Execute an `@avx` block. The block's code is represented via the arguments:
 @aggressive_constprop @generated function _avx_!(
     ::Val{var"#UNROLL#"}, ::Val{var"#OPS#"}, ::Val{var"#ARF#"}, ::Val{var"#AM#"}, ::Val{var"#LPSYM#"}, ::Val{Tuple{var"#LB#",var"#V#"}}, var"#flattened#var#arguments#"::Vararg{Any,var"#num#vargs#"}
 ) where {var"#UNROLL#", var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#", var"#V#", var"#num#vargs#"}
-  # 1 + 1 # Irrelevant line you can comment out/in to force recompilation...
+  1 + 1 # Irrelevant line you can comment out/in to force recompilation...
   ls = _avx_loopset(var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#".parameters, var"#V#".parameters, var"#UNROLL#")
   pushfirst!(ls.preamble.args, :(var"#lv#tuple#args#" = reassemble_tuple(Tuple{var"#LB#",var"#V#"}, var"#flattened#var#arguments#")))
   # return @show avx_body(ls, var"#UNROLL#")

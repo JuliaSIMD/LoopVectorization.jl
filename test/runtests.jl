@@ -73,6 +73,8 @@ const START_TIME = time()
 
   @time include("outer_reductions.jl")
   
+  @time include("upperboundedintegers.jl")
+  
   if VERSION ≥ v"1.6"
     @time include("quantum.jl")
   end
