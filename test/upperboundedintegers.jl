@@ -29,9 +29,13 @@ using OffsetArrays, Test
     x = OffsetVector(rand(l), -1)
     @test ubsum(x) ≈ ubsum(x)
     xs = similar(x)
-    # while with other operations, it'll do at most `UF * W * cld(N, W)` iterations,
-    # where `N` is the actual length, `W` the vector width, and `UF` the unroll factor
-    @test @view(ubdouble!(xs, x)[begin:14]) == @view(x[begin:14]) .* 2;
+    # both otherwise, the behavior is undefined. It'll evaluate at most
+    # UF * W * cld(UB, W)
+    # iterations, where UF is the unroll factor, W the vector width,
+    # and N the actual length.
+    # It may evaluate less than the upper bound, depending on the mask's value.
+    # We check that the first few match
+    @test @view(ubdouble!(xs, x)[begin:3]) == @view(x[begin:3]) .* 2;
     @test xs[end] ≠ 2x[end]
   end
 end

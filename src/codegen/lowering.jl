@@ -208,18 +208,18 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
     # end
 end
 function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask::Bool)
-    UF = unrollfactor(us, n)
-    isone(UF) && return lower_no_unroll(ls, us, n, inclmask)
-    @unpack u₁loopnum, vloopnum, u₁, u₂ = us
-    order = names(ls)
-    loopsym = order[n]
-    loop = getloop(ls, n)
-    vectorized = order[vloopnum]
-    nisunrolled = isunrolled1(us, n)
-    nisvectorized = isvectorized(us, n)
-    W = nisvectorized ? ls.vector_width : 1
-    UFW = UF * W
-    looplength = length(loop)
+  UF = unrollfactor(us, n)
+  isone(UF) && return lower_no_unroll(ls, us, n, inclmask)
+  @unpack u₁loopnum, vloopnum, u₁, u₂ = us
+  order = names(ls)
+  loopsym = order[n]
+  loop = getloop(ls, n)
+  vectorized = order[vloopnum]
+  nisunrolled = isunrolled1(us, n)
+  nisvectorized = isvectorized(us, n)
+  W = nisvectorized ? ls.vector_width : 1
+  UFW = UF * W
+  looplength = length(loop)
   if W ≠ 0 & isknown(first(loop)) & isknown(step(loop))
     loopisstatic = isknown(last(loop))
     # something other than the default hint currently means an UpperBoundedInteger was passed as an argument
@@ -228,159 +228,163 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     loopisstatic = false
     loopisbounded = false
   end
-    if loopisstatic & loopisbounded
-        UFWnew = cld(looplength, cld(looplength, UFW))
-        UF = cld(UFWnew, W)
-        UFW = UF * W
-        us = nisunrolled ? UnrollSpecification(us, UF, u₂) : UnrollSpecification(us, u₁, UF)
-    end
-    remmask = inclmask | nisvectorized
-    Ureduct = (n == num_loops(ls) && (u₂ == -1)) ? ureduct(ls) : -1
-    sl = startloop(ls, us, n, false)
-    UFt = loopisstatic ? cld(looplength % UFW, W) : 1
-    # Don't place remainder first if we're going to have to mask this loop (i.e., if this loop is vectorized)
-    remfirst = loopisstatic & (!nisvectorized) & (UFt > 0) & !(unsigned(Ureduct) < unsigned(UF))
-    tc = terminatecondition(ls, us, n, inclmask, remfirst ? 1 : UF)
-    # usorig = ls.unrollspecification
+  Ureduct = (n == num_loops(ls) && (u₂ == -1)) ? ureduct(ls) : -1
+  # for now, require loopisstatic or !Ureduct-ing for reducing UF
+  if loopisbounded & (loopisstatic | (Ureduct < 0))
+    UFWnew = cld(looplength, cld(looplength, UFW))
+    UF = cld(UFWnew, W)
+    UFW = UF * W
+    us = nisunrolled ? UnrollSpecification(us, UF, u₂) : UnrollSpecification(us, u₁, UF)
+    #if (!loopisstatic) & (Ureduct ≥ UF)
+    #  ls.ureduct = Ureduct = UF >> 1
+    #end
+  end
+  remmask = inclmask | nisvectorized
+  sl = startloop(ls, us, n, false)
+  UFt = loopisstatic ? cld(looplength % UFW, W) : 1
+  # Don't place remainder first if we're going to have to mask this loop (i.e., if this loop is vectorized)
+  remfirst = loopisstatic & (!nisvectorized) & (UFt > 0) & !(unsigned(Ureduct) < unsigned(UF))
+  tc = terminatecondition(ls, us, n, inclmask, remfirst ? 1 : UF)
+  # usorig = ls.unrollspecification
   # tc = (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !loopisstatic && !inclmask && !ls.loadelimination ? expect(tc) : tc
   # Don't need to create the body if loop is dynamic and bounded
   dynamicbounded = ((!loopisstatic) & loopisbounded)
   body = dynamicbounded ? tc : lower_block(ls, us, n, inclmask, UF)
   if loopisstatic
-        iters = length(loop) ÷ UFW
-        if (iters ≤ 1) || (iters*UF ≤ 16 && allinteriorunrolled(ls, us, n))# Let's set a limit on total unrolling
-            q = Expr(:block)
-            for _ ∈ 1:iters
-                push!(q.args, body)
-            end
-        else
-            q = Expr(:while, tc, body)
-        end
-        remblock = Expr(:block)
-        (nisvectorized && (UFt > 0) && isone(num_loops(ls))) && push!(remblock.args, definemask(loop))
-        unroll_cleanup = true
-    else
-        remblock = init_remblock(loop, ls.lssm, n)#loopsym)
-        # unroll_cleanup = Ureduct > 0 || (nisunrolled ? (u₂ > 1) : (u₁ > 1))
-        # remblock = unroll_cleanup ? init_remblock(loop, ls.lssm, n)#loopsym) : Expr(:block)
-      q = if loopisbounded
-        Expr(:block)
-      elseif unsigned(Ureduct) < unsigned(UF)
-        # push!(body.args, Expr(:(||), tc, Expr(:break)))
-        # Expr(:while, true, body)
-        termcond = gensym(:maybeterm)
-        push!(body.args, Expr(:(=), termcond, tc))
-        Expr(:block, Expr(:(=), termcond, true), Expr(:while, termcond, body))
-      else
-        Expr(:while, tc, body)
+    iters = length(loop) ÷ UFW
+    if (iters ≤ 1) || (iters*UF ≤ 16 && allinteriorunrolled(ls, us, n))# Let's set a limit on total unrolling
+      q = Expr(:block)
+      for _ ∈ 1:iters
+        push!(q.args, body)
       end
-  end
-    q = if unsigned(Ureduct) < unsigned(UF) # unsigned(-1) == typemax(UInt); 
-        add_cleanup = true
-        if isone(Ureduct)
-            UF_cleanup = 1
-            if nisvectorized
-                blockhead = :while
-            else
-                blockhead = if UF == 2
-                    if loopisstatic
-                        add_cleanup = UFt == 1
-                        :block
-                    else
-                        :if
-                    end
-                else
-                    :while
-                end
-                UFt = 0
-            end
-        elseif 2Ureduct < UF
-            UF_cleanup = 2
-            blockhead = :while
-        else
-            UF_cleanup = UF - Ureduct
-            blockhead = :if
-        end
-        _q = if dynamicbounded
-            initialize_outer_reductions!(q, ls, Ureduct); q
-        else
-            Expr(:block, add_upper_outer_reductions(ls, q, Ureduct, UF, loop, nisvectorized))
-        end
-        if add_cleanup
-            cleanup_expr = Expr(blockhead)
-            blockhead === :block || push!(cleanup_expr.args, terminatecondition(ls, us, n, inclmask, UF_cleanup))
-            us_cleanup = nisunrolled ? UnrollSpecification(us, UF_cleanup, u₂) : UnrollSpecification(us, u₁, UF_cleanup)
-            push!(cleanup_expr.args, lower_block(ls, us_cleanup, n, inclmask, UF_cleanup))
-            push!(_q.args, cleanup_expr)
-        end
-        UFt > 0 && push!(_q.args, remblock)
-        _q
-    elseif remfirst
-        numiters = length(loop) ÷ UF
-        if numiters > 2
-            Expr( :block, remblock, q )
-        else
-            q = Expr(:block, remblock)
-            for i ∈ 1:numiters
-                push!(q.args, body)
-            end
-            q
-        end
-    elseif iszero(UFt)
-        Expr( :block, q )
-    elseif !nisvectorized && !loopisstatic && UF ≥ 10
-        rem_uf = UF - 1
-        UF = rem_uf >> 1
-        UFt = rem_uf - UF
-        ust = nisunrolled ? UnrollSpecification(us, UFt, u₂) : UnrollSpecification(us, u₁, UFt)
-        newblock = lower_block(ls, ust, n, remmask, UFt)
-        # comparison = unrollremcomparison(ls, loop, UFt, n, nisvectorized, remfirst)
-        comparison = terminatecondition(ls, us, n, inclmask, UFt)
-        UFt = 1
-        UF += 1 - iseven(rem_uf)
-        Expr( :block, q, Expr(iseven(rem_uf) ? :while : :if, comparison, newblock), remblock )
     else
-        # if (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !isstaticloop(loop) && !inclmask# && !ls.loadelimination
-        #     # Expr(:block, sl, assumeloopiteratesatleastonce(loop), Expr(:while, tc, body))
-        #     Expr(:block, sl, expect(tc), q, remblock)
-        # else
-        #     Expr(:block, sl, q, remblock)
-        # end
-        Expr( :block, q, remblock )
+      q = Expr(:while, tc, body)
     end
-    if !iszero(UFt)
-        # if unroll_cleanup
-        iforelseif = :if
-        while true
-            ust = nisunrolled ? UnrollSpecification(us, UFt, u₂) : UnrollSpecification(us, u₁, UFt)
-            newblock = lower_block(ls, ust, n, remmask, UFt)
-            if (UFt ≥ UF - 1 + nisvectorized) || UFt == Ureduct || loopisstatic
-                if isone(num_loops(ls)) && isone(UFt) && isone(Ureduct)
-                    newblock = Expr(:block, definemask(loop), newblock)
-                end
-                push!(remblock.args, newblock)
-                break
-            end
-            comparison = unrollremcomparison(ls, loop, UFt, n, nisvectorized, remfirst)
-            if isone(num_loops(ls)) && isone(UFt)
-                remblocknew = Expr(:if, comparison, newblock)
-                push!(remblock.args, Expr(:block, Expr(:let, definemask(loop), remblocknew)))
-                remblock = remblocknew
-            else
-                remblocknew = Expr(iforelseif, comparison, newblock)
-                # remblocknew = Expr(:elseif, comparison, newblock)
-                push!(remblock.args, remblocknew)
-                remblock = remblocknew
-                iforelseif = :elseif
-            end
-            UFt += 1
+    remblock = Expr(:block)
+    (nisvectorized && (UFt > 0) && isone(num_loops(ls))) && push!(remblock.args, definemask(loop))
+    unroll_cleanup = true
+  else
+    remblock = init_remblock(loop, ls.lssm, n)#loopsym)
+    # unroll_cleanup = Ureduct > 0 || (nisunrolled ? (u₂ > 1) : (u₁ > 1))
+    # remblock = unroll_cleanup ? init_remblock(loop, ls.lssm, n)#loopsym) : Expr(:block)
+    q = if loopisbounded
+      Expr(:block)
+    elseif unsigned(Ureduct) < unsigned(UF)
+      # push!(body.args, Expr(:(||), tc, Expr(:break)))
+      # Expr(:while, true, body)
+      termcond = gensym(:maybeterm)
+      push!(body.args, Expr(:(=), termcond, tc))
+      Expr(:block, Expr(:(=), termcond, true), Expr(:while, termcond, body))
+    else
+      Expr(:while, tc, body)
+    end
+  end
+  q = if unsigned(Ureduct) < unsigned(UF) # unsigned(-1) == typemax(UInt); 
+    add_cleanup = true
+    if isone(Ureduct)
+      UF_cleanup = 1
+      if nisvectorized
+        blockhead = :while
+      else
+        blockhead = if UF == 2
+        if loopisstatic
+          add_cleanup = UFt == 1
+          :block
+        else
+          :if
         end
-        # else
-        #     ust = nisunrolled ? UnrollSpecification(us, 1, u₂) : UnrollSpecification(us, u₁, 1)
-        #     # newblock = lower_block(ls, ust, n, remmask, 1)
-        #     push!(remblock.args, lower_no_unroll(ls, ust, n, inclmask, false, UF-1))
-        # end
+        else
+          :while
+        end
+        UFt = 0
+      end
+    elseif 2Ureduct < UF
+      UF_cleanup = 2
+      blockhead = :while
+    else
+      UF_cleanup = UF - Ureduct
+      blockhead = :if
     end
+    _q = if dynamicbounded
+      initialize_outer_reductions!(q, ls, Ureduct); q
+    else
+      Expr(:block, add_upper_outer_reductions(ls, q, Ureduct, UF, loop, nisvectorized))
+    end
+    if add_cleanup
+      cleanup_expr = Expr(blockhead)
+      blockhead === :block || push!(cleanup_expr.args, terminatecondition(ls, us, n, inclmask, UF_cleanup))
+      us_cleanup = nisunrolled ? UnrollSpecification(us, UF_cleanup, u₂) : UnrollSpecification(us, u₁, UF_cleanup)
+      push!(cleanup_expr.args, lower_block(ls, us_cleanup, n, inclmask, UF_cleanup))
+      push!(_q.args, cleanup_expr)
+    end
+    UFt > 0 && push!(_q.args, remblock)
+    _q
+  elseif remfirst
+    numiters = length(loop) ÷ UF
+    if numiters > 2
+      Expr( :block, remblock, q )
+    else
+      q = Expr(:block, remblock)
+      for i ∈ 1:numiters
+        push!(q.args, body)
+      end
+      q
+    end
+  elseif iszero(UFt)
+    Expr( :block, q )
+  elseif !nisvectorized && !loopisstatic && UF ≥ 10
+    rem_uf = UF - 1
+    UF = rem_uf >> 1
+    UFt = rem_uf - UF
+    ust = nisunrolled ? UnrollSpecification(us, UFt, u₂) : UnrollSpecification(us, u₁, UFt)
+    newblock = lower_block(ls, ust, n, remmask, UFt)
+    # comparison = unrollremcomparison(ls, loop, UFt, n, nisvectorized, remfirst)
+    comparison = terminatecondition(ls, us, n, inclmask, UFt)
+    UFt = 1
+    UF += 1 - iseven(rem_uf)
+    Expr( :block, q, Expr(iseven(rem_uf) ? :while : :if, comparison, newblock), remblock )
+  else
+    # if (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !isstaticloop(loop) && !inclmask# && !ls.loadelimination
+    #     # Expr(:block, sl, assumeloopiteratesatleastonce(loop), Expr(:while, tc, body))
+    #     Expr(:block, sl, expect(tc), q, remblock)
+    # else
+    #     Expr(:block, sl, q, remblock)
+    # end
+    Expr( :block, q, remblock )
+  end
+  if !iszero(UFt)
+    # if unroll_cleanup
+    iforelseif = :if
+    while true
+      ust = nisunrolled ? UnrollSpecification(us, UFt, u₂) : UnrollSpecification(us, u₁, UFt)
+      newblock = lower_block(ls, ust, n, remmask, UFt)
+      if (UFt ≥ UF - 1 + nisvectorized) || UFt == Ureduct || loopisstatic
+        if isone(num_loops(ls)) && isone(UFt) && isone(Ureduct)
+          newblock = Expr(:block, definemask(loop), newblock)
+        end
+        push!(remblock.args, newblock)
+        break
+      end
+      comparison = unrollremcomparison(ls, loop, UFt, n, nisvectorized, remfirst)
+      if isone(num_loops(ls)) && isone(UFt)
+        remblocknew = Expr(:if, comparison, newblock)
+        push!(remblock.args, Expr(:block, Expr(:let, definemask(loop), remblocknew)))
+        remblock = remblocknew
+      else
+        remblocknew = Expr(iforelseif, comparison, newblock)
+        # remblocknew = Expr(:elseif, comparison, newblock)
+        push!(remblock.args, remblocknew)
+        remblock = remblocknew
+        iforelseif = :elseif
+      end
+      UFt += 1
+    end
+    # else
+    #     ust = nisunrolled ? UnrollSpecification(us, 1, u₂) : UnrollSpecification(us, u₁, 1)
+    #     # newblock = lower_block(ls, ust, n, remmask, 1)
+    #     push!(remblock.args, lower_no_unroll(ls, ust, n, inclmask, false, UF-1))
+    # end
+  end
   if (length(ls.outer_reductions) > 0) && (2 ≤ n < length(ls.loops))
     pre, post = reinit_and_update_tiled_outer_reduct!(sl, q, ls, order[u₁loopnum], order[us.u₂loopnum], vectorized)
     Expr(:block, pre, Expr(:let, sl, q), post)
