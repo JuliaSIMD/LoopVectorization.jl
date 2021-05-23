@@ -11,7 +11,7 @@
         end
     end
     function myvexpavx!(b, a)
-        @avx for i ∈ eachindex(a)
+        @turbo for i ∈ eachindex(a)
             b[i] = Base.exp(a[i])
         end
     end
@@ -21,12 +21,12 @@
         end
     end
     function offset_exp!(A, B)
-        @avx for i=1:size(A,1), j=1:size(B,2)
+        @turbo for i=1:size(A,1), j=1:size(B,2)
             A[i,j] = exp(B[i,j])
         end
     end
     function offset_expavx!(A, B)
-        @avx for i=1:size(A,1), j=1:size(B,2)
+        @turbo for i=1:size(A,1), j=1:size(B,2)
             A[i,j] = exp(B[i,j])
         end
     end
@@ -51,7 +51,7 @@
     end
     function myvexpavx(a)
         s = zero(eltype(a))
-        @avx for i ∈ eachindex(a)
+        @turbo for i ∈ eachindex(a)
             s += exp(a[i])
         end
         s
@@ -66,7 +66,7 @@
     end
     function trianglelogdetavx(L)
         ld = zero(eltype(L))
-        @avx for i ∈ 1:size(L,1)
+        @turbo for i ∈ 1:size(L,1)
             ld += log(L[i,i])
         end
         ld
@@ -87,7 +87,7 @@
     end
     function testrepindshigherdimavx(L)
         ld = zero(eltype(L))
-        @avx for i ∈ axes(L,1), j ∈ axes(L,2)
+        @turbo for i ∈ axes(L,1), j ∈ axes(L,2)
             ld += log(L[i,j,i])
         end
         ld
@@ -106,7 +106,7 @@
     end
     function calc_sinsavx!(res::AbstractArray{T}) where {T}
         code_phase_delta = T(0.01)
-        @avx for i ∈ eachindex(res)
+        @turbo for i ∈ eachindex(res)
             res[i] = sin(i * code_phase_delta)
         end
     end
@@ -145,7 +145,7 @@
         u = maximum(x)                                       # max value used to re-center
         abs(u) == Inf && return any(isnan, x) ? T(NaN) : u   # check for non-finite values
         s = zero(T)
-        @avx for i = 1:n
+        @turbo for i = 1:n
             tmp = exp(x[i] - u)
             r[i] = tmp
             s += tmp
@@ -185,52 +185,52 @@
     # # lsfeq.operations
 
     function vpow0!(y, x)
-        @avx for i ∈ eachindex(y, x)
+        @turbo for i ∈ eachindex(y, x)
             y[i] = x[i] ^ 0
         end; y
     end
     function vpown1!(y, x)
-        @avx for i ∈ eachindex(y, x)
+        @turbo for i ∈ eachindex(y, x)
             y[i] = x[i] ^ -1
         end; y
     end
     function vpow1!(y, x)
-        @avx for i ∈ eachindex(y, x)
+        @turbo for i ∈ eachindex(y, x)
             y[i] = x[i] ^ 1
         end; y
     end
     function vpown2!(y, x)
-        @avx for i ∈ eachindex(y, x)
+        @turbo for i ∈ eachindex(y, x)
             y[i] = x[i] ^ -2
         end; y
     end
     function vpow2!(y, x)
-        @avx for i ∈ eachindex(y, x)
+        @turbo for i ∈ eachindex(y, x)
             y[i] = x[i] ^ 2
         end; y
     end
     function vpown3!(y, x)
-        @avx for i ∈ eachindex(y, x)
+        @turbo for i ∈ eachindex(y, x)
             y[i] = x[i] ^ -3
         end; y
     end
     function vpow3!(y, x)
-        @avx for i ∈ eachindex(y, x)
+        @turbo for i ∈ eachindex(y, x)
             y[i] = x[i] ^ 3
         end; y
     end
     function vpown4!(y, x)
-        @avx for i ∈ eachindex(y, x)
+        @turbo for i ∈ eachindex(y, x)
             y[i] = x[i] ^ -4
         end; y
     end
     function vpow4!(y, x)
-        @avx for i ∈ eachindex(y, x)
+        @turbo for i ∈ eachindex(y, x)
             y[i] = x[i] ^ 4
         end; y
     end
     function vpown5!(y, x)
-        @avx for i ∈ eachindex(y, x)
+        @turbo for i ∈ eachindex(y, x)
             y[i] = x[i] ^ -5
         end; y
     end
@@ -244,22 +244,22 @@
     ls2 = LoopVectorization.loopset(q2);
     
     function vpow5!(y, x)
-        @avx for i ∈ eachindex(y, x)
+        @turbo for i ∈ eachindex(y, x)
             y[i] = x[i] ^ 5
         end; y
     end
     function vpowf!(y, x)
-        @avx for i ∈ eachindex(y, x)
+        @turbo for i ∈ eachindex(y, x)
             y[i] = x[i] ^ 2.3
         end; y
     end
     function vpowf!(y, x, p::Number)
-        @avx for i ∈ eachindex(y, x)
+        @turbo for i ∈ eachindex(y, x)
             y[i] = x[i] ^ p
         end; y
     end
     function vpowf!(y, x, p::AbstractArray)
-        @avx for i ∈ eachindex(y, x)
+        @turbo for i ∈ eachindex(y, x)
             y[i] = x[i] ^ p[i]
         end; y
     end
@@ -275,7 +275,7 @@
         y
     end    
     function csetanhavx!(y, z, x)
-        @avx for j in axes(x, 2)
+        @turbo for j in axes(x, 2)
             for i = axes(x, 1)
                 t2 = inv(tanh(x[i, j]))
                 t1 = tanh(x[i, j])
@@ -298,7 +298,7 @@
         N = length(x)
         ent = zeros(T, N)
         x isa AbstractVector && (x = x')
-        @avx for i = 1:N, j = 1:size(x,1)
+        @turbo for i = 1:N, j = 1:size(x,1)
             ent[i] += x[j,i]*log(x[j,i])
         end
         ent
@@ -313,7 +313,7 @@
     end
     function vsincosavx(x)
         y = Matrix{eltype(x)}(undef, length(x), 2)
-        @avx for i = eachindex(x)
+        @turbo for i = eachindex(x)
             y[i,1], y[i,2] = sincos(x[i])
         end
         return y
@@ -328,7 +328,7 @@
     end
     function sincosdotavx(x)
         a = zero(eltype(x))
-        @avx for i ∈ eachindex(x)
+        @turbo for i ∈ eachindex(x)
             s, c = sincos(x[i])
             a += s * c
         end
@@ -349,7 +349,7 @@
         s = myvexp(a)
         @test s ≈ myvexpavx(a)
         @test s ≈ myvexp_avx(a)
-        @test b1 ≈ @avx exp.(a)
+        @test b1 ≈ @turbo exp.(a)
 
         @test vsincos(a) ≈ vsincosavx(a)
         @test sincosdot(a) ≈ sincosdotavx(a)

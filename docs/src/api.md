@@ -3,7 +3,7 @@
 ## Macros
 
 ```@docs
-@avx
+@turbo
 @_avx
 ```
 

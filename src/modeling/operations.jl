@@ -8,7 +8,7 @@ const GLOBALCONSTANT = Symbol("##GLOBAL##CONSTANT##")
 """
     ArrayReference
 
-A type for encoding an array reference `A[i,j]` occurring inside an `@avx` block.
+A type for encoding an array reference `A[i,j]` occurring inside an `@turbo` block.
 
 # Fields
 
@@ -109,7 +109,7 @@ abstract type AbstractLoopOperation end
 
 """
 `OperationType` is an `@enum` for classifying supported operations that can appear in
-`@avx` blocks. Type `LoopVectorization.OperationType` to see the different types.
+`@turbo` blocks. Type `LoopVectorization.OperationType` to see the different types.
 """
 @enum OperationType begin
     constant
@@ -132,7 +132,7 @@ loopvalue
 """
     Operation
 
-A structure to encode a particular action occuring inside an `@avx` block.
+A structure to encode a particular action occuring inside an `@turbo` block.
 
 # Fields
 

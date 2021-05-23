@@ -4,13 +4,13 @@ function awmean_lv(x::Array{T1}, σ::Array{T2}) where {T1<:Number,T2<:Number}
   T3 = promote_type(T1,T2)
   T = sizeof(T3) ≤ 4 ? Float32 : Float64
   sum_of_values = sum_of_weights = χ2 = zero(T)
-  @vectorize for i=1:n
+  @turbo for i=1:n
     sum_of_values += x[i] / (σ[i]*σ[i])
     sum_of_weights += 1 / (σ[i]*σ[i])
   end
   wx = sum_of_values / sum_of_weights
   
-  @vectorize for i=1:n
+  @turbo for i=1:n
     χ2 += (x[i] - wx) * (x[i] - wx) / (σ[i] * σ[i])
   end
   mswd = χ2 / (n-1)

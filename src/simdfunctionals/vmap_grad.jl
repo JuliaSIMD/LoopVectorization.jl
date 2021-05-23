@@ -137,7 +137,7 @@ end
     end
     quote
         $preloop
-        @avx for i ∈ eachindex(Δ)
+        @turbo for i ∈ eachindex(Δ)
             $loop_body
         end
         $ret

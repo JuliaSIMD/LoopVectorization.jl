@@ -55,7 +55,7 @@
             A = fA(rand(2,2))
             B = fB(rand(2,2))
             C = similar(A)
-            ls = LoopVectorization.@avx_debug for m ∈ axes(A,1), n ∈ axes(B,2)
+            ls = LoopVectorization.@turbo_debug for m ∈ axes(A,1), n ∈ axes(B,2)
                 ΔCₘₙ = zero(eltype(C))
                 for k ∈ axes(A,2)
                     ΔCₘₙ += A[m,k] * B[k,n]
@@ -78,7 +78,7 @@
         dM, rM = divrem(size(C,1), 3)
         dN, rN = divrem(size(C,2), 3)
         dK, rK = divrem(size(B,1), 3)
-        @avx for m ∈ 1:3*dM + rM, n ∈ 1:3*dN + rN
+        @turbo for m ∈ 1:3*dM + rM, n ∈ 1:3*dN + rN
             Cₘₙ = zero(eltype(C))
             for k ∈ 1:3*dK + rK
                 Cₘₙ += A[m,k] * B[k,n]
@@ -88,7 +88,7 @@
     end
     function AmulBavx2!(C, A, B)
         z = zero(eltype(C))
-        @avx unroll=(2,1) for m ∈ axes(A,1), n ∈ axes(B,2)
+        @turbo unroll=(2,1) for m ∈ axes(A,1), n ∈ axes(B,2)
             C[m,n] = z
             for k ∈ axes(A,2)
                 C[m,n] += A[m,k] * B[k,n]
@@ -96,7 +96,7 @@
         end
     end
     function AmulBavx3!(C, A, B)
-        @avx unroll=(2,2) for m ∈ axes(A,1), n ∈ axes(B,2)
+        @turbo unroll=(2,2) for m ∈ axes(A,1), n ∈ axes(B,2)
             C[m,n] = zero(eltype(C))
             for k ∈ axes(A,2)
                 C[m,n] += A[m,k] * B[k,n]
@@ -105,7 +105,7 @@
     end
     myzero(A) = zero(eltype(A))
     # function AmulBavx4!(C, A, B)
-    #     @avx for m ∈ axes(A,1), n ∈ axes(B,2)
+    #     @turbo for m ∈ axes(A,1), n ∈ axes(B,2)
     #         C[m,n] = myzero(C)
     #         for k ∈ axes(A,2)
     #             C[m,n] += A[m,k] * B[k,n]
@@ -113,7 +113,7 @@
     #     end
     # end
     # C = Cs; A = Ats'; B = Bs; factor = 1;
-    # ls = LoopVectorization.@avx_debug for m ∈ axes(A,1), n ∈ axes(B,2)
+    # ls = LoopVectorization.@turbo_debug for m ∈ axes(A,1), n ∈ axes(B,2)
     #         ΔCₘₙ = zero(eltype(C))
     #         for k ∈ axes(A,2)
     #             ΔCₘₙ += A[m,k] * B[k,n]
@@ -121,7 +121,7 @@
     #         C[m,n] += ΔCₘₙ * factor
     #     end;
     function AmuladdBavx!(C, A, B, α = one(eltype(C)))
-        @avx unroll=(2,2) for m ∈ indices((A,C),1), n ∈ indices((B,C),2)
+        @turbo unroll=(2,2) for m ∈ indices((A,C),1), n ∈ indices((B,C),2)
             ΔCₘₙ = zero(eltype(C))
             for k ∈ indices((A,B),(2,1))
                 ΔCₘₙ += A[m,k] * B[k,n]
@@ -130,7 +130,7 @@
         end
     end
     function AmuladdBavx!(C, A, B, α, β)# = zero(eltype(C)))
-        @avx unroll=(1,1) for m ∈ axes(A,1), n ∈ axes(B,2)
+        @turbo unroll=(1,1) for m ∈ axes(A,1), n ∈ axes(B,2)
             ΔCₘₙ = zero(eltype(C))
             for k ∈ axes(A,2)
                 ΔCₘₙ += A[m,k] * B[k,n]
@@ -240,7 +240,7 @@
     end
 
     function AmulB2x2avx!(C, A, B)
-        @avx unroll=(2,2) for m ∈ axes(A,1), n ∈ axes(B,2)
+        @turbo unroll=(2,2) for m ∈ axes(A,1), n ∈ axes(B,2)
             ΔCₘₙ = zero(eltype(C))
             for k ∈ axes(A,2)
                 ΔCₘₙ += A[m,k] * B[k,n]
@@ -279,7 +279,7 @@
         @test LoopVectorization.choose_order(lsAtmulB) == (Symbol[:n,:m,:k], :n, :m, :k, Unumt, Tnumt)
     end
     function AtmulBavx1!(C, A, B)
-        @avx for n ∈ axes(C,2), m ∈ axes(C,1)
+        @turbo for n ∈ axes(C,2), m ∈ axes(C,1)
             Cₘₙ = zero(eltype(C))
             for k ∈ axes(A,1)
                 Cₘₙ += A[k,m] * B[k,n]
@@ -312,9 +312,9 @@
         @assert size(C, 1) == size(A, 2)
         @assert size(C, 2) == size(B, 2)
         @assert size(A, 1) == size(B, 1)
-        # When the @avx macro is available, this code is faster:
+        # When the @turbo macro is available, this code is faster:
         z = zero(eltype(C))
-        @avx unroll=(2,2) for n in axes(C,2), m in axes(C,1)
+        @turbo unroll=(2,2) for n in axes(C,2), m in axes(C,1)
             Cmn = z
             for k in axes(A,1)
                 Cmn += A[k,m] * B[k,n]
@@ -328,7 +328,7 @@
         @assert size(C, 1) == size(A, 2)
         @assert size(C, 2) == size(B, 2)
         @assert size(A, 1) == size(B, 1)
-        # When the @avx macro is available, this code is faster:
+        # When the @turbo macro is available, this code is faster:
         z = zero(eltype(C))
         @_avx for n in axes(C,2), m in axes(C,1)
             Cmn = z
@@ -367,7 +367,7 @@
         @test LoopVectorization.choose_order(lsr2amb) == ([:m, :n, :k], :m, :n, :m, 2, 4)
     end
     function rank2AmulBavx!(C, Aₘ, Aₖ, B)
-        @avx for m ∈ axes(C,1), n ∈ axes(C,2)
+        @turbo for m ∈ axes(C,1), n ∈ axes(C,2)
             Cₘₙ = zero(eltype(C))
             for k ∈ axes(B,1)
                 Cₘₙ += (Aₘ[m,1]*Aₖ[1,k]+Aₘ[m,2]*Aₖ[2,k]) * B[k,n]
@@ -385,7 +385,7 @@
         end
     end
     function rank2AmulBavx_noinline!(C, Aₘ, Aₖ, B)
-        @avx inline=false for m ∈ axes(C,1), n ∈ axes(C,2)
+        @turbo inline=false for m ∈ axes(C,1), n ∈ axes(C,2)
             Cₘₙ = zero(eltype(C))
             for k ∈ axes(B,1)
                 Cₘₙ += (Aₘ[m,1]*Aₖ[1,k]+Aₘ[m,2]*Aₖ[2,k]) * B[k,n]
@@ -405,7 +405,7 @@
             for n ∈ 1:2:(N & -2)
                 n1 = n + 1
                 C11, C21, C12, C22 = zero(T), zero(T), zero(T), zero(T)
-                @avx inline=true for k ∈ 1:K
+                @turbo inline=true for k ∈ 1:K
                     C11 += A[k,m] * B[k,n]
                     C21 += A[k,m1] * B[k,n]
                     C12 += A[k,m] * B[k,n1]
@@ -419,7 +419,7 @@
             if isodd(N)
                 C1n = 0.0
                 C2n = 0.0
-                @avx inline=true for k ∈ 1:K
+                @turbo inline=true for k ∈ 1:K
                     C1n += A[k,m] * B[k,N]
                     C2n += A[k,m1] * B[k,N]
                 end
@@ -431,7 +431,7 @@
             for n ∈ 1:2:(N & -2)
                 n1 = n + 1
                 Cm1, Cm2 = zero(T), zero(T)
-                @avx inline=true for k ∈ 1:K
+                @turbo inline=true for k ∈ 1:K
                     Cm1 += A[k,M] * B[k,n] 
                     Cm2 += A[k,M] * B[k,n1] 
                 end
@@ -440,7 +440,7 @@
             end
             if isodd(N)
                 Cmn = 0.0
-                @avx inline=true for k ∈ 1:K
+                @turbo inline=true for k ∈ 1:K
                     Cmn += A[k,M] * B[k,N]
                 end
                 C[M,N] = Cmn
@@ -514,7 +514,7 @@
             for n ∈ 1:2:(N & -2)
                 n1 = n + 1
                 C11, C21, C12, C22 = zero(T), zero(T), zero(T), zero(T)
-                @avx inline=false for k ∈ 1:K
+                @turbo inline=false for k ∈ 1:K
                     C11 += A[k,m] * B[k,n] 
                     C21 += A[k,m1] * B[k,n] 
                     C12 += A[k,m] * B[k,n1] 
@@ -528,7 +528,7 @@
             if isodd(N)
                 C1n = 0.0
                 C2n = 0.0
-                @avx inline=false for k ∈ 1:K
+                @turbo inline=false for k ∈ 1:K
                     C1n += A[k,m] * B[k,N]
                     C2n += A[k,m1] * B[k,N]
                 end
@@ -540,7 +540,7 @@
             for n ∈ 1:2:(N & -2)
                 n1 = n + 1
                 Cm1, Cm2 = zero(T), zero(T)
-                @avx inline=false for k ∈ 1:K
+                @turbo inline=false for k ∈ 1:K
                     Cm1 += A[k,M] * B[k,n] 
                     Cm2 += A[k,M] * B[k,n1] 
                 end
@@ -549,7 +549,7 @@
             end
             if isodd(N)
                 Cmn = 0.0
-                @avx inline=false for k ∈ 1:K
+                @turbo inline=false for k ∈ 1:K
                     Cmn += A[k,M] * B[k,N]
                 end
                 C[M,N] = Cmn
@@ -558,9 +558,9 @@
         return C
     end
 
-    # TODO: add fast=false option to `@avx`
+    # TODO: add fast=false option to `@turbo`
     # function gemm_accurate!(C, A, B)
-    #     @avx for n in axes(C,2), m in axes(C,1)
+    #     @turbo for n in axes(C,2), m in axes(C,1)
     #         Cmn_hi = zero(eltype(C))
     #         Cmn_lo = zero(eltype(C))
     #         for k in axes(B,1)
@@ -596,7 +596,7 @@
 
     function AB_plus_BA_avx!(du, u, mat)
         @assert size(u, 1) == size(u, 2) == size(mat, 1) == size(mat, 2)
-        @avx for i2 in 1:size(u, 2), i1 in 1:size(u, 1)
+        @turbo for i2 in 1:size(u, 2), i1 in 1:size(u, 1)
             for sum_idx in 1:size(u, 1)
                 du[i1, i2] += mat[i1, sum_idx] * u[sum_idx, i2] + mat[i2, sum_idx] * u[i1, sum_idx]
             end
@@ -606,7 +606,7 @@
 
     function threegemms!(Ab, Bb, Cb, A, B, C)
         M, N = size(Cb); K = size(B,1)
-        @avx for m in 1:M, k in 1:K, n in 1:N
+        @turbo for m in 1:M, k in 1:K, n in 1:N
             Ab[m,k] += C[m,n] * B[k,n]
             Bb[k,n] += A[m,k] * C[m,n]
             Cb[m,n] += A[m,k] * B[k,n]

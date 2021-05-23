@@ -50,7 +50,7 @@ end
 
 # @generated function vapply!(f::F, y, x, ::Val{U}) where {F,U}
 #     quote
-#         @avx unroll=$U for j ∈ 1:1024
+#         @turbo unroll=$U for j ∈ 1:1024
 #             y[j] = f(x[j])
 #         end
 #     end
@@ -64,7 +64,7 @@ end
 #         cc = readcyclecounter()
 #         for i ∈ 1:8192
 #             s = vector_init(Val{$U}(), $T)
-#             @avx unroll=$U for j ∈ 1:512
+#             @turbo unroll=$U for j ∈ 1:512
 #                 s += f(x[j])
 #             end
 #             volatile(s)
@@ -79,7 +79,7 @@ end
 #     quote
 #         cc = readcyclecounter()
 #         for i ∈ 1:8192
-#             @avx unroll=$U for j ∈ 1:512
+#             @turbo unroll=$U for j ∈ 1:512
 #                 y[j] = f(x[j])
 #             end
 #         end

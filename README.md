@@ -17,15 +17,15 @@ LoopVectorization is supported on Julia 1.1 and later. It is tested on Julia 1.5
 ## Warning
 
 Misusing LoopVectorization can have [serious consequences](http://catb.org/jargon/html/N/nasal-demons.html). Like `@inbounds`, misusing it can lead to segfaults and memory corruption.
-We expect that any time you use the `@avx` macro with a given block of code that you:
-1. Are not indexing an array out of bounds. `@avx` does not perform any bounds checking.
+We expect that any time you use the `@turbo` macro with a given block of code that you:
+1. Are not indexing an array out of bounds. `@turbo` does not perform any bounds checking.
 2. Are not iterating over an empty collection. Iterating over an empty loop such as `for i ∈ eachindex(Float64[])` is undefined behavior, and will likely result in the out of bounds memory accesses. Ensure that loops behave correctly.
-3. Are not relying on a specific execution order. `@avx` can and will re-order operations and loops inside its scope, so the correctness cannot depend on a particular order. You cannot implement `cumsum` with `@avx`.
+3. Are not relying on a specific execution order. `@turbo` can and will re-order operations and loops inside its scope, so the correctness cannot depend on a particular order. You cannot implement `cumsum` with `@turbo`.
 4. Are not using multiple loops at the same level in nested loops.
 
 ## Usage
 
-This library provides the `@avx` macro, which may be used to prefix a `for` loop or broadcast statement.
+This library provides the `@turbo` macro, which may be used to prefix a `for` loop or broadcast statement.
 It then tries to vectorize the loop to improve runtime performance.
 
 The macro assumes that loop iterations can be reordered. It also currently supports simple nested loops, where loop bounds of inner loops are constant across iterations of the outer loop, and only a single loop at each level of loop nest. These limitations should be removed in a future version.
@@ -60,7 +60,7 @@ mydot (generic function with 1 method)
 
 julia> function mydotavx(a, b)
            s = 0.0
-           @avx for i ∈ eachindex(a,b)
+           @turbo for i ∈ eachindex(a,b)
                s += a[i]*b[i]
            end
            s
@@ -111,7 +111,7 @@ julia> function mygemm!(C, A, B)
 mygemm! (generic function with 1 method)
 
 julia> function mygemmavx!(C, A, B)
-           @avx for m ∈ axes(A,1), n ∈ axes(B,2)
+           @turbo for m ∈ axes(A,1), n ∈ axes(B,2)
                Cmn = zero(eltype(C))
                for k ∈ axes(A,2)
                    Cmn += A[m,k] * B[k,n]
@@ -207,7 +207,7 @@ julia> A = rand(5,77); B = rand(77, 51); C = rand(51,49); D = rand(49,51);
 
 julia> X1 =      view(A,1,:) .+ B  *  (C .+ D');
 
-julia> X2 = @avx view(A,1,:) .+ B .*ˡ (C .+ D');
+julia> X2 = @turbo view(A,1,:) .+ B .*ˡ (C .+ D');
 
 julia> @test X1 ≈ X2
 Test Passed
@@ -219,7 +219,7 @@ julia> buf2 = similar(X1);
 julia> @btime $X1 .= view($A,1,:) .+ mul!($buf2, $B, ($buf1 .= $C .+ $D'));
   9.188 μs (0 allocations: 0 bytes)
 
-julia> @btime @avx $X2 .= view($A,1,:) .+ $B .*ˡ ($C .+ $D');
+julia> @btime @turbo $X2 .= view($A,1,:) .+ $B .*ˡ ($C .+ $D');
   6.751 μs (0 allocations: 0 bytes)
 
 julia> @test X1 ≈ X2
@@ -238,7 +238,7 @@ This may improve as the optimizations within LoopVectorization improve.
 Note that loops will be faster than broadcasting in general. This is because the behavior of broadcasts is determined by runtime information (i.e., dimensions other than the leading dimension of size `1` will be broadcasted; it is not known which these will be at compile time).
 ```julia
 julia> function AmulBtest!(C,A,Bk,Bn,d)
-          @avx for m ∈ axes(A,1), n ∈ axes(Bk,2)
+          @turbo for m ∈ axes(A,1), n ∈ axes(Bk,2)
              ΔCmn = zero(eltype(C))
              for k ∈ axes(A,2)
                 ΔCmn += A[m,k] * (Bk[k,n] + Bn[n,k])
@@ -276,7 +276,7 @@ BenchmarkTools.Trial:
  <summaryClick me! ></summary>
 <p>
 
-The key to the `@avx` macro's performance gains is leveraging knowledge of exactly how data like `Float64`s and `Int`s are handled by a CPU. As such, it is not strightforward to generalize the `@avx` macro to work on arrays containing structs such as `Matrix{Complex{Float64}}`. Instead, it is currently recommended that users wishing to apply `@avx` to arrays of structs use packages such as [StructArrays.jl](https://github.com/JuliaArrays/StructArrays.jl) which transform an array where each element is a struct into a struct where each element is an array. Using StructArrays.jl, we can write a matrix multiply (gemm) kernel that works on matrices of `Complex{Float64}`s and `Complex{Int}`s:
+The key to the `@turbo` macro's performance gains is leveraging knowledge of exactly how data like `Float64`s and `Int`s are handled by a CPU. As such, it is not strightforward to generalize the `@turbo` macro to work on arrays containing structs such as `Matrix{Complex{Float64}}`. Instead, it is currently recommended that users wishing to apply `@turbo` to arrays of structs use packages such as [StructArrays.jl](https://github.com/JuliaArrays/StructArrays.jl) which transform an array where each element is a struct into a struct where each element is an array. Using StructArrays.jl, we can write a matrix multiply (gemm) kernel that works on matrices of `Complex{Float64}`s and `Complex{Int}`s:
 ```julia 
 using LoopVectorization, LinearAlgebra, StructArrays, BenchmarkTools, Test
 
@@ -285,7 +285,7 @@ BLAS.set_num_threads(1); @show BLAS.vendor()
 const MatrixFInt64 = Union{Matrix{Float64}, Matrix{Int}}
 
 function mul_avx!(C::MatrixFInt64, A::MatrixFInt64, B::MatrixFInt64)
-    @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+    @turbo for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
         Cmn = zero(eltype(C))
         for k ∈ 1:size(A,2)
             Cmn += A[m,k] * B[k,n]
@@ -295,7 +295,7 @@ function mul_avx!(C::MatrixFInt64, A::MatrixFInt64, B::MatrixFInt64)
 end
 
 function mul_add_avx!(C::MatrixFInt64, A::MatrixFInt64, B::MatrixFInt64, factor=1)
-    @avx for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+    @turbo for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
         ΔCmn = zero(eltype(C))
         for k ∈ 1:size(A,2)
             ΔCmn += A[m,k] * B[k,n]

@@ -1,15 +1,18 @@
 const NOpsType = Int#Union{Int,Vector{Int}}
 
-struct UpperBoundedInteger{N, T<: Integer} <: Integer
+struct UpperBoundedInteger{N, T<: Base.BitInteger} <: Integer
   i::T
+  @inline UpperBoundedInteger{N}(i::T) where {N,T<:Base.BitInteger} = new{N,T}(i)
 end
-@inline UpperBoundedInteger{N}(i::T) where {N,T<:Integer} = UpperBoundedInteger{N,T}(i)
-@inline UpperBoundedInteger(i::T, ::StaticInt{N}) where {N,T<:Integer} = UpperBoundedInteger{N,T}(i)
-@inline Base.:(%)(a::UpperBoundedInteger, ::Type{T}) where {T<:Integer} = a.i % T
-Base.promote_rule(::Type{T}, ::Type{UpperBoundedInteger{N,S}}) where {N,T,S} = promote_rule(T,S)
-Base.promote_rule(::Type{UpperBoundedInteger{N,S}}, ::Type{T}) where {N,T,S} = promote_rule(S,T)
+
+@inline UpperBoundedInteger(i::T, ::StaticInt{N}) where {N,T<:Base.BitInteger} = UpperBoundedInteger{N}(i)
+@inline UpperBoundedInteger(::StaticInt{M}, ::StaticInt{N}) where {N,M} = StaticInt{M}()
+@inline UpperBoundedInteger{N}(::StaticInt{M}) where {N,M} = StaticInt{M}()
+@inline Base.:(%)(a::UpperBoundedInteger, ::Type{T}) where {T<:Base.BitInteger} = a.i % T
+Base.promote_rule(::Type{T}, ::Type{UpperBoundedInteger{N,S}}) where {N,T<:Base.BitInteger,S} = promote_rule(T,S)
+Base.promote_rule(::Type{UpperBoundedInteger{N,S}}, ::Type{T}) where {N,T<:Base.BitInteger,S} = promote_rule(S,T)
 Base.convert(::Type{T}, i::UpperBoundedInteger) where {T<:Number} = convert(T, i.i)
-Base.convert(::Type{UpperBoundedInteger{N,T}}, i::UpperBoundedInteger{N,T}) where {N,T<:Integer} = i
+Base.convert(::Type{UpperBoundedInteger{N,T}}, i::UpperBoundedInteger{N,T}) where {N,T<:Base.BitInteger} = i
 Base.convert(::Type{Any}, i::UpperBoundedInteger) = i
 upper_bound(_) = typemax(Int)
 upper_bound(::Type{CloseOpen{T,UpperBoundedInteger{N,S}}}) where {T,N,S} = N - 1
@@ -684,10 +687,10 @@ end
 """
     _avx_!(unroll, ops, arf, am, lpsym, lb, vargs...)
 
-Execute an `@avx` block. The block's code is represented via the arguments:
+Execute an `@turbo` block. The block's code is represented via the arguments:
 - `unroll` is `Val((u₁,u₂))` and specifies the loop unrolling factor(s).
   These values may be supplied manually via the `unroll` keyword
-  of [`@avx`](@ref).
+  of [`@turbo`](@ref).
 - `ops` is `Tuple{mod1, sym1, op1, mod2, sym2, op2...}` encoding the operations of the loop.
   `mod` and `sym` encode the module and symbol of the called function; `op` is an [`OperationStruct`](@ref)
   encoding the details of the operation.
@@ -703,7 +706,7 @@ Execute an `@avx` block. The block's code is represented via the arguments:
 @aggressive_constprop @generated function _avx_!(
     ::Val{var"#UNROLL#"}, ::Val{var"#OPS#"}, ::Val{var"#ARF#"}, ::Val{var"#AM#"}, ::Val{var"#LPSYM#"}, ::Val{Tuple{var"#LB#",var"#V#"}}, var"#flattened#var#arguments#"::Vararg{Any,var"#num#vargs#"}
 ) where {var"#UNROLL#", var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#", var"#V#", var"#num#vargs#"}
-  1 + 1 # Irrelevant line you can comment out/in to force recompilation...
+  # 1 + 1 # Irrelevant line you can comment out/in to force recompilation...
   ls = _avx_loopset(var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#".parameters, var"#V#".parameters, var"#UNROLL#")
   pushfirst!(ls.preamble.args, :(var"#lv#tuple#args#" = reassemble_tuple(Tuple{var"#LB#",var"#V#"}, var"#flattened#var#arguments#")))
   # return @show avx_body(ls, var"#UNROLL#")

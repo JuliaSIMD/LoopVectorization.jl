@@ -1,13 +1,13 @@
 using OffsetArrays, LinearAlgebra, LoopVectorization, Test
 function mydotavx(a, b)
     s = zero(eltype(a))
-    @avxt for i ∈ eachindex(a,b)
+    @tturbo for i ∈ eachindex(a,b)
         s += a[i]*b[i]
     end
     s
 end
 function AmulB!(C,A,B)
-    @avxt for n in indices((B,C),2), m in indices((A,C),1)
+    @tturbo for n in indices((B,C),2), m in indices((A,C),1)
         Cmn = zero(eltype(C))
         for k in indices((A,B),(2,1))
             Cmn += A[m,k] * B[k,n]
@@ -22,7 +22,7 @@ function dot3(x::AbstractVector{Complex{T}}, A::AbstractMatrix{Complex{T}}, y::A
     Ar = reinterpret(reshape, T, A);
     sre = zero(T)
     sim = zero(T)
-    @avxt for n in axes(Ar,3)
+    @tturbo for n in axes(Ar,3)
         tre = zero(T)
         tim = zero(T)
         for m in axes(Ar,2)
@@ -35,7 +35,7 @@ function dot3(x::AbstractVector{Complex{T}}, A::AbstractMatrix{Complex{T}}, y::A
     sre + im*sim
 end
 function conv!(out, A, kern)
-    @avxt for n ∈ axes(out,2), m ∈ axes(out,1)
+    @tturbo for n ∈ axes(out,2), m ∈ axes(out,1)
         tmp = zero(eltype(out))
         for nᵢ ∈ -1:1, mᵢ ∈ -1:1
             tmp += A[mᵢ+m, nᵢ+n]*kern[mᵢ, nᵢ]
@@ -71,7 +71,7 @@ function convlayer!(
     dcd::DenseConvDims{2, <:Any, <:Any, <:Any}
 )
     (K₁, K₂, Cᵢₙ, Cₒᵤₜ) = kernaxes(dcd)
-    @avxt for j₁ ∈ axes(out,1), j₂ ∈ axes(out,2), d ∈ axes(out,4), o ∈ Cₒᵤₜ
+    @tturbo for j₁ ∈ axes(out,1), j₂ ∈ axes(out,2), d ∈ axes(out,4), o ∈ Cₒᵤₜ
         s = zero(eltype(out))
         for k₁ ∈ K₁, k₂ ∈ K₂, i ∈ Cᵢₙ
             s += img[j₁ + k₁ - 1, j₂ + k₂ - 1, i, d] * kern[k₁, k₂, i, o]

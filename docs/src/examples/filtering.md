@@ -7,7 +7,7 @@ kern = Images.Kernel.gaussian((1, 1), (3, 3))
 A = rand(130,130);
 out = OffsetArray(similar(A, size(A) .- size(kernel) .+ 1), -1 .- kernel.offsets);
 function filter2davx!(out::AbstractMatrix, A::AbstractMatrix, kern)
-    @avx for J in CartesianIndices(out)
+    @turbo for J in CartesianIndices(out)
         tmp = zero(eltype(out))
         for I ∈ CartesianIndices(kern)
             tmp += A[I + J] * kern[I]

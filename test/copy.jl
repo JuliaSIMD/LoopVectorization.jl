@@ -4,7 +4,7 @@ using LoopVectorization, OffsetArrays, Test
 @testset "copy" begin
 
     function copyavx1!(x, y)
-        @avx for i ∈ eachindex(x)
+        @turbo for i ∈ eachindex(x)
             x[i] = y[i]
         end
     end
@@ -14,7 +14,7 @@ using LoopVectorization, OffsetArrays, Test
         end
     end
     function copyavx2!(x, y)
-        @avx for i ∈ eachindex(x)
+        @turbo for i ∈ eachindex(x)
             yᵢ = y[i]
             x[i] = yᵢ
         end
@@ -31,7 +31,7 @@ using LoopVectorization, OffsetArrays, Test
         end
     end
     function offset_copyavx1!(A, B)
-        @avx for i=1:size(A,1), j=1:size(B,2)
+        @turbo for i=1:size(A,1), j=1:size(B,2)
            A[i,j+2] = B[i,j]
         end
     end
@@ -41,7 +41,7 @@ using LoopVectorization, OffsetArrays, Test
         end
     end
     function offset_copyavx2!(A, B)
-        @avx for i=1:size(A,1), j=1:size(B,2)
+        @turbo for i=1:size(A,1), j=1:size(B,2)
             Bᵢⱼ = B[i,j]
             A[i,j+2] = Bᵢⱼ
         end
@@ -55,7 +55,7 @@ using LoopVectorization, OffsetArrays, Test
     function make2point3avx!(x)
         a = 1.742416161578685
         b = 1.5
-        @avx for i ∈ eachindex(x)
+        @turbo for i ∈ eachindex(x)
             x[i] = a ^ b
         end
     end
@@ -65,7 +65,7 @@ using LoopVectorization, OffsetArrays, Test
         end
     end
     function make23avx!(x)
-        @avx for i ∈ eachindex(x)
+        @turbo for i ∈ eachindex(x)
             @inbounds x[i] = 23
         end
     end
@@ -75,7 +75,7 @@ using LoopVectorization, OffsetArrays, Test
         end
     end
     function myfillavx!(x, a)
-        @avx for i ∈ eachindex(x)
+        @turbo for i ∈ eachindex(x)
             x[i] = a
         end
     end
@@ -85,7 +85,7 @@ using LoopVectorization, OffsetArrays, Test
         end
     end
     function issue_256!(A)
-        @avx for i = 1:size(A,1)
+        @turbo for i = 1:size(A,1)
             A[i,(x=1,).x] = 0
         end
         A
@@ -98,7 +98,7 @@ using LoopVectorization, OffsetArrays, Test
         B
     end
     function reversecopy1avx!(B, A)
-        @avx for i in eachindex(A)
+        @turbo for i in eachindex(A)
             B[i] = A[11-i]
         end
         B
@@ -110,28 +110,28 @@ using LoopVectorization, OffsetArrays, Test
         B
     end
     function reversecopy2avx!(B, A)
-        @avx for i in eachindex(B)
+        @turbo for i in eachindex(B)
             B[i] = A[-i]
         end
         B
     end
     function reversecopy3avx!(B, A)
         n = length(A)
-        @avx for i in 1:n
+        @turbo for i in 1:n
             B[i] = A[n+1-i]
         end
         B
     end
     function copy3!(B, A)
         @assert (length(B) ≥ 3) && (length(A) ≥ 3)
-        @avx for i in 1:3
+        @turbo for i in 1:3
             B[i] = A[i]
         end
         B
     end
     function copyselfdot!(s, x)
         m = zero(eltype(x))
-        @avx for i ∈ 1:2
+        @turbo for i ∈ 1:2
             sᵢ = x[i]
             s[i] = sᵢ
             m += sᵢ * sᵢ
@@ -139,7 +139,7 @@ using LoopVectorization, OffsetArrays, Test
         m
     end
   function scattercopyavx!(H,a,j)
-    @avx for i ∈ eachindex(j), k ∈ eachindex(a)
+    @turbo for i ∈ eachindex(j), k ∈ eachindex(a)
       H[j[i],k] = a[k]
     end
     H
@@ -165,7 +165,7 @@ using LoopVectorization, OffsetArrays, Test
         @test x == q2
         fill!(q2, -999999); copy_avx2!(q2, x);
         @test x == q2
-        fill!(q2, -999999); @avx q2 .= x;
+        fill!(q2, -999999); @turbo q2 .= x;
         @test x == q2
         @test all(iszero, issue_256!(reshape(x,(length(x),1))))
 
@@ -211,11 +211,11 @@ using LoopVectorization, OffsetArrays, Test
             @test x == q2
         end
         a = rand(R)
-        @avx x .= a;
+        @turbo x .= a;
         fill!(q2, a);
         @test x == q2
         a = rand(R)
-        @avx x .= a;
+        @turbo x .= a;
         fill!(q2, a);
         @test x == q2
 

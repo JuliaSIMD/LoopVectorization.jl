@@ -3,14 +3,14 @@
 @testset "mapreduce" begin
     function maximum_avx(x)
         s = typemin(eltype(x))
-        @avx for i in eachindex(x)
+        @turbo for i in eachindex(x)
             s = max(s, x[i])
         end
         s
     end
     function minimum_avx(x)
         s = typemax(eltype(x))
-        @avx for i in eachindex(x)
+        @turbo for i in eachindex(x)
             s = min(s, x[i])
         end
         s

@@ -53,7 +53,7 @@ using Requires
 
 
 export LowDimArray, stridedpointer, indices,
-    @avx, @avxt, @vectorize, @tvectorize, *ˡ, _avx_!,
+    @avx, @avxt, @turbo, @tturbo, *ˡ, _avx_!,
     vmap, vmap!, vmapt, vmapt!, vmapnt, vmapnt!, vmapntt, vmapntt!,
     tanh_fast, sigmoid_fast,
     vfilter, vfilter!, vmapreduce, vreduce

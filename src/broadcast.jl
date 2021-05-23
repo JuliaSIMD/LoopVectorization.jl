@@ -178,13 +178,13 @@ end
 A lazy product of `A` and `B`. While functionally identical to `A * B`, this may avoid the
 need for intermediate storage for any computations in `A` or `B`.  Example:
 
-    @avx @. a + B *ˡ (c + d')
+    @turbo @. a + B *ˡ (c + d')
 
 which is equivalent to
 
      a .+ B * (c .+ d')
 
-It should only be used inside an `@avx` block, and to materialize the result it cannot be
+It should only be used inside an `@turbo` block, and to materialize the result it cannot be
 the final operation.
 """
 @inline *ˡ(a::A, b::B) where {A,B} = Product{A,B}(a, b)
@@ -432,7 +432,7 @@ end
     resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
     Expr(:block, Expr(:meta,:inline), setup_call(ls, :(Base.Broadcast.materialize!(dest′, bc)), LineNumberNode(0), inline, false, u₁, u₂, threads%Int), :dest′)
 end
-# these are marked `@inline` so the `@avx` itself can choose whether or not to inline.
+# these are marked `@inline` so the `@turbo` itself can choose whether or not to inline.
 @generated function vmaterialize!(
     dest::AbstractArray{T,N}, bc::Broadcasted{Base.Broadcast.DefaultArrayStyle{0},Nothing,typeof(identity),Tuple{T2}}, ::Val{Mod}, ::Val{UNROLL}
 ) where {T <: NativeTypes, N, T2 <: Number, Mod, UNROLL}
@@ -440,7 +440,7 @@ end
     quote
         $(Expr(:meta,:inline))
         arg = T(first(bc.args))
-        @avx inline=$inline unroll=($u₁,$u₂) thread=$threads for i ∈ eachindex(dest)
+        @turbo inline=$inline unroll=($u₁,$u₂) thread=$threads for i ∈ eachindex(dest)
             dest[i] = arg
         end
         dest
@@ -454,7 +454,7 @@ end
         $(Expr(:meta,:inline))
         arg = T(first(bc.args))
         dest = parent(dest′)
-        @avx inline=$inline unroll=($u₁,$u₂) thread=$threads for i ∈ eachindex(dest)
+        @turbo inline=$inline unroll=($u₁,$u₂) thread=$threads for i ∈ eachindex(dest)
             dest[i] = arg
         end
         dest′

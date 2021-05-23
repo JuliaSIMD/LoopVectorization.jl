@@ -20,7 +20,7 @@ using Test
         s = zero(eltype(a))
         za = OffsetArray(a, OffsetArrays.Origin(0))
         zb = OffsetArray(b, OffsetArrays.Origin(0))
-        @avx for i ∈ LoopVectorization.CloseOpen(min(length(a),length(b)))
+        @turbo for i ∈ LoopVectorization.CloseOpen(min(length(a),length(b)))
             s += za[i]*zb[i]
         end
         s
@@ -35,7 +35,7 @@ using Test
     end
     function mydotavx(a, b)
         s = zero(eltype(a))
-        @avx for i ∈ eachindex(a,b)
+        @turbo for i ∈ eachindex(a,b)
             s += a[i]*b[i]
         end
         s
@@ -66,14 +66,14 @@ using Test
     end
     function myselfdotavx(a)
         s = zero(eltype(a))
-        @avx for i ∈ eachindex(a)
+        @turbo for i ∈ eachindex(a)
             s += a[i]*a[i]
         end
         s
     end
     function myselfdotavx_v2(a)
         s = zero(eltype(a))
-        @avx for i ∈ 1:length(a)
+        @turbo for i ∈ 1:length(a)
             s += a[i]*a[i]
         end
         s
@@ -81,7 +81,7 @@ using Test
     function myselfdotavx_range(a)
         s = zero(eltype(a))
         rng = axes(a, 1)
-        @avx for i ∈ rng
+        @turbo for i ∈ rng
             s += a[i]*a[i]
         end
         s
@@ -95,32 +95,32 @@ using Test
     end
     function dot_unroll2avx(x::Vector{T}, y::Vector{T}) where {T<:Number}
         z = zero(T)
-        @avx unroll=2 for i ∈ 1:length(x)
+        @turbo unroll=2 for i ∈ 1:length(x)
             z += x[i]*y[i]
         end
         z
     end
     function dot_unroll3avx(x::Vector{T}, y::Vector{T}) where {T<:Number}
         z = zero(T)
-        @avx unroll=3 for i ∈ 1:length(x)
+        @turbo unroll=3 for i ∈ 1:length(x)
             z += x[i]*y[i]
         end
         z
     end
-    # @macroexpand @avx inline=false unroll=2 for i ∈ 1:length(x)
+    # @macroexpand @turbo inline=false unroll=2 for i ∈ 1:length(x)
     #         z += x[i]*y[i]
     #     end
 
     function dot_unroll2avx_noinline(x::Vector{T}, y::Vector{T}) where {T<:Number}
         z = zero(T)
-        @avx inline=true unroll=2 for i ∈ 1:length(x)
+        @turbo inline=true unroll=2 for i ∈ 1:length(x)
             z += x[i]*y[i]
         end
         z
     end
     function dot_unroll3avx_inline(x::Vector{T}, y::Vector{T}) where {T<:Number}
         z = zero(T)
-        @avx unroll=3 inline=true check_empty=true for i ∈ 1:length(x)
+        @turbo unroll=3 inline=true check_empty=true for i ∈ 1:length(x)
             z += x[i]*y[i]
         end
         z
@@ -145,7 +145,7 @@ using Test
     ) where {T}
         zre = zero(T)
         zim = zero(T)
-        @avx for i ∈ 1:length(xre)
+        @turbo for i ∈ 1:length(xre)
             zre += xre[i]*yre[i] - xim[i]*yim[i]
             zim += xre[i]*yim[i] + xim[i]*yre[i]
         end
@@ -163,7 +163,7 @@ using Test
         end
     end
     function complex_mul_with_index_offsetavx!(c_re, c_im, a_re, a_im, b_re, b_im)
-        @avx for i = 1:length(a_re) - 1
+        @turbo for i = 1:length(a_re) - 1
             c_re[i] = b_re[i] * a_re[i + 1] - b_im[i] * a_im[i + 1]
             c_im[i] = b_re[i] * a_im[i + 1] + b_im[i] * a_re[i + 1]
         end
@@ -189,14 +189,14 @@ using Test
     end
     function mcpiavx(x, y)
         acc = 0
-        @avx for i ∈ eachindex(x)
+        @turbo for i ∈ eachindex(x)
             acc += (x[i]*x[i] + y[i]*y[i]) < 1.0
         end
         4acc/length(x)
     end
     function mcpiavx_u4(x, y)
         acc = 0
-        @avx unroll=4 for i ∈ eachindex(x)
+        @turbo unroll=4 for i ∈ eachindex(x)
             acc += (x[i]*x[i] + y[i]*y[i]) < 1.0
         end
         4acc/length(x)
@@ -225,28 +225,28 @@ using Test
     end
     function dotloopinductvarpowavx(x)
         s = zero(eltype(x))
-        @avx for i ∈ eachindex(x)
+        @turbo for i ∈ eachindex(x)
             s += x[i] * i^3
         end
         s
     end
     function dot_from_n_to_100(a, b, n)
         s = zero(eltype(a))
-        @avx for i ∈ n:100
+        @turbo for i ∈ n:100
             s += a[i] * b[i]
         end
         s
     end
     function dot33(a,b)
         s = zero(eltype(a))
-        @avx for i ∈ 1:33
+        @turbo for i ∈ 1:33
             s += a[i] * b[i]
         end
         s
     end
     function dot17(a,b)
         s = zero(eltype(a))
-        @avx for i ∈ 1:17
+        @turbo for i ∈ 1:17
             s += a[i] * b[i]
         end
         s

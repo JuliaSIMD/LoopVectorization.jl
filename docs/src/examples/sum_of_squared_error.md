@@ -4,7 +4,7 @@ To calculate `(y - X * β)'(y - X * β)`, we can use the following loop.
 ```julia
 function sse_avx(y, X, β)
     lp = zero(eltype(y))
-    @avx for i ∈ eachindex(y)
+    @turbo for i ∈ eachindex(y)
         δ = y[i]
         for j ∈ eachindex(β)
             δ -= X[i,j] * β[j]

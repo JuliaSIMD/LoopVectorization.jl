@@ -2,9 +2,9 @@
 
 ## Loop expressions
 
-When applying `@avx` to a loop expression, it creates a `LoopSet` without awareness to type information, and then [condenses the information](https://github.com/JuliaSIMD/LoopVectorization.jl/blob/master/src/condense_loopset.jl) into a summary which is passed as type information to a generated function.
+When applying `@turbo` to a loop expression, it creates a `LoopSet` without awareness to type information, and then [condenses the information](https://github.com/JuliaSIMD/LoopVectorization.jl/blob/master/src/condense_loopset.jl) into a summary which is passed as type information to a generated function.
 ```julia
-julia> @macroexpand @avx for m ∈ 1:M, n ∈ 1:N
+julia> @macroexpand @turbo for m ∈ 1:M, n ∈ 1:N
            C[m,n] = zero(eltype(B))
            for k ∈ 1:K
                C[m,n] += A[m,k] * B[k,n]
@@ -36,7 +36,7 @@ and the set of loop bounds:
 
 ## Broadcasting
 
-When applying the `@avx` macro to a broadcast expression, there are no explicit loops, and even the dimensionality of the operation is unknown.  Consequently the `LoopSet` object must be constructed at compile time. The function and involved operations are their relationships are straightforward to infer from the structure of nested broadcasts:
+When applying the `@turbo` macro to a broadcast expression, there are no explicit loops, and even the dimensionality of the operation is unknown.  Consequently the `LoopSet` object must be constructed at compile time. The function and involved operations are their relationships are straightforward to infer from the structure of nested broadcasts:
 ```julia
 julia> Meta.@lower @. f(g(a,b) + c) / d
 :($(Expr(:thunk, CodeInfo(
@@ -49,7 +49,7 @@ julia> Meta.@lower @. f(g(a,b) + c) / d
 └──      return %5
 ))))
 
-julia> @macroexpand @avx @. f(g(a,b) + c) / d
+julia> @macroexpand @turbo @. f(g(a,b) + c) / d
 quote
     var"##262" = Base.broadcasted(g, a, b)
     var"##263" = Base.broadcasted(+, var"##262", c)

@@ -587,7 +587,7 @@ const FUNCTIONSYMBOLS = IdDict{Type{<:Function},Instruction}(
     # typeof(eltype) => :eltype
 )
 
-# implement whitelist for avx_support that package authors may use to conservatively guard `@avx` application
+# implement whitelist for avx_support that package authors may use to conservatively guard `@turbo` application
 for f ∈ keys(FUNCTIONSYMBOLS)
     @eval ArrayInterface.can_avx(::$f) = true
 end

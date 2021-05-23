@@ -25,14 +25,14 @@ using LoopVectorization: Static
     # # rng1k, rng2k = axes(skern);
     # rng1,  rng2  = R.indices;
     # tmp = z; i = 2; j = 2;
-    # ls1 = LoopVectorization.@avx_debug for jk in rng2, ik in rng1
+    # ls1 = LoopVectorization.@turbo_debug for jk in rng2, ik in rng1
     #     tmp += A[i+ik,j+jk]*kern[ik,jk]
     # end;
     # ls1
 
     # out = out1;
     # C = At';
-    # ls2d = LoopVectorization.@avx_debug for j in axes(out1,2), i in axes(out1,1)
+    # ls2d = LoopVectorization.@turbo_debug for j in axes(out1,2), i in axes(out1,1)
     #         tmp = zero(eltype(out1))
     #         for jk in axes(kern,2), ik in axes(kern,1)
     #             tmp += A[i+ik,j+jk]*kern[ik,jk]
@@ -40,7 +40,7 @@ using LoopVectorization: Static
     #         out1[i,j] = tmp
     # end;
     # LoopVectorization.choose_order(ls2d)
-    # ls2ds = LoopVectorization.@avx_debug for j in axes(out1,2), i in axes(out1,1)
+    # ls2ds = LoopVectorization.@turbo_debug for j in axes(out1,2), i in axes(out1,1)
     #         tmp = zero(eltype(out1))
     #         for jk in axes(skern,2), ik in axes(skern,1)
     #             tmp += A[i+ik,j+jk]*skern[ik,jk]
@@ -74,7 +74,7 @@ using LoopVectorization: Static
         rng1,  rng2  = axes(out)
         for j in rng2, i in rng1
             tmp = zero(eltype(out))
-            @avx for jk in rng2k, ik in rng1k
+            @turbo for jk in rng2k, ik in rng1k
                 tmp += A[i+ik,j+jk]*kern[ik,jk]
             end
             out[i,j] = tmp
@@ -85,7 +85,7 @@ using LoopVectorization: Static
         rng1k, rng2k = axes(kern)
         rng1,  rng2  = axes(out)
         offset1 = offset2 = 0
-        @avx for j in rng2, i in rng1
+        @turbo for j in rng2, i in rng1
             tmp = zero(eltype(out))
             for jk in rng2k, ik in rng1k
                 tmp += A[i+ik,j+jk]*kern[ik,jk]
@@ -115,7 +115,7 @@ using LoopVectorization: Static
     function avx2dunrolled!(out::AbstractMatrix, A::AbstractMatrix, kern::SizedOffsetMatrix{T,-1,1,-1,1}) where {T}
         Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> kern_ik_jk = kern[ik-2,jk-2]
         # Manually unpack the OffsetArray
-        @avx for j in axes(out,2), i in axes(out,1)
+        @turbo for j in axes(out,2), i in axes(out,1)
             tmp_0 = zero(eltype(out))
             Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> tmp_{ik+(jk-1)*3} = A[(ik-2)+i,(jk-2) + j*1] * kern_ik_jk + tmp_{ik+(jk-1)*3-1}
             out[i,j] = tmp_9
@@ -125,8 +125,8 @@ using LoopVectorization: Static
     function avx2dunrolled2x2!(out::AbstractMatrix, A::AbstractMatrix, kern::SizedOffsetMatrix{T,-1,1,-1,1}) where {T}
         # rng1,  rng2  = axes(out)
         # Manually unpack the OffsetArray
-        # @avx for j in rng2, i in rng1
-        @avx unroll=(2,2) for j in axes(out,2), i in axes(out,1)
+        # @turbo for j in rng2, i in rng1
+        @turbo unroll=(2,2) for j in axes(out,2), i in axes(out,1)
             Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> kern_ik_jk = kern[ik - 2, jk + (-2)]
             tmp_0 = zero(eltype(out))
             j1 = j * 1 # If you're reading this code for examples, don't do this! The point is to test
@@ -139,7 +139,7 @@ using LoopVectorization: Static
         rng1,  rng2  = axes(out)
         Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> kern_ik_jk = kern[ik-2,jk-2]
         # Manually unpack the OffsetArray
-        @avx unroll=(3,3) for j in rng2, i in rng1
+        @turbo unroll=(3,3) for j in rng2, i in rng1
             tmp_0 = zero(eltype(out))
             Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> tmp_{ik+(jk-1)*3} = A[(ik-2) + i, j*1 + (jk-2)] * kern_ik_jk + tmp_{ik+(jk-1)*3-1}
             out[i,j] = tmp_9
@@ -160,7 +160,7 @@ using LoopVectorization: Static
     # A = rand(T, 100, 100);
     # kern = OffsetArray(rand(T, 3, 3), -1:1, -1:1);
     # out = OffsetArray(similar(A, size(A).-2), 1, 1);   # stay away from the edges of A
-    # lsgeneric = LoopVectorization.@avx_debug for I in CartesianIndices(out)
+    # lsgeneric = LoopVectorization.@turbo_debug for I in CartesianIndices(out)
     #        tmp = zero(eltype(out))
     #        for J in CartesianIndices(kern)
     #            tmp += A[I+J]*kern[J]
@@ -169,7 +169,7 @@ using LoopVectorization: Static
     #    end;
     # LoopVectorization.choose_order(lsgeneric)
     # # out = out1;
-#     lsgenerics = LoopVectorization.@avx_debug for I in CartesianIndices(out)
+#     lsgenerics = LoopVectorization.@turbo_debug for I in CartesianIndices(out)
 #            tmp = zero(eltype(out))
 #            for J in CartesianIndices(skern)
 #                tmp += A[I+J]*kern[J]
@@ -177,7 +177,7 @@ using LoopVectorization: Static
 #            out[I] = tmp
 #        end;
 #     LoopVectorization.choose_order(lsgenerics)
-# @macroexpand @avx for I in R
+# @macroexpand @turbo for I in R
 #            tmp = z
 #            for J in Rk
 #                tmp += A[I+J]*kern[J]
@@ -187,7 +187,7 @@ using LoopVectorization: Static
 
     function avxgeneric!(out, A, kern, R=CartesianIndices(out), z=zero(eltype(out)))
        Rk = CartesianIndices(kern)
-       @avx for I in R
+       @turbo for I in R
            tmp = z
            for J in Rk
                tmp += A[I+J]*kern[J]
@@ -197,7 +197,7 @@ using LoopVectorization: Static
        out
     end
     function avxgeneric2!(out, A, kern, keep = nothing)
-      @avx for I in CartesianIndices(out)
+      @turbo for I in CartesianIndices(out)
         tmp = if keep === nothing
           zero(eltype(out))
         else

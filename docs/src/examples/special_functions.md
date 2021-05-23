@@ -5,7 +5,7 @@
 function logdettriangle(B::Union{LowerTriangular,UpperTriangular})
     A = parent(B) # using a triangular matrix would fall back to the default loop.
     ld = zero(eltype(A))
-    @avx for n ∈ axes(A,1)
+    @turbo for n ∈ axes(A,1)
         ld += log(A[n,n])
     end
     ld

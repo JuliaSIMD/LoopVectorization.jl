@@ -4,7 +4,7 @@ Here I'll discuss a variety of Matrix-vector operations, naturally starting with
 
 ```julia
 function jgemvavx!(𝐲, 𝐀, 𝐱)
-    @avx for i ∈ eachindex(𝐲)
+    @turbo for i ∈ eachindex(𝐲)
         𝐲i = zero(eltype(𝐲))
         for j ∈ eachindex(𝐱)
             𝐲i += 𝐀[i,j] * 𝐱[j]

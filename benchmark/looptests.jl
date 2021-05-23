@@ -64,7 +64,7 @@ function jgemm!(𝐂, 𝐀ᵀ::Adjoint, 𝐁ᵀ::Adjoint)
     end
 end
 function gemmavx!(𝐂, 𝐀, 𝐁)
-    @avx for m ∈ indices((𝐀,𝐂),1), n ∈ indices((𝐁,𝐂),2)
+    @turbo for m ∈ indices((𝐀,𝐂),1), n ∈ indices((𝐁,𝐂),2)
         𝐂ₘₙ = zero(eltype(𝐂))
         for k ∈ indices((𝐀,𝐁),(2,1))
             𝐂ₘₙ += 𝐀[m,k] * 𝐁[k,n]
@@ -76,7 +76,7 @@ function gemmavx!(Cc::AbstractMatrix{Complex{T}}, Ac::AbstractMatrix{Complex{T}}
     A = reinterpret(reshape, T, Ac)
     B = reinterpret(reshape, T, Bc)
     C = reinterpret(reshape, T, Cc)
-    @avx for m ∈ indices((A,C),2), n ∈ indices((B,C),3)
+    @turbo for m ∈ indices((A,C),2), n ∈ indices((B,C),3)
         Cre = zero(T)
         Cim = zero(T)
         for k ∈ indices((A,B),(3,2))
@@ -88,7 +88,7 @@ function gemmavx!(Cc::AbstractMatrix{Complex{T}}, Ac::AbstractMatrix{Complex{T}}
     end
 end
 function gemmavxt!(𝐂, 𝐀, 𝐁)
-    @avxt for m ∈ indices((𝐀,𝐂),1), n ∈ indices((𝐁,𝐂),2)
+    @tturbo for m ∈ indices((𝐀,𝐂),1), n ∈ indices((𝐁,𝐂),2)
         𝐂ₘₙ = zero(eltype(𝐂))
         for k ∈ indices((𝐀,𝐁),(2,1))
             𝐂ₘₙ += 𝐀[m,k] * 𝐁[k,n]
@@ -100,7 +100,7 @@ function gemmavxt!(Cc::AbstractMatrix{Complex{T}}, Ac::AbstractMatrix{Complex{T}
     A = reinterpret(reshape, T, Ac)
     B = reinterpret(reshape, T, Bc)
     C = reinterpret(reshape, T, Cc)
-    @avxt for m ∈ indices((A,C),2), n ∈ indices((B,C),3)
+    @tturbo for m ∈ indices((A,C),2), n ∈ indices((B,C),3)
         Cre = zero(T)
         Cim = zero(T)
         for k ∈ indices((A,B),(3,2))
@@ -121,16 +121,16 @@ function jdot(a, b)
 end
 function jdotavx(a, b)
     s = zero(eltype(a))
-    # @avx for i ∈ eachindex(a,b)
-    @avx for i ∈ eachindex(a)
+    # @turbo for i ∈ eachindex(a,b)
+    @turbo for i ∈ eachindex(a)
         s += a[i] * b[i]
     end
     s
 end
 function jdotavxt(a, b)
     s = zero(eltype(a))
-    # @avx for i ∈ eachindex(a,b)
-    @avxt for i ∈ eachindex(a)
+    # @turbo for i ∈ eachindex(a,b)
+    @tturbo for i ∈ eachindex(a)
         s += a[i] * b[i]
     end
     s
@@ -144,7 +144,7 @@ function jselfdot(a)
 end
 function jselfdotavx(a)
     s = zero(eltype(a))
-    @avx for i ∈ eachindex(a)
+    @turbo for i ∈ eachindex(a)
         s += a[i] * a[i]
     end
     s
@@ -160,7 +160,7 @@ end
 function jdot3v2avx(x, A, y)
     M, N = size(A)
     s = zero(promote_type(eltype(x), eltype(A), eltype(y)))
-    @avx for n ∈ 1:N, m ∈ 1:M
+    @turbo for n ∈ 1:N, m ∈ 1:M
         s += x[m] * A[m,n] * y[n]
     end
     s
@@ -178,7 +178,7 @@ function jdot3(x, A, y)
 end
 function jdot3avx(x, A, y)
     s = zero(promote_type(eltype(x), eltype(A), eltype(y)))
-    @avx for n ∈ axes(A,2)
+    @turbo for n ∈ axes(A,2)
         t = zero(s)
         for m ∈ axes(A,1)
             t += x[m] * A[m,n]
@@ -193,7 +193,7 @@ function jvexp!(b, a)
     end
 end
 function jvexpavx!(b, a)
-    @avx for i ∈ eachindex(a)
+    @turbo for i ∈ eachindex(a)
         b[i] = exp(a[i])
     end
 end
@@ -206,7 +206,7 @@ function jsvexp(a)
 end
 function jsvexpavx(a)
     s = zero(eltype(a))
-    @avx for i ∈ eachindex(a)
+    @turbo for i ∈ eachindex(a)
         s += exp(a[i])
     end
     s
@@ -230,7 +230,7 @@ function jgemv!(𝐲, 𝐀ᵀ::Adjoint, 𝐱)
     end
 end
 function jgemvavx!(𝐲, 𝐀, 𝐱)
-    @avx for i ∈ eachindex(𝐲)
+    @turbo for i ∈ eachindex(𝐲)
         𝐲ᵢ = zero(eltype(𝐲))
         for j ∈ eachindex(𝐱)
             𝐲ᵢ += 𝐀[i,j] * 𝐱[j]
@@ -248,7 +248,7 @@ function jvar!(𝐬², 𝐀, x̄)
     end
 end
 function jvaravx!(𝐬², 𝐀, x̄)
-    @avx for j ∈ eachindex(𝐬²)
+    @turbo for j ∈ eachindex(𝐬²)
         𝐬²ⱼ = zero(eltype(𝐬²))
         x̄ⱼ = x̄[j]
         for i ∈ 1:size(𝐀,2)
@@ -259,7 +259,7 @@ function jvaravx!(𝐬², 𝐀, x̄)
     end
 end
 japlucBc!(D, a, B, c) =      @. D = a + B * c';
-japlucBcavx!(D, a, B, c) = @avx @. D = a + B * c';
+japlucBcavx!(D, a, B, c) = @turbo @. D = a + B * c';
 
 function jOLSlp(y, X, β)
     lp = zero(eltype(y))
@@ -274,7 +274,7 @@ function jOLSlp(y, X, β)
 end
 function jOLSlp_avx(y, X, β)
     lp = zero(eltype(y))
-    @avx for i ∈ eachindex(y)
+    @turbo for i ∈ eachindex(y)
         δ = y[i]
         for j ∈ eachindex(β)
             δ -= X[i,j] * β[j]
@@ -300,7 +300,7 @@ function randomaccessavx(P, basis, coeffs::Vector{T}) where {T}
     C = length(coeffs)
     A = size(P, 1)
     p = zero(T)
-    @avx for c ∈ 1:C
+    @turbo for c ∈ 1:C
         pc = coeffs[c]
         for a = 1:A
             pc *= P[a, basis[a, c]]
@@ -319,7 +319,7 @@ end
 function jlogdettriangleavx(B::Union{LowerTriangular,UpperTriangular})
     A = parent(B) # No longer supported
     ld = zero(eltype(A))
-    @avx for n ∈ axes(A,1)
+    @turbo for n ∈ axes(A,1)
         ld += log(A[n,n])
     end
     ld
@@ -339,7 +339,7 @@ function filter2d!(out::AbstractMatrix, A::AbstractMatrix, kern)
     out
 end
 function filter2davx!(out::AbstractMatrix, A::AbstractMatrix, kern)
-    @avx for J in CartesianIndices(out)
+    @turbo for J in CartesianIndices(out)
         tmp = zero(eltype(out))
         for I ∈ CartesianIndices(kern)
             tmp += A[I + J] * kern[I]
@@ -364,7 +364,7 @@ end
 function filter2dunrolledavx!(out::AbstractMatrix, A::AbstractMatrix, kern::SizedOffsetMatrix{T,-1,1,-1,1}) where {T}
     rng1,  rng2  = axes(out)
     Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> kern_ik_jk = kern[ik-2,jk-2]
-    @avx for j in rng2, i in rng1
+    @turbo for j in rng2, i in rng1
         tmp_0 = zero(eltype(out))
         Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik -> tmp_{ik+(jk-1)*3} = A[i+(ik-2),j+(jk-2)] * kern_ik_jk + tmp_{ik+(jk-1)*3-1}
         out[i,j] = tmp_9
@@ -379,7 +379,7 @@ end
 #     end
 # end
 # function smooth_line_avx!(sl,nrm1,j,i1,sl,rl,ih2,denom)
-#     @avx for i=i1:2:nrm1
+#     @turbo for i=i1:2:nrm1
 #         sl[i,j]=denom*(rl[i,j]+ih2*(sl[i,j-1]+sl[i-1,j]+sl[i+1,j]+sl[i,j+1]))
 #     end
 # end

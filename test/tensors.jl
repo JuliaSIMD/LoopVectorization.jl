@@ -19,7 +19,7 @@ function contracttest1!(tiJaB_d_temp3, tiJaB_i, Wmnij)
     nvir = last(rvir)
     rocc = axes(tiJaB_d_temp3, 1)
     for b in rvir, j in rocc
-        @avx for a in b:nvir, i in j:last(rocc)
+        @turbo for a in b:nvir, i in j:last(rocc)
             temp = zero(eltype(tiJaB_i))
             for n in rocc, m in rocc
                 temp += tiJaB_i[m,n,a,b]*Wmnij[m,n,i,j]
@@ -35,7 +35,7 @@ function contracttest2!(tiJaB_d_temp3, tiJaB_i, Wmnij)
     nvir = last(rvir)
     rocc = axes(tiJaB_d_temp3, 1)
     for b in rvir, a in b:nvir, j in rocc
-        @avx for i in j:last(rocc)
+        @turbo for i in j:last(rocc)
             temp = zero(eltype(tiJaB_i))
             for n in rocc, m in rocc
                 temp += tiJaB_i[m,n,a,b]*Wmnij[m,n,i,j]

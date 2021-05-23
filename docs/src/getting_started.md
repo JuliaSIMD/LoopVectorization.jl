@@ -15,7 +15,7 @@ function mvp(P, basis, coeffs::Vector{T}) where {T}
     C = length(coeffs)
     A = size(P, 1)
     p = zero(T)
-    @avx for c ∈ 1:C
+    @turbo for c ∈ 1:C
         pc = coeffs[c]
         for a = 1:A
             pc *= P[a, basis[a, c]]
@@ -71,7 +71,7 @@ BenchmarkTools.Trial:
   samples:          10000
   evals/sample:     1
 
-julia> @benchmark @avx @. $E2 = exp($A - $b' + $ldad) * $c
+julia> @benchmark @turbo @. $E2 = exp($A - $b' + $ldad) * $c
 BenchmarkTools.Trial: 
   memory estimate:  0 bytes
   allocs estimate:  0

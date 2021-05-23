@@ -5,7 +5,7 @@ using LoopVectorization, Test
     A = (1:10) .^ 2; K = rand(10);
 
     function act!(ℛ::AbstractArray, A, 𝒶𝓍i = axes(A,1), 𝒶𝓍j = axes(ℛ,2))
-        @avx for j in 𝒶𝓍j
+        @turbo for j in 𝒶𝓍j
             for i in 𝒶𝓍i
                 ℛ[i, j] = A[i] / j
             end
@@ -27,7 +27,7 @@ using LoopVectorization, Test
     inds = [2,3,5,2];
 
     function two!(ℛ::AbstractArray, inds, A, 𝒶𝓍j = axes(ℛ,2), 𝒶𝓍i = axes(inds,1))         
-        @avx for i = 𝒶𝓍i
+        @turbo for i = 𝒶𝓍i
             for j = 𝒶𝓍j
                 ℛ[inds[i], j] = A[j]
             end
@@ -45,7 +45,7 @@ using LoopVectorization, Test
     @test two!(copy(D), inds, A) == two!(copy(D), inds, A)
 
     function three!(ℛ::AbstractArray, A, 𝒶𝓍i = axes(ℛ,1))
-        @avx for i = 𝒶𝓍i
+        @turbo for i = 𝒶𝓍i
             ℛ[i] = A[2i + 1] + A[i]
         end
         ℛ
@@ -60,7 +60,7 @@ using LoopVectorization, Test
 
     function and(A, 𝒶𝓍i = axes(A,1))
         𝒜𝒸𝒸 = true
-        @avx for i = 𝒶𝓍i
+        @turbo for i = 𝒶𝓍i
             𝒜𝒸𝒸 = 𝒜𝒸𝒸 & (A[i] > 0)
         end
         𝒜𝒸𝒸
@@ -89,7 +89,7 @@ using LoopVectorization, Test
 
         ℛ = EV
 
-        @avx for u = 𝒶𝓍u
+        @turbo for u = 𝒶𝓍u
             for z = 𝒶𝓍z
                 for x = 𝒶𝓍x
                     for k = 𝒶𝓍k

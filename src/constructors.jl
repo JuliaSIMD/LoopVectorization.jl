@@ -111,7 +111,7 @@ function process_args(args; inline = false, check_empty = false, u₁ = zero(Int
     end
     inline, check_empty, u₁, u₂, threads
 end
-function vectorize_macro(mod, src, q, args...)
+function turbo_macro(mod, src, q, args...)
     q = macroexpand(mod, q)
     
     if q.head === :for
@@ -124,12 +124,12 @@ function vectorize_macro(mod, src, q, args...)
     end
 end
 """
-    @vectorize
+    @turbo
 
 Annotate a `for` loop, or a set of nested `for` loops whose bounds are constant across iterations, to optimize the computation. For example:
 
     function AmulB!(C, A, B)
-        @vectorize for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+        @turbo for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
             Cₘₙ = zero(eltype(C))
             for k ∈ 1:size(A,2)
                 Cₘₙ += A[m,k] * B[k,n]
@@ -148,11 +148,11 @@ julia> using LoopVectorization
 
 julia> a = rand(100);
 
-julia> b = @vectorize exp.(2 .* a);
+julia> b = @turbo exp.(2 .* a);
 
 julia> c = similar(b);
 
-julia> @vectorize @. c = exp(2a);
+julia> @turbo @. c = exp(2a);
 
 julia> b ≈ c
 true
@@ -160,11 +160,11 @@ true
 
 # Extended help
 
-Advanced users can customize the implementation of the `@vectorize`-annotated block
+Advanced users can customize the implementation of the `@turbo`-annotated block
 using keyword arguments:
 
 ```
-@vectorize inline=false unroll=2 body
+@turbo inline=false unroll=2 body
 ```
 
 where `body` is the code of the block (e.g., `for ... end`).
@@ -197,24 +197,24 @@ but it applies to the loop ordering and unrolling that will be chosen by LoopVec
 `uᵢ=0` (the default) indicates that LoopVectorization should pick its own value,
 and `uᵢ=-1` disables unrolling for the correspond loop.
 
-The `@vectorize` macro also checks the array arguments using `LoopVectorization.check_args` to try and determine
+The `@turbo` macro also checks the array arguments using `LoopVectorization.check_args` to try and determine
 if they are compatible with the macro. If `check_args` returns false, a fall back loop annotated with `@inbounds`
 and `@fastmath` is generated. Note that `VectorizationBase` provides functions such as `vadd` and `vmul` that will
-ignore `@fastmath`, preserving IEEE semantics both within `@vectorize` and `@fastmath`.
+ignore `@fastmath`, preserving IEEE semantics both within `@turbo` and `@fastmath`.
 `check_args` currently returns false for some wrapper types like `LinearAlgebra.UpperTriangular`, requiring you to
 use their `parent`. Triangular loops aren't yet supported.
 """
-macro vectorize(args...)
-    vectorize_macro(__module__, __source__, last(args), Base.front(args)...)
+macro turbo(args...)
+    turbo_macro(__module__, __source__, last(args), Base.front(args)...)
 end
 """
-Equivalent to `@vectorize`, except it adds `thread=true` as the first keyword argument.
+Equivalent to `@turbo`, except it adds `thread=true` as the first keyword argument.
 Note that later arguments take precendence.
 
-Meant for convenience, as `@tvectorize` is shorter than `@vectorize thread=true`.
+Meant for convenience, as `@tturbo` is shorter than `@turbo thread=true`.
 """
-macro tvectorize(args...)
-    vectorize_macro(__module__, __source__, last(args), :(thread=true), Base.front(args)...)
+macro tturbo(args...)
+    turbo_macro(__module__, __source__, last(args), :(thread=true), Base.front(args)...)
 end
 
 function def_outer_reduct_types!(ls::LoopSet)
@@ -224,22 +224,22 @@ function def_outer_reduct_types!(ls::LoopSet)
   end
 end
 """
-    @_vectorize
+    @_turbo
 
-This macro mostly exists for debugging/testing purposes. It does not support many of the use cases of [`@vectorize`](@ref).
+This macro mostly exists for debugging/testing purposes. It does not support many of the use cases of [`@turbo`](@ref).
 It emits loops directly, rather than punting to an `@generated` function, meaning it doesn't have access to type
 information when generating code or analyzing the loops, often leading to bad performance.
 
-This macro accepts the `inline` and `unroll` keyword arguments like `@vectorize`, but ignores the `check_empty` argument.
+This macro accepts the `inline` and `unroll` keyword arguments like `@turbo`, but ignores the `check_empty` argument.
 """
-macro _vectorize(q)
+macro _turbo(q)
   q = macroexpand(__module__, q)
   ls = LoopSet(q, __module__)
   set_hw!(ls)
   def_outer_reduct_types!(ls)
   esc(Expr(:block, ls.prepreamble, lower_and_split_loops(ls, -1)))
 end
-macro _vectorize(arg, q)
+macro _turbo(arg, q)
   @assert q.head === :for
   q = macroexpand(__module__, q)
   inline, check_empty, u₁, u₂ = check_macro_kwarg(arg, false, false, zero(Int8), zero(Int8), 1)
@@ -249,14 +249,14 @@ macro _vectorize(arg, q)
   esc(Expr(:block, ls.prepreamble, lower(ls, u₁ % Int, u₂ % Int, -1)))
 end
 
-macro vectorize_debug(q)
+macro turbo_debug(q)
     q = macroexpand(__module__, q)
     ls = LoopSet(q, __module__)
     esc(LoopVectorization.setup_call_debug(ls))
 end
 
 # define aliases
-const var"@avx" = var"@vectorize"
-const var"@avxt" = var"@tvectorize"
-const var"@avx_debug" = var"@vectorize_debug"
+const var"@avx" = var"@turbo"
+const var"@avxt" = var"@tturbo"
+const var"@avx_debug" = var"@turbo_debug"
 

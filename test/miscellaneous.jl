@@ -20,14 +20,14 @@ using Test
     end
     function dot3avx(x, A, y)
         s = zero(promote_type(eltype(x), eltype(A), eltype(y)))
-        @avx for m ∈ axes(A,1), n ∈ axes(A,2)
+        @turbo for m ∈ axes(A,1), n ∈ axes(A,2)
             s += x[m] * A[m,n] * y[n]
         end
         s
     end
     function dot3v2avx(x, A, y)
         s = zero(promote_type(eltype(x), eltype(A), eltype(y)))
-        @avx for n ∈ axes(A,2)
+        @turbo for n ∈ axes(A,2)
             t = zero(s)
             for m ∈ axes(A,1)
                 t += x[m] * A[m,n]
@@ -48,7 +48,7 @@ using Test
     function dot3avx24(x, A, y)
         M, N = size(A)
         s = zero(promote_type(eltype(x), eltype(A), eltype(y)))
-        @avx unroll=(2,4) for m ∈ 1:M, n ∈ 1:N
+        @turbo unroll=(2,4) for m ∈ 1:M, n ∈ 1:N
             s += x[m] * A[m,n] * y[n]
         end
         s
@@ -82,7 +82,7 @@ using Test
     #     @test LoopVectorization.choose_order(lssubcol) == (Symbol[:i,:j], :j, :i, :j, 2, 6)
     # end
     # @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, Symbol("##undefined##"), :j, 4, -1)
-    ## @avx is SLOWER!!!!
+    ## @turbo is SLOWER!!!!
     ## need to fix!
     function mysubcol!(B, A, x)
         @inbounds for i ∈ 1:size(A,2)
@@ -92,7 +92,7 @@ using Test
         end
     end
     function mysubcolavx!(B, A, x)
-        @avx for i ∈ 1:size(A,2), j ∈ eachindex(x)
+        @turbo for i ∈ 1:size(A,2), j ∈ eachindex(x)
             B[j,i] = A[j,i] - x[j]
         end
     end
@@ -121,7 +121,7 @@ using Test
         end
     end
     function mycolsumavx!(x, A)
-        @avx for j ∈ eachindex(x)
+        @turbo for j ∈ eachindex(x)
             xⱼ = zero(eltype(x))
             for i ∈ 1:size(A,2)
                 xⱼ += A[j,i] - 0.25
@@ -164,7 +164,7 @@ using Test
         end
     end
     function myvaravx!(s², A, x̄)
-        @avx for j ∈ eachindex(s²)
+        @turbo for j ∈ eachindex(s²)
             s²ⱼ = zero(eltype(s²))
             x̄ⱼ = x̄[j]
             for i ∈ 1:size(A,2)
@@ -194,7 +194,7 @@ using Test
         end
     end
     function setcolumstovectorplus100avx!(Z::AbstractArray{T}, A) where {T} 
-        @avx for i = axes(A,1), j = axes(Z,2)
+        @turbo for i = axes(A,1), j = axes(Z,2)
             acc = zero(T)
             acc = acc + A[i] + 100
             Z[i, j] = acc
@@ -218,7 +218,7 @@ using Test
         C = length(coeffs)
         A = size(P, 1)
         p = zero(T)
-        @avx for c ∈ 1:C
+        @turbo for c ∈ 1:C
             pc = coeffs[c]
             for a = 1:A
                 pc *= P[a, basis[a, c]]
@@ -250,7 +250,7 @@ using Test
     lsb = LoopVectorization.loopset(bq);
   function threemulaccum_lv(A, B ,C)
     D = zero(promote_type(eltype(A),eltype(B),eltype(C)))
-    @avx for i in axes(C,1), j in axes(C,2), k in axes(C,3)
+    @turbo for i in axes(C,1), j in axes(C,2), k in axes(C,3)
       D += A[i,j] * B[i,k] * C[i,j,k]
     end
     D
@@ -273,19 +273,19 @@ using Test
         end
     end
     function clenshawavx!(ret,x,coeff)
-        @avx for j in 1:length(ret)
+        @turbo for j in 1:length(ret)
             ret[j] = clenshaw(x[j], coeff)
         end
     end
 # ret = y2; coeff = c;
-#     LoopVectorization.@avx_debug for j in 1:length(ret)
+#     LoopVectorization.@turbo_debug for j in 1:length(ret)
 #             ret[j] = clenshaw(x[j], coeff)
 #     end
 #     t = β₁ = β₂ = ρ = s = 0.0; weights = rand(1); nodes = rand(1); lomnibus(args...) = +(args...)
-# LoopVectorization.@avx_debug for i ∈ eachindex(weights, nodes)
+# LoopVectorization.@turbo_debug for i ∈ eachindex(weights, nodes)
 #         s += weights[i] * lomnibus(nodes[i], t, β₁, β₂, ρ)
 #     end
-# @macroexpand @avx for i ∈ eachindex(weights, nodes)
+# @macroexpand @turbo for i ∈ eachindex(weights, nodes)
 #         s += weights[i] * lomnibus(nodes[i], t, β₁, β₂, ρ)
 #     end
     function softmax3_core!(lse, qq, xx, tmpmax, maxk, nk)
@@ -306,14 +306,14 @@ using Test
     end
     function softmax3_coreavx1!(lse, qq, xx, tmpmax, maxk, nk)
         for k in Base.OneTo(maxk)
-            @avx for i in eachindex(lse)
+            @turbo for i in eachindex(lse)
                 tmp = exp(xx[i,k] - tmpmax[i])
                 lse[i] += tmp
                 qq[i,k] = tmp
             end
         end
         for k in maxk+1:nk
-            @avx for i in eachindex(lse)
+            @turbo for i in eachindex(lse)
                 tmp = exp(xx[i,k] - tmpmax[i])
                 lse[i] += tmp
             end
@@ -337,7 +337,7 @@ using Test
         qq[:,Base.OneTo(maxk)] ./= vec(lse)
     end
     function softmax3_coreavx2!(lse, qq, xx, tmpmax, maxk, nk)
-        @avx for k in Base.OneTo(maxk)
+        @turbo for k in Base.OneTo(maxk)
             for i in eachindex(lse)
                 tmp = exp(xx[i,k] - tmpmax[i])
                 lse[i] += tmp
@@ -345,7 +345,7 @@ using Test
             end
         end
         if maxk < nk
-            @avx for k in maxk+1:nk
+            @turbo for k in maxk+1:nk
                 for i in eachindex(lse)
                     tmp = exp(xx[i,k] - tmpmax[i])
                     lse[i] += tmp
@@ -374,13 +374,13 @@ using Test
     end
     function softmax3_coreavx3!(lse, qq, xx, tmpmax, maxk, nk)
         for k in Base.OneTo(nk)
-            @avx for i in eachindex(lse)
+            @turbo for i in eachindex(lse)
                 tmp = exp(xx[i,k] - tmpmax[i])
                 lse[i] += tmp
                 k <= maxk && (qq[i,k] = tmp)
             end
         end
-        @avx qq[:,Base.OneTo(maxk)] ./= vec(lse)
+        @turbo qq[:,Base.OneTo(maxk)] ./= vec(lse)
     end
     function softmax3_core_avx3!(lse, qq, xx, tmpmax, maxk, nk)
         for k in Base.OneTo(nk)
@@ -399,7 +399,7 @@ using Test
     #          end)
     # lsif = LoopVectorization.loopset(qif)
     function softmax3_coreavx4!(lse, qq, xx, tmpmax, maxk, nk)
-        @avx for k in Base.OneTo(nk)
+        @turbo for k in Base.OneTo(nk)
             for i in eachindex(lse)
                 tmp = exp(xx[i,k] - tmpmax[i])
                 lse[i] += tmp
@@ -478,7 +478,7 @@ using Test
     function sumprodavx(x)
         s = zero(eltype(x))
         p = one(eltype(x))
-        @avx for i ∈ eachindex(x)
+        @turbo for i ∈ eachindex(x)
             s += x[i]
             p *=x[i]
         end
@@ -503,7 +503,7 @@ using Test
     end
     function test_bit_shiftavx(counter)
         accu = zero(first(counter))
-        @avx for i ∈ eachindex(counter)
+        @turbo for i ∈ eachindex(counter)
             accu += counter[i] << 1
         end
         accu
@@ -521,7 +521,7 @@ using Test
         end
     end
     function test_for_with_different_indexavx!(c, a, b, start_sample, num_samples)
-        @avx for i = start_sample:num_samples + start_sample - 1
+        @turbo for i = start_sample:num_samples + start_sample - 1
             c[i] = b[i] * a[i]
         end
     end
@@ -538,7 +538,7 @@ using Test
     end
     function rshift_i_avx!(out)
         n = length(out)
-        @avx for i in 1:n
+        @turbo for i in 1:n
             out[i] = out[i] << i
         end
     end
@@ -550,7 +550,7 @@ using Test
     end
     function one_plus_i_avx!(out)
         n = length(out)
-        @avx for i in 1:n
+        @turbo for i in 1:n
             out[i] = 1 + i
         end
     end
@@ -563,14 +563,14 @@ using Test
         end
     end
     function addsumtoeachavx!(y, z)
-        @avx for i in axes(z, 1)
+        @turbo for i in axes(z, 1)
             for j in axes(y, 1)
                 y[j] = y[j] + z[i]
             end
         end
     end
     function crossedsumavx!(x, y, z)
-        @avx for i in axes(x, 1)
+        @turbo for i in axes(x, 1)
             for j in axes(x, 2)
                 x[i, j] = x[i, j] + z[i]
                 y[j, i] = y[j, i] + z[i]
@@ -589,7 +589,7 @@ using Test
     #  3.0  4.0  1.0  2.0  7.0  8.0  5.0  6.0  11.0  12.0  9.0  10.0  15.0  16.0  13.0  …  191.0  192.0  189.0  190.0  195.0  196.0  193.0  194.0  197.0  198.0  199.0
      # 1.0  4.0  5.0  2.0  3.0  8.0  9.0  6.0  7.0  12.0  13.0  10.0  11.0  16.0  17.0  …  187.0  192.0  193.0  190.0  191.0  196.0  197.0  194.0  195.0  198.0  199.0
     function instruct_x_avx!(r::AbstractVector, loc::Int)
-        @avx for lhs in 0:(length(r) >> 1) - (1 << (loc - 1))
+        @turbo for lhs in 0:(length(r) >> 1) - (1 << (loc - 1))
             # mask locations before
             p = lhs + lhs & ~(1 << (loc - 1) - 1)
             q = lhs + lhs & ~(1 << (loc - 1) - 1) + 1 << (loc - 1)
@@ -629,7 +629,7 @@ using Test
         c_re
     end
     function multiple_unrolls_split_depchains_avx!(c_re::AbstractArray{T}, a_re, b_re, a_im, b_im, keep = nothing) where {T}
-        @avx for k in 1:2
+        @turbo for k in 1:2
             for n in 1:2
                 # acc = ifelse(keep === nothing, zero(T), c_re[k, n]) # same problem
                 acc = keep === nothing ? zero(T) : c_re[k, n]
@@ -646,7 +646,7 @@ using Test
     function MatCalcWtDW!(m)
         l, n = size(m.Wt)
         fill!(m.Wt_D_W, 0)
-        @avx for k in 1:n
+        @turbo for k in 1:n
             for j in 1:l
                 for i in 1:l
                     m.Wt_D_W[i, j] += m.Wt[i, k] * m.Wt[j, k] * m.d[k]
@@ -663,13 +663,13 @@ using Test
     end
     function loopinductvardivisionavx(τ)
         M,N = size(τ)
-        @avx for t = 1:N, j = 1:M
+        @turbo for t = 1:N, j = 1:M
             τ[j, t] = ((j - 1) / (M - 1))
         end
         τ
     end
 function maxavx!(R::AbstractArray{T}, Q, keep=nothing) where T
-    @avx for i in axes(Q,1)
+    @turbo for i in axes(Q,1)
         # acc = -999 # works fine
         acc = ifelse(isnothing(keep), typemin(T), R[i])
         for j in axes(Q,2), k in axes(Q,3)
@@ -684,7 +684,7 @@ end
         a = 1.0
         _s = 0.0
         k = length(E1);
-        @avx for j = 1:k
+        @turbo for j = 1:k
             for i = 1:n
                 v = a * (1 - t * t)
                 _s += v
@@ -698,7 +698,7 @@ function splitintonoloop(U, E1)
     a = 1.0
     _s = 0.0
     n, k = size(U)
-    @avx for j = 1:k
+    @turbo for j = 1:k
         for i = 1:n
             u = tanh(a * U[i,j])
             v = a * (1 - t * t)
@@ -729,7 +729,7 @@ function findreducedparentfornonvecstoreavx!(U::AbstractMatrix{T}, E1::AbstractV
     n,k = size(U)
     _s = zero(T)
     a = 1.0
-    @avx for j = 1:k
+    @turbo for j = 1:k
         for i = 1:n
             t = tanh(a * U[i,j])
             U[i,j] = t
@@ -756,13 +756,13 @@ end
 
 
 function powcseliteral!(x)
-    @avx for i ∈ eachindex(x)
+    @turbo for i ∈ eachindex(x)
         x[i] = 3^4
     end
     x
 end
 function powcsesymbol!(x, a = 3)
-    @avx for i ∈ eachindex(x)
+    @turbo for i ∈ eachindex(x)
         x[i] = a^4
     end
     x
@@ -779,7 +779,7 @@ function manyreturntest(x)
 end
 function manyreturntestavx(x)
     s = zero(eltype(x))
-    @avx for j ∈ eachindex(x)
+    @turbo for j ∈ eachindex(x)
         a, b, c, d, e, f, g, h, i = ninereturns(x[j])
         s += a * i + b * h + c * g - d
     end
@@ -804,7 +804,7 @@ function maybe_const_issue144!(𝛥mat, 𝛥ℛ, mat, ℛ)
 end
 function maybe_const_issue144_avx!(𝛥mat, 𝛥ℛ, mat, ℛ)
     𝛥ℛ_value = 𝛥ℛ.value
-    @avx for j in axes(mat,2)
+    @turbo for j in axes(mat,2)
         for i in axes(mat,1)
             ℰ𝓍1 = conj(𝛥ℛ_value)
             ℰ𝓍2 = -(ℛ[j])
@@ -825,19 +825,19 @@ end
         𝛥x
     end
     function grad_avx!(𝛥x, 𝛥ℛ, x, 𝒶𝓍i=eachindex(x))
-        @avx for i = 𝒶𝓍i
+        @turbo for i = 𝒶𝓍i
             (i >= first(axes(𝛥x, 1))) & (i <= last(axes(𝛥x, 1))) && (𝛥x[i] = 𝛥x[i] + 𝛥ℛ[i])
         end
         𝛥x
     end
     function grad_avx_base!(𝛥x, 𝛥ℛ, x, 𝒶𝓍i=eachindex(x))
-        @avx for i = 𝒶𝓍i
+        @turbo for i = 𝒶𝓍i
             (i >= first(axes(𝛥x, 1))) & (i <= Base.last(axes(𝛥x, 1))) && (𝛥x[i] = 𝛥x[i] + 𝛥ℛ[i])
         end
         𝛥x
     end
     @eval function grad_avx_eval!(𝛥x, 𝛥ℛ, x, 𝒶𝓍i=eachindex(x))
-        @avx for i = 𝒶𝓍i
+        @turbo for i = 𝒶𝓍i
             (i >= $first($axes(𝛥x, 1))) & (i <= $last($axes(𝛥x, 1))) && (𝛥x[i] = 𝛥x[i] + 𝛥ℛ[i])
         end
         𝛥x
@@ -1070,7 +1070,7 @@ end
 
         nta = rand(2)
         namedtuple = (a = copy(nta), b = 10.0)
-        @avx for i in 1:2
+        @turbo for i in 1:2
             namedtuple.a[i] += namedtuple.b
         end
       @test namedtuple.a == nta .+ 10
@@ -1112,7 +1112,7 @@ end
     function smoothdim_avx!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
         ifirst, ilast = first(irng), last(irng)
         ifirst > ilast && return s
-        @avx for Ipost in Rpost
+        @turbo for Ipost in Rpost
             for Ipre in Rpre
                 s[Ipre, ifirst, Ipost] = x[Ipre, ifirst, Ipost]
                 for i = ifirst+1:ilast
@@ -1125,7 +1125,7 @@ end
     function smoothdim_ifelse_avx!(s, x, α, Rpre, irng::AbstractUnitRange, Rpost)
         ifirst, ilast = first(irng), last(irng)
         ifirst > ilast && return s
-        @avx for Ipost in Rpost, i = ifirst:ilast, Ipre in Rpre
+        @turbo for Ipost in Rpost, i = ifirst:ilast, Ipre in Rpre
             xi = x[Ipre, i, Ipost]
             xim = i > ifirst ? x[Ipre, i-1, Ipost] : xi
             s[Ipre, i, Ipost] = α*xi + (1-α)*xim
@@ -1141,7 +1141,7 @@ end
 
             # s = dest1; 
             # ifirst, ilast = first(axes(x, d)), last(axes(x, d))
-            # ls = LoopVectorization.@avx_debug for Ipost in Rpost, i = ifirst:ilast, Ipre in Rpre
+            # ls = LoopVectorization.@turbo_debug for Ipost in Rpost, i = ifirst:ilast, Ipre in Rpre
             #     xi = x[Ipre, i, Ipost]
             #     xim = i > ifirst ? x[Ipre, i-1, Ipost] : xi
             #     s[Ipre, i, Ipost] = α*xi + (1-α)*xim
@@ -1169,7 +1169,7 @@ end
     function mul1!(y::Vector{T}, A::Matrix{UInt8}, x::Vector{T}) where T 
         packedstride = size(A, 1)
         m, n = size(A)
-        @avx for j ∈ eachindex(x)
+        @turbo for j ∈ eachindex(x)
             for i ∈ eachindex(y)
                 k = 2 * ((i-1) & 3)
                 block = A[(j-1) * packedstride + ((i-1) >> 2) + 1]
@@ -1204,7 +1204,7 @@ end
 
   if VERSION ≥ v"1.7.0-DEV.1031"
     @test_throws LoopVectorization.LoopError @macroexpand begin # pull #172
-      @avx for i in eachindex(xs)
+      @turbo for i in eachindex(xs)
         if i in axes(ys,1)
           xs[i] = ys[i]
         else
@@ -1214,7 +1214,7 @@ end
     end
   else
     @test_throws LoadError @macroexpand begin # pull #172
-        @avx for i in eachindex(xs)
+        @turbo for i in eachindex(xs)
             if i in axes(ys,1)
                 xs[i] = ys[i]
             else
@@ -1240,7 +1240,7 @@ end
 
         function obj9(y::AbstractMatrix, s::AbstractArray, θ::AbstractVector)
             out = 0.0
-            @avxt for i in axes(y,2)
+            @tturbo for i in axes(y,2)
                 for j in axes(y,1)
                     acc = 0.0
                     for r in axes(θ,1)
@@ -1260,7 +1260,7 @@ end
     function energy(spin_conf)
       (Nx, Ny) = size(spin_conf)
       res = 0
-      @avx for i = 1:Nx
+      @turbo for i = 1:Nx
         for j = 1:Ny
           i0 = (i-1+Nx)%Nx
           i1 = (i+Nx)%Nx
@@ -1290,7 +1290,7 @@ end
 
     function issue_257_avx!(A,G)
       N = length(G)
-      @avx for i = 1:N-1
+      @turbo for i = 1:N-1
         A[i] = G[(1-1)*N+i] + G[(1-1)*N+i+1]
       end
       A

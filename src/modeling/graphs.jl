@@ -208,8 +208,8 @@ staticmulincr(ptr, incr) = Expr(:call, lv(:staticmul), Expr(:call, :eltype, ptr)
 @inline cmpend(i::Int, r::AbstractUnitRange) = i ≤ last(r)
 @inline cmpend(i::Int, r::AbstractRange) = i ≤ last(r)
 
-@inline vcmpend(i::Int, r::CloseOpen, ::StaticInt{W}) where {W} = i ≤ vsub_nsw(getfield(r,:upper), W)
-@inline vcmpendzs(i::Int, r::CloseOpen, ::StaticInt{W}) where {W} = i ≠ (getfield(r,:upper) &  (-W))
+@inline vcmpend(i::Int, r::CloseOpen, ::StaticInt{W}) where {W} = i ≤ vsub_nsw((getfield(r,:upper) % Int), W)
+@inline vcmpendzs(i::Int, r::CloseOpen, ::StaticInt{W}) where {W} = i ≠ ((getfield(r,:upper) % Int) &  (-W))
 @inline vcmpend(i::Int, r::AbstractUnitRange, ::StaticInt{W}) where {W} = i ≤ vsub_nsw(last(r), W-1)
 @inline vcmpendzs(i::Int, r::AbstractUnitRange, ::StaticInt{W}) where {W} = i ≠ (length(r) &  (-W))
 # i = 0
@@ -1162,7 +1162,7 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
         add_andblock!(ls, ex, elementbytes, position)
     elseif ex.head === :||
         add_orblock!(ls, ex, elementbytes, position)
-    elseif ex.head === :local # Handle locals introduced by `@inbounds`; using `local` with `@avx` is not recomended (nor is `@inbounds`; which applies automatically regardless)
+    elseif ex.head === :local # Handle locals introduced by `@inbounds`; using `local` with `@turbo` is not recomended (nor is `@inbounds`; which applies automatically regardless)
         @assert length(ex.args) == 1 # TODO replace assert + first with "only" once support for Julia < 1.4 is dropped
         localbody = first(ex.args)
         @assert localbody.head === :(=)

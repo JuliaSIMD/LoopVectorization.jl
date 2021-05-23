@@ -4,7 +4,7 @@ using LoopVectorization, Test#, OffsetArrays
 	@show @__LINE__
 
     function addone!(y, x)
-        @avx for i ∈ eachindex(x,y)
+        @turbo for i ∈ eachindex(x,y)
             y[i] = x[i] + 1
         end
         y

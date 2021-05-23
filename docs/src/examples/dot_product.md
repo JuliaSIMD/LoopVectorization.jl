@@ -5,7 +5,7 @@
 ```julia
 function jdotavx(a, b)
     s = zero(eltype(a))
-    @avx for i ∈ eachindex(a, b)
+    @turbo for i ∈ eachindex(a, b)
         s += a[i] * b[i]
     end
     s
@@ -44,7 +44,7 @@ A related problem is taking the dot product of a vector with itself; taking the 
 ```julia
 function jselfdotavx(a)
     s = zero(eltype(a))
-    @avx for i ∈ eachindex(a)
+    @turbo for i ∈ eachindex(a)
         s += a[i] * a[i]
     end
     s

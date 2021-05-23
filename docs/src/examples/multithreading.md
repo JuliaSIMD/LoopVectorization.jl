@@ -1,7 +1,7 @@
 # Multithreading
 
-LoopVectorization can multithread loops if you pass the argument `@avx thread=true for ... end` or equivalently use `@avxt`. By default, `thread = false`, which runs only a single thread.
-You can also supply a numerical argument to set an upper bound on the number of threads, e.g. `@avx thread=8 for ... end` will use up to `min(8,Threads.nthreads(),VectorizationBase.num_cores())` threads. `VectorizationBase.num_cores()` uses [Hwloc.jl](https://github.com/JuliaParallel/Hwloc.jl) to get the number of physical cores.
+LoopVectorization can multithread loops if you pass the argument `@turbo thread=true for ... end` or equivalently use `@tturbo`. By default, `thread = false`, which runs only a single thread.
+You can also supply a numerical argument to set an upper bound on the number of threads, e.g. `@turbo thread=8 for ... end` will use up to `min(8,Threads.nthreads(),VectorizationBase.num_cores())` threads. `VectorizationBase.num_cores()` uses [Hwloc.jl](https://github.com/JuliaParallel/Hwloc.jl) to get the number of physical cores.
 Currently, this only works for `for` loops, but support for broadcasting will come.
 
 Lets look at a few benchmarks.
@@ -10,7 +10,7 @@ Taking the [first example from the ThreadsX.jl README](https://github.com/tkf/Th
 ```julia
 function relative_prime_count(x, N)
     c = 0
-    @avxt for i ∈ 1:N
+    @tturbo for i ∈ 1:N
         c += gcd(x, i) == 1
     end
     c
@@ -34,7 +34,7 @@ I'll make comparisons with OpenMP through the rest of this, starting with a simp
 ```julia
 function dotavxt(a::AbstractArray{T}, b::AbstractArray{T}) where {T <: Real}
     s = zero(T)
-    @avxt for i ∈ eachindex(a,b)
+    @tturbo for i ∈ eachindex(a,b)
         s += a[i] * b[i]
     end
     s
@@ -100,7 +100,7 @@ function dotavxt(ca::AbstractVector{Complex{T}}, cb::AbstractVector{Complex{T}})
     a = reinterpret(reshape, T, ca)
     b = reinterpret(reshape, T, cb)
     re = zero(T); im = zero(T)
-    @avx for i ∈ axes(a,2) # adjoint(a[i]) * b[i]
+    @turbo for i ∈ axes(a,2) # adjoint(a[i]) * b[i]
         re += a[1,i] * b[1,i] + a[2,i] * b[2,i]
         im += a[1,i] * b[2,i] - a[2,i] * b[1,i]
     end
@@ -137,13 +137,13 @@ and as we have an array of structs rather than structs of arrays, we need additi
 ![complexdot](../assets/threadedcomplexdotproduct.svg)
 
 
-If we take this further to the three-argument dot product, which isn't implemented in BLAS, `@avxt` now holds a substantial advantage over the competition:
+If we take this further to the three-argument dot product, which isn't implemented in BLAS, `@tturbo` now holds a substantial advantage over the competition:
 ```julia
 function dotavxt(ca::AbstractVector{Complex{T}}, cb::AbstractVector{Complex{T}}) where {T}
     a = reinterpret(reshape, T, ca)
     b = reinterpret(reshape, T, cb)
     re = zero(T); im = zero(T)
-    @avxt for i ∈ axes(a,2) # adjoint(a[i]) * b[i]
+    @tturbo for i ∈ axes(a,2) # adjoint(a[i]) * b[i]
         re += a[1,i] * b[1,i] + a[2,i] * b[2,i]
         im += a[1,i] * b[2,i] - a[2,i] * b[1,i]
     end
@@ -190,7 +190,7 @@ Unlike all the dot product cases (including the 3-argument dot product), which f
 Here, I compare against other libraries: Intel MKL, OpenBLAS (Julia's default), and two Julia libraries: [Tullio.jl](https://github.com/mcabbott/Tullio.jl) and [Octavian.jl](https://github.com/JuliaLinearAlgebra/Octavian.jl).
 ```julia
 function A_mul_B!(C, A, B)
-    @avxt for n ∈ indices((C,B), 2), m ∈ indices((C,A), 1)
+    @tturbo for n ∈ indices((C,B), 2), m ∈ indices((C,A), 1)
         Cmn = zero(eltype(C))
         for k ∈ indices((A,B), (2,1))
             Cmn += C[m,k] * B[k,n]
@@ -243,7 +243,7 @@ end
 
 function convlayer!(out::AbstractArray{<:Any,4}, img, kern, dcd::DenseConvDims)
     (K₁, K₂, Cᵢₙ, Cₒᵤₜ) = kernaxes(dcd)
-    @avxt for j₁ ∈ axes(out,1), j₂ ∈ axes(out,2), d ∈ axes(out,4), o ∈ Cₒᵤₜ
+    @tturbo for j₁ ∈ axes(out,1), j₂ ∈ axes(out,2), d ∈ axes(out,4), o ∈ Cₒᵤₜ
         s = zero(eltype(out))
         for k₁ ∈ K₁, k₂ ∈ K₂, i ∈ Cᵢₙ
             s += img[j₁ + k₁ - 1, j₂ + k₂ - 1, i, d] * kern[k₁, k₂, i, o]
@@ -309,11 +309,11 @@ BenchmarkTools.Trial:
   samples:          38
   evals/sample:     1
 ```
-This still nets `@avxt` a 23x advantage on this machine!
+This still nets `@tturbo` a 23x advantage on this machine!
 
 
 ## FAQ
-#### If I do `@avx thread=true for ... end`, how many threads will it use? Or if I do `@avx thread=4 for ... end`, what then?
+#### If I do `@turbo thread=true for ... end`, how many threads will it use? Or if I do `@turbo thread=4 for ... end`, what then?
 
 LoopVectorization will choose how many threads to use based on the length of the loop ranges and how expensive it estimates evaluating the loop to be. It will at most use one thread per physical core of the system.
 

@@ -105,7 +105,7 @@ for (op, init) in zip((:+, :max, :min), (:zero, :typemin, :typemax))
 
     @eval function _vreduce_dims!(out, ::typeof($op), Rpre, is, Rpost, arg)
         s = $init(first(arg))
-        @avx for Ipost in Rpost, Ipre in Rpre
+        @turbo for Ipost in Rpost, Ipre in Rpre
             accum = s
             for i in is
                 accum = $op(accum, arg[Ipre, i, Ipost])
@@ -117,7 +117,7 @@ for (op, init) in zip((:+, :max, :min), (:zero, :typemin, :typemax))
 
     @eval function _vreduce(::typeof($op), arg)
         s = $init(first(arg))
-        @avx for i in eachindex(arg)
+        @turbo for i in eachindex(arg)
             s = $op(s, arg[i])
         end
         return s

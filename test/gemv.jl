@@ -26,7 +26,7 @@ using Test
         end
     end
     function mygemvavx!(y, A, x)
-        @avx for i ∈ eachindex(y)
+        @turbo for i ∈ eachindex(y)
             yᵢ = zero(eltype(y))
             for j ∈ eachindex(x)
                 yᵢ += A[i,j] * x[j]
@@ -36,7 +36,7 @@ using Test
     end
     function mygemvavx_range!(y, A, x)
         rng1, rng2 = axes(A)
-        @avx for i ∈ rng1
+        @turbo for i ∈ rng1
             yᵢ = zero(eltype(y))
             for j ∈ rng2
                 yᵢ += A[i,j] * x[j]
@@ -86,7 +86,7 @@ using Test
     d = size(G,1)
     δ = 0
     z = zero(eltype(G))
-    @avx for d1=1:d
+    @turbo for d1=1:d
       G[d1,κ] = z
       for d2=1:d
         G[d1, κ - δ] += B[d2, d1] * B[d2, κ + δ]
@@ -96,7 +96,7 @@ using Test
     function AtmulvBavx2!(G, B,κ)
       d = size(G,1)
       δ = 0
-      @avx for d1=1:d
+      @turbo for d1=1:d
         z = zero(eltype(G))
         for d2=1:d
           z += B[d2 - δ, d1]*B[d2, κ - δ]
@@ -106,7 +106,7 @@ using Test
     end
     function AtmulvBavx3!(G, B,κ)
         d = size(G,1)
-        @avx unroll=(2,2) for d1=1:d
+        @turbo unroll=(2,2) for d1=1:d
             G[d1,κ] = B[1,d1]*B[1,κ]
             for d2=2:d
                 G[d1,κ] += B[d2,d1]*B[d2,κ]
@@ -168,7 +168,7 @@ using Test
 
     function hhavx!(A::AbstractVector{T}, B, C, D) where {T}
         L = T(length(axes(B,2)));
-        @avx for i in axes(A, 1)
+        @turbo for i in axes(A, 1)
             A[i] = A[i] + D[i] * L
             for j = axes(B, 2)
                 B[i, j] = B[i, j] + D[i]
@@ -200,7 +200,7 @@ using Test
     function tuplemulavx!(out::Vector{Tuple{T,T}}, A::Matrix{Tuple{T,T}}, b::Vector{T}) where {T}
         rA, rout = reinterpret(T, A), reinterpret(T, out)
         fill!(rout, 0)
-        @avx for j in axes(A, 2), i in axes(A, 1)
+        @turbo for j in axes(A, 2), i in axes(A, 1)
             ii = 2*(i-1) + 1
             rout[ii] += rA[ii,j]*b[j]
             rout[ii+1] += rA[ii+1,j]*abs(b[j])
@@ -217,7 +217,7 @@ using Test
         nothing
     end
     function multiple_muls_avx!(Y, dY, A, dA, b, db)
-        @avx for m ∈ axes(A,1)
+        @turbo for m ∈ axes(A,1)
             dy = 0.0
             y = 0.0
             for n ∈ axes(A,2)
@@ -230,7 +230,7 @@ using Test
     end
 
   function depchain_with_different_deps!(c1,c2,A,b)
-    @avx for j in axes(A,1), k in axes(A,2)
+    @turbo for j in axes(A,1), k in axes(A,2)
       c1[j] += A[j,k] * b[k]
       c2[j] += A[j,k] * b[k] - 0 * b[j]
     end

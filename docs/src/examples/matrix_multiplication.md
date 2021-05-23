@@ -6,7 +6,7 @@ LoopVectorization currently doesn't do any memory-modeling or memory-based optim
 We can write a single function:
 ```julia
 function A_mul_B!(C, A, B)
-    @avx for n ∈ indices((C,B), 2), m ∈ indices((C,A), 1)
+    @turbo for n ∈ indices((C,B), 2), m ∈ indices((C,A), 1)
         Cmn = zero(eltype(C))
         for k ∈ indices((A,B), (2,1))
             Cmn += A[m,k] * B[k,n]

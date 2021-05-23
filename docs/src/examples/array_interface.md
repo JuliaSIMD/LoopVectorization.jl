@@ -14,7 +14,7 @@ By supporting the interface, using `LoopVectorization` can simplify implementing
 using StaticArrays, LoopVectorization
 
 @inline function AmulB!(C, A, B)
-    @avx for n ∈ axes(C,2), m ∈ axes(C,1)
+    @turbo for n ∈ axes(C,2), m ∈ axes(C,1)
         Cmn = zero(eltype(C))
         for k ∈ axes(B,1)
             Cmn += A[m,k] * B[k,n]
@@ -93,7 +93,7 @@ C_hybrid = HybridArray{Tuple{StaticArrays.Dynamic(),StaticArrays.Dynamic(),3,3}}
 # A is M x K x I x L
 # B is K x N x L x J
 function bmul!(C, A, B)
-    @avx for n in axes(C,2), m in axes(C,1), j in axes(C,4), i in axes(C,3)
+    @turbo for n in axes(C,2), m in axes(C,1), j in axes(C,4), i in axes(C,3)
         Cmnji = zero(eltype(C))
         for k in axes(B,1), l in axes(B,3)
             Cmnji += A[m,k,i,l] * B[k,n,l,j]

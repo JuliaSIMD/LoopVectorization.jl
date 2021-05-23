@@ -33,7 +33,7 @@ LoopVectorization.ArrayReferenceMeta
 
 ## Condensed types
 
-These are used when encoding the `@avx` block as a type parameter for passing through
+These are used when encoding the `@turbo` block as a type parameter for passing through
 to the `@generated` function.
 
 ```@docs

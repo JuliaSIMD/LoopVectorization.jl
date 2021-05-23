@@ -712,7 +712,7 @@ end
     check_args(::Vararg{AbstractArray})
 
 
-LoopVectorization will optimize an `@avx` loop if `check_args` on each on the indexed abstract arrays returns true.
+LoopVectorization will optimize an `@turbo` loop if `check_args` on each on the indexed abstract arrays returns true.
 It returns true for `AbstractArray{T}`s when `check_type(T) == true` and the array or its parent is a `StridedArray` or `AbstractRange`.
 
 To provide support for a custom array type, ensure that `check_args` returns true, either through overloading it or subtyping `DenseArray`.

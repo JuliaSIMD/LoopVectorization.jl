@@ -275,7 +275,7 @@ end
 function exp_bench!(br, s, i)
     a = rand(s); b = similar(a)
     n_gflop = 1e-9*s # not really gflops
-    br[1,i] = n_gflop / @belapsed @avx @. $b = exp($a)
+    br[1,i] = n_gflop / @belapsed @turbo @. $b = exp($a)
     baseb = copy(b)
     br[2,i] = n_gflop / @belapsed @. $b = exp($a)
     @assert b ≈ baseb "LoopVec wrong?"
@@ -296,7 +296,7 @@ function aplusBc_bench!(br, s, i)
     a = rand(M); B = rand(M,N); c = rand(N);
     c′ = c'; D = similar(B)
     n_gflop = 2e-9 * M*N
-    br[1,i] = n_gflop / @belapsed @avx @. $D = $a + $B * $c′
+    br[1,i] = n_gflop / @belapsed @turbo @. $D = $a + $B * $c′
     Dcopy = copy(D); fill!(D, NaN);
     br[2,i] = n_gflop / @belapsed @. $D = $a + $B * $c′
     @assert D ≈ Dcopy "LoopVec wrong?"
@@ -319,7 +319,7 @@ end
 function AplusAt_bench!(br, s, i)
     A = rand(s,s); B = similar(A)
     n_gflop = 1e-9*s^2
-    br[1,i] = n_gflop / @belapsed @avx @. $B = $A + $A'
+    br[1,i] = n_gflop / @belapsed @turbo @. $B = $A + $A'
     baseB = copy(B); fill!(B, NaN);
     br[2,i] = n_gflop / @belapsed @. $B = $A + $A'
     @assert B ≈ baseB "LoopVec wrong?"

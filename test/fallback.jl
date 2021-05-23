@@ -11,7 +11,7 @@
     end
     function msdavx(x)
         s = zero(eltype(x))
-        @avx for i in eachindex(x)
+        @turbo for i in eachindex(x)
             s = muladd(x[i], x[i], s) # Avoids fastmath in fallback loop.
         end
         s
@@ -38,7 +38,7 @@
     @test msdavx(x) != msdavx(FallbackArrayWrapper(x))
 
     x = rand(1000); # should be long enough to make zero differences incredibly unlikely
-    @test exp.(x) != (@avx exp.(x))
-    @test exp.(x) == (@avx exp.(FallbackArrayWrapper(x)))
+    @test exp.(x) != (@turbo exp.(x))
+    @test exp.(x) == (@turbo exp.(FallbackArrayWrapper(x)))
 end
 

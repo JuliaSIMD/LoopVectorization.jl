@@ -45,7 +45,7 @@ function broutine2x2_avx!(S::AbstractMatrix{Complex{T}}, U::AbstractMatrix, locs
     Sr = reinterpret(reshape, T, S)
 
     if step_1 == 1
-        @avx for _j in 0:(Hmax>>>locs)-1, b in axes(S, 1)
+        @turbo for _j in 0:(Hmax>>>locs)-1, b in axes(S, 1)
             j = _j << locs
             
             ST1_re = U11_re * Sr[1, b, j+1] - U11_im * Sr[2, b, j+1] +

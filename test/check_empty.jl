@@ -1,14 +1,14 @@
 
 function mysum_checked(x)
     s = zero(eltype(x))
-    @avx check_empty = true for i ∈ eachindex(x)
+    @turbo check_empty = true for i ∈ eachindex(x)
         s += x[i]
     end
     s
 end
 function mysum_unchecked(x)
     s = zero(eltype(x))
-    @avx for i ∈ eachindex(x)
+    @turbo for i ∈ eachindex(x)
         s += x[i]
     end
     s

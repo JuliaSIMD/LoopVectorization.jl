@@ -10,7 +10,7 @@ T = Float32
         z
     end
     function promote_bool_storeavx!(z, x, y)
-        @avx for i ∈ eachindex(x)
+        @turbo for i ∈ eachindex(x)
             z[i] = (x[i]*x[i] + y[i]*y[i]) < 1
         end
         z
@@ -25,7 +25,7 @@ T = Float32
             # z[i] = (x[i]*x[i] + y[i]*y[i]) < 1
         # end
     function promote_bool_storeavx2!(z, x, y)
-        @avx for i ∈ eachindex(x)
+        @turbo for i ∈ eachindex(x)
             z[i] = (x[i]*x[i] + y[i]*y[i]) < 1 ? 1 : 0
         end
         z
@@ -49,7 +49,7 @@ T = Float32
     end
     function Bernoulli_logitavx(y, α::AbstractVector{T}) where {T}
         t = zero(T === Int32 ? Float32 : Float64)
-        @avx for i ∈ eachindex(α)
+        @turbo for i ∈ eachindex(α)
             invOmP = 1 + exp(α[i])
             nlogOmP = log(invOmP)
             nlogP = nlogOmP - α[i]
@@ -79,7 +79,7 @@ T = Float32
         end
     end
     function addormulavx!(c, a, b)
-        @avx for i ∈ eachindex(c,a,b)
+        @turbo for i ∈ eachindex(c,a,b)
             c[i] = if a[i] > b[i]
                 a[i] + b[i]
             else
@@ -98,7 +98,7 @@ T = Float32
         end
     end
     function addormulp1avx!(c, a, b)
-        @avx for i ∈ eachindex(c,a,b)
+        @turbo for i ∈ eachindex(c,a,b)
             a_greater_than_b = a[i] > b[i]
             c[i] = 1 + (a_greater_than_b ? a[i] + b[i] : a[i] * b[i])
         end
@@ -109,7 +109,7 @@ T = Float32
         end
     end
     function addifelsemulavx!(c, a, b)
-        @avx for i ∈ eachindex(c,a,b)
+        @turbo for i ∈ eachindex(c,a,b)
             c[i] = ifelse(a[i] > b[i], a[i] + b[i], a[i] * b[i])
         end
     end
@@ -119,7 +119,7 @@ T = Float32
         end
     end
     function addifelsemulp1avx!(c, a, b)
-        @avx for i ∈ eachindex(c,a,b)
+        @turbo for i ∈ eachindex(c,a,b)
             c[i] = 1 + ifelse(a[i] > b[i], a[i] + b[i], a[i] * b[i])
         end
     end
@@ -129,7 +129,7 @@ T = Float32
         end
     end
     function ifelseoverwriteavx!(p)
-        @avx for i ∈ eachindex(p)
+        @turbo for i ∈ eachindex(p)
             p[i] = p[i] < 0.5 ? p[i]^2 : p[i]^3
         end
     end
@@ -147,7 +147,7 @@ T = Float32
         end
     end
     function maybewriteandavx!(c, a, b)
-        @avx for i ∈ eachindex(c,a,b)
+        @turbo for i ∈ eachindex(c,a,b)
             a[i] > b[i] && (c[i] = a[i] + b[i])
         end
     end
@@ -162,7 +162,7 @@ T = Float32
         end
     end
     function maybewriteoravx!(c, a, b)
-        @avx for i ∈ eachindex(c,a,b)
+        @turbo for i ∈ eachindex(c,a,b)
             a[i] > b[i] || (c[i] = a[i] ^ b[i])
         end
     end
@@ -177,7 +177,7 @@ T = Float32
         end
     end
     function maybewriteoravx!(c::AbstractVector{<:Integer}, a, b)
-        @avx for i ∈ eachindex(c,a,b)
+        @turbo for i ∈ eachindex(c,a,b)
             a[i] > b[i] || (c[i] = a[i] & b[i])
         end
     end
@@ -188,7 +188,7 @@ T = Float32
         end
     end
     function notacondloadavx!(C, A, b)
-        @avx for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
+        @turbo for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
             C[m,n] = A[m,n] * (b[n] > 0 ? b[n] : -b[n])
         end
     end
@@ -198,7 +198,7 @@ T = Float32
         end
     end
     function condloadscalaravx!(C, A, c, b)
-        @avx for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
+        @turbo for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
             C[m,n] = A[m,n] * (c[n] > 0 ? b[n] : 1) + c[n]
         end
     end
@@ -208,7 +208,7 @@ T = Float32
         end
     end
     function maskedloadscalaravx!(C, A, b)
-        @avx for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
+        @turbo for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
             C[m,n] = A[m,n] * (A[m,n] > 0 ? b[n] : 1)
         end
     end
@@ -222,7 +222,7 @@ T = Float32
         end
     end
     function AtmulBposavx!(C, A, B)
-        @avx for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
+        @turbo for n ∈ 1:size(C,2), m ∈ 1:size(C,1)
             Cₘₙ = zero(eltype(C))
             for k ∈ 1:size(A,1)
                 Cₘₙ += A[k,m] * B[k,n]
@@ -251,7 +251,7 @@ T = Float32
         end
     end
     function condstore1avx!(x)
-        @avx for i ∈ eachindex(x)
+        @turbo for i ∈ eachindex(x)
             x1 = 2*x[i]-100
             x2 = x1*x1
             x3 = x2 + x1
@@ -271,7 +271,7 @@ T = Float32
         end
     end
     function condstore2avx!(x)
-        @avx for i ∈ eachindex(x)
+        @turbo for i ∈ eachindex(x)
             x1 = 2*getindex(x, i)-100
             x2 = x1*x1
             x3 = x2 + x1
@@ -300,7 +300,7 @@ T = Float32
         end
     end
     function andorassignmentavx!(x, y, z)
-        @avx for i ∈ eachindex(x, y, z)
+        @turbo for i ∈ eachindex(x, y, z)
             yᵢ = y[i]
             zᵢ = z[i]
             (yᵢ > 0.5) || (yᵢ *= 2)
@@ -309,7 +309,7 @@ T = Float32
         end
     end
     function andorassignment_avx!(x, y, z)
-        @avx for i ∈ eachindex(x, y, z)
+        @turbo for i ∈ eachindex(x, y, z)
             yᵢ = y[i]
             zᵢ = z[i]
             (yᵢ > 0.5) || (yᵢ *= 2)
@@ -332,7 +332,7 @@ T = Float32
     end
     function twoifelses_avx!(res, half, m, keep=nothing, final=true)
         𝒶𝓍j=axes(half,1)
-        @avx for j in 𝒶𝓍j
+        @turbo for j in 𝒶𝓍j
             𝓇𝒽𝓈 = if isnothing(keep)
                 log(half[j]) + m[j]
             else
@@ -354,7 +354,7 @@ T = Float32
         end
     end
     function testfunctionavx!(f::Matrix{<:AbstractFloat}, v, d, g, s, θ)
-        @avx for j in 1:size(f,1)
+        @turbo for j in 1:size(f,1)
             x = v[j, s] + v[j, d] - v[j, g] + f[j, g] + θ
             _x = ifelse(isnan(x), typemin(eltype(f)), x)
             f[j, d] = _x 
@@ -379,7 +379,7 @@ T = Float32
         T = eltype(X)
         n = length(X) - 1
         w = zero(X)
-        @avx for j in 0:n
+        @turbo for j in 0:n
             tmp = one(T)
             for k in 0:n
                 tmp = k != j ? tmp * (X[j+1] - X[k+1]) : tmp
@@ -392,7 +392,7 @@ T = Float32
         T = eltype(X)
         n = length(X) - 1
         w = zero(X)
-        @avx inline=true for j in 0:n
+        @turbo inline=true for j in 0:n
             tmp = one(T)
             for k in 0:n
                 tmp = k==j ? tmp : tmp * (X[j+1] - X[k+1])
@@ -405,7 +405,7 @@ T = Float32
         T = eltype(X)
         n = length(X) - 1
         w = zero(X)
-        @avx inline=true for j in 0:n
+        @turbo inline=true for j in 0:n
             tmp = one(T)
             for k in 0:n
                 tmp = ifelse(k != j, tmp * (X[j+1] - X[k+1]), tmp)
@@ -418,7 +418,7 @@ T = Float32
         T = eltype(X)
         n = length(X) - 1
         w = zero(X)
-        @avx for j in 0:n
+        @turbo for j in 0:n
             tmp = one(T)
             for k in 0:n
                 tmp = ifelse(k == j, tmp, tmp * (X[j+1] - X[k+1]))
@@ -581,18 +581,18 @@ T = Float32
     ai = [rand(Bool) for _ in 1:71];
     bi = [rand(Bool) for _ in 1:71];
     # if LoopVectorization.VectorizationBase.AVX2 || Base.libllvm_version ≥ v"8" #FIXME Why doesn't this work on Travis Ivy Bridge Julia 1.1?
-        @test (ai .& bi) == (@avx ai .& bi)
-        @test (ai .| bi) == (@avx ai .| bi)
-        @test (ai .⊻ bi) == (@avx ai .⊻ bi)
+        @test (ai .& bi) == (@turbo ai .& bi)
+        @test (ai .| bi) == (@turbo ai .| bi)
+        @test (ai .⊻ bi) == (@turbo ai .⊻ bi)
     # else
-    #     @test_broken (ai .& bi) == (@avx ai .& bi)
-    #     @test_broken (ai .| bi) == (@avx ai .| bi)
-    #     @test_broken (ai .⊻ bi) == (@avx ai .⊻ bi)
+    #     @test_broken (ai .& bi) == (@turbo ai .& bi)
+    #     @test_broken (ai .| bi) == (@turbo ai .| bi)
+    #     @test_broken (ai .⊻ bi) == (@turbo ai .⊻ bi)
     # end
     a = bitrand(127); b = bitrand(127);
-    @test (a .& b) == (@avx a .& b)
-    @test (a .| b) == (@avx a .| b)
-    @test (a .⊻ b) == (@avx a .⊻ b)
+    @test (a .& b) == (@turbo a .& b)
+    @test (a .| b) == (@turbo a .| b)
+    @test (a .⊻ b) == (@turbo a .⊻ b)
 
     s, d, g = 3, 1, 2; f = rand(N,2); v = rand(N,3); θ = 0.78;
     v[rand(eachindex(v), length(v) >> 3)] .= NaN;

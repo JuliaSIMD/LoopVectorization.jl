@@ -5,7 +5,7 @@
     f(x) = cos(x) * log(x)
     function avxmax(v)
         max_x = -Inf
-        @avx for i ∈ eachindex(v)
+        @turbo for i ∈ eachindex(v)
             x = f(i)
             max_x = max(max_x, x)
         end
@@ -14,7 +14,7 @@
     function avxextrema(v)
         max_x = -Inf
         min_x = Inf
-        @avx for i ∈ eachindex(v)
+        @turbo for i ∈ eachindex(v)
             x = f(i)
             max_x = max(max_x, x)
             min_x = min(min_x, x)

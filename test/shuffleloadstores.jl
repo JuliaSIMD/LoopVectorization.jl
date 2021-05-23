@@ -12,7 +12,7 @@ function cdot_mat(ca::AbstractVector{Complex{T}}, cb::AbstractVector{Complex{T}}
     a = reinterpret(reshape, T, ca)
     b = reinterpret(reshape, T, cb)
     re = zero(T); im = zero(T)
-    @avx for i ∈ axes(a,2)
+    @turbo for i ∈ axes(a,2)
         re += a[1,i] * b[1,i] + a[2,i] * b[2,i]
         im += a[1,i] * b[2,i] - a[2,i] * b[1,i]
     end
@@ -24,7 +24,7 @@ function cdot_affine(ca::AbstractVector{Complex{T}}, cb::AbstractVector{Complex{
     re = zero(T); im = zero(T)
     # with a multiplier, we go from `i = 1 -> 2i = 2` to `i = 0 -> 2i = 0
     # 2(i+1-1) = 2i + 2 - 2, so....
-    @avx for i ∈ 1:length(a)>>>1
+    @turbo for i ∈ 1:length(a)>>>1
         re += a[2i-1] * b[2i-1] + a[2i] * b[2i  ]
         im += a[2i-1] * b[2i  ] - a[2i] * b[2i-1]
     end
@@ -34,7 +34,7 @@ function cdot_stride(ca::AbstractVector{Complex{T}}, cb::AbstractVector{Complex{
     a = reinterpret(T, ca);
     b = reinterpret(T, cb);
     re = zero(T); im = zero(T)
-    @avx for i ∈ 1:2:length(a)
+    @turbo for i ∈ 1:2:length(a)
         re += a[i] * b[i  ] + a[i+1] * b[i+1]
         im += a[i] * b[i+1] - a[i+1] * b[i  ]
     end
@@ -60,7 +60,7 @@ function qdot_mat(x::AbstractMatrix, y::AbstractMatrix)
     b = zero(eltype(x))
     c = zero(eltype(x))
     d = zero(eltype(x))
-    @avx for i ∈ axes(x,2)
+    @turbo for i ∈ axes(x,2)
         a₁ = x[1,i]
         b₁ = x[2,i]
         c₁ = x[3,i]
@@ -81,7 +81,7 @@ function qdot_affine(x::AbstractVector, y::AbstractVector)
     b = zero(eltype(x))
     c = zero(eltype(x))
     d = zero(eltype(x))
-    @avx for i ∈ 1:length(x)>>2
+    @turbo for i ∈ 1:length(x)>>2
         a₁ = x[4i-3]
         b₁ = x[4i-2]
         c₁ = x[4i-1]
@@ -102,7 +102,7 @@ function qdot_stride(x::AbstractVector, y::AbstractVector)
     b = zero(eltype(x))
     c = zero(eltype(x))
     d = zero(eltype(x))
-    @avx for i ∈ 1:4:length(x)
+    @turbo for i ∈ 1:4:length(x)
         a₁ = x[i]
         b₁ = x[i+1]
         c₁ = x[i+2]
@@ -119,7 +119,7 @@ function qdot_stride(x::AbstractVector, y::AbstractVector)
     (a,b,c,d)
 end
 function cmatmul_array!(C::AbstractArray{T,3}, A::AbstractArray{T,3}, B::AbstractArray{T,3}) where {T}
-    @avx for n ∈ indices((C,B),3), m ∈ indices((C,A),2)
+    @turbo for n ∈ indices((C,B),3), m ∈ indices((C,A),2)
         Cre = zero(T)
         Cim = zero(T)
         for k ∈ indices((A,B),(3,2))
@@ -143,7 +143,7 @@ function issue209(M, G, J, H, B, ϕ)
     # currently, it isn't because  `jj` and `hh` are loop induct vars
     for mm = 1:M
         m_idx = M + 2 - mm
-        @avx for hh = 1:H+1
+        @turbo for hh = 1:H+1
             h_idx = (hh - 1)*jmax
             for jj = 1:jmax, gg = 1:G-1
                 tmpf[1, gg, jj + h_idx] = ϕf[1, jj, gg+1, hh, m_idx] +

@@ -12,7 +12,7 @@ function issue238_noavx!(output, matrix, input)
   return nothing
 end
 function issue238!(output, matrix, input)
-  @avx inline=true for i in axes(output, 2), v in axes(output, 1)
+  @turbo inline=true for i in axes(output, 2), v in axes(output, 1)
     res = zero(eltype(output))
     for ii in axes(matrix, 2)
       res += matrix[i, ii] * input[v, ii]
@@ -22,7 +22,7 @@ function issue238!(output, matrix, input)
   return nothing
 end
 function issue238_v2!(output, matrix, input)
-  @avx inline=true for i in axes(output, 2), v in axes(output, 1)
+  @turbo inline=true for i in axes(output, 2), v in axes(output, 1)
     res = output[v, i]
     for ii in axes(matrix, 2)
       res += matrix[i, ii] * input[v, ii]
