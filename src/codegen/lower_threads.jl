@@ -25,11 +25,14 @@ end
     offset = ThreadingUtilities.store!(p, args, offset)
     nothing
 end
+
+struct StaticType{T} end
+@inline gettype(::StaticType{T}) where {T} = T
+
 @inline function avx_launch(
-    ::Val{UNROLL}, ::Val{OPS}, ::Val{ARF}, ::Val{AM}, ::Val{LPSYM}, lbvargs::LBV, tid
-) where {UNROLL,OPS,ARF,AM,LPSYM,K,LBV<:Tuple{Vararg{Any,K}}}
-    fargs = flatten_to_tuple(lbvargs)
-    ThreadingUtilities.launch(setup_avx_threads!, tid, pointer(AVX{UNROLL,OPS,ARF,AM,LPSYM,LBV,typeof(fargs)}()), fargs)
+    ::Val{UNROLL}, ::Val{OPS}, ::Val{ARF}, ::Val{AM}, ::Val{LPSYM}, ::StaticType{LBV}, fargs::FARGS, tid
+) where {UNROLL,OPS,ARF,AM,LPSYM,K,LBV<:Tuple{Vararg{Any,K}},FARGS}
+    ThreadingUtilities.launch(setup_avx_threads!, tid, pointer(AVX{UNROLL,OPS,ARF,AM,LPSYM,LBV,FARGS}()), fargs)
 end
 
 # function approx_cbrt(x)
@@ -397,10 +400,8 @@ function thread_one_loops_expr(
         $iterstop
         var"#thread#id#" = vadd_nw(var"#thread#id#", var"#trailzing#zeros#")
 
-        avx_launch(
-          Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM,
-          ($loopboundexpr, var"#vargs#"), var"#thread#id#"
-        )
+        var"##lbvargs#to_launch##" = ($loopboundexpr, var"#vargs#")
+        avx_launch(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, StaticType{typeof(var"##lbvargs#to_launch##")}(), flatten_to_tuple(var"##lbvargs#to_launch##"), var"#thread#id#")
 
         var"#thread#mask#" >>>= var"#trailzing#zeros#"
 
@@ -587,10 +588,8 @@ function thread_two_loops_expr(
         $iterstop2
         var"#thread#id#" = vadd_nw(var"#thread#id#", var"#trailzing#zeros#")
         # @show var"#thread#id#" $loopboundexpr
-        avx_launch(
-          Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM,
-          ($loopboundexpr, var"#vargs#"), var"#thread#id#"
-        )
+        var"##lbvargs#to_launch##" = ($loopboundexpr, var"#vargs#")
+        avx_launch(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, StaticType{typeof(var"##lbvargs#to_launch##")}(), flatten_to_tuple(var"##lbvargs#to_launch##"), var"#thread#id#")
         var"#thread#mask#" >>>= var"#trailzing#zeros#"
 
         var"##end#inner##" = var"#thread#launch#count#0#" == vsub_nw(var"#thread#factor#0#", 0x00000001)
