@@ -1,4 +1,4 @@
-using Zygote
+using Zygote, Test, LinearAlgebra
 zygotefun2(a,b) = sigmoid_fast(a + b) + LoopVectorization.relu(a * b) * tanh(a - b)
 zygotefun3(a,b,c) = log(tanh_fast(a*b) + 1 + exp(b - c))
 @testset "Zygote" begin
@@ -6,7 +6,7 @@ zygotefun3(a,b,c) = log(tanh_fast(a*b) + 1 + exp(b - c))
 
     for T ∈ (Float32,Float64)
         x = randn(T, 217); y = randn(T, 217); z = randn(T, 217);
-        w = randn(T, 217)
+        w = randn(T, 217);
         # Test 1-arg and `tanh_fast` vs `tanh`
         gref1 = gradient(x -> dot(w,  map(tanh,      x)), x);
         glv_1 = gradient(x -> dot(w, vmap(tanh_fast, x)), x);
