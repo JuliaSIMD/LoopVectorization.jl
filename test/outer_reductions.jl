@@ -1,5 +1,5 @@
 
-function awmean_lv(x::Array{T1}, σ::Array{T2}) where {T1<:Number,T2<:Number}
+function awmean_lv(x::AbstractArray{T1}, σ::AbstractArray{T2}) where {T1<:Number,T2<:Number}
   n = length(x)
   T3 = promote_type(T1,T2)
   T = sizeof(T3) ≤ 4 ? Float32 : Float64
@@ -17,7 +17,7 @@ function awmean_lv(x::Array{T1}, σ::Array{T2}) where {T1<:Number,T2<:Number}
   wσ = sqrt(one(T) / sum_of_weights)
   return wx, wσ, mswd
 end
-function awmean_simd(x::Array{T1}, σ::Array{T2}) where {T1<:Number,T2<:Number}
+function awmean_simd(x::AbstractArray{T1}, σ::AbstractArray{T2}) where {T1<:Number,T2<:Number}
   n = length(x)
   T3 = promote_type(T1,T2)
   T = sizeof(T3) ≤ 4 ? Float32 : Float64
@@ -39,18 +39,18 @@ end
 function test_awmean(::Type{T}) where {T}
     for n ∈ 2:100
       if T <: Integer
-        x = rand(T(-100):T(100), n)
-        σ = rand(T(1):T(10), n)
+        x = view(rand(T(-100):T(100), n + 32), 17:n+16)
+        σ = view(rand(T(1):T(10), n + 32), 17:n+16)
       else
-        x = randn(T, n)
-        σ = rand(T, n)
+        x = view(randn(T, n + 32), 17:n+16)
+        σ = view(rand(T, n + 32), 17:n+16)
       end
       wx, wσ, mswd = awmean_simd(x, σ)
       @test iszero(@allocated((wxlv, wσlv, mswdlv) = awmean_lv(x, σ)))
       wxlv, wσlv, mswdlv = awmean_lv(x, σ)
-      @test wx ≈ wxlv
-      @test wσ ≈ wσlv
-      @test mswd ≈ mswdlv
+      isfinite(wx)   && @test wx ≈ wxlv
+      isfinite(wσ)   && @test wσ ≈ wσlv
+      isfinite(mswd) && @test mswd ≈ mswdlv
     end
 end
 

@@ -165,11 +165,17 @@ end
 #     block_per_m, blocks_per_n
 # end
 if Sys.ARCH === :x86_64
-    @inline choose_num_threads(C::Float64, NT::UInt, x::Base.BitInteger) = _choose_num_threads(Base.mul_float_fast(C, 0.05460264079015985), NT, x)
+  @inline function choose_num_threads(C::T, NT::UInt, x::Base.BitInteger) where {T<:Union{Float32,Float64}}
+    _choose_num_threads(Base.mul_float_fast(T(C), T(0.05460264079015985)), NT, x)
+  end
 else
-    @inline choose_num_threads(C::Float64, NT::UInt, x::Base.BitInteger) = _choose_num_threads(Base.mul_float_fast(C, 0.05460264079015985 * 0.25), NT, x)
+  @inline function choose_num_threads(C::T, NT::UInt, x::Base.BitInteger) where {T<:Union{Float32,Float64}}
+    _choose_num_threads(Base.mul_float_fast(C, T(0.05460264079015985) * T(0.25)), NT, x)
+  end
 end
-@inline _choose_num_threads(C::Float64, NT::UInt, x::Base.BitInteger) = min(Base.fptoui(UInt, Base.ceil_llvm(Base.mul_float_fast(C, Base.sqrt_llvm(Base.uitofp(Float64, x))))), NT)
+@inline function _choose_num_threads(C::T, NT::UInt, x::Base.BitInteger) where {T<:Union{Float32,Float64}}
+  min(Base.fptoui(UInt, Base.ceil_llvm(Base.mul_float_fast(C, Base.sqrt_llvm_fast(Base.uitofp(T, x))))), NT)
+end
 function push_loop_length_expr!(q::Expr, ls::LoopSet)
     l = 1
     ndynamic = 0
@@ -342,7 +348,7 @@ function thread_one_loops_expr(
     _num_threads > 1 || return avx_body(ls, UNROLL)
     choose_nthread = Expr(:(=), Symbol("#nthreads#"), _num_threads)
   else
-    choose_nthread = :(_choose_num_threads($c, $ntmax))
+    choose_nthread = :(_choose_num_threads($(Float32(c)), $ntmax))
     push_loop_length_expr!(choose_nthread, ls)
     choose_nthread = Expr(:(=), Symbol("#nthreads#"), choose_nthread)
   end
@@ -474,7 +480,7 @@ function thread_two_loops_expr(
     _num_threads > 1 || return avx_body(ls, UNROLL)
     choose_nthread = Expr(:(=), Symbol("#nthreads#"), _num_threads)
   else
-    choose_nthread = :(_choose_num_threads($c, $ntmax))
+    choose_nthread = :(_choose_num_threads($(Float32(c)), $ntmax))
     push_loop_length_expr!(choose_nthread, ls)
     choose_nthread = Expr(:(=), Symbol("#nthreads#"), choose_nthread)
   end
