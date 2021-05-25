@@ -39,10 +39,10 @@ end
 function test_awmean(::Type{T}) where {T}
     for n ∈ 2:100
       if T <: Integer
-        x = view(rand(T(-100):T(100), n + 32), 17:n+16)
+        x = view(rand(T(-50):T(100), n + 32), 17:n+16)
         σ = view(rand(T(1):T(10), n + 32), 17:n+16)
       else
-        x = view(randn(T, n + 32), 17:n+16)
+        x = view((randn(T, n + 32) .+= T(2)), 17:n+16)
         σ = view(rand(T, n + 32), 17:n+16)
       end
       wx, wσ, mswd = awmean_simd(x, σ)
