@@ -177,10 +177,8 @@ function issue209_noavx(M, G, J, H, B, ϕ)
 end
 using LoopVectorization
 
-function r_turbo!(r1, r2)
-  m = size(r1,2)
-  n = size(r1,3)
-  @turbo thread=true for j=2:n-1, i=1:m-1
+function sumdim2_turbo!(r1, r2)
+  @turbo thread=true for j = indices((r1,r2),(3,4)), i ∈ indices((r1,r2),(2,3))
     r1[1,i,j] = r2[1,1,i,j] + r2[1,2,i,j]
     r1[2,i,j] = r2[2,1,i,j] - r2[2,2,i,j]
     r1[3,i,j] = r2[3,1,i,j] * r2[3,2,i,j]
@@ -188,10 +186,8 @@ function r_turbo!(r1, r2)
   end
   r1
 end
-function r!(r1, r2)
-  m = size(r1,2)
-  n = size(r1,3)
-  @inbounds @fastmath for j=2:n-1, i=1:m-1
+function sumdim2!(r1, r2)
+  @inbounds @fastmath for j = indices((r1,r2),(3,4)), i ∈ indices((r1,r2),(2,3))
     r1[1,i,j] = r2[1,1,i,j] + r2[1,2,i,j]
     r1[2,i,j] = r2[2,1,i,j] - r2[2,2,i,j]
     r1[3,i,j] = r2[3,1,i,j] * r2[3,2,i,j]
@@ -257,7 +253,7 @@ end
   
     s = Array{Float64}(undef, 4, 128, 128);
     s2 = rand(4, 2, 128, 128);
-    @test r_turbo(s, s2) ≈ r(similar(s), s2)
+    @test sumdim2_turbo!(s, s2) ≈ sumdim2!(similar(s), s2)
 
 end
 
