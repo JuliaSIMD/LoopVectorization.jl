@@ -185,80 +185,83 @@ end
 
 # interleave: `0` means `false`, positive means literal, negative means multiplier
 function unrolled_curly(op::Operation, u₁::Int, u₁loop::Loop, vloop::Loop, mask::Bool, interleave::Int=0)
-    u₁loopsym = u₁loop.itersymbol
-    vloopsym = vloop.itersymbol
-    indices = getindicesonly(op)
-    vstep = step(vloop)
-    li = op.ref.loopedindex
-    # @assert all(loopedindex)
-    # @unpack u₁, u₁loopsym, vloopsym = td
-    AV = AU = -1
-    for (n,ind) ∈ enumerate(indices)
-        # @show AU, op, n, ind, vloopsym, u₁loopsym
-        if li[n]
-            if ind === vloopsym
-                @assert AV == -1 # FIXME: these asserts should be replaced with checks that prevent using `unrolled_curly` in these cases (also to be reflected in cost modeling, to avoid those)
-                AV = n
-            end
-            if ind === u₁loopsym
-                @assert AU == -1
-                AU = n
-            end
-        else
-            opp = findop(parents(op), ind)
-            # @show opp
-            if isvectorized(opp)
-                @assert AV == -1
-                AV = n
-            end
-            if (u₁loopsym === CONSTANTZEROINDEX) ? (CONSTANTZEROINDEX ∈ loopdependencies(opp)) : (isu₁unrolled(opp) || (ind === u₁loopsym))
-                @assert AU == -1
-                AU = n
-            end
+  u₁loopsym = u₁loop.itersymbol
+  vloopsym = vloop.itersymbol
+  indices = getindicesonly(op)
+  vstep = step(vloop)
+  li = op.ref.loopedindex
+  # @assert all(loopedindex)
+  # @unpack u₁, u₁loopsym, vloopsym = td
+  AV = AU = -1
+  for (n,ind) ∈ enumerate(indices)
+    # @show AU, op, n, ind, vloopsym, u₁loopsym
+    if li[n]
+      if ind === vloopsym
+        @assert AV == -1 # FIXME: these asserts should be replaced with checks that prevent using `unrolled_curly` in these cases (also to be reflected in cost modeling, to avoid those)
+        AV = n
+      end
+      if ind === u₁loopsym
+        if AU ≠ -1
+          u₁loopsym === CONSTANTZEROINDEX && continue
+          throw(ArgumentError("Two of the same index $ind?"))
         end
-    end
-    AU == -1 && throw(LoopError("Failed to find $(u₁loopsym) in args of $(repr(op))."))
-    vecnotunrolled = AU != AV
-    conditional_memory_op = isconditionalmemop(op)
-    if mask || conditional_memory_op
-        M = one(UInt)
-        # `isu₁unrolled(last(parents(op)))` === is condop unrolled?
-        # isu₁unrolled(last(parents(op)))
-        if vecnotunrolled || conditional_memory_op || (interleave > 0) # mask all
-            M = (M << u₁) - M
-        else # mask last
-            M <<= (u₁ - 1)
-        end
+        AU = n
+      end
     else
-        M = zero(UInt)
+      opp = findop(parents(op), ind)
+      # @show opp
+      if isvectorized(opp)
+        @assert AV == -1
+        AV = n
+      end
+      if (u₁loopsym === CONSTANTZEROINDEX) ? (CONSTANTZEROINDEX ∈ loopdependencies(opp)) : (isu₁unrolled(opp) || (ind === u₁loopsym))
+        @assert AU == -1
+        AU = n
+      end
     end
-    @assert isknown(step(u₁loop)) "Unrolled loops must have known steps to use `Unroll` type; this is a bug, shouldn't have reached here"
-    if AV > 0
-        @assert isknown(step(vloop)) "Vectorized loops must have known steps to use `Unroll` type; this is a bug, shouldn't have reached here."
-        X = convert(Int, getstrides(op)[AV])
-        X *= gethint(step(vloop))
-        intvecsym = :(Int($VECTORWIDTHSYMBOL))
-        if interleave > 0
-            Expr(:curly, lv(:Unroll), AU, interleave, u₁, AV, intvecsym, M, X)
-        elseif interleave < 0
-            unrollstepexpr = :(Int($(mulexpr(VECTORWIDTHSYMBOL, -interleave))))
-            Expr(:curly, lv(:Unroll), AU, unrollstepexpr, u₁, AV, intvecsym, M, X)
-        else
-            if vecnotunrolled
-                # Expr(:call, Expr(:curly, lv(:Unroll), AU, 1, u₁, AV, intvecsym, M, 1), ind)
-                Expr(:curly, lv(:Unroll), AU, gethint(step(u₁loop)), u₁, AV, intvecsym, M, X)
-            else
-                if isone(X)
-                    Expr(:curly, lv(:Unroll), AU, intvecsym, u₁, AV, intvecsym, M, X)
-                else
-                    unrollstepexpr = :(Int($(mulexpr(VECTORWIDTHSYMBOL, X))))
-                    Expr(:curly, lv(:Unroll), AU, unrollstepexpr, u₁, AV, intvecsym, M, X)
-                end
-            end
-        end
+  end
+  AU == -1 && throw(LoopError("Failed to find $(u₁loopsym) in args of $(repr(op))."))
+  vecnotunrolled = AU != AV
+  conditional_memory_op = isconditionalmemop(op)
+  if mask || conditional_memory_op
+    M = one(UInt)
+    # `isu₁unrolled(last(parents(op)))` === is condop unrolled?
+    # isu₁unrolled(last(parents(op)))
+    if vecnotunrolled || conditional_memory_op || (interleave > 0) # mask all
+      M = (M << u₁) - M
+    else # mask last
+      M <<= (u₁ - 1)
+    end
+  else
+    M = zero(UInt)
+  end
+  @assert isknown(step(u₁loop)) "Unrolled loops must have known steps to use `Unroll` type; this is a bug, shouldn't have reached here"
+  if AV > 0
+    @assert isknown(step(vloop)) "Vectorized loops must have known steps to use `Unroll` type; this is a bug, shouldn't have reached here."
+    X = convert(Int, getstrides(op)[AV])
+    X *= gethint(step(vloop))
+    intvecsym = :(Int($VECTORWIDTHSYMBOL))
+    if interleave > 0
+      Expr(:curly, lv(:Unroll), AU, interleave, u₁, AV, intvecsym, M, X)
+    elseif interleave < 0
+      unrollstepexpr = :(Int($(mulexpr(VECTORWIDTHSYMBOL, -interleave))))
+      Expr(:curly, lv(:Unroll), AU, unrollstepexpr, u₁, AV, intvecsym, M, X)
     else
-        Expr(:curly, lv(:Unroll), AU, gethint(step(u₁loop)), u₁, 0, 1, M, 1)
+      if vecnotunrolled
+        # Expr(:call, Expr(:curly, lv(:Unroll), AU, 1, u₁, AV, intvecsym, M, 1), ind)
+        Expr(:curly, lv(:Unroll), AU, gethint(step(u₁loop)), u₁, AV, intvecsym, M, X)
+      else
+        if isone(X)
+          Expr(:curly, lv(:Unroll), AU, intvecsym, u₁, AV, intvecsym, M, X)
+        else
+          unrollstepexpr = :(Int($(mulexpr(VECTORWIDTHSYMBOL, X))))
+          Expr(:curly, lv(:Unroll), AU, unrollstepexpr, u₁, AV, intvecsym, M, X)
+        end
+      end
     end
+  else
+    Expr(:curly, lv(:Unroll), AU, gethint(step(u₁loop)), u₁, 0, 1, M, 1)
+  end
 end
 function unrolledindex(op::Operation, td::UnrollArgs, mask::Bool, inds_calc_by_ptr_offset::Vector{Bool}, ls::LoopSet)
     @unpack u₁, u₁loopsym, u₁loop, vloop = td

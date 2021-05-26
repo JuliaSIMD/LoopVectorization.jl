@@ -55,6 +55,8 @@ const START_TIME = time()
 
   @time include("gemv.jl")
 
+  @time include("rejectunroll.jl")
+  
   @time include("miscellaneous.jl")
 
   @time include("copy.jl")

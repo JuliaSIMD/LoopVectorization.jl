@@ -26,7 +26,9 @@ function lower!(
         end
     end
 end
-
+function isu₂invalidstorereorder(ls::LoopSet, us::UnrollSpecification)
+  us.u₂ == -1 ? false : ls.validreorder[ls.loopordermap[us.u₂loopnum]] ≠ 0x03
+end
 function lower_block(
     ls::LoopSet, us::UnrollSpecification, n::Int, mask::Bool, UF::Int
 )
@@ -40,6 +42,7 @@ function lower_block(
     u₁ = n == u₁loopnum ? UF : u₁
     dontmaskfirsttiles = mask && vloopnum == u₂loopnum
     blockq = Expr(:block)
+    cannot_reorder_u₂ = isu₂invalidstorereorder(ls, us)
     for prepost ∈ 1:2
         # !u₁ && !u₂
         lower!(blockq, ops[1,1,prepost,n], ls, unrollsyms, u₁, u₂, -1, mask, true, true)
@@ -56,22 +59,30 @@ function lower_block(
                 lower_tiled_store!(blockq, opsv1, opsv2, ls, unrollsyms, u₁, u₂, mask)
             else
                 for store ∈ (false,true)
+                    if cannot_reorder_u₂
+                        nstores = 0# break
+                        lowernonstore = lowerstore = true
+                    else
+                        lowerstore = store; lowernonstore = !store
+                    end
                     for t ∈ 0:u₂-1
                         # !u₁ &&  u₂
-                        lower!(blockq, opsv1, ls, unrollsyms, u₁, u₂, t, mask & !(dontmaskfirsttiles & (t < u₂ - 1)), !store, store)
+                        lower!(blockq, opsv1, ls, unrollsyms, u₁, u₂, t, mask & !(dontmaskfirsttiles & (t < u₂ - 1)), lowernonstore, lowerstore)
                         if iszero(t) && !store #  u₁ && !u₂
                             # for u ∈ 0:u₁-1
-                            lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, u₂, -1, mask, true, true)
+                            lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, u₂, -1, mask, lowernonstore, lowerstore)
                             # end
                         end
                         #  u₁ && u₂
                         # for u ∈ 0:u₁-1
-                        lower!(blockq, opsv2, ls, unrollsyms, u₁, u₂, t, mask & !(dontmaskfirsttiles & (t < u₂ - 1)), !store, store)
+                        lower!(blockq, opsv2, ls, unrollsyms, u₁, u₂, t, mask & !(dontmaskfirsttiles & (t < u₂ - 1)), lowernonstore, lowerstore)
                         # end
                     end
                     nstores == 0 && break
                 end
             end
+        elseif cannot_reorder_u₂
+            lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, u₂, -1, mask, true, true)
         else
             # for u ∈ 0:u₁-1     #  u₁ && !u₂
             lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, u₂, -1, mask, true, false)

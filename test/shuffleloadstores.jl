@@ -175,6 +175,30 @@ function issue209_noavx(M, G, J, H, B, ϕ)
     end
     parent(tmp)
 end
+using LoopVectorization
+
+function r_turbo!(r1, r2)
+  m = size(r1,2)
+  n = size(r1,3)
+  @turbo thread=true for j=2:n-1, i=1:m-1
+    r1[1,i,j] = r2[1,1,i,j] + r2[1,2,i,j]
+    r1[2,i,j] = r2[2,1,i,j] - r2[2,2,i,j]
+    r1[3,i,j] = r2[3,1,i,j] * r2[3,2,i,j]
+    r1[4,i,j] = r2[4,1,i,j] / r2[4,2,i,j]
+  end
+  r1
+end
+function r!(r1, r2)
+  m = size(r1,2)
+  n = size(r1,3)
+  @inbounds @fastmath for j=2:n-1, i=1:m-1
+    r1[1,i,j] = r2[1,1,i,j] + r2[1,2,i,j]
+    r1[2,i,j] = r2[2,1,i,j] - r2[2,2,i,j]
+    r1[3,i,j] = r2[3,1,i,j] * r2[3,2,i,j]
+    r1[4,i,j] = r2[4,1,i,j] / r2[4,2,i,j]
+  end
+  r1
+end
 
 @testset "shuffles load/stores" begin
     @show @__LINE__
@@ -230,6 +254,11 @@ end
         ϕ = view(fill(1e5+1e7im, 2*J+17, G+17, H+17, M+17), 9:2*J+9, 9:G+9, 9:H+9, 9:M+9) .= rand.() .+ rand.().*im;
         @test issue209(M, G, J, H, B, ϕ) ≈ issue209_noavx(M, G, J, H, B, ϕ)
     end
+  
+    s = Array{Float64}(undef, 4, 128, 128);
+    s2 = rand(4, 2, 128, 128);
+    @test r_turbo(s, s2) ≈ r(similar(s), s2)
+
 end
 
 

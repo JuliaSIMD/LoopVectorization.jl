@@ -230,58 +230,66 @@ end
     # 1 << round(Int, log2(x))
 # end
 function unroll_no_reductions(ls, order, vloopsym)
-    size_T = biggest_type_size(ls)
-    W, Wshift = lsvecwidthshift(ls, vloopsym, size_T)
-
-    compute_rt = load_rt = store_rt = 0.0
-    unrolled = last(order)
-    if unrolled === vloopsym && length(order) > 1
-        unrolled = order[end-1]
+  size_T = biggest_type_size(ls)
+  W, Wshift = lsvecwidthshift(ls, vloopsym, size_T)
+  
+  compute_rt = load_rt = store_rt = 0.0
+  unrolled = last(order)
+  i = 0
+  while reject_reorder(ls, unrolled, false)
+    i += 1
+    unrolled = order[end-i]
+  end
+  if unrolled === vloopsym && length(order) > 1
+    unrolled_candidate = order[end-1]
+    if !reject_reorder(ls, unrolled_candidate, false)
+      unrolled = unrolled_candidate
     end
+  end
     # latency not a concern, because no depchains
-    compute_l = 0.0
-    rpp = 0 # register pressure proportional to unrolling
-    rpc = 0 # register pressure independent of unroll factor
-    for op ∈ operations(ls)
-        isu₁unrolled(op) || continue
-        rt, sl, rpop = cost(ls, op, (unrolled,Symbol("")), vloopsym, Wshift, size_T)
-        if iscompute(op)
-            compute_rt += rt
-            compute_l += sl
-            rpc += rpop # constant loads for special functions reused with unrolling
-        elseif isload(op)
-            load_rt += rt
-            rpp += rpop # loads are proportional to unrolling
-        elseif isstore(op)
-            store_rt += rt
-        end
-    end 
-    # heuristic guess
-    # roundpow2(min(4, round(Int, (compute_rt + load_rt + 1) / compute_rt)))
-    memory_rt = load_rt + store_rt
-    u = if compute_rt ≤ 1
-        4
-    elseif compute_rt > memory_rt
-        clamp(round(Int, compute_l / compute_rt), 1, 4)
-        # max(1, VectorizationBase.nextpow2( min( 4, round(Int, 8 / compute_rt) ) ))
-    elseif iszero(load_rt)
-        iszero(store_rt) ? 4 : max(1, min(4, round(Int, 2compute_rt / store_rt)))
-    else
-        max(1, min(4, round(Int, 2compute_rt / load_rt)))
+  compute_l = 0.0
+  rpp = 0 # register pressure proportional to unrolling
+  rpc = 0 # register pressure independent of unroll factor
+  for op ∈ operations(ls)
+    isu₁unrolled(op) || continue
+    rt, sl, rpop = cost(ls, op, (unrolled,Symbol("")), vloopsym, Wshift, size_T)
+    if iscompute(op)
+      compute_rt += rt
+      compute_l += sl
+      rpc += rpop # constant loads for special functions reused with unrolling
+    elseif isload(op)
+      load_rt += rt
+      rpp += rpop # loads are proportional to unrolling
+    elseif isstore(op)
+      store_rt += rt
     end
-    # u = min(u, max(1, (reg_count(ls) ÷ max(1,round(Int,rp)))))
-    # commented out here is to decide to align loops
-    # if memory_rt > compute_rt && isone(u) && (length(order) > 1) && (last(order) === vloopsym) && length(getloop(ls, last(order))) > 8W
-    #     ls.align_loops[] = findfirst(operations(ls)) do op
-    #         isstore(op) && isu₁unrolled(op)
-    #     end
-    # end
-    if unrolled === vloopsym
-        u = demote_unroll_factor(ls, u, vloopsym)
-    end
-    remaining_reg = max(8, (reg_count(ls) - round(Int,rpc))) # spilling a few consts isn't so bad
-    reg_constraint = max(1, remaining_reg ÷ max(1,round(Int,rpp)))
-    clamp(u, 1, reg_constraint), unrolled
+  end 
+  # heuristic guess
+  # roundpow2(min(4, round(Int, (compute_rt + load_rt + 1) / compute_rt)))
+  memory_rt = load_rt + store_rt
+  u = if compute_rt ≤ 1
+    4
+  elseif compute_rt > memory_rt
+    clamp(round(Int, compute_l / compute_rt), 1, 4)
+    # max(1, VectorizationBase.nextpow2( min( 4, round(Int, 8 / compute_rt) ) ))
+  elseif iszero(load_rt)
+    iszero(store_rt) ? 4 : max(1, min(4, round(Int, 2compute_rt / store_rt)))
+  else
+    max(1, min(4, round(Int, 2compute_rt / load_rt)))
+  end
+  # u = min(u, max(1, (reg_count(ls) ÷ max(1,round(Int,rp)))))
+  # commented out here is to decide to align loops
+  # if memory_rt > compute_rt && isone(u) && (length(order) > 1) && (last(order) === vloopsym) && length(getloop(ls, last(order))) > 8W
+  #     ls.align_loops[] = findfirst(operations(ls)) do op
+  #         isstore(op) && isu₁unrolled(op)
+  #     end
+  # end
+  if unrolled === vloopsym
+    u = demote_unroll_factor(ls, u, vloopsym)
+  end
+  remaining_reg = max(8, (reg_count(ls) - round(Int,rpc))) # spilling a few consts isn't so bad
+  reg_constraint = max(1, remaining_reg ÷ max(1,round(Int,rpp)))
+  clamp(u, 1, reg_constraint), unrolled
     # rt = max(compute_rt, load_rt + store_rt)
     # # (iszero(rt) ? 4 : max(1, roundpow2( min( 4, round(Int, 16 / rt) ) ))), unrolled
     # (iszero(rt) ? 4 : max(1, VectorizationBase.nextpow2( min( 4, round(Int, 8 / rt) ) ))), unrolled
@@ -372,7 +380,7 @@ function determine_unroll_factor(ls::LoopSet, order::Vector{Symbol}, vloopsym::S
     innermost_loop = last(order)
     rt = Inf; rtcomp = Inf; latency = Inf; best_unrolled = Symbol("")
     for unrolled ∈ order
-        reject_reorder(ls, unrolled) && continue
+        reject_reorder(ls, unrolled, false) && continue
         rttemp, ltemp = determine_unroll_factor(ls, order, unrolled, vloopsym)
         rtcomptemp = rttemp + (0.01 * ((vloopsym === unrolled) + (unrolled === innermost_loop) - latency))
         if rtcomptemp < rtcomp
@@ -1110,6 +1118,14 @@ function evaluate_cost_tile!(
 end
 
 
+# struct LoopOrders
+#     syms::Vector{Int}
+#     buff::Vector{Int}
+# end
+# function LoopOrders(ls::LoopSet)
+#   syms = collect(Base.OneTo(num_loops(ls)))
+#   LoopOrders(syms, similar(syms))
+# end
 struct LoopOrders
     syms::Vector{Symbol}
     buff::Vector{Symbol}
@@ -1119,29 +1135,29 @@ function LoopOrders(ls::LoopSet)
     LoopOrders(syms, similar(syms))
 end
 function Base.iterate(lo::LoopOrders)
-    lo.syms, zeros(Int, length(lo.syms))# - 1)
+  lo.syms, zeros(Int, length(lo.syms))
 end
 
 function swap!(x, i, j)
-    xᵢ, xⱼ = x[i], x[j]
-    x[j], x[i] = xᵢ, xⱼ
+  xᵢ, xⱼ = x[i], x[j]
+  x[j], x[i] = xᵢ, xⱼ
 end
 function advance_state!(state)
-    N = length(state)
-    for n ∈ 1:N
-        sₙ = state[n]
-        if sₙ == N - n
-            if n == N
-                return false
-            else
-                state[n] = 0
-            end
-        else
-            state[n] = sₙ + 1
-            break
-        end
+  N = length(state)
+  for n ∈ 1:N
+    sₙ = state[n]
+    if sₙ == N - n
+      if n == N
+        return false
+      else
+        state[n] = 0
+      end
+    else
+      state[n] = sₙ + 1
+      break
     end
-    true
+  end
+  true
 end
 # I doubt this is the most efficient algorithm, but it's the simplest thing
 # that I could come up with.
@@ -1154,37 +1170,42 @@ function Base.iterate(lo::LoopOrders, state)
     end
     syms, state
 end
+
+function reject_reorder(ls::LoopSet, loop::Int, isu₂::Bool)
+  r = ls.validreorder[loop]
+  r < Core.ifelse(isu₂, 0x01, 0x03)
+end
+function reject_reorder(ls::LoopSet, loop::Symbol, isu₂::Bool)
+  for i ∈ eachindex(ls.loops)
+    ls.loops[i].itersymbol === loop && return reject_reorder(ls, i, isu₂)
+  end
+  false
+end
+
 function choose_unroll_order(ls::LoopSet, lowest_cost::Float64 = Inf)
-    iszero(length(offsetloadcollection(ls).opidcollectionmap)) && fill_offset_memop_collection!(ls)
-    lo = LoopOrders(ls)
-    best_order = lo.syms
-    new_order, state = iterate(lo) # right now, new_order === best_order
-    best_vec = first(new_order)
-    while true
-        for new_vec ∈ new_order
-            reject_reorder(ls, new_vec) && continue
-            cost_temp = evaluate_cost_unroll(ls, new_order, new_vec, lowest_cost)
-            if cost_temp < lowest_cost
-                lowest_cost = cost_temp
-                copyto!(best_order, new_order)
-                best_vec = new_vec
-            end
-        end
-        iter = iterate(lo, state)
-        iter === nothing && return best_order, best_vec, lowest_cost
-        new_order, state = iter
+  iszero(length(offsetloadcollection(ls).opidcollectionmap)) && fill_offset_memop_collection!(ls)
+  lo = LoopOrders(ls)
+  best_order = lo.syms
+  new_order, state = iterate(lo) # right now, new_order === best_order
+  best_vec = first(new_order)
+  while true
+    for new_vec ∈ new_order
+      reject_reorder(ls, new_vec, false) && continue
+      cost_temp = evaluate_cost_unroll(ls, new_order, new_vec, lowest_cost)
+      if cost_temp < lowest_cost
+        lowest_cost = cost_temp
+        copyto!(best_order, new_order)
+        best_vec = new_vec
+      end
     end
+    iter = iterate(lo, state)
+    iter === nothing && return best_order, best_vec, lowest_cost
+    new_order, state = iter
+  end
 end
 
 
 
-function reject_reorder(ls::LoopSet, reordered::Symbol)
-    length(ls.outer_reductions) > 0 || return false
-    for op ∈ operations(ls)
-        reordered ∈ loopdependencies(op) && any(opp -> (iscompute(opp) && isanouterreduction(ls, opp)), parents(op)) && return true
-    end
-    false
-end
 """
 This function searches for unrolling combinations that will cause LoopVectorization to generate invalid code.
 
@@ -1255,14 +1276,14 @@ function choose_tile(ls::LoopSet)
     reduced_by_unrolling = Array{Bool}(undef, 2, 2, nops)
 
     for newu₂ ∈ lo.syms
-        reject_reorder(ls, newu₂) && continue
+        reject_reorder(ls, newu₂, true) && continue
         for newu₁ ∈ lo.syms#@view(new_order[nt+1:end])
-            reject_reorder(ls, newu₁) && continue
+            reject_reorder(ls, newu₁, true) && continue
             ((newu₁ == newu₂) || reject_candidate(ls, newu₁, newu₂)) && continue
             new_order, state = iterate(lo) # right now, new_order === best_order
             while true
                 for new_vec ∈ new_order # view to skip first
-                    reject_reorder(ls, new_vec) && continue
+                    reject_reorder(ls, new_vec, false) && continue
                     if anyisbit && ls.loopindexesbit[getloopid(ls,new_vec)]
                         # ((new_vec === newu₁) || (new_vec === newu₂)) || continue
                         (new_vec === newu₁) || continue

@@ -410,6 +410,7 @@ mutable struct LoopSet
     omop::OffsetLoadCollection
     loopordermap::Vector{Int}
     loopindexesbit::Vector{Bool}
+    validreorder::Vector{UInt8}
     mod::Symbol
     LoopSet() = new()
 end
@@ -556,6 +557,7 @@ function LoopSet(mod::Symbol)
     ls.omop = OffsetLoadCollection()
     ls.loopordermap =  Int[]
     ls.loopindexesbit = Bool[]
+    ls.validreorder = UInt8[]
     ls.mod = mod
     ls
 end
@@ -1228,6 +1230,67 @@ function looplength(ls::LoopSet, s::Symbol)
     end
 end
 
+function accept_reorder_according_to_tracked_reductions(ls::LoopSet, reordered::Symbol)
+  for op ∈ operations(ls)
+    if reordered ∈ loopdependencies(op)
+      for opp ∈ parents(op)
+        (iscompute(opp) && isanouterreduction(ls, opp)) && return 0x00
+      end
+    end
+  end
+  0x03
+end
+function check_valid_reorder_dims!(ls::LoopSet)
+  validreorder = ls.validreorder
+  resize!(validreorder, num_loops(ls))
+  fill!(validreorder, 0x03)
+  omop = offsetloadcollection(ls)
+  @unpack opids = omop
+  num_collections = length(opids)
+  ops = operations(ls)
+  for i ∈ eachindex(opids)
+    opidsᵢ = opids[i]
+    opi = ops[first(opidsᵢ)]
+    opiref = opi.ref.ref
+    isl = isload(opi)
+    for j ∈ 1:i-1
+      opidsⱼ = opids[j]
+      opj = ops[first(opidsⱼ)]
+      (isl ⊻ isload(opj)) || continue # try and find load/store combo
+      opjref = opj.ref.ref
+      sameref(opiref, opjref) || continue
+      # possible they have shared offsets in certain directions
+      for k ∈ eachindex(ls.loops)
+        validreorder[k] == 0x03 || continue# if already demoted, don't need to check again
+        loopk = ls.loops[k]
+        itersym = loopk.itersymbol
+        for (l,isym) ∈ enumerate(getindicesonly(opi))
+          isym === itersym || continue
+          # we match, now we check if this load is offset
+          # we'll require all offsets in this index be equal, across both loads and stores
+          firstoff = opiref.offsets[l]
+          maxdiff = max(checkmismatch(ops, opidsᵢ, l, firstoff, 2:length(opidsᵢ)), checkmismatch(ops, opidsⱼ, l, firstoff, 1:length(opidsⱼ)))
+          if maxdiff ≥ (isknown(step(loopk)) ? abs(gethint(step(loopk))) : 1)
+            validreorder[k] = 0x00#0x01
+          end
+        end
+      end
+    end
+  end
+  length(ls.outer_reductions) == 0 && return
+  for i ∈ eachindex(validreorder)
+    validreorder[i] &= accept_reorder_according_to_tracked_reductions(ls, ls.loops[i].itersymbol)
+  end
+end
+function checkmismatch(ops::Vector{Operation}, opids::Vector{Int}, l::Int, firstoff::Int8, checkrange::UnitRange{Int})
+  maxabsdiff = 0
+  for m ∈ checkrange
+    diff = ops[opids[m]].ref.ref.offsets[l] - firstoff
+    maxabsdiff = max(maxabsdiff, abs(diff%Int))
+  end
+  return maxabsdiff
+end
+
 offsetloadcollection(ls::LoopSet) = ls.omop
 function fill_offset_memop_collection!(ls::LoopSet)
     omop = offsetloadcollection(ls)
@@ -1330,6 +1393,7 @@ function fill_offset_memop_collection!(ls::LoopSet)
             end
         end
     end
+    check_valid_reorder_dims!(ls)
 end
 
 function pushbatchedcollection!(batchedcollections, batchedcollectionmap, opidc, ops, collectionⱼ, istart, istop)

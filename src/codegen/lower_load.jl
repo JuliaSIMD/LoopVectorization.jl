@@ -331,18 +331,20 @@ end
 function _lower_load!(
     q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, mask::Bool, inds_calc_by_ptr_offset::Vector{Bool} = indices_calculated_by_pointer_offsets(ls, op.ref)
 )
-    if rejectinterleave(op)
-        lower_load_no_optranslation!(q, ls, op, td, mask, inds_calc_by_ptr_offset)
-    else
-        omop = offsetloadcollection(ls)
-        batchid, opind = omop.batchedcollectionmap[identifier(op)]
-        if opind == 1
-            collectionid, copind = omop.opidcollectionmap[identifier(op)]
-            opidmap = offsetloadcollection(ls).opids[collectionid]
-            idsformap = omop.batchedcollections[batchid]
-            lower_load_collection!(q, ls, opidmap, idsformap, td, mask, inds_calc_by_ptr_offset)
-        end
+  if rejectinterleave(op)
+    lower_load_no_optranslation!(q, ls, op, td, mask, inds_calc_by_ptr_offset)
+  else
+    omop = offsetloadcollection(ls)
+    @unpack opids, opidcollectionmap, batchedcollections, batchedcollectionmap = omop
+    batchid, opind = batchedcollectionmap[identifier(op)]
+    if opind == 1
+      collectionid, copind = opidcollectionmap[identifier(op)]
+      opidmap = opids[collectionid]
+      idsformap = batchedcollections[batchid]
+      lower_load_collection!(q, ls, opidmap, idsformap, td, mask, inds_calc_by_ptr_offset)
     end
+  end
+  return nothing
 end
 function additive_vectorized_loopinductvar_only(op::Operation)
     isvectorized(op) || return true
@@ -388,18 +390,21 @@ function rejectcurly(ls::LoopSet, op::Operation, u₁loopsym::Symbol, vloopsym::
     false
 end
 function rejectinterleave(ls::LoopSet, op::Operation, vloop::Loop, idsformap::SubArray{Tuple{Int,Int}, 1, Vector{Tuple{Int,Int}}, Tuple{UnitRange{Int}}, true})
-    vloopsym = vloop.itersymbol; strd = step(vloop)
-    isknown(strd) || return true
-    # TODO: reject if there is a vectorized !loopedindex index
-    for (li,ind) ∈ zip(op.ref.loopedindex,getindicesonly(op))
-        li && continue
-        for indop ∈ operations(ls)
-            if (name(indop) === ind) && isvectorized(indop)
-                additive_vectorized_loopinductvar_only(indop) || return true # so that it is `MM`
-            end
-        end
+  strd = step(vloop)
+  isknown(strd) || return true
+  # TODO: reject if there is a vectorized !loopedindex index
+  indices = getindicesonly(op); li = op.ref.loopedindex
+  for i ∈ eachindex(li)
+    li[i] && continue
+    ind = indices[i]
+    for indop ∈ operations(ls)
+      if (name(indop) === ind) && isvectorized(indop)
+        additive_vectorized_loopinductvar_only(indop) || return true # so that it is `MM`
+      end
     end
-    (first(getindices(op)) === vloopsym) && (length(idsformap) ≠ first(getstrides(op)) * gethint(strd))
+  end
+  vloopsym = vloop.itersymbol; 
+  (first(getindices(op)) === vloopsym) && (length(idsformap) ≠ first(getstrides(op)) * gethint(strd))
 end
 # function lower_load_collection_manual_u₁unroll!(
 #     q::Expr, ls::LoopSet, opidmap::Vector{Int},
