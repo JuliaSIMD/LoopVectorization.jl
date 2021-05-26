@@ -32,7 +32,7 @@ relatively primitive arithmetic operations (e.g. `+`, `/`, or `log`), and not, f
 
 I'll make comparisons with OpenMP through the rest of this, starting with a simple dot product to focus on threading overhead:
 ```julia
-function dotavxt(a::AbstractArray{T}, b::AbstractArray{T}) where {T <: Real}
+function dot_tturbo(a::AbstractArray{T}, b::AbstractArray{T}) where {T <: Real}
     s = zero(T)
     @tturbo for i ∈ eachindex(a,b)
         s += a[i] * b[i]
@@ -70,19 +70,19 @@ Trying out one size to give a perspective on scale:
 ```julia
 julia> N = 10_000; x = rand(N); y = rand(N);
 
-julia> @btime dot($x, $y)
+julia> @btime dot($x, $y) # LinearAlgebra
   1.114 μs (0 allocations: 0 bytes)
 2480.296446711209
 
-julia> @btime dotavx($x, $y)
+julia> @btime dot_turbo($x, $y)
   761.621 ns (0 allocations: 0 bytes)
 2480.296446711209
 
-julia> @btime dotavxt($x, $y)
+julia> @btime dot_tturbo($x, $y)
   622.723 ns (0 allocations: 0 bytes)
 2480.296446711209
 
-julia> @btime dotbaseline($x, $y)
+julia> @btime dot_baseline($x, $y)
   1.294 μs (0 allocations: 0 bytes)
 2480.2964467112097
 
@@ -96,11 +96,11 @@ All these times are fairly fast; `wait(Threads.@spawn 1+1)` will typically take 
 
 Now let's look at a more complex example:
 ```julia
-function dotavxt(ca::AbstractVector{Complex{T}}, cb::AbstractVector{Complex{T}}) where {T}
+function dot_tturbo(ca::AbstractVector{Complex{T}}, cb::AbstractVector{Complex{T}}) where {T}
     a = reinterpret(reshape, T, ca)
     b = reinterpret(reshape, T, cb)
     re = zero(T); im = zero(T)
-    @turbo for i ∈ axes(a,2) # adjoint(a[i]) * b[i]
+    @tturbo for i ∈ axes(a,2) # adjoint(a[i]) * b[i]
         re += a[1,i] * b[1,i] + a[2,i] * b[2,i]
         im += a[1,i] * b[2,i] - a[2,i] * b[1,i]
     end
@@ -139,15 +139,23 @@ and as we have an array of structs rather than structs of arrays, we need additi
 
 If we take this further to the three-argument dot product, which isn't implemented in BLAS, `@tturbo` now holds a substantial advantage over the competition:
 ```julia
-function dotavxt(ca::AbstractVector{Complex{T}}, cb::AbstractVector{Complex{T}}) where {T}
-    a = reinterpret(reshape, T, ca)
-    b = reinterpret(reshape, T, cb)
-    re = zero(T); im = zero(T)
-    @tturbo for i ∈ axes(a,2) # adjoint(a[i]) * b[i]
-        re += a[1,i] * b[1,i] + a[2,i] * b[2,i]
-        im += a[1,i] * b[2,i] - a[2,i] * b[1,i]
+function dot3(x::AbstractVector{Complex{T}}, A::AbstractMatrix{Complex{T}}, y::AbstractVector{Complex{T}}) where {T}
+    xr = reinterpret(reshape, T, x);
+    yr = reinterpret(reshape, T, y);
+    Ar = reinterpret(reshape, T, A);
+    sre = zero(T)
+    sim = zero(T)
+    @tturbo for n in axes(Ar,3)
+        tre = zero(T)
+        tim = zero(T)
+        for m in axes(Ar,2)
+            tre += xr[1,m] * Ar[1,m,n] + xr[2,m] * Ar[2,m,n]
+            tim += xr[1,m] * Ar[2,m,n] - xr[2,m] * Ar[1,m,n]
+        end
+        sre += tre * yr[1,n] - tim * yr[2,n]
+        sim += tre * yr[2,n] + tim * yr[1,n]
     end
-    Complex(re, im)
+    Complex(sre, sim)
 end
 ```
 

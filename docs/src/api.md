@@ -4,7 +4,7 @@
 
 ```@docs
 @turbo
-@_avx
+@tturbo
 ```
 
 ## `map`-like constructs
@@ -24,3 +24,10 @@ vmapntt!
 vfilter
 LoopVectorization.vfilter!
 ```
+
+## `reduce`-like constructs
+```@docs
+vreduce
+vmapreduce
+```
+
