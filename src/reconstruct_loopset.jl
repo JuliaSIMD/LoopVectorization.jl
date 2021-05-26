@@ -645,9 +645,9 @@ function avx_body(ls::LoopSet, UNROLL::Tuple{Bool,Int8,Int8,Bool,Int,Int,Int,Int
     q
 end
 
-function _avx_loopset_debug(::Val{UNROLL}, ::Val{OPS}, ::Val{ARF}, ::Val{AM}, ::Val{LPSYM}, _vargs::Tuple{LB,V}) where {UNROLL, OPS, ARF, AM, LPSYM, LB, V}
+function _turbo_loopset_debug(::Val{UNROLL}, ::Val{OPS}, ::Val{ARF}, ::Val{AM}, ::Val{LPSYM}, _vargs::Tuple{LB,V}) where {UNROLL, OPS, ARF, AM, LPSYM, LB, V}
     # @show OPS ARF AM LPSYM _vargs
-    _avx_loopset(OPS, ARF, AM, LPSYM, _vargs[1].parameters, V.parameters, UNROLL)
+    _turbo_loopset(OPS, ARF, AM, LPSYM, _vargs[1].parameters, V.parameters, UNROLL)
 end
 function tovector(@nospecialize(t))
     v = Vector{Any}(undef, length(t))
@@ -661,7 +661,7 @@ function tovector(@nospecialize(t))
     end
     v
 end
-function _avx_loopset(
+function _turbo_loopset(
     @nospecialize(OPSsv), @nospecialize(ARFsv), @nospecialize(AMsv), @nospecialize(LPSYMsv), LBsv::Core.SimpleVector, vargs::Core.SimpleVector,
     UNROLL::Tuple{Bool,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt}
 )
@@ -685,7 +685,7 @@ else
 end
 
 """
-    _avx_!(unroll, ops, arf, am, lpsym, lb, vargs...)
+    _turbo_!(unroll, ops, arf, am, lpsym, lb, vargs...)
 
 Execute an `@turbo` block. The block's code is represented via the arguments:
 - `unroll` is `Val((u₁,u₂))` and specifies the loop unrolling factor(s).
@@ -703,11 +703,11 @@ Execute an `@turbo` block. The block's code is represented via the arguments:
   `StaticLowerUnitRange(1)` because the lower bound of the iterator can be determined to be 1.
 - `vargs...` holds the encoded pointers of all the arrays (see `VectorizationBase`'s various pointer types).
 """
-@aggressive_constprop @generated function _avx_!(
+@aggressive_constprop @generated function _turbo_!(
     ::Val{var"#UNROLL#"}, ::Val{var"#OPS#"}, ::Val{var"#ARF#"}, ::Val{var"#AM#"}, ::Val{var"#LPSYM#"}, ::Val{Tuple{var"#LB#",var"#V#"}}, var"#flattened#var#arguments#"::Vararg{Any,var"#num#vargs#"}
 ) where {var"#UNROLL#", var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#", var"#V#", var"#num#vargs#"}
   # 1 + 1 # Irrelevant line you can comment out/in to force recompilation...
-  ls = _avx_loopset(var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#".parameters, var"#V#".parameters, var"#UNROLL#")
+  ls = _turbo_loopset(var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#".parameters, var"#V#".parameters, var"#UNROLL#")
   pushfirst!(ls.preamble.args, :(var"#lv#tuple#args#" = reassemble_tuple(Tuple{var"#LB#",var"#V#"}, var"#flattened#var#arguments#")))
   # return @show avx_body(ls, var"#UNROLL#")
   if last(var"#UNROLL#") > 1

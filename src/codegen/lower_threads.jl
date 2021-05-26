@@ -1,18 +1,18 @@
-struct AVX{UNROLL,OPS,ARF,AM,LPSYM,LBV,FLBV} <: Function end
+struct TURBO{UNROLL,OPS,ARF,AM,LPSYM,LBV,FLBV} <: Function end
 
-# This should call the same `_avx_!(Val{UNROLL}(), Val{OPS}(), Val{ARF}(), Val{AM}(), Val{LPSYM}(), _vargs)` as normal so that this
+# This should call the same `_turbo_!(Val{UNROLL}(), Val{OPS}(), Val{ARF}(), Val{AM}(), Val{LPSYM}(), _vargs)` as normal so that this
 # hopefully shouldn't add much to compile time.
 
-function (::AVX{UNROLL,OPS,ARF,AM,LPSYM,LBV,FLBV})(p::Ptr{UInt}) where {UNROLL,OPS,ARF,AM,LPSYM,K,LBV,FLBV<:Tuple{Vararg{Any,K}}}
+function (::TURBO{UNROLL,OPS,ARF,AM,LPSYM,LBV,FLBV})(p::Ptr{UInt}) where {UNROLL,OPS,ARF,AM,LPSYM,K,LBV,FLBV<:Tuple{Vararg{Any,K}}}
     (_, _vargs) = ThreadingUtilities.load(p, FLBV, 2*sizeof(UInt))
   # Main.VARGS[Threads.threadid()] = first(_vargs)
   # Threads.threadid() == 2 && Core.println(typeof(_vargs))
-    ret = _avx_!(Val{UNROLL}(), Val{OPS}(), Val{ARF}(), Val{AM}(), Val{LPSYM}(), Val{LBV}(), _vargs...)
+    ret = _turbo_!(Val{UNROLL}(), Val{OPS}(), Val{ARF}(), Val{AM}(), Val{LPSYM}(), Val{LBV}(), _vargs...)
     ThreadingUtilities.store!(p, ret, Int(register_size()))
     nothing
 end
-@generated function Base.pointer(::AVX{UNROLL,OPS,ARF,AM,LPSYM,LBV,FLBV}) where {UNROLL,OPS,ARF,AM,LPSYM,K,LBV,FLBV<:Tuple{Vararg{Any,K}}}
-    f = AVX{UNROLL,OPS,ARF,AM,LPSYM,LBV,FLBV}()
+@generated function Base.pointer(::TURBO{UNROLL,OPS,ARF,AM,LPSYM,LBV,FLBV}) where {UNROLL,OPS,ARF,AM,LPSYM,K,LBV,FLBV<:Tuple{Vararg{Any,K}}}
+    f = TURBO{UNROLL,OPS,ARF,AM,LPSYM,LBV,FLBV}()
     precompile(f, (Ptr{UInt},))
     quote
         $(Expr(:meta,:inline))
@@ -20,7 +20,7 @@ end
     end
 end
 
-@inline function setup_avx_threads!(p::Ptr{UInt}, fptr::Ptr{Cvoid}, args::LBV) where {K,LBV<:Tuple{Vararg{Any,K}}}
+@inline function setup_turbo_threads!(p::Ptr{UInt}, fptr::Ptr{Cvoid}, args::LBV) where {K,LBV<:Tuple{Vararg{Any,K}}}
     offset = ThreadingUtilities.store!(p, fptr, sizeof(UInt))
     offset = ThreadingUtilities.store!(p, args, offset)
     nothing
@@ -32,7 +32,7 @@ struct StaticType{T} end
 @inline function avx_launch(
     ::Val{UNROLL}, ::Val{OPS}, ::Val{ARF}, ::Val{AM}, ::Val{LPSYM}, ::StaticType{LBV}, fargs::FARGS, tid
 ) where {UNROLL,OPS,ARF,AM,LPSYM,K,LBV<:Tuple{Vararg{Any,K}},FARGS}
-    ThreadingUtilities.launch(setup_avx_threads!, tid, pointer(AVX{UNROLL,OPS,ARF,AM,LPSYM,LBV,FARGS}()), fargs)
+    ThreadingUtilities.launch(setup_turbo_threads!, tid, pointer(TURBO{UNROLL,OPS,ARF,AM,LPSYM,LBV,FARGS}()), fargs)
 end
 
 # function approx_cbrt(x)
@@ -367,10 +367,10 @@ function thread_one_loops_expr(
     end
   end
   avxcall_args = Expr(:tuple, lastboundexpr, Symbol("#vargs#"))
-  _avx_call_ = :(_avx_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, Val(typeof(var"#avx#call#args#")), flatten_to_tuple(var"#avx#call#args#")...))
+  _turbo_call_ = :(_turbo_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, Val(typeof(var"#avx#call#args#")), flatten_to_tuple(var"#avx#call#args#")...))
   update_return_values = if length(ls.outer_reductions) > 0
     retv = loopset_return_value(ls, Val(false))
-    _avx_call_ = Expr(:(=), retv, _avx_call_)
+    _turbo_call_ = Expr(:(=), retv, _turbo_call_)
     outer_reduct_combine_expressions(ls, retv)
   else
     nothing
@@ -420,7 +420,7 @@ function thread_one_loops_expr(
       var"#threads#" = Polyester.UnsignedIteratorEarlyStop(var"#torelease#", 0x00000000)
     end
     var"#avx#call#args#" = $avxcall_args
-    $_avx_call_
+    $_turbo_call_
     var"##do#thread##" || $retexpr
     var"#thread#id#" = 0x00000000
     var"#thread#mask#" = Polyester.mask(var"#threads#")
@@ -516,12 +516,12 @@ function thread_two_loops_expr(
     end
   end
   avxcall_args = Expr(:tuple, lastboundexpr, Symbol("#vargs#"))
-  _avx_call_ = :(_avx_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, Val(typeof(var"#avx#call#args#")), flatten_to_tuple(var"#avx#call#args#")...))
-  # _avx_orig_ = :(_avx_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, var"#lv#tuple#args#"))
+  _turbo_call_ = :(_turbo_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, Val(typeof(var"#avx#call#args#")), flatten_to_tuple(var"#avx#call#args#")...))
+  # _turbo_orig_ = :(_turbo_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, var"#lv#tuple#args#"))
   update_return_values = if length(ls.outer_reductions) > 0
     retv = loopset_return_value(ls, Val(false))
-    _avx_call_ = Expr(:(=), retv, _avx_call_)
-    # _avx_orig_ = Expr(:(=), retv, _avx_orig_)
+    _turbo_call_ = Expr(:(=), retv, _turbo_call_)
+    # _turbo_orig_ = Expr(:(=), retv, _turbo_orig_)
     outer_reduct_combine_expressions(ls, retv)
   else
     nothing
@@ -535,7 +535,7 @@ function thread_two_loops_expr(
     $loopstart1
     $loopstart2
     # if var"#nthreads#" ≤ 1
-    #   $_avx_orig_
+    #   $_turbo_orig_
     #   return $retexpr
     # end
     $define_len1
@@ -614,7 +614,7 @@ function thread_two_loops_expr(
     end
     # @show $lastboundexpr
     var"#avx#call#args#" = $avxcall_args
-    $_avx_call_
+    $_turbo_call_
     var"##do#thread##" || $retexpr
     # @show $retv
     var"#thread#id#" = 0x00000000

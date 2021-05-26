@@ -527,7 +527,7 @@ end
 # _first_cache_size(::Nothing) = StaticInt(262144)
 # first_cache_size() = _first_cache_size(cache_size(first_cache()))
 
-@generated function _avx_config_val(
+@generated function _turbo_config_val(
     ::Val{CNFARG}, ::StaticInt{W}, ::StaticInt{RS}, ::StaticInt{AR}, ::StaticInt{NT},
     ::StaticInt{CLS}, ::StaticInt{L1}, ::StaticInt{L2}, ::StaticInt{L3}
 ) where {CNFARG,W,RS,AR,CLS,L1,L2,L3,NT}
@@ -539,7 +539,7 @@ end
 @inline function avx_config_val(
     ::Val{CNFARG}, ::StaticInt{W}
 ) where {CNFARG,W}
-    _avx_config_val(
+    _turbo_config_val(
         Val{CNFARG}(), StaticInt{W}(), register_size(), available_registers(), lv_max_num_threads(),
         cache_linesize(), cache_size(StaticInt(1)), cache_size(StaticInt(2)), cache_size(StaticInt(3))
     )
@@ -666,7 +666,7 @@ function generate_call_types(
   argmeta = argmeta_and_consts_description(ls, arraysymbolinds)
   loop_bounds = loop_boundaries(ls, shouldindbyind)
   loop_syms = tuple_expr(QuoteNode, ls.loopsymbols)
-  func = debug ? lv(:_avx_loopset_debug) : lv(:_avx_!)
+  func = debug ? lv(:_turbo_loopset_debug) : lv(:_turbo_!)
   lbarg = debug ? Expr(:call, :typeof, loop_bounds) : loop_bounds
   configarg = (inline,u₁,u₂,ls.isbroadcast,thread)
   unroll_param_tup = Expr(:call, lv(:avx_config_val), :(Val{$configarg}()), VECTORWIDTHSYMBOL)

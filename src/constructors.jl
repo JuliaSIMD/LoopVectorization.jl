@@ -129,9 +129,9 @@ end
 Annotate a `for` loop, or a set of nested `for` loops whose bounds are constant across iterations, to optimize the computation. For example:
 
     function AmulB!(C, A, B)
-        @turbo for m ∈ 1:size(A,1), n ∈ 1:size(B,2)
+        @turbo for m ∈ indices((A,C), 1), n ∈ indices((B,C), 2) # indices((A,C),1) == axes(A,1) == axes(C,1)
             Cₘₙ = zero(eltype(C))
-            for k ∈ 1:size(A,2)
+            for k ∈ indices((A,B), (2,1)) # indices((A,B), (2,1)) == axes(A,2) == axes(B,1)
                 Cₘₙ += A[m,k] * B[k,n]
             end
             C[m,n] = Cₘₙ
@@ -163,7 +163,7 @@ true
 Advanced users can customize the implementation of the `@turbo`-annotated block
 using keyword arguments:
 
-```
+```julia
 @turbo inline=false unroll=2 body
 ```
 
@@ -175,9 +175,9 @@ It is clamped to be between `1` and `min(Threads.nthreads(),LoopVectorization.nu
 `false` is equivalent to `1`, and `true` is equivalent to `min(Threads.nthreads(),LoopVectorization.num_cores())`.
 
 `inline` is a Boolean. When `true`, `body` will be directly inlined
-into the function (via a forced-inlining call to `_avx_!`).
-When `false`, it wont force inlining of the call to `_avx_!` instead, letting Julia's own inlining engine
-determine whether the call to `_avx_!` should be inlined. (Typically, it won't.)
+into the function (via a forced-inlining call to `_turbo_!`).
+When `false`, it wont force inlining of the call to `_turbo_!` instead, letting Julia's own inlining engine
+determine whether the call to `_turbo_!` should be inlined. (Typically, it won't.)
 Sometimes not inlining can lead to substantially worse code generation, and >40% regressions, even in very
 large problems (2-d convolutions are a case where this has been observed).
 One can find some circumstances where `inline=true` is faster, and other circumstances
@@ -208,6 +208,8 @@ macro turbo(args...)
     turbo_macro(__module__, __source__, last(args), Base.front(args)...)
 end
 """
+    @tturbo
+
 Equivalent to `@turbo`, except it adds `thread=true` as the first keyword argument.
 Note that later arguments take precendence.
 
@@ -249,6 +251,11 @@ macro _turbo(arg, q)
   esc(Expr(:block, ls.prepreamble, lower(ls, u₁ % Int, u₂ % Int, -1)))
 end
 
+"""
+    @turbo_debug
+
+Returns a `LoopSet` object instead of evaluating the loops. Useful for debugging and introspection.
+"""
 macro turbo_debug(q)
     q = macroexpand(__module__, q)
     ls = LoopSet(q, __module__)

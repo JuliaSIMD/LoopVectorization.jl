@@ -1,6 +1,6 @@
 function _precompile_()
     ccall(:jl_generating_output, Cint, ()) == 1 || return nothing
-    # Base.precompile(Tuple{typeof(which(_avx_!,(Val{UNROLL},Val{OPS},Val{ARF},Val{AM},Val{LPSYM},Tuple{LB, V},)).generator.gen),Any,Any,Any,Any,Any,Any,Any,Any,Type,Type,Type,Type,Any,Any})   # time: 1.0198073
+    # Base.precompile(Tuple{typeof(which(_turbo_!,(Val{UNROLL},Val{OPS},Val{ARF},Val{AM},Val{LPSYM},Tuple{LB, V},)).generator.gen),Any,Any,Any,Any,Any,Any,Any,Any,Type,Type,Type,Type,Any,Any})   # time: 1.0198073
     # Base.precompile(Tuple{typeof(gespf1),Any,Tuple{Any, VectorizationBase.NullStep}})   # time: 0.1096832
     Base.precompile(Tuple{typeof(turbo_macro),Module,LineNumberNode,Expr})   # time: 0.09183489
     Base.precompile(Tuple{typeof(gespf1),StridedPointer{Float64, 1, 1, 0, (1,), Tuple{StaticInt{8}}, Tuple{StaticInt{1}}},Tuple{StaticInt{1}}})   # time: 0.05469272
@@ -8,7 +8,7 @@ function _precompile_()
     Base.precompile(Tuple{Type{LoopSet},Symbol})   # time: 0.03362425
     Base.precompile(Tuple{typeof(recursive_muladd_search!),Expr,Vector{Any},Nothing,Bool,Bool})   # time: 0.029960306
     Base.precompile(Tuple{typeof(add_constant!),LoopSet,Float64,Vector{Symbol},Symbol,Int})   # time: 0.027501073
-    Base.precompile(Tuple{typeof(_avx_loopset),Any,Any,Any,Any,Core.SimpleVector,Core.SimpleVector,Tuple{Bool, Int8, Int8, Bool, Int, Int, Int, Int, Int, Int, Int, UInt}})   # time: 0.02345788
+    Base.precompile(Tuple{typeof(_turbo_loopset),Any,Any,Any,Any,Core.SimpleVector,Core.SimpleVector,Tuple{Bool, Int8, Int8, Bool, Int, Int, Int, Int, Int, Int, Int, UInt}})   # time: 0.02345788
     Base.precompile(Tuple{typeof(substitute_broadcast),Expr,Symbol,Bool,Int8,Int8,Int})   # time: 0.02281322
     Base.precompile(Tuple{typeof(push!),LoopSet,Expr,Int,Int})   # time: 0.022659862
     Base.precompile(Tuple{typeof(add_compute!),LoopSet,Symbol,Expr,Int,Int,Nothing})   # time: 0.02167476

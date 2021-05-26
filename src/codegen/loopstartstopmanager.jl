@@ -554,7 +554,7 @@ function use_loop_induct_var!(
   for (i,isli) ∈ enumerate(li)
     ii = i + offset
     ind = indices[ii]
-    Wisz && push!(gespinds.args, staticexpr(0)) # wrong for `@_avx`...
+    Wisz && push!(gespinds.args, staticexpr(0)) # wrong for `@_turbo`...
     if !li[i] # if it wasn't set
       uliv[i] = 0
       push!(offsetprecalc_descript.args, 0)

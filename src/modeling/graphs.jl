@@ -564,7 +564,7 @@ end
 
 """
 Used internally to create symbols unique for this loopset.
-This is used so that identical loops will create identical `_avx_!` calls in the macroexpansions, hopefully reducing recompilation.
+This is used so that identical loops will create identical `_turbo_!` calls in the macroexpansions, hopefully reducing recompilation.
 """
 gensym!(ls::LoopSet, s) = Symbol("###$(s)###$(ls.symcounter += 1)###")
 

@@ -51,7 +51,7 @@ using Requires
 
 
 export LowDimArray, stridedpointer, indices,
-    @avx, @avxt, @turbo, @tturbo, *ˡ, _avx_!,
+    @avx, @avxt, @turbo, @tturbo, *ˡ, _turbo_!,
     vmap, vmap!, vmapt, vmapt!, vmapnt, vmapnt!, vmapntt, vmapntt!,
     tanh_fast, sigmoid_fast,
     vfilter, vfilter!, vmapreduce, vreduce
@@ -97,8 +97,9 @@ include("broadcast.jl")
 LoopVectorization provides macros and functions that combine SIMD vectorization and
 loop-reordering so as to improve performance:
 
-- [`@avx`](@ref): transform `for`-loops and broadcasting
-- [`@_avx`](@ref): similar to `@avx` but does not use type information
+- [`@turbo`](@ref): transform `for`-loops and broadcasting
+- [`vmapreduce`](@ref): vectorized version of `mapreduce`
+- [`vreduce`](@ref): vectorized version of `reduce`
 - [`vmap`](@ref) and `vmap!`: vectorized version of `map` and `map!`
 - [`vmapnt`](@ref) and `vmapnt!`: non-temporal variants of `vmap` and `vmap!`
 - [`vmapntt`](@ref) and `vmapntt!`: threaded variants of `vmapnt` and `vmapnt!`
