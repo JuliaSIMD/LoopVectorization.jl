@@ -1,0 +1,18 @@
+# https://docs.codecov.io/docs/codecovyml-reference
+
+# There are
+#  3 [number of parts] * 3 [number of OS] = 9
+# parallel jobs in ci.yml
+codecov:
+  notify:
+    after_n_builds: 9
+comment:
+  after_n_builds: 9
+
+coverage:
+  range: 70..95
+  round: down
+  precision: 2
+
+github_checks:
+  annotations: false
