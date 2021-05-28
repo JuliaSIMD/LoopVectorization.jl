@@ -70,7 +70,7 @@ function lower_block(
                         lower!(blockq, opsv1, ls, unrollsyms, u₁, u₂, t, mask & !(dontmaskfirsttiles & (t < u₂ - 1)), lowernonstore, lowerstore)
                         if iszero(t) && !store #  u₁ && !u₂
                             # for u ∈ 0:u₁-1
-                            lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, u₂, -1, mask, lowernonstore, lowerstore)
+                            lower!(blockq, ops[2,1,prepost,n], ls, unrollsyms, u₁, u₂, -1, mask, true, true)
                             # end
                         end
                         #  u₁ && u₂
@@ -504,7 +504,6 @@ function initialize_outer_reductions!(
     u₁u, u₂u = isunrolled_sym(op, getloop(ls, us.u₁loopnum).itersymbol, getloop(ls, us.u₂loopnum).itersymbol, getloop(ls, us.vloopnum).itersymbol, ls)#, u₂)
     z = outer_reduction_zero(op, u₁u, Umax, reduction_instruction_class(instruction(op)), rs)
     mvar = variable_name(op, -1)
-    # @show u₁, u₂, u₁u, _Umax
     if (u₂ == -1)
         push!(q.args, Expr(:(=), Symbol(mvar, '_', _Umax), z))
     elseif u₁u
@@ -549,7 +548,6 @@ function add_upper_outer_reductions(ls::LoopSet, loopq::Expr, Ulow::Int, Uhigh::
     ifq = Expr(:block)
     ifqlet = Expr(:block)
     initialize_outer_reductions!(ifqlet, ls, Uhigh)
-    # @show loopq
     push!(ifq.args, loopq)
     t = Expr(:tuple)
     mvartu = Expr(:tuple)
@@ -738,7 +736,6 @@ end
 maskexpr(looplimit) = Expr(:(=), MASKSYMBOL, Expr(:call, lv(:mask), VECTORWIDTHSYMBOL, looplimit))
 @inline idiv_fast(a::I, b::I) where {I <: Base.BitInteger} = Base.udiv_int(a, b)
 @inline idiv_fast(a, b) = idiv_fast(Int(a), Int(b))
-# @inline idiv_fast(a, b) = idiv_fast(@show(Int(a)), @show(Int(b)))
 function definemask(loop::Loop)
     isstaticloop(loop) && return maskexpr(length(loop))
     # W = 4
@@ -863,7 +860,6 @@ ureduct(ls::LoopSet) = ls.ureduct
 function lower_unrollspec(ls::LoopSet)
     us = ls.unrollspecification
     @unpack vloopnum, u₁, u₂ = us
-    # @show u₁, u₂
     order = names(ls)
     init_loop_map!(ls)
     vectorized = order[vloopnum]
@@ -955,7 +951,6 @@ function isunrolled_sym(
     u₁reduced = u₁loop ∈ reductops
     u₂reduced = u₂loop ∈ reductops
     # If they're being reduced, we want to only unroll the reduced variable along one of the two loops.
-    # @show u₁reduced, u₂reduced
     if u₂reduced
         if u₁reduced# if both are reduced, we unroll u₁
             if vloop === u₁loop
