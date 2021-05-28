@@ -1102,6 +1102,58 @@ function prepare_rhs_for_storage!(ls::LoopSet, RHS::Union{Symbol,Expr}, array, r
     add_store!(ls, mpref, elementbytes)
 end
 
+function add_assignment!(ls::LoopSet, LHS, RHS, elementbytes::Int, position::Int)
+  if LHS isa Symbol
+    if RHS isa Expr
+      maybe_const_compute!(ls, LHS, add_operation!(ls, LHS, RHS, elementbytes, position), elementbytes, position)
+    else
+      add_constant!(ls, RHS, ls.loopsymbols[1:position], LHS, elementbytes)
+    end
+  elseif LHS isa Expr
+    if LHS.head === :ref
+      if RHS isa Symbol
+        add_store_ref!(ls, RHS, LHS, elementbytes)
+      elseif RHS isa Expr
+        # need to check if LHS appears in RHS
+        # assign RHS to lrhs
+        array, rawindices = ref_from_expr!(ls, LHS)
+        prepare_rhs_for_storage!(ls, RHS, array, rawindices, elementbytes, position)
+      else
+        add_store_ref!(ls, RHS, LHS, elementbytes)  # is this necessary? (Extension API?)
+      end
+    elseif LHS.head === :tuple
+      if RHS.head === :tuple
+        for i ∈ eachindex(LHS.args)
+          add_assignment!(ls, LHS.args[i], RHS.args[i], elementbytes, position)
+        end
+        return
+      end
+      @assert length(LHS.args) ≤ 9 "Functions returning more than 9 values aren't currently supported."
+      lhstemp = gensym!(ls, "lhstuple")
+      vparents = Operation[maybe_const_compute!(ls, lhstemp, add_operation!(ls, lhstemp, RHS, elementbytes, position), elementbytes, position)]
+      for i ∈ eachindex(LHS.args)
+        f = (:first,:second,:third,:fourth,:fifth,:sixth,:seventh,:eighth,:ninth)[i]
+        lhsi = LHS.args[i]
+        if lhsi isa Symbol
+          add_compute!(ls, lhsi, f, vparents, elementbytes)
+        elseif lhsi isa Expr && lhsi.head === :ref
+          tempunpacksym = gensym!(ls, "tempunpack")
+          add_compute!(ls, tempunpacksym, f, vparents, elementbytes)
+          add_store_ref!(ls, tempunpacksym, lhsi, elementbytes)
+        else
+          throw(LoopError("Unpacking the above expression in the left hand side was not understood/supported.", lhsi))
+        end
+      end
+      first(vparents)
+    else
+      throw(LoopError("LHS not understood; only `:ref`s and `:tuple`s are currently supported.", LHS))
+    end
+  else
+    throw(LoopError("LHS not understood.", LHS))
+  end
+  nothing
+end
+
 function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
     if ex.head === :call
         finex = first(ex.args)::Symbol
@@ -1112,50 +1164,7 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
             error("Function $finex not recognized.")
         end
     elseif ex.head === :(=)
-        LHS = ex.args[1]
-        RHS = ex.args[2]
-        if LHS isa Symbol
-            if RHS isa Expr
-                maybe_const_compute!(ls, LHS, add_operation!(ls, LHS, RHS, elementbytes, position), elementbytes, position)
-            else
-                add_constant!(ls, RHS, ls.loopsymbols[1:position], LHS, elementbytes)
-            end
-        elseif LHS isa Expr
-            if LHS.head === :ref
-                if RHS isa Symbol
-                    add_store_ref!(ls, RHS, LHS, elementbytes)
-                elseif RHS isa Expr
-                    # need to check if LHS appears in RHS
-                    # assign RHS to lrhs
-                    array, rawindices = ref_from_expr!(ls, LHS)
-                    prepare_rhs_for_storage!(ls, RHS, array, rawindices, elementbytes, position)
-                else
-                    add_store_ref!(ls, RHS, LHS, elementbytes)  # is this necessary? (Extension API?)
-                end
-            elseif LHS.head === :tuple
-                @assert length(LHS.args) ≤ 9 "Functions returning more than 9 values aren't currently supported."
-                lhstemp = gensym!(ls, "lhstuple")
-                vparents = Operation[maybe_const_compute!(ls, lhstemp, add_operation!(ls, lhstemp, RHS, elementbytes, position), elementbytes, position)]
-                for i ∈ eachindex(LHS.args)
-                    f = (:first,:second,:third,:fourth,:fifth,:sixth,:seventh,:eighth,:ninth)[i]
-                    lhsi = LHS.args[i]
-                    if lhsi isa Symbol
-                        add_compute!(ls, lhsi, f, vparents, elementbytes)
-                    elseif lhsi isa Expr && lhsi.head === :ref
-                        tempunpacksym = gensym!(ls, "tempunpack")
-                        add_compute!(ls, tempunpacksym, f, vparents, elementbytes)
-                        add_store_ref!(ls, tempunpacksym, lhsi, elementbytes)
-                    else
-                        throw(LoopError("Unpacking the above expression in the left hand side was not understood/supported.", lhsi))
-                    end
-                end
-                first(vparents)
-            else
-                throw(LoopError("LHS not understood; only `:ref`s and `:tuple`s are currently supported.", LHS))
-            end
-        else
-            throw(LoopError("LHS not understood.", LHS))
-        end
+        add_assignment!(ls, ex.args[1], ex.args[2], elementbytes, position)
     elseif ex.head === :block
         add_block!(ls, ex, elementbytes, position)
     elseif ex.head === :for

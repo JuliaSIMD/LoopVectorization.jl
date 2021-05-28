@@ -54,6 +54,8 @@ const START_TIME = time()
     @time include("dot.jl")
 
     @time include("special.jl")
+
+    @time include("multiassignments.jl")
   end
 
   @time if LOOPVECTORIZATION_TEST == "all" || LOOPVECTORIZATION_TEST == "part2"
