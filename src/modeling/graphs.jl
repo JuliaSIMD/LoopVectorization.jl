@@ -1126,7 +1126,7 @@ function add_assignment!(ls::LoopSet, LHS, RHS, elementbytes::Int, position::Int
         for i ∈ eachindex(LHS.args)
           add_assignment!(ls, LHS.args[i], RHS.args[i], elementbytes, position)
         end
-        return
+        return last(operations(ls)) # FIXME: dummy
       end
       @assert length(LHS.args) ≤ 9 "Functions returning more than 9 values aren't currently supported."
       lhstemp = gensym!(ls, "lhstuple")
@@ -1151,7 +1151,6 @@ function add_assignment!(ls::LoopSet, LHS, RHS, elementbytes::Int, position::Int
   else
     throw(LoopError("LHS not understood.", LHS))
   end
-  nothing
 end
 
 function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
