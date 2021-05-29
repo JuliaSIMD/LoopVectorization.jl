@@ -138,8 +138,14 @@ Annotate a `for` loop, or a set of nested `for` loops whose bounds are constant 
         end
     end
 
-The macro models the set of nested loops, and chooses an ordering of the three loops to
-minimize predicted computation time.
+The macro models the set of nested loops, and chooses an ordering of the three loops to minimize predicted computation time.
+
+Current limitations:
+
+1. It assumes that loop iterations are independent.
+2. It does not perform bounds checks.
+3. It assumes that each loop iterates at least once. (Use `@turbo check_empty=true` to lift this assumption.)
+4. That there is only one loop at each level of the nest.
 
 It may also apply to broadcasts:
 
