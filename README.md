@@ -1,3 +1,7 @@
+<img src="https://github.com/JuliaSIMD/LoopVectorization.jl/blob/master/docs/src/assets/logo.svg" width="300">
+
+---
+
 # LoopVectorization
 
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://JuliaSIMD.github.io/LoopVectorization.jl/stable)
