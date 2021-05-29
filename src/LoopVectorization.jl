@@ -3,7 +3,7 @@ module LoopVectorization
 using Static: StaticInt, gt
 using VectorizationBase, SLEEFPirates, UnPack, OffsetArrays
 using VectorizationBase: register_size, register_count, cache_linesize, cache_size, has_opmask_registers,
-  mask, pick_vector_width, MM, AbstractMask, data, grouped_strided_pointer,
+  mask, pick_vector_width, MM, AbstractMask, data, grouped_strided_pointer, AbstractSIMD,
   maybestaticlength, maybestaticsize, vzero, maybestaticrange, offsetprecalc, lazymul,
   vadd_nw, vadd_nsw, vadd_nuw, vsub_nw, vsub_nsw, vsub_nuw, vmul_nw, vmul_nsw, vmul_nuw,
     maybestaticfirst, maybestaticlast, gep, gesp, NativeTypes, #llvmptr,
@@ -116,7 +116,7 @@ function __init__()
   @require ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4" include("simdfunctionals/vmap_grad_rrule.jl")
   @require ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210" include("simdfunctionals/vmap_grad_forwarddiff.jl")
   @require SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b" begin
-    @eval SpecialFunctions.erf(x::VectorizationBase.AbstractSIMD) = VectorizationBase.verf(float(x))
+    @eval SpecialFunctions.erf(x::AbstractSIMD) = VectorizationBase.verf(float(x))
   end
 end
 

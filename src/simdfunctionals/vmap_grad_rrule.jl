@@ -1,5 +1,4 @@
 
-using .VectorizationBase: AbstractSIMD
 import .ChainRulesCore
 
 function ChainRulesCore.rrule(::typeof(tanh_fast), x)
