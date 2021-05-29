@@ -172,7 +172,7 @@ function capture_a_muladd(ex::Expr, mod)
     true, call
 end
 function capture_muladd(ex::Expr, mod)
-    while true
+  while true
         ex.head === :ref && return ex
         found, ex = capture_a_muladd(ex, mod)
         found || return ex
@@ -210,7 +210,7 @@ function contract!(expr::Expr, ex::Expr, i::Int, mod)
     if ex.head === :(=)
         RHS = ex.args[2]
         # @show ex
-        if RHS isa Expr && RHS.head === :call
+        if RHS isa Expr && Base.sym_in(RHS.head, (:call,:if))
             ex.args[2] = capture_muladd(RHS, mod)
         end
     end
