@@ -1,7 +1,9 @@
 # LoopVectorization.jl
 
-This documentation is for `LoopVectorization.jl`.
-Please file an issue if you run into any problems.
+This documentation is for 
+[`LoopVectorization.jl`](https://github.com/JuliaSIMD/LoopVectorization.jl).
+Please [file an issue](https://github.com/JuliaSIMD/LoopVectorization.jl/issues/new) 
+if you run into any problems.
 
 ## Manual Outline
 
