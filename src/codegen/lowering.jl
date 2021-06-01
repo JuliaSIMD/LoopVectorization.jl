@@ -341,7 +341,7 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
       end
       q
     end
-  elseif iszero(UFt)
+  elseif iszero(UFt) # loop is static with no remainder
     Expr( :block, q )
   elseif !nisvectorized && !loopisstatic && UF ≥ 10
     rem_uf = UF - 1
@@ -354,6 +354,9 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     UFt = 1
     UF += 1 - iseven(rem_uf)
     Expr( :block, q, Expr(iseven(rem_uf) ? :while : :if, comparison, newblock), remblock )
+  # elseif UF > 1
+    
+  #   Expr( :block, q, remblock )
   else
     # if (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !isstaticloop(loop) && !inclmask# && !ls.loadelimination
     #     # Expr(:block, sl, assumeloopiteratesatleastonce(loop), Expr(:while, tc, body))
@@ -361,34 +364,54 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     # else
     #     Expr(:block, sl, q, remblock)
     # end
+    
     Expr( :block, q, remblock )
   end
-  if !iszero(UFt)
-    # if unroll_cleanup
-    iforelseif = :if
-    while true
-      ust = nisunrolled ? UnrollSpecification(us, UFt, u₂) : UnrollSpecification(us, u₁, UFt)
-      newblock = lower_block(ls, ust, n, remmask, UFt)
-      if (UFt ≥ UF - 1 + nisvectorized) || UFt == Ureduct || loopisstatic
-        if isone(num_loops(ls)) && isone(UFt) && isone(Ureduct)
-          newblock = Expr(:block, definemask(loop), newblock)
+  if UFt ≠ 0
+    if nisvectorized & (!loopisstatic) & (UF > 1) & (Ureduct < 0)
+      ust = nisunrolled ? UnrollSpecification(us, 1, u₂) : UnrollSpecification(us, u₁, 1)
+      tc = terminatecondition(ls, us, n, remmask, 1)
+      maskc = terminatecondition(ls, us, n, false, 1)
+      body = lower_block(ls, us, n, remmask, 1)
+      termcond = gensym(:term)
+      maskdef = isone(num_loops(ls)) ? definemask(loop) : MASKSYMBOL
+      cleanup_q = quote
+        $termcond = true
+        var"##mask##temp##" = $maskdef
+        while $termcond
+          $MASKSYMBOL = $(GlobalRef(VectorizationBase.IfElse, :ifelse))($maskc, max_mask($VECTORWIDTHSYMBOL), var"##mask##temp##")
+          $body
+          $termcond = $tc
         end
-        push!(remblock.args, newblock)
-        break
       end
-      comparison = unrollremcomparison(ls, loop, UFt, n, nisvectorized, remfirst)
-      if isone(num_loops(ls)) && isone(UFt)
-        remblocknew = Expr(:if, comparison, newblock)
-        push!(remblock.args, Expr(:block, Expr(:let, definemask(loop), remblocknew)))
-        remblock = remblocknew
-      else
-        remblocknew = Expr(iforelseif, comparison, newblock)
-        # remblocknew = Expr(:elseif, comparison, newblock)
-        push!(remblock.args, remblocknew)
-        remblock = remblocknew
-        iforelseif = :elseif
+      push!(remblock.args, cleanup_q)
+    else
+    # if unroll_cleanup
+      iforelseif = :if
+      while true
+        ust = nisunrolled ? UnrollSpecification(us, UFt, u₂) : UnrollSpecification(us, u₁, UFt)
+        newblock = lower_block(ls, ust, n, remmask, UFt)
+        if (UFt ≥ UF - 1 + nisvectorized) || UFt == Ureduct || loopisstatic
+          if isone(num_loops(ls)) && isone(UFt) && isone(Ureduct)
+            newblock = Expr(:block, definemask(loop), newblock)
+          end
+          push!(remblock.args, newblock)
+          break
+        end
+        comparison = unrollremcomparison(ls, loop, UFt, n, nisvectorized, remfirst)
+        if isone(num_loops(ls)) && isone(UFt)
+          remblocknew = Expr(:if, comparison, newblock)
+          push!(remblock.args, Expr(:block, Expr(:let, definemask(loop), remblocknew)))
+          remblock = remblocknew
+        else
+          remblocknew = Expr(iforelseif, comparison, newblock)
+          # remblocknew = Expr(:elseif, comparison, newblock)
+          push!(remblock.args, remblocknew)
+          remblock = remblocknew
+          iforelseif = :elseif
+        end
+        UFt += 1
       end
-      UFt += 1
     end
     # else
     #     ust = nisunrolled ? UnrollSpecification(us, 1, u₂) : UnrollSpecification(us, u₁, 1)
