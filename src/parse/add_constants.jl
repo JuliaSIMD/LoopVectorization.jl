@@ -53,6 +53,7 @@ function add_constant!(ls::LoopSet, mpref::ArrayReferenceMetaPosition, elementby
     end
     push!(vloadcall.args, Expr(:call, lv(:False)), staticexpr(reg_size(ls)))
     pushpreamble!(ls, Expr(:(=), temp, vloadcall))
+    pushpreamble!(ls, Expr(:(=), name(op), temp))
     pushpreamble!(ls, op, temp)
     pushop!(ls, op, temp)
 end

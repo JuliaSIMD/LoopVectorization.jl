@@ -214,7 +214,7 @@ staticmulincr(ptr, incr) = Expr(:call, lv(:staticmul), Expr(:call, :eltype, ptr)
 @inline vcmpendzs(i::Int, r::AbstractUnitRange, ::StaticInt{W}) where {W} = i ≠ (length(r) &  (-W))
 # i = 0
 # i += 4*3 # i = 12
-@inline vcmpend(i::Int, r::AbstractRange, ::StaticInt{W}) where {W} = i ≤ vsub_nsw(last(r), vsub_nsw(W*step(r), 1))
+@inline vcmpend(i::Int, r::AbstractRange, ::StaticInt{W}) where {W} =   i ≤ vsub_nsw(last(r), vsub_nsw(W*step(r), 1))
 @inline vcmpendzs(i::Int, r::AbstractRange, ::StaticInt{W}) where {W} = i ≤ vsub_nsw(last(r), vsub_nsw(W*step(r), 1))
 
 function staticloopexpr(loop::Loop)
