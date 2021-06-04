@@ -355,9 +355,9 @@ val(x) = Expr(:call, Expr(:curly, :Val, x))
   ri = max(1, ri)
   quote
     $(Expr(:meta,:inline))
-    p, li = VectorizationBase.tdot(x, (vsub_nsw(getfield(i,1,false),1),), VectorizationBase.strides(x))
+    p, li = VectorizationBase.tdot(x, (vsub_nsw(getfield(i,1,false),one($I)),), VectorizationBase.strides(x))
     ptr = gep(p, li)
-    StridedPointer{$T,1,$(C===1 ? 1 : 0),$(B===1 ? 1 : 0),$(R[ri],)}(ptr, (getfield(getfield(x,:strd), $ri, 1),), (Zero(),))
+    StridedPointer{$T,1,$(C===1 ? 1 : 0),$(B===1 ? 1 : 0),$(R[ri],)}(ptr, (getfield(getfield(x,:strd), $ri, false),), (Zero(),))
   end
 end
 @generated function gespf1(x::StridedPointer{T,N,C,B,R}, ::Tuple{VectorizationBase.NullStep}) where {T,N,C,B,R}
@@ -371,7 +371,7 @@ end
   ri = max(1, ri)
   quote
     $(Expr(:meta,:inline))
-    StridedPointer{$T,1,$(C===1 ? 1 : 0),$(B===1 ? 1 : 0),$(R[ri],)}(pointer(x), (getfield(getfield(x,:strd), $ri, 1),), (getfield(getfield(x,:offsets), $ri, 1),))
+    StridedPointer{$T,1,$(C===1 ? 1 : 0),$(B===1 ? 1 : 0),$(R[ri],)}(pointer(x), (getfield(getfield(x,:strd), $ri, false),), (getfield(getfield(x,:offsets), $ri, false),))
   end
 end
 @generated function gespf1(x::StridedBitPointer{N,C,B,R}, ::Tuple{VectorizationBase.NullStep}) where {N,C,B,R}
@@ -385,7 +385,7 @@ end
   ri = max(1, ri)
   quote
     $(Expr(:meta,:inline))
-    StridedBitPointer{1,$(C===1 ? 1 : 0),$(B===1 ? 1 : 0),$(R[ri],)}(pointer(x), (getfield(getfield(x,:strd), $ri, 1),), (getfield(getfield(x,:offsets), $ri, 1),))
+    StridedBitPointer{1,$(C===1 ? 1 : 0),$(B===1 ? 1 : 0),$(R[ri],)}(pointer(x), (getfield(getfield(x,:strd), $ri, false),), (getfield(getfield(x,:offsets), $ri, false),))
   end
 end
 @generated function gespf1(x::StridedBitPointer{T,N,C,B,R}, i::Tuple{I}) where {T,N,I<:Integer,C,B,R}
