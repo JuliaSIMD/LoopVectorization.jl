@@ -1069,15 +1069,15 @@ end
         @test grad!(zeros(5), ones(5), ones(3)) ≈ grad_avx!(zeros(5), ones(5), ones(3)) ≈ grad_avx_base!(zeros(5), ones(5), ones(3)) ≈ grad_avx_eval!(zeros(5), ones(5), ones(3))
 
         nta = rand(2)
-        namedtuple = (a = copy(nta), b = 10.0)
+        namedtuple = (a = (1,copy(nta)), b = 10.0)
         @turbo for i in 1:2
-            namedtuple.a[i] += namedtuple.b
+            namedtuple.a[2][i] += namedtuple.b
         end
-      @test namedtuple.a == nta .+ 10
+        @test namedtuple.a[2].c == nta .+ 10
 
-      let A = rand(T, 20, 30); B = rand(T, 20, 30); C = rand(T, 20, 30, 30);
-        @test threemulaccum_base(A,B,C) ≈ threemulaccum_lv(A,B,C)
-      end
+        let A = rand(T, 20, 30); B = rand(T, 20, 30); C = rand(T, 20, 30, 30);
+            @test threemulaccum_base(A,B,C) ≈ threemulaccum_lv(A,B,C)
+        end
     end
     for T ∈ [Int16, Int32, Int64]
         n = 8sizeof(T) - 1

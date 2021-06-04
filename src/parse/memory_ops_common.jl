@@ -1,5 +1,10 @@
-dottosym(x) = x
-dottosym(x::Expr) = Symbol(dottosym(x.args[1]), "###extractarray###", x.args[2].value)
+dottosym(x)::Symbol = x
+
+function dottosym(x::Expr)::Symbol
+  s1 = dottosym(x.args[1])
+  xa2 = x.args[2]
+  xa2 isa QuoteNode ? Symbol(s1, "###extractarray###", xa2.value) : Symbol(s1, "###extractarray###", xa2)
+end
 function extract_array_symbol_from_ref!(ls::LoopSet, ex::Expr, offset1::Int)::Symbol
     ar = ex.args[1 + offset1]
     if isa(ar, Symbol)

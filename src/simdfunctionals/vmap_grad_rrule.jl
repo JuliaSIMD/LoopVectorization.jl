@@ -4,14 +4,14 @@ import .ChainRulesCore
 function ChainRulesCore.rrule(::typeof(tanh_fast), x)
     t = tanh_fast(x)
     ∂ = let t = t
-        y -> (ChainRulesCore.Zero(), mul_fast(vfnmadd_fast(t, t, one(t)), y))
+        y -> (ChainRulesCore.ZeroTangent(), mul_fast(vfnmadd_fast(t, t, one(t)), y))
     end
     t, ∂
 end
 function ChainRulesCore.rrule(::typeof(sigmoid_fast), x)
     s = sigmoid_fast(x)
     ∂ = let s = s
-        y -> (ChainRulesCore.Zero(), mul_fast(vfnmadd_fast(s, s, s), y))
+        y -> (ChainRulesCore.ZeroTangent(), mul_fast(vfnmadd_fast(s, s, s), y))
     end
     s, ∂
 end
@@ -20,7 +20,7 @@ function ChainRulesCore.rrule(::typeof(relu), v)
     cmp = v < z
     r = ifelse(cmp, z, v)
     ∂ = let cmp = cmp
-        y -> (ChainRulesCore.Zero(), ifelse(cmp, zero(y), y))
+        y -> (ChainRulesCore.ZeroTangent(), ifelse(cmp, zero(y), y))
     end
     r, ∂
 end
@@ -64,7 +64,7 @@ end
 @generated function (b::SIMDMapBack{K,T})(Δ::A) where {K,T,A}
     preloop = Expr(:block, :(jacs = b.jacs))
     loop_body = Expr(:block, :(Δᵢ = Δ[i]))
-    ret = Expr(:tuple, ChainRulesCore.Zero(), ChainRulesCore.Zero())
+    ret = Expr(:tuple, ChainRulesCore.ZeroTangent(), ChainRulesCore.ZeroTangent())
     for k ∈1:K
         jₖ = Symbol(:j_, k)
         push!(preloop.args, :($jₖ = jacs[$k]))
