@@ -9,7 +9,7 @@ function extract_array_symbol_from_ref!(ls::LoopSet, ex::Expr, offset1::Int)::Sy
     ar = ex.args[1 + offset1]
     if isa(ar, Symbol)
         return ar
-    elseif isa(ar, Expr) && ar.head === :(.)
+    elseif isa(ar, Expr) && (ar.head === :(.) || ar.head === :ref)
         s = dottosym(ar)
         pushprepreamble!(ls, Expr(:(=), s, ar))
         return s
