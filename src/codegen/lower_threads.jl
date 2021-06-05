@@ -665,7 +665,7 @@ function valid_thread_loops(ls::LoopSet)
   end
   for (i,o) ∈ enumerate(order)
     loop = getloop(ls, o)
-    if isstaticloop(loop) & length(loop) ≤ 1
+    if isstaticloop(loop) & (length(loop) ≤ 1)
       valid_thread_loop[i] = false
     end
   end
