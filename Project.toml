@@ -1,11 +1,10 @@
 name = "LoopVectorization"
 uuid = "bdcacae8-1622-11e9-2a5c-532679323890"
 authors = ["Chris Elrod <elrodc@gmail.com>"]
-version = "0.12.30"
+version = "0.12.31"
 
 [deps]
 ArrayInterface = "4fba245c-0d91-5ea0-9b3e-6abc04ee57a9"
-ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
 DocStringExtensions = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
 IfElse = "615f187c-cbe4-4ef1-ba3b-2fcf58d6d173"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -21,7 +20,6 @@ VectorizationBase = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
 
 [compat]
 ArrayInterface = "3.1.9"
-ChainRulesCore = "0.10"
 DocStringExtensions = "0.8"
 IfElse = "0.1"
 OffsetArrays = "1.4.1"

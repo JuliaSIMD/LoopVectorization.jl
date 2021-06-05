@@ -14,8 +14,7 @@ const START_TIME = time()
 @time @testset "LoopVectorization.jl" begin
 
   @time if LOOPVECTORIZATION_TEST == "all" || LOOPVECTORIZATION_TEST == "part1"
-    @time Aqua.test_all(LoopVectorization, stale_deps = false)
-    @time Aqua.test_stale_deps(LoopVectorization, ignore = [:ChainRulesCore])
+    @time Aqua.test_all(LoopVectorization)
     # @test isempty(detect_unbound_args(LoopVectorization))
 
     @time include("printmethods.jl")
