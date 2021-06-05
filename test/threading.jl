@@ -96,40 +96,42 @@ function convlayer_direct!(
 end
 
 @testset "Threading" begin
-    @show @__LINE__
-    dcd = DenseConvDims{2,(5,5),3,6}()
-    kern4 = rand(Float32, 5, 5, 3, 6);
-    @time for M ∈ 17:50:267
-        img = rand(Float32, M, M, 3, 100);
-        outimage1 = Array{Float32}(undef, size(img,1)+1-size(kern4,1), size(img,2)+1-size(kern4,2), size(kern4,4), size(img,4));
-        outimage2 = similar(outimage1);
+  @show @__LINE__
+  dcd = DenseConvDims{2,(5,5),3,6}()
+  kern4 = rand(Float32, 5, 5, 3, 6);
+  @time for M ∈ 17:50:267
+    img = rand(Float32, M, M, 3, 100);
+    outimage1 = Array{Float32}(undef, size(img,1)+1-size(kern4,1), size(img,2)+1-size(kern4,2), size(kern4,4), size(img,4));
+    outimage2 = similar(outimage1);
 
-        convlayer!(outimage1, img, kern4, dcd);
-        convlayer_direct!(outimage2, img, kern4, dcd);
-        @test outimage1 ≈ outimage2
+    convlayer!(outimage1, img, kern4, dcd);
+    convlayer_direct!(outimage2, img, kern4, dcd);
+    @test outimage1 ≈ outimage2
+  end
+
+  @time for M ∈ 17:399
+    # @show M
+    K = M; N = M;
+    A = rand(M,K); B = rand(K,N); b = rand(K);
+    @test dot(A,B) ≈ mydotavx(A,B)
+
+    C1 = A * B;
+    @test AmulB!(similar(C1), A, B) ≈ C1
+    c1 = A * b;
+    @test AmulB!(similar(c1), A, b) ≈ c1
+
+    if VERSION ≥ v"1.6"
+      x = randn(Complex{Float64}, 3M-1);
+      W = randn(Complex{Float64}, 3M-1, 3M+1);
+      y = randn(Complex{Float64}, 3M+1);
+      @test dot(x,W,y) ≈ dot3(x,W,y)
     end
 
-    @time for M ∈ 17:399
-        # @show M
-        K = M; N = M;
-        A = rand(M,K); B = rand(K,N);
-        @test dot(A,B) ≈ mydotavx(A,B)
-
-        C1 = A * B; C0 = similar(C1);
-        @test AmulB!(C0, A, B) ≈ C1
-
-		if VERSION ≥ v"1.6"
-	        x = randn(Complex{Float64}, 3M-1);
-    	    W = randn(Complex{Float64}, 3M-1, 3M+1);
-        	y = randn(Complex{Float64}, 3M+1);
-        	@test dot(x,W,y) ≈ dot3(x,W,y)
-		end
-
-        kern = OffsetArray(randn(3,3),-2,-2)
-        out1 = OffsetArray(randn(size(A) .- 2), 1, 1)
-        out2 = similar(out1);
-        @test conv!(out1, A, kern) ≈ conv_baseline!(out2, A, kern)
-    end
+    kern = OffsetArray(randn(3,3),-2,-2)
+    out1 = OffsetArray(randn(size(A) .- 2), 1, 1)
+    out2 = similar(out1);
+    @test conv!(out1, A, kern) ≈ conv_baseline!(out2, A, kern)
+  end
 end
 
 

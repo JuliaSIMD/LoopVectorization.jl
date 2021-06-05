@@ -644,26 +644,32 @@ function thread_two_loops_expr(
 end
 
 function valid_thread_loops(ls::LoopSet)
-    order, u₁loop, u₂loop, vectorized, u₁, u₂, c, shouldinline = choose_order_cost(ls)
-    # NOTE: `names` are being placed in the opposite order here versus normal lowering!
-    copyto!(names(ls), order); init_loop_map!(ls)
-    u₁loop = getloop(ls, u₁loop)
-    _u₂loop = getloopid_or_nothing(ls, u₂loop)
-    u₂loop = _u₂loop === nothing ? u₁loop : getloop_from_id(ls, _u₂loop)
-    ua = UnrollArgs(u₁loop, u₂loop, getloop(ls, vectorized), u₁, u₂, u₂)
-    valid_thread_loop = fill(true, length(order))
-    for op ∈ operations(ls)
-        if isstore(op) && (length(reduceddependencies(op)) > 0)
-            for reduceddep ∈ reduceddependencies(op)
-                for (i,o) ∈ enumerate(order)
-                    if o === reduceddep
-                        valid_thread_loop[i] = false
-                    end
-                end
-            end
+  order, u₁loop, u₂loop, vectorized, u₁, u₂, c, shouldinline = choose_order_cost(ls)
+  # NOTE: `names` are being placed in the opposite order here versus normal lowering!
+  copyto!(names(ls), order); init_loop_map!(ls)
+  u₁loop = getloop(ls, u₁loop)
+  _u₂loop = getloopid_or_nothing(ls, u₂loop)
+  u₂loop = _u₂loop === nothing ? u₁loop : getloop_from_id(ls, _u₂loop)
+  ua = UnrollArgs(u₁loop, u₂loop, getloop(ls, vectorized), u₁, u₂, u₂)
+  valid_thread_loop = fill(true, length(order))
+  for op ∈ operations(ls)
+    if isstore(op) && (length(reduceddependencies(op)) > 0)
+      for reduceddep ∈ reduceddependencies(op)
+        for (i,o) ∈ enumerate(order)
+          if o === reduceddep
+            valid_thread_loop[i] = false
+          end
         end
+      end
     end
-    valid_thread_loop, ua, c
+  end
+  for (i,o) ∈ enumerate(order)
+    loop = getloop(ls, o)
+    if isstaticloop(loop) & length(loop) ≤ 1
+      valid_thread_loop[i] = false
+    end
+  end
+  valid_thread_loop, ua, c
 end
 function avx_threads_expr(
     ls::LoopSet, UNROLL::Tuple{Bool,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt},
