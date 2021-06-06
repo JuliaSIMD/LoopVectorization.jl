@@ -332,16 +332,21 @@ function _lower_load!(
     q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, mask::Bool, inds_calc_by_ptr_offset::Vector{Bool} = indices_calculated_by_pointer_offsets(ls, op.ref)
 )
   if rejectinterleave(op)
-    lower_load_no_optranslation!(q, ls, op, td, mask, inds_calc_by_ptr_offset)
+    return lower_load_no_optranslation!(q, ls, op, td, mask, inds_calc_by_ptr_offset)
   else
     omop = offsetloadcollection(ls)
     @unpack opids, opidcollectionmap, batchedcollections, batchedcollectionmap = omop
     batchid, opind = batchedcollectionmap[identifier(op)]
-    if opind == 1
-      collectionid, copind = opidcollectionmap[identifier(op)]
-      opidmap = opids[collectionid]
-      idsformap = batchedcollections[batchid]
-      lower_load_collection!(q, ls, opidmap, idsformap, td, mask, inds_calc_by_ptr_offset)
+    for (bid, oid) ∈ batchedcollectionmap # this relies on `for op ∈ ops` in codegen/operation_evaluation_order.jl
+      if bid == batchid
+        if oid == opind
+          collectionid, copind = opidcollectionmap[identifier(op)]
+          opidmap = opids[collectionid]
+          idsformap = batchedcollections[batchid]
+          lower_load_collection!(q, ls, opidmap, idsformap, td, mask, inds_calc_by_ptr_offset)
+        end
+        return nothing
+      end
     end
   end
   return nothing

@@ -151,20 +151,25 @@ using LoopVectorization, OffsetArrays, Test
     H
   end
 
-  function issue!(output, input, idx)
+  function issue279!(output, input, idx)
     @turbo for j in axes(output, 2), i in axes(output, 1)
       output[i, j, idx] = input[1, 1, i, j, idx]
     end
     output
   end
 
-  function issue_plain!(output, input, idx)
+  function issue279_plain!(output, input, idx)
     for j in axes(output, 2), i in axes(output, 1)
       output[i, j, idx] = input[1, 1, i, j, idx]
     end
     output
   end
-
+  function issue280!(dest, src)
+    @turbo for i in indices((dest, src), (2, 2))
+      dest[1, i] = src[2, i]
+      dest[2, i] = src[1, i]
+    end
+  end
   
     for T ∈ (Float32, Float64, Int32, Int64)
         @show T, @__LINE__
@@ -250,7 +255,16 @@ using LoopVectorization, OffsetArrays, Test
 
       input = rand(R, 2, 2, 5, 5, 1); output = Array{T}(undef, size(input)[3:end]...); output_plain = similar(output);
       
-      @test issue!(output, input, 1) ≈ issue_plain!(output_plain, input, 1)
+      @test issue279!(output, input, 1) ≈ issue279_plain!(output_plain, input, 1)
 
+      src = rand(R, 2, 17); dest = similar(src);
+      issue280!(dest, src)
+      @test dest ≈ vcat(view(src,2,:)',view(src,1,:)')
+      if VERSION ≥ v"1.6"
+        src2 = reinterpret(reshape,R,Vector{Tuple{T,T}}(undef, 17)); src2 .= src;
+        dest2 = reinterpret(reshape,R,Vector{Tuple{T,T}}(undef, 17));
+        issue280!(dest2, src2)
+        @test dest2 ≈ vcat(view(src,2,:)',view(src,1,:)')
+      end
     end
 end
