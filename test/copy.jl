@@ -150,6 +150,21 @@ using LoopVectorization, OffsetArrays, Test
     end
     H
   end
+
+  function issue!(output, input, idx)
+    @turbo for j in axes(output, 2), i in axes(output, 1)
+      output[i, j, idx] = input[1, 1, i, j, idx]
+    end
+    output
+  end
+
+  function issue_plain!(output, input, idx)
+    for j in axes(output, 2), i in axes(output, 1)
+      output[i, j, idx] = input[1, 1, i, j, idx]
+    end
+    output
+  end
+
   
     for T ∈ (Float32, Float64, Int32, Int64)
         @show T, @__LINE__
@@ -229,8 +244,13 @@ using LoopVectorization, OffsetArrays, Test
         @test copyselfdot!(y, x) ≈ x[1]^2 + x[2]^2
       @test view(x, 1:2) == view(y, 1:2)
 
-      H0 = zeros(10,10); H1 = zeros(10,10);
-      j = [1,2,5,8]; a = rand(10);
+      H0 = zeros(T,10,10); H1 = zeros(T,10,10);
+      j = [1,2,5,8]; a = rand(R,10);
       @test scattercopyavx!(H0, a, j) == scattercopy!(H1, a, j)
+
+      input = rand(R, 2, 2, 5, 5, 1); output = Array{T}(undef, size(input)[3:end]...); output_plain = similar(output);
+      
+      @test issue!(output, input, 1) ≈ issue_plain!(output_plain, input, 1)
+
     end
 end
