@@ -50,7 +50,7 @@ function test_awmean(::Type{T}) where {T}
       wxlv, wσlv, mswdlv = awmean_lv(x, σ)
       isfinite(wx)   && @test wx ≈ wxlv
       isfinite(wσ)   && @test wσ ≈ wσlv
-      isfinite(mswd) && @test mswd ≈ mswdlv
+      isfinite(mswd) && @test mswd ≈ mswdlv atol=1e-16 rtol=sqrt(eps(typeof(mswdlv)))
     end
 end
 

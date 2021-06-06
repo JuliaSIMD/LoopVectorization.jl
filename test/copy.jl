@@ -261,8 +261,8 @@ using LoopVectorization, OffsetArrays, Test
       issue280!(dest, src)
       @test dest ≈ vcat(view(src,2,:)',view(src,1,:)')
       if VERSION ≥ v"1.6"
-        src2 = reinterpret(reshape,R,Vector{Tuple{T,T}}(undef, 17)); src2 .= src;
-        dest2 = reinterpret(reshape,R,Vector{Tuple{T,T}}(undef, 17));
+        src2 = reinterpret(reshape,T,Vector{Tuple{T,T}}(undef, 17)); src2 .= src;
+        dest2 = reinterpret(reshape,T,Vector{Tuple{T,T}}(undef, 17));
         issue280!(dest2, src2)
         @test dest2 ≈ vcat(view(src,2,:)',view(src,1,:)')
       end
