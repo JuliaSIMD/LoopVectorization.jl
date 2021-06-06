@@ -51,47 +51,43 @@ end
 @inline staticdims(::Any) = One()
 @inline staticdims(::CartesianIndices{N}) where {N} = StaticInt{N}()
 
-
-function append_loop_staticdims!(valcall::Expr, loop::Loop)
-    if isstaticloop(loop)
-        push!(valcall.args, staticexpr(1))
-    else
-        push!(valcall.args, Expr(:call, lv(:staticdims), loop.rangesym))#loop_boundary(loop)))
-    end
-    nothing
+function append_loop_staticdims!(valcall::Expr, loop::Loop, constoffset::Int)
+  isstaticloop(loop) && return constoffset + 1
+  push!(valcall.args, Expr(:call, lv(:staticdims), loop.rangesym))
+  constoffset
 end
 function subset_vptr!(ls::LoopSet, vptr::Symbol, indnum::Int, ind, previndices, loopindex, subset::Bool)
-    str_typ = subset ? "subset" : "index"
-    subsetvptr = Symbol(vptr, "_##$(str_typ)##_$(indnum)_##with##_$(ind)_##")
-    valcall = staticexpr(1)
-    if indnum > 1
-        offset = first(previndices) === DISCONTIGUOUS
-        valcall = Expr(:call, :(+), valcall)
-        for i ∈ 1:indnum-1
-            loopdep = if loopindex[i]
-                index = previndices[i+offset]
-                if index === CONSTANTZEROINDEX
-                    if indnum == 2 && i == 1
-                        push!(valcall.args, staticexpr(1))
-                    else
-                        valcall.args[2] = staticexpr(2)
-                    end
-                    continue
-                else
-                    index
-                end
-            else
-                # assumes all staticdims will be of equal length once expanded...
-                # A[I + J, constindex], I and J may be CartesianIndices. This requires they all be of same number of dims
-                first(loopdependencies(ls.opdict[previndices[i+offset]]))
-            end
-            append_loop_staticdims!(valcall, getloop(ls, loopdep))
+  str_typ = subset ? "subset" : "index"
+  subsetvptr = Symbol(vptr, "_##$(str_typ)##_$(indnum)_##with##_$(ind)_##")
+  valcall = Expr(:call, +)
+  constoffset = 1
+  if indnum > 1
+    offset = first(previndices) === DISCONTIGUOUS
+    # valcall =  Expr(:call, :(+), valcall)
+    for i ∈ 1:indnum-1
+      if loopindex[i]
+        loopdep = previndices[i+offset]
+        if loopdep === CONSTANTZEROINDEX
+          constoffset += 1
+          continue
         end
+      else
+        # assumes all staticdims will be of equal length once expanded...
+        # A[I + J, constindex], I and J may be CartesianIndices. This requires they all be of same number of dims
+        loopdep = first(loopdependencies(ls.opdict[previndices[i+offset]]))
+      end
+      constoffset = append_loop_staticdims!(valcall, getloop(ls, loopdep), constoffset)
     end
-    # indm1 = ind isa Integer ? ind - 1 : Expr(:call, :-, ind, 1)
-    f = lv(Core.ifelse(subset, :subsetview, :_gesp))
-    pushpreamble!(ls, Expr(:(=), subsetvptr, Expr(:call, f, vptr, valcall, ind)))
-    subsetvptr
+  end
+  # indm1 = ind isa Integer ? ind - 1 : Expr(:call, :-, ind, 1)
+  f = lv(Core.ifelse(subset, :subsetview, :_gesp))
+  constoffsetexpr = staticexpr(constoffset)
+  if length(valcall.args) ≠ 1
+    push!(valcall.args, constoffsetexpr)
+    constoffsetexpr = valcall
+  end
+  pushpreamble!(ls, Expr(:(=), subsetvptr, Expr(:call, f, vptr, constoffsetexpr, ind)))
+  subsetvptr
 end
 
 function gesp_const_offset!(ls::LoopSet, vptrarray, ninds, indices, loopedindex, mlt::Integer, sym)
