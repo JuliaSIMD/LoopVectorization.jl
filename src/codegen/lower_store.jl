@@ -6,7 +6,7 @@ function storeinstr_preprend(op::Operation, vloopsym::Symbol)
     # vectorized is not a loopdep, but is a reduced dep
     opp = first(parents(op))
     # while vectorized ∉ loopdependencies(opp)
-    while !isvectorized(opp)
+    while ((!isvectorized(opp)) || (any(rdep -> rdep ∉ loopdependencies(opp), reduceddependencies(opp))))
         oppold = opp
         for oppp ∈ parents(opp)
             if vloopsym ∈ reduceddependencies(oppp)

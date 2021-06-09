@@ -16,29 +16,28 @@
 
 # end
 
-function dependent_outer_reducts(ls::LoopSet, op)
-    for i ∈ ls.outer_reductions
-        search_tree(parents(operations(ls)[i]), name(op)) && return true
-    end
-    false
-end
+# function dependent_outer_reducts(ls::LoopSet, op)
+#     for i ∈ ls.outer_reductions
+#         search_tree(parents(operations(ls)[i]), name(op)) && return true
+#     end
+#     false
+# end
 
 function isnopidentity(ls::LoopSet, op::Operation, u₁loop::Symbol, u₂loop::Symbol, vectorized::Symbol, u₂max::Int)
-    parents_op = parents(op)
+  parents_op = parents(op)
     if iscompute(op) && instruction(op).instr === :identity && isone(length(parents_op)) && name(first(parents_op)) === name(op)
-        loopistiled = u₂max ≠ -1
+        # loopistiled = u₂max ≠ -1
         # parents_u₁syms, parents_u₂syms = parent_unroll_status(op, u₁loop, u₂loop, u₂max)
-        # @show  (u₁unrolledsym, first(parents_u₁syms)), (isu₂unrolled(op), parents_u₂syms[1])
-        # @show op parents(op) isu₁unrolled(op), isu₁unrolled(only(parents(op)))
         # if (u₁unrolledsym == first(parents_u₁syms)) && (isu₂unrolled(op) == parents_u₂syms[1])
         opp = only(parents_op)
+        # @show op opp isu₁unrolled(op), isu₁unrolled(opp), isu₂unrolled(op), isu₂unrolled(opp)
         if (isu₁unrolled(op) == isu₁unrolled(opp)) & (isu₂unrolled(op) == isu₂unrolled(opp))
             true
         else
-            if isvectorized(opp) & (!isvectorized(op))
-                op.instruction = reduction_to_scalar(instruction(opp))
-                op.mangledvariable = gensym(op.mangledvariable)
-            end
+            # if isvectorized(opp) & (!isvectorized(op))
+            #     op.instruction = reduction_to_scalar(instruction(opp))
+            #     op.mangledvariable = gensym(op.mangledvariable)
+            # end
             false
         end
     else

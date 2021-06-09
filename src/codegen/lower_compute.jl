@@ -363,18 +363,31 @@ function getu₁forreduct(ls::LoopSet, op::Operation, u₁::Int)
 end
 isidentityop(op::Operation) = iscompute(op) && (instruction(op).instr === :identity) && (length(parents(op)) == 1)
 function reduce_parent!(q::Expr, ls::LoopSet, op::Operation, opp::Operation, parent::Symbol)
+  # if instruction(op).instr === :log_fast
+  #   @show op opp isvectorized(op) isvectorized(opp) dependent_outer_reducts(ls, op)
+  # end
   isvectorized(op) && return parent
-  dependent_outer_reducts(ls, op) && return parent
+  # if dependent_outer_reducts(ls, op)
+    
+  #   return parent
+  # end
+  # @show op opp isvectorized(opp)
   if isvectorized(opp)
     oppt = opp
   elseif isidentityop(opp)
     oppt = only(parents(opp))
+    # @show oppt
     isvectorized(oppt) || return parent
   else
     return parent
   end
+  reduct_class = reduction_instruction_class(oppt.instruction)
+  if (instruction(op).instr === :mul_fast) & (reduct_class == ADDITIVE_IN_REDUCTIONS)
+    op.vectorized = true
+    return parent
+  end
   newp = gensym(parent)
-  push!(q.args, Expr(:(=), newp, Expr(:call, lv(reduction_to_scalar(oppt.instruction)), parent)))
+  push!(q.args, Expr(:(=), newp, Expr(:call, lv(reduction_to_scalar(reduct_class)), parent)))
   newp
 end
 function lower_compute!(
@@ -528,7 +541,7 @@ function lower_compute!(
           # elseif parents_u₂syms[n] & (!u₂unrolledsym)
             #&& (isouterreduction(ls, opp) != -1)
             # this checks if the parent is u₂ unrolled but this operation is not, in which case we need to reduce it.
-            reduced_u₂ = reduce_expr_u₂(mangledvar(opp), instruction(opp), u₂max, Symbol("__", u₁))#ureduct(ls))
+          reduced_u₂ = reduce_expr_u₂(mangledvar(opp), instruction(opp), u₂max, Symbol("__", u₁))#ureduct(ls))
             reducedparentname = gensym!(ls, "reducedop")
             push!(q.args, Expr(:(=), reducedparentname, reduced_u₂))
             reduced_u₂ = reduce_parent!(q, ls, op, opp, reducedparentname)
