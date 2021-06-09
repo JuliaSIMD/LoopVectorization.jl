@@ -363,19 +363,19 @@ function getu₁forreduct(ls::LoopSet, op::Operation, u₁::Int)
 end
 isidentityop(op::Operation) = iscompute(op) && (instruction(op).instr === :identity) && (length(parents(op)) == 1)
 function reduce_parent!(q::Expr, ls::LoopSet, op::Operation, opp::Operation, parent::Symbol)
-    isvectorized(op) && return parent
-    dependent_outer_reducts(ls, op) && return parent
-    if isvectorized(opp)
-        oppt = opp
-    elseif isidentityop(opp)
-        oppt = only(parents(opp))
-        isvectorized(oppt) || return parent
-    else
-        return parent
-    end
-    newp = gensym(parent)
-    push!(q.args, Expr(:(=), newp, Expr(:call, lv(reduction_to_scalar(oppt.instruction)), parent)))
-    newp
+  isvectorized(op) && return parent
+  dependent_outer_reducts(ls, op) && return parent
+  if isvectorized(opp)
+    oppt = opp
+  elseif isidentityop(opp)
+    oppt = only(parents(opp))
+    isvectorized(oppt) || return parent
+  else
+    return parent
+  end
+  newp = gensym(parent)
+  push!(q.args, Expr(:(=), newp, Expr(:call, lv(reduction_to_scalar(oppt.instruction)), parent)))
+  newp
 end
 function lower_compute!(
     q::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs, mask::Bool
@@ -410,6 +410,9 @@ function lower_compute!(
                 parentop.identifier, gensym(parentop.variable), parentop.elementbytes, parentop.instruction, parentop.node_type,
                 parentop.dependencies, parentop.reduced_deps, parentop.parents, parentop.ref, parentop.reduced_children
             )
+            newparentop.vectorized = false
+            newparentop.u₁unrolled = false
+            newparentop.u₂unrolled = parents_u₂syms[i]
             parentname = mangledvar(parentop)
             newparentname = mangledvar(newparentop)
             parents_op[i] = newparentop
