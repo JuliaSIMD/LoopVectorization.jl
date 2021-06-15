@@ -465,9 +465,8 @@ end
     bc::Broadcasted, ::Val{Mod}, ::Val{UNROLL}
 ) where {Mod,UNROLL}
   ElType = Base.Broadcast.combine_eltypes(bc.f, bc.args)
-  @show ElType
-    dest = similar(bc, ElType)
-    vmaterialize!(dest, bc, Val{Mod}(), Val{UNROLL}())
+  dest = similar(bc, ElType)
+  vmaterialize!(dest, bc, Val{Mod}(), Val{UNROLL}())
 end
 
 vmaterialize!(dest, bc, ::Val, ::Val, ::StaticInt, ::StaticInt, ::StaticInt) = Base.Broadcast.materialize!(dest, bc)
