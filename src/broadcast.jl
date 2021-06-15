@@ -464,7 +464,8 @@ end
 @inline function vmaterialize(
     bc::Broadcasted, ::Val{Mod}, ::Val{UNROLL}
 ) where {Mod,UNROLL}
-    ElType = Base.Broadcast.combine_eltypes(bc.f, bc.args)
+  ElType = Base.Broadcast.combine_eltypes(bc.f, bc.args)
+  @show ElType
     dest = similar(bc, ElType)
     vmaterialize!(dest, bc, Val{Mod}(), Val{UNROLL}())
 end
