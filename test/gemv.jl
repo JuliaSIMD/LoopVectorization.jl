@@ -87,7 +87,7 @@ using Test
     δ = 0
     z = zero(eltype(G))
     @turbo for d1=1:d
-      G[d1,κ] = z
+      G[d1,κ - δ] = z
       for d2=1:d
         G[d1, κ - δ] += B[d2, d1] * B[d2, κ + δ]
       end
