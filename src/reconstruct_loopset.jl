@@ -30,7 +30,7 @@ function Loop(ls::LoopSet, ex::Expr, sym::Symbol, f, s, l, ub::Int)
     rangesym = gensym(ssym * "_loop");
     lensym = gensym(ssym * "_looplen")
     pushpreamble!(ls, Expr(:(=), rangesym, ex))
-    pushpreamble!(ls, Expr(:(=), lensym, Expr(:call, lv(:maybestaticlength), rangesym)))
+    pushpreamble!(ls, Expr(:(=), lensym, Expr(:call, GlobalRef(ArrayInterface,:static_length), rangesym)))
     F = if f === nothing
         start = gensym(ssym*"_loopstart")
         pushpreamble!(ls, Expr(:(=), start, Expr(:call, %, Expr(:call, lv(:first), rangesym), Int)))
