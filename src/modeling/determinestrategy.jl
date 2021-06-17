@@ -1,20 +1,4 @@
 
-
-# function indexappearences(op::Operation, s::Symbol)
-#     s ∉ loopdependencies(op) && return 0
-#     appearences = 0
-#     if isloopvalue(op)
-#         return s === first(loopdependencies(op)) ? 1 : 0
-#     elseif isload(op)
-#         return 100
-#     end
-#     newapp = 0
-#     for opp ∈ parents(op)
-#         newapp += indexappearences(opp, s)
-#     end
-#     factor = instruction(op).instr ∈ (:+, :vadd, :add_fast, :vadd_fast) ? 1 : 10
-#     newapp * factor
-# end
 function check_linear_parents(ls::LoopSet, op::Operation, s::Symbol)
   (s ∈ loopdependencies(op)) || return true
   if isload(op) # TODO: handle loading from ranges.
@@ -155,44 +139,44 @@ end
 function evaluate_cost_unroll(
     ls::LoopSet, order::Vector{Symbol}, vloopsym::Symbol, max_cost = typemax(Float64)
 )
-    included_vars = fill!(resize!(ls.included_vars, length(operations(ls))), false)
-    nested_loop_syms = Symbol[]#Set{Symbol}()
-    total_cost = 0.0
-    iter = 1.0
-    size_T = biggest_type_size(ls)
-    W, Wshift = lsvecwidthshift(ls, vloopsym, size_T)
-    # Need to check if fusion is possible
-    for itersym ∈ order
-        cacheunrolled!(ls, itersym, Symbol(""), vloopsym)
-        # Add to set of defined symbles
-        push!(nested_loop_syms, itersym)
-        looplength = length(ls, itersym)
-        liter = itersym === vloopsym ? num_iterations(looplength, W) : looplength
-        iter *= liter
-        # check which vars we can define at this level of loop nest
-        for (id,op) ∈ enumerate(operations(ls))
-            # won't define if already defined...
-            # id = identifier(op)
-            included_vars[id] && continue
-            # it must also be a subset of defined symbols
-            loopdependencies(op) ⊆ nested_loop_syms || continue
-          # hasintersection(reduceddependencies(op), nested_loop_syms) && return Inf
-            rd = reduceddependencies(op)
-            hasintersection(rd, @view(nested_loop_syms[1:end-length(rd)])) && return Inf
-            if isstore(op) #TODO: DRY (this is repeated in evaluate_cost_tile)
-                loadstoredeps = store_load_deps(op)
-                if !(loadstoredeps === nothing)
-                    any(s -> (s ∉ loadstoredeps), nested_loop_syms) && return Inf
-                end
-            end
-            included_vars[id] = true
-            # TODO: use actual unrolls here?
-            c = first(cost(ls, op, (Symbol(""),Symbol("")), vloopsym, Wshift, size_T))
-            total_cost += iter * c
-            total_cost > max_cost && return total_cost # abort if more expensive; we only want to know the cheapest
+  included_vars = fill!(resize!(ls.included_vars, length(operations(ls))), false)
+  nested_loop_syms = Symbol[]#Set{Symbol}()
+  total_cost = 0.0
+  iter = 1.0
+  size_T = biggest_type_size(ls)
+  W, Wshift = lsvecwidthshift(ls, vloopsym, size_T)
+  # Need to check if fusion is possible
+  for itersym ∈ order
+    cacheunrolled!(ls, itersym, Symbol(""), vloopsym)
+    # Add to set of defined symbles
+    push!(nested_loop_syms, itersym)
+    looplength = length(ls, itersym)
+    liter = itersym === vloopsym ? num_iterations(looplength, W) : looplength
+    iter *= liter
+    # check which vars we can define at this level of loop nest
+    for (id,op) ∈ enumerate(operations(ls))
+      # won't define if already defined...
+      # id = identifier(op)
+      included_vars[id] && continue
+      # it must also be a subset of defined symbols
+      loopdependencies(op) ⊆ nested_loop_syms || continue
+      # hasintersection(reduceddependencies(op), nested_loop_syms) && return Inf
+      rd = reduceddependencies(op)
+      hasintersection(rd, @view(nested_loop_syms[1:end-length(rd)])) && return Inf
+      if isstore(op) #TODO: DRY (this is repeated in evaluate_cost_tile)
+        loadstoredeps = store_load_deps(op)
+        if !(loadstoredeps === nothing)
+          any(s -> (s ∉ loadstoredeps), nested_loop_syms) && return Inf
         end
+      end
+      included_vars[id] = true
+      # TODO: use actual unrolls here?
+      c = first(cost(ls, op, (Symbol(""),Symbol("")), vloopsym, Wshift, size_T))
+      total_cost += iter * c
+      0.9total_cost > max_cost && return total_cost # abort if more expensive; we only want to know the cheapest
     end
-    0.999total_cost + stride_penalty(ls, order) # 0.999 to place finger on scale in its favor
+  end
+  0.9total_cost + stride_penalty(ls, order) # 0.999 to place finger on scale in its favor
 end
 
 # only covers vectorized ops; everything else considered lifted?
@@ -275,7 +259,7 @@ function unroll_no_reductions(ls, order, vloopsym)
   elseif iszero(load_rt)
     iszero(store_rt) ? 4 : max(1, min(4, round(Int, 2compute_rt / store_rt)))
   else
-    max(1, min(4, round(Int, 2compute_rt / load_rt)))
+    max(1, min(4, round(Int, 1.75compute_rt / load_rt)))
   end
   # u = min(u, max(1, (reg_count(ls) ÷ max(1,round(Int,rp)))))
   # commented out here is to decide to align loops
@@ -1062,7 +1046,8 @@ function evaluate_cost_tile!(
                 # println("constoffelim")
                 continue
             elseif load_elimination_cost_factor!(cost_vec, reg_pressure, choose_to_inline, ls, op, iters[id], unrollsyms, Wshift, size_T)
-                # println("loadelim")
+              # println("loadelim")
+              # A[i,j-1], A[i,j]
                 continue
             end
         #elseif isconstant(op)

@@ -971,21 +971,20 @@ end
 # end
 # instruction(ls::LoopSet, f::Symbol) = instruction!(ls, f)
 function instruction!(ls::LoopSet, x::Expr)
-    # x isa Symbol && return x
-    if x.head === :$
-        _x = only(x.args)
-        _x isa Symbol && return instruction!(ls, _x)
-        @assert _x isa Expr
-        x = _x
-    end
+  # x isa Symbol && return x
+  if x.head === :$
+    _x = only(x.args)
+    _x isa Symbol && return instruction!(ls, _x)
+    @assert _x isa Expr
+    x = _x
+  end
+  if x.head ≢ :(->)
     instr = last(x.args).value
-    if instr ∉ keys(COST)
-        instr = gensym!(ls, "f")
-        pushpreamble!(ls, Expr(:(=), instr, x))
-        Instruction(Symbol(""), instr)
-    else
-        Instruction(:LoopVectorization, instr)
-    end
+    instr ∈ keys(COST) && return Instruction(:LoopVectorization, instr)
+  end
+  instr = gensym!(ls, "f")
+  pushpreamble!(ls, Expr(:(=), instr, x))
+  Instruction(Symbol(""), instr)
 end
 instruction!(ls::LoopSet, x::Symbol) = instruction(x)
 function instruction!(ls::LoopSet, f::F) where {F <: Function}

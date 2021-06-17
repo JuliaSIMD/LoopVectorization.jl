@@ -735,7 +735,7 @@ function findreducedparentfornonvecstoreavx!(U::AbstractMatrix{T}, E1::AbstractV
             U[i,j] = t
             _s += a * (1 - t^2)
         end
-        E1[j] = _s / n
+        E1[j] = (x -> x / n)(_s)
     end
     U,E1
 end

@@ -89,39 +89,41 @@ function returned_ops(ls::LoopSet)
 end
 
 function lower_and_split_loops(ls::LoopSet, inline::Int)
-    split_candidates = returned_ops(ls)
-    length(split_candidates) > 1 || return lower(ls, inline)
-    order_fused, unrolled_fused, tiled_fused, vectorized_fused, U_fused, T_fused, cost_fused, shouldinline_fused = choose_order_cost(ls)
-    remaining_ops = Vector{Int}(undef, length(split_candidates) - 1); split_1 = Int[0];
-    # for (ind,i) ∈ enumerate(split_candidates)
-    for (ind,i) ∈ enumerate(split_candidates)
-        split_1[1] = i
-        ls_1 = split_loopset(ls, split_1)
-        order_1, unrolled_1, tiled_1, vectorized_1, U_1, T_1, cost_1, shouldinline_1 = choose_order_cost(ls_1)
-        remaining_ops[1:ind-1] .= @view(split_candidates[1:ind-1]); remaining_ops[ind:end] .= @view(split_candidates[ind+1:end])
-        ls_2 = split_loopset(ls, remaining_ops)
-        order_2, unrolled_2, tiled_2, vectorized_2, U_2, T_2, cost_2, shouldinline_2 = choose_order_cost(ls_2)
-        # U_1 = T_1 = U_2 = T_2 = 2
-        #@show cost_1 + cost_2 ≤ cost_fused, cost_1, cost_2, cost_fused
-        if cost_1 + cost_2 ≤ cost_fused
-            ls_2_lowered = if length(remaining_ops) > 1
-                inline = iszero(inline) ? (shouldinline_1 % Int) : inline
-                lower_and_split_loops(ls_2, inline)
-            else
-                doinline = inlinedecision(inline, shouldinline_1 | shouldinline_2)
-                lower(ls_2, order_2, unrolled_2, tiled_2, vectorized_2, U_2, T_2, doinline)
-            end
-            return Expr(
-                :block,
-                ls.preamble,
-                lower(ls_1, order_1, unrolled_1, tiled_1, vectorized_1, U_1, T_1, false),
-                ls_2_lowered,
-                nothing
-            )
-        end
+  split_candidates = returned_ops(ls)
+  length(split_candidates) > 1 || return lower(ls, inline)
+  order_fused, unrolled_fused, tiled_fused, vectorized_fused, U_fused, T_fused, cost_fused, shouldinline_fused = choose_order_cost(ls)
+  remaining_ops = Vector{Int}(undef, length(split_candidates) - 1); split_1 = Int[0];
+  # for (ind,i) ∈ enumerate(split_candidates)
+  for (ind,i) ∈ enumerate(split_candidates)
+    split_1[1] = i
+    ls_1 = split_loopset(ls, split_1)
+    order_1, unrolled_1, tiled_1, vectorized_1, U_1, T_1, cost_1, shouldinline_1 = choose_order_cost(ls_1)
+    remaining_ops[1:ind-1] .= @view(split_candidates[1:ind-1]); remaining_ops[ind:end] .= @view(split_candidates[ind+1:end])
+    ls_2 = split_loopset(ls, remaining_ops)
+    order_2, unrolled_2, tiled_2, vectorized_2, U_2, T_2, cost_2, shouldinline_2 = choose_order_cost(ls_2)
+    # U_1 = T_1 = U_2 = T_2 = 2
+    # return ls_1, ls_2
+    # @show cost_1 + cost_2 ≤ cost_fused, cost_1, cost_2, cost_fused
+    if cost_1 + cost_2 ≤ 0.9cost_fused
+      ls_2_lowered = if length(remaining_ops) > 1
+        inline = iszero(inline) ? (shouldinline_1 % Int) : inline
+        lower_and_split_loops(ls_2, inline)
+      else
+        doinline = inlinedecision(inline, shouldinline_1 | shouldinline_2)
+        lower(ls_2, order_2, unrolled_2, tiled_2, vectorized_2, U_2, T_2, doinline)
+      end
+      return Expr(
+        :block,
+        ls.preamble,
+        lower(ls_1, order_1, unrolled_1, tiled_1, vectorized_1, U_1, T_1, false),
+        ls_2_lowered,
+        nothing
+      )
     end
-    doinline = inlinedecision(inline, shouldinline_fused)
-    lower(ls, order_fused, unrolled_fused, tiled_fused, vectorized_fused, U_fused, T_fused, doinline)
+    length(split_candidates) == 2 && break
+  end
+  doinline = inlinedecision(inline, shouldinline_fused)
+  lower(ls, order_fused, unrolled_fused, tiled_fused, vectorized_fused, U_fused, T_fused, doinline)
 end
 
 
