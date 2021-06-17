@@ -142,7 +142,7 @@ function load_short_static_reduction_first!(ls::LoopSet, u₁loop::Symbol, u₂l
 end
 
 function fillorder!(ls::LoopSet, order::Vector{Symbol}, u₁loop::Symbol, u₂loop::Symbol, u₂max::Int, vectorized::Symbol)
-  load_short_static_reduction_first!(ls, u₁loop, u₂loop, vectorized)
+    load_short_static_reduction_first!(ls, u₁loop, u₂loop, vectorized)
     lo = ls.loop_order
     resize!(lo, length(ls.loopsymbols))
     ro = lo.loopnames # reverse order; will have same order as lo
