@@ -756,21 +756,21 @@ function add_block!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
     end
 end
 function maybestatic!(expr::Expr)
-    if expr.head === :call
-        f = first(expr.args)
-        if f === :length
-            expr.args[1] = lv(:maybestaticlength)
-        elseif f === :size && length(expr.args) == 3
-            i = expr.args[3]
-            if i isa Integer
-                expr.args[1] = lv(:maybestaticsize)
-                expr.args[3] = Expr(:call, Expr(:curly, :Val, convert(Int, i)))
-            end
-        else
-            static_literals!(expr)
-        end
+  if expr.head === :call
+    f = first(expr.args)
+    if f === :length
+      expr.args[1] = GlobalRef(ArrayInterface,:static_length)
+    elseif f === :size && length(expr.args) == 3
+      i = expr.args[3]
+      if i isa Integer
+        expr.args[1] = GlobalRef(ArrayInterface,:size)
+        expr.args[3] = staticexpr(convert(Int,i)::Int)
+      end
+    else
+      static_literals!(expr)
     end
-    expr
+  end
+  expr
 end
 add_loop_bound!(ls::LoopSet, itersym::Symbol, bound::Union{Integer,Symbol}, upper::Bool, step::Bool)::MaybeKnown = MaybeKnown(bound, upper ? 1024 : 1)
 function add_loop_bound!(ls::LoopSet, itersym::Symbol, bound::Expr, upper::Bool, step::Bool)::MaybeKnown
@@ -797,7 +797,7 @@ function range_loop!(ls::LoopSet, itersym::Symbol, l::MaybeKnown, u::MaybeKnown,
     isone(s) || pushexpr!(range, s)
     pushexpr!(range, u)
     pushprepreamble!(ls, Expr(:(=), rangename, range))
-    pushprepreamble!(ls, Expr(:(=), lenname, Expr(:call, lv(:maybestaticlength), rangename)))
+    pushprepreamble!(ls, Expr(:(=), lenname, Expr(:call, GlobalRef(ArrayInterface,:static_length), rangename)))
     Loop(itersym, l, u, s, rangename, lenname)
 end
 function range_loop!(ls::LoopSet, r::Expr, itersym::Symbol)::Loop
@@ -853,7 +853,7 @@ end
 function misc_loop!(ls::LoopSet, r::Union{Expr,Symbol}, itersym::Symbol, staticstepone::Bool)::Loop
     rangename = gensym!(ls, "looprange" * string(itersym)); lenname = gensym!(ls, "looplen" * string(itersym));
     pushprepreamble!(ls, Expr(:(=), rangename, Expr(:call, lv(:canonicalize_range), :(@inbounds $(static_literals!(r))))))
-    pushprepreamble!(ls, Expr(:(=), lenname, Expr(:call, lv(:maybestaticlength), rangename)))
+    pushprepreamble!(ls, Expr(:(=), lenname, Expr(:call, GlobalRef(ArrayInterface,:static_length), rangename)))
     L = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticfirst), rangename), false, false)
     U = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticlast), rangename), true, false)
     if staticstepone

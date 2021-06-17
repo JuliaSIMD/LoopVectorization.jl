@@ -4,7 +4,7 @@ using Static: StaticInt, gt
 using VectorizationBase, SLEEFPirates, UnPack, OffsetArrays
 using VectorizationBase: register_size, register_count, cache_linesize, cache_size, has_opmask_registers,
   mask, pick_vector_width, MM, AbstractMask, data, grouped_strided_pointer, AbstractSIMD,
-  maybestaticlength, maybestaticsize, vzero, maybestaticrange, offsetprecalc, lazymul,
+  vzero, offsetprecalc, lazymul,
   vadd_nw, vadd_nsw, vadd_nuw, vsub_nw, vsub_nsw, vsub_nuw, vmul_nw, vmul_nsw, vmul_nuw,
     maybestaticfirst, maybestaticlast, gep, gesp, NativeTypes, #llvmptr,
     vfmadd, vfmsub, vfnmadd, vfnmsub, vfmadd_fast, vfmsub_fast, vfnmadd_fast, vfnmsub_fast, vfmadd231, vfmsub231, vfnmadd231, vfnmsub231,
