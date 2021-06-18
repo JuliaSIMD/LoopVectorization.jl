@@ -160,7 +160,7 @@ function evaluate_cost_unroll(
       # it must also be a subset of defined symbols
       loopdependencies(op) ⊆ nested_loop_syms || continue
       # hasintersection(reduceddependencies(op), nested_loop_syms) && return Inf
-      (isassigned(sld, id) && any(s -> (s ∉ sld[id]), nested_loop_syms)) && return 0,0,Inf,false
+      (isassigned(sld, id) && any(s -> (s ∉ sld[id]), nested_loop_syms)) && return Inf
       included_vars[id] = true
       # TODO: use actual unrolls here?
       c = first(cost(ls, op, (Symbol(""),Symbol("")), vloopsym, Wshift, size_T))
