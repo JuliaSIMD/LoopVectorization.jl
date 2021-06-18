@@ -23,7 +23,7 @@ using VectorizationBase: register_size, register_count, cache_linesize, cache_si
     num_threads, num_cores,
     max_mask#,zero_mask
 
-using VectorizationBase: maybestaticlength # for compatibility
+using VectorizationBase: maybestaticsize # for compatibility
 
 using IfElse: ifelse
 
