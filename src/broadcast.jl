@@ -385,7 +385,7 @@ function add_broadcast_loops!(ls::LoopSet, loopsyms::Vector{Symbol}, destsym::Sy
         push!(axes_tuple.args, Nrange)
         pushpreamble!(ls, Expr(:(=), Nlower, Expr(:call, lv(:maybestaticfirst), Nrange)))
         pushpreamble!(ls, Expr(:(=), Nupper, Expr(:call, lv(:maybestaticlast), Nrange)))
-        pushpreamble!(ls, Expr(:(=), Nlen, Expr(:call, lv(:maybestaticlength), Nrange)))
+        pushpreamble!(ls, Expr(:(=), Nlen, Expr(:call, GlobalRef(ArrayInterface,:static_length), Nrange)))
     end
 end
 # size of dest determines loops
@@ -465,9 +465,8 @@ end
     bc::Broadcasted, ::Val{Mod}, ::Val{UNROLL}
 ) where {Mod,UNROLL}
   ElType = Base.Broadcast.combine_eltypes(bc.f, bc.args)
-  @show ElType
-    dest = similar(bc, ElType)
-    vmaterialize!(dest, bc, Val{Mod}(), Val{UNROLL}())
+  dest = similar(bc, ElType)
+  vmaterialize!(dest, bc, Val{Mod}(), Val{UNROLL}())
 end
 
 vmaterialize!(dest, bc, ::Val, ::Val, ::StaticInt, ::StaticInt, ::StaticInt) = Base.Broadcast.materialize!(dest, bc)

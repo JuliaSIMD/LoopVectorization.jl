@@ -30,7 +30,7 @@ function Loop(ls::LoopSet, ex::Expr, sym::Symbol, f, s, l, ub::Int)
     rangesym = gensym(ssym * "_loop");
     lensym = gensym(ssym * "_looplen")
     pushpreamble!(ls, Expr(:(=), rangesym, ex))
-    pushpreamble!(ls, Expr(:(=), lensym, Expr(:call, lv(:maybestaticlength), rangesym)))
+    pushpreamble!(ls, Expr(:(=), lensym, Expr(:call, GlobalRef(ArrayInterface,:static_length), rangesym)))
     F = if f === nothing
         start = gensym(ssym*"_loopstart")
         pushpreamble!(ls, Expr(:(=), start, Expr(:call, %, Expr(:call, lv(:first), rangesym), Int)))
@@ -106,10 +106,10 @@ function ArrayReferenceMeta(
 )
     # unpack the `ArrayRefStruct`
     # we don't want to specialize on it, as it is typed on symbols.
-    index_types = (ar.index_types)::UInt64
-    indices = (ar.indices)::UInt64
-    offsets = (ar.offsets)::UInt64
-    strides = (ar.strides)::UInt64
+    index_types = (ar.index_types)::UInt128
+    indices = (ar.indices)::UInt128
+    offsets = (ar.offsets)::UInt128
+    strides = (ar.strides)::UInt128
     arrayar, ptrar = array_and_ptr(ar)::Tuple{Symbol,Symbol}
     # ptrar = ptr(ar)::Symbol
     # TODO, check if this matters at all. The compiler still knows it is an `::ArrayRefStruct`, just not `arrayar` or `ptrar`?
@@ -119,7 +119,7 @@ function ArrayReferenceMeta(
     )
 end
 function ArrayReferenceMeta(
-    ls::LoopSet, index_types::UInt64, indices::UInt64, offsets::UInt64, strides::UInt64,
+    ls::LoopSet, index_types::UInt128, indices::UInt128, offsets::UInt128, strides::UInt128,
     arrayar::Symbol, ptrar::Symbol, arraysymbolinds::Vector{Symbol},
     opsymbols::Vector{Symbol}, nopsv::Vector{NOpsType}, expandedv::Vector{Bool}
 )
@@ -128,7 +128,7 @@ function ArrayReferenceMeta(
     offset_vec = Int8[]
     stride_vec = Int8[]
     loopedindex = Bool[]
-    while index_types != zero(UInt64)
+    while index_types != zero(UInt128)
         ind = indices % UInt8
         offsetᵢ = offsets % Int8
         strideᵢ = strides % Int8
@@ -405,8 +405,8 @@ loopdependencies(ls::LoopSet, os::OperationStruct, expand = false, offset = 0) =
 reduceddependencies(ls::LoopSet, os::OperationStruct, expand = false, offset = 0) = parents_symvec(ls, os.reduceddeps, expand, offset)
 childdependencies(ls::LoopSet, os::OperationStruct, expand = false, offset = 0) = parents_symvec(ls, os.childdeps, expand, offset)
 
-# parents(ls::LoopSet, u::UInt64) = loopindexoffset(ls, u, false)
-parents(ls::LoopSet, u::UInt64) = loopindex(ls, u, 0x08)
+# parents(ls::LoopSet, u::UInt128) = loopindexoffset(ls, u, false)
+parents(ls::LoopSet, u::UInt128) = loopindex(ls, u, 0x08)
 parents(ls::LoopSet, os::OperationStruct) = parents(ls, os.parents)
 
 expandedopname(opsymbol::Symbol, offset::Integer) = Symbol(String(opsymbol)*'#'*string(offset+1)*'#')

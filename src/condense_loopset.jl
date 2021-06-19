@@ -75,57 +75,57 @@ It supports array-references with up to 8 indexes, where the data for each conse
 of `index_types` (storing the enum `IndexType`), `indices` (the `id` for each index symbol), and `offsets` (currently unused).
 """
 struct ArrayRefStruct{array,ptr}
-    index_types::UInt64
-    indices::UInt64
-    offsets::UInt64
-    strides::UInt64
+  index_types::UInt128
+  indices::UInt128
+  offsets::UInt128
+  strides::UInt128
 end
 array_and_ptr(@nospecialize(ar::ArrayRefStruct{a,p})) where {a,p} = (a::Symbol,p::Symbol)
 # array(@nospecialize(ar::ArrayRefStruct{a,p})) where {a,p} = a::Symbol
 # ptr(@nospecialize(ar::ArrayRefStruct{a,p})) where {a,p}   = p::Symbol
 
 function findindoradd!(v::Vector{T}, s::T) where {T}
-    ind = findfirst(==(s), v)
-    ind === nothing || return ind
-    push!(v, s)
-    length(v)
+  ind = findfirst(==(s), v)
+  ind === nothing || return ind
+  push!(v, s)
+  length(v)
 end
 function ArrayRefStruct(ls::LoopSet, mref::ArrayReferenceMeta, arraysymbolinds::Vector{Symbol}, ids::Vector{Int})
-    index_types = zero(UInt64)
-    indices = zero(UInt64)
-    offsets = zero(UInt64)
-    strides = zero(UInt64)
-    @unpack loopedindex, ref = mref
-    indv = ref.indices
-    offv = ref.offsets
-    strv = ref.strides
-    # we can discard that the array was considered discontiguous, as it should be recovered from type information
-    start = 1 + (first(indv) === DISCONTIGUOUS)
-    for (n,ind) ∈ enumerate(@view(indv[start:end]))
-        index_types <<= 8
-        indices <<= 8
-        offsets <<= 8
-        offsets |= (offv[n] % UInt8)
-        strides <<= 8
-        strides |= (strv[n] % UInt8)
-        if loopedindex[n]
-            index_types |= LoopIndex
-            if strv[n] ≠ 0
-                indices |= getloopid(ls, ind)
-            end
-        else
-            parent = get(ls.opdict, ind, nothing)
-            @assert !(parent === nothing) "Index $ind not found in array."
-            # if parent === nothing
-            #     index_types |= SymbolicIndex
-            #     indices |= findindoradd!(arraysymbolinds, ind)
-            # else
-            index_types |= ComputedIndex
-            indices |= ids[identifier(parent)]
-            # end
-        end
+  index_types = zero(UInt128)
+  indices = zero(UInt128)
+  offsets = zero(UInt128)
+  strides = zero(UInt128)
+  @unpack loopedindex, ref = mref
+  indv = ref.indices
+  offv = ref.offsets
+  strv = ref.strides
+  # we can discard that the array was considered discontiguous, as it should be recovered from type information
+  start = 1 + (first(indv) === DISCONTIGUOUS)
+  for (n,ind) ∈ enumerate(@view(indv[start:end]))
+    index_types <<= 8
+    indices <<= 8
+    offsets <<= 8
+    offsets |= (offv[n] % UInt8)
+    strides <<= 8
+    strides |= (strv[n] % UInt8)
+    if loopedindex[n]
+      index_types |= LoopIndex
+      if strv[n] ≠ 0
+        indices |= getloopid(ls, ind)
+      end
+    else
+      parent = get(ls.opdict, ind, nothing)
+      @assert !(parent === nothing) "Index $ind not found in array."
+      # if parent === nothing
+      #     index_types |= SymbolicIndex
+      #     indices |= findindoradd!(arraysymbolinds, ind)
+      # else
+      index_types |= ComputedIndex
+      indices |= ids[identifier(parent)]
+      # end
     end
-    ArrayRefStruct{mref.ref.array,mref.ptr}( index_types, indices, offsets, strides )
+  end
+  ArrayRefStruct{mref.ref.array,mref.ptr}( index_types, indices, offsets, strides )
 end
 
 """
@@ -135,62 +135,56 @@ A condensed representation of an [`Operation`](@ref).
 """
 struct OperationStruct <: AbstractLoopOperation
     # instruction::Instruction
-    loopdeps::UInt64
-    reduceddeps::UInt64
-    childdeps::UInt64
-    parents::UInt64
-    node_type::OperationType
-    array::UInt8
-    symid::UInt8
+  loopdeps::UInt128
+  reduceddeps::UInt128
+  childdeps::UInt128
+  parents::UInt128
+  node_type::OperationType
+  array::UInt8
+  symid::UInt8
 end
 optype(os) = os.node_type
 
 function findmatchingarray(ls::LoopSet, mref::ArrayReferenceMeta)
-    id = 0x01
-    for r ∈ ls.refs_aliasing_syms
-        r == mref && return id
-        id += 0x01
-    end
-    0x00
+  id = 0x01
+  for r ∈ ls.refs_aliasing_syms
+    r == mref && return id
+    id += 0x01
+  end
+  0x00
 end
-# filled_4byte_chunks(u::UInt64) = 16 - (leading_zeros(u) >>> 2)
-filled_8byte_chunks(u::UInt64) = 8 - (leading_zeros(u) >>> 3)
-
-# num_loop_deps(os::OperationStruct) = filled_4byte_chunks(os.loopdeps)
-# num_reduced_deps(os::OperationStruct) = filled_4byte_chunks(os.reduceddeps)
-# num_child_deps(os::OperationStruct) = filled_4byte_chunks(os.childdeps)
-# num_parents(os::OperationStruct) = filled_4byte_chunks(os.parents)
+filled_8byte_chunks(u::T) where {T<:Unsigned} = sizeof(T) - (leading_zeros(u) >>> 3)
 
 function shifted_loopset(ls::LoopSet, loopsyms::Vector{Symbol})
-    ld = zero(UInt64) # leading_zeros(ld) >> 2 yields the number of loopdeps
-    for d ∈ loopsyms
-        ld <<= 4
-        ld |= getloopid(ls, d)::Int
-    end
-    ld
+  ld = zero(UInt128) # leading_zeros(ld) >> 2 yields the number of loopdeps
+  for d ∈ loopsyms
+    ld <<= 4
+    ld |= getloopid(ls, d)::Int
+  end
+  ld
 end
 loopdeps_uint(ls::LoopSet, op::Operation) = shifted_loopset(ls, loopdependencies(op))
 reduceddeps_uint(ls::LoopSet, op::Operation) = shifted_loopset(ls, reduceddependencies(op))
 childdeps_uint(ls::LoopSet, op::Operation) = shifted_loopset(ls, reducedchildren(op))
 function parents_uint(ls::LoopSet, op::Operation)
-    p = zero(UInt64)
-    for parent ∈ parents(op)
-        p <<= 8
-        p |= identifier(parent)
-    end
-    p
+  p = zero(UInt128)
+  for parent ∈ parents(op)
+    p <<= 8
+    p |= identifier(parent)
+  end
+  p
 end
 function recursively_set_parents_true!(x::Vector{Bool}, op::Operation)
-    x[identifier(op)] && return nothing # don't redescend
-    x[identifier(op)] = true
-    for opp ∈ parents(op)
-        recursively_set_parents_true!(x, opp)
-    end
-    return nothing
+  x[identifier(op)] && return nothing # don't redescend
+  x[identifier(op)] = true
+  for opp ∈ parents(op)
+    recursively_set_parents_true!(x, opp)
+  end
+  return nothing
 end
 function getroots(ls::LoopSet)::Vector{Bool}
-    rooted = Vector{Bool}(undef, length(operations(ls)))
-    getroots!(rooted, ls)
+  rooted = Vector{Bool}(undef, length(operations(ls)))
+  getroots!(rooted, ls)
 end
 function getroots!(rooted::Vector{Bool}, ls::LoopSet)
   fill!(rooted, false)

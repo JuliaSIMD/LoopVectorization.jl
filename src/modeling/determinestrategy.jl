@@ -1,4 +1,3 @@
-
 function check_linear_parents(ls::LoopSet, op::Operation, s::Symbol)
   (s ∈ loopdependencies(op)) || return true
   if isload(op) # TODO: handle loading from ranges.
@@ -137,7 +136,7 @@ end
 
 # evaluates cost of evaluating loop in given order
 function evaluate_cost_unroll(
-    ls::LoopSet, order::Vector{Symbol}, vloopsym::Symbol, max_cost = typemax(Float64)
+  ls::LoopSet, order::Vector{Symbol}, vloopsym::Symbol, max_cost::Float64 = typemax(Float64), sld::Vector{Vector{Symbol}} = store_load_deps(operations(ls))
 )
   included_vars = fill!(resize!(ls.included_vars, length(operations(ls))), false)
   nested_loop_syms = Symbol[]#Set{Symbol}()
@@ -161,14 +160,7 @@ function evaluate_cost_unroll(
       # it must also be a subset of defined symbols
       loopdependencies(op) ⊆ nested_loop_syms || continue
       # hasintersection(reduceddependencies(op), nested_loop_syms) && return Inf
-      rd = reduceddependencies(op)
-      hasintersection(rd, @view(nested_loop_syms[1:end-length(rd)])) && return Inf
-      if isstore(op) #TODO: DRY (this is repeated in evaluate_cost_tile)
-        loadstoredeps = store_load_deps(op)
-        if !(loadstoredeps === nothing)
-          any(s -> (s ∉ loadstoredeps), nested_loop_syms) && return Inf
-        end
-      end
+      (isassigned(sld, id) && any(s -> (s ∉ sld[id]), nested_loop_syms)) && return Inf
       included_vars[id] = true
       # TODO: use actual unrolls here?
       c = first(cost(ls, op, (Symbol(""),Symbol("")), vloopsym, Wshift, size_T))
@@ -216,7 +208,7 @@ end
 function unroll_no_reductions(ls, order, vloopsym)
   size_T = biggest_type_size(ls)
   W, Wshift = lsvecwidthshift(ls, vloopsym, size_T)
-  
+
   compute_rt = load_rt = store_rt = 0.0
   unrolled = last(order)
   i = 0
@@ -247,7 +239,7 @@ function unroll_no_reductions(ls, order, vloopsym)
     elseif isstore(op)
       store_rt += rt
     end
-  end 
+  end
   # heuristic guess
   # roundpow2(min(4, round(Int, (compute_rt + load_rt + 1) / compute_rt)))
   memory_rt = load_rt + store_rt
@@ -330,7 +322,7 @@ end
 
 demote_unroll_factor(ls::LoopSet, UF, loop::Symbol) = demote_unroll_factor(ls, UF, getloop(ls, loop))
 function demote_unroll_factor(ls::LoopSet, UF, loop::Loop)
-    W = ls.vector_width 
+    W = ls.vector_width
     if !iszero(W) && isstaticloop(loop)
         UFW = maybedemotesize(UF*W, length(loop))
         UF = cld(UFW, W)
@@ -676,7 +668,7 @@ function isoptranslation(ls::LoopSet, op::Operation, unrollsyms::UnrollSymbols)
     u₂step = step(getloop(ls, u₂loopsym))
     (isknown(u₁step) & isknown(u₂step)) || return 0, 0x00
     abs(gethint(u₁step)) == abs(gethint(u₂step)) || return 0, 0x00
-    
+
     istranslation = 0
     inds = getindices(op); li = op.ref.loopedindex
     for i ∈ eachindex(li)
@@ -738,7 +730,7 @@ function maxnegativeoffset(ls::LoopSet, op::Operation, u::Symbol)
     collectionid, opind = omop.opidcollectionmap[identifier(op)]
     collectionid == 0 && return mno, id
     @unpack opids = omop
-    
+
     # offsetcol = offsets[collectionid]
     opidcol = opids[collectionid]
     opid = identifier(op)
@@ -829,33 +821,42 @@ function load_elimination_cost_factor!(
     end
 end
 function loadintostore(ls::LoopSet, op::Operation)
-    isload(op) || return false # leads to bad behavior more than it helps
-    for opp ∈ operations(ls)
-        isstore(opp) && opp.ref == op.ref && return true
-    end
-    false
+  isload(op) || return false # leads to bad behavior more than it helps
+  for opp ∈ operations(ls)
+    isstore(opp) && opp.ref == op.ref && return true
+  end
+  false
 end
 function store_load_deps!(deps::Vector{Symbol}, op::Operation, compref = op.ref)
-    for opp ∈ parents(op)
-        for ld ∈ loopdependencies(opp)
-            (ld ∈ deps) || push!(deps, ld)
-        end
-        for ld ∈ reduceddependencies(opp)
-            (ld ∈ deps) || push!(deps, ld)
-        end
-        if isload(opp)
-            (opp.ref == compref) && return true
-        else
-            store_load_deps!(deps, opp, compref) && return true
-        end
+  for opp ∈ parents(op)
+    for ld ∈ loopdependencies(opp)
+      (ld ∈ deps) || push!(deps, ld)
     end
-    false
+    for ld ∈ reduceddependencies(opp)
+      (ld ∈ deps) || push!(deps, ld)
+    end
+    if isload(opp)
+      (opp.ref == compref) && return true
+    else
+      store_load_deps!(deps, opp, compref) && return true
+    end
+  end
+  false
 end
-function store_load_deps(op::Operation)
-    isstore(op) || return nothing
-    deps = copy(loopdependencies(op))
-    store_load_deps!(deps, op) ? deps : nothing
+function store_load_deps(op::Operation)::Union{Nothing,Vector{Symbol}}
+  isstore(op) || return nothing
+  deps = copy(loopdependencies(op))
+  store_load_deps!(deps, op) ? deps : nothing
 end
+function store_load_deps(ops::Vector{Operation})
+  sld = Vector{Vector{Symbol}}(undef, length(ops))
+  for i ∈ eachindex(sld)
+    sldᵢ = store_load_deps(ops[i])
+    sldᵢ ≢ nothing && (sld[i] = sldᵢ)
+  end
+  sld
+end
+
 function add_constant_offset_load_elmination_cost!(
     X, R, choose_to_inline, ls::LoopSet, op::Operation, iters, unrollsyms::UnrollSymbols, u₁reduces::Bool, u₂reduces::Bool, Wshift::Int, size_T::Int, opisininnerloop::Bool
 )
@@ -924,7 +925,7 @@ function evaluate_cost_tile(ls::LoopSet, order::Vector{Symbol}, unrollsyms::Unro
   evaluate_cost_tile!(iters, reduced_by_unrolling, ls, order, unrollsyms, anyisbit)
 end
 function evaluate_cost_tile!(
-  iters::Vector{Float64}, reduced_by_unrolling::Array{Bool,3}, ls::LoopSet, order::Vector{Symbol}, unrollsyms::UnrollSymbols, anyisbit::Bool
+  iters::Vector{Float64}, reduced_by_unrolling::Array{Bool,3}, ls::LoopSet, order::Vector{Symbol}, unrollsyms::UnrollSymbols, anyisbit::Bool, sld::Vector{Vector{Symbol}} = store_load_deps(operations(ls))
 )
     N = length(order)
     @assert N ≥ 2 "Cannot tile merely $N loops!"
@@ -998,24 +999,11 @@ function evaluate_cost_tile!(
           # @assert _maybe_continue == all(ld -> ld ∈ nested_loop_syms, loopdependencies(op))
             _maybe_continue || continue
             # all(ld -> ld ∈ nested_loop_syms, loopdependencies(op)) || continue
-            rd = reduceddependencies(op)
-            if hasintersection(rd, @view(nested_loop_syms[1:end-length(rd)]))
-                return 0,0,Inf,false
-            end
-            if isstore(op)
-                loadstoredeps = store_load_deps(op)
-                if !(loadstoredeps === nothing)
-                  # for s ∈ nested_loop_syms
-                  #   contains = false
-                  #   for ds ∈ loadstoredeps
-                  #     contains |= s === ds
-                  #     contains && break
-                  #   end
-                  #   contains || 
-                  # end
-                    any(s -> (s ∉ loadstoredeps), nested_loop_syms) && return 0,0,Inf,false
-                end
-            end
+            # rd = reduceddependencies(op)
+            # if hasintersection(rd, @view(nested_loop_syms[1:end-length(rd)]))
+            #     return 0,0,Inf,false
+            # end
+            (isassigned(sld, id) && any(s -> (s ∉ sld[id]), nested_loop_syms)) && return 0,0,Inf,false
             included_vars[id] = true
             if isconstant(op)
                 depends_on_u₁, depends_on_u₂ = isunrolled_sym(op, u₁loopsym, u₂loopsym, vloopsym)
@@ -1038,7 +1026,7 @@ function evaluate_cost_tile!(
     for (id, op) ∈ enumerate(ops)
         iters[id] == -99.9 && continue
         opisininnerloop = descendentsininnerloop[id]
-        
+
         u₁reducesrt, u₂reducesrt = reduced_by_unrolling[1,1,id], reduced_by_unrolling[2,1,id]
         u₁reducesrp, u₂reducesrp = reduced_by_unrolling[1,2,id], reduced_by_unrolling[2,2,id]
         if isload(op)
@@ -1060,7 +1048,7 @@ function evaluate_cost_tile!(
         rp = opisininnerloop ? rp : zero(rp) # we only care about register pressure within the inner most loop
         rto = rt
         rt *= iters[id]
-        # @show (u₁reducesrt, u₂reducesrt), rto, rt, lat, rp, op 
+        # @show (u₁reducesrt, u₂reducesrt), rto, rt, lat, rp, op
         if isstore(op) & (!u₁reducesrt) & (!u₂reducesrt)
             irreducible_storecosts += rt
         end
@@ -1112,23 +1100,41 @@ end
 #   LoopOrders(syms, similar(syms))
 # end
 struct LoopOrders
-    syms::Vector{Symbol}
-    buff::Vector{Symbol}
-end
-function LoopOrders(ls::LoopSet)
-    syms = copy(ls.loopsymbols)
-    LoopOrders(syms, similar(syms))
-end
-function Base.iterate(lo::LoopOrders)
-  lo.syms, zeros(Int, length(lo.syms))
+  syms_nr::Vector{Symbol}
+  syms_r::Vector{Symbol}
+  buff::Vector{Symbol}
 end
 
-function swap!(x, i, j)
-  xᵢ, xⱼ = x[i], x[j]
-  x[j], x[i] = xᵢ, xⱼ
+function LoopOrders(ls::LoopSet)
+  reductsyms = Symbol[]
+  nonreductsyms = Symbol[]
+  for l ∈ ls.loopsymbols
+    isreduct = false
+    for op ∈ operations(ls)
+      if l ∈ reduceddependencies(op)
+        isreduct = true
+        push!(reductsyms, l)
+        break
+      end
+    end
+    isreduct || push!(nonreductsyms, l)
+  end
+  LoopOrders(nonreductsyms, reductsyms, Vector{Symbol}(undef, length(ls.loopsymbols)))
 end
+
+nonreductview(lo::LoopOrders) = view(lo.buff, 1:length(lo.syms_nr))
+reductview(lo::LoopOrders) = view(lo.buff, 1+length(lo.syms_nr):length(lo.buff))
+function Base.iterate(lo::LoopOrders)
+  copyto!(nonreductview(lo), lo.syms_nr)
+  copyto!(reductview(lo), lo.syms_r)
+  nr = length(lo.syms_nr); r = length(lo.syms_r)
+  state = zeros(Int, nr + r)
+  lo.buff, (view(state, 1:nr), view(state, 1+nr:nr+r))
+end
+
 function advance_state!(state)
   N = length(state)
+  N > 1 || return false
   for n ∈ 1:N
     sₙ = state[n]
     if sₙ == N - n
@@ -1144,16 +1150,31 @@ function advance_state!(state)
   end
   true
 end
-# I doubt this is the most efficient algorithm, but it's the simplest thing
-# that I could come up with.
-function Base.iterate(lo::LoopOrders, state)
-    advance_state!(state) || return nothing
-    syms = copyto!(lo.buff, lo.syms)
-    for i ∈ eachindex(state)
-        sᵢ = state[i]
-        sᵢ == 0 || swap!(syms, i, i + sᵢ)
-    end
-    syms, state
+function advance_state!(state, Nr)
+  state_nr = view(state, 1:Nr)
+  advance_state!(state_nr) && return true
+  fill!(state_nr, 0)
+  advance_state!(view(state, 1+Nr:length(state)))
+end
+swap!(x::AbstractVector, i::Int, j::Int) = (x[j], x[i]) = (x[i], x[j])
+function swap!(dest::AbstractVector{Symbol}, src::AbstractVector{Symbol}, offs::AbstractVector{Int})
+  copyto!(dest, src)
+  for i ∈ eachindex(offs)
+    sᵢ = offs[i]
+    sᵢ == 0 || swap!(dest, i, i + sᵢ)
+  end
+end
+# This is not a good algorithm
+function Base.iterate(lo::LoopOrders, (state_nr, state_r))
+  if advance_state!(state_nr)
+    swap!(nonreductview(lo), lo.syms_nr, state_nr)
+  else
+    advance_state!(state_r) || return nothing
+    fill!(state_nr, 0)
+    copyto!(nonreductview(lo), lo.syms_nr)
+    swap!(reductview(lo), lo.syms_r, state_r)
+  end
+  lo.buff, (state_nr, state_r)
 end
 
 function reject_reorder(ls::LoopSet, loop::Int, isu₂::Bool)
@@ -1167,16 +1188,16 @@ function reject_reorder(ls::LoopSet, loop::Symbol, isu₂::Bool)
   false
 end
 
-function choose_unroll_order(ls::LoopSet, lowest_cost::Float64 = Inf)
+function choose_unroll_order(ls::LoopSet, lowest_cost::Float64 = Inf, sld::Vector{Vector{Symbol}} = store_load_deps(operations(ls)))
   iszero(length(offsetloadcollection(ls).opidcollectionmap)) && fill_offset_memop_collection!(ls)
   lo = LoopOrders(ls)
-  best_order = lo.syms
   new_order, state = iterate(lo) # right now, new_order === best_order
+  best_order = similar(new_order)
   best_vec = first(new_order)
   while true
     for new_vec ∈ new_order
       reject_reorder(ls, new_vec, false) && continue
-      cost_temp = evaluate_cost_unroll(ls, new_order, new_vec, lowest_cost)
+      cost_temp = evaluate_cost_unroll(ls, new_order, new_vec, lowest_cost, sld)
       if cost_temp < lowest_cost
         lowest_cost = cost_temp
         copyto!(best_order, new_order)
@@ -1234,94 +1255,94 @@ opa_0_ = fa(...)
 Then unless `fa` was taking the previous `opa_0_`s as an argument and updating them, this would be wrong, because it'd be overwriting the previous `opa_0_` values.
 """
 function reject_candidate(op::Operation, u₁loopsym::Symbol, u₂loopsym::Symbol)
-    if iscompute(op) && u₁loopsym ∈ reduceddependencies(op) && u₁loopsym ∈ loopdependencies(op)
-        if u₂loopsym ∉ reduceddependencies(op) && !any(opp -> name(opp) === name(op), parents(op))
-            return true
-        end
+  if iscompute(op) && u₁loopsym ∈ reduceddependencies(op) && u₁loopsym ∈ loopdependencies(op)
+    if u₂loopsym ∉ reduceddependencies(op) && !any(opp -> name(opp) === name(op), parents(op))
+      return true
     end
-    false
+  end
+  false
 end
 function reject_candidate(ls::LoopSet, u₁loopsym::Symbol, u₂loopsym::Symbol)
-    for op ∈ operations(ls)
-        reject_candidate(op, u₁loopsym, u₂loopsym) && return true
-    end
-    false
+  for op ∈ operations(ls)
+    reject_candidate(op, u₁loopsym, u₂loopsym) && return true
+  end
+  false
 end
 inlinedecision(inline::Int, shouldinline::Bool) = iszero(inline) ? shouldinline : isone(inline)
-function choose_tile(ls::LoopSet)
-    iszero(length(offsetloadcollection(ls).opidcollectionmap)) && fill_offset_memop_collection!(ls)
-    lo = LoopOrders(ls)
-    best_order = copyto!(ls.loop_order.bestorder, lo.syms)
-    bestu₁ = bestu₂ = best_vec = first(best_order) # filler
-    u₁ = u₂ = 0; lowest_cost = Inf; loadelim = false
-    anyisbit = any(ls.loopindexesbit)
-  
-    nops = length(operations(ls))
-    iters = Vector{Float64}(undef, nops)
-    reduced_by_unrolling = Array{Bool}(undef, 2, 2, nops)
 
-    for newu₂ ∈ lo.syms
-        reject_reorder(ls, newu₂, true) && continue
-        for newu₁ ∈ lo.syms#@view(new_order[nt+1:end])
-            reject_reorder(ls, newu₁, true) && continue
-            ((newu₁ == newu₂) || reject_candidate(ls, newu₁, newu₂)) && continue
-            new_order, state = iterate(lo) # right now, new_order === best_order
-            while true
-                for new_vec ∈ new_order # view to skip first
-                    reject_reorder(ls, new_vec, false) && continue
-                    if anyisbit && ls.loopindexesbit[getloopid(ls,new_vec)]
-                        # ((new_vec === newu₁) || (new_vec === newu₂)) || continue
-                        (new_vec === newu₁) || continue
-                    end
-                    u₁temp, u₂temp, cost_temp, loadelim_temp = evaluate_cost_tile!(iters, reduced_by_unrolling, ls, new_order, UnrollSymbols(newu₁, newu₂, new_vec), anyisbit)
-                    # if cost_temp < lowest_cost # leads to 4 vmovapds
-                    if cost_temp ≤ lowest_cost # lead to 2 vmovapds
-                        lowest_cost = cost_temp
-                        u₁, u₂ = u₁temp, u₂temp
-                        best_vec = new_vec
-                        bestu₂ = newu₂
-                        bestu₁ = newu₁
-                        loadelim = loadelim_temp
-                        copyto!(best_order, new_order)
-                        save_tilecost!(ls)
-                    end
-                end
-                iter = iterate(lo, state)
-                iter === nothing && break
-                new_order, state = iter
-            end
+function choose_tile(ls::LoopSet, sld::Vector{Vector{Symbol}} = store_load_deps(operations(ls)))
+  iszero(length(offsetloadcollection(ls).opidcollectionmap)) && fill_offset_memop_collection!(ls)
+  lo = LoopOrders(ls)
+  best_order = ls.loop_order.bestorder
+  bestu₁ = bestu₂ = best_vec = Symbol("")
+  u₁ = u₂ = 0; lowest_cost = Inf; loadelim = false
+  anyisbit = any(ls.loopindexesbit)
+
+  nops = length(operations(ls))
+  iters = Vector{Float64}(undef, nops)
+  reduced_by_unrolling = Array{Bool}(undef, 2, 2, nops)
+
+  for newu₂ ∈ ls.loopsymbols
+    reject_reorder(ls, newu₂, true) && continue
+    for newu₁ ∈ ls.loopsymbols#@view(new_order[nt+1:end])
+      (((newu₁ == newu₂) || reject_reorder(ls, newu₁, true)) || reject_candidate(ls, newu₁, newu₂)) && continue
+      new_order, state = iterate(lo) # right now, new_order === best_order
+      while true
+        for new_vec ∈ new_order # view to skip first
+          reject_reorder(ls, new_vec, false) && continue
+          if anyisbit && ls.loopindexesbit[getloopid(ls,new_vec)]
+            # ((new_vec === newu₁) || (new_vec === newu₂)) || continue
+            (new_vec === newu₁) || continue
+          end
+          u₁temp, u₂temp, cost_temp, loadelim_temp = evaluate_cost_tile!(iters, reduced_by_unrolling, ls, new_order, UnrollSymbols(newu₁, newu₂, new_vec), anyisbit, sld)
+          # if cost_temp < lowest_cost # leads to 4 vmovapds
+          if cost_temp ≤ lowest_cost # lead to 2 vmovapds
+            lowest_cost = cost_temp
+            u₁, u₂ = u₁temp, u₂temp
+            best_vec = new_vec
+            bestu₂ = newu₂
+            bestu₁ = newu₁
+            loadelim = loadelim_temp
+            copyto!(best_order, new_order)
+            save_tilecost!(ls)
+          end
         end
+        iter = iterate(lo, state)
+        iter === nothing && break
+        new_order, state = iter
+      end
     end
-    ls.loadelimination = loadelim
-    # `any(...)` is a HACK: specialization can fail in Tullio's codegen, resulting in bad performance. See https://github.com/JuliaSIMD/LoopVectorization.jl/issues/245
-    shouldinline = (looplengthprod(ls) < 4097.0) #|| any(op -> iscompute(op) && iszero(length(loopdependencies(op))), operations(ls))
-    best_order, bestu₁, bestu₂, best_vec, u₁, u₂, lowest_cost, shouldinline
+  end
+  ls.loadelimination = loadelim
+  # `any(...)` is a HACK: specialization can fail in Tullio's codegen, resulting in bad performance. See https://github.com/JuliaSIMD/LoopVectorization.jl/issues/245
+  shouldinline = (looplengthprod(ls) < 4097.0) #|| any(op -> iscompute(op) && iszero(length(loopdependencies(op))), operations(ls))
+  best_order, bestu₁, bestu₂, best_vec, u₁, u₂, lowest_cost, shouldinline
 end
 # Last in order is the inner most loop
 function choose_order_cost(ls::LoopSet)
-    resize!(ls.loop_order, length(ls.loopsymbols))
-    if num_loops(ls) > 1
-        torder, tunroll, ttile, tvec, tU, tT, tc, shouldinline = choose_tile(ls)
-    else
-        torder = names(ls) # dummy
-        tunroll = ttile = tvec = Symbol("##undefined##") # dummy
-        tU = tT = 0 # dummy
-        tc = Inf
-    end
-    uorder, uvec, uc = choose_unroll_order(ls, tc)
-    if num_loops(ls) > 1 && tc ≤ uc
-        copyto!(ls.loop_order.bestorder, torder)
-        return torder, tunroll, ttile, tvec, tU, tT, tc, shouldinline
-        # return torder, tvec, 4, 4#5, 5
-    else
-        copyto!(ls.loop_order.bestorder, uorder)
-        UF, uunroll = determine_unroll_factor(ls, uorder, uvec)
-        return uorder, uunroll, Symbol("##undefined##"), uvec, UF, -1, uc, true
-    end
+  resize!(ls.loop_order, length(ls.loopsymbols))
+  sld = store_load_deps(operations(ls))
+  if num_loops(ls) > 1
+    torder, tunroll, ttile, tvec, tU, tT, tc, shouldinline = choose_tile(ls, sld)
+  else
+    torder = names(ls) # dummy
+    tunroll = ttile = tvec = Symbol("##undefined##") # dummy
+    tU = tT = 0 # dummy
+    tc = Inf
+  end
+  uorder, uvec, uc = choose_unroll_order(ls, tc, sld)
+  if num_loops(ls) > 1 && tc ≤ uc
+    @assert ls.loop_order.bestorder === torder
+    # copyto!(ls.loop_order.bestorder, torder)
+    return torder, tunroll, ttile, tvec, tU, tT, tc, shouldinline
+    # return torder, tvec, 4, 4#5, 5
+  else
+    copyto!(ls.loop_order.bestorder, uorder)
+    UF, uunroll = determine_unroll_factor(ls, uorder, uvec)
+    return uorder, uunroll, Symbol("##undefined##"), uvec, UF, -1, uc, true
+  end
 end
 function choose_order(ls::LoopSet)
     order, unroll, tile, vec, u₁, u₂, c = choose_order_cost(ls)
     order, unroll, tile, vec, u₁, u₂
 end
-
-
