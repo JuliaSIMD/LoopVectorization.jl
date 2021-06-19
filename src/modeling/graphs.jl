@@ -487,8 +487,6 @@ function pushpreamble!(ls::LoopSet, op::Operation, v::Number)
     id = identifier(op)
     if iszero(v)
         push!(ls.preamble_zeros, (id, typ))
-    elseif isone(v)
-        push!(ls.preamble_funcofeltypes, (id, MULTIPLICATIVE_IN_REDUCTIONS))
     elseif v isa Integer
         push!(ls.preamble_symint, (id, integer_description(v)))
     else
