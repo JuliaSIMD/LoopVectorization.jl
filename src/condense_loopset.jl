@@ -445,8 +445,11 @@ function check_shouldindbyind(ls::LoopSet, ind::Symbol, shouldindbyind::Vector{B
 end
 
 
-@inline dummy_ptrarray(sp, A) = sp
-@inline dummy_ptrarray(sp::AbstractStridedPointer{T,N}, A::AbstractArray{T,N}) where {T,N} = PtrArray(sp, VectorizationBase.zerotuple(Val{N}()), VectorizationBase.val_dense_dims(A))
+@inline densewrapper(sp, A) = sp
+# @inline dummy_ptrarray(sp::AbstractStridedPointer{T,N}, A::AbstractArray{T,N}) where {T,N} = PtrArray(sp, VectorizationBase.zerotuple(Val{N}()), VectorizationBase.val_dense_dims(A))
+@inline densewrapper(sp::AbstractStridedPointer{T,N}, A::AbstractArray{T,N}) where {T,N} = _densewrapper(sp, VectorizationBase.val_dense_dims(A))
+@inline _densewrapper(sp, ::Nothing) = sp
+@inline _densewrapper(sp::AbstractStridedPointer, ::Val{D}) where {D} = VectorizationBase.DensePointerWrapper{D}(sp)
 
 # write a "check_loops_safe_to_zerorangestart
 # that will be used to
@@ -496,7 +499,7 @@ function add_grouped_strided_pointer!(extra_args::Expr, ls::LoopSet)
   for (k,gespindsummary) ∈ gespsummaries
     ref = allarrayrefs[k]
     gespinds = calcgespinds(ls, ref, gespindsummary, shouldindbyind)
-    push!(tgarrays.args, Expr(:call, lv(:dummy_ptrarray), Expr(:call, lv(:gespf1), vptr(ref), gespinds), name(ref)))
+    push!(tgarrays.args, Expr(:call, lv(:densewrapper), Expr(:call, lv(:gespf1), vptr(ref), gespinds), name(ref)))
   end
   push!(gsp.args, tgarrays)
   matcheddims = Expr(:tuple)
