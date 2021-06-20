@@ -56,6 +56,8 @@ const START_TIME = time()
     @time include("special.jl")
 
     @time include("multiassignments.jl")
+
+    @time include("reduction_untangling.jl")
   end
 
   @time if LOOPVECTORIZATION_TEST == "all" || LOOPVECTORIZATION_TEST == "part2"

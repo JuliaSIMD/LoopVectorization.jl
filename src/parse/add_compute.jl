@@ -307,19 +307,17 @@ function add_compute!(
         deps = newloopdeps; reduceddeps = newreduceddeps
     end
     # @show reduction, search_tree(vparents, var) ex var vparents mpref get(ls.opdict, var, nothing) search_tree_for_ref(ls, vparents, mpref, var) # relies on cycles being forbidden
-    op = if reduction || search_tree(vparents, var)
-        add_reduction!(ls, var, reduceddeps, deps, vparents, reduction_ind, elementbytes, instr)
+    if reduction || search_tree(vparents, var)
+        return add_reduction!(ls, var, reduceddeps, deps, vparents, reduction_ind, elementbytes, instr)
     else
-        var, found = search_tree_for_ref(ls, vparents, mpref, var)
-        if found
-            add_reduction!(ls, var, reduceddeps, deps, vparents, reduction_ind, elementbytes, instr)
-        else
-            op = Operation(length(operations(ls)), var, elementbytes, instr, compute, deps, reduceddeps, vparents)
-            pushop!(ls, op, var)
+        if mpref ≢ nothing && ((length(loopdependencies(mpref)) < position) | (length(reduceddependencies(mpref)) > 0))
+            var, found = search_tree_for_ref(ls, vparents, mpref, var)
+            found && return add_reduction!(ls, var, reduceddeps, deps, vparents, reduction_ind, elementbytes, instr)
         end
+        op = Operation(length(operations(ls)), var, elementbytes, instr, compute, deps, reduceddeps, vparents)
+        return pushop!(ls, op, var)
     end
     # maybe_const_compute!(ls, op, elementbytes, position)
-    op
 end
 function add_reduction!(ls::LoopSet, var::Symbol, reduceddeps, deps, vparents, reduction_ind, elementbytes, instr)
     parent = ls.opdict[var]
