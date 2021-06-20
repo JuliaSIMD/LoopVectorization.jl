@@ -88,7 +88,7 @@ function vector_cost(ic::InstructionCost, Wshift, sizeof_T)
     srt, sl, srp
 end
 
-const OPAQUE_INSTRUCTION = InstructionCost(-1.0, 40, 40.0, 32)
+const OPAQUE_INSTRUCTION = InstructionCost(-1.0, 20, 20.0, 16)
 
 instruction_cost(instruction::Instruction) = instruction.mod === :LoopVectorization ? COST[instruction.instr] : OPAQUE_INSTRUCTION
 instruction_cost(instruction::Symbol) = get(COST, instruction, OPAQUE_INSTRUCTION)

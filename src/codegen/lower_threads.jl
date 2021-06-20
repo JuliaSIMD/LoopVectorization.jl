@@ -476,6 +476,7 @@ function thread_two_loops_expr(
   )
   looplen = looplengthprod(ls)
   c = 0.05460264079015985 * c / looplen
+  # @show c
   if Sys.ARCH !== :x86_64
     c *= 0.25
   end
@@ -536,6 +537,7 @@ function thread_two_loops_expr(
   retexpr = length(ls.outer_reductions) > 0 ? :(return $retv) : :(return nothing)
   q = quote
     $choose_nthread # UInt
+    # @show var"#nthreads#"
     $loopstart1
     $loopstart2
     var"##do#thread##" = var"#nthreads#" > one(var"#nthreads#")
@@ -567,7 +569,7 @@ function thread_two_loops_expr(
         var"#thread#factor#1#" = min(var"#thread#factor#1#", var"#num#unrolls#thread#1#")
       end
       # @show (var"#thread#factor#0#", var"#thread#factor#1#")
-      var"#nrequest#" = vsub_nsw((var"#nthreads#" % UInt32), 0x00000001)
+      var"#nrequest#" = vsub_nsw(vmul_nsw(var"#thread#factor#0#", var"#thread#factor#1#" % UInt32), 0x00000001)
       var"#loop#1#start#init#" = var"#iter#start#0#"
       var"##do#thread##" = var"#nrequest#" ≠ 0x00000000
       if var"##do#thread##"
