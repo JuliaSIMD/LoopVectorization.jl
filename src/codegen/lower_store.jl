@@ -149,7 +149,6 @@ function lower_store!(
     reductfunc::Symbol = storeinstr_preprend(op, ua.vloop.itersymbol), inds_calc_by_ptr_offset = indices_calculated_by_pointer_offsets(ls, op.ref)
 )
     @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, vloop, u₂max, suffix = ua
-
     omop = offsetloadcollection(ls)
     batchid, opind = omop.batchedcollectionmap[identifier(op)]
     if ((batchid ≠ 0) && isvectorized(op)) && (!rejectinterleave(op))
@@ -161,10 +160,13 @@ function lower_store!(
     # trueexpr = Expr(:call, lv(:True));
     rs = staticexpr(reg_size(ls));
     opp = first(parents(op))
-    if ((opp.instruction.instr === reductfunc) || (opp.instruction.instr === :identity)) && isone(length(parents(opp)))
-        opp = only(parents(opp))
+    if (((opp.instruction.instr === reductfunc) || (opp.instruction.instr === :identity)) && isone(length(parents(opp))))
+        oppp = only(parents(opp))
+        if isu₂unrolled(op) == isu₂unrolled(oppp)
+            opp = oppp
+        end
     end
-    # __u₂max = ls.unrollspecification.u₂
+  # __u₂max = ls.unrollspecification.u₂
     isu₁, isu₂ = isunrolled_sym(opp, u₁loopsym, u₂loopsym, vloopsym, ls)#, __u₂max)
     # @show isu₁, isu₂, u₁loopsym, u₂loopsym
     # @show isu₁, isu₂, opp, u₁loopsym, u₂loopsym, vloopsym
