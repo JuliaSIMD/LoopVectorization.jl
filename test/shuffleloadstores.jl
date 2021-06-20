@@ -243,15 +243,16 @@ function my_gemm_manual_unroll(out, s::Matrix{UInt8}, V)
       for l in 1:k
         block = s[l, j]
         # unrolled loop
+        thisiszero = 0
         p = 1
         Aij = (block >> (2 * (p - 1))) & 3
-        out[4*(l - 1) + p, c] += ((Aij >= 2) + (Aij == 3)) * V[j, c]
+        out[4*(l - 1) + p, c + thisiszero] += ((Aij >= 2) + (Aij == 3)) * V[j, c]
         p = 2
         Aij = (block >> (2 * (p - 1))) & 3
         out[4*(l - 1) + p, c] += ((Aij >= 2) + (Aij == 3)) * V[j, c]
         p = 3
         Aij = (block >> (2 * (p - 1))) & 3
-        out[4*(l - 1) + p, c] += ((Aij >= 2) + (Aij == 3)) * V[j, c]
+        out[4*(l - 1) + p + thisiszero, c] += ((Aij >= 2) + (Aij == 3)) * V[j, c]
         p = 4
         Aij = (block >> (2 * (p - 1))) & 3
         out[4*(l - 1) + p, c] += ((Aij >= 2) + (Aij == 3)) * V[j, c]
