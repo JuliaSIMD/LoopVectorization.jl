@@ -16,5 +16,6 @@ Manifest.toml
 test/Manifest.toml
 test/*#*
 *#*
+test/testresults
 
 

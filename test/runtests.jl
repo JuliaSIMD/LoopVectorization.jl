@@ -5,95 +5,43 @@ import InteractiveUtils, Aqua
 InteractiveUtils.versioninfo(stdout; verbose = true)
 
 const LOOPVECTORIZATION_TEST = get(ENV, "LOOPVECTORIZATION_TEST", "all")
-const START_TIME = time()
 
-@show LoopVectorization.register_count()
-
-@show RUN_SLOW_TESTS
-
-@time @testset "LoopVectorization.jl" begin
-
-  @time if LOOPVECTORIZATION_TEST == "all" || LOOPVECTORIZATION_TEST == "part1"
-    @time Aqua.test_all(LoopVectorization, ambiguities = VERSION ≥ v"1.6")
-    # @test isempty(detect_unbound_args(LoopVectorization))
-
-    @time include("printmethods.jl")
-
-    @time include("can_avx.jl")
-
-    @time include("fallback.jl")
-
-    @time include("utils.jl")
-
-    @time include("arraywrappers.jl")
-
-    @time include("check_empty.jl")
-
-    @time include("loopinductvars.jl")
-
-    @time include("shuffleloadstores.jl")
-
-    if VERSION < v"1.7-DEV"
-      @time include("zygote.jl")
-    else
-      println("Skipping Zygote tests.")
+if LOOPVECTORIZATION_TEST == "all"
+  NUMGROUPS = 5
+  processes = Vector{Base.Process}(undef, NUMGROUPS)
+  paths = Vector{String}(undef, NUMGROUPS)
+  ios = Vector{IOStream}(undef, NUMGROUPS)
+  tmp = tempdir();
+  for i ∈ 1:NUMGROUPS
+    path, io = mktemp(tmp)
+    paths[i] = path
+    ios[i] = io
+    env = copy(ENV)
+    env["LOOPVECTORIZATION_TEST"] = "part$i"
+    env["JULIA_NUM_THREADS"] = string(Threads.nthreads())
+    processes[i] = run(pipeline(setenv(`$(Base.julia_cmd()) $(@__FILE__)`, env), stderr = io, stdout = io), wait=false)
+  end
+  for i ∈ 1:NUMGROUPS
+    proc = processes[i]
+    while process_running(proc)
+      sleep(5)
     end
-
-    @time include("offsetarrays.jl")
-
-    @time include("tensors.jl")
-
-    @time include("map.jl")
-
-    @time include("filter.jl")
-
-    @time include("mapreduce.jl")
-
-    @time include("ifelsemasks.jl")
-
-    @time include("dot.jl")
-
-    @time include("special.jl")
-
-    @time include("multiassignments.jl")
-
-    @time include("reduction_untangling.jl")
+    close(ios[i])
+    run(`cat $(paths[i])`)
   end
-
-  @time if LOOPVECTORIZATION_TEST == "all" || LOOPVECTORIZATION_TEST == "part2"
-    @time include("gemv.jl")
-
-    @time include("rejectunroll.jl")
-
-    @time include("miscellaneous.jl")
-
-    @time include("copy.jl")
-
-    @time include("broadcast.jl")
-
-    @time include("gemm.jl")
-  end
-
-  @time if LOOPVECTORIZATION_TEST == "all" || LOOPVECTORIZATION_TEST == "part3"
-    @time include("threading.jl")
-
-    @time include("tullio.jl")
-
-    @time include("staticsize.jl")
-
-    @time include("iteration_bound_tests.jl")
-
-    @time include("outer_reductions.jl")
-
-    @time include("upperboundedintegers.jl")
-
-    if VERSION ≥ v"1.6"
-      @time include("quantum.jl")
+  @testset verbose=true "All" begin
+    for (i,proc) ∈ enumerate(processes)
+      @testset "part$i" begin
+        @test success(proc)
+      end
     end
   end
+else
+  include("grouptests.jl")
 end
 
-const ELAPSED_MINUTES = (time() - START_TIME)/60
-# @test ELAPSED_MINUTES < 180
-@test ELAPSED_MINUTES < 300
+
+
+
+
 
