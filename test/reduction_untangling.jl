@@ -1,10 +1,10 @@
 
 # issue 288
 function not_a_reduction!(A, B)
-  @turbo for j ∈ 1:size(A, 2)
+  @turbo for j ∈ 1:size(A.re, 2)
     jre = B.re[j]
     jim = B.im[j]
-    for i ∈ 1:size(A, 1)
+    for i ∈ 1:size(A.re, 1)
       ire = B.re[i]
       iim = B.im[i]
       cisim = iim * jre - ire * jim
@@ -20,10 +20,10 @@ function not_a_reduction!(A, B)
   return nothing
 end
 function not_a_reduction_noturbo!(A, B)
-  @turbo for j ∈ 1:size(A, 2)
+  @turbo for j ∈ 1:size(A.re, 2)
     jre = B.re[j]
     jim = B.im[j]
-    for i ∈ 1:size(A, 1)
+    for i ∈ 1:size(A.re, 1)
       ire = B.re[i]
       iim = B.im[i]
       cisim = iim * jre - ire * jim
