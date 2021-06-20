@@ -1,6 +1,3 @@
-
-
-
 function dot_simd(a::AbstractVector, b::AbstractVector)
     s = zero(eltype(a))
     @fastmath @inbounds @simd for i ∈ eachindex(a)
@@ -196,6 +193,94 @@ function sumdim2!(r1, r2)
   r1
 end
 
+# Issue 287
+ function my_gemm_noturbo!(out, s::Matrix{UInt8}, V)
+           Vcols = size(V, 2)
+           srows = size(s, 1)
+           scols = size(s, 2)
+           k = srows >> 2
+           rem = srows & 3
+           @inbounds @fastmath for c in 1:Vcols
+               for j in 1:scols
+                   for l in 1:k
+                       block = s[l, j]
+                       for p in 1:4
+                           Aij = (block >> (2 * (p - 1))) & 3
+                           out[4*(l - 1) + p, c] += ((Aij >= 2) + (Aij == 3)) * V[j, c]
+                       end
+                   end
+               end
+           end
+           # TODO handle rem
+       end
+function my_gemm_unroll(out, s::Matrix{UInt8}, V)
+  Vcols = size(V, 2)
+  srows = size(s, 1)
+  scols = size(s, 2)
+  k = srows >> 2
+  rem = srows & 3
+  @avx for c in 1:Vcols
+    for j in 1:scols
+      for l in 1:k
+        block = s[l, j]
+        for p in 1:4
+          Aij = (block >> (2 * (p - 1))) & 3
+          out[4*(l - 1) + p, c] += ((Aij >= 2) + (Aij == 3)) * V[j, c]
+        end
+      end
+    end
+  end
+  # TODO handle rem
+end
+function my_gemm_manual_unroll(out, s::Matrix{UInt8}, V)
+  Vcols = size(V, 2)
+  srows = size(s, 1)
+  scols = size(s, 2)
+  k = srows >> 2
+  rem = srows & 3
+  @avx for c in 1:Vcols
+    for j in 1:scols
+      for l in 1:k
+        block = s[l, j]
+        # unrolled loop
+        p = 1
+        Aij = (block >> (2 * (p - 1))) & 3
+        out[4*(l - 1) + p, c] += ((Aij >= 2) + (Aij == 3)) * V[j, c]
+        p = 2
+        Aij = (block >> (2 * (p - 1))) & 3
+        out[4*(l - 1) + p, c] += ((Aij >= 2) + (Aij == 3)) * V[j, c]
+        p = 3
+        Aij = (block >> (2 * (p - 1))) & 3
+        out[4*(l - 1) + p, c] += ((Aij >= 2) + (Aij == 3)) * V[j, c]
+        p = 4
+        Aij = (block >> (2 * (p - 1))) & 3
+        out[4*(l - 1) + p, c] += ((Aij >= 2) + (Aij == 3)) * V[j, c]
+      end
+    end
+  end
+  # TODO handle rem
+end
+function my_gemm_nexpr_unroll(out, s::Matrix{UInt8}, V)
+  Vcols = size(V, 2)
+  srows = size(s, 1)
+  scols = size(s, 2)
+  k = srows >> 2
+  rem = srows & 3
+  @turbo for c in 1:Vcols
+    for j in 1:scols
+      for l in 1:k
+        block = s[l, j]
+        # unrolled loop
+        Base.Cartesian.@nexprs 4 p -> begin
+          Aij = (block >> (2 * (p - 1))) & 3
+          out[4*(l - 1) + p, c] += ((Aij >= 2) + (Aij == 3)) * V[j, c]
+        end
+      end
+    end
+  end
+  # TODO handle rem
+end
+
 @testset "shuffles load/stores" begin
     @show @__LINE__
     for i ∈ 1:128
@@ -206,7 +291,7 @@ end
             @test dsimd ≈ cdot_mat(ac, bc)
         end
         @test dsimd ≈ cdot_affine(ac, bc) ≈ cdot_stride(ac, bc)
-        
+
 
         xq = [ntuple(_ -> rand(), Val(4)) for _ ∈ 1:i];
         yq = [ntuple(_ -> rand(), Val(4)) for _ ∈ 1:i];
@@ -230,7 +315,7 @@ end
             Aca = reinterpret(reshape, Float64, Ac);
             Bca = reinterpret(reshape, Float64, Bc);
             cmatmul_array!(Cca, Aca, Bca)
-            
+
             @test Cc1 ≈ Cc2# ≈ Cc3
         end
     end
@@ -250,11 +335,22 @@ end
         ϕ = view(fill(1e5+1e7im, 2*J+17, G+17, H+17, M+17), 9:2*J+9, 9:G+9, 9:H+9, 9:M+9) .= rand.() .+ rand.().*im;
         @test issue209(M, G, J, H, B, ϕ) ≈ issue209_noavx(M, G, J, H, B, ϕ)
     end
-  
+
     s = Array{Float64}(undef, 4, 128, 128);
     s2 = rand(4, 2, 128, 128);
     @test sumdim2_turbo!(s, s2) ≈ sumdim2!(similar(s), s2)
 
+  # issue 287
+  out_test = zeros(100, 10);
+  out_test1 = zeros(100, 10);
+  s = rand(UInt8, 25, 100);
+  V = rand(100, 10);
+  my_gemm_noturbo!(out_test, s, V);
+  my_gemm_unroll(out_test1, s, V);
+  @test out_test ≈ out_test1
+  my_gemm_manual_unroll(fill!(out_test1, 0), s, V);
+  @test out_test ≈ out_test1
+  my_gemm_nexpr_unroll(fill!(out_test1, 0), s, V);
+  @test out_test ≈ out_test1
+  
 end
-
-

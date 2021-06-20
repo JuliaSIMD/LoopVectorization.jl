@@ -113,6 +113,7 @@ byterepresentable(x::Integer)::Bool = typemin(Int8) ≤ x ≤ typemax(Int8)
 function _addoffset!(indices, offsets, strides, loopedindex, loopdependencies, ind, offset, stride)
     push!(indices, ind)
     push!(offsets, offset % Int8)
+    # push!(offsets, (offset+stride-1) % Int8)
     push!(strides, stride % Int8)
     push!(loopedindex, true)
     push!(loopdependencies, ind)
@@ -249,8 +250,35 @@ function checkforoffset!(
     loopedindex::Vector{Bool}, loopdependencies::Vector{Symbol}, reduceddeps::Vector{Symbol}, ind::Expr
 )::Symbol
 
-    offset, mult_syms = affine_index_expression(ls, ind)
-    if !byterepresentable(offset)
+  offset, mult_syms = affine_index_expression(ls, ind)
+  let deleted = 0, N = length(mult_syms)
+    for n ∈ 1:N
+      ntemp = n - deleted
+      mlt, sym = mult_syms[ntemp]
+      opm = get(ls.opdict, sym, nothing)
+      opm === nothing && continue
+      isconstant(opm) || continue
+      found = false
+      for (opid,(intval,intsz,signed)) ∈ ls.preamble_symint
+        if opid == identifier(opm)
+          offset += intval * mlt
+          deleted += 1
+          deleteat!(mult_syms, ntemp)
+          found = true
+          break
+        end
+      end
+      found && continue
+      for (opid,nt) ∈ ls.preamble_zeros
+        if opid == identifier(opm)
+          deleted += 1
+          deleteat!(mult_syms, ntemp)
+          break
+        end
+      end
+    end
+  end
+  if !byterepresentable(offset)
         if length(mult_syms) == 1
             mlt,sym = only(mult_syms)
             if !byterepresentable(mlt)
@@ -263,7 +291,6 @@ function checkforoffset!(
         vptrarray = gesp_const_offset!(ls, vptrarray, ninds, indices, loopedindex, 1, offset - r)
         offset = r
     end
-    
     # (success && byterepresentable(offset)) || return false, vptrarray
     if length(mult_syms) == 0
         addconstindex!(indices, offsets, strides, loopedindex, offset)

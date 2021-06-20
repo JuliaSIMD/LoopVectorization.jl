@@ -383,7 +383,7 @@ mutable struct LoopSet
     preamble::Expr
     prepreamble::Expr # performs extractions that must be performed first, and don't need further registering
     preamble_symsym::Vector{Tuple{Int,Symbol}}
-    preamble_symint::Vector{Tuple{Int,Tuple{Int,Int32,Bool}}}
+    preamble_symint::Vector{Tuple{Int,Tuple{Int,Int32,Bool}}} # (id,(intval,intsz,signed))
     preamble_symfloat::Vector{Tuple{Int,Float64}}
     preamble_zeros::Vector{Tuple{Int,NumberType}}
     preamble_funcofeltypes::Vector{Tuple{Int,Float64}}

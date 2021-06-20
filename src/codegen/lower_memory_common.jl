@@ -138,10 +138,10 @@ function mem_offset(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Vect
         indvectorized = _mm & (ind === vloopsym)
         offset = offsets[n] % Int
         stride = strides[n] % Int
-        ind_by_offset = inds_calc_by_ptr_offset[n] | (ind === CONSTANTZEROINDEX)
-        if !ind_by_offset
-            offset += (stride - 1)
+        if ind ≢ CONSTANTZEROINDEX
+          offset += (stride - 1)
         end
+        ind_by_offset = inds_calc_by_ptr_offset[n] | (ind === CONSTANTZEROINDEX)
         @unpack vstep = td
         if loopedindex[n]
             addoffset!(ret, indvectorized, vstep, stride, ind, offset, ind_by_offset) # 7 arg
@@ -297,8 +297,8 @@ function mem_offset_u(
             stride = convert(Int, strides[n])
             indvectorized = ind === vloopsym
             indvectorizedmm = _mm & indvectorized
-            if !ind_by_offset
-                offset += (stride - 1)
+            if ind ≢ CONSTANTZEROINDEX
+              offset += (stride - 1)
             end
             if ind === u₁loopsym
                 addvectoroffset!(ret, indvectorizedmm, incr₁, u₁step, vstep, stride, ind, offset, ind_by_offset, indvectorized) # 9 arg
