@@ -428,7 +428,12 @@ function pushgespind!(
       if index_by_index
         if gespsymbol === Symbol("")
           if constoffset == 0
-            ns = Expr(:call, GlobalRef(VectorizationBase, :NullStep))
+            nostep = if fromgsp | (!index_by_index)
+              GlobalRef(VectorizationBase, :NullStep)
+            else
+              GlobalRef(ArrayInterface.Static, :Zero)
+            end
+            ns = Expr(:call, nostep)
             if fromgsp
               loop = getloop(ls, ind)
               if loop.rangesym ≢ Symbol("")

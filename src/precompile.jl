@@ -1,7 +1,10 @@
 function _precompile_()
     ccall(:jl_generating_output, Cint, ()) == 1 || return nothing
     # Base.precompile(Tuple{typeof(which(_turbo_!,(Val{UNROLL},Val{OPS},Val{ARF},Val{AM},Val{LPSYM},Tuple{LB, V},)).generator.gen),Any,Any,Any,Any,Any,Any,Any,Any,Type,Type,Type,Type,Any,Any})   # time: 1.0198073
-    # Base.precompile(Tuple{typeof(gespf1),Any,Tuple{Any, VectorizationBase.NullStep}})   # time: 0.1096832
+  # Base.precompile(Tuple{typeof(gespf1),Any,Tuple{Any, VectorizationBase.NullStep}})   # time: 0.1096832
+    Base.precompile(avx_body, (LoopSet, Tuple{Bool,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt}))
+    Base.precompile(lower_and_split_loops, (LoopSet, Int))
+    Base.precompile(lower, (LoopSet, Int, Int, Int))
     Base.precompile(Tuple{typeof(turbo_macro),Module,LineNumberNode,Expr})   # time: 0.09183489
     Base.precompile(Tuple{typeof(gespf1),StridedPointer{Float64, 1, 1, 0, (1,), Tuple{StaticInt{8}}, Tuple{StaticInt{1}}},Tuple{StaticInt{1}}})   # time: 0.05469272
     Base.precompile(Tuple{typeof(zerorangestart),UnitRange{Int}})   # time: 0.04291692
