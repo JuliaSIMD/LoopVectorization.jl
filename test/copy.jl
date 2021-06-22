@@ -266,5 +266,15 @@ using LoopVectorization, OffsetArrays, Test
         issue280!(dest2, src2)
         @test dest2 ≈ vcat(view(src,2,:)',view(src,1,:)')
       end
+
+      rng = 10:20
+      arr1 = zeros(30);
+      arr2 = zeros(30);
+      ifirst = 5
+      @turbo for i in rng
+        arr1[i-ifirst] += 1
+      end
+      @. arr2[rng-ifirst] += 1;
+      @test arr1 == arr2
     end
 end

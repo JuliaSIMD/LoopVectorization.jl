@@ -366,7 +366,7 @@ function cse_constant_offsets!(
               Expr(:call, GlobalRef(Base,:(-)), gespsymbol, name(op2))
             end
             gespsymbol = gensym!(ls, "#gespsym#")
-            push!(q.args, Expr(:(=), gespsymbol, subexpr))
+            pushpreamble!(ls, Expr(:(=), gespsymbol, subexpr))
             ind = maybeloopvaluename(op1)
             substitute_ops_all!(ls, i, ii, indop, op1, allarrayrefs, array_refs_with_same_name, arrayref_to_name_op_collection)
           else
