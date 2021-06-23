@@ -74,7 +74,7 @@ function add_prefetches!(q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, pr
     if !isknown(prefetchloop_step)
         for i ∈ eachindex(gespinds.args)
             if i == prefetchind
-                gespinds.args[i] = mulexpr(getsym(prefetchloop_step), gespinds.args[i])
+                gespinds.args[i] = mulexpr(getsym(prefetchloop_step), (gespinds.args[i])::Union{Symbol,Expr})
             end
             # gespinds.args[i] = Expr(:call, lv(:data), gespinds.args[i])
         end
@@ -163,31 +163,6 @@ function lower_load_no_optranslation!(
     end
     nothing
 end
-# function lower_load_vectorized!(
-#     q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, mask::Union{Nothing,Symbol,Unsigned} = nothing
-# )
-#     @unpack u₁, u₁loopsym, u₂loopsym, vectorized, suffix = td
-#     loopdeps = loopdependencies(op)
-#     @assert isvectorized(op)
-#     opu₁ = isu₁unrolled(op)
-#     inds_calc_by_ptr_offset = indices_calculated_by_pointer_offsets(ls, op.ref)
-#     if opu₁
-#         umin = 0
-#         U = u₁
-#     else
-#         umin = -1
-#         U = 0
-#     end
-#     # Urange = unrolled ∈ loopdeps ? 0:U-1 : 0
-#     var = variable_name(op, suffix)
-#     for u ∈ umin:U-1
-#         td = UnrollArgs(td, u)
-#         pushvectorload!(q, op, var, td, U, vectorized, mask, opu₁, inds_calc_by_ptr_offset, reg_size(ls))
-#     end
-#     prefetchind = prefetchisagoodidea(ls, op, td)
-#     iszero(prefetchind) || add_prefetches!(q, ls, op, td, prefetchind, umin)
-#     nothing
-# end
 function indisvectorized(ls::LoopSet, ind::Symbol)
     for op ∈ operations(ls)
         ((op.variable === ind) && isvectorized(op)) && return true
@@ -217,7 +192,6 @@ function lower_load_for_optranslation!(
     # abs of steps are equal
     equal_steps = (step₁ == step₂) ⊻ (posindicator ≠ 0x03)
     # @show step₁, step₂, posindicator, equal_steps
-    # _td = UnrollArgs(u₁loop, u₂loop, vloop, total_unroll, u₂max, Core.ifelse(equal_steps, 0, u₂max - 1))
     _td = UnrollArgs(u₁loop, u₂loop, vloop, u₁, u₂max, Core.ifelse(equal_steps, 0, u₂max - 1))
     gespinds = mem_offset(op, _td, inds_by_ptroff, false, ls)
     ptr = vptr(op)

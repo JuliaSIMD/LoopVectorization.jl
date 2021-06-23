@@ -375,7 +375,7 @@ function reduce_parent!(q::Expr, ls::LoopSet, op::Operation, opp::Operation, par
   if isvectorized(opp)
     oppt = opp
   elseif isidentityop(opp)
-    oppt = only(parents(opp))
+    oppt = parents(opp)[1]
     # @show oppt
     isvectorized(oppt) || return parent
   else
@@ -570,7 +570,7 @@ function lower_compute!(
         else# mask last u₁
             :ifelselast # ifelse only the last one
         end
-        if last(instrcall.args) == varsym
+        if last(instrcall.args) === varsym
             pushfirst!(instrcall.args, lv(ifelsefunc))
             # showexpr = true
             insert!(instrcall.args, 3, MASKSYMBOL)

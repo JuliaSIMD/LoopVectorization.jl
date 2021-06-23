@@ -1,12 +1,18 @@
+function opisreduced(op::Operation)
+  for rdep ∈ reduceddependencies(op)
+    rdep ∉ loopdependencies(op) && return true
+  end
+  false
+end
 function storeinstr_preprend(op::Operation, vloopsym::Symbol)
     # defaultstoreop = :vstore!
     # defaultstoreop = :vnoaliasstore!
     isvectorized(op) && return Symbol("")
     vloopsym ∉ reduceddependencies(op) && return Symbol("")
     # vectorized is not a loopdep, but is a reduced dep
-    opp = first(parents(op))
+    opp::Operation = first(parents(op))
     # while vectorized ∉ loopdependencies(opp)
-    while ((!isvectorized(opp)) || (any(rdep -> rdep ∉ loopdependencies(opp), reduceddependencies(opp))))
+    while ((!isvectorized(opp)) || opisreduced(opp))
         oppold = opp
         for oppp ∈ parents(opp)
             if vloopsym ∈ reduceddependencies(oppp)
@@ -145,88 +151,92 @@ function lower_store_collection!(
 end
 gf(s::Symbol, n::Int) = Expr(:call, GlobalRef(Core,:getfield), s, n, false)
 function lower_store!(
-    q::Expr, ls::LoopSet, op::Operation, ua::UnrollArgs, mask::Bool,
-    reductfunc::Symbol = storeinstr_preprend(op, ua.vloop.itersymbol), inds_calc_by_ptr_offset = indices_calculated_by_pointer_offsets(ls, op.ref)
-)
-    @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, vloop, u₂max, suffix = ua
-    omop = offsetloadcollection(ls)
-    batchid, opind = omop.batchedcollectionmap[identifier(op)]
-    if ((batchid ≠ 0) && isvectorized(op)) && (!rejectinterleave(op))
-        (opind == 1) && lower_store_collection!(q, ls, op, ua, mask, inds_calc_by_ptr_offset)
-        return
+  q::Expr, ls::LoopSet, op::Operation, ua::UnrollArgs, mask::Bool,
+  reductfunc::Symbol = storeinstr_preprend(op, ua.vloop.itersymbol), inds_calc_by_ptr_offset = indices_calculated_by_pointer_offsets(ls, op.ref)
+  )
+  @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, vloop, u₂max, suffix = ua
+  omop = offsetloadcollection(ls)
+  batchid, opind = omop.batchedcollectionmap[identifier(op)]
+  if ((batchid ≠ 0) && isvectorized(op)) && (!rejectinterleave(op))
+    (opind == 1) && lower_store_collection!(q, ls, op, ua, mask, inds_calc_by_ptr_offset)
+    return
+  end
+  falseexpr = Expr(:call, lv(:False));
+  aliasexpr = falseexpr;
+  # trueexpr = Expr(:call, lv(:True));
+  rs = staticexpr(reg_size(ls));
+  opp = first(parents(op))
+  if ((opp.instruction.instr === reductfunc) || (opp.instruction.instr === :identity))
+    parents_opp = parents(opp)
+    opppstate = Base.iterate(parents_opp)
+    if opppstate ≢ nothing
+      oppp, state = opppstate
+      if (Base.iterate(parents_opp, state) === nothing) && isu₂unrolled(op) == isu₂unrolled(oppp)
+        opp = oppp
+      end
     end
-    falseexpr = Expr(:call, lv(:False));
-    aliasexpr = falseexpr;
-    # trueexpr = Expr(:call, lv(:True));
-    rs = staticexpr(reg_size(ls));
-    opp = first(parents(op))
-    if (((opp.instruction.instr === reductfunc) || (opp.instruction.instr === :identity)) && isone(length(parents(opp))))
-        oppp = only(parents(opp))
-        if isu₂unrolled(op) == isu₂unrolled(oppp)
-            opp = oppp
-        end
-    end
+  end
   # __u₂max = ls.unrollspecification.u₂
-    isu₁, isu₂ = isunrolled_sym(opp, u₁loopsym, u₂loopsym, vloopsym, ls)#, __u₂max)
-    # @show isu₁, isu₂, u₁loopsym, u₂loopsym
-    # @show isu₁, isu₂, opp, u₁loopsym, u₂loopsym, vloopsym
-    u = isu₁ ? u₁ : 1
-    mvar = Symbol(variable_name(opp, ifelse(isu₂, suffix, -1)), '_', u)
-    if all(op.ref.loopedindex)
-        inds = unrolledindex(op, ua, mask, inds_calc_by_ptr_offset, ls)
-        storeexpr = if reductfunc === Symbol("")
-            Expr(:call, lv(:_vstore!), sptr(op), mvar, inds)
-        else
-            Expr(:call, lv(:_vstore!), lv(reductfunc), sptr(op), mvar, inds)
-        end
-        add_memory_mask!(storeexpr, op, ua, mask, ls)
-        push!(storeexpr.args, falseexpr, aliasexpr, falseexpr, rs)
-        push!(q.args, storeexpr)
+  isu₁, isu₂ = isunrolled_sym(opp, u₁loopsym, u₂loopsym, vloopsym, ls)#, __u₂max)
+  # @show isu₁, isu₂, u₁loopsym, u₂loopsym
+  # @show isu₁, isu₂, opp, u₁loopsym, u₂loopsym, vloopsym
+  u = isu₁ ? u₁ : 1
+  mvar = Symbol(variable_name(opp, ifelse(isu₂, suffix, -1)), '_', u)
+  if all(op.ref.loopedindex)
+    inds = unrolledindex(op, ua, mask, inds_calc_by_ptr_offset, ls)
+    storeexpr = if reductfunc === Symbol("")
+      Expr(:call, lv(:_vstore!), sptr(op), mvar, inds)
     else
-      parents_op = parents(op)
-      data_u₁ = isu₁ & (u₁ > 1)
-      
-      indices_u₁ = data_u₁
-      if !data_u₁ & (length(parents_op) > 1)
-        indices_u₁ = first(isunrolled_sym(op, u₁loopsym, u₂loopsym, vloopsym, ls))
-      end
-      if indices_u₁
-        mvard = Symbol(mvar, "##data##")
-        # isu₁ &&
-        data_u₁ && push!(q.args, Expr(:(=), mvard, Expr(:call, lv(:data), mvar)))
-        sptrsym = sptr!(q, op)
-        for u ∈ 1:u₁
-          inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, true, u-1, ls)
-          # @show isu₁unrolled(opp), opp
-          storeexpr = if data_u₁
-            if reductfunc === Symbol("")
-              Expr(:call, lv(:_vstore!), sptrsym, gf(mvard,u), inds)
-            else
-              Expr(:call, lv(:_vstore!), lv(reductfunc), sptrsym, mvaru, inds)
-            end
-          elseif reductfunc === Symbol("")
-            Expr(:call, lv(:_vstore!), sptrsym, mvar, inds)
+      Expr(:call, lv(:_vstore!), lv(reductfunc), sptr(op), mvar, inds)
+    end
+    add_memory_mask!(storeexpr, op, ua, mask, ls)
+    push!(storeexpr.args, falseexpr, aliasexpr, falseexpr, rs)
+    push!(q.args, storeexpr)
+  else
+    parents_op = parents(op)
+    data_u₁ = isu₁ & (u₁ > 1)
+    
+    indices_u₁ = data_u₁
+    if !data_u₁ & (length(parents_op) > 1)
+      indices_u₁ = first(isunrolled_sym(op, u₁loopsym, u₂loopsym, vloopsym, ls))
+    end
+    if indices_u₁
+      mvard = Symbol(mvar, "##data##")
+      # isu₁ &&
+      data_u₁ && push!(q.args, Expr(:(=), mvard, Expr(:call, lv(:data), mvar)))
+      sptrsym = sptr!(q, op)
+      for u ∈ 1:u₁
+        inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, true, u-1, ls)
+        # @show isu₁unrolled(opp), opp
+        storeexpr = if data_u₁
+          if reductfunc === Symbol("")
+            Expr(:call, lv(:_vstore!), sptrsym, gf(mvard,u), inds)
           else
-            Expr(:call, lv(:_vstore!), lv(reductfunc), sptrsym, mvar, inds)
+            Expr(:call, lv(:_vstore!), lv(reductfunc), sptrsym, mvaru, inds)
           end
-          domask = mask && (isvectorized(op) & ((u == u₁) | (vloopsym !== u₁loopsym)))
-          add_memory_mask!(storeexpr, op, ua, domask, ls)# & ((u == u₁) | isvectorized(op)))
-          push!(storeexpr.args, falseexpr, aliasexpr, falseexpr, rs)
-          push!(q.args, storeexpr)
-        end
-      else
-        inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, true, 0, ls)
-        storeexpr = if reductfunc === Symbol("")
-          Expr(:call, lv(:_vstore!), sptr(op), mvar, inds)
+        elseif reductfunc === Symbol("")
+          Expr(:call, lv(:_vstore!), sptrsym, mvar, inds)
         else
-          Expr(:call, lv(:_vstore!), lv(reductfunc), sptr(op), mvar, inds)
+          Expr(:call, lv(:_vstore!), lv(reductfunc), sptrsym, mvar, inds)
         end
-        add_memory_mask!(storeexpr, op, ua, mask, ls)
+        domask = mask && (isvectorized(op) & ((u == u₁) | (vloopsym !== u₁loopsym)))
+        add_memory_mask!(storeexpr, op, ua, domask, ls)# & ((u == u₁) | isvectorized(op)))
         push!(storeexpr.args, falseexpr, aliasexpr, falseexpr, rs)
         push!(q.args, storeexpr)
       end
+    else
+      inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, true, 0, ls)
+      storeexpr = if reductfunc === Symbol("")
+        Expr(:call, lv(:_vstore!), sptr(op), mvar, inds)
+      else
+        Expr(:call, lv(:_vstore!), lv(reductfunc), sptr(op), mvar, inds)
+      end
+      add_memory_mask!(storeexpr, op, ua, mask, ls)
+      push!(storeexpr.args, falseexpr, aliasexpr, falseexpr, rs)
+      push!(q.args, storeexpr)
     end
-    nothing
+  end
+  nothing
 end
 
 function lower_tiled_store!(

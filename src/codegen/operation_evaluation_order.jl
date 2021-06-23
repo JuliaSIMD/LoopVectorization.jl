@@ -25,24 +25,28 @@
 
 function isnopidentity(ls::LoopSet, op::Operation, u₁loop::Symbol, u₂loop::Symbol, vectorized::Symbol, u₂max::Int)
   parents_op = parents(op)
-    if iscompute(op) && instruction(op).instr === :identity && isone(length(parents_op)) && name(first(parents_op)) === name(op)
-        # loopistiled = u₂max ≠ -1
-        # parents_u₁syms, parents_u₂syms = parent_unroll_status(op, u₁loop, u₂loop, u₂max)
-        # if (u₁unrolledsym == first(parents_u₁syms)) && (isu₂unrolled(op) == parents_u₂syms[1])
-        opp = only(parents_op)
-        # @show op opp isu₁unrolled(op), isu₁unrolled(opp), isu₂unrolled(op), isu₂unrolled(opp)
-        if (isu₁unrolled(op) == isu₁unrolled(opp)) & (isu₂unrolled(op) == isu₂unrolled(opp))
-            true
-        else
-            # if isvectorized(opp) & (!isvectorized(op))
-            #     op.instruction = reduction_to_scalar(instruction(opp))
-            #     op.mangledvariable = gensym(op.mangledvariable)
-            # end
-            false
-        end
+  if iscompute(op) && instruction(op).instr === :identity
+    # loopistiled = u₂max ≠ -1
+    # parents_u₁syms, parents_u₂syms = parent_unroll_status(op, u₁loop, u₂loop, u₂max)
+    # if (u₁unrolledsym == first(parents_u₁syms)) && (isu₂unrolled(op) == parents_u₂syms[1])
+    oppstate = Base.iterate(parents_op)
+    oppstate === nothing && return false
+    opp, state = oppstate
+    Base.iterate(parents_op, state) === nothing || return false
+    name(opp) === name(op) || return false
+    # @show op opp isu₁unrolled(op), isu₁unrolled(opp), isu₂unrolled(op), isu₂unrolled(opp)
+    if (isu₁unrolled(op) == isu₁unrolled(opp)) & (isu₂unrolled(op) == isu₂unrolled(opp))
+      true
     else
-        false
+      # if isvectorized(opp) & (!isvectorized(op))
+      #     op.instruction = reduction_to_scalar(instruction(opp))
+      #     op.mangledvariable = gensym(op.mangledvariable)
+      # end
+      false
     end
+  else
+    false
+  end
 end
 
 function set_upstream_family!(adal::Vector{T}, op::Operation, val::T, ld::Vector{Symbol}, id::Int) where {T}

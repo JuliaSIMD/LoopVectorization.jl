@@ -677,7 +677,7 @@ function determine_eltype(ls::LoopSet, ortypdefined::Bool)::Union{Symbol,Expr}
     if narrays == 1
       return Expr(:call, lv(:eltype), first(ls.includedactualarrays))
     else
-      oreducop = ls.operations[only(ls.outer_reductions)]
+      oreducop = ls.operations[ls.outer_reductions[1]]
       if ortypdefined
         return typeof_expr(oreducop)
       else

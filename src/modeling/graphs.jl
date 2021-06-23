@@ -32,16 +32,6 @@ UnPack.unpack(ua::UnrollArgs, ::Val{:u₁step}) = getfield(getfield(ua, :u₁loo
 UnPack.unpack(ua::UnrollArgs, ::Val{:u₂step}) = getfield(getfield(ua, :u₂loop), :step)
 UnPack.unpack(ua::UnrollArgs, ::Val{:vstep}) = getfield(getfield(ua, :vloop), :step)
 
-
-function UnrollArgs(ua::UnrollArgs, u₁::Int)
-    @unpack u₁loop, u₂loop, vloop, u₂max, suffix = ua
-    UnrollArgs(u₁loop, u₂loop, vloop, u₁, u₂max, suffix)
-end
-# UnrollSymbols(ua::UnrollArgs) = UnrollSymbols(ua.u₁loopsym, ua.u₂loopsym, ua.vloopsym)
-
-# isfirst(ua::UnrollArgs{Nothing}) = iszero(ua.u₁)
-# isfirst(ua::UnrollArgs{Int}) = iszero(ua.u₁) & iszero(ua.suffix)
-
 struct UnrollSpecification
     u₁loopnum::Int
     u₂loopnum::Int
@@ -84,6 +74,7 @@ getsym(mk::MaybeKnown) = getfield(mk, :sym)
 gethint(mk::MaybeKnown) = getfield(mk, :hint)
 Base.isone(mk::MaybeKnown) = isknown(mk) && isone(gethint(mk))
 Base.iszero(mk::MaybeKnown) = isknown(mk) && iszero(gethint(mk))
+gethint(a::Integer) = a
 
 function Loop(
     itersymbol::Symbol, start::Union{Int,Symbol}, stop::Union{Int,Symbol}, step::Union{Int,Symbol},
@@ -136,20 +127,23 @@ end
 # end
 isknown(x::Union{Symbol,Expr}) = false
 isknown(x::Integer) = true
-gethint(a::Integer) = a
 addexpr(a,b) = arithmeticexpr(+, :vadd_nsw, a, b)
 subexpr(a,b) = arithmeticexpr(-, :vsub_nsw, a, b)
 mulexpr(a,b) = arithmeticexpr(*, :vmul_nsw, a, b)
 lazymulexpr(a,b) = arithmeticexpr(*, :lazymul, a, b)
-function arithmeticexpr(op, f, a, b)
-    if isknown(a) & isknown(b)
-        return staticexpr(op(gethint(a), gethint(b)))
-    else
-        ex = Expr(:call, lv(f))
-        pushexpr!(ex, a)
-        pushexpr!(ex, b)
-        return ex
-    end
+function arithmeticexpr(op, f, a::Union{Integer,MaybeKnown}, b::Union{Integer,MaybeKnown})
+  if isknown(a) & isknown(b)
+    return staticexpr(op(gethint(a), gethint(b)))
+  else
+    return _arithmeticexpr(f, a, b)
+  end
+end
+arithmeticexpr(op, f, a, b) = _arithmeticexpr(f, a, b)
+function _arithmeticexpr(f, a, b)
+  ex = Expr(:call, lv(f))
+  pushexpr!(ex, a)
+  pushexpr!(ex, b)
+  return ex
 end
 mulexpr(a,b,c) = arithmeticexpr(*, 1, :vmul_nsw, a, b, c)
 addexpr(a,b,c) = arithmeticexpr(+, 0, :vadd_nsw, a, b, c)

@@ -40,22 +40,36 @@ function addoffset!(ret::Expr, stride, ind) # 3 args
 end
 # dropping `calcbypointeroffset` has to be delayed until after multiplying the `indexstride` by `index.
 function addoffset!(ret::Expr, stride, ind, offset, calcbypointeroffset::Bool) # 5 -> 3 args
-    if calcbypointeroffset
-        addoffset!(ret, stride, offset)
-    elseif _iszero(offset)
-        addoffset!(ret, stride, ind)
-    else
-        addoffset!(ret, stride, addexpr(ind, offset))
-    end
+  if calcbypointeroffset
+    addoffset!(ret, stride, offset)
+  elseif _iszero(offset)
+    addoffset!(ret, stride, ind)
+  else
+    addoffset!(ret, stride, addexpr(ind, offset))
+  end
+end
+function _addoffset!(ret::Expr, vloopstride, indexstride::Union{Integer,MaybeKnown}, index, offset, calcbypointeroffset::Bool) # 6 -> 5 args
+  if _isone(indexstride)
+    addoffset!(ret, vloopstride, index, offset, calcbypointeroffset)
+  else
+    __addoffset!(ret, vloopstride, indexstride, index, offset, calcbypointeroffset)
+  end
 end
 function _addoffset!(ret::Expr, vloopstride, indexstride, index, offset, calcbypointeroffset::Bool) # 6 -> 5 args
-    if _isone(indexstride)
-        addoffset!(ret, vloopstride, index, offset, calcbypointeroffset)
-    elseif isknown(vloopstride) & isknown(indexstride)
-        addoffset!(ret, gethint(vloopstride)*gethint(indexstride), index, offset, calcbypointeroffset)
-    else
-        addoffset!(ret, mulexpr(vloopstride,indexstride), index, offset, calcbypointeroffset)
-    end
+  ___addoffset!(ret, vloopstride, indexstride, index, offset, calcbypointeroffset)
+end
+function __addoffset!(ret::Expr, vloopstride, indexstride, index, offset, calcbypointeroffset::Bool) # 6 -> 5 args
+  ___addoffset!(ret, vloopstride, indexstride, index, offset, calcbypointeroffset)
+end
+function __addoffset!(ret::Expr, vloopstride::Union{Integer,MaybeKnown}, indexstride::Union{Integer,MaybeKnown}, index, offset, calcbypointeroffset::Bool) # 6 -> 5 args
+  if isknown(vloopstride) & isknown(indexstride)
+    addoffset!(ret, gethint(vloopstride)*gethint(indexstride), index, offset, calcbypointeroffset)
+  else
+    ___addoffset!(ret, vloopstride, indexstride, index, offset, calcbypointeroffset)
+  end
+end
+function ___addoffset!(ret::Expr, vloopstride, indexstride, index, offset, calcbypointeroffset::Bool) # 6 -> 5 args
+  addoffset!(ret, mulexpr(vloopstride,indexstride), index, offset, calcbypointeroffset)
 end
 # multiply `index` by `indexstride`
 function addoffset!(ret::Expr, vloopstride, indexstride, index, offset, calcbypointeroffset::Bool) # 6 -> (5 or 6) args
@@ -400,19 +414,19 @@ function add_memory_mask!(memopexpr::Expr, op::Operation, td::UnrollArgs, mask::
     nothing
 end
 
-varassignname(var::Symbol, u::Int, isunrolled::Bool) = isunrolled ? Symbol(var, u) : var
-# name_memoffset only gets called when vectorized
-function name_memoffset(var::Symbol, op::Operation, td::UnrollArgs, u₁unrolled::Bool, inds_calc_by_ptr_offset::Vector{Bool}, ls::LoopSet)
-    @unpack u₁, u₁loopsym, u₂loopsym, suffix = td
-    if (suffix == -1) && u₁ < 0 # u₁ == -1 sentinel value meaning not unrolled
-        name = var
-        mo = mem_offset(op, td, inds_calc_by_ptr_offset, true, 0, ls)
-    else
-        name = u₁unrolled ? Symbol(var, u₁) : var
-        mo = mem_offset_u(op, td, inds_calc_by_ptr_offset, true, 0, ls)
-    end
-    name, mo
-end
+# varassignname(var::Symbol, u::Int, isunrolled::Bool) = isunrolled ? Symbol(var, u) : var
+# # name_memoffset only gets called when vectorized
+# function name_memoffset(var::Symbol, op::Operation, td::UnrollArgs, u₁unrolled::Bool, inds_calc_by_ptr_offset::Vector{Bool}, ls::LoopSet)
+#     @unpack u₁, u₁loopsym, u₂loopsym, suffix = td
+#     if (suffix == -1) && u₁ < 0 # u₁ == -1 sentinel value meaning not unrolled
+#         name = var
+#         mo = mem_offset(op, td, inds_calc_by_ptr_offset, true, 0, ls)
+#     else
+#         name = u₁unrolled ? Symbol(var, u₁) : var
+#         mo = mem_offset_u(op, td, inds_calc_by_ptr_offset, true, 0, ls)
+#     end
+#     name, mo
+# end
 
 function condvarname_and_unroll(cond::Operation, u₁loop::Symbol, u₂loop::Symbol, vloop::Symbol, suffix::Int, opu₂::Bool, ls::LoopSet)
     condvar, condu₁, condu₂ = variable_name_and_unrolled(cond, u₁loop, u₂loop, vloop, Core.ifelse(opu₂, suffix, -1), ls)
