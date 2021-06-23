@@ -221,8 +221,8 @@ using LoopVectorization, OffsetArrays, Test
 
         fill_with_r1c3!(A1, B)
         @test all(==(B[1,3]), A1)
-        fill_with_r1c3!(A1, LinearIndices(B))
-        @test all(==(LinearIndices(B)[1,3]), A1)
+        fill_with_r1c3!(A1, LinearIndices(B))# check args fails
+        @test all(==(LinearIndices(B)[1,3]), A1) 
       
         a = rand(R)
         myfillavx!(x, a);
