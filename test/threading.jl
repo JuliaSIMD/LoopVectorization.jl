@@ -1,6 +1,6 @@
 using OffsetArrays, LinearAlgebra, LoopVectorization, Test
 
-let nt = min(Threads.nthreads(), (Sys.CPU_THREADS)::Int) - 1
+let nt = min(Threads.nthreads(), (Sys.CPU_THREADS)::Int)
   if (LoopVectorization.num_cores() < 4) && (nt ≥ 4)
     @eval LoopVectorization.num_cores() = LoopVectorization.StaticInt{$nt}()
   end
