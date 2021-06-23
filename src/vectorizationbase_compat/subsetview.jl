@@ -32,7 +32,8 @@
         StridedPointer{$T,$(N-1),$newC,$B,$newR}($gptr, $newstrd, $newoffsets)
     end
 end
-@generated function _gesp(sp, ::StaticInt{I}, i::Integer) where {I,N,T}
+@inline _gesp(sp::VectorizationBase.FastRange, ::StaticInt{1}, i) = gesp(sp, (i,))
+@generated function _gesp(sp::AbstractStridedPointer{T,N}, ::StaticInt{I}, i::Integer) where {I,N,T}
   t = Expr(:tuple)
   for j ∈ 1:I-1
     push!(t.args, staticexpr(0))
