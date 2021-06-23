@@ -32,19 +32,21 @@
         StridedPointer{$T,$(N-1),$newC,$B,$newR}($gptr, $newstrd, $newoffsets)
     end
 end
-@generated function _gesp(sp::AbstractStridedPointer{T,N}, ::StaticInt{I}, i::Integer) where {I,N,T}
-    t = Expr(:tuple)
-    for j ∈ 1:I-1
-        push!(t.args, staticexpr(0))
-    end
-    push!(t.args, :i)
+@generated function _gesp(sp, ::StaticInt{I}, i::Integer) where {I,N,T}
+  t = Expr(:tuple)
+  for j ∈ 1:I-1
+    push!(t.args, staticexpr(0))
+  end
+  push!(t.args, :i)
+  if I > 1
     for j ∈ I+1:N
-        push!(t.args, staticexpr(0))
+      push!(t.args, staticexpr(0))
     end
-    quote
-        $(Expr(:meta,:inline))
-        gesp(sp, $t)
-    end
+  end
+  quote
+    $(Expr(:meta,:inline))
+    gesp(sp, $t)
+  end
 end
 
 

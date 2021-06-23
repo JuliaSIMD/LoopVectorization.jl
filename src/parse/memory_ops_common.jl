@@ -6,16 +6,16 @@ function dottosym(x::Expr)::Symbol
   xa2 isa QuoteNode ? Symbol(s1, "###extractarray###", xa2.value) : Symbol(s1, "###extractarray###", xa2)
 end
 function extract_array_symbol_from_ref!(ls::LoopSet, ex::Expr, offset1::Int)::Symbol
-    ar = ex.args[1 + offset1]
-    if isa(ar, Symbol)
-        return ar
-    elseif isa(ar, Expr) && (ar.head === :(.) || ar.head === :ref)
-        s = dottosym(ar)
-        pushprepreamble!(ls, Expr(:(=), s, ar))
-        return s
-    else
-        throw("Indexing into the following expression was not recognized: $ar")
-    end
+  ar = ex.args[1 + offset1]
+  if isa(ar, Symbol)
+    return ar
+  elseif isa(ar, Expr) && (ar.head === :(.) || ar.head === :ref)
+    s = dottosym(ar)
+    pushprepreamble!(ls, Expr(:(=), s, ar))
+    return s
+  else
+    throw("Indexing into the following expression was not recognized: $ar")
+  end
 end
 
 
@@ -27,12 +27,12 @@ ref_from_ref!(ls::LoopSet, ex::Expr) = ref_from_expr!(ls, ex, 0, 0)
 ref_from_getindex!(ls::LoopSet, ex::Expr) = ref_from_expr!(ls, ex, 1, 1)
 ref_from_setindex!(ls::LoopSet, ex::Expr) = ref_from_expr!(ls, ex, 1, 2)
 function ref_from_expr!(ls::LoopSet, ex::Expr)
-    if ex.head === :ref
-        ref_from_ref!(ls, ex)
-    else#if ex.head === :call
-        f = first(ex.args)::Symbol
-        f === :getindex ? ref_from_getindex!(ls, ex) : ref_from_setindex!(ls, ex)
-    end
+  if ex.head === :ref
+    ref_from_ref!(ls, ex)
+  else#if ex.head === :call
+    f = first(ex.args)::Symbol
+    f === :getindex ? ref_from_getindex!(ls, ex) : ref_from_setindex!(ls, ex)
+  end
 end
 
 add_vptr!(ls::LoopSet, op::Operation) = add_vptr!(ls, op.ref)
@@ -91,20 +91,20 @@ function subset_vptr!(ls::LoopSet, vptr::Symbol, indnum::Int, ind, previndices, 
 end
 
 function gesp_const_offset!(ls::LoopSet, vptrarray, ninds, indices, loopedindex, mlt::Integer, sym)
-    if isone(mlt)
-        subset_vptr!(ls, vptrarray, ninds, sym, indices, loopedindex, false)
-    else        
-        mltsym = Symbol(sym, "##multiplied##by##", mlt)
-        pushprepreamble!(ls, Expr(:(=), mltsym, Expr(:call, :(*), mlt, sym))) # want same name for arrays to be given the same name if possible
-        subset_vptr!(ls, vptrarray, ninds, mltsym, indices, loopedindex, false)
-    end
+  if isone(mlt)
+    subset_vptr!(ls, vptrarray, ninds, sym, indices, loopedindex, false)
+  else        
+    mltsym = Symbol(sym, "##multiplied##by##", mlt)
+    pushprepreamble!(ls, Expr(:(=), mltsym, Expr(:call, :(*), mlt, sym))) # want same name for arrays to be given the same name if possible
+    subset_vptr!(ls, vptrarray, ninds, mltsym, indices, loopedindex, false)
+  end
 end
 function gesp_const_offsets!(ls::LoopSet, vptrarray, ninds, indices, loopedindex, mltsyms)
-    length(mltsyms) > 1 && sort!(mltsyms, by = last) # if multiple have same combination of syms, make sure they match even if order is different
-    for (mlt,sym) ∈ mltsyms
-        vptrarray = gesp_const_offset!(ls, vptrarray, ninds, indices, loopedindex, mlt, sym)
-    end
-    vptrarray
+  length(mltsyms) > 1 && sort!(mltsyms, by = last) # if multiple have same combination of syms, make sure they match even if order is different
+  for (mlt,sym) ∈ mltsyms
+    vptrarray = gesp_const_offset!(ls, vptrarray, ninds, indices, loopedindex, mlt, sym)
+  end
+  vptrarray
 end
 
 
@@ -296,7 +296,7 @@ function checkforoffset!(
         addconstindex!(indices, offsets, strides, loopedindex, offset)
         return vptrarray
     elseif length(mult_syms) == 1
-        mlt, sym = only(mult_syms)
+      mlt, sym = mult_syms[1]
         if sym ∈ ls.loopsymbols
             if byterepresentable(mlt)
                 _addoffset!(indices, offsets, strides, loopedindex, loopdependencies, sym, offset, mlt)

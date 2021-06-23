@@ -1,4 +1,11 @@
 using OffsetArrays, LinearAlgebra, LoopVectorization, Test
+
+let nt = min(Threads.nthreads(), (Sys.CPU_THREADS)::Int) - 1
+  if (LoopVectorization.num_cores() < 4) && (nt ≥ 4)
+    @eval LoopVectorization.num_cores() = LoopVectorization.StaticInt{$nt}()
+  end
+end
+
 function mydotavx(a, b)
     s = zero(eltype(a))
     @tturbo for i ∈ eachindex(a,b)

@@ -170,6 +170,19 @@ using LoopVectorization, OffsetArrays, Test
       dest[2, i] = src[1, i]
     end
   end
+
+  function fill_with_3rd!(dest, src)
+    p = 1
+    @turbo for i ∈ eachindex(dest)
+      dest[i] = src[3*p]
+    end
+  end
+  function fill_with_r1c3!(dest, src::AbstractMatrix)
+    p = 1
+    @turbo for i ∈ eachindex(dest)
+      dest[i] = src[p, 3*p]
+    end
+  end
   
     for T ∈ (Float32, Float64, Int32, Int64)
         @show T, @__LINE__
@@ -201,7 +214,16 @@ using LoopVectorization, OffsetArrays, Test
         @test A1 == A2
         fill!(A2, 0); offset_copy_avx2!(A2, B);
         @test A1 == A2
-        
+        fill_with_3rd!(A1, B)
+        @test all(==(B[3]), A1)
+        fill_with_3rd!(A1, eachindex(B))
+        @test all(==(3), A1)
+
+        fill_with_r1c3!(A1, B)
+        @test all(==(B[1,3]), A1)
+        fill_with_r1c3!(A1, LinearIndices(B))
+        @test all(==(LinearIndices(B)[1,3]), A1)
+      
         a = rand(R)
         myfillavx!(x, a);
         fill!(q2, a);
