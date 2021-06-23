@@ -11,7 +11,7 @@ using LoopVectorization, Test
         b = rand(R,99,99,1);
         bl = LowDimArray{(true,true,false)}(b);
         @test size(bl) == size(b)
-        @test LoopVectorization.size(bl) === (size(b,1),size(b,2),LoopVectorization.StaticInt(1))
+        @test LoopVectorization.ArrayInterface.size(bl) === (size(b,1),size(b,2),LoopVectorization.StaticInt(1))
 
         br = reshape(b, (99,99));
         c1 = a .+ b;
@@ -24,7 +24,7 @@ using LoopVectorization, Test
         br = reshape(b, (99,1,99));
         bl = LowDimArray{(true,false,true)}(br);
         @test size(bl) == size(br)
-        @test LoopVectorization.size(bl) === (size(br,1),LoopVectorization.StaticInt(1),size(br,3))
+        @test LoopVectorization.ArrayInterface.size(bl) === (size(br,1),LoopVectorization.StaticInt(1),size(br,3))
         @. c1 = a + br;
         fill!(c2, 99999); @turbo @. c2 = a + bl;
         @test c1 ≈ c2
@@ -33,7 +33,7 @@ using LoopVectorization, Test
         br = reshape(b, (1,99,99));
         bl = LowDimArray{(false,)}(br);
         @test size(bl) == size(br)
-        @test LoopVectorization.size(bl) === (size(br,1),LoopVectorization.StaticInt(1),size(br,3))
+        @test LoopVectorization.ArrayInterface.size(bl) === (LoopVectorization.StaticInt(1),size(br,2),size(br,3))
         @. c1 = a + br;
         fill!(c2, 99999);
         @test c1 ≈ @turbo @. c2 = a + bl
@@ -53,7 +53,7 @@ using LoopVectorization, Test
         end
         max_ = maximum(xs, dims=1);
         @test (@turbo exp.(xs .- LowDimArray{(false,)}(max_))) ≈ exp.(xs .- LowDimArray{(false,)}(max_))
-        @test size(LowDimArray{(false,)}(max_)))) == size(max_)
+        @test size(LowDimArray{(false,)}(max_)) == size(max_)
 
         if T === Int32
             a = rand(T(1):T(100), 73, 1);
