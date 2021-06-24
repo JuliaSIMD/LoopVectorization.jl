@@ -1119,11 +1119,11 @@ function add_assignment!(ls::LoopSet, LHS, RHS, elementbytes::Int, position::Int
         end
         return last(operations(ls)) # FIXME: dummy
       end
-      @assert length(LHS.args) ≤ 9 "Functions returning more than 9 values aren't currently supported."
+      @assert length(LHS.args) ≤ 14 "Functions returning more than 9 values aren't currently supported."
       lhstemp = gensym!(ls, "lhstuple")
       vparents = Operation[maybe_const_compute!(ls, lhstemp, add_operation!(ls, lhstemp, RHS, elementbytes, position), elementbytes, position)]
       for i ∈ eachindex(LHS.args)
-        f = (:first,:second,:third,:fourth,:fifth,:sixth,:seventh,:eighth,:ninth)[i]
+        f = (:first,:second,:third,:fourth,:fifth,:sixth,:seventh,:eighth,:ninth,:tenth,:eleventh,:twelfth,:thirteenth,:last)[i]
         lhsi = LHS.args[i]
         if lhsi isa Symbol
           add_compute!(ls, lhsi, f, vparents, elementbytes)
