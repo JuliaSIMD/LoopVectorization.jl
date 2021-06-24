@@ -252,7 +252,7 @@ function add_compute!(
     mpref::Union{Nothing,ArrayReferenceMetaPosition} = nothing
 )
     @assert ex.head === :call
-    # instr = instruction(first(ex.args))::Symbol
+  # instr = instruction(first(ex.args))::Symbol
     instr = instruction!(ls, first(ex.args))::Instruction
     args = @view(ex.args[2:end])
     if (instr.instr === :pow_fast || instr.instr === :(^)) && length(args) == 2

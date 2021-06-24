@@ -11,8 +11,8 @@
 # end
 
 function Base.copyto!(ls::LoopSet, q::Expr)
-    q.head === :for || throw("Expression must be a for loop.")
-    add_loop!(ls, q, 8)
+  q.head === :for || throw("Expression must be a for loop.")
+  add_loop!(ls, q, 8)
     # strip_unneeded_const_deps!(ls)
 end
 
@@ -61,11 +61,11 @@ end
 
 
 function LoopSet(q::Expr, mod::Symbol = :Main)
-    contract_pass!(q)
-    ls = LoopSet(mod)
-    copyto!(ls, q)
-    resize!(ls.loop_order, num_loops(ls))
-    ls
+  contract_pass!(q)
+  ls = LoopSet(mod)
+  copyto!(ls, q)
+  resize!(ls.loop_order, num_loops(ls))
+  ls
 end
 LoopSet(q::Expr, m::Module) = LoopSet(macroexpand(m, q)::Expr, Symbol(m))
 

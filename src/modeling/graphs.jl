@@ -741,11 +741,11 @@ function pushop!(ls::LoopSet, op::Operation, var::Symbol = name(op))
   op
 end
 function add_block!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
-    for x ∈ ex.args
-        x isa Expr || continue # be that general?
-        x.head === :inbounds && continue
-        push!(ls, x, elementbytes, position)
-    end
+  for x ∈ ex.args
+    x isa Expr || continue # be that general?
+    x.head === :inbounds && continue
+    push!(ls, x, elementbytes, position)
+  end
 end
 function maybestatic!(expr::Expr)
   if expr.head === :call
@@ -947,7 +947,7 @@ function add_loop!(ls::LoopSet, q::Expr, elementbytes::Int)
     body = q.args[2]::Expr
     position = length(ls.loopsymbols)
     if body.head === :block
-        add_block!(ls, body, elementbytes, position)
+      add_block!(ls, body, elementbytes, position)
     else
         push!(ls, q, elementbytes, position)
     end
