@@ -43,11 +43,15 @@ function mulexpr(mulexargs)
     a, b
 end
 function append_args_skip!(call, args, i, mod)
-    for j ∈ eachindex(args)
-        j == i && continue
-        push!(call.args, args[j])
+  for j ∈ eachindex(args)
+    j == i && continue
+    if length(call.args) < 3
+      push!(call.args, args[j])
+    else
+      call = Expr(:call, :add_fast, call, args[j])
     end
-    call
+  end
+  call
 end
 
 function fastfunc(f)
