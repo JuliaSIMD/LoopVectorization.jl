@@ -200,7 +200,7 @@ function append_update_args(f, ex::Expr)
     push!(call.args, ex.args[i])
   end
   push!(call.args, ex.args[1])
-  nothing
+  call
 end
 contract_pass!(::Any, ::Any) = nothing
 function contract!(expr::Expr, ex::Expr, i::Int, mod)
