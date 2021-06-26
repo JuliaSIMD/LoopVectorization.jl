@@ -233,7 +233,7 @@ function _precompile_()
     Base.precompile(Tuple{typeof(contract!),Expr,Expr,Int,Nothing})   # time: 0.001449395
     Base.precompile(Tuple{typeof(tryrefconvert),LoopSet,Expr,Int,Symbol})   # time: 0.001434435
     Base.precompile(Tuple{typeof(gespf1),StridedPointer{Float32, 2, 1, 0, (1, 2), Tuple{StaticInt{4}, Int}, Tuple{StaticInt{1}, StaticInt{1}}},Tuple{Int}})   # time: 0.001407814
-    Base.precompile(Tuple{typeof(append_update_args!),Expr,Expr})   # time: 0.001406569
+    Base.precompile(Tuple{typeof(append_update_args),Symbol,Expr})   # time: 0.001406569
     Base.precompile(Tuple{typeof(gespf1),StridedPointer{Float32, 1, 1, 0, (1,), Tuple{StaticInt{4}}, Tuple{StaticInt{1}}},Tuple{Int}})   # time: 0.001404321
     Base.precompile(Tuple{typeof(symbolind),Symbol,Operation,UnrollArgs,LoopSet})   # time: 0.001402186
     Base.precompile(Tuple{typeof(gespf1),StridedPointer{Float64, 2, 1, 0, (1, 2), Tuple{StaticInt{8}, Int}, Tuple{StaticInt{1}, StaticInt{1}}},Tuple{Int}})   # time: 0.001394523

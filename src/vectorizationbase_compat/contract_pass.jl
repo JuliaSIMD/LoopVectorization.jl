@@ -194,7 +194,7 @@ function capture_muladd(ex::Expr, mod)
     found || return ex
   end
 end
-function append_update_args(f, ex::Expr)
+function append_update_args(f::Symbol, ex::Expr)
   call = Expr(:call, f)
   for i ∈ 2:length(ex.args)
     push!(call.args, ex.args[i])
