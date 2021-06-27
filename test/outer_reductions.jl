@@ -54,9 +54,20 @@ function test_awmean(::Type{T}) where {T}
     end
 end
 
+function not_an_outer_reduct!(r, N::Int, x = 2.0, y= nothing) # there was a bug where this was classified as one
+  @turbo for i ∈ eachindex(r)
+    acc = y === nothing ? x : r[i]
+    for n ∈ 1:N
+      acc += 0
+    end
+    r[i] = acc
+  end
+  r
+end
 @testset "Outer Reductions" begin
   for T ∈ [Float32,Float64,Int32,Int64]
     test_awmean(T)
   end
+  @test all(==(7.4), not_an_outer_reduct!(Vector{Float64}(undef, 5), 17, 7.4))
 end
 

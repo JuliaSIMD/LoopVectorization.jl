@@ -1413,7 +1413,7 @@ Returns `-1` if not an outerreduction.
 function isouterreduction(ls::LoopSet, op::Operation)
   if isconstant(op) # equivalent to checking if length(loopdependencies(op)) == 0
     instr = op.instruction
-    instr == LOOPCONSTANT && return 0
+    instr == LOOPCONSTANT && return Core.ifelse(length(loopdependencies(op)) == 0, 0, -1)
     instr.mod === GLOBALCONSTANT && return -1
     ops = operations(ls)
     for or ∈ ls.outer_reductions
