@@ -209,17 +209,21 @@ function contract!(expr::Expr, ex::Expr, i::Int, mod)
   if ex.head === :(+=)
     call = append_update_args(:add_fast, ex)
     expr.args[i] = ex = Expr(:(=), first(ex.args), call)
-  elseif ex.head === :(-=)
-    call = Expr(:call, :sub_fast)
-    append!(call.args, ex.args)
-    expr.args[i] = ex = Expr(:(=), first(ex.args), call)
   elseif ex.head === :(*=)
     call = append_update_args(:mul_fast, ex)
     expr.args[i] = ex = Expr(:(=), first(ex.args), call)
-  elseif ex.head === :(/=)
-    call = Expr(:call, :div_fast)
-    append!(call.args, ex.args)
-    expr.args[i] = ex = Expr(:(=), first(ex.args), call)
+  elseif Meta.isexpr(ex, :(\=), 2)
+    exa1 = ex.args[1]
+    call = Expr(:call, :div_fast, ex.args[2], exa1)
+    expr.args[i] = ex = Expr(:(=), exa1, call)
+  else
+    j = findfirst(Base.Fix2(===, ex.head), (:(-=),  :(/=),  :(÷=),  :(%=),  :(^=),  :(&=),  :(|=),  :(⊻=),  :(>>>=),  :(>>=),  :(<<=)))
+    if j ≢ nothing
+      f = (:sub_fast,  :div_fast,  :(÷),  :(%),  :(^),  :(&),  :(|),  :(⊻),  :(>>>),  :(>>),  :(<<))[j::Int]
+      call = Expr(:call, f)
+      append!(call.args, ex.args)
+      expr.args[i] = ex = Expr(:(=), first(ex.args), call)
+    end
   end
   if ex.head === :(=)
     RHS = ex.args[2]
