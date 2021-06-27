@@ -8,7 +8,7 @@ end
 
 @testset "Simple Miscellaneous" begin
   r1 = rand(UInt, 239);
-  mask = ~(one(eltype(r))<<(2))
+  mask = ~(one(eltype(r1))<<(2))
   r2 = r1 .& mask;
   @test lv_turbo(r1, mask) == r2;
 end
