@@ -166,11 +166,11 @@ end
 # end
 if Sys.ARCH === :x86_64
   @inline function choose_num_threads(C::T, NT::UInt, x::Base.BitInteger) where {T<:Union{Float32,Float64}}
-    _choose_num_threads(Base.mul_float_fast(T(C), T(0.05460264079015985)), NT, x)
+    _choose_num_threads(Base.mul_float_fast(T(C), T(0.0225)), NT, x)
   end
 else
   @inline function choose_num_threads(C::T, NT::UInt, x::Base.BitInteger) where {T<:Union{Float32,Float64}}
-    _choose_num_threads(Base.mul_float_fast(C, T(0.05460264079015985) * T(0.25)), NT, x)
+    _choose_num_threads(Base.mul_float_fast(C, T(0.0225) * T(0.25)), NT, x)
   end
 end
 @inline function _choose_num_threads(C::T, NT::UInt, x::Base.BitInteger) where {T<:Union{Float32,Float64}}
@@ -339,7 +339,7 @@ function thread_one_loops_expr(
     UNROLL::Tuple{Bool,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt}, OPS::Expr, ARF::Expr, AM::Expr, LPSYM::Expr
   )
   looplen = looplengthprod(ls)
-  c = 0.05460264079015985 * c / looplen
+  c = 0.0225 * c / looplen
   if Sys.ARCH !== :x86_64
     c *= 0.25
   end
@@ -475,8 +475,7 @@ function thread_two_loops_expr(
     UNROLL::Tuple{Bool,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt}, OPS::Expr, ARF::Expr, AM::Expr, LPSYM::Expr
   )
   looplen = looplengthprod(ls)
-  c = 0.05460264079015985 * c / looplen
-  # @show c
+  c = 0.0225 * c / looplen
   if Sys.ARCH !== :x86_64
     c *= 0.25
   end
