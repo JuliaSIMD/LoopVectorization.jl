@@ -214,6 +214,8 @@ using LoopVectorization: Static
         px = parent(x)
         px === x ? x : pparent(px)
     end
+
+    
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
         Abase = fill(T(NaN), 200, 200);
@@ -277,6 +279,27 @@ using LoopVectorization: Static
             fill!(out4, NaN); @test pparent(avxgeneric2!(out4', A, skern)')' ≈ pparent(out1)
             fill!(out4, NaN); @test pparent(avxgeneric2!(out4', At', kern)')' ≈ pparent(out1)
             fill!(out4, NaN); @test pparent(avxgeneric2!(out4', At', skern)')' ≈ pparent(out1)
-        end
+        end      
     end
+  function issue_295!(R, A, B)
+    @turbo for j in 1:4
+      for i in 0:1
+        R[i, j] = A[2i + 2j] + 0 * B[j]
+      end
+    end
+    R
+  end
+
+  A = [i^2 for i in 1:10];
+  B = [1,2,3,4];
+  R = OffsetArray(zeros(Int, 2,4), 0:1, 1:4);
+  function issue_295!(R, A, B)
+    @turbo for j in 1:4
+      for i in 0:1
+        R[i, j] = A[2i + 2j] + 0 * B[j]
+      end
+    end
+    R
+  end
+  @test issue_295!(R, A, B) == OffsetArray([4  16  36   64; 16  36  64  100], -1, 0)
 end
