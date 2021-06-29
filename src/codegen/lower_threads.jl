@@ -390,32 +390,36 @@ function thread_one_loops_expr(
       var"##do#thread##" = var"#nrequest#" ≠ 0x00000000
       if var"##do#thread##"
         var"#threads#", var"#torelease#" = Polyester.request_threads(Threads.threadid()%UInt32, var"#nrequest#")
-        var"#thread#factor#0#" = var"#nthreads#"
-        $iterdef
-        var"#thread#launch#count#" = 0x00000000
-        var"#thread#id#" = 0x00000000
-        var"#thread#mask#" = Polyester.mask(var"#threads#")
-        var"#threads#remain#" = true
-        while var"#threads#remain#"
-          VectorizationBase.assume(var"#thread#mask#" ≠ zero(var"#thread#mask#"))
-          var"#trailzing#zeros#" = Base.trailing_zeros(var"#thread#mask#") % UInt32
-          var"#nblock#size#thread#0#" = Core.ifelse(
-            var"#thread#launch#count#" < (var"#nrem#thread#0#" % UInt32),
-            vadd_nw(var"#base#block#size#thread#0#", var"#block#rem#step#0#"),
-            var"#base#block#size#thread#0#"
-          )
-          var"#trailzing#zeros#" = vadd_nw(var"#trailzing#zeros#", 0x00000001)
-          $iterstop
-          var"#thread#id#" = vadd_nw(var"#thread#id#", var"#trailzing#zeros#")
+        var"#nrequest#" = var"#threads#".i
+        var"##do#thread##" = var"#nrequest#" ≠ zero(var"#nrequest#")
+        if var"##do#thread##"
+          var"#thread#factor#0#" = var"#nthreads#"
+          $iterdef
+          var"#thread#launch#count#" = 0x00000000
+          var"#thread#id#" = 0x00000000
+          var"#thread#mask#" = Polyester.mask(var"#threads#")
+          var"#threads#remain#" = true
+          while var"#threads#remain#"
+            VectorizationBase.assume(var"#thread#mask#" ≠ zero(var"#thread#mask#"))
+            var"#trailzing#zeros#" = Base.trailing_zeros(var"#thread#mask#") % UInt32
+            var"#nblock#size#thread#0#" = Core.ifelse(
+              var"#thread#launch#count#" < (var"#nrem#thread#0#" % UInt32),
+              vadd_nw(var"#base#block#size#thread#0#", var"#block#rem#step#0#"),
+              var"#base#block#size#thread#0#"
+            )
+            var"#trailzing#zeros#" = vadd_nw(var"#trailzing#zeros#", 0x00000001)
+            $iterstop
+            var"#thread#id#" = vadd_nw(var"#thread#id#", var"#trailzing#zeros#")
 
-          var"##lbvargs#to_launch##" = ($loopboundexpr, var"#vargs#")
-          avx_launch(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, StaticType{typeof(var"##lbvargs#to_launch##")}(), flatten_to_tuple(var"##lbvargs#to_launch##"), var"#thread#id#")
+            var"##lbvargs#to_launch##" = ($loopboundexpr, var"#vargs#")
+            avx_launch(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, StaticType{typeof(var"##lbvargs#to_launch##")}(), flatten_to_tuple(var"##lbvargs#to_launch##"), var"#thread#id#")
 
-          var"#thread#mask#" >>>= var"#trailzing#zeros#"
+            var"#thread#mask#" >>>= var"#trailzing#zeros#"
 
-          var"#iter#start#0#" = var"#iter#stop#0#"
-          var"#thread#launch#count#" = vadd_nw(var"#thread#launch#count#", 0x00000001)
-          var"#threads#remain#" = var"#thread#launch#count#" ≠ var"#nrequest#"
+            var"#iter#start#0#" = var"#iter#stop#0#"
+            var"#thread#launch#count#" = vadd_nw(var"#thread#launch#count#", 0x00000001)
+            var"#threads#remain#" = var"#thread#launch#count#" ≠ var"#nrequest#"
+          end
         end
       else# eliminate undef var errors that the compiler should be able to figure out are unreachable, but doesn't
         var"#torelease#" = zero(Polyester.worker_type())
@@ -573,46 +577,50 @@ function thread_two_loops_expr(
       var"##do#thread##" = var"#nrequest#" ≠ 0x00000000
       if var"##do#thread##"
         var"#threads#", var"#torelease#" = Polyester.request_threads(Threads.threadid(), var"#nrequest#")
-        $iterdef1
-        $iterdef2
-        # @show var"#base#block#size#thread#0#", var"#block#rem#step#0#" var"#base#block#size#thread#1#", var"#block#rem#step#1#"
-        var"#thread#launch#count#" = 0x00000000
-        var"#thread#launch#count#0#" = 0x00000000
-        var"#thread#launch#count#1#" = 0x00000000
-        var"#thread#id#" = 0x00000000
-        var"#thread#mask#" = Polyester.mask(var"#threads#")
-        var"#threads#remain#" = true
-        while var"#threads#remain#"
-          VectorizationBase.assume(var"#thread#mask#" ≠ zero(var"#thread#mask#"))
-          var"#trailzing#zeros#" = Base.trailing_zeros(var"#thread#mask#") % UInt32
-          var"#nblock#size#thread#0#" = Core.ifelse(
-            var"#thread#launch#count#0#" < (var"#nrem#thread#0#" % UInt32),
-            vadd_nw(var"#base#block#size#thread#0#", var"#block#rem#step#0#"),
-            var"#base#block#size#thread#0#"
-          )
-          var"#nblock#size#thread#1#" = Core.ifelse(
-            var"#thread#launch#count#1#" < (var"#nrem#thread#1#" % UInt32),
-            vadd_nw(var"#base#block#size#thread#1#", var"#block#rem#step#1#"),
-            var"#base#block#size#thread#1#"
-          )
-          var"#trailzing#zeros#" = vadd_nw(var"#trailzing#zeros#", 0x00000001)
-          $iterstop1
-          $iterstop2
-          var"#thread#id#" = vadd_nw(var"#thread#id#", var"#trailzing#zeros#")
-          # @show var"#thread#id#" $loopboundexpr
-          var"##lbvargs#to_launch##" = ($loopboundexpr, var"#vargs#")
-          avx_launch(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, StaticType{typeof(var"##lbvargs#to_launch##")}(), flatten_to_tuple(var"##lbvargs#to_launch##"), var"#thread#id#")
-          var"#thread#mask#" >>>= var"#trailzing#zeros#"
+        var"#nrequest#" = var"#threads#".i
+        var"##do#thread##" = var"#nrequest#" ≠ zero(var"#nrequest#")
+        if var"##do#thread##"
+          $iterdef1
+          $iterdef2
+          # @show var"#base#block#size#thread#0#", var"#block#rem#step#0#" var"#base#block#size#thread#1#", var"#block#rem#step#1#"
+          var"#thread#launch#count#" = 0x00000000
+          var"#thread#launch#count#0#" = 0x00000000
+          var"#thread#launch#count#1#" = 0x00000000
+          var"#thread#id#" = 0x00000000
+          var"#thread#mask#" = Polyester.mask(var"#threads#")
+          var"#threads#remain#" = true
+          while var"#threads#remain#"
+            VectorizationBase.assume(var"#thread#mask#" ≠ zero(var"#thread#mask#"))
+            var"#trailzing#zeros#" = Base.trailing_zeros(var"#thread#mask#") % UInt32
+            var"#nblock#size#thread#0#" = Core.ifelse(
+              var"#thread#launch#count#0#" < (var"#nrem#thread#0#" % UInt32),
+              vadd_nw(var"#base#block#size#thread#0#", var"#block#rem#step#0#"),
+              var"#base#block#size#thread#0#"
+            )
+            var"#nblock#size#thread#1#" = Core.ifelse(
+              var"#thread#launch#count#1#" < (var"#nrem#thread#1#" % UInt32),
+              vadd_nw(var"#base#block#size#thread#1#", var"#block#rem#step#1#"),
+              var"#base#block#size#thread#1#"
+            )
+            var"#trailzing#zeros#" = vadd_nw(var"#trailzing#zeros#", 0x00000001)
+            $iterstop1
+            $iterstop2
+            var"#thread#id#" = vadd_nw(var"#thread#id#", var"#trailzing#zeros#")
+            # @show var"#thread#id#" $loopboundexpr
+            var"##lbvargs#to_launch##" = ($loopboundexpr, var"#vargs#")
+            avx_launch(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, StaticType{typeof(var"##lbvargs#to_launch##")}(), flatten_to_tuple(var"##lbvargs#to_launch##"), var"#thread#id#")
+            var"#thread#mask#" >>>= var"#trailzing#zeros#"
 
-          var"##end#inner##" = var"#thread#launch#count#0#" == vsub_nw(var"#thread#factor#0#", 0x00000001)
-          var"#thread#launch#count#0#" = Core.ifelse(var"##end#inner##", 0x00000000, vadd_nw(var"#thread#launch#count#0#", 0x00000001))
-          var"#thread#launch#count#1#" = Core.ifelse(var"##end#inner##", var"#thread#launch#count#1#" + 0x00000001, var"#thread#launch#count#1#")
+            var"##end#inner##" = var"#thread#launch#count#0#" == vsub_nw(var"#thread#factor#0#", 0x00000001)
+            var"#thread#launch#count#0#" = Core.ifelse(var"##end#inner##", 0x00000000, vadd_nw(var"#thread#launch#count#0#", 0x00000001))
+            var"#thread#launch#count#1#" = Core.ifelse(var"##end#inner##", var"#thread#launch#count#1#" + 0x00000001, var"#thread#launch#count#1#")
 
-          var"#iter#start#0#" = Core.ifelse(var"##end#inner##", var"#loop#1#start#init#", var"#iter#stop#0#")
-          var"#iter#start#1#" = Core.ifelse(var"##end#inner##", var"#iter#stop#1#", var"#iter#start#1#")
+            var"#iter#start#0#" = Core.ifelse(var"##end#inner##", var"#loop#1#start#init#", var"#iter#stop#0#")
+            var"#iter#start#1#" = Core.ifelse(var"##end#inner##", var"#iter#stop#1#", var"#iter#start#1#")
 
-          var"#thread#launch#count#" = vadd_nw(var"#thread#launch#count#", 0x00000001)
-          var"#threads#remain#" = var"#thread#launch#count#" ≠ var"#nrequest#"
+            var"#thread#launch#count#" = vadd_nw(var"#thread#launch#count#", 0x00000001)
+            var"#threads#remain#" = var"#thread#launch#count#" ≠ var"#nrequest#"
+          end
         end
       else# eliminate undef var errors that the compiler should be able to figure out are unreachable, but doesn't
         var"#torelease#" = zero(Polyester.worker_type())
