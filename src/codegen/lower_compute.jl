@@ -176,21 +176,19 @@ function ifelselastexpr(hasf::Bool, M::Int, vargtypes, K::Int, S::Int, maskearly
     q
 end
 @generated function ifelselast(f::F, m::AbstractMask{W}, ::StaticInt{M}, ::StaticInt{S}, vargs::Vararg{Any,K}) where {F,W,K,M,S}
-    1+1
     ifelselastexpr(true, M, vargs, K, S, false)
 end
 @generated function ifelselast(m::AbstractMask{W}, ::StaticInt{M}, ::StaticInt{S}, varg_1::V1, varg_2::V2) where {W,V1,V2,M,S}
-    1+1
     ifelselastexpr(false, M, (V1,V2), 2, S, false)
 end
 @generated function ifelsepartial(f::F, m::AbstractMask{W}, ::StaticInt{M}, ::StaticInt{S}, vargs::Vararg{Any,K}) where {F,W,K,M,S}
-    1+1
     ifelselastexpr(true, M, vargs, K, S, true)
 end
 @generated function ifelsepartial(m::AbstractMask{W}, ::StaticInt{M}, ::StaticInt{S}, varg_1::V1, varg_2::V2) where {W,V1,V2,M,S}
-    1+1
     ifelselastexpr(false, M, (V1,V2), 2, S, true)
 end
+# @inline ifelselast(f::F, m::AbstractMask{W}, ::StaticInt{M}, ::StaticInt{S}, vargs::Vararg{NativeTypes,K}) where {F,W,K,M,S} = f(vargs...)
+# @inline ifelsepartial(f::F, m::AbstractMask{W}, ::StaticInt{M}, ::StaticInt{S}, vargs::Vararg{NativeTypes,K}) where {F,W,K,M,S} = f(vargs...)
 @generated function subset_vec_unroll(vu::VecUnroll{N}, ::StaticInt{S}) where {N,S}
     (1 ≤ S ≤ N + 1) || throw(ArgumentError("`vu` isa `VecUnroll` of `$(N+1)` elements, but trying to subset $S of them."))
     t = Expr(:tuple)

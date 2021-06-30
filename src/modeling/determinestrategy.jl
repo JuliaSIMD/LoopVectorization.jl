@@ -1318,6 +1318,26 @@ function choose_tile(ls::LoopSet, sld::Vector{Vector{Symbol}} = store_load_deps(
   shouldinline = (looplengthprod(ls) < 4097.0) #|| any(op -> iscompute(op) && iszero(length(loopdependencies(op))), operations(ls))
   best_order, bestu₁, bestu₂, best_vec, u₁, u₂, lowest_cost, shouldinline
 end
+function mismatchedstorereductions(ls::LoopSet)
+  reduceddeps = Vector{Symbol}[]
+  nreduceddeps = 0
+  for op ∈ operations(ls)
+    isstore(op) || continue
+    rd = reduceddependencies(first(parents(op)))
+    if nreduceddeps ≠ 0
+      length(rd) == nreduceddeps || return true
+    else
+      nreduceddeps = length(rd)
+    end
+    for rdo ∈ reduceddeps
+      for s ∈ rdo
+        s ∈ rd || return true
+      end
+    end
+    push!(reduceddeps, rd)
+  end
+  false
+end
 # Last in order is the inner most loop
 function choose_order_cost(ls::LoopSet)
   resize!(ls.loop_order, length(ls.loopsymbols))
@@ -1331,15 +1351,16 @@ function choose_order_cost(ls::LoopSet)
     tc = Inf
   end
   uorder, uvec, uc = choose_unroll_order(ls, tc, sld)
+  mismatched = mismatchedstorereductions(ls)
   if num_loops(ls) > 1 && tc ≤ uc
     @assert ls.loop_order.bestorder === torder
     # copyto!(ls.loop_order.bestorder, torder)
-    return torder, tunroll, ttile, tvec, tU, tT, tc, shouldinline
+    return torder, tunroll, ttile, tvec, tU, tT, Core.ifelse(mismatched, Inf, tc), shouldinline
     # return torder, tvec, 4, 4#5, 5
   else
     copyto!(ls.loop_order.bestorder, uorder)
     UF, uunroll = determine_unroll_factor(ls, uorder, uvec)
-    return uorder, uunroll, Symbol("##undefined##"), uvec, UF, -1, uc, true
+    return uorder, uunroll, Symbol("##undefined##"), uvec, UF, -1, Core.ifelse(mismatched, Inf, uc), true
   end
 end
 function choose_order(ls::LoopSet)

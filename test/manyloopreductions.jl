@@ -1,4 +1,43 @@
 
+function mismatchedreductions_noturbo!(𝛥r392, 𝛥x923, 𝛥ℛ, ℛ, r392, x923, 𝒶𝓍k=1:2, 𝒶𝓍n=1:3, 𝒶𝓍j=1:9, 𝒶𝓍m=1:9, 𝒶𝓍i=1:3)
+  @inbounds @fastmath for k = 𝒶𝓍k
+    for i = 𝒶𝓍i
+      for m = 𝒶𝓍m
+        for j = 𝒶𝓍j
+          for n = 𝒶𝓍n
+            ℰ𝓍1 = conj(x923[m, k, n])
+            ℰ𝓍2 = 𝛥ℛ[n, j, m, i] * ℰ𝓍1
+            ℰ𝓍3 = conj(r392[i, j, k])
+            ℰ𝓍4 = 𝛥ℛ[n, j, m, i] * ℰ𝓍3
+            𝛥r392[i, j, k] = 𝛥r392[i, j, k] + ℰ𝓍2
+            𝛥x923[m, k, n] = 𝛥x923[m, k, n] + ℰ𝓍4
+          end
+        end
+      end
+    end
+  end
+  𝛥r392, 𝛥x923
+end
+function mismatchedreductions!(𝛥r392, 𝛥x923, 𝛥ℛ, ℛ, r392, x923, 𝒶𝓍k=1:2, 𝒶𝓍n=1:3, 𝒶𝓍j=1:9, 𝒶𝓍m=1:9, 𝒶𝓍i=1:3)
+  @turbo for k = 𝒶𝓍k
+    for i = 𝒶𝓍i
+      for m = 𝒶𝓍m
+        for j = 𝒶𝓍j
+          for n = 𝒶𝓍n
+            ℰ𝓍1 = conj(x923[m, k, n])
+            ℰ𝓍2 = 𝛥ℛ[n, j, m, i] * ℰ𝓍1
+            ℰ𝓍3 = conj(r392[i, j, k])
+            ℰ𝓍4 = 𝛥ℛ[n, j, m, i] * ℰ𝓍3
+            𝛥r392[i, j, k] = 𝛥r392[i, j, k] + ℰ𝓍2
+            𝛥x923[m, k, n] = 𝛥x923[m, k, n] + ℰ𝓍4
+          end
+        end
+      end
+    end
+  end
+  𝛥r392, 𝛥x923
+end
+
 @testset "Many Loop Reductions" begin
   A = rand((2:6)...);
   N = ndims(A)
@@ -53,5 +92,16 @@
     end
     @test B ≈ sum(A, dims = dims)
   end
+
+  r392 = rand(3,9,2);
+  x923 = rand(9,2,3);
+  K = rand(3,9,9,3);
+  𝛥r392_1, 𝛥x923_1, 𝛥r392_2, 𝛥x923_2, 𝛥ℛ = similar(r392), similar(x923), similar(r392), similar(x923), copy(K);
+  𝛥r392_1 .= -1; 𝛥x923_1 .= -1; 𝛥r392_2 .= -1; 𝛥x923_2 .= -1;
+
+  mismatchedreductions_noturbo!(𝛥r392_1, 𝛥x923_1, 𝛥ℛ, K, r392, x923)
+  @time mismatchedreductions!(𝛥r392_2, 𝛥x923_2, 𝛥ℛ, K, r392, x923)
+  @test 𝛥r392_1 ≈ 𝛥r392_2
+  @test 𝛥x923_1 ≈ 𝛥x923_2
 end
 
