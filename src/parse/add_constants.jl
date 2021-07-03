@@ -62,7 +62,7 @@ end
 # assignedsym will be assigned to value within the preamble
 function add_constant!(
     ls::LoopSet, value::Symbol, deps::Vector{Symbol}, assignedsym::Symbol, elementbytes::Int, f::Symbol = Symbol("")
-)
+  )
     retop = get(ls.opdict, value, nothing)
     if retop === nothing
         op = Operation(length(operations(ls)), assignedsym, elementbytes, Instruction(f, value), constant, deps, NODEPENDENCY, NOPARENTS)

@@ -183,10 +183,12 @@ function add_reduction_update_parent!(
   parent::Operation, instr::Instruction, reduction_ind::Int, elementbytes::Int
 )
   var = name(parent)
+  # isouterreduction = iszero(length(loopdependencies(parent))) && (parent.instruction === LOOPCONSTANT)
   isouterreduction = parent.instruction === LOOPCONSTANT
   # @show instr, vparents, parent, reduction_ind
   # if parent is not an outer reduction...
   # if !isouterreduction && !isreductzero(parent, ls, reduct_zero)
+  # @show isouterreduction, parent, length(loopdependencies(parent))
   add_reduct_instruct = !isouterreduction && !isconstant(parent)
   if add_reduct_instruct
     if instr.instr === :ifelse
@@ -226,7 +228,7 @@ function add_reduction_update_parent!(
   update_reduction_status!(vparents, reduceddeps, name(reductinit))
   # this is the op added by add_compute
   op = Operation(length(operations(ls)), reductsym, elementbytes, instr, compute, deps, reduceddeps, vparents)
-  parent.instruction === LOOPCONSTANT && push!(ls.outer_reductions, identifier(op))
+  isouterreduction && push!(ls.outer_reductions, identifier(op))
   opout = pushop!(ls, op, var) # note this overwrites the entry in the operations dict, but not the vector
   # isouterreduction || iszero(length(reduceddeps)) && return opout
   # return opout

@@ -35,12 +35,12 @@ function add_ci_call!(q::Expr, @nospecialize(f), args, syms, i, valarg = nothing
     push!(q.args, Expr(:(=), syms[i], call))
 end
 
-function substitute_broadcast(q::Expr, mod::Symbol, inline, u₁, u₂, threads)
+function substitute_broadcast(q::Expr, mod::Symbol, inline, u₁, u₂, threads, warncheckarg)
     ci = first(Meta.lower(LoopVectorization, q).args).code
     nargs = length(ci)-1
     ex = Expr(:block)
     syms = [gensym() for _ ∈ 1:nargs]
-    configarg = (inline,u₁,u₂,true,threads)
+    configarg = (inline,u₁,u₂,true,threads,warncheckarg)
     unroll_param_tup = Expr(:call, lv(:avx_config_val), :(Val{$configarg}()), staticexpr(0))
     for n ∈ 1:nargs
         ciₙ = ci[n]
@@ -75,7 +75,7 @@ function loopset(q::Expr) # for interactive use only
     ls
 end
 
-function check_macro_kwarg(arg, inline::Bool, check_empty::Bool, u₁::Int8, u₂::Int8, threads::Int)
+function check_macro_kwarg(arg, inline::Bool, check_empty::Bool, u₁::Int8, u₂::Int8, threads::Int, warncheckarg::Bool)
     ((arg.head === :(=)) && (length(arg.args) == 2)) || throw(ArgumentError("macro kwarg should be of the form `argname = value`."))
     kw = (arg.args[1])::Symbol
     value = (arg.args[2])
@@ -100,27 +100,29 @@ function check_macro_kwarg(arg, inline::Bool, check_empty::Bool, u₁::Int8, u�
         else
             throw(ArgumentError("Don't know how to process argument in `thread=$value`."))
         end
+    elseif kw === :warn_check_args
+        warncheckarg = value::Bool
     else
         throw(ArgumentError("Received unrecognized keyword argument $kw. Recognized arguments include:\n`inline`, `unroll`, `check_empty`, and `thread`."))
     end
-    inline, check_empty, u₁, u₂, threads
+    inline, check_empty, u₁, u₂, threads, warncheckarg
 end
-function process_args(args; inline = false, check_empty = false, u₁ = zero(Int8), u₂ = zero(Int8), threads = 1)
+function process_args(args; inline = false, check_empty = false, u₁ = zero(Int8), u₂ = zero(Int8), threads = 1, warncheckarg = false)
     for arg ∈ args
-        inline, check_empty, u₁, u₂, threads = check_macro_kwarg(arg, inline, check_empty, u₁, u₂, threads)
+        inline, check_empty, u₁, u₂, threads, warncheckarg = check_macro_kwarg(arg, inline, check_empty, u₁, u₂, threads, warncheckarg)
     end
-    inline, check_empty, u₁, u₂, threads
+    inline, check_empty, u₁, u₂, threads, warncheckarg
 end
 function turbo_macro(mod, src, q, args...)
     q = macroexpand(mod, q)
     
     if q.head === :for
         ls = LoopSet(q, mod)
-        inline, check_empty, u₁, u₂, threads = process_args(args)
-        esc(setup_call(ls, q, src, inline, check_empty, u₁, u₂, threads))
+        inline, check_empty, u₁, u₂, threads, warncheckarg = process_args(args)
+        esc(setup_call(ls, q, src, inline, check_empty, u₁, u₂, threads, warncheckarg))
     else
-        inline, check_empty, u₁, u₂, threads = process_args(args, inline=true)
-        substitute_broadcast(q, Symbol(mod), inline, u₁, u₂, threads)
+        inline, check_empty, u₁, u₂, threads, warncheckarg = process_args(args, inline=true)
+        substitute_broadcast(q, Symbol(mod), inline, u₁, u₂, threads, warncheckarg)
     end
 end
 """
@@ -209,6 +211,10 @@ and `@fastmath` is generated. Note that `VectorizationBase` provides functions s
 ignore `@fastmath`, preserving IEEE semantics both within `@turbo` and `@fastmath`.
 `check_args` currently returns false for some wrapper types like `LinearAlgebra.UpperTriangular`, requiring you to
 use their `parent`. Triangular loops aren't yet supported.
+
+Setting the keyword argument `warn_check_args=true` (e.g. `@turbo warn_check_args=true for ...`) in a loop or
+broadcast statement will cause it to warn once if `LoopVectorization.check_args` fails and the fallback
+loop is executed instead of the LoopVectorization-optimized loop.
 """
 macro turbo(args...)
     turbo_macro(__module__, __source__, last(args), Base.front(args)...)
@@ -250,7 +256,7 @@ end
 macro _turbo(arg, q)
   @assert q.head === :for
   q = macroexpand(__module__, q)
-  inline, check_empty, u₁, u₂ = check_macro_kwarg(arg, false, false, zero(Int8), zero(Int8), 1)
+  inline, check_empty, u₁, u₂ = check_macro_kwarg(arg, false, false, zero(Int8), zero(Int8), 1, false)
   ls = LoopSet(q, __module__)
   set_hw!(ls)
   def_outer_reduct_types!(ls)

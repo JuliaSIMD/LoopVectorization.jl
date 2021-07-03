@@ -11,7 +11,7 @@
     end
     function msdavx(x)
         s = zero(eltype(x))
-        @turbo for i in eachindex(x)
+        @turbo warn_check_args=true for i in eachindex(x)
             s = muladd(x[i], x[i], s) # Avoids fastmath in fallback loop.
         end
         s
@@ -33,6 +33,8 @@
     @test @inferred !LoopVectorization.check_args(['a'])
     @test @inferred !LoopVectorization.check_args(Diagonal(x))
 
+    @test_nowarn msdavx(x)
+    @test_logs (:warn,"`LoopVectorization.check_args` on your inputs failed; running fallback `@inbounds @fastmath` loop instead.") msdavx(FallbackArrayWrapper(x))
     @test msdavx(FallbackArrayWrapper(x)) == 1e18
     @test msd(x) == msdavx(FallbackArrayWrapper(x))
     @test msdavx(x) != msdavx(FallbackArrayWrapper(x))

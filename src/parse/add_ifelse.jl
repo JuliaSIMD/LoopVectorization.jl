@@ -5,37 +5,49 @@
 negateop!(ls::LoopSet, condop::Operation, elementbytes::Int) = add_compute!(ls, gensym!(ls, "negated#mask"), :~, [condop], elementbytes)
 
 function add_if!(ls::LoopSet, LHS::Symbol, RHS::Expr, elementbytes::Int, position::Int, mpref::Union{Nothing,ArrayReferenceMetaPosition} = nothing)
-    # for now, just simple 1-liners
-    @assert length(RHS.args) == 3 "if statements without an else cannot be assigned to a variable."
-    condition = first(RHS.args)
-    condop = if condition isa Symbol
-        getop(ls, condition, elementbytes)
-    elseif mpref === nothing
-        add_operation!(ls, gensym!(ls, "mask"), condition, elementbytes, position)
-    else
-        add_operation!(ls, gensym!(ls, "mask"), condition, mpref, elementbytes, position)
+  # for now, just simple 1-liners
+  @assert length(RHS.args) == 3 "if statements without an else cannot be assigned to a variable."
+  condition = first(RHS.args)
+  condop = if condition isa Symbol
+    getop(ls, condition, elementbytes)
+  elseif mpref === nothing
+    add_operation!(ls, gensym!(ls, "mask"), condition, elementbytes, position)
+  else
+    add_operation!(ls, gensym!(ls, "mask"), condition, mpref, elementbytes, position)
+  end
+  iftrue = RHS.args[2]
+  if iftrue isa Expr
+    trueop = add_operation!(ls, gensym!(ls, "iftrue"), iftrue, elementbytes, position)
+    if iftrue.head === :ref && all(ld -> ld ∈ loopdependencies(trueop), loopdependencies(condop)) && !search_tree(parents(condop), trueop)
+      trueop.instruction = Instruction(:conditionalload)
+      push!(parents(trueop), condop)
     end
-    iftrue = RHS.args[2]
-    if iftrue isa Expr
-        trueop = add_operation!(ls, gensym!(ls, "iftrue"), iftrue, elementbytes, position)
-        if iftrue.head === :ref && all(ld -> ld ∈ loopdependencies(trueop), loopdependencies(condop)) && !search_tree(parents(condop), trueop)
-            trueop.instruction = Instruction(:conditionalload)
-            push!(parents(trueop), condop)
-        end
-    else
-        trueop = getop(ls, iftrue, elementbytes)
+  else
+    trueop = getop(ls, iftrue, elementbytes)
+  end
+  iffalse = RHS.args[3]
+  if trueop.instruction === Instruction(:conditionalload)
+    if ((iffalse isa Number) && (iffalse == 0)) || (Meta.isexpr(iffalse, :call, 2) && (iffalse.args[1] === :zero))
+      trueop.variable = LHS
+      ls.opdict[LHS] = trueop
+      return trueop
     end
-    iffalse = RHS.args[3]
-    if iffalse isa Expr
-        falseop = add_operation!(ls, gensym!(ls, "iffalse"), iffalse, elementbytes, position)
-        if iffalse.head === :ref && all(ld -> ld ∈ loopdependencies(falseop), loopdependencies(condop)) && !search_tree(parents(condop), falseop)
-            falseop.instruction = Instruction(:conditionalload)
-            push!(parents(falseop), negateop!(ls, condop, elementbytes))
-        end
-    else
-        falseop = getop(ls, iffalse, elementbytes)
+  end
+  if iffalse isa Expr
+    falseop = add_operation!(ls, gensym!(ls, "iffalse"), iffalse, elementbytes, position)
+    if iffalse.head === :ref && all(ld -> ld ∈ loopdependencies(falseop), loopdependencies(condop)) && !search_tree(parents(condop), falseop)
+      falseop.instruction = Instruction(:conditionalload)
+      push!(parents(falseop), negateop!(ls, condop, elementbytes))
+      if (any(==(identifier(trueop)), Iterators.map(first, ls.preamble_zeros)))
+        falseop.variable = LHS
+        ls.opdict[LHS] = falseop
+        return falseop
+      end
     end
-    add_compute_ifelse!(ls, LHS, condop, trueop, falseop, elementbytes)
+  else
+    falseop = getop(ls, iffalse, elementbytes)
+  end
+  add_compute_ifelse!(ls, LHS, condop, trueop, falseop, elementbytes)
 end
 
 function add_andblock!(ls::LoopSet, condop::Operation, LHS, rhsop::Operation, elementbytes::Int, position::Int)

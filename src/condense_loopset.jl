@@ -525,10 +525,11 @@ end
     ::Val{CNFARG}, ::StaticInt{W}, ::StaticInt{RS}, ::StaticInt{AR}, ::StaticInt{NT},
     ::StaticInt{CLS}, ::StaticInt{L1}, ::StaticInt{L2}, ::StaticInt{L3}
 ) where {CNFARG,W,RS,AR,CLS,L1,L2,L3,NT}
-    inline,u₁,u₂,BROADCAST,thread = CNFARG
-    nt = min(thread % UInt, NT % UInt)
-    t = Expr(:tuple, inline, u₁, u₂, BROADCAST, W, RS, AR, CLS, L1,L2,L3, nt)
-    Expr(:call, Expr(:curly, :Val, t))
+  inline,u₁,u₂,BROADCAST,thread = CNFARG
+  nt = min(thread % UInt, NT % UInt)
+  t = Expr(:tuple, inline, u₁, u₂, BROADCAST, W, RS, AR, CLS, L1,L2,L3, nt)
+  length(CNFARG) == 6 && push!(t.args, last(CNFARG))
+  Expr(:call, Expr(:curly, :Val, t))
 end
 @inline function avx_config_val(
     ::Val{CNFARG}, ::StaticInt{W}
@@ -787,18 +788,20 @@ function setup_call_debug(ls::LoopSet)
   generate_call(ls, (false,zero(Int8),zero(Int8)), zero(UInt), true)
 end
 function setup_call(
-    ls::LoopSet, q::Expr, source::LineNumberNode, inline::Bool, check_empty::Bool, u₁::Int8, u₂::Int8, thread::Int
+  ls::LoopSet, q::Expr, source::LineNumberNode, inline::Bool, check_empty::Bool, u₁::Int8, u₂::Int8, thread::Int, warncheckarg::Bool
 )
-    # We outline/inline at the macro level by creating/not creating an anonymous function.
-    # The old API instead was based on inlining or not inline the generated function, but
-    # the generated function must be inlined into the initial loop preamble for performance reasons.
-    # Creating an anonymous function and calling it also achieves the outlining, while still
-    # inlining the generated function into the loop preamble.
-    lnns = extract_all_lnns(q)
-    pushfirst!(lnns, source)
-    call = generate_call(ls, (inline, u₁, u₂), thread%UInt, false)
-    call = check_empty ? check_if_empty(ls, call) : call
-    pushprepreamble!(ls, Expr(:if, check_args_call(ls), call, make_crashy(make_fast(q))))
-    prepend_lnns!(ls.prepreamble, lnns)
-    return ls.prepreamble
+  # We outline/inline at the macro level by creating/not creating an anonymous function.
+  # The old API instead was based on inlining or not inline the generated function, but
+  # the generated function must be inlined into the initial loop preamble for performance reasons.
+  # Creating an anonymous function and calling it also achieves the outlining, while still
+  # inlining the generated function into the loop preamble.
+  lnns = extract_all_lnns(q)
+  pushfirst!(lnns, source)
+  call = generate_call(ls, (inline, u₁, u₂), thread%UInt, false)
+  call = check_empty ? check_if_empty(ls, call) : call
+  argfailure = make_crashy(make_fast(q))
+  warncheckarg && (argfailure = Expr(:block, :(@warn "`LoopVectorization.check_args` on your inputs failed; running fallback `@inbounds @fastmath` loop instead."  maxlog=1), argfailure))
+  pushprepreamble!(ls, Expr(:if, check_args_call(ls), call, argfailure))
+  prepend_lnns!(ls.prepreamble, lnns)
+  return ls.prepreamble
 end

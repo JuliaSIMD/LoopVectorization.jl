@@ -989,12 +989,13 @@ end
 
 
 function maybe_const_compute!(ls::LoopSet, LHS::Symbol, op::Operation, elementbytes::Int, position::Int)
-    # return op
-    if iscompute(op) && iszero(length(loopdependencies(op)))
-        ls.opdict[LHS] = add_constant!(ls, LHS, ls.loopsymbols[1:position], gensym!(ls, instruction(op).instr), elementbytes, :numericconstant)
-    else
-        op
-    end
+  # return op
+  if iscompute(op) && iszero(length(loopdependencies(op)))
+    ls.opdict[LHS] = add_constant!(ls, LHS, ls.loopsymbols[1:position], gensym!(ls, instruction(op).instr), elementbytes, :numericconstant)
+  else
+    # op.dependencies = ls.loopsymbols[1:position]
+    op
+  end
 end
 strip_op_linenumber_nodes(q::Expr) = only(filter(x -> !isa(x, LineNumberNode), q.args))
 
