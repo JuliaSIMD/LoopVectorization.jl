@@ -246,11 +246,6 @@ function thread_loop_summary!(ls::LoopSet, ua::UnrollArgs, threadedloop::Loop, i
         :($lensym = $((threadedloop.lensym)) % UInt)
     end
     unroll_factor = Core.ifelse(threadedloop === vloop, W, 1)
-    # if threadedloop === u₁loop
-    #     unroll_factor *= u₁
-    # elseif threadedloop === u₂loop
-    #     unroll_factor *= u₂
-    # end
     num_unroll_sym = Symbol("#num#unrolls#thread#$threadloopnumtag#")
     define_num_unrolls = if unroll_factor == 1
       :($num_unroll_sym = $lensym)
@@ -334,15 +329,19 @@ function define_block_size(threadedloop, vloop, tn, W)
         end
     end
 end
+function scale_cost(c, looplen)
+  c = 0.05 * c / looplen
+  if Sys.ARCH !== :x86_64
+    c *= 0.25
+  end
+  c
+end
 function thread_one_loops_expr(
     ls::LoopSet, ua::UnrollArgs, valid_thread_loop::Vector{Bool}, ntmax::UInt, c::Float64,
     UNROLL::Tuple{Bool,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt}, OPS::Expr, ARF::Expr, AM::Expr, LPSYM::Expr
   )
   looplen = looplengthprod(ls)
-  c = 0.0225 * c / looplen
-  if Sys.ARCH !== :x86_64
-    c *= 0.25
-  end
+  c = scale_cost(c, looplen)
   if all(isstaticloop, ls.loops)
     _num_threads = _choose_num_threads(c, ntmax, Int64(looplen))::UInt
     _num_threads > 1 || return avx_body(ls, UNROLL)
@@ -376,7 +375,6 @@ function thread_one_loops_expr(
     nothing
   end
   retexpr = length(ls.outer_reductions) > 0 ? :(return $retv) : :(return nothing)
-  # @unpack u₁loop, u₂loop, vloop, u₁, u₂max = ua
   iterdef = define_block_size(threadedloop, ua.vloop, 0, ls.vector_width)
   q = quote
     $choose_nthread # UInt
@@ -479,10 +477,8 @@ function thread_two_loops_expr(
     UNROLL::Tuple{Bool,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt}, OPS::Expr, ARF::Expr, AM::Expr, LPSYM::Expr
   )
   looplen = looplengthprod(ls)
-  c = 0.0225 * c / looplen
-  if Sys.ARCH !== :x86_64
-    c *= 0.25
-  end
+  # c = 0.0225 * c / looplen
+  c = scale_cost(c, looplen)
   if all(isstaticloop, ls.loops)
     _num_threads = _choose_num_threads(c, ntmax, Int64(looplen))::UInt
     _num_threads > 1 || return avx_body(ls, UNROLL)
