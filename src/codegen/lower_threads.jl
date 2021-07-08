@@ -436,7 +436,7 @@ function thread_one_loops_expr(
       var"#thread#mask#" >>>= var"#trailzing#zeros#"
       var"#thread#id#" = vadd_nw(var"#thread#id#", var"#trailzing#zeros#")
       var"#thread#ptr#" = ThreadingUtilities.taskpointer(var"#thread#id#")
-      ThreadingUtilities.wait(var"#thread#ptr#")
+      ThreadingUtilities.wait(var"#thread#ptr#", var"#thread#id#")
       $update_return_values
       var"#threads#remain#" = var"#thread#mask#" ≠ 0x00000000
     end
@@ -637,7 +637,7 @@ function thread_two_loops_expr(
       var"#thread#mask#" >>>= var"#trailzing#zeros#"
       var"#thread#id#" = vadd_nw(var"#thread#id#", var"#trailzing#zeros#")
       var"#thread#ptr#" = ThreadingUtilities.taskpointer(var"#thread#id#")
-      ThreadingUtilities.wait(var"#thread#ptr#")
+      ThreadingUtilities.wait(var"#thread#ptr#", var"#thread#id#")
       $update_return_values
       var"#threads#remain#" = var"#thread#mask#" ≠ 0x00000000
     end
