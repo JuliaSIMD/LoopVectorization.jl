@@ -33,7 +33,7 @@ end
 
 function ∂vmap_singlethread!(
     f::F, ∂y::Tuple{Vararg{DenseArray{T},A}}, y::DenseArray{T},
-    args::Vararg{<:DenseArray{<:Base.HWReal},A}
+    args::Vararg{DenseArray{Base.HWReal},A}
 ) where {F,T <: Base.HWReal, A}
     N = length(y)
     ptry = VectorizationBase.zero_offsets(stridedpointer(y))
