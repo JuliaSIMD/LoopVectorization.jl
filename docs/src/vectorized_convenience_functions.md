@@ -73,7 +73,7 @@ BenchmarkTools.Trial:
 
 ## vfilter
 
-This function requires LLVM 7 or greater, and is only likly to give better performance if your CPU has AVX512. This is because it uses the compressed store intrinsic, which was added in LLVM 7. AVX512 provides a corresponding instruction, making the operation fast, while other instruction sets must emulate it, and thus are likely to get similar performance with `LoopVectorization.vfilter` as they do from `Base.filter`.
+This function requires LLVM 7 or greater, and is only likely to give better performance if your CPU has AVX512. This is because it uses the compressed store intrinsic, which was added in LLVM 7. AVX512 provides a corresponding instruction, making the operation fast, while other instruction sets must emulate it, and thus are likely to get similar performance with `LoopVectorization.vfilter` as they do from `Base.filter`.
 
 ```julia
 julia> using LoopVectorization, BenchmarkTools
