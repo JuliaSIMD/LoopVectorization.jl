@@ -24,7 +24,7 @@ function _precompile_()
     Base.precompile(Tuple{typeof(pushop!),LoopSet,Operation,Symbol})   # time: 0.015437002
     Base.precompile(Tuple{typeof(add_grouped_strided_pointer!),Expr,LoopSet})   # time: 0.014089168
     Base.precompile(Tuple{typeof(should_zerorangestart),LoopSet,Vector{ArrayReferenceMeta},Vector{Vector{Int}},Vector{Bool}})   # time: 0.013730842
-    Base.precompile(Tuple{typeof(normalize_offsets!),LoopSet,Int,Vector{ArrayReferenceMeta},Vector{Int},Vector{Vector{Tuple{Int, Int, Int}}}})   # time: 0.012555225
+    # Base.precompile(Tuple{typeof(normalize_offsets!),LoopSet,Int,Vector{ArrayReferenceMeta},Vector{Int},Vector{Vector{Tuple{Int, Int, Int}}}})   # time: 0.012555225
     Base.precompile(Tuple{Type{Operation},Int,Symbol,Int,Symbol,OperationType,Vector{Symbol},Vector{Symbol},Vector{Operation},ArrayReferenceMeta,Vector{Symbol}})   # time: 0.012369638
     # Base.precompile(Tuple{typeof(which(subsetview,(VectorizationBase.StridedPointer{T, N, C, B, R, X, O},StaticInt{I},Integer,)).generator.gen),Any,Any,Any,Any,Any,Any,Any,Any,Any,Any,Any,Any})   # time: 0.011771905
     # Base.precompile(Tuple{typeof(which(gc_preserve_vmap!,(F,AbstractArray,Val{NonTemporal},Val{Threaded},Vararg{AbstractArray, A},)).generator.gen),Any,Any,Any,Any,Any,Any,Any,Type,Any,Any})   # time: 0.011680721

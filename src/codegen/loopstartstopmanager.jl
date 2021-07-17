@@ -193,83 +193,83 @@ function substitute_ops_all!(
     end
   end
 end
-function normalize_offsets!(
-  ls::LoopSet, i::Int, allarrayrefs::Vector{ArrayReferenceMeta},
-  array_refs_with_same_name::Vector{Int}, arrayref_to_name_op_collection::Vector{Vector{Tuple{Int,Int,Int}}}
-)
-  ops = operations(ls)
-  length(ops) > 256 && return 0
-  minoffset::Int8 = typemax(Int8)
-  maxoffset::Int8 = typemin(Int8)
-  # we want to store the offsets, because we don't want to require that the `offset` vectors of the variaous `ArrayReferenceMeta`s don't alias
-  # loopsym = Symbol("##DUMMY##NOT#REALLY#A#LOOP##")
-  # stride::Int = typemin(Int)
-  # thereiszerooffset::Bool = false
-  # offsets::Base.RefValue{NTuple{128,Int8}} = Base.RefValue{NTuple{128,Int8}}();
-  # GC.@preserve offsets begin
-  #   poffsets = Base.unsafe_convert(Ptr{Int8}, offsets)
-  for j ∈ array_refs_with_same_name
-    arrayref_to_name_op = arrayref_to_name_op_collection[j]
-    for (_,__,opid) ∈ arrayref_to_name_op
-      op = ops[opid]
-      opref = op.ref
-      off = getoffsets(opref)[i]
-      # thereiszerooffset |= off == zero(Int8)
-      # off == zero(Int8) && return 0
-      minoffset = min(off, minoffset)
-      maxoffset = max(off, maxoffset)
-      # unsafe_store!(poffsets, off, opid)
-      # if loopsym ≢ Symbol("##DUMMY##NOT#REALLY#A#LOOP##")
-      #   stride = Int(getstrides(opref)[i])
-      #   if opref.loopedindex[i]
-      #     loopsym = getindicesonly(op)[i]
-      #   else
-      #     loopsym = Symbol("##NOT#A#LOOP##")
-      #   end
-      # end
-    end
-  end
-  # reaching here means none of the offsets contain `0`
-  # we won't bother if difference between offsets is >127
-  # we don't want `maxoffset` to overflow when subtracting `minoffset`
-  # so we check if it's safe, and give up if it isn't
-  minoffsetint = Int(minoffset)
-  return (((Int(maxoffset) - minoffsetint) > 127)) ? 0 : minoffsetint
+# function normalize_offsets!(
+#   ls::LoopSet, i::Int, allarrayrefs::Vector{ArrayReferenceMeta},
+#   array_refs_with_same_name::Vector{Int}, arrayref_to_name_op_collection::Vector{Vector{Tuple{Int,Int,Int}}}
+# )
+#   ops = operations(ls)
+#   length(ops) > 256 && return 0
+#   minoffset::Int8 = typemax(Int8)
+#   maxoffset::Int8 = typemin(Int8)
+#   # we want to store the offsets, because we don't want to require that the `offset` vectors of the variaous `ArrayReferenceMeta`s don't alias
+#   # loopsym = Symbol("##DUMMY##NOT#REALLY#A#LOOP##")
+#   # stride::Int = typemin(Int)
+#   # thereiszerooffset::Bool = false
+#   # offsets::Base.RefValue{NTuple{128,Int8}} = Base.RefValue{NTuple{128,Int8}}();
+#   # GC.@preserve offsets begin
+#   #   poffsets = Base.unsafe_convert(Ptr{Int8}, offsets)
+#   for j ∈ array_refs_with_same_name
+#     arrayref_to_name_op = arrayref_to_name_op_collection[j]
+#     for (_,__,opid) ∈ arrayref_to_name_op
+#       op = ops[opid]
+#       opref = op.ref
+#       off = getoffsets(opref)[i]
+#       # thereiszerooffset |= off == zero(Int8)
+#       # off == zero(Int8) && return 0
+#       minoffset = min(off, minoffset)
+#       maxoffset = max(off, maxoffset)
+#       # unsafe_store!(poffsets, off, opid)
+#       # if loopsym ≢ Symbol("##DUMMY##NOT#REALLY#A#LOOP##")
+#       #   stride = Int(getstrides(opref)[i])
+#       #   if opref.loopedindex[i]
+#       #     loopsym = getindicesonly(op)[i]
+#       #   else
+#       #     loopsym = Symbol("##NOT#A#LOOP##")
+#       #   end
+#       # end
+#     end
+#   end
+#   # reaching here means none of the offsets contain `0`
+#   # we won't bother if difference between offsets is >127
+#   # we don't want `maxoffset` to overflow when subtracting `minoffset`
+#   # so we check if it's safe, and give up if it isn't
+#   minoffsetint = Int(minoffset)
+#   return (((Int(maxoffset) - minoffsetint) > 127)) ? 0 : minoffsetint
   
-  #   # if loopsym ≢ Symbol("##DUMMY##NOT#REALLY#A#LOOP##")
-  #   #   loop = getloop(ls, loopsym)
-  #   #   if minstride ≠ maxstride
-  #   #     @assert isknown(first(loop)) "Currently, if the same index is used for the same array with different multiples (e.g., `x[i]` and `x[2*i]`), then the start of that loop range must be known at compile time."
-  #   #   end
-  #   #   stride_offset = 1 - gethint(first(loop))
-  #   # else
-  #   #   loop = first(ls.loops)
-  #   # end
-  #   offset_adjust = Int(minoffset)
-  #   if (loopsym ≢ Symbol("##DUMMY##NOT#REALLY#A#LOOP##")) && (loopsym ≢ Symbol("##NOT#A#LOOP##"))
-  #     loopstart = first(getloop(ls, loopsym))
-  #     if isknown(loopstart)
-  #       loopstartval = gethint(loopstart)
-  #       offset_adjust = loopstartval*(stride - 1)
-  #       if offset_adjust + Int(maxoffset) ≤ typemax(Int8)
-  #         minoffset -= Int8(offset_adjust)
-  #         stride = 1
-  #       end
-  #     end
-  #   end
-  #   for j ∈ array_refs_with_same_name
-  #     arrayref_to_name_op = arrayref_to_name_op_collection[j]
-  #     for (_,__,opid) ∈ arrayref_to_name_op
-  #       new_offset = unsafe_load(poffsets, opid) - minoffset
-  #       old_offset = getoffsets(ops[opid].ref)[i]
-  #       @show new_offset, old_offset
-  #       getoffsets(ops[opid].ref)[i] = new_offset
-  #       # getoffsets(ops[opid].ref)[i] = unsafe_load(poffsets, opid) - minoffset
-  #     end
-  #   end
-  # end
-  # return @show offset_adjust, stride
-end
+#   #   # if loopsym ≢ Symbol("##DUMMY##NOT#REALLY#A#LOOP##")
+#   #   #   loop = getloop(ls, loopsym)
+#   #   #   if minstride ≠ maxstride
+#   #   #     @assert isknown(first(loop)) "Currently, if the same index is used for the same array with different multiples (e.g., `x[i]` and `x[2*i]`), then the start of that loop range must be known at compile time."
+#   #   #   end
+#   #   #   stride_offset = 1 - gethint(first(loop))
+#   #   # else
+#   #   #   loop = first(ls.loops)
+#   #   # end
+#   #   offset_adjust = Int(minoffset)
+#   #   if (loopsym ≢ Symbol("##DUMMY##NOT#REALLY#A#LOOP##")) && (loopsym ≢ Symbol("##NOT#A#LOOP##"))
+#   #     loopstart = first(getloop(ls, loopsym))
+#   #     if isknown(loopstart)
+#   #       loopstartval = gethint(loopstart)
+#   #       offset_adjust = loopstartval*(stride - 1)
+#   #       if offset_adjust + Int(maxoffset) ≤ typemax(Int8)
+#   #         minoffset -= Int8(offset_adjust)
+#   #         stride = 1
+#   #       end
+#   #     end
+#   #   end
+#   #   for j ∈ array_refs_with_same_name
+#   #     arrayref_to_name_op = arrayref_to_name_op_collection[j]
+#   #     for (_,__,opid) ∈ arrayref_to_name_op
+#   #       new_offset = unsafe_load(poffsets, opid) - minoffset
+#   #       old_offset = getoffsets(ops[opid].ref)[i]
+#   #       @show new_offset, old_offset
+#   #       getoffsets(ops[opid].ref)[i] = new_offset
+#   #       # getoffsets(ops[opid].ref)[i] = unsafe_load(poffsets, opid) - minoffset
+#   #     end
+#   #   end
+#   # end
+#   # return @show offset_adjust, stride
+# end
 function isloopvalue(ls::LoopSet, ind::Symbol, isrooted::Union{Nothing,Vector{Bool}} = nothing)
   for (i,op) ∈ enumerate(operations(ls))
     if (isrooted ≢ nothing)
@@ -298,7 +298,7 @@ function cse_constant_offsets!(
   strides = getstrides(ar)
   offset = first(indices) === DISCONTIGUOUS
   # gespindoffsets = fill(Symbol(""), length(li))
-  gespindsummary = Vector{Tuple{Symbol,Int}}(undef, length(li))
+  gespindsummary = Vector{Symbol}(undef, length(li))
   for i ∈ eachindex(li)
     gespsymbol::Symbol = Symbol("")    
     ii = i + offset
@@ -415,8 +415,9 @@ function cse_constant_offsets!(
         end
       end
     end
-    constoffset = normalize_offsets!(ls, i, allarrayrefs, array_refs_with_same_name, arrayref_to_name_op_collection)
-    gespindsummary[i] = (gespsymbol, constoffset)
+    # constoffset = normalize_offsets!(ls, i, allarrayrefs, array_refs_with_same_name, arrayref_to_name_op_collection)
+    # gespindsummary[i] = (gespsymbol, constoffset)
+    gespindsummary[i] = gespsymbol
   end
   return gespindsummary
 end
@@ -438,30 +439,52 @@ end
 #   return nothing
 # end
 function adjust_offsets!(
-  ls::LoopSet, offsetadjust::Int8, i::Int,
+  ls::LoopSet, i::Int,
   array_refs_with_same_name::Vector{Int}, arrayref_to_name_op_collection::Vector{Vector{Tuple{Int,Int,Int}}}
 )
   ops = operations(ls)
+  @assert length(ops) ≤ 256
   offsets::Base.RefValue{NTuple{256,Int8}} = Base.RefValue{NTuple{256,Int8}}();
   GC.@preserve offsets begin
     poffsets = Base.unsafe_convert(Ptr{Int8}, offsets)
+    minoffset = typemax(Int8)
+    maxoffset = typemin(Int8)
+    # stridesunequal = false
     for j ∈ array_refs_with_same_name
       arrayref_to_name_op = arrayref_to_name_op_collection[j]
       for (_,__,opid) ∈ arrayref_to_name_op
-        unsafe_store!(poffsets, getoffsets(ops[opid].ref)[i], opid)
+        opref = ops[opid].ref
+        off = getoffsets(opref)[i]
+        minoffset = min(off, minoffset)
+        maxoffset = max(off, maxoffset)
+        unsafe_store!(poffsets, off, opid)
+        # stridesunequal |= (stride ≠ getstrides(opref)[i])
       end
     end
-    for j ∈ array_refs_with_same_name
-      arrayref_to_name_op = arrayref_to_name_op_collection[j]
-      for (_,__,opid) ∈ arrayref_to_name_op
-        getoffsets(ops[opid].ref)[i] = unsafe_load(poffsets, opid) - offsetadjust
+    constoffset = Int(minoffset)
+    constoffset = Core.ifelse(Int(maxoffset) - constoffset > 127, 0, constoffset)
+    if constoffset ≠ 0
+      for j ∈ array_refs_with_same_name
+        arrayref_to_name_op = arrayref_to_name_op_collection[j]
+        for (_,__,opid) ∈ arrayref_to_name_op
+          opref = ops[opid].ref
+          newoffset = unsafe_load(poffsets, opid) - constoffset
+          # if stridesunequal
+          #   stride = getstrides(opref)[i]
+          #   newoffsetint = Int(newoffset) + (Int(stride) - 1)
+          #   # @assert typemin(Int8) ≤ newoffsetint ≤ typemax(Int8)
+          #   newoffset = Int8(newoffsetint)
+          # end
+          getoffsets(ops[opid].ref)[i] = newoffset
+        end
       end
     end
   end
+  constoffset#, Core.ifelse(stridesunequal, 1, Int(stride))
 end
 
 function calcgespinds(
-  ls::LoopSet, ar::ArrayReferenceMeta, gespindsummary::Vector{Tuple{Symbol,Int}}, shouldindbyind::Vector{Bool},
+  ls::LoopSet, ar::ArrayReferenceMeta, gespindsummary::Vector{Symbol}, shouldindbyind::Vector{Bool},
   array_refs_with_same_name::Vector{Int}, arrayref_to_name_op_collection::Vector{Vector{Tuple{Int,Int,Int}}}
 )
   gespinds = Expr(:tuple)
@@ -472,9 +495,7 @@ function calcgespinds(
   for i ∈ eachindex(li)
     ind = indices[i]
     isli = li[i]
-    stride = strides[i]
-    index_by_index = check_shouldindbyind(ls, ind, shouldindbyind)
-    gespsymbol, constoffset = gespindsummary[i]
+    gespsymbol = gespindsummary[i]
     # if isli & (!index_by_index) && (length(operations(ls)) ≤ 256)
     #   ops = operations(ls)
     #   loopfirst = first(getloop(ls, ind))
@@ -482,8 +503,11 @@ function calcgespinds(
     #     # copy in case of aliasing
     #   end
     # end
-    constoffset ≠ 0 && adjust_offsets!(ls, Int8(constoffset), i, array_refs_with_same_name, arrayref_to_name_op_collection)
-      
+    # constoffset ≠ 0 &&
+    constoffset = adjust_offsets!(ls, i, array_refs_with_same_name, arrayref_to_name_op_collection)
+    index_by_index = isli ? check_shouldindbyind(ls, ind, shouldindbyind) : true
+    # (stridesunequal & isli) && (@assert isknown(first(getloop(ls, ind))))
+    
     # end
     #   stride = strides[i]
     #   if stride ≠ 1
@@ -498,7 +522,7 @@ function calcgespinds(
     #   #   getstrides(op)
     #   # end
     # end
-    pushgespind!(gespinds, ls, gespsymbol, constoffset, Int(stride), ind, isli, index_by_index, true)
+    pushgespind!(gespinds, ls, gespsymbol, constoffset, Int(strides[i]), ind, isli, index_by_index, true)
   end
   gespinds
 end
