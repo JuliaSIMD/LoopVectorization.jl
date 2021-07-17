@@ -82,7 +82,6 @@ function lower_store_collection!(
     offset_dummy_loop = Loop(first(getindices(op)), MaybeKnown(1), MaybeKnown(1024), MaybeKnown(1), Symbol(""), Symbol(""))
     unrollcurl₂ = unrolled_curly(op, nouter, offset_dummy_loop, vloop, mask, 1)
     inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false, 0, ls)
-
     falseexpr = Expr(:call, lv(:False));
     aliasexpr = falseexpr;
     # trueexpr = Expr(:call, lv(:True));
@@ -153,7 +152,7 @@ gf(s::Symbol, n::Int) = Expr(:call, GlobalRef(Core,:getfield), s, n, false)
 function lower_store!(
   q::Expr, ls::LoopSet, op::Operation, ua::UnrollArgs, mask::Bool,
   reductfunc::Symbol = storeinstr_preprend(op, ua.vloop.itersymbol), inds_calc_by_ptr_offset = indices_calculated_by_pointer_offsets(ls, op.ref)
-  )
+)
   @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, vloop, u₂max, suffix = ua
   omop = offsetloadcollection(ls)
   batchid, opind = omop.batchedcollectionmap[identifier(op)]

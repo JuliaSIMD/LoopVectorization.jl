@@ -250,26 +250,46 @@ end
 const NODEPENDENCY = Symbol[]
 const NOPARENTS = Operation[]
 
-function Base.show(io::IO, op::Operation)
-    if isconstant(op)
-        if op.instruction === LOOPCONSTANT
-            print(io, Expr(:(=), op.variable, 0))
-        elseif op.instruction.instr === GLOBALCONSTANT
-            print(io, op.instruction.instr)
-        else
-            print(io, Expr(:(=), op.variable, op.instruction.instr))
-        end
-    elseif isload(op)
-        ref = Expr(:ref, name(op.ref)); append!(ref.args, getindices(op))
-        print(io, Expr(:(=), op.variable, ref))
-    elseif iscompute(op)
-        print(io, Expr(:(=), op.variable, callexpr(op.instruction, map(name, parents(op)))))
-    elseif isstore(op)
-        ref = Expr(:ref, name(op.ref)); append!(ref.args, getindices(op))
-        print(io, Expr(:(=), ref, name(first(parents(op)))))
-    elseif isloopvalue(op)
-        print(io, Expr(:(=), op.variable, first(loopdependencies(op))))
+function ref_for_print(op::Operation)
+  ref = Expr(:ref, name(op.ref));
+  inds = getindicesonly(op)
+  length(inds) ≠ length(parent(inds)) && push!(ref.args, first(parent(inds)))
+  strides = getstrides(op);
+  offsets = getoffsets(op);
+  for i ∈ eachindex(inds)
+    s = strides[i]; o = offsets[i]; ind = inds[i]
+    if s == 1
+      if o == 0
+        push!(ref.args, ind)
+      else
+        push!(ref.args, :($ind + $o))
+      end
+    else
+      index = :($s * $ind)
+      o == 0 || (index = :($index + $o))
+      push!(ref.args, index)
     end
+  end
+  ref
+end
+function Base.show(io::IO, op::Operation)
+  if isconstant(op)
+    if op.instruction === LOOPCONSTANT
+      print(io, Expr(:(=), op.variable, 0))
+    elseif op.instruction.instr === GLOBALCONSTANT
+      print(io, op.instruction.instr)
+    else
+      print(io, Expr(:(=), op.variable, op.instruction.instr))
+    end
+  elseif isload(op)
+    print(io, Expr(:(=), op.variable, ref_for_print(op)))
+  elseif iscompute(op)
+    print(io, Expr(:(=), op.variable, callexpr(op.instruction, map(name, parents(op)))))
+  elseif isstore(op)
+    print(io, Expr(:(=), ref_for_print(op), name(first(parents(op)))))
+  elseif isloopvalue(op)
+    print(io, Expr(:(=), op.variable, first(loopdependencies(op))))
+  end
 end
 
 function isreduction(op::Operation)
