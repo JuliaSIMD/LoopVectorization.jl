@@ -1,6 +1,4 @@
 
-
-
 function uniquearrayrefs_csesummary(ls::LoopSet)
   uniquerefs = ArrayReferenceMeta[]
   # each `Vector{Tuple{Int,Int}}` has the same name
@@ -200,37 +198,77 @@ function normalize_offsets!(
   array_refs_with_same_name::Vector{Int}, arrayref_to_name_op_collection::Vector{Vector{Tuple{Int,Int,Int}}}
 )
   ops = operations(ls)
-  length(ops) > 128 && return 0
+  length(ops) > 256 && return 0
   minoffset::Int8 = typemax(Int8)
   maxoffset::Int8 = typemin(Int8)
   # we want to store the offsets, because we don't want to require that the `offset` vectors of the variaous `ArrayReferenceMeta`s don't alias
-  offsets::Base.RefValue{NTuple{128,Int8}} = Base.RefValue{NTuple{128,Int8}}();
-  GC.@preserve offsets begin
-    poffsets = Base.unsafe_convert(Ptr{Int8}, offsets)
-    for j ∈ array_refs_with_same_name
-      arrayref_to_name_op = arrayref_to_name_op_collection[j]
-      for (_,__,opid) ∈ arrayref_to_name_op
-        op = ops[opid]
-        off = getoffsets(op.ref)[i]
-        off == zero(Int8) && return 0
-        minoffset = min(off, minoffset)
-        maxoffset = max(off, maxoffset)
-        unsafe_store!(poffsets, off, opid)
-      end
-    end
-    # reaching here means none of the offsets contain `0`
-    # we won't bother if difference between offsets is >127
-    # we don't want `maxoffset` to overflow when subtracting `minoffset`
-    # so we check if it's safe, and give up if it isn't
-    (Int(maxoffset) - Int(minoffset)) > 127 && return 0
-    for j ∈ array_refs_with_same_name
-      arrayref_to_name_op = arrayref_to_name_op_collection[j]
-      for (_,__,opid) ∈ arrayref_to_name_op
-        getoffsets(ops[opid].ref)[i] = unsafe_load(poffsets, opid) - minoffset
-      end
+  # loopsym = Symbol("##DUMMY##NOT#REALLY#A#LOOP##")
+  # stride::Int = typemin(Int)
+  # thereiszerooffset::Bool = false
+  # offsets::Base.RefValue{NTuple{128,Int8}} = Base.RefValue{NTuple{128,Int8}}();
+  # GC.@preserve offsets begin
+  #   poffsets = Base.unsafe_convert(Ptr{Int8}, offsets)
+  for j ∈ array_refs_with_same_name
+    arrayref_to_name_op = arrayref_to_name_op_collection[j]
+    for (_,__,opid) ∈ arrayref_to_name_op
+      op = ops[opid]
+      opref = op.ref
+      off = getoffsets(opref)[i]
+      # thereiszerooffset |= off == zero(Int8)
+      # off == zero(Int8) && return 0
+      minoffset = min(off, minoffset)
+      maxoffset = max(off, maxoffset)
+      # unsafe_store!(poffsets, off, opid)
+      # if loopsym ≢ Symbol("##DUMMY##NOT#REALLY#A#LOOP##")
+      #   stride = Int(getstrides(opref)[i])
+      #   if opref.loopedindex[i]
+      #     loopsym = getindicesonly(op)[i]
+      #   else
+      #     loopsym = Symbol("##NOT#A#LOOP##")
+      #   end
+      # end
     end
   end
-  return Int(minoffset)
+  # reaching here means none of the offsets contain `0`
+  # we won't bother if difference between offsets is >127
+  # we don't want `maxoffset` to overflow when subtracting `minoffset`
+  # so we check if it's safe, and give up if it isn't
+  minoffsetint = Int(minoffset)
+  return (((Int(maxoffset) - minoffsetint) > 127)) ? 0 : minoffsetint
+  
+  #   # if loopsym ≢ Symbol("##DUMMY##NOT#REALLY#A#LOOP##")
+  #   #   loop = getloop(ls, loopsym)
+  #   #   if minstride ≠ maxstride
+  #   #     @assert isknown(first(loop)) "Currently, if the same index is used for the same array with different multiples (e.g., `x[i]` and `x[2*i]`), then the start of that loop range must be known at compile time."
+  #   #   end
+  #   #   stride_offset = 1 - gethint(first(loop))
+  #   # else
+  #   #   loop = first(ls.loops)
+  #   # end
+  #   offset_adjust = Int(minoffset)
+  #   if (loopsym ≢ Symbol("##DUMMY##NOT#REALLY#A#LOOP##")) && (loopsym ≢ Symbol("##NOT#A#LOOP##"))
+  #     loopstart = first(getloop(ls, loopsym))
+  #     if isknown(loopstart)
+  #       loopstartval = gethint(loopstart)
+  #       offset_adjust = loopstartval*(stride - 1)
+  #       if offset_adjust + Int(maxoffset) ≤ typemax(Int8)
+  #         minoffset -= Int8(offset_adjust)
+  #         stride = 1
+  #       end
+  #     end
+  #   end
+  #   for j ∈ array_refs_with_same_name
+  #     arrayref_to_name_op = arrayref_to_name_op_collection[j]
+  #     for (_,__,opid) ∈ arrayref_to_name_op
+  #       new_offset = unsafe_load(poffsets, opid) - minoffset
+  #       old_offset = getoffsets(ops[opid].ref)[i]
+  #       @show new_offset, old_offset
+  #       getoffsets(ops[opid].ref)[i] = new_offset
+  #       # getoffsets(ops[opid].ref)[i] = unsafe_load(poffsets, opid) - minoffset
+  #     end
+  #   end
+  # end
+  # return @show offset_adjust, stride
 end
 function isloopvalue(ls::LoopSet, ind::Symbol, isrooted::Union{Nothing,Vector{Bool}} = nothing)
   for (i,op) ∈ enumerate(operations(ls))
@@ -379,7 +417,6 @@ function cse_constant_offsets!(
     end
     constoffset = normalize_offsets!(ls, i, allarrayrefs, array_refs_with_same_name, arrayref_to_name_op_collection)
     gespindsummary[i] = (gespsymbol, constoffset)
-    # pushgespind!(gespinds, ls, gespsymbol, constoffset, ind, li, i, check_shouldindbyind(ls, ind, shouldindbyind), true)
   end
   return gespindsummary
 end
@@ -400,20 +437,74 @@ end
 #   end
 #   return nothing
 # end
-function calcgespinds(ls::LoopSet, ar::ArrayReferenceMeta, gespindsummary::Vector{Tuple{Symbol,Int}}, shouldindbyind::Vector{Bool})
+function adjust_offsets!(
+  ls::LoopSet, offsetadjust::Int8, i::Int,
+  array_refs_with_same_name::Vector{Int}, arrayref_to_name_op_collection::Vector{Vector{Tuple{Int,Int,Int}}}
+)
+  ops = operations(ls)
+  offsets::Base.RefValue{NTuple{256,Int8}} = Base.RefValue{NTuple{256,Int8}}();
+  GC.@preserve offsets begin
+    poffsets = Base.unsafe_convert(Ptr{Int8}, offsets)
+    for j ∈ array_refs_with_same_name
+      arrayref_to_name_op = arrayref_to_name_op_collection[j]
+      for (_,__,opid) ∈ arrayref_to_name_op
+        unsafe_store!(poffsets, getoffsets(ops[opid].ref)[i], opid)
+      end
+    end
+    for j ∈ array_refs_with_same_name
+      arrayref_to_name_op = arrayref_to_name_op_collection[j]
+      for (_,__,opid) ∈ arrayref_to_name_op
+        getoffsets(ops[opid].ref)[i] = unsafe_load(poffsets, opid) - offsetadjust
+      end
+    end
+  end
+end
+
+function calcgespinds(
+  ls::LoopSet, ar::ArrayReferenceMeta, gespindsummary::Vector{Tuple{Symbol,Int}}, shouldindbyind::Vector{Bool},
+  array_refs_with_same_name::Vector{Int}, arrayref_to_name_op_collection::Vector{Vector{Tuple{Int,Int,Int}}}
+)
   gespinds = Expr(:tuple)
   li = ar.loopedindex
   indices = getindicesonly(ar)
+  # offsets = getoffsets(ar)
+  strides = getstrides(ar)
   for i ∈ eachindex(li)
     ind = indices[i]
+    isli = li[i]
+    stride = strides[i]
+    index_by_index = check_shouldindbyind(ls, ind, shouldindbyind)
     gespsymbol, constoffset = gespindsummary[i]
-    pushgespind!(gespinds, ls, gespsymbol, constoffset, ind, li[i], check_shouldindbyind(ls, ind, shouldindbyind), true)
+    # if isli & (!index_by_index) && (length(operations(ls)) ≤ 256)
+    #   ops = operations(ls)
+    #   loopfirst = first(getloop(ls, ind))
+    #   if isknown(loopfirst)
+    #     # copy in case of aliasing
+    #   end
+    # end
+    constoffset ≠ 0 && adjust_offsets!(ls, Int8(constoffset), i, array_refs_with_same_name, arrayref_to_name_op_collection)
+      
+    # end
+    #   stride = strides[i]
+    #   if stride ≠ 1
+    #     loop = getloop(ls, ind)
+    #     if isknown(first(loop))
+    #       offsets[i] -= gethint(first(loop))
+    #     end
+    #   end
+    #   # for op ∈ operations(ls)
+    #   #   accesses_memory(op) || continue
+    #   #   sameref(op.ref, ref) || continue
+    #   #   getstrides(op)
+    #   # end
+    # end
+    pushgespind!(gespinds, ls, gespsymbol, constoffset, Int(stride), ind, isli, index_by_index, true)
   end
   gespinds
 end
 
 function pushgespind!(
-  gespinds::Expr, ls::LoopSet, gespsymbol::Symbol, constoffset::Int, ind::Symbol, isli::Bool, index_by_index::Bool, fromgsp::Bool
+  gespinds::Expr, ls::LoopSet, gespsymbol::Symbol, constoffset::Int, stride::Int, ind::Symbol, isli::Bool, index_by_index::Bool, fromgsp::Bool
 )
   if isli
     if ind === CONSTANTZEROINDEX
@@ -453,21 +544,32 @@ function pushgespind!(
         loop = getloop(ls, ind)
         if gespsymbol === Symbol("")
           if isknown(first(loop))
-            push!(gespinds.args, staticexpr(constoffset + gethint(first(loop))))
+            # @show constoffset, gethint(first(loop))
+            push!(gespinds.args, staticexpr(constoffset + stride*gethint(first(loop))))
           elseif constoffset == 0
-            push!(gespinds.args, getsym(first(loop)))
-          else
+            if stride == 1
+              push!(gespinds.args, getsym(first(loop)))
+            else
+              push!(gespinds.args, mulexpr(getsym(first(loop)), stride))
+            end
+          elseif stride == 1
             push!(gespinds.args, addexpr(getsym(first(loop)), constoffset))
+          else
+            push!(gespinds.args, addexpr(mulexpr(getsym(first(loop)), stride), constoffset))
           end
         elseif isknown(first(loop))
-          loopfirst = gethint(first(loop)) + constoffset
+          loopfirst = gethint(first(loop))*stride + constoffset
           if loopfirst == 0
             push!(gespinds.args, gespsymbol)
           else
             push!(gespinds.args, Expr(:call, GlobalRef(Base, :(+)), gespsymbol, staticexpr(loopfirst)))
           end
         else
-          addedstarts = Expr(:call, GlobalRef(Base, :(+)), gespsymbol, getsym(first(loop)))
+          addedstarts = if stride == 1
+            Expr(:call, GlobalRef(Base, :(+)), gespsymbol, getsym(first(loop)))
+          else
+            Expr(:call, GlobalRef(Base, :(+)), mulexpr(stride, gespsymbol), getsym(first(loop)))
+          end
           if constoffset == 0
             push!(gespinds.args, addedstarts)
           else
@@ -563,11 +665,11 @@ function use_loop_induct_var!(
     if !li[i] # if it wasn't set
       uliv[i] = 0
       push!(offsetprecalc_descript.args, 0)
-      Wisz || pushgespind!(gespinds, ls, Symbol(""), 0, ind, isli, true, false)
+      Wisz || pushgespind!(gespinds, ls, Symbol(""), 0, 1, ind, isli, true, false)
     elseif ind === CONSTANTZEROINDEX
       uliv[i] = 0
       push!(offsetprecalc_descript.args, 0)
-      Wisz || pushgespind!(gespinds, ls, Symbol(""), 0, ind, isli, true, false)
+      Wisz || pushgespind!(gespinds, ls, Symbol(""), 0, 1, ind, isli, true, false)
     elseif isbroadcast ||
       ((isone(ii) && (last(looporder) === ind)) && !(otherindexunrolled(ls, ind, ar)) ||
       multiple_with_name(vptrar, allarrayrefs)) ||
@@ -575,13 +677,13 @@ function use_loop_induct_var!(
       # Not doing normal offset indexing
       uliv[i] = -findfirst(Base.Fix2(===,ind), looporder)::Int
       push!(offsetprecalc_descript.args, 0) # not doing offset indexing, so push 0
-      Wisz || pushgespind!(gespinds, ls, Symbol(""), 0, ind, isli, true, false)
+      Wisz || pushgespind!(gespinds, ls, Symbol(""), 0, 1, ind, isli, true, false)
     else
       uliv[i] = findfirst(Base.Fix2(===,ind), looporder)::Int
       loop = getloop(ls, ind)
       push!(offsetprecalc_descript.args, max(5,us.u₁+1,us.u₂+1))
       use_offsetprecalc = true
-      Wisz || pushgespind!(gespinds, ls, Symbol(""), 0, ind, isli, false, false)
+      Wisz || pushgespind!(gespinds, ls, Symbol(""), 0, 1, ind, isli, false, false)
     end
     # cases for pushgespind! and loopval!
     # if !isloopval, same as before

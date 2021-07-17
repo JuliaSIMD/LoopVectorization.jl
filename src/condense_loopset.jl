@@ -259,16 +259,16 @@ function tuple_expr(f, v)
 end
 
 function argmeta_and_consts_description(ls::LoopSet, arraysymbolinds)
-    Expr(
-        :tuple,
-        length(arraysymbolinds),
-        tuple_expr(ls.outer_reductions),
-        tuple_expr(first, ls.preamble_symsym),
-        tuple_expr(ls.preamble_symint),
-        tuple_expr(ls.preamble_symfloat),
-        tuple_expr(ls.preamble_zeros),
-        tuple_expr(ls.preamble_funcofeltypes)
-    )
+  Expr(
+    :tuple,
+    length(arraysymbolinds),
+    tuple_expr(ls.outer_reductions),
+    tuple_expr(first, ls.preamble_symsym),
+    tuple_expr(ls.preamble_symint),
+    tuple_expr(ls.preamble_symfloat),
+    tuple_expr(ls.preamble_zeros),
+    tuple_expr(ls.preamble_funcofeltypes)
+  )
 end
 @inline vdata(v::Vec) = getfield(v, :data)
 @inline vdata(v::VecUnroll) = getfield(v, :data)
@@ -492,7 +492,7 @@ function add_grouped_strided_pointer!(extra_args::Expr, ls::LoopSet)
   shouldindbyind = should_zerorangestart(ls, allarrayrefs, name_to_array_map, roots)
   for (k,gespindsummary) ∈ gespsummaries
     ref = allarrayrefs[k]
-    gespinds = calcgespinds(ls, ref, gespindsummary, shouldindbyind)
+    gespinds = calcgespinds(ls, ref, gespindsummary, shouldindbyind, name_to_array_map[first(first(unique_to_name_and_op_map[k]))], unique_to_name_and_op_map)
     push!(tgarrays.args, Expr(:call, lv(:densewrapper), Expr(:call, lv(:gespf1), vptr(ref), gespinds), name(ref)))
   end
   push!(gsp.args, tgarrays)

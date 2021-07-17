@@ -282,6 +282,28 @@ function my_gemm_nexpr_unroll(out, s::Matrix{UInt8}, V)
   # TODO handle rem
 end
 
+function readraw_turbo!(img, raw)
+  npack = length(raw) ÷ 3
+  @turbo for i in 0:npack-1
+    img[1+4i] = raw[2+3i] << 4
+    img[2+4i] = raw[1+3i]
+    img[3+4i] = raw[2+3i]
+    img[4+4i] = raw[3+3i]
+  end
+  img
+end
+function readraw!(img, raw)
+  npack = length(raw) ÷ 3
+  @inbounds @simd for i in 0:npack-1
+    img[1+4i] = raw[2+3i] << 4
+    img[2+4i] = raw[1+3i]
+    img[3+4i] = raw[2+3i]
+    img[4+4i] = raw[3+3i]
+  end
+  img
+end
+
+
 @testset "shuffles load/stores" begin
     @show @__LINE__
     for i ∈ 1:128
@@ -353,5 +375,10 @@ end
   @test out_test ≈ out_test1
   my_gemm_nexpr_unroll(fill!(out_test1, 0), s, V);
   @test out_test ≈ out_test1
-  
+
+
+  w = 2048; raw = rand(UInt8, (3w*w) ÷ 4);
+  img1 = Matrix{UInt8}(undef, w, w);
+  img2 = Matrix{UInt8}(undef, w, w);
+  @test readraw!(img1, raw) == readraw_turbo!(img2, raw)
 end
