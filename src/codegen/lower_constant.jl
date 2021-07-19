@@ -158,6 +158,17 @@ function lower_constant!(
 end
 
 isconstantop(op::Operation) = (instruction(op) == LOOPCONSTANT) || (isconstant(op) && length(loopdependencies(op)) == 0)
+function isinitializedconst(op::Operation)
+  if isconstant(op)
+    return true
+  elseif iscompute(op)
+    for opp ∈ parents(op)
+      isinitializedconst(opp) || return false
+    end
+    return true
+  end
+  false
+end
 function constantopname(op::Operation)
   instr = instruction(op)
   if instr === LOOPCONSTANT
@@ -181,7 +192,13 @@ end
 # @inline maybeconvert(::Type{T}, s::Number) where {T} = convert(T, s)
 # @inline maybeconvert(::Type{T}, s::T) where {T <: Number} = s
 # @inline maybeconvert(::Type, s) = s
-
+function sizeequivalent_symint_expr(intval::Int, signed::Bool)
+  if signed
+    Expr(:call, lv(:sizeequivalentint), ELTYPESYMBOL, intval)
+  else
+    Expr(:call, lv(:sizeequivalentint), ELTYPESYMBOL, intval % UInt)
+  end
+end
 
 function lower_licm_constants!(ls::LoopSet)
     ops = operations(ls)
@@ -197,10 +214,8 @@ function lower_licm_constants!(ls::LoopSet)
     for (id,(intval,intsz,signed)) ∈ ls.preamble_symint
         if intsz == 1
             setop!(ls, ops[id], intval % Bool)
-        elseif signed
-            setop!(ls, ops[id], Expr(:call, lv(:sizeequivalentint), ELTYPESYMBOL, intval))
         else
-            setop!(ls, ops[id], Expr(:call, lv(:sizeequivalentint), ELTYPESYMBOL, intval % UInt))
+            setop!(ls, ops[id], sizeequivalent_symint_expr(intval, signed))
         end
     end
     for (id,floatval) ∈ ls.preamble_symfloat

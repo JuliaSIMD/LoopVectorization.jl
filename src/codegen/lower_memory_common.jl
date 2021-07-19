@@ -1,4 +1,4 @@
-function parentind(ind::Symbol, op::Operation)
+function parentind(ind::Symbol, op::Union{Operation,ArrayReferenceMetaPosition})
   for (id,opp) ∈ enumerate(parents(op))
     name(opp) === ind && return id
   end

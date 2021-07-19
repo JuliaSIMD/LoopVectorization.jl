@@ -324,6 +324,7 @@ function cse_constant_offsets!(
         end
       end
       ops = operations(ls)
+      # @show ar
       while licmoffset # repeat until we run out
         # ind = indices[ii]
         # indices are all the same across operations, so we look to the first for checking compatibility...

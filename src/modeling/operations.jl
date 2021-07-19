@@ -354,6 +354,7 @@ function Operation(id::Int, var::Symbol, elementbytes::Int, instr, optype::Opera
     Operation( id, var, elementbytes, instr, optype, mpref.loopdependencies, mpref.reduceddeps, mpref.parents, mpref.mref )
 end
 Base.:(==)(x::ArrayReferenceMetaPosition, y::ArrayReferenceMetaPosition) = x.mref == y.mref
+parents(op::ArrayReferenceMetaPosition) = op.parents
 # Avoid memory allocations by using this for ops that aren't references
 const NOTAREFERENCE = ArrayReferenceMeta(ArrayReference(Symbol(""), Symbol[]),Bool[],Symbol(""))
 const NOTAREFERENCEMP = ArrayReferenceMetaPosition(NOTAREFERENCE, NOPARENTS, Symbol[], Symbol[],Symbol(""))
@@ -364,7 +365,7 @@ loopdependencies(ref::ArrayReferenceMetaPosition) = ref.loopdependencies
 reduceddependencies(ref::ArrayReferenceMetaPosition) = ref.reduceddeps
 arrayref(ref::ArrayReference) = ref
 arrayref(ref::ArrayReferenceMeta) = ref.ref
-arrayref(ref::ArrayReferenceMetaPosition) = ref.ref.ref
+arrayref(ref::ArrayReferenceMetaPosition) = ref.mref.ref
 arrayref(op::Operation) = op.ref.ref
 getindices(ref) = arrayref(ref).indices
 getoffsets(ref) = arrayref(ref).offsets

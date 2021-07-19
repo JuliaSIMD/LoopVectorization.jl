@@ -253,6 +253,7 @@ function unroll_no_reductions(ls, order, vloopsym)
   else
     max(1, min(4, round(Int, 1.75compute_rt / load_rt)))
   end
+  # @show load_rt, store_rt, compute_rt, compute_l, u
   # u = min(u, max(1, (reg_count(ls) ÷ max(1,round(Int,rp)))))
   # commented out here is to decide to align loops
   # if memory_rt > compute_rt && isone(u) && (length(order) > 1) && (last(order) === vloopsym) && length(getloop(ls, last(order))) > 8W

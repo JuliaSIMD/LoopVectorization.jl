@@ -40,22 +40,83 @@ function add_constant!(ls::LoopSet, var::Number, elementbytes::Int = 8)
     pushpreamble!(ls, Expr(:(=), name(op), var))
     rop
 end
-function add_constant!(ls::LoopSet, mpref::ArrayReferenceMetaPosition, elementbytes::Int)
-    op = Operation(length(operations(ls)), varname(mpref), elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS, mpref.mref)
-    add_vptr!(ls, op)
-    temp = gensym!(ls, "intermediateconstref")
-    vloadcall = Expr(:call, lv(:_vload), mpref.mref.ptr)
-    nindices = length(getindices(op))
-    # getoffsets(op) .+= 1
-    if nindices > 0
-        dummyloop = first(ls.loops)
-        push!(vloadcall.args, mem_offset(op, UnrollArgs(dummyloop, dummyloop, dummyloop, 0, 0, 0), fill(false,nindices), true, ls))
+function ensure_constant_lowered!(ls::LoopSet, op::Operation)
+  if iscompute(op)
+    call = callexpr(instruction(op))
+    for opp ∈ parents(op)
+      ensure_constant_lowered!(ls, opp)
+      push!(call.args, name(opp))
     end
-    push!(vloadcall.args, Expr(:call, lv(:False)), staticexpr(reg_size(ls)))
-    pushpreamble!(ls, Expr(:(=), temp, vloadcall))
-    pushpreamble!(ls, Expr(:(=), name(op), temp))
-    pushpreamble!(ls, op, temp)
-    pushop!(ls, op, temp)
+    pushpreamble!(ls, Expr(:(=), name(op), call))
+  elseif isconstant(op) & !isconstantop(op)
+    opid = identifier(op)
+    for (id, sym) ∈ ls.preamble_symsym
+      if id == opid
+        pushpreamble!(ls, Expr(:(=), name(op), sym))
+        return
+      end
+    end
+    for (id,(intval,intsz,signed)) ∈ ls.preamble_symint
+      if id == opid
+        if intsz == 1
+          pushpreamble!(ls, Expr(:(=), name(op), intval % Bool))
+        elseif signed
+          pushpreamble!(ls, Expr(:(=), name(op), intval))
+        else
+          pushpreamble!(ls, Expr(:(=), name(op), intval % UInt))
+        end
+        return
+      end
+    end
+    for (id,floatval) ∈ ls.preamble_symfloat
+      if id == opid
+        pushpreamble!(ls, Expr(:(=), name(op), floatval))
+        return
+      end
+      
+    end
+    for (id,typ) ∈ ls.preamble_zeros
+      if id == opid
+        pushpreamble!(ls, Expr(:(=), name(op), staticexpr(0)))
+        return
+      end
+    end
+    for (id,f) ∈ ls.preamble_funcofeltypes
+      if id == opid
+        pushpreamble!(ls, Expr(:(=), name(op), Expr(:call, reduction_zero(f), Float64)))
+        return
+      end
+    end
+  end
+end
+function ensure_constant_lowered!(ls::LoopSet, mpref::ArrayReferenceMetaPosition, ind::Symbol)
+  length(loopdependencies(mpref)) == 0 && return
+  for (id,opp) ∈ enumerate(parents(mpref))
+    if name(opp) === ind
+      ensure_constant_lowered!(ls, opp)
+    end
+  end
+  return nothing
+end
+function add_constant!(ls::LoopSet, mpref::ArrayReferenceMetaPosition, elementbytes::Int)
+  op = Operation(length(operations(ls)), varname(mpref), elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS, mpref.mref)
+  add_vptr!(ls, op)
+  temp = gensym!(ls, "intermediateconstref")
+  vloadcall = Expr(:call, lv(:_vload), mpref.mref.ptr)
+  nindices = length(getindices(op))
+  # getoffsets(op) .+= 1
+  if nindices > 0
+    dummyloop = first(ls.loops)
+    for ind ∈ getindicesonly(op)
+      ensure_constant_lowered!(ls, mpref, ind)
+    end
+    push!(vloadcall.args, mem_offset(op, UnrollArgs(dummyloop, dummyloop, dummyloop, 0, 0, 0), fill(false,nindices), true, ls))
+  end
+  push!(vloadcall.args, Expr(:call, lv(:False)), staticexpr(reg_size(ls)))
+  pushpreamble!(ls, Expr(:(=), temp, vloadcall))
+  pushpreamble!(ls, Expr(:(=), name(op), temp))
+  pushpreamble!(ls, op, temp)
+  pushop!(ls, op, temp)
 end
 # This version has loop dependencies. var gets assigned to sym when lowering.
 # value is what will get assigned within the loop.
