@@ -1,24 +1,43 @@
 function maybeaddref!(ls::LoopSet, op::Operation)
-    ref = op.ref
-    id = findfirst(==(ref), ls.refs_aliasing_syms)
-    # try to CSE
-    if id === nothing
-        push!(ls.syms_aliasing_refs, name(op))
-        push!(ls.refs_aliasing_syms, ref)
-        0
-    else
-        id
-    end
+  ref = op.ref
+  id = findfirst(==(ref), ls.refs_aliasing_syms)
+  # try to CSE
+  if id === nothing
+    push!(ls.syms_aliasing_refs, name(op))
+    push!(ls.refs_aliasing_syms, ref)
+    0
+  else
+    id
+  end
 end
 
 function add_load!(ls::LoopSet, op::Operation, actualarray::Bool = true)
-    @assert isload(op)
-    if (id = maybeaddref!(ls, op)) > 0 # try to CSE
-        opp = ls.opdict[ls.syms_aliasing_refs[id]] # throw an error if not found.
-        return isstore(opp) ? getop(ls, first(parents(opp))) : opp
+  @assert isload(op)
+  if (id = maybeaddref!(ls, op)) > 0 # try to CSE
+    opp = ls.opdict[ls.syms_aliasing_refs[id]] # throw an error if not found.
+    op_inds = getindicesonly(op)
+    li = op.ref.loopedindex
+    allmatch = true
+    parents_op = parents(op)
+    parents_opp = parents(opp)
+    for i ∈ eachindex(op_inds)
+      li[i] && continue
+      ind = op_inds[i]
+      if (id_op = parentind(ind, op)) > 0
+        if (id_opp = parentind(ind, opp)) > 0
+          if !matches(parents_op[id_op], parents_opp[id_opp])
+            allmatch = false
+            break
+          end
+        end
+      end
     end
-    add_vptr!(ls, op.ref.ref.array, vptr(op), actualarray)
-    pushop!(ls, op, name(op))
+    if allmatch
+      return isstore(opp) ? getop(ls, first(parents(opp))) : opp
+    end
+  end
+  add_vptr!(ls, op.ref.ref.array, vptr(op), actualarray)
+  pushop!(ls, op, name(op))
 end
 
 function add_load!(

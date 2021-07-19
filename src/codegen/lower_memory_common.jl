@@ -1,8 +1,8 @@
 function parentind(ind::Symbol, op::Operation)
-    for (id,opp) ∈ enumerate(parents(op))
-        name(opp) === ind && return id
-    end
-    -1
+  for (id,opp) ∈ enumerate(parents(op))
+    name(opp) === ind && return id
+  end
+  -1
 end
 function symbolind(ind::Symbol, op::Operation, td::UnrollArgs, ls::LoopSet)
     id = parentind(ind, op)

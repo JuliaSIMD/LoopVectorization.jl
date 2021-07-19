@@ -227,23 +227,23 @@ isu₂unrolled(op::Operation) = op.u₂unrolled
 isvectorized(op::Operation) = op.vectorized
 
 function matches(op1::Operation, op2::Operation)
-    op1 === op2 && return true
-    op1.instruction === op2.instruction || return false
-    op1.node_type == op2.node_type || return false
-    if isconstant(op1)
-        return iszero(length(loopdependencies(op1))) && iszero(length(loopdependencies(op2))) && (mangledvar(op1) === mangledvar(op2))
-    end
-    op1.dependencies == op2.dependencies || return false
-    op2.reduced_deps == op2.reduced_deps || return false
-    if accesses_memory(op1)
-        op1.ref == op2.ref || return false
-    end
-    nparents = length(parents(op1))
-    nparents == length(parents(op2)) || return false
-    for p ∈ 1:nparents
-        matches(op1.parents[p], op2.parents[p]) || return false
-    end
-    true
+  op1 === op2 && return true
+  op1.instruction === op2.instruction || return false
+  op1.node_type == op2.node_type || return false
+  if isconstant(op1)
+    return iszero(length(loopdependencies(op1))) && iszero(length(loopdependencies(op2))) && (mangledvar(op1) === mangledvar(op2))
+  end
+  op1.dependencies == op2.dependencies || return false
+  op2.reduced_deps == op2.reduced_deps || return false
+  if accesses_memory(op1)
+    op1.ref == op2.ref || return false
+  end
+  nparents = length(parents(op1))
+  nparents == length(parents(op2)) || return false
+  for p ∈ 1:nparents
+    matches(op1.parents[p], op2.parents[p]) || return false
+  end
+  true
 end
 
  # negligible save on allocations for operations that don't need these (eg, constants).
