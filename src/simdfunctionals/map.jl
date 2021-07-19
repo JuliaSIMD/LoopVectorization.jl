@@ -63,50 +63,50 @@ function vmap_singlethread!(
     start, N, ::Val{NonTemporal},
     ptrargs::Tuple{Vararg{AbstractStridedPointer,A}}
 ) where {F, T, NonTemporal, A}
-    i = convert(Int, start)
-    V = VectorizationBase.pick_vector_width(T)
-    W = unwrap(V)
-    st = VectorizationBase.static_sizeof(T)
-    UNROLL = 4
-    LOG2UNROLL = 2
-    while i < vsub_nsw(N, ((W << LOG2UNROLL) - 1))
-        index = VectorizationBase.Unroll{1,W,UNROLL,1,W,0x0000000000000000}((i,))
-        v = f(VectorizationBase.fmap(vload, ptrargs, index)...)
-        if NonTemporal
-            _vstore!(ptry, v, index, True(), True(), True(), register_size())
-        else
-            _vstore!(ptry, v, index, False(), True(), False(), register_size())
-        end
-        i = vadd_nw(i, StaticInt{UNROLL}() * W)
+  i = convert(Int, start)
+  V = VectorizationBase.pick_vector_width(promote_type(T, reduce(promote_type, map(eltype, ptrargs))))
+  W = unwrap(V)
+  st = VectorizationBase.static_sizeof(T)
+  UNROLL = 4
+  LOG2UNROLL = 2
+  while i < vsub_nsw(N, ((W << LOG2UNROLL) - 1))
+    index = VectorizationBase.Unroll{1,W,UNROLL,1,W,0x0000000000000000}((i,))
+    v = f(VectorizationBase.fmap(vload, ptrargs, index)...)
+    if NonTemporal
+      _vstore!(ptry, v, index, True(), True(), True(), register_size())
+    else
+      _vstore!(ptry, v, index, False(), True(), False(), register_size())
     end
-    # if Base.libllvm_version ≥ v"11" # this seems to be slower
-    #     Nm1 = vsub_nw(N, 1)
-    #     while i < N # stops at 16 when
-    #         m = mask(V, i, Nm1)
-    #         vnoaliasstore!(ptry, f(vload.(ptrargs, ((MM{W}(i),),), m)...), (MM{W}(i,),), m)
-    #         i = vadd_nw(i, W)
-    #     end
-    # else
-    while i < vsub_nsw(N, (W - 1)) # stops at 16 when
-        vᵣ = f(map1(vload, ptrargs, (MM{W}(i),))...)
-        if NonTemporal
-            _vstore!(ptry, vᵣ, (MM{W}(i),), True(), True(), True(), register_size())
-        else
-            _vstore!(ptry, vᵣ, (MM{W}(i),), False(), True(), False(), register_size())
-        end
-        i = vadd_nw(i, W)
+    i = vadd_nw(i, StaticInt{UNROLL}() * W)
+  end
+  # if Base.libllvm_version ≥ v"11" # this seems to be slower
+  #     Nm1 = vsub_nw(N, 1)
+  #     while i < N # stops at 16 when
+  #         m = mask(V, i, Nm1)
+  #         vnoaliasstore!(ptry, f(vload.(ptrargs, ((MM{W}(i),),), m)...), (MM{W}(i,),), m)
+  #         i = vadd_nw(i, W)
+  #     end
+  # else
+  while i < vsub_nsw(N, (W - 1)) # stops at 16 when
+    vᵣ = f(map1(vload, ptrargs, (MM{W}(i),))...)
+    if NonTemporal
+      _vstore!(ptry, vᵣ, (MM{W}(i),), True(), True(), True(), register_size())
+    else
+      _vstore!(ptry, vᵣ, (MM{W}(i),), False(), True(), False(), register_size())
     end
-    if i < N
-      m = mask(T, N & (W - 1))
-      vfinal = f(map1(vload, ptrargs, (MM{W}(i),), m)...)
-      if NonTemporal
-        _vstore!(ptry, vfinal, (MM{W}(i,),), m, True(), True(), False(), register_size())
-      else
-        _vstore!(ptry, vfinal, (MM{W}(i,),), m, False(), True(), False(), register_size())
-      end
+    i = vadd_nw(i, W)
+  end
+  if i < N
+    m = mask(T, N & (W - 1))
+    vfinal = f(map1(vload, ptrargs, (MM{W}(i),), m)...)
+    if NonTemporal
+      _vstore!(ptry, vfinal, (MM{W}(i,),), m, True(), True(), False(), register_size())
+    else
+      _vstore!(ptry, vfinal, (MM{W}(i,),), m, False(), True(), False(), register_size())
     end
-    # end
-    nothing
+  end
+  # end
+  nothing
 end
 
 abstract type AbstractVmapClosure{NonTemporal,F,D,N,A<:Tuple{Vararg{StridedPointer,N}}} <: Function end
