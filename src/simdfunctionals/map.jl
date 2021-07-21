@@ -109,10 +109,10 @@ function _vmap_singlethread!(
   nothing
 end
 
-abstract type AbstractVmapClosure{NonTemporal,F,D,N,A<:Tuple{Vararg{StridedPointer,N}}} <: Function end
+abstract type AbstractVmapClosure{NonTemporal,F,D,N,A<:Tuple{Vararg{Any,N}}} <: Function end
 struct VmapClosure{NonTemporal,F,D,N,A} <: AbstractVmapClosure{NonTemporal,F,D,N,A}
   f::F
-  function VmapClosure{NonTemporal}(f::F, ::D, ::A) where {NonTemporal,F,D,N,A<:Tuple{Vararg{StridedPointer,N}}}
+  function VmapClosure{NonTemporal}(f::F, ::D, ::A) where {NonTemporal,F,D,N,A<:Tuple{Vararg{Any,N}}}
     new{NonTemporal,F,D,N,A}(f)
   end
 end
@@ -160,7 +160,7 @@ end
   end
 end
 
-@inline function vmap_closure(f::F, ptry::D, ptrargs::A, ::Val{NonTemporal}) where {F,D<:StridedPointer,N,A<:Tuple{Vararg{StridedPointer,N}},NonTemporal}
+@inline function vmap_closure(f::F, ptry::D, ptrargs::A, ::Val{NonTemporal}) where {F,D<:StridedPointer,N,A<:Tuple{Vararg{Any,N}},NonTemporal}
   vmc = VmapClosure{NonTemporal}(f, ptry, ptrargs)
   @cfunction($vmc, Cvoid, (Ptr{UInt},))
 end
@@ -354,11 +354,11 @@ BenchmarkTools.Trial:
 function vmapnt!(
     f::F, y::AbstractArray, args::Vararg{AbstractArray,A}
 ) where {F,A}
-    if check_args(y, args...) && all_dense(y, args...)
-        gc_preserve_vmap!(f, y, Val{true}(), Val{false}(), args...)
-    else
-        map!(f, y, args...)
-    end
+  if check_args(y, args...) && all_dense(y, args...)
+    gc_preserve_vmap!(f, y, Val{true}(), Val{false}(), args...)
+  else
+    map!(f, y, args...)
+  end
 end
 
 """
@@ -366,13 +366,13 @@ end
 A threaded variant of [`vmapnt!`](@ref).
 """
 function vmapntt!(
-    f::F, y::AbstractArray, args::Vararg{AbstractArray,A}
+  f::F, y::AbstractArray, args::Vararg{AbstractArray,A}
 ) where {F,A}
-    if check_args(y, args...) && all_dense(y, args...)
-        gc_preserve_vmap!(f, y, Val{true}(), Val{true}(), args...)
-    else
-        map!(f, y, args...)
-    end
+  if check_args(y, args...) && all_dense(y, args...)
+    gc_preserve_vmap!(f, y, Val{true}(), Val{true}(), args...)
+  else
+    map!(f, y, args...)
+  end
 end
 
 # generic fallbacks
@@ -382,9 +382,9 @@ end
 @inline vmapntt!(f, args...) = map!(f, args...)
 
 function vmap_call(f::F, vm!::V, args::Vararg{Any,N}) where {V,F,N}
-    T = Base._return_type(f, Base.Broadcast.eltypes(args))
-    dest = similar(first(args), T)
-    vm!(f, dest, args...)
+  T = Base._return_type(f, Base.Broadcast.eltypes(args))
+  dest = similar(first(args), T)
+  vm!(f, dest, args...)
 end
 
 """

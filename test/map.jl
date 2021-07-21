@@ -28,6 +28,6 @@
     @test y1 ≈ y2
   end
   @test vmap(abs2, 1:100) == map(abs2, 1:100)
-  @test vmap(abs2, 1:3:1000) == map(abs2, 1:3:1000)
-  @test vmap(abs2, 1.0:3.0:1000.0) ≈ map(abs2, 1.0:3.0:1000.0)
+  @test vmapt(abs2, 1:3:10000) == map(abs2, 1:3:1000)
+  @test vmapt(abs2, 1.0:3.0:10000.0) ≈ map(abs2, 1.0:3.0:1000.0)
 end
