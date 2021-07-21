@@ -54,14 +54,14 @@ function vmap_singlethread!(
     ::Val{NonTemporal},
     args::Vararg{AbstractArray,A}
 ) where {F,T <: Base.HWReal, A, NonTemporal}
-    ptry, ptrargs, N = setup_vmap!(f, y, Val{NonTemporal}(), args...)
-    vmap_singlethread!(f, ptry, Zero(), N, Val{NonTemporal}(), ptrargs)
-    nothing
+  ptry, ptrargs, N = setup_vmap!(f, y, Val{NonTemporal}(), args...)
+  _vmap_singlethread!(f, ptry, Zero(), N, Val{NonTemporal}(), ptrargs)
+  nothing
 end
-function vmap_singlethread!(
-    f::F, ptry::AbstractStridedPointer{T},
-    start, N, ::Val{NonTemporal},
-    ptrargs::Tuple{Vararg{AbstractStridedPointer,A}}
+function _vmap_singlethread!(
+  f::F, ptry::AbstractStridedPointer{T},
+  start, N, ::Val{NonTemporal},
+  ptrargs::Tuple{Vararg{Any,A}}
 ) where {F, T, NonTemporal, A}
   i = convert(Int, start)
   V = VectorizationBase.pick_vector_width(promote_type(T, reduce(promote_type, map(eltype, ptrargs))))
@@ -111,10 +111,10 @@ end
 
 abstract type AbstractVmapClosure{NonTemporal,F,D,N,A<:Tuple{Vararg{StridedPointer,N}}} <: Function end
 struct VmapClosure{NonTemporal,F,D,N,A} <: AbstractVmapClosure{NonTemporal,F,D,N,A}
-    f::F
-    function VmapClosure{NonTemporal}(f::F, ::D, ::A) where {NonTemporal,F,D,N,A<:Tuple{Vararg{StridedPointer,N}}}
-        new{NonTemporal,F,D,N,A}(f)
-    end
+  f::F
+  function VmapClosure{NonTemporal}(f::F, ::D, ::A) where {NonTemporal,F,D,N,A<:Tuple{Vararg{StridedPointer,N}}}
+    new{NonTemporal,F,D,N,A}(f)
+  end
 end
 # struct VmapKnownClosure{NonTemporal,F,D,N,A} <: AbstractVmapClosure{NonTemporal,F,D,N,A} end
 
@@ -122,14 +122,14 @@ end
 #     :(_vmap_thread_call!($(F.instance), p, $D, $A, Val{$NonTemporal}()))
 # end
 function (m::VmapClosure{NonTemporal,F,D,N,A})(p::Ptr{UInt}) where {NonTemporal,F,D,N,A}
-    (offset, dest) = ThreadingUtilities.load(p, D, 2*sizeof(UInt))
-    (offset, args) = ThreadingUtilities.load(p, A, offset)
-    
-    (offset, start) = ThreadingUtilities.load(p, Int, offset)
-    (offset, stop ) = ThreadingUtilities.load(p, Int, offset)
-        
-    vmap_singlethread!(m.f, dest, start, stop, Val{NonTemporal}(), args)
-    nothing
+  (offset, dest) = ThreadingUtilities.load(p, D, 2*sizeof(UInt))
+  (offset, args) = ThreadingUtilities.load(p, A, offset)
+  
+  (offset, start) = ThreadingUtilities.load(p, Int, offset)
+  (offset, stop ) = ThreadingUtilities.load(p, Int, offset)
+  
+  _vmap_singlethread!(m.f, dest, start, stop, Val{NonTemporal}(), args)
+  nothing
 end
 
 @inline function _get_fptr(cfunc::Base.CFunction)
@@ -146,23 +146,23 @@ end
 @inline function setup_thread_vmap!(
     p, cfunc, ptry, ptrargs, start, stop
 )
-    fptr = _get_fptr(cfunc)
-    offset = ThreadingUtilities.store!(p, fptr, sizeof(UInt))
-    offset = ThreadingUtilities.store!(p, ptry, offset)
-    offset = ThreadingUtilities.store!(p, ptrargs, offset)
-    offset = ThreadingUtilities.store!(p, start, offset)
-    offset = ThreadingUtilities.store!(p, stop, offset)
-    nothing
+  fptr = _get_fptr(cfunc)
+  offset = ThreadingUtilities.store!(p, fptr, sizeof(UInt))
+  offset = ThreadingUtilities.store!(p, ptry, offset)
+  offset = ThreadingUtilities.store!(p, ptrargs, offset)
+  offset = ThreadingUtilities.store!(p, start, offset)
+  offset = ThreadingUtilities.store!(p, stop, offset)
+  nothing
 end
 @inline function launch_thread_vmap!(tid, cfunc, ptry, ptrargs, start, stop)
-    ThreadingUtilities.launch(tid, cfunc, ptry, ptrargs, start, stop) do p, cfunc, ptry, ptrargs, start, stop
-        setup_thread_vmap!(p, cfunc, ptry, ptrargs, start, stop)
-    end
+  ThreadingUtilities.launch(tid, cfunc, ptry, ptrargs, start, stop) do p, cfunc, ptry, ptrargs, start, stop
+    setup_thread_vmap!(p, cfunc, ptry, ptrargs, start, stop)
+  end
 end
 
 @inline function vmap_closure(f::F, ptry::D, ptrargs::A, ::Val{NonTemporal}) where {F,D<:StridedPointer,N,A<:Tuple{Vararg{StridedPointer,N}},NonTemporal}
-    vmc = VmapClosure{NonTemporal}(f, ptry, ptrargs)
-    @cfunction($vmc, Cvoid, (Ptr{UInt},))
+  vmc = VmapClosure{NonTemporal}(f, ptry, ptrargs)
+  @cfunction($vmc, Cvoid, (Ptr{UInt},))
 end
 # @inline function _cfunc_closure(f, ptry, ptrargs, ::Val{NonTemporal}) where {NonTemporal}
 #     vmc = VmapClosure{NonTemporal}(f, ptry, ptrargs)
@@ -197,7 +197,7 @@ function vmap_multithread!(
 
     # if !((nt > 1) && iszero(ccall(:jl_in_threaded_region, Cint, ())))
     if nt < 2
-        vmap_singlethread!(f, ptry, Zero(), N, Val{NonTemporal}(), ptrargs)
+        _vmap_singlethread!(f, ptry, Zero(), N, Val{NonTemporal}(), ptrargs)
         return
     end
 
@@ -214,7 +214,7 @@ function vmap_multithread!(
             launch_thread_vmap!(tid, cfunc, ptry, ptrargs, start, stop)
             start = stop
         end
-        vmap_singlethread!(f, ptry, start, N, Val{NonTemporal}(), ptrargs)
+        _vmap_singlethread!(f, ptry, start, N, Val{NonTemporal}(), ptrargs)
         for tid ∈ 1:nt-1
             ThreadingUtilities.wait(tid)
         end
