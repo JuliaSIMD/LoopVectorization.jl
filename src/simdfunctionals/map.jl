@@ -256,8 +256,20 @@ end
 """
     vmap!(f, destination, a::AbstractArray)
     vmap!(f, destination, a::AbstractArray, b::AbstractArray, ...)
-Vectorized-`map!`, applying `f` to each element of `a` (or paired elements of `a`, `b`, ...)
+Vectorized-`map!`, applying `f` to batches of elements of `a` (or paired batches of `a`, `b`, ...)
 and storing the result in `destination`.
+
+The function `f` must accept `VectorizationBase.AbstractSIMD` inputs. Ideally, all this requires
+is making sure that `f` is defined to be agnostic with respect to input types, but if the function `f`
+contains branches or loops, more work will probably be needed. For example, a function
+```julia
+f(x) = x > 0 ? log(x) : inv(x)
+```
+can be rewritten into
+```julia
+using IfElse
+f(x) = IfElse.ifelse(x > 0, log(x), inv(x))
+```
 """
 function vmap!(
     f::F, y::AbstractArray, arg1::AbstractArray, arg2::AbstractArray, args::Vararg{AbstractArray,A}
