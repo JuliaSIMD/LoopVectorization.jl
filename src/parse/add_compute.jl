@@ -404,8 +404,7 @@ function add_pow!(
             xo
         end
     elseif x isa Number
-        pushpreamble!(ls, Expr(:(=), var, x ^ p))
-        return add_constant!(ls, var, elementbytes)
+        return add_constant!(ls, x ^ p, elementbytes)::Operation
     end
     pint = round(Int, p)
     if p != pint
@@ -425,7 +424,7 @@ function add_pow!(
     elseif pint == 1
         return add_compute!(ls, var, :identity, [xop], elementbytes)
     elseif pint == 2
-        return add_compute!(ls, var, :abs2, [xop], elementbytes)
+        return add_compute!(ls, var, :abs2_fast, [xop], elementbytes)
     end
 
     # Implementation from https://github.com/JuliaLang/julia/blob/a965580ba7fd0e8314001521df254e30d686afbf/base/intfuncs.jl#L216
@@ -433,16 +432,16 @@ function add_pow!(
     pint >>= t
     while (t -= 1) > 0
         varname = (iszero(pint) && isone(t)) ? var : gensym!(ls, "pbs")
-        xop = add_compute!(ls, varname, :abs2, [xop], elementbytes)
+        xop = add_compute!(ls, varname, :abs2_fast, [xop], elementbytes)
     end
     yop = xop
     while pint > 0
         t = trailing_zeros(pint) + 1
         pint >>= t
         while (t -= 1) >= 0
-            xop = add_compute!(ls, gensym!(ls, "pbs"), :abs2, [xop], elementbytes)
+            xop = add_compute!(ls, gensym!(ls, "pbs"), :abs2_fast, [xop], elementbytes)
         end
-        yop = add_compute!(ls, iszero(pint) ? var : gensym!(ls, "pbs"), :(*), [xop, yop], elementbytes)
+        yop = add_compute!(ls, iszero(pint) ? var : gensym!(ls, "pbs"), :mul_fast, [xop, yop], elementbytes)
     end
     yop
 end

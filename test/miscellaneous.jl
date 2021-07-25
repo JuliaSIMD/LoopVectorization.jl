@@ -103,7 +103,7 @@ using Test
     end
 
     colsumq = :(for i ∈ 1:size(A,2), j ∈ eachindex(x)
-                x[j] += A[j,i] - 0.25
+                x[j] += A[j,i] - 1 / 4
                 end)
     lscolsum = LoopVectorization.loopset(colsumq);
     # if LoopVectorization.register_count() != 8
@@ -133,7 +133,7 @@ using Test
         @_avx for j ∈ eachindex(x)
             xⱼ = zero(eltype(x))
             for i ∈ 1:size(A,2)
-                xⱼ += A[j,i] - 0.25
+                xⱼ += A[j,i] - 1 / 4
             end
             x[j] = xⱼ
         end
@@ -196,7 +196,7 @@ using Test
     function setcolumstovectorplus100avx!(Z::AbstractArray{T}, A) where {T} 
         @turbo for i = axes(A,1), j = axes(Z,2)
             acc = zero(T)
-            acc = acc + A[i] + 100
+            acc = acc + A[i] + (26 + 74)
             Z[i, j] = acc
         end
     end
@@ -504,7 +504,7 @@ using Test
     function test_bit_shiftavx(counter)
         accu = zero(first(counter))
         @turbo for i ∈ eachindex(counter)
-            accu += counter[i] << 1
+            accu += counter[i] << (-3 * 4 + 13) 
         end
         accu
     end

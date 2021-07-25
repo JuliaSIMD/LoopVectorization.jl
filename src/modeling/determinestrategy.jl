@@ -1054,7 +1054,7 @@ function evaluate_cost_tile!(
     rp = opisininnerloop ? rp : zero(rp) # we only care about register pressure within the inner most loop
     rto = rt
     rt *= iters[id]
-    @show (u₁reducesrt, u₂reducesrt), (u₁reducesrp, u₂reducesrp), rto, rt, lat, rp, op
+    # @show (u₁reducesrt, u₂reducesrt), (u₁reducesrp, u₂reducesrp), rto, rt, lat, rp, op
     if isstore(op) & (!u₁reducesrt) & (!u₂reducesrt)
       irreducible_storecosts += rt
     end

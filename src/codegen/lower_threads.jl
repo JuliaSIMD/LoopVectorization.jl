@@ -604,7 +604,6 @@ function thread_two_loops_expr(
             var"#thread#id#" = vadd_nw(var"#thread#id#", var"#trailzing#zeros#")
             # @show var"#thread#id#" $loopboundexpr
             var"##lbvargs#to_launch##" = ($loopboundexpr, var"#vargs#")
-            @show sizeof(var"##lbvargs#to_launch##")
             avx_launch(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, StaticType{typeof(var"##lbvargs#to_launch##")}(), flatten_to_tuple(var"##lbvargs#to_launch##"), var"#thread#id#")
             var"#thread#mask#" >>>= var"#trailzing#zeros#"
 
@@ -626,7 +625,6 @@ function thread_two_loops_expr(
     end
     # @show $lastboundexpr
     var"#avx#call#args#" = $avxcall_args
-    @show sizeof(var"#avx#call#args#")
     $_turbo_call_
     var"##do#thread##" || $retexpr
     # @show $retv
