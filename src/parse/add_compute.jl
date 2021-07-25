@@ -48,29 +48,29 @@ end
 #     pushparent!(mpref.parents, mpref.loopdependencies, mpref.reduceddeps, parent)
 # end
 function add_parent!(
-    vparents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet, var, elementbytes::Int, position::Int
+  vparents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet, var, elementbytes::Int, position::Int
 )
-    parent = if var isa Symbol
-        # if var === :kern_1_1
-        #     @show operations(ls) ls.preamble_symsym
-        # end
-        opp = getop(ls, var, elementbytes)
-        # if var === :kern_1_1
-        #     @show operations(ls) ls.preamble_symsym
-        # end
-        # @show var opp first(operations(ls)) opp === first(operations(ls))
-        if iscompute(opp) && instruction(opp).instr === :identity && length(loopdependencies(opp)) < position && isone(length(parents(opp))) && name(opp) === name(first(parents(opp)))
-            first(parents(opp))
-        else
-            opp
-        end
-    elseif var isa Expr #CSE candidate
-        add_operation!(ls, gensym!(ls, "temp"), var, elementbytes, position)
-    else # assumed constant
-        add_constant!(ls, var, elementbytes)
-        # add_constant!(ls, var, deps, gensym(:loopredefconst), elementbytes)
+  parent = if var isa Symbol
+    # if var === :kern_1_1
+    #     @show operations(ls) ls.preamble_symsym
+    # end
+    opp = getop(ls, var, elementbytes)
+    # if var === :kern_1_1
+    #     @show operations(ls) ls.preamble_symsym
+    # end
+    # @show var opp first(operations(ls)) opp === first(operations(ls))
+    if iscompute(opp) && instruction(opp).instr === :identity && length(loopdependencies(opp)) < position && isone(length(parents(opp))) && name(opp) === name(first(parents(opp)))
+      first(parents(opp))
+    else
+      opp
     end
-    pushparent!(vparents, deps, reduceddeps, parent)
+  elseif var isa Expr #CSE candidate
+    add_operation!(ls, gensym!(ls, "temp"), var, elementbytes, position)
+  else # assumed constant
+    add_constant!(ls, var, elementbytes)
+    # add_constant!(ls, var, deps, gensym(:loopredefconst), elementbytes)
+  end
+  pushparent!(vparents, deps, reduceddeps, parent)
 end
 # function add_reduction!(
 #     vparents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet, var::Symbol, elementbytes::Int
@@ -270,7 +270,7 @@ function add_compute!(
         if var === arg
             reduction_ind = ind
             # add_reduction!(vparents, deps, reduceddeps, ls, arg, elementbytes)
-            getop(ls, arg::Symbol, elementbytes)   # weird that this needs annotation
+            getop(ls, var, elementbytes)
         elseif arg isa Expr
             isref, argref = tryrefconvert(ls, arg, elementbytes, varname(mpref))
             if isref

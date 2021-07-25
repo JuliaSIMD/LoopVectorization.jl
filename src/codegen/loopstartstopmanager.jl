@@ -439,49 +439,61 @@ end
 #   end
 #   return nothing
 # end
+
+
 function adjust_offsets!(
   ls::LoopSet, i::Int,
   array_refs_with_same_name::Vector{Int}, arrayref_to_name_op_collection::Vector{Vector{Tuple{Int,Int,Int}}}
 )
   ops = operations(ls)
-  @assert length(ops) ≤ 256
-  offsets::Base.RefValue{NTuple{256,Int8}} = Base.RefValue{NTuple{256,Int8}}();
-  GC.@preserve offsets begin
+  if length(ops) ≤ 256
+    offsets = Ref{NTuple{256,Int8}}()
     poffsets = Base.unsafe_convert(Ptr{Int8}, offsets)
-    minoffset = typemax(Int8)
-    maxoffset = typemin(Int8)
-    # stridesunequal = false
+    GC.@preserve offsets adjust_offsets!(ls, i, poffsets, array_refs_with_same_name, arrayref_to_name_op_collection)
+  else
+    offsetsv = similar(ops, Int8)
+    poffsets = pointer(offsetsv)
+    GC.@preserve offsetsv adjust_offsets!(ls, i, poffsets, array_refs_with_same_name, arrayref_to_name_op_collection)
+  end
+end
+function adjust_offsets!(
+  ls::LoopSet, i::Int, poffsets::Ptr{Int8},
+  array_refs_with_same_name::Vector{Int}, arrayref_to_name_op_collection::Vector{Vector{Tuple{Int,Int,Int}}}
+)
+  ops = operations(ls)
+  minoffset = typemax(Int8)
+  maxoffset = typemin(Int8)
+  # stridesunequal = false
+  for j ∈ array_refs_with_same_name
+    arrayref_to_name_op = arrayref_to_name_op_collection[j]
+    for (_,__,opid) ∈ arrayref_to_name_op
+      opref = ops[opid].ref
+      off = getoffsets(opref)[i]
+      minoffset = min(off, minoffset)
+      maxoffset = max(off, maxoffset)
+      unsafe_store!(poffsets, off, opid)
+      # stridesunequal |= (stride ≠ getstrides(opref)[i])
+    end
+  end
+  constoffset = Int(minoffset)
+  constoffset = Core.ifelse(Int(maxoffset) - constoffset > 127, 0, constoffset)
+  if constoffset ≠ 0
     for j ∈ array_refs_with_same_name
       arrayref_to_name_op = arrayref_to_name_op_collection[j]
       for (_,__,opid) ∈ arrayref_to_name_op
         opref = ops[opid].ref
-        off = getoffsets(opref)[i]
-        minoffset = min(off, minoffset)
-        maxoffset = max(off, maxoffset)
-        unsafe_store!(poffsets, off, opid)
-        # stridesunequal |= (stride ≠ getstrides(opref)[i])
-      end
-    end
-    constoffset = Int(minoffset)
-    constoffset = Core.ifelse(Int(maxoffset) - constoffset > 127, 0, constoffset)
-    if constoffset ≠ 0
-      for j ∈ array_refs_with_same_name
-        arrayref_to_name_op = arrayref_to_name_op_collection[j]
-        for (_,__,opid) ∈ arrayref_to_name_op
-          opref = ops[opid].ref
-          newoffset = unsafe_load(poffsets, opid) - constoffset
-          # if stridesunequal
-          #   stride = getstrides(opref)[i]
-          #   newoffsetint = Int(newoffset) + (Int(stride) - 1)
-          #   # @assert typemin(Int8) ≤ newoffsetint ≤ typemax(Int8)
-          #   newoffset = Int8(newoffsetint)
-          # end
-          getoffsets(ops[opid].ref)[i] = newoffset
-        end
+        newoffset = unsafe_load(poffsets, opid) - constoffset
+        # if stridesunequal
+        #   stride = getstrides(opref)[i]
+        #   newoffsetint = Int(newoffset) + (Int(stride) - 1)
+        #   # @assert typemin(Int8) ≤ newoffsetint ≤ typemax(Int8)
+        #   newoffset = Int8(newoffsetint)
+        # end
+        getoffsets(ops[opid].ref)[i] = newoffset
       end
     end
   end
-  constoffset#, Core.ifelse(stridesunequal, 1, Int(stride))
+  return constoffset#, Core.ifelse(stridesunequal, 1, Int(stride))
 end
 
 function calcgespinds(

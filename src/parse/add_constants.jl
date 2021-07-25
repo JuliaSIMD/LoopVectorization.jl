@@ -124,13 +124,13 @@ end
 function add_constant!(
     ls::LoopSet, value::Symbol, deps::Vector{Symbol}, assignedsym::Symbol, elementbytes::Int, f::Symbol = Symbol("")
   )
-    retop = get(ls.opdict, value, nothing)
-    if retop === nothing
-        op = Operation(length(operations(ls)), assignedsym, elementbytes, Instruction(f, value), constant, deps, NODEPENDENCY, NOPARENTS)
-    else
-        op = Operation(length(operations(ls)), assignedsym, elementbytes, :identity, compute, deps, reduceddependencies(retop), [retop])
-    end
-    pushop!(ls, op, assignedsym)
+  retop = get(ls.opdict, value, nothing)
+  if retop === nothing
+    op = Operation(length(operations(ls)), assignedsym, elementbytes, Instruction(f, value), constant, deps, NODEPENDENCY, NOPARENTS)
+  else
+    op = Operation(length(operations(ls)), assignedsym, elementbytes, :identity, compute, deps, reduceddependencies(retop), [retop])
+  end
+  pushop!(ls, op, assignedsym)
 end
 # function add_constant!(
 #     ls::LoopSet, value, deps::Vector{Symbol}, assignedsym::Symbol, elementbytes::Int, f::Symbol = Symbol("")
@@ -142,7 +142,7 @@ end
 function add_constant!(
     ls::LoopSet, value::Number, deps::Vector{Symbol}, assignedsym::Symbol, elementbytes::Int
 )
-    op = add_constant!(ls, gensym!(ls, string(value)), deps, assignedsym, elementbytes, :numericconstant)
-    pushpreamble!(ls, op, value)
-    op
+  op = add_constant!(ls, gensym!(ls, string(value)), deps, assignedsym, elementbytes, :numericconstant)
+  pushpreamble!(ls, op, value)
+  op
 end

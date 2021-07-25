@@ -645,7 +645,7 @@ function generate_call_types(
   for op ∈ ops
     instr::Instruction = instruction(op)
     if (isconstant(op) && (instr == LOOPCONSTANT)) && (!roots[identifier(op)])
-      instr = op.instruction = DROPPEDCONSTANT 
+      instr = op.instruction = DROPPEDCONSTANT
     end
     push!(operation_descriptions.args, QuoteNode(instr.mod))
     push!(operation_descriptions.args, QuoteNode(instr.instr))
