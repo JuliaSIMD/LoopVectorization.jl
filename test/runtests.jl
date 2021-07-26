@@ -7,7 +7,7 @@ InteractiveUtils.versioninfo(stdout; verbose = true)
 const LOOPVECTORIZATION_TEST = get(ENV, "LOOPVECTORIZATION_TEST", "all")
 
 if LOOPVECTORIZATION_TEST == "all"
-  NUMGROUPS = 6
+  NUMGROUPS = 8
   processes = Vector{Base.Process}(undef, NUMGROUPS)
   paths = Vector{String}(undef, NUMGROUPS)
   ios = Vector{IOStream}(undef, NUMGROUPS)
@@ -21,13 +21,20 @@ if LOOPVECTORIZATION_TEST == "all"
     env["JULIA_NUM_THREADS"] = string(Threads.nthreads())
     processes[i] = run(pipeline(setenv(`$(Base.julia_cmd()) $(@__FILE__)`, env), stderr = io, stdout = io), wait=false)
   end
-  for i ∈ 1:NUMGROUPS
-    proc = processes[i]
-    while process_running(proc)
-      sleep(5)
+  completed = fill(false, NUMGROUPS)
+  while true
+    for i ∈ eachindex(completed)
+      completed[i] && continue
+      proc = processes[i]
+      process_running(proc) && continue
+      completed[i] = true
+      close(ios[i])
+      println("Test Group: $i")
+      run(`cat $(paths[i])`)
+      println("\n\n")
     end
-    close(ios[i])
-    run(`cat $(paths[i])`)
+    all(completed) && break
+    sleep(5)
   end
   @testset verbose=true "All" begin
     for (i,proc) ∈ enumerate(processes)
