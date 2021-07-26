@@ -15,6 +15,15 @@ function cdot_mat(ca::AbstractVector{Complex{T}}, cb::AbstractVector{Complex{T}}
     end
     Complex(re, im)
 end
+function cdot_swizzle(ca::AbstractVector{Complex{T}}, cb::AbstractVector{Complex{T}}) where {T}
+  a = reinterpret(T, ca)
+  b = reinterpret(T, cb)
+  reim = Vec(zero(T),zero(T))
+  @turbo for i ∈ eachindex(a)
+    reim = vfmsubadd(vmovsldup(a[i]), b[i], vfmsubadd(vmovshdup(a[i]), vpermilps177(b[i]), reim))
+  end
+  Complex(reim(1), reim(2))
+end
 function cdot_affine(ca::AbstractVector{Complex{T}}, cb::AbstractVector{Complex{T}}) where {T}
     a = reinterpret(T, ca);
     b = reinterpret(T, cb);
@@ -135,7 +144,7 @@ function cmatmul_array_v2!(Cc::AbstractMatrix{Complex{T}}, Ac::AbstractMatrix{Co
   C = reinterpret(Float64, Cc);
   A = reinterpret(Float64, Ac);
   B = reinterpret(reshape, Float64, Bc);
-  @turbo for n ∈ indices((C,B),(2,3)), m ∈ indices((C,A),1)
+  @turbo vectorize=2 for n ∈ indices((C,B),(2,3)), m ∈ indices((C,A),1)
     Cmn = zero(T)
     for k ∈ indices((A,B),(2,2))
       Amk = A[m,k]

@@ -337,9 +337,9 @@ function scale_cost(c, looplen)
   c
 end
 function thread_one_loops_expr(
-    ls::LoopSet, ua::UnrollArgs, valid_thread_loop::Vector{Bool}, ntmax::UInt, c::Float64,
-    UNROLL::Tuple{Bool,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt}, OPS::Expr, ARF::Expr, AM::Expr, LPSYM::Expr
-  )
+  ls::LoopSet, ua::UnrollArgs, valid_thread_loop::Vector{Bool}, ntmax::UInt, c::Float64,
+  UNROLL::Tuple{Bool,Int8,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt}, OPS::Expr, ARF::Expr, AM::Expr, LPSYM::Expr
+)
   looplen = looplengthprod(ls)
   c = scale_cost(c, looplen)
   if all(isstaticloop, ls.loops)
@@ -473,9 +473,9 @@ function define_thread_blocks(threadedloop1, threadedloop2, vloop, u‚ÇÅloop, u‚Ç
   end
 end
 function thread_two_loops_expr(
-    ls::LoopSet, ua::UnrollArgs, valid_thread_loop::Vector{Bool}, ntmax::UInt, c::Float64,
-    UNROLL::Tuple{Bool,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt}, OPS::Expr, ARF::Expr, AM::Expr, LPSYM::Expr
-  )
+  ls::LoopSet, ua::UnrollArgs, valid_thread_loop::Vector{Bool}, ntmax::UInt, c::Float64,
+  UNROLL::Tuple{Bool,Int8,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt}, OPS::Expr, ARF::Expr, AM::Expr, LPSYM::Expr
+)
   looplen = looplengthprod(ls)
   # c = 0.0225 * c / looplen
   c = scale_cost(c, looplen)
@@ -677,7 +677,7 @@ function valid_thread_loops(ls::LoopSet)
   valid_thread_loop, ua, c
 end
 function avx_threads_expr(
-    ls::LoopSet, UNROLL::Tuple{Bool,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt},
+    ls::LoopSet, UNROLL::Tuple{Bool,Int8,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt},
     nt::UInt, OPS::Expr, ARF::Expr, AM::Expr, LPSYM::Expr
 )
     valid_thread_loop, ua, c = valid_thread_loops(ls)

@@ -393,44 +393,44 @@ end
 @generated function vmaterialize!(
     dest::AbstractArray{T,N}, bc::BC, ::Val{Mod}, ::Val{UNROLL}
 ) where {T <: NativeTypes, N, BC <: Union{Broadcasted,Product}, Mod, UNROLL}
-    # 2+1
-    # we have an N dimensional loop.
-    # need to construct the LoopSet
-    # @show typeof(dest)
-    ls = LoopSet(Mod)
-    inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, threads, warncheckarg = UNROLL
-    set_hw!(ls, rs, rc, cls, l1, l2, l3)
-    ls.isbroadcast = isbroadcast # maybe set `false` in a DiffEq-like `@..` macro
-    loopsyms = [gensym!(ls, "n") for n ∈ 1:N]
-    add_broadcast_loops!(ls, loopsyms, :dest)
-    elementbytes = sizeof(T)
-    add_broadcast!(ls, :dest, :bc, loopsyms, BC, elementbytes)
-    storeop = add_simple_store!(ls, :dest, ArrayReference(:dest, loopsyms), elementbytes)
-    doaddref!(ls, storeop)
-    resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
+  # 2+1
+  # we have an N dimensional loop.
+  # need to construct the LoopSet
+  # @show typeof(dest)
+  ls = LoopSet(Mod)
+  inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, l1, l2, l3, threads, warncheckarg = UNROLL
+  set_hw!(ls, rs, rc, cls, l1, l2, l3)
+  ls.isbroadcast = isbroadcast # maybe set `false` in a DiffEq-like `@..` macro
+  loopsyms = [gensym!(ls, "n") for n ∈ 1:N]
+  add_broadcast_loops!(ls, loopsyms, :dest)
+  elementbytes = sizeof(T)
+  add_broadcast!(ls, :dest, :bc, loopsyms, BC, elementbytes)
+  storeop = add_simple_store!(ls, :dest, ArrayReference(:dest, loopsyms), elementbytes)
+  doaddref!(ls, storeop)
+  resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
   # return ls
-    sc = setup_call(ls, :(Base.Broadcast.materialize!(dest, bc)), LineNumberNode(0), inline, false, u₁, u₂, threads%Int, warncheckarg)
+  sc = setup_call(ls, :(Base.Broadcast.materialize!(dest, bc)), LineNumberNode(0), inline, false, u₁, u₂, v, threads%Int, warncheckarg)
   # return sc
-    Expr(:block, Expr(:meta,:inline), sc, :dest)
+  Expr(:block, Expr(:meta,:inline), sc, :dest)
 end
 @generated function vmaterialize!(
     dest′::Union{Adjoint{T,A},Transpose{T,A}}, bc::BC, ::Val{Mod}, ::Val{UNROLL}
 ) where {T <: NativeTypes, N, A <: AbstractArray{T,N}, BC <: Union{Broadcasted,Product}, Mod, UNROLL}
-    # we have an N dimensional loop.
-    # need to construct the LoopSet
-    ls = LoopSet(Mod)
-    inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, threads, warncheckarg = UNROLL
-    set_hw!(ls, rs, rc, cls, l1, l2, l3)
-    ls.isbroadcast = isbroadcast # maybe set `false` in a DiffEq-like `@..` macro
-    loopsyms = [gensym!(ls, "n") for n ∈ 1:N]
-    pushprepreamble!(ls, Expr(:(=), :dest, Expr(:call, :parent, :dest′)))
-    add_broadcast_loops!(ls, loopsyms, :dest′)
-    elementbytes = sizeof(T)
-    add_broadcast!(ls, :dest, :bc, loopsyms, BC, elementbytes)
-    storeop = add_simple_store!(ls, :dest, ArrayReference(:dest, reverse(loopsyms)), elementbytes)
-    doaddref!(ls, storeop)
-    resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
-    Expr(:block, Expr(:meta,:inline), setup_call(ls, :(Base.Broadcast.materialize!(dest′, bc)), LineNumberNode(0), inline, false, u₁, u₂, threads%Int, warncheckarg), :dest′)
+  # we have an N dimensional loop.
+  # need to construct the LoopSet
+  ls = LoopSet(Mod)
+  inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, l1, l2, l3, threads, warncheckarg = UNROLL
+  set_hw!(ls, rs, rc, cls, l1, l2, l3)
+  ls.isbroadcast = isbroadcast # maybe set `false` in a DiffEq-like `@..` macro
+  loopsyms = [gensym!(ls, "n") for n ∈ 1:N]
+  pushprepreamble!(ls, Expr(:(=), :dest, Expr(:call, :parent, :dest′)))
+  add_broadcast_loops!(ls, loopsyms, :dest′)
+  elementbytes = sizeof(T)
+  add_broadcast!(ls, :dest, :bc, loopsyms, BC, elementbytes)
+  storeop = add_simple_store!(ls, :dest, ArrayReference(:dest, reverse(loopsyms)), elementbytes)
+  doaddref!(ls, storeop)
+  resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
+  Expr(:block, Expr(:meta,:inline), setup_call(ls, :(Base.Broadcast.materialize!(dest′, bc)), LineNumberNode(0), inline, false, u₁, u₂, v, threads%Int, warncheckarg), :dest′)
 end
 # these are marked `@inline` so the `@turbo` itself can choose whether or not to inline.
 @generated function vmaterialize!(

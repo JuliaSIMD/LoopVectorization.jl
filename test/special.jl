@@ -334,7 +334,17 @@
         end
         a
     end
-    
+
+  function sin_sum_3loop!(u, x, y, z)
+    @turbo for k in 1:length(z)
+      for j in 1:length(y)
+        for i in 1:length(x)
+          u[i, j, k] = sin(x[i]) + sin(y[j]) + sin(z[k])
+        end 
+      end 
+    end 
+  end
+
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
         a = randn(T, 127);
@@ -410,6 +420,14 @@
         @test csetanh!(Y1, X, Z) ≈ csetanhavx!(Y2, X, Z)
 
         x = rand(T, 97);
-        @test transposedvectoraccessavx(x) ≈ transposedvectoraccess(x)
+      @test transposedvectoraccessavx(x) ≈ transposedvectoraccess(x)
+
+      itot = 47;
+      dx = 1. / itot;
+      x = dx*collect(0:itot-1); y = dx*collect(0:itot-1); z = dx*collect(0:itot-1);
+      u = zeros(itot+8, itot+8, itot+8);
+      uv = @view u[5:5+itot-1, 5:5+itot-1, 5:5+itot-1];
+      sin_sum_3loop!(uv, x, y, z);
+      @test uv ≈ (identity(sin.(x)) .+ identity((sin.(y))')) .+ identity(reshape(sin.(z), (1, 1, length(z))))
     end
 end

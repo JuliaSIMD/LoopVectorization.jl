@@ -377,15 +377,15 @@ function expandbyoffset!(indexpand::Vector{T}, inds, offsets::Vector{Int}, expan
     indexpand
 end
 expandbyoffset(inds::Vector{Int}, offsets::Vector{Int}, expand::Bool) = expandbyoffset!(Int[], inds, offsets, expand)
-function loopindex(ls::LoopSet, u::Unsigned, shift::Unsigned)
-    mask = (one(shift) << shift) - one(shift) # mask to zero out all but shift-bits
-    idxs = Int[]
-    while u != zero(u)
-        pushfirst!(idxs, ( u % UInt8 ) & mask)
-        u >>= shift
-    end
-    reverse!(idxs)
+function loopindex!(idxs::Vector{Int}, ls::LoopSet, u::Unsigned, shift::Unsigned)
+  mask = (one(shift) << shift) - one(shift) # mask to zero out all but shift-bits
+  while u != zero(u)
+    pushfirst!(idxs, ( u % UInt8 ) & mask)
+    u >>= shift
+  end
+  idxs
 end
+loopindex(ls::LoopSet, u::Unsigned, shift::Unsigned) = reverse!(loopindex!(Int[], ls, u, shift))
 function loopindexoffset(ls::LoopSet, u::Unsigned, li::Bool, expand::Bool = false)
     if li
         shift = 0x04
@@ -406,8 +406,13 @@ reduceddependencies(ls::LoopSet, os::OperationStruct, expand = false, offset = 0
 childdependencies(ls::LoopSet, os::OperationStruct, expand = false, offset = 0) = parents_symvec(ls, os.childdeps, expand, offset)
 
 # parents(ls::LoopSet, u::UInt128) = loopindexoffset(ls, u, false)
-parents(ls::LoopSet, u::UInt128) = loopindex(ls, u, 0x08)
-parents(ls::LoopSet, os::OperationStruct) = parents(ls, os.parents)
+function parents(ls::LoopSet, u₀::UInt128, u₁::UInt128)
+  idxs = Int[]
+  u₁ == zero(u₁) || loopindex!(idxs, ls, u₁, 0x10)
+  loopindex!(idxs, ls, u₀, 0x10)
+  reverse!(idxs)
+end
+parents(ls::LoopSet, os::OperationStruct) = parents(ls, os.parents₀, os.parents₁)
 
 expandedopname(opsymbol::Symbol, offset::Integer) = Symbol(String(opsymbol)*'#'*string(offset+1)*'#')
 function calcnops(ls::LoopSet, os::OperationStruct)
@@ -477,13 +482,13 @@ function add_op!(
     push!(opoffsets, opoffsets[end] + nops)
     nothing
 end
-function add_parents_to_op!(ls::LoopSet, op::Operation, up::Unsigned, k::Int, Δ::Int)
+function add_parents_to_op!(ls::LoopSet, op::Operation, up₀::UInt128, up₁::UInt128, k::Int, Δ::Int)
     vparents = parents(op)
     ops = operations(ls)
     offsets = ls.operation_offsets
     if isone(Δ) # not expanded
         @assert isone(k)
-        for i ∈ parents(ls, up)
+        for i ∈ parents(ls, up₀, up₁)
             # FIXME; children also filled in cacheunrolled
             for j ∈ offsets[i]+1:offsets[i+1] # if parents are expanded, add them all
                 opp = ops[j]
@@ -495,7 +500,7 @@ function add_parents_to_op!(ls::LoopSet, op::Operation, up::Unsigned, k::Int, Δ
         # Do we want to require that all Δidxs are equal?
         # Because `CartesianIndex((2,3)) - 1` results in a methoderorr, I think this is reasonable for now
         # FIXME; children also filled in cacheunrolled
-        for i ∈ parents(ls, up)
+        for i ∈ parents(ls, up₀, up₁)
             opp = ops[offsets[i]+k]
             pushfirst!(vparents, opp)
             push!(children(opp), op)
@@ -516,7 +521,7 @@ function add_parents_to_ops!(ls::LoopSet, ops::Vector{OperationStruct}, constoff
                     pushpreamble!(ls, Expr(:(=), instr.instr, extract_varg(constoffset)))
                 end
             elseif !isloopvalue(op)
-                add_parents_to_op!(ls, op, ops[i].parents, k, Δ)
+                add_parents_to_op!(ls, op, ops[i].parents₀, ops[i].parents₁, k, Δ)
             end
         end
     end
@@ -637,9 +642,9 @@ function avx_loopset!(
     extractind = extract_outerreduct_types!(ls, extractind, vargs)
     ls
 end
-function avx_body(ls::LoopSet, UNROLL::Tuple{Bool,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt})
-    inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, nt = UNROLL
-    q = iszero(u₁) ? lower_and_split_loops(ls, inline % Int) : lower(ls, u₁ % Int, u₂ % Int, inline % Int)
+function avx_body(ls::LoopSet, UNROLL::Tuple{Bool,Int8,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt})
+    inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, l1, l2, l3, nt = UNROLL
+    q = (iszero(u₁) & iszero(v)) ? lower_and_split_loops(ls, inline % Int) : lower(ls, u₁ % Int, u₂ % Int, v % Int, inline % Int)
     ls.isbroadcast = isbroadcast
     iszero(length(ls.outer_reductions)) ? push!(q.args, nothing) : push!(q.args, loopset_return_value(ls, Val(true)))
     q
@@ -662,14 +667,14 @@ function tovector(@nospecialize(t))
     v
 end
 function _turbo_loopset(
-    @nospecialize(OPSsv), @nospecialize(ARFsv), @nospecialize(AMsv), @nospecialize(LPSYMsv), LBsv::Core.SimpleVector, vargs::Core.SimpleVector,
-    UNROLL::Tuple{Bool,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt}
+  @nospecialize(OPSsv), @nospecialize(ARFsv), @nospecialize(AMsv), @nospecialize(LPSYMsv), LBsv::Core.SimpleVector, vargs::Core.SimpleVector,
+  UNROLL::Tuple{Bool,Int8,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt}
 )
     nops = length(OPSsv) ÷ 3
     instr = Instruction[Instruction(OPSsv[3i+1], OPSsv[3i+2]) for i ∈ 0:nops-1]
     ops = OperationStruct[ OPSsv[3i] for i ∈ 1:nops ]
     ls = LoopSet(:LoopVectorization)
-    inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, nt = UNROLL
+    inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, l1, l2, l3, nt = UNROLL
     set_hw!(ls, rs, rc, cls, l1, l2, l3); ls.vector_width = W; ls.isbroadcast = isbroadcast
     arsv = Vector{ArrayRefStruct}(undef, length(ARFsv))
     for i ∈ eachindex(arsv)
@@ -711,10 +716,10 @@ Execute an `@turbo` block. The block's code is represented via the arguments:
   pushfirst!(ls.preamble.args, :(var"#lv#tuple#args#" = reassemble_tuple(Tuple{var"#LB#",var"#V#"}, var"#flattened#var#arguments#")))
   # return @show avx_body(ls, var"#UNROLL#")
   if last(var"#UNROLL#") > 1
-    inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, nt = var"#UNROLL#"
+    inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, l1, l2, l3, nt = var"#UNROLL#"
     # wrap in `var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#"` in `Expr` to homogenize types
     avx_threads_expr(
-      ls, (inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, one(UInt)), nt,
+      ls, (inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, l1, l2, l3, one(UInt)), nt,
       :(Val{$(var"#OPS#")}()), :(Val{$(var"#ARF#")}()), :(Val{$(var"#AM#")}()), :(Val{$(var"#LPSYM#")}())
     )
   else

@@ -138,10 +138,11 @@ struct OperationStruct <: AbstractLoopOperation
   loopdeps::UInt128
   reduceddeps::UInt128
   childdeps::UInt128
-  parents::UInt128
+  parents₀::UInt128
+  parents₁::UInt128
   node_type::OperationType
+  symid::UInt16
   array::UInt8
-  symid::UInt8
 end
 optype(os) = os.node_type
 
@@ -166,13 +167,21 @@ end
 loopdeps_uint(ls::LoopSet, op::Operation) = shifted_loopset(ls, loopdependencies(op))
 reduceddeps_uint(ls::LoopSet, op::Operation) = shifted_loopset(ls, reduceddependencies(op))
 childdeps_uint(ls::LoopSet, op::Operation) = shifted_loopset(ls, reducedchildren(op))
-function parents_uint(ls::LoopSet, op::Operation)
+function parents_uint(oppv::AbstractVector{Operation})
   p = zero(UInt128)
-  for parent ∈ parents(op)
-    p <<= 8
+  for parent ∈ oppv
+    p <<= 16
     p |= identifier(parent)
   end
   p
+end
+function parents_uint(op::Operation)
+  opv = parents(op)
+  N = length(opv)
+  @assert N ≤ 16
+  p0 = parents_uint(view(opv, 1:min(8,N)))
+  p1 = N > 8 ? parents_uint(view(opv, 9:N)) : zero(p0)
+  p0, p1
 end
 function recursively_set_parents_true!(x::Vector{Bool}, op::Operation)
   x[identifier(op)] && return nothing # don't redescend
@@ -199,16 +208,16 @@ function getroots!(rooted::Vector{Bool}, ls::LoopSet)
   return rooted
 end
 function OperationStruct!(varnames::Vector{Symbol}, ids::Vector{Int}, ls::LoopSet, op::Operation)
-    instr = instruction(op)
-    ld = loopdeps_uint(ls, op)
-    rd = reduceddeps_uint(ls, op)
-    cd = childdeps_uint(ls, op)
-    p = parents_uint(ls, op)
-    array = accesses_memory(op) ? findmatchingarray(ls, op.ref) : 0x00
-    ids[identifier(op)] = id = findindoradd!(varnames, name(op))
-    OperationStruct(
-        ld, rd, cd, p, op.node_type, array, id
-    )
+  instr = instruction(op)
+  ld = loopdeps_uint(ls, op)
+  rd = reduceddeps_uint(ls, op)
+  cd = childdeps_uint(ls, op)
+  p0, p1 = parents_uint(op)
+  array = accesses_memory(op) ? findmatchingarray(ls, op.ref) : 0x00
+  ids[identifier(op)] = id = findindoradd!(varnames, name(op))
+  OperationStruct(
+    ld, rd, cd, p0, p1, op.node_type, id, array
+  )
 end
 ## turn a LoopSet into a type object which can be used to reconstruct the LoopSet.
 
@@ -527,10 +536,10 @@ end
     ::Val{CNFARG}, ::StaticInt{W}, ::StaticInt{RS}, ::StaticInt{AR}, ::StaticInt{NT},
     ::StaticInt{CLS}, ::StaticInt{L1}, ::StaticInt{L2}, ::StaticInt{L3}
 ) where {CNFARG,W,RS,AR,CLS,L1,L2,L3,NT}
-  inline,u₁,u₂,BROADCAST,thread = CNFARG
+  inline,u₁,u₂,v,BROADCAST,thread = CNFARG
   nt = min(thread % UInt, NT % UInt)
-  t = Expr(:tuple, inline, u₁, u₂, BROADCAST, W, RS, AR, CLS, L1,L2,L3, nt)
-  length(CNFARG) == 6 && push!(t.args, last(CNFARG))
+  t = Expr(:tuple, inline, u₁, u₂, v, BROADCAST, W, RS, AR, CLS, L1, L2, L3, nt)
+  length(CNFARG) == 7 && push!(t.args, CNFARG[7])
   Expr(:call, Expr(:curly, :Val, t))
 end
 @inline function avx_config_val(
@@ -563,7 +572,8 @@ end
 
 
 function split_ifelse!(
-  ls::LoopSet, preserve::Vector{Symbol}, shouldindbyind::Vector{Bool}, roots::Vector{Bool}, extra_args::Expr, k::Int, inlineu₁u₂::Tuple{Bool,Int8,Int8}, thread::UInt, debug::Bool
+  ls::LoopSet, preserve::Vector{Symbol}, shouldindbyind::Vector{Bool}, roots::Vector{Bool}, extra_args::Expr, k::Int,
+  inlineu₁u₂::Tuple{Bool,Int8,Int8,Int8}, thread::UInt, debug::Bool
 )
   roots[k] = false
   op = operations(ls)[k]
@@ -617,13 +627,14 @@ function split_ifelse!(
   prepre
 end
 
-function generate_call(ls::LoopSet, inlineu₁u₂::Tuple{Bool,Int8,Int8}, thread::UInt, debug::Bool)
+function generate_call(ls::LoopSet, inlineu₁u₂::Tuple{Bool,Int8,Int8,Int8}, thread::UInt, debug::Bool)
   extra_args = Expr(:tuple)
   preserve, shouldindbyind, roots = add_grouped_strided_pointer!(extra_args, ls)
   generate_call_split(ls, preserve, shouldindbyind, roots, extra_args, inlineu₁u₂, thread, debug)
 end
 function generate_call_split(
-  ls::LoopSet, preserve::Vector{Symbol}, shouldindbyind::Vector{Bool}, roots::Vector{Bool}, extra_args::Expr, inlineu₁u₂::Tuple{Bool,Int8,Int8}, thread::UInt, debug::Bool
+  ls::LoopSet, preserve::Vector{Symbol}, shouldindbyind::Vector{Bool}, roots::Vector{Bool}, extra_args::Expr,
+  inlineu₁u₂::Tuple{Bool,Int8,Int8,Int8}, thread::UInt, debug::Bool
 )
   for (k,op) ∈ enumerate(operations(ls))
     parents_op = parents(op)
@@ -636,7 +647,8 @@ end
 
 # Try to condense in type stable manner
 function generate_call_types(
-  ls::LoopSet, preserve::Vector{Symbol}, shouldindbyind::Vector{Bool}, roots::Vector{Bool}, extra_args::Expr, (inline,u₁,u₂)::Tuple{Bool,Int8,Int8}, thread::UInt, debug::Bool
+  ls::LoopSet, preserve::Vector{Symbol}, shouldindbyind::Vector{Bool}, roots::Vector{Bool}, extra_args::Expr,
+  (inline,u₁,u₂,v)::Tuple{Bool,Int8,Int8,Int8}, thread::UInt, debug::Bool
 )
   # good place to check for split  
   operation_descriptions = Expr(:tuple)
@@ -665,7 +677,7 @@ function generate_call_types(
   loop_syms = tuple_expr(QuoteNode, ls.loopsymbols)
   func = debug ? lv(:_turbo_loopset_debug) : lv(:_turbo_!)
   lbarg = debug ? Expr(:call, :typeof, loop_bounds) : loop_bounds
-  configarg = (inline,u₁,u₂,ls.isbroadcast,thread)
+  configarg = (inline,u₁,u₂,v,ls.isbroadcast,thread)
   unroll_param_tup = Expr(:call, lv(:avx_config_val), :(Val{$configarg}()), VECTORWIDTHSYMBOL)
   q = Expr(:call, func, unroll_param_tup, val(operation_descriptions), val(arrayref_descriptions), val(argmeta), val(loop_syms))
 
@@ -697,9 +709,10 @@ function generate_call_types(
 end
 # @inline reductinittype(::T) where {T} = StaticType{T}()
 typeof_expr(op::Operation) = Expr(:call, GlobalRef(Base,:typeof), name(op))
+eltype_expr(op::Operation) = Expr(:call, GlobalRef(Base,:eltype), name(op))
 function add_outerreduct_types!(extra_args::Expr, ls::LoopSet) # extract_outerreduct_types!
   for or ∈ ls.outer_reductions
-    push!(extra_args.args, typeof_expr(operations(ls)[or]))
+    push!(extra_args.args, eltype_expr(operations(ls)[or]))
   end
 end
 """
@@ -735,6 +748,7 @@ Returns true if the element type is supported.
 """
 @inline check_type(::Type{T}) where {T <: NativeTypes} = true
 @inline check_type(::Type{T}) where {T} = false
+@inline check_type(::Type{T}) where {T <: AbstractSIMD} = true
 @inline check_device(::ArrayInterface.CPUPointer) = true
 @inline check_device(::ArrayInterface.CPUTuple) = true
 @inline check_device(x) = false
@@ -787,10 +801,10 @@ function setup_call_final(ls::LoopSet, q::Expr)
   return ls.preamble
 end
 function setup_call_debug(ls::LoopSet)
-  generate_call(ls, (false,zero(Int8),zero(Int8)), zero(UInt), true)
+  generate_call(ls, (false,zero(Int8),zero(Int8),zero(Int8)), zero(UInt), true)
 end
 function setup_call(
-  ls::LoopSet, q::Expr, source::LineNumberNode, inline::Bool, check_empty::Bool, u₁::Int8, u₂::Int8, thread::Int, warncheckarg::Int
+  ls::LoopSet, q::Expr, source::LineNumberNode, inline::Bool, check_empty::Bool, u₁::Int8, u₂::Int8, v::Int8, thread::Int, warncheckarg::Int
 )
   # We outline/inline at the macro level by creating/not creating an anonymous function.
   # The old API instead was based on inlining or not inline the generated function, but
@@ -799,7 +813,7 @@ function setup_call(
   # inlining the generated function into the loop preamble.
   lnns = extract_all_lnns(q)
   pushfirst!(lnns, source)
-  call = generate_call(ls, (inline, u₁, u₂), thread%UInt, false)
+  call = generate_call(ls, (inline, u₁, u₂, v), thread%UInt, false)
   call = check_empty ? check_if_empty(ls, call) : call
   argfailure = make_crashy(make_fast(q))
   if warncheckarg ≠ 0
