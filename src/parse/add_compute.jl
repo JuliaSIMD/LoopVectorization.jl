@@ -404,7 +404,7 @@ function add_pow!(
             xo
         end
     elseif x isa Number
-        return add_constant!(ls, x ^ p, elementbytes)::Operation
+      return add_constant!(ls, x ^ p, elementbytes, var)::Operation
     end
     pint = round(Int, p)
     if p != pint

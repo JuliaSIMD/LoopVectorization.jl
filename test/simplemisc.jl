@@ -7,6 +7,7 @@ function lv_turbo(r::Vector{UInt64}, mask::UInt64)
 end
 
 @testset "Simple Miscellaneous" begin
+  @show @__LINE__
   r1 = rand(UInt, 239);
   mask = ~(one(eltype(r1))<<(2))
   r2 = r1 .& mask;

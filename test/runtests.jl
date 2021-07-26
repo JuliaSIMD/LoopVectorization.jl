@@ -7,7 +7,7 @@ InteractiveUtils.versioninfo(stdout; verbose = true)
 const LOOPVECTORIZATION_TEST = get(ENV, "LOOPVECTORIZATION_TEST", "all")
 
 if LOOPVECTORIZATION_TEST == "all"
-  NUMGROUPS = 5
+  NUMGROUPS = 6
   processes = Vector{Base.Process}(undef, NUMGROUPS)
   paths = Vector{String}(undef, NUMGROUPS)
   ios = Vector{IOStream}(undef, NUMGROUPS)

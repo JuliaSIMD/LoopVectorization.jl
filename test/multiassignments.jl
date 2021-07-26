@@ -21,6 +21,7 @@ end
 multiassign_turbo(x) = multiassign_turbo!(similar(x, length(x)-3), x)
 
 @testset "Multiple assignments" begin
+  @show @__LINE__
   x = rand(111);
   @test multiassign(x) ≈ multiassign_turbo(x)  
 end

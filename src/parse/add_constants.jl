@@ -12,33 +12,33 @@ end
 #     pushpreamble!(ls, Expr(:(=), sym, var))
 #     add_constant!(ls, sym, elementbytes)
 # end
-function add_constant!(ls::LoopSet, var::Number, elementbytes::Int = 8)
-    op = Operation(length(operations(ls)), gensym!(ls, "loopconstnumber"), elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS)
-    ops = operations(ls)
-    typ = var isa Integer ? HardInt : HardFloat
-    if iszero(var)
-        for (id,typ_) ∈ ls.preamble_zeros
-            (instruction(ops[id]) == LOOPCONSTANT && typ == typ_) && return ops[id]
-        end
-        push!(ls.preamble_zeros, (identifier(op),typ))
-    elseif var isa Integer
-        idescript = integer_description(var)
-        for (id,descript) ∈ ls.preamble_symint
-            if (instruction(ops[id]) == LOOPCONSTANT) && (idescript == descript)
-                return ops[id]
-            end
-        end
-        push!(ls.preamble_symint, (identifier(op), idescript))
-    else#if var isa FloatX
-        for (id,fvar) ∈ ls.preamble_symfloat
-            (instruction(ops[id]) == LOOPCONSTANT && fvar == var) && return ops[id]
-        end
-        push!(ls.preamble_symfloat, (identifier(op), var))
+function add_constant!(ls::LoopSet, var::Number, elementbytes::Int = 8, varname = gensym!(ls, "loopconstnumber"))
+  op = Operation(length(operations(ls)), varname, elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS)
+  ops = operations(ls)
+  typ = var isa Integer ? HardInt : HardFloat
+  if iszero(var)
+    for (id,typ_) ∈ ls.preamble_zeros
+      (instruction(ops[id]) == LOOPCONSTANT && typ == typ_) && return ops[id]
     end
-    rop = pushop!(ls, op)
-    rop === op || return rop
-    pushpreamble!(ls, Expr(:(=), name(op), var))
-    rop
+    push!(ls.preamble_zeros, (identifier(op),typ))
+  elseif var isa Integer
+    idescript = integer_description(var)
+    for (id,descript) ∈ ls.preamble_symint
+      if (instruction(ops[id]) == LOOPCONSTANT) && (idescript == descript)
+        return ops[id]
+      end
+    end
+    push!(ls.preamble_symint, (identifier(op), idescript))
+  else#if var isa FloatX
+    for (id,fvar) ∈ ls.preamble_symfloat
+      (instruction(ops[id]) == LOOPCONSTANT && fvar == var) && return ops[id]
+    end
+    push!(ls.preamble_symfloat, (identifier(op), var))
+  end
+  rop = pushop!(ls, op)
+  rop === op || return rop
+  pushpreamble!(ls, Expr(:(=), name(op), var))
+  rop
 end
 function ensure_constant_lowered!(ls::LoopSet, op::Operation)
   if iscompute(op)

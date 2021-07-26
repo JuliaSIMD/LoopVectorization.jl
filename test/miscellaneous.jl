@@ -4,14 +4,15 @@ using Test
 
 @testset "Miscellaneous" begin
 # T = Float32
-    Unum, Tnum = LoopVectorization.register_count() == 16 ? (1, 6) : (1, 8)
+    # Unum, Tnum = LoopVectorization.register_count() == 16 ? (1, 6) : (1, 8)
     dot3q = :(for m ∈ 1:M, n ∈ 1:N
               s += x[m] * A[m,n] * y[n]
               end);
     lsdot3 = LoopVectorization.loopset(dot3q);
-    if LoopVectorization.register_count() != 8
-        @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :m, :n, :m, Unum, Tnum)#&-2
-    end
+    # if LoopVectorization.register_count() != 8
+        # @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :m, :n, :m, Unum, Tnum)#&-2
+    # end
+    @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :n, Symbol("##undefined##"), :m, 4, -1)
 
     @static if VERSION < v"1.4"
         dot3(x, A, y) = dot(x, A * y)

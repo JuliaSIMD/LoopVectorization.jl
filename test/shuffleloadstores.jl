@@ -129,6 +129,7 @@ function cmatmul_array!(Cc::AbstractMatrix{Complex{T}}, Ac::AbstractMatrix{Compl
     C[1,m,n] = Cre
     C[2,m,n] = Cim
   end
+  return Cc
 end
 function cmatmul_array_v2!(Cc::AbstractMatrix{Complex{T}}, Ac::AbstractMatrix{Complex{T}}, Bc::AbstractMatrix{Complex{T}}) where {T}
   C = reinterpret(Float64, Cc);
@@ -143,6 +144,7 @@ function cmatmul_array_v2!(Cc::AbstractMatrix{Complex{T}}, Ac::AbstractMatrix{Co
     end
     C[m,n] = Cmn
   end
+  return Cc
 end
 
 function issue209(M, G, J, H, B, ϕ)
@@ -350,10 +352,10 @@ end
             Bc = rand(Complex{Float64}, i, i);
             Cc1 = Ac*Bc;
             Cc2 = similar(Cc1);
-            # Cc3 = similar(Cc1)
-            cmatmul_array!(Cc2, Ac, Bc)
-
-            @test Cc1 ≈ Cc2# ≈ Cc3
+            Cc3 = similar(Cc1)
+            @test Cc1 ≈ cmatmul_array!(Cc2, Ac, Bc)
+            Cc2 .= NaN
+            @test Cc1 ≈ cmatmul_array_v2!(Cc2, Ac, Bc)
         end
     end
     @show @__LINE__

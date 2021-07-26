@@ -72,8 +72,6 @@ const START_TIME = time()
 
     @time include("tullio.jl")
 
-    @time include("staticsize.jl")
-
     @time include("iteration_bound_tests.jl")
 
     @time include("outer_reductions.jl")
@@ -93,6 +91,9 @@ const START_TIME = time()
     @time include("gemm.jl")
   end
 
+  @time if LOOPVECTORIZATION_TEST == "all" || LOOPVECTORIZATION_TEST == "part6"
+    @time include("staticsize.jl")
+  end
 end
 
 const ELAPSED_MINUTES = (time() - START_TIME)/60

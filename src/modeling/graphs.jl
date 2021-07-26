@@ -569,22 +569,21 @@ function fill_children!(ls::LoopSet)
   end
 end
 function cacheunrolled!(ls::LoopSet, u₁loop::Symbol, u₂loop::Symbol, vloopsym::Symbol)
-    fill_children!(ls)
-    vloop = getloop(ls, vloopsym)
-    for op ∈ operations(ls)
-        setunrolled!(ls, op, u₁loop, u₂loop, vloopsym)
-        if accesses_memory(op)
-            rc = rejectcurly(ls, op, u₁loop, vloopsym)
-            op.rejectcurly = rc
-            if rc
-                op.rejectinterleave = true
-            else
-                omop = ls.omop
-                batchid, opind = omop.batchedcollectionmap[identifier(op)]
-                op.rejectinterleave = ((batchid == 0) || (!isvectorized(op))) || rejectinterleave(ls, op, vloop, omop.batchedcollections[batchid])
-            end
-        end
+  vloop = getloop(ls, vloopsym)
+  for op ∈ operations(ls)
+    setunrolled!(ls, op, u₁loop, u₂loop, vloopsym)
+    if accesses_memory(op)
+      rc = rejectcurly(ls, op, u₁loop, vloopsym)
+      op.rejectcurly = rc
+      if rc
+        op.rejectinterleave = true
+      else
+        omop = ls.omop
+        batchid, opind = omop.batchedcollectionmap[identifier(op)]
+        op.rejectinterleave = ((batchid == 0) || (!isvectorized(op))) || rejectinterleave(ls, op, vloop, omop.batchedcollections[batchid])
+      end
     end
+  end
 end
 function setunrolled!(ls::LoopSet, op::Operation, u₁loopsym::Symbol, u₂loopsym::Symbol, vectorized::Symbol)
   u₁::Bool = u₂::Bool = v::Bool = false
@@ -1068,7 +1067,7 @@ function add_operation!(
             end
             op
         else
-            # maybe_const_compute!(ls, add_compute!(ls, LHS, RHS, elementbytes, position), elementbytes, position)
+          # maybe_const_compute!(ls, add_compute!(ls, LHS, RHS, elementbytes, position), elementbytes, position)
             add_compute!(ls, LHS, RHS, elementbytes, position)
         end
     elseif RHS.head === :if
