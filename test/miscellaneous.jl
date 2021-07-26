@@ -9,10 +9,12 @@ using Test
               s += x[m] * A[m,n] * y[n]
               end);
     lsdot3 = LoopVectorization.loopset(dot3q);
-    # if LoopVectorization.register_count() != 8
+    if LoopVectorization.register_count() == 32
         # @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :m, :n, :m, Unum, Tnum)#&-2
-    # end
-    @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :n, Symbol("##undefined##"), :m, 4, -1)
+      @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :n, Symbol("##undefined##"), :m, 4, -1)
+    else
+      @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :n, :m, :m, 2, 6)
+    end
 
     @static if VERSION < v"1.4"
         dot3(x, A, y) = dot(x, A * y)
