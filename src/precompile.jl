@@ -12,7 +12,7 @@ function _precompile_()
     Base.precompile(Tuple{typeof(recursive_muladd_search!),Expr,Vector{Any},Nothing,Bool,Bool})   # time: 0.029960306
     Base.precompile(Tuple{typeof(add_constant!),LoopSet,Float64,Vector{Symbol},Symbol,Int})   # time: 0.027501073
     Base.precompile(Tuple{typeof(_turbo_loopset),Any,Any,Any,Any,Core.SimpleVector,Core.SimpleVector,Tuple{Bool, Int8, Int8, Bool, Int, Int, Int, Int, Int, Int, Int, UInt}})   # time: 0.02345788
-    Base.precompile(Tuple{typeof(substitute_broadcast),Expr,Symbol,Bool,Int8,Int8,Int})   # time: 0.02281322
+    Base.precompile(Tuple{typeof(substitute_broadcast),Expr,Symbol,Bool,Int8,Int8,Int,Int})   # time: 0.02281322
     Base.precompile(Tuple{typeof(push!),LoopSet,Expr,Int,Int})   # time: 0.022659862
     Base.precompile(Tuple{typeof(add_compute!),LoopSet,Symbol,Expr,Int,Int,Nothing})   # time: 0.02167476
     Base.precompile(Tuple{typeof(checkforoffset!),LoopSet,Symbol,Int,Vector{Operation},Vector{Symbol},Vector{Int8},Vector{Int8},Vector{Bool},Vector{Symbol},Vector{Symbol},Expr})   # time: 0.020454278
@@ -105,7 +105,7 @@ function _precompile_()
     Base.precompile(Tuple{typeof(gespf1),StridedPointer{Float32, 2, -1, 0, (2, 3), Tuple{Int, Int}, Tuple{StaticInt{1}, StaticInt{0}}},Tuple{StaticInt{1}, StaticInt{1}}})   # time: 0.003363417
     Base.precompile(Tuple{typeof(repeated_index!),LoopSet,Vector{Symbol},Symbol,Int,Int})   # time: 0.003356449
     Base.precompile(Tuple{typeof(gespf1),StridedPointer{Float32, 2, 2, 0, (2, 1), Tuple{StaticInt{292}, StaticInt{4}}, Tuple{StaticInt{0}, StaticInt{0}}},Tuple{StaticInt{0}, StaticInt{0}}})   # time: 0.003346945
-    Base.precompile(Tuple{typeof(pushgespind!),Expr,LoopSet,Symbol,Int,Symbol,Bool,Bool,Bool})   # time: 0.003310727
+    Base.precompile(Tuple{typeof(pushgespind!),Expr, LoopSet, Symbol, Int, Int, Symbol, Bool, Bool, Bool})   # time: 0.003310727
     Base.precompile(Tuple{typeof(maybeaddref!),LoopSet,Operation})   # time: 0.003291367
     Base.precompile(Tuple{typeof(gespf1),StridedPointer{Float64, 3, 1, 0, (1, 2, 3), Tuple{StaticInt{8}, StaticInt{16}, Int}, Tuple{StaticInt{1}, StaticInt{1}, StaticInt{1}}},Tuple{StaticInt{1}, StaticInt{1}, StaticInt{1}}})   # time: 0.003288427
     Base.precompile(Tuple{typeof(gespf1),StridedPointer{Float32, 2, 2, 0, (2, 1), Tuple{StaticInt{308}, StaticInt{4}}, Tuple{StaticInt{0}, StaticInt{0}}},Tuple{StaticInt{0}, StaticInt{0}}})   # time: 0.003276252

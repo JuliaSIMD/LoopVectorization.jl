@@ -211,7 +211,7 @@ function lower_store!(
           if reductfunc === Symbol("")
             Expr(:call, lv(:_vstore!), sptrsym, gf(mvard,u), inds)
           else
-            Expr(:call, lv(:_vstore!), lv(reductfunc), sptrsym, mvaru, inds)
+            Expr(:call, lv(:_vstore!), lv(reductfunc), sptrsym, gf(mvard,u), inds)
           end
         elseif reductfunc === Symbol("")
           Expr(:call, lv(:_vstore!), sptrsym, mvar, inds)
@@ -282,13 +282,11 @@ function lower_tiled_store!(blockq::Expr, op::Operation, ls::LoopSet, ua::Unroll
         # opp = only(parents(opp))
     end
     isu₁, isu₂ = isunrolled_sym(opp, u₁loopsym, u₂loopsym, vloopsym, ls)#, u₂)
-    @assert isu₂
-    # It's reasonable forthis to be `!isu₁`
+    # It's reasonable for this to be `!isu₁`
     u = Core.ifelse(isu₁, u₁, 1)
     tup = Expr(:tuple)
     for t ∈ 0:u₂-1
-        mvar = Symbol(variable_name(opp, t), '_', u)
-        push!(tup.args, mvar)
+        push!(tup.args, Symbol(variable_name(opp, ifelse(isu₂, t, -1)), '_', u))
     end
     vut = Expr(:call, lv(:VecUnroll), tup) # `VecUnroll` of `VecUnroll`s
     inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false, 0, ls)

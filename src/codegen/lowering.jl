@@ -873,33 +873,34 @@ function lower_unrollspec(ls::LoopSet)
 end
 
 function lower(ls::LoopSet, order, u₁loop, u₂loop, vectorized, u₁, u₂, inline::Bool)
-    cacheunrolled!(ls, u₁loop, u₂loop, vectorized)
-    fillorder!(ls, order, u₁loop, u₂loop, u₂, vectorized)
-    ls.unrollspecification = UnrollSpecification(ls, u₁loop, u₂loop, vectorized, u₁, u₂)
-    q = lower_unrollspec(ls)
-    inline && pushfirst!(q.args, Expr(:meta, :inline))
-    q
+  cacheunrolled!(ls, u₁loop, u₂loop, vectorized)
+  fillorder!(ls, order, u₁loop, u₂loop, u₂, vectorized)
+  ls.unrollspecification = UnrollSpecification(ls, u₁loop, u₂loop, vectorized, u₁, u₂)
+  q = lower_unrollspec(ls)
+  inline && pushfirst!(q.args, Expr(:meta, :inline))
+  q
 end
 
 function lower(ls::LoopSet, inline::Int = -1)
-    fill_offset_memop_collection!(ls)
-    order, u₁loop, u₂loop, vectorized, u₁, u₂, c, shouldinline = choose_order_cost(ls)
-    lower(ls, order, u₁loop, u₂loop, vectorized, u₁, u₂, inlinedecision(inline, shouldinline))
+  fill_offset_memop_collection!(ls)
+  order, u₁loop, u₂loop, vectorized, u₁, u₂, c, shouldinline = choose_order_cost(ls)
+  lower(ls, order, u₁loop, u₂loop, vectorized, u₁, u₂, inlinedecision(inline, shouldinline))
 end
 function lower(ls::LoopSet, u₁::Int, u₂::Int, inline::Int)
-    fill_offset_memop_collection!(ls)
-    if u₂ > 1
-        @assert num_loops(ls) > 1 "There is only $(num_loops(ls)) loop, but specified blocking parameter u₂ is $u₂."
-        order, u₁loop, u₂loop, vectorized, _u₁, _u₂, c, shouldinline = choose_tile(ls)
-        copyto!(ls.loop_order.bestorder, order)
-    else
-        u₂ = -1
-        order, vectorized, c = choose_unroll_order(ls, Inf)
-        u₁loop = first(order); u₂loop = Symbol("##undefined##"); shouldinline = true
-        copyto!(ls.loop_order.bestorder, order)
-    end
-    doinline = inlinedecision(inline, shouldinline)
-    lower(ls, order, u₁loop, u₂loop, vectorized, u₁, u₂, doinline)
+  fill_offset_memop_collection!(ls)
+  fill_children!(ls)
+  if u₂ > 1
+    @assert num_loops(ls) > 1 "There is only $(num_loops(ls)) loop, but specified blocking parameter u₂ is $u₂."
+    order, u₁loop, u₂loop, vectorized, _u₁, _u₂, c, shouldinline = choose_tile(ls)
+    copyto!(ls.loop_order.bestorder, order)
+  else
+    u₂ = -1
+    order, vectorized, c = choose_unroll_order(ls, Inf)
+    u₁loop = first(order); u₂loop = Symbol("##undefined##"); shouldinline = true
+    copyto!(ls.loop_order.bestorder, order)
+  end
+  doinline = inlinedecision(inline, shouldinline)
+  lower(ls, order, u₁loop, u₂loop, vectorized, u₁, u₂, doinline)
 end
 
 # Base.convert(::Type{Expr}, ls::LoopSet) = lower(ls)

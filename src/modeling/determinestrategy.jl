@@ -45,7 +45,7 @@ function unitstride(ls::LoopSet, op::Operation, s::Symbol)
 end
 
 function cost(ls::LoopSet, op::Operation, (u₁,u₂)::Tuple{Symbol,Symbol}, vloopsym::Symbol, Wshift::Int, size_T::Int = op.elementbytes)
-    isconstant(op) && return 0.0, 0, Float64(length(loopdependencies(op)) > 0)
+    isconstant(op) && return 0.0, 0, 1.0#Float64(length(loopdependencies(op)) > 0)
     isloopvalue(op) && return 0.0, 0, 0.0
     instr = instruction(op)
     if length(parents(op)) == 1
@@ -99,7 +99,7 @@ function cost(ls::LoopSet, op::Operation, (u₁,u₂)::Tuple{Symbol,Symbol}, vlo
             sl *= 3
         end
     end
-    srt, sl, Float64(srp)
+    srt, sl, Float64(srp+1)
 end
 
     # Base._return_type()
@@ -918,179 +918,244 @@ function update_reg_pres!(rp, cost, u₁reduces, u₂reduces)
         rp[1] += cost
     end
 end
-
-function evaluate_cost_tile(ls::LoopSet, order::Vector{Symbol}, unrollsyms::UnrollSymbols, anyisbit::Bool)
+function child_dependent_u₁u₂(op::Operation)
+  u₁ = u₂ = false
+  for opc ∈ children(op)
+    u₁ |= isu₁unrolled(opc)
+    u₂ |= isu₂unrolled(opc)
+  end
+  u₁, u₂
+end
+function evaluate_cost_tile(ls::LoopSet, order::Vector{Symbol}, unrollsyms::UnrollSymbols, anyisbit::Bool = false)
   nops = length(operations(ls))
   iters = Vector{Float64}(undef, nops)
   reduced_by_unrolling = Array{Bool}(undef, 2, 2, nops)
+  fill_children!(ls)
   evaluate_cost_tile!(iters, reduced_by_unrolling, ls, order, unrollsyms, anyisbit)
 end
 function evaluate_cost_tile!(
-  iters::Vector{Float64}, reduced_by_unrolling::Array{Bool,3}, ls::LoopSet, order::Vector{Symbol}, unrollsyms::UnrollSymbols, anyisbit::Bool, sld::Vector{Vector{Symbol}} = store_load_deps(operations(ls))
+  iters::Vector{Float64}, reduced_by_unrolling::Array{Bool,3}, ls::LoopSet, order::Vector{Symbol}, unrollsyms::UnrollSymbols, anyisbit::Bool,
+  sld::Vector{Vector{Symbol}} = store_load_deps(operations(ls)), holdopinreg::Vector{Bool} = holdopinregister(ls)
 )
-    N = length(order)
-    @assert N ≥ 2 "Cannot tile merely $N loops!"
-    @unpack u₁loopsym, u₂loopsym, vloopsym = unrollsyms
-    cacheunrolled!(ls, u₁loopsym, u₂loopsym, vloopsym)
-    # u₂loopsym = order[1]
-    # u₁loopsym = order[2]
-    ops = operations(ls)
-    nops = length(ops)
-    included_vars = resize!(ls.included_vars, nops)
-    descendentsininnerloop = resize!(ls.place_after_loop, nops)
-    @inbounds for i ∈ 1:nops
-      included_vars[i] = false
-      descendentsininnerloop[i] = false
-      reduced_by_unrolling[1,1,i] = false
-      reduced_by_unrolling[2,1,i] = false
-      reduced_by_unrolling[1,2,i] = false
-      reduced_by_unrolling[2,2,i] = false
-      iters[i] = -99.9
+  N = length(order)
+  @assert N ≥ 2 "Cannot tile merely $N loops!"
+  @unpack u₁loopsym, u₂loopsym, vloopsym = unrollsyms
+  cacheunrolled!(ls, u₁loopsym, u₂loopsym, vloopsym)
+  # println("\n")
+  # @show order unrollsyms
+  # u₂loopsym = order[1]
+  # u₁loopsym = order[2]
+  ops = operations(ls)
+  nops = length(ops)
+  included_vars = resize!(ls.included_vars, nops)
+  descendentsininnerloop = resize!(ls.place_after_loop, nops)
+  @inbounds for i ∈ 1:nops
+    included_vars[i] = false
+    descendentsininnerloop[i] = false
+    reduced_by_unrolling[1,1,i] = false
+    reduced_by_unrolling[2,1,i] = false
+    reduced_by_unrolling[1,2,i] = false
+    reduced_by_unrolling[2,2,i] = false
+    iters[i] = -99.9
+  end
+  innerloop = last(order)
+  nested_loop_syms = Symbol[]# Set{Symbol}()
+  # Need to check if fusion is possible
+  size_T = biggest_type_size(ls)
+  W, Wshift = lsvecwidthshift(ls, vloopsym, size_T)
+  # costs =
+  # cost_mat[1] / ( unrolled * u₂loopsym)
+  # cost_mat[2] / ( u₂loopsym)
+  # cost_mat[3] / ( unrolled)
+  # cost_mat[4]
+  
+  cost_vec = cost_vec_buf(ls)
+  reg_pressure = reg_pres_buf(ls)
+  iter::Float64 = 1.0
+  u₁reached = u₂reached = false
+  choose_to_inline = Ref(false)
+  copyto!(names(ls), order); reverse!(names(ls))
+  prefetch_good_idea = false
+  # goes from outer to inner
+  for n ∈ 1:N
+    itersym = order[n]
+    if itersym == u₁loopsym
+      u₁reached = true
+    elseif itersym == u₂loopsym
+      u₂reached = true
     end
-    innerloop = last(order)
-    nested_loop_syms = Symbol[]# Set{Symbol}()
-    # Need to check if fusion is possible
-    size_T = biggest_type_size(ls)
-    W, Wshift = lsvecwidthshift(ls, vloopsym, size_T)
-    # costs =
-    # cost_mat[1] / ( unrolled * u₂loopsym)
-    # cost_mat[2] / ( u₂loopsym)
-    # cost_mat[3] / ( unrolled)
-    # cost_mat[4]
-    cost_vec = cost_vec_buf(ls)
-    reg_pressure = reg_pres_buf(ls)
-    iter::Float64 = 1.0
-    u₁reached = u₂reached = false
-    choose_to_inline = Ref(false)
-    copyto!(names(ls), order); reverse!(names(ls))
-    prefetch_good_idea = false
-    # goes from outer to inner
-    for n ∈ 1:N
-        itersym = order[n]
-        if itersym == u₁loopsym
-            u₁reached = true
-        elseif itersym == u₂loopsym
-            u₂reached = true
-        end
-        # Add to set of defined symbles
-        push!(nested_loop_syms, itersym)
-        looplength = length(ls, itersym)
-        iter *= itersym === vloopsym ? num_iterations(looplength, W) : looplength
-        # check which vars we can define at this level of loop nest
-        for (id, op) ∈ enumerate(ops)
-            # isconstant(op) && continue
-            # @assert id == identifier(op)+1 # testing, for now
-            # won't define if already defined...
-            included_vars[id] && continue
-            # it must also be a subset of defined symbols
-            _maybe_continue = true
-          for ld ∈ loopdependencies(op)
-            mbc = false
-            for nls ∈ nested_loop_syms
-              if ld === nls
-                mbc = true
-                break
-              end
-            end
-            if !mbc
-              _maybe_continue = false
-              break
-            end
-          end
-          # @assert _maybe_continue == all(ld -> ld ∈ nested_loop_syms, loopdependencies(op))
-            _maybe_continue || continue
-            # all(ld -> ld ∈ nested_loop_syms, loopdependencies(op)) || continue
-            # rd = reduceddependencies(op)
-            # if hasintersection(rd, @view(nested_loop_syms[1:end-length(rd)]))
-            #     return 0,0,Inf,false
-            # end
-            (isassigned(sld, id) && any(s -> (s ∉ sld[id]), nested_loop_syms)) && return 0,0,Inf,false
-            included_vars[id] = true
-            if isconstant(op)
-                depends_on_u₁, depends_on_u₂ = isunrolled_sym(op, u₁loopsym, u₂loopsym, vloopsym)
-                reduced_by_unrolling[1,1,id] = !depends_on_u₁
-                reduced_by_unrolling[2,1,id] = !depends_on_u₂
-            else
-                depends_on_u₁ = isu₁unrolled(op)
-                depends_on_u₂ = isu₂unrolled(op)
-                reduced_by_unrolling[1,1,id] = (u₁reached) & !depends_on_u₁
-                reduced_by_unrolling[2,1,id] = (u₂reached) & !depends_on_u₂
-            end
-            # cost is reduced by unrolling u₁ if it is interior to u₁loop (true if either u₁reached, or if depends on u₂ [or u₁]) and doesn't depend on u₁
-            reduced_by_unrolling[1,2,id] = (u₁reached | depends_on_u₂) & !depends_on_u₁
-            reduced_by_unrolling[2,2,id] = (u₂reached | depends_on_u₁) & !depends_on_u₂
-            iters[id] = iter
-            innerloop ∈ loopdependencies(op) && set_upstream_family!(descendentsininnerloop, op, true)
-        end
-    end
-    irreducible_storecosts = 0.0
+    # Add to set of defined symbles
+    push!(nested_loop_syms, itersym)
+    looplength = length(ls, itersym)
+    iter *= itersym === vloopsym ? num_iterations(looplength, W) : looplength
+    # check which vars we can define at this level of loop nest
     for (id, op) ∈ enumerate(ops)
-        iters[id] == -99.9 && continue
-        opisininnerloop = descendentsininnerloop[id]
+      # isconstant(op) && continue
+      # @assert id == identifier(op)+1 # testing, for now
+      # won't define if already defined...
+      included_vars[id] && continue
+      # it must also be a subset of defined symbols
+      _maybe_continue = true
+      for ld ∈ loopdependencies(op)
+        mbc = false
+        for nls ∈ nested_loop_syms
+          if ld === nls
+            mbc = true
+            break
+          end
+        end
+        if !mbc
+          _maybe_continue = false
+          break
+        end
+      end
+      # @assert _maybe_continue == all(ld -> ld ∈ nested_loop_syms, loopdependencies(op))
+      _maybe_continue || continue
+      # all(ld -> ld ∈ nested_loop_syms, loopdependencies(op)) || continue
+      # rd = reduceddependencies(op)
+      # if hasintersection(rd, @view(nested_loop_syms[1:end-length(rd)]))
+      #     return 0,0,Inf,false
+      # end
+      (isassigned(sld, id) && any(s -> (s ∉ sld[id]), nested_loop_syms)) && return 0,0,Inf,false
+      included_vars[id] = true
+      if isconstant(op)
+        depends_on_u₁, depends_on_u₂ = isunrolled_sym(op, u₁loopsym, u₂loopsym, vloopsym)
+        reduced_by_unrolling[1,1,id] = !depends_on_u₁
+        reduced_by_unrolling[2,1,id] = !depends_on_u₂
+      else
+        depends_on_u₁ = isu₁unrolled(op)
+        depends_on_u₂ = isu₂unrolled(op)
+        reduced_by_unrolling[1,1,id] = (u₁reached) & !depends_on_u₁
+        reduced_by_unrolling[2,1,id] = (u₂reached) & !depends_on_u₂
+      end
+      # cost is reduced by unrolling u₁ if it is interior to u₁loop (true if either u₁reached, or if depends on u₂ [or u₁]) and doesn't depend on u₁
+      inner₁ = u₁reached | depends_on_u₂
+      inner₂ = u₂reached | depends_on_u₁
+      # if isconstantop(op)
+      # if iscompute(op)
+      #   @show inner₁, depends_on_u₁, inner₂, depends_on_u₂, op
+      # end
+      reduced_by_unrolling[1,2,id] = inner₁ & !depends_on_u₁
+      reduced_by_unrolling[2,2,id] = inner₂ & !depends_on_u₂
+      # else
+      #   reduced_by_unrolling[1,2,id] = inner₁ & !depends_on_u₁
+      #   reduced_by_unrolling[2,2,id] = inner₂ & !depends_on_u₂
+      # end
+      iters[id] = iter
+      innerloop ∈ loopdependencies(op) && set_upstream_family!(descendentsininnerloop, op, true)
+    end
+  end
+  irreducible_storecosts = 0.0
+  for (id, op) ∈ enumerate(ops)
+    iters[id] == -99.9 && continue
+    opisininnerloop = descendentsininnerloop[id]
 
-        u₁reducesrt, u₂reducesrt = reduced_by_unrolling[1,1,id], reduced_by_unrolling[2,1,id]
-        u₁reducesrp, u₂reducesrp = reduced_by_unrolling[1,2,id], reduced_by_unrolling[2,2,id]
-        if isload(op)
-            if add_constant_offset_load_elmination_cost!(cost_vec, reg_pressure, choose_to_inline, ls, op, iters[id], unrollsyms, u₁reducesrp, u₂reducesrp, Wshift, size_T, opisininnerloop)
-                # println("constoffelim")
-                continue
-            elseif load_elimination_cost_factor!(cost_vec, reg_pressure, choose_to_inline, ls, op, iters[id], unrollsyms, Wshift, size_T)
-              # println("loadelim")
-              # A[i,j-1], A[i,j]
-                continue
-            end
-        #elseif isconstant(op)
-        end
-        rt, lat, rp = cost(ls, op, (u₁loopsym, u₂loopsym), vloopsym, Wshift, size_T)
-        if isload(op) & (!prefetch_good_idea)
-            prefetch_good_idea = prefetchisagoodidea(ls, op, UnrollArgs(ls, 4, unrollsyms, 4, 0)) ≠ 0
-        end
-        # rp = (opisininnerloop && !(loadintostore(ls, op))) ? rp : zero(rp) # we only care about register pressure within the inner most loop
-        rp = opisininnerloop ? rp : zero(rp) # we only care about register pressure within the inner most loop
-        rto = rt
-        rt *= iters[id]
-        # @show (u₁reducesrt, u₂reducesrt), rto, rt, lat, rp, op
-        if isstore(op) & (!u₁reducesrt) & (!u₂reducesrt)
-            irreducible_storecosts += rt
-        end
-        update_cost_vec!(cost_vec, rt, u₁reducesrt, u₂reducesrt)
-        update_reg_pres!(reg_pressure, rp, u₁reducesrp, u₂reducesrp)
-        # update_costs!(reg_pressure, rp, u₁reducesrp, u₂reducesrp)
+    u₁reducesrt, u₂reducesrt = reduced_by_unrolling[1,1,id], reduced_by_unrolling[2,1,id]
+    u₁reducesrp, u₂reducesrp = reduced_by_unrolling[1,2,id], reduced_by_unrolling[2,2,id]
+    if isload(op)
+      if add_constant_offset_load_elmination_cost!(cost_vec, reg_pressure, choose_to_inline, ls, op, iters[id], unrollsyms, u₁reducesrp, u₂reducesrp, Wshift, size_T, opisininnerloop)
+        # println("constoffelim")
+        continue
+      elseif load_elimination_cost_factor!(cost_vec, reg_pressure, choose_to_inline, ls, op, iters[id], unrollsyms, Wshift, size_T)
+        # println("loadelim")
+        # A[i,j-1], A[i,j]
+        continue
+      end
+      #elseif isconstant(op)
     end
-    # reg_pressure[1] = max(reg_pressure[1], length(ls.outer_reductions))
-    # @inbounds ((cost_vec[4] > 0) || ((cost_vec[2] > 0) & (cost_vec[3] > 0))) || return 0,0,Inf,false
-    # reg_pres[4] == remaining_registers
-    costpenalty = ((reg_pressure[1] + reg_pressure[2] + reg_pressure[3]) > reg_pressure[4]) ? 2 : 1
-    u₁v = vloopsym === u₁loopsym; u₂v = vloopsym === u₂loopsym
-    visbit = anyisbit && ls.loopindexesbit[getloopid(ls,vloopsym)]
-    round_uᵢ = if visbit
-        (u₁v ? -1 : (u₂v ? -2 : 0))
-    elseif prefetch_good_idea
-        (u₁v ? 1 : (u₂v ? 2 : 0))
+    rt, lat, rp = cost(ls, op, (u₁loopsym, u₂loopsym), vloopsym, Wshift, size_T)
+    if isload(op) & (!prefetch_good_idea)
+      prefetch_good_idea = prefetchisagoodidea(ls, op, UnrollArgs(ls, 4, unrollsyms, 4, 0)) ≠ 0
+    end
+    # rp = (opisininnerloop && !(loadintostore(ls, op))) ? rp : zero(rp) # we only care about register pressure within the inner most loop
+    rp = opisininnerloop ? rp : zero(rp) # we only care about register pressure within the inner most loop
+    rto = rt
+    rt *= iters[id]
+    # @show (u₁reducesrt, u₂reducesrt), (u₁reducesrp, u₂reducesrp), rto, rt, lat, rp, op
+    if isstore(op) & (!u₁reducesrt) & (!u₂reducesrt)
+      irreducible_storecosts += rt
+    end
+    update_cost_vec!(cost_vec, rt, u₁reducesrt, u₂reducesrt)
+    # if child_dependent_u₁u₂(op)
+    if iscompute(op) | isload(op)
+      if !holdopinreg[id]
+        rp = max(zero(rp), rp - one(rp))
+      elseif innerloop ∈ loopdependencies(op)
+        u₁c, u₂c = child_dependent_u₁u₂(op)
+        # The idea here is that we check if the operation is executed in the innermost loop nest
+        #   - If this is true, then the operation must be recalculated on every iteration of the inner most loop
+        # 
+        # Then we check if it's children don't depend on both unrolled loops. If they do not depend on both,
+        # we assume that these children can safely overwrite the results of this operation.
+        # (Because this op has to be recalculated on the next iteration, there's no point to holding it somewhere)
+        if !(u₁c & u₂c)
+        # if u₁reducesrp & u₂reducesrp & !(u₁c & u₂c)
+          rp = max(zero(rp), rp - one(rp))
+        end
+      end
+    end
+    # @show u₁reducesrp, u₂reducesrp, rp, op
+    update_reg_pres!(reg_pressure, rp, u₁reducesrp, u₂reducesrp)
+    # end
+    # update_costs!(reg_pressure, rp, u₁reducesrp, u₂reducesrp)
+  end
+  # reg_pressure[1] = max(reg_pressure[1], length(ls.outer_reductions))
+  # @inbounds ((cost_vec[4] > 0) || ((cost_vec[2] > 0) & (cost_vec[3] > 0))) || return 0,0,Inf,false
+  # reg_pres[4] == remaining_registers
+  costpenalty = ((reg_pressure[1] + reg_pressure[2] + reg_pressure[3]) > reg_pressure[4]) ? 2 : 1
+  u₁v = vloopsym === u₁loopsym; u₂v = vloopsym === u₂loopsym
+  visbit = anyisbit && ls.loopindexesbit[getloopid(ls,vloopsym)]
+  round_uᵢ = if visbit
+    (u₁v ? -1 : (u₂v ? -2 : 0))
+  elseif prefetch_good_idea
+    (u₁v ? 1 : (u₂v ? 2 : 0))
+  else
+    0
+  end
+  if (irreducible_storecosts / sum(cost_vec) ≥ 0.5) && !any(op -> loadintostore(ls, op), operations(ls))
+    u₁, u₂ = if visbit
+      vecsforbyte = 8 ÷ ls.vector_width
+      u₁v ? (vecsforbyte,1) : (1,vecsforbyte)
     else
-        0
+      (1, 1)
     end
-    if (irreducible_storecosts / sum(cost_vec) ≥ 0.5) && !any(op -> loadintostore(ls, op), operations(ls))
-        u₁, u₂ = if visbit
-            vecsforbyte = 8 ÷ ls.vector_width
-            u₁v ? (vecsforbyte,1) : (1,vecsforbyte)
-        else
-            (1, 1)
-        end
-        ucost = unroll_cost(cost_vec, 1, 1, length(getloop(ls, u₁loopsym)), length(getloop(ls, u₂loopsym)))
-    else
-        u₁, u₂, ucost = solve_unroll(ls, u₁loopsym, u₂loopsym, cost_vec, reg_pressure, W, vloopsym, round_uᵢ)
-    end
-    outer_reduct_penalty = length(ls.outer_reductions) * (u₁ + isodd(u₁))
-    favor_bigger_u₂ = u₁ - u₂
-    # favor_smaller_vloopsym = (u₁v ? u₁ : -u₁) + (u₂v ?  u₂ : -u₂)
-    favor_smaller_vectorized = (u₁v ⊻ u₂v) ? (u₁v ? u₁ - u₂ : u₂ - u₁) : 0
-    favor_u₁_vectorized = -0.2u₁v
-    favoring_heuristics = favor_bigger_u₂ + 0.5favor_smaller_vectorized + favor_u₁_vectorized
-    costpenalty = costpenalty * ucost + stride_penalty(ls, order) + outer_reduct_penalty + favoring_heuristics
-    u₁, u₂, costpenalty, choose_to_inline[]
+    ucost = unroll_cost(cost_vec, 1, 1, length(getloop(ls, u₁loopsym)), length(getloop(ls, u₂loopsym)))
+  else
+    u₁, u₂, ucost = solve_unroll(ls, u₁loopsym, u₂loopsym, cost_vec, reg_pressure, W, vloopsym, round_uᵢ)
+  end
+  outer_reduct_penalty = length(ls.outer_reductions) * (u₁ + isodd(u₁))
+  favor_bigger_u₂ = u₁ - u₂
+  # favor_smaller_vloopsym = (u₁v ? u₁ : -u₁) + (u₂v ?  u₂ : -u₂)
+  favor_smaller_vectorized = (u₁v ⊻ u₂v) ? (u₁v ? u₁ - u₂ : u₂ - u₁) : 0
+  favor_u₁_vectorized = -0.2u₁v
+  favoring_heuristics = favor_bigger_u₂ + 0.5favor_smaller_vectorized + favor_u₁_vectorized
+  costpenalty = costpenalty * ucost + stride_penalty(ls, order) + outer_reduct_penalty + favoring_heuristics
+  u₁, u₂, costpenalty, choose_to_inline[]
 end
 
+function holdopinregister(ls::LoopSet)
+  ops = operations(ls)
+  childdeps = fill(false, length(ops))
+  # childdeps = fill(false, length(ls.loops), length(ops))
+  for i ∈ eachindex(ops)
+    op = ops[i]
+    ld = loopdependencies(op)
+    found = false
+    for opc ∈ children(op)
+      for j ∈ loopdependencies(opc)
+        if j ∉ ld
+          found = true
+          break
+        end
+      end
+      if found
+        childdeps[i] = true
+        break
+      end
+    end
+  end
+  childdeps
+end
 
 # struct LoopOrders
 #     syms::Vector{Int}
@@ -1282,7 +1347,7 @@ function choose_tile(ls::LoopSet, sld::Vector{Vector{Symbol}} = store_load_deps(
   nops = length(operations(ls))
   iters = Vector{Float64}(undef, nops)
   reduced_by_unrolling = Array{Bool}(undef, 2, 2, nops)
-
+  holdopinreg = holdopinregister(ls)
   for newu₂ ∈ ls.loopsymbols
     reject_reorder(ls, newu₂, true) && continue
     for newu₁ ∈ ls.loopsymbols#@view(new_order[nt+1:end])
@@ -1295,7 +1360,7 @@ function choose_tile(ls::LoopSet, sld::Vector{Vector{Symbol}} = store_load_deps(
             # ((new_vec === newu₁) || (new_vec === newu₂)) || continue
             (new_vec === newu₁) || continue
           end
-          u₁temp, u₂temp, cost_temp, loadelim_temp = evaluate_cost_tile!(iters, reduced_by_unrolling, ls, new_order, UnrollSymbols(newu₁, newu₂, new_vec), anyisbit, sld)
+          u₁temp, u₂temp, cost_temp, loadelim_temp = evaluate_cost_tile!(iters, reduced_by_unrolling, ls, new_order, UnrollSymbols(newu₁, newu₂, new_vec), anyisbit, sld, holdopinreg)
           # if cost_temp < lowest_cost # leads to 4 vmovapds
           if cost_temp ≤ lowest_cost # lead to 2 vmovapds
             lowest_cost = cost_temp
@@ -1341,6 +1406,7 @@ function mismatchedstorereductions(ls::LoopSet)
 end
 # Last in order is the inner most loop
 function choose_order_cost(ls::LoopSet)
+  fill_children!(ls)
   resize!(ls.loop_order, length(ls.loopsymbols))
   sld = store_load_deps(operations(ls))
   if num_loops(ls) > 1

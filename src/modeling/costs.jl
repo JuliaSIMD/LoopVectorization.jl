@@ -113,8 +113,8 @@ vector_cost(instr::Instruction, Wshift, sizeof_T) = vector_cost(instruction_cost
 #    consolidated into a single register. The number of LICM-ed setindex!, on the other
 #    hand, should indicate how many registers we're keeping live for the sake of eventually storing.
 const COST = Dict{Symbol,InstructionCost}(
-    :getindex => InstructionCost(-3.0,0.5,3,1),
-    :conditionalload => InstructionCost(-3.0,0.5,3,1),
+    :getindex => InstructionCost(-3.0,0.5,3,0),
+    :conditionalload => InstructionCost(-3.0,0.5,3,0),
     :setindex! => InstructionCost(-3.0,1.0,3,0),
     :conditionalstore! => InstructionCost(-3.0,1.0,3,0),
     :zero => InstructionCost(1,0.5),
@@ -210,6 +210,8 @@ const COST = Dict{Symbol,InstructionCost}(
     :vfmsub231 => InstructionCost(4,0.5), # - and * will fuse into this, so much of the time they're not twice as expensive
     :vfnmadd231 => InstructionCost(4,0.5), # + and -* will fuse into this, so much of the time they're not twice as expensive
     :vfnmsub231 => InstructionCost(4,0.5), # - and -* will fuse into this, so much of the time they're not twice as expensive
+    :vfmaddsub => InstructionCost(4,0.5),
+    :vfmsubadd => InstructionCost(4,0.5),
     :sqrt => InstructionCost(15,4.0,-2.0),
     :sqrt_fast => InstructionCost(15,4.0,-2.0),
     :log => InstructionCost(-3.0, 15, 30, 11),
@@ -264,7 +266,10 @@ const COST = Dict{Symbol,InstructionCost}(
     :prefetch0 => InstructionCost(0,0.0,0.0,0),
     :prefetch1 => InstructionCost(0,0.0,0.0,0),
     :prefetch2 => InstructionCost(0,0.0,0.0,0),
-    :convert => InstructionCost(4,0.5)
+  :convert => InstructionCost(4,0.5),
+  :vpermilps177 => InstructionCost(1, 1.0),
+  :vmovsldup => InstructionCost(1, 1.0),
+  :vmovshdup => InstructionCost(1, 1.0)
 )
 
 # # @inline prefetch0(x::Ptr, i) = VectorizationBase.prefetch(x, Val{3}(), Val{0}())
@@ -345,7 +350,9 @@ const REDUCTION_CLASS = Dict{Symbol,Float64}(
     :max => MAX,
     :min => MIN,
     :max_fast => MAX,
-    :min_fast => MIN
+  :min_fast => MIN,
+  :vfmaddsub => ADDITIVE_IN_REDUCTIONS,
+  :vfmsubadd => ADDITIVE_IN_REDUCTIONS
 )
 reduction_instruction_class(instr::Symbol) = get(REDUCTION_CLASS, instr, NaN)
 reduction_instruction_class(instr::Instruction) = reduction_instruction_class(instr.instr)

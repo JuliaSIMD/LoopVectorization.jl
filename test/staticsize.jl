@@ -31,10 +31,10 @@ function issue238_v2!(output, matrix, input)
   end
   return nothing
 end
-const MAXTESTSIXE = 8 # N^3 loop iterations, meaning N^3 different functions compiled
+const MAXTESTSIZE = 8 # N^3 loop iterations, meaning N^3 different functions compiled
 function n2testloop(output1,output2,output3,output_nonstatic0,output_nonstatic1)
   n1, n3 = size(output1)
-  for n2 ∈ 1:MAXTESTSIXE;
+  for n2 ∈ 1:MAXTESTSIZE;
     # @show n1, n2, n3
     input  = randn(n1, n2)
     matrix = randn(n3, n2)
@@ -55,7 +55,8 @@ function n2testloop(output1,output2,output3,output_nonstatic0,output_nonstatic1)
 end
 
 @testset "Statically Sized Arrays" begin
-  for n1 ∈ 1:MAXTESTSIXE, n3 ∈ 1:MAXTESTSIXE
+  @show @__LINE__
+  for n1 ∈ 1:MAXTESTSIZE, n3 ∈ 1:MAXTESTSIZE
     output1 = StrideArray(undef, StaticInt(n1), StaticInt(n3))
     output2 = StrideArray(undef, StaticInt(n1), StaticInt(n3))
     output3 = StrideArray(undef, StaticInt(n1), StaticInt(n3))

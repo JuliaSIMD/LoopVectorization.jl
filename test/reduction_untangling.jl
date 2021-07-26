@@ -40,6 +40,7 @@ function not_a_reduction_noturbo!(A, B)
 end
 
 @testset "Untangle reductions" begin
+  @show @__LINE__
   N = 11
   A1 = (re = rand(N,N), im = rand(N,N))
   A2 = deepcopy(A1)

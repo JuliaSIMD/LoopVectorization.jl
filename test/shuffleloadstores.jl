@@ -115,17 +115,36 @@ function qdot_stride(x::AbstractVector, y::AbstractVector)
     end
     (a,b,c,d)
 end
-function cmatmul_array!(C::AbstractArray{T,3}, A::AbstractArray{T,3}, B::AbstractArray{T,3}) where {T}
-    @turbo for n ∈ indices((C,B),3), m ∈ indices((C,A),2)
-        Cre = zero(T)
-        Cim = zero(T)
-        for k ∈ indices((A,B),(3,2))
-            Cre += A[1,m,k] * B[1,k,n] - A[2,m,k] * B[2,k,n]
-            Cim += A[1,m,k] * B[2,k,n] + A[2,m,k] * B[1,k,n]
-        end
-        C[1,m,n] = Cre
-        C[2,m,n] = Cim
+function cmatmul_array!(Cc::AbstractMatrix{Complex{T}}, Ac::AbstractMatrix{Complex{T}}, Bc::AbstractMatrix{Complex{T}}) where {T}
+  C = reinterpret(reshape, Float64, Cc);
+  A = reinterpret(reshape, Float64, Ac);
+  B = reinterpret(reshape, Float64, Bc);
+  @turbo for n ∈ indices((C,B),3), m ∈ indices((C,A),2)
+    Cre = zero(T)
+    Cim = zero(T)
+    for k ∈ indices((A,B),(3,2))
+      Cre += A[1,m,k] * B[1,k,n] - A[2,m,k] * B[2,k,n]
+      Cim += A[1,m,k] * B[2,k,n] + A[2,m,k] * B[1,k,n]
     end
+    C[1,m,n] = Cre
+    C[2,m,n] = Cim
+  end
+  return Cc
+end
+function cmatmul_array_v2!(Cc::AbstractMatrix{Complex{T}}, Ac::AbstractMatrix{Complex{T}}, Bc::AbstractMatrix{Complex{T}}) where {T}
+  C = reinterpret(Float64, Cc);
+  A = reinterpret(Float64, Ac);
+  B = reinterpret(reshape, Float64, Bc);
+  @turbo for n ∈ indices((C,B),(2,3)), m ∈ indices((C,A),1)
+    Cmn = zero(T)
+    for k ∈ indices((A,B),(2,2))
+      Amk = A[m,k]
+      Aperm = vpermilps177(Amk)
+      Cmn = vfmaddsub(Amk, B[1,k,n], vfmaddsub(Aperm, B[2,k,n], Cmn))
+    end
+    C[m,n] = Cmn
+  end
+  return Cc
 end
 
 function issue209(M, G, J, H, B, ϕ)
@@ -333,13 +352,10 @@ end
             Bc = rand(Complex{Float64}, i, i);
             Cc1 = Ac*Bc;
             Cc2 = similar(Cc1);
-            # Cc3 = similar(Cc1)
-            Cca = reinterpret(reshape, Float64, Cc2);
-            Aca = reinterpret(reshape, Float64, Ac);
-            Bca = reinterpret(reshape, Float64, Bc);
-            cmatmul_array!(Cca, Aca, Bca)
-
-            @test Cc1 ≈ Cc2# ≈ Cc3
+            Cc3 = similar(Cc1)
+            @test Cc1 ≈ cmatmul_array!(Cc2, Ac, Bc)
+            Cc2 .= NaN
+            @test Cc1 ≈ cmatmul_array_v2!(Cc2, Ac, Bc)
         end
     end
     @show @__LINE__

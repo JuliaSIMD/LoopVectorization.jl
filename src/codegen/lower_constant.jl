@@ -235,3 +235,60 @@ function lower_licm_constants!(ls::LoopSet)
         setop!(ls, ops[id], Expr(:call, reduction_zero(f), ELTYPESYMBOL))
     end
 end
+
+function pushconstvalue!(v::Vector{Any}, ls::LoopSet, op::Operation)::Bool
+  isconstant(op) || return true
+  opid = identifier(op)
+  for (id,(intval,intsz,signed)) ∈ ls.preamble_symint
+    id == opid || continue
+    if intsz == 1
+      push!(v, intval % Bool)
+      return false
+    elseif intsz == 1
+      signed ? push!(v, intval % Int8) : push!(v, intval % UInt8)
+    elseif intsz == 2
+      signed ? push!(v, intval % Int16) : push!(v, intval % UInt16)
+    elseif intsz == 4
+      signed ? push!(v, intval % Int32) : push!(v, intval % UInt32)
+    else
+      signed ? push!(v, intval) : push!(v, unsigned(intval))
+    end
+    return false
+  end
+  for (id,floatval) ∈ ls.preamble_symfloat
+    if id == opid
+      push!(v, floatval)
+      return false
+    end
+  end
+  for (id,typ) ∈ ls.preamble_zeros
+    id == opid || continue
+    if typ == HardFloat
+      push!(v, 0.0)
+    else
+      push!(v, 0)
+    end
+    return false
+  end
+  for (id,f) ∈ ls.preamble_funcofeltypes
+    id == opid || continue
+    x = reduction_zero(f)
+    if x == ADDITIVE_IN_REDUCTIONS
+      push!(v, 0)
+    elseif x == MULTIPLICATIVE_IN_REDUCTIONS
+      push!(v, 1)
+    elseif x == MAX
+      push!(v, -Inf)
+    elseif x == MIN
+      push!(v, Inf)
+    elseif x == ALL
+      push!(v, true)
+    elseif x == ANY
+      push!(v, false)
+    else
+      return true
+    end
+    return false
+  end
+  return true
+end

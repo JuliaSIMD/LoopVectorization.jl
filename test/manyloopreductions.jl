@@ -39,11 +39,11 @@ function mismatchedreductions!(𝛥r392, 𝛥x923, 𝛥ℛ, ℛ, r392, x923, �
 end
 
 @testset "Many Loop Reductions" begin
+  @show @__LINE__
   A = rand((2:6)...);
   N = ndims(A)
   T = eltype(A)
   let dims = (3,5)
-
     sᵢ = size(A)
     sₒ = ntuple(Val(N)) do d
       ifelse(d ∈ dims, 1, sᵢ[d])

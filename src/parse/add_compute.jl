@@ -48,29 +48,29 @@ end
 #     pushparent!(mpref.parents, mpref.loopdependencies, mpref.reduceddeps, parent)
 # end
 function add_parent!(
-    vparents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet, var, elementbytes::Int, position::Int
+  vparents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet, var, elementbytes::Int, position::Int
 )
-    parent = if var isa Symbol
-        # if var === :kern_1_1
-        #     @show operations(ls) ls.preamble_symsym
-        # end
-        opp = getop(ls, var, elementbytes)
-        # if var === :kern_1_1
-        #     @show operations(ls) ls.preamble_symsym
-        # end
-        # @show var opp first(operations(ls)) opp === first(operations(ls))
-        if iscompute(opp) && instruction(opp).instr === :identity && length(loopdependencies(opp)) < position && isone(length(parents(opp))) && name(opp) === name(first(parents(opp)))
-            first(parents(opp))
-        else
-            opp
-        end
-    elseif var isa Expr #CSE candidate
-        add_operation!(ls, gensym!(ls, "temp"), var, elementbytes, position)
-    else # assumed constant
-        add_constant!(ls, var, elementbytes)
-        # add_constant!(ls, var, deps, gensym(:loopredefconst), elementbytes)
+  parent = if var isa Symbol
+    # if var === :kern_1_1
+    #     @show operations(ls) ls.preamble_symsym
+    # end
+    opp = getop(ls, var, elementbytes)
+    # if var === :kern_1_1
+    #     @show operations(ls) ls.preamble_symsym
+    # end
+    # @show var opp first(operations(ls)) opp === first(operations(ls))
+    if iscompute(opp) && instruction(opp).instr === :identity && length(loopdependencies(opp)) < position && isone(length(parents(opp))) && name(opp) === name(first(parents(opp)))
+      first(parents(opp))
+    else
+      opp
     end
-    pushparent!(vparents, deps, reduceddeps, parent)
+  elseif var isa Expr #CSE candidate
+    add_operation!(ls, gensym!(ls, "temp"), var, elementbytes, position)
+  else # assumed constant
+    add_constant!(ls, var, elementbytes)
+    # add_constant!(ls, var, deps, gensym(:loopredefconst), elementbytes)
+  end
+  pushparent!(vparents, deps, reduceddeps, parent)
 end
 # function add_reduction!(
 #     vparents::Vector{Operation}, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, ls::LoopSet, var::Symbol, elementbytes::Int
@@ -270,7 +270,7 @@ function add_compute!(
         if var === arg
             reduction_ind = ind
             # add_reduction!(vparents, deps, reduceddeps, ls, arg, elementbytes)
-            getop(ls, arg::Symbol, elementbytes)   # weird that this needs annotation
+            getop(ls, var, elementbytes)
         elseif arg isa Expr
             isref, argref = tryrefconvert(ls, arg, elementbytes, varname(mpref))
             if isref
@@ -404,8 +404,7 @@ function add_pow!(
             xo
         end
     elseif x isa Number
-        pushpreamble!(ls, Expr(:(=), var, x ^ p))
-        return add_constant!(ls, var, elementbytes)
+      return add_constant!(ls, x ^ p, elementbytes, var)::Operation
     end
     pint = round(Int, p)
     if p != pint
@@ -425,7 +424,7 @@ function add_pow!(
     elseif pint == 1
         return add_compute!(ls, var, :identity, [xop], elementbytes)
     elseif pint == 2
-        return add_compute!(ls, var, :abs2, [xop], elementbytes)
+        return add_compute!(ls, var, :abs2_fast, [xop], elementbytes)
     end
 
     # Implementation from https://github.com/JuliaLang/julia/blob/a965580ba7fd0e8314001521df254e30d686afbf/base/intfuncs.jl#L216
@@ -433,16 +432,16 @@ function add_pow!(
     pint >>= t
     while (t -= 1) > 0
         varname = (iszero(pint) && isone(t)) ? var : gensym!(ls, "pbs")
-        xop = add_compute!(ls, varname, :abs2, [xop], elementbytes)
+        xop = add_compute!(ls, varname, :abs2_fast, [xop], elementbytes)
     end
     yop = xop
     while pint > 0
         t = trailing_zeros(pint) + 1
         pint >>= t
         while (t -= 1) >= 0
-            xop = add_compute!(ls, gensym!(ls, "pbs"), :abs2, [xop], elementbytes)
+            xop = add_compute!(ls, gensym!(ls, "pbs"), :abs2_fast, [xop], elementbytes)
         end
-        yop = add_compute!(ls, iszero(pint) ? var : gensym!(ls, "pbs"), :(*), [xop, yop], elementbytes)
+        yop = add_compute!(ls, iszero(pint) ? var : gensym!(ls, "pbs"), :mul_fast, [xop, yop], elementbytes)
     end
     yop
 end

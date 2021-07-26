@@ -264,6 +264,8 @@ function ref_for_print(op::Operation)
       else
         push!(ref.args, :($ind + $o))
       end
+    elseif s == 0
+      push!(ref.args, o)
     else
       index = :($s * $ind)
       o == 0 || (index = :($index + $o))

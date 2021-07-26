@@ -645,7 +645,7 @@ function generate_call_types(
   for op ∈ ops
     instr::Instruction = instruction(op)
     if (isconstant(op) && (instr == LOOPCONSTANT)) && (!roots[identifier(op)])
-      instr = op.instruction = DROPPEDCONSTANT 
+      instr = op.instruction = DROPPEDCONSTANT
     end
     push!(operation_descriptions.args, QuoteNode(instr.mod))
     push!(operation_descriptions.args, QuoteNode(instr.instr))
@@ -790,7 +790,7 @@ function setup_call_debug(ls::LoopSet)
   generate_call(ls, (false,zero(Int8),zero(Int8)), zero(UInt), true)
 end
 function setup_call(
-  ls::LoopSet, q::Expr, source::LineNumberNode, inline::Bool, check_empty::Bool, u₁::Int8, u₂::Int8, thread::Int, warncheckarg::Bool
+  ls::LoopSet, q::Expr, source::LineNumberNode, inline::Bool, check_empty::Bool, u₁::Int8, u₂::Int8, thread::Int, warncheckarg::Int
 )
   # We outline/inline at the macro level by creating/not creating an anonymous function.
   # The old API instead was based on inlining or not inline the generated function, but
@@ -802,7 +802,11 @@ function setup_call(
   call = generate_call(ls, (inline, u₁, u₂), thread%UInt, false)
   call = check_empty ? check_if_empty(ls, call) : call
   argfailure = make_crashy(make_fast(q))
-  warncheckarg && (argfailure = Expr(:block, :(@warn "`LoopVectorization.check_args` on your inputs failed; running fallback `@inbounds @fastmath` loop instead."  maxlog=1), argfailure))
+  if warncheckarg ≠ 0
+    warning = :(@warn "`LoopVectorization.check_args` on your inputs failed; running fallback `@inbounds @fastmath` loop instead.")
+    warncheckarg > 0 && push!(warning.args, :(maxlog=$warncheckarg))
+    argfailure = Expr(:block,  warning, argfailure)
+  end
   pushprepreamble!(ls, Expr(:if, check_args_call(ls), call, argfailure))
   prepend_lnns!(ls.prepreamble, lnns)
   return ls.prepreamble

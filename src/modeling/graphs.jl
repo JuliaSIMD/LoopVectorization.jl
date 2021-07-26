@@ -569,22 +569,21 @@ function fill_children!(ls::LoopSet)
   end
 end
 function cacheunrolled!(ls::LoopSet, u₁loop::Symbol, u₂loop::Symbol, vloopsym::Symbol)
-    fill_children!(ls)
-    vloop = getloop(ls, vloopsym)
-    for op ∈ operations(ls)
-        setunrolled!(ls, op, u₁loop, u₂loop, vloopsym)
-        if accesses_memory(op)
-            rc = rejectcurly(ls, op, u₁loop, vloopsym)
-            op.rejectcurly = rc
-            if rc
-                op.rejectinterleave = true
-            else
-                omop = ls.omop
-                batchid, opind = omop.batchedcollectionmap[identifier(op)]
-                op.rejectinterleave = ((batchid == 0) || (!isvectorized(op))) || rejectinterleave(ls, op, vloop, omop.batchedcollections[batchid])
-            end
-        end
+  vloop = getloop(ls, vloopsym)
+  for op ∈ operations(ls)
+    setunrolled!(ls, op, u₁loop, u₂loop, vloopsym)
+    if accesses_memory(op)
+      rc = rejectcurly(ls, op, u₁loop, vloopsym)
+      op.rejectcurly = rc
+      if rc
+        op.rejectinterleave = true
+      else
+        omop = ls.omop
+        batchid, opind = omop.batchedcollectionmap[identifier(op)]
+        op.rejectinterleave = ((batchid == 0) || (!isvectorized(op))) || rejectinterleave(ls, op, vloop, omop.batchedcollections[batchid])
+      end
     end
+  end
 end
 function setunrolled!(ls::LoopSet, op::Operation, u₁loopsym::Symbol, u₂loopsym::Symbol, vectorized::Symbol)
   u₁::Bool = u₂::Bool = v::Bool = false
@@ -709,27 +708,66 @@ function Operation(ls::LoopSet, variable, elementbytes, instr, optype, mpref::Ar
 end
 
 operations(ls::LoopSet) = ls.operations
-function pushop!(ls::LoopSet, op::Operation, var::Symbol = name(op))
-  if iscompute(op) && length(loopdependencies(op)) == 0
-    op.node_type = constant
-    opdef = callexpr(instruction(op))
-    opparents = parents(op)
-    mangledname = Symbol('#', instruction(op).instr, '#')
-    while length(opparents) > 0
-      oppname = name(popfirst!(opparents))
-      mangledname = Symbol(mangledname, oppname, '#')
-      push!(opdef.args, oppname)
-      # if opp.instruction == LOOPCONSTANT 
-      #   push!(opdef.args, name(opp))
-      # else
 
-      # end
-    end
-    op.mangledvariable = mangledname
-    pushpreamble!(ls, Expr(:(=), name(op), opdef))
-    op.instruction = LOOPCONSTANT
-    push!(ls.preamble_symsym, (identifier(op), name(op)))
+function getconstvalues(ls::LoopSet, opparents::Vector{Operation})::Tuple{Bool,Vector{Any}}
+  vals = sizehint!(Any[], length(opparents))
+  for i ∈ eachindex(opparents)
+    pushconstvalue!(vals, ls, opparents[i]) && return true, vals
   end
+  false, vals
+end
+
+function add_constant_compute!(ls::LoopSet, op::Operation, var::Symbol)::Operation
+  op.node_type = constant
+  instr = instruction(op)
+  opparents = parents(op)
+  if Base.sym_in(instr.instr, (:add_fast,:mul_fast,:sub_fast,:div_fast,:vfmadd_fast, :vfnmadd_fast, :vfmsub_fast, :vfnmsub_fast))
+    getconstfailed, vals = getconstvalues(ls, opparents)
+    if !getconstfailed
+      f = instr.instr
+      if f === :add_fast
+        return add_constant!(ls, sum(vals), 8)::Operation
+      elseif f === :mul_fast
+        return add_constant!(ls, prod(vals), 8)::Operation
+      elseif f === :sub_fast
+        if length(opparents) == 2
+          return add_constant!(ls, vals[1] - vals[2], 8)::Operation
+        elseif length(opparents) == 1
+          return add_constant!(ls, - vals[1], 8)::Operation
+        end
+      elseif f === :div_fast
+        if length(opparents) == 2
+          return add_constant!(ls, vals[1] / vals[2], 8)::Operation
+        end
+      elseif length(opparents) == 3
+        T = typeof(sum(vals))
+        if f === :vfmadd_fast
+          return add_constant!(ls, T( (big(vals[1])*big(vals[2]) + big(vals[3]))), 8)::Operation
+        elseif f === :vfnmadd_fast
+          return add_constant!(ls, T(big(vals[3]) - big(vals[1])*big(vals[2])), 8)::Operation
+        elseif f === :vfmsub_fast
+          return add_constant!(ls, T((big(vals[1])*big(vals[2]) - big(vals[3]))), 8)::Operation
+        elseif f === :vfnmsub_fast
+          return add_constant!(ls, T(- (big(vals[1])*big(vals[2]) + big(vals[3]))), 8)::Operation
+        end
+      end
+    end
+  end
+  opdef = callexpr(instr)
+  mangledname = Symbol('#', instruction(op).instr, '#')
+  while length(opparents) > 0
+    oppname = name(popfirst!(opparents))
+    mangledname = Symbol(mangledname, oppname, '#')
+    push!(opdef.args, oppname)
+  end
+  op.mangledvariable = mangledname
+  pushpreamble!(ls, Expr(:(=), name(op), opdef))
+  op.instruction = LOOPCONSTANT
+  push!(ls.preamble_symsym, (identifier(op), name(op)))
+  _pushop!(ls, op, var)
+end
+
+function _pushop!(ls::LoopSet, op::Operation, var::Symbol)
   for opp ∈ operations(ls)
     if matches(op, opp)
       ls.opdict[var] = opp
@@ -740,6 +778,14 @@ function pushop!(ls::LoopSet, op::Operation, var::Symbol = name(op))
   ls.opdict[var] = op
   op
 end
+function pushop!(ls::LoopSet, op::Operation, var::Symbol = name(op))
+  if (iscompute(op) && length(loopdependencies(op)) == 0)
+    add_constant_compute!(ls, op, var)
+  else
+    _pushop!(ls, op, var)
+  end
+end
+
 function add_block!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
   for x ∈ ex.args
     x isa Expr || continue # be that general?
@@ -1021,7 +1067,7 @@ function add_operation!(
             end
             op
         else
-            # maybe_const_compute!(ls, add_compute!(ls, LHS, RHS, elementbytes, position), elementbytes, position)
+          # maybe_const_compute!(ls, add_compute!(ls, LHS, RHS, elementbytes, position), elementbytes, position)
             add_compute!(ls, LHS, RHS, elementbytes, position)
         end
     elseif RHS.head === :if
