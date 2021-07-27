@@ -344,6 +344,20 @@
       end 
     end 
   end
+  function sin_sum_3loop_split!(u, x, y, z)
+    sx = similar(x); sy = similar(y); sz = similar(z);
+    @turbo for k in 1:length(z)
+      for j in 1:length(y)
+        for i in 1:length(x)
+          sxi = sin(x[i])
+          syj = sin(y[j])
+          szk = sin(z[k])
+          sx[i] = sxi; sy[j] = syj; sz[k] = szk;
+          u[i, j, k] = sxi + syj + szk
+        end 
+      end 
+    end 
+  end
 
     for T ∈ (Float32, Float64)
         @show T, @__LINE__
@@ -428,6 +442,8 @@
       u = zeros(itot+8, itot+8, itot+8);
       uv = @view u[5:5+itot-1, 5:5+itot-1, 5:5+itot-1];
       sin_sum_3loop!(uv, x, y, z);
-      @test uv ≈ (identity(sin.(x)) .+ identity((sin.(y))')) .+ identity(reshape(sin.(z), (1, 1, length(z))))
+      uv2 = @view similar(u)[5:5+itot-1, 5:5+itot-1, 5:5+itot-1];
+      sin_sum_3loop_split!(uv2, x, y, z);
+      @test uv ≈ uv2 ≈ (identity(sin.(x)) .+ identity((sin.(y))')) .+ identity(reshape(sin.(z), (1, 1, length(z))))
     end
 end
