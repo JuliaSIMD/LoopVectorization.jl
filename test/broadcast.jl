@@ -171,6 +171,10 @@ function test_broadcast(::Type{T}) where {T}
     @. D1 = C ^ 2;
     @outline @turbo @. D2 = C ^ 2;
     @test D1 ≈ D2
+    @turbo view(C,1:100,1:10,1:10) .= 0;
+    @test all(==(0), C)
+    @turbo view(B, axes(B,1), axes(B,2))' .= 2
+    @test all(==(2), B)
   end
 end
 

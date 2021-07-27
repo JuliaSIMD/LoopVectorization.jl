@@ -436,11 +436,11 @@ end
 @generated function vmaterialize!(
     dest::AbstractArray{T,N}, bc::Broadcasted{Base.Broadcast.DefaultArrayStyle{0},Nothing,typeof(identity),Tuple{T2}}, ::Val{Mod}, ::Val{UNROLL}
 ) where {T <: NativeTypes, N, T2 <: Number, Mod, UNROLL}
-    inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, threads = UNROLL
+  inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, l1, l2, l3, threads = UNROLL
     quote
         $(Expr(:meta,:inline))
         arg = T(first(bc.args))
-        @turbo inline=$inline unroll=($u₁,$u₂) thread=$threads for i ∈ eachindex(dest)
+        @turbo inline=$inline unroll=($u₁,$u₂) thread=$threads vectorize=$v for i ∈ eachindex(dest)
             dest[i] = arg
         end
         dest
@@ -449,12 +449,12 @@ end
 @generated function vmaterialize!(
     dest′::Union{Adjoint{T,A},Transpose{T,A}}, bc::Broadcasted{Base.Broadcast.DefaultArrayStyle{0},Nothing,typeof(identity),Tuple{T2}}, ::Val{Mod}, ::Val{UNROLL}
 ) where {T <: NativeTypes, N, A <: AbstractArray{T,N}, T2 <: Number, Mod, UNROLL}
-    inline, u₁, u₂, isbroadcast, W, rs, rc, cls, l1, l2, l3, threads = UNROLL
+    inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, l1, l2, l3, threads = UNROLL
     quote
         $(Expr(:meta,:inline))
         arg = T(first(bc.args))
         dest = parent(dest′)
-        @turbo inline=$inline unroll=($u₁,$u₂) thread=$threads for i ∈ eachindex(dest)
+        @turbo inline=$inline unroll=($u₁,$u₂) thread=$threads vectorize=$v for i ∈ eachindex(dest)
             dest[i] = arg
         end
         dest′
