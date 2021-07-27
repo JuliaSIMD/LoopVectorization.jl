@@ -1254,14 +1254,16 @@ function reject_reorder(ls::LoopSet, loop::Symbol, isu₂::Bool)
   false
 end
 
-function choose_unroll_order(ls::LoopSet, lowest_cost::Float64 = Inf, sld::Vector{Vector{Symbol}} = store_load_deps(operations(ls)))
+function choose_unroll_order(ls::LoopSet, lowest_cost::Float64 = Inf, sld::Vector{Vector{Symbol}} = store_load_deps(operations(ls)), v::Int = 0)
   iszero(length(offsetloadcollection(ls).opidcollectionmap)) && fill_offset_memop_collection!(ls)
   lo = LoopOrders(ls)
   new_order, state = iterate(lo) # right now, new_order === best_order
+  vec_iter_prealloc = v == 0 ? new_order : [(ls.loops)[v].itersymbol]
   best_order = similar(new_order)
   best_vec = first(new_order)
   while true
-    for new_vec ∈ new_order
+    vec_iter = v == 0 ? new_order : vec_iter_prealloc
+    for new_vec ∈ vec_iter
       reject_reorder(ls, new_vec, false) && continue
       cost_temp = evaluate_cost_unroll(ls, new_order, new_vec, lowest_cost, sld)
       if cost_temp < lowest_cost
@@ -1336,10 +1338,11 @@ function reject_candidate(ls::LoopSet, u₁loopsym::Symbol, u₂loopsym::Symbol)
 end
 inlinedecision(inline::Int, shouldinline::Bool) = iszero(inline) ? shouldinline : isone(inline)
 
-function choose_tile(ls::LoopSet, sld::Vector{Vector{Symbol}} = store_load_deps(operations(ls)))
+function choose_tile(ls::LoopSet, sld::Vector{Vector{Symbol}} = store_load_deps(operations(ls)), v::Int = 0)
   iszero(length(offsetloadcollection(ls).opidcollectionmap)) && fill_offset_memop_collection!(ls)
   lo = LoopOrders(ls)
   best_order = ls.loop_order.bestorder
+  vec_iter_prealloc = v == 0 ? best_order : [(ls.loops)[v].itersymbol]
   bestu₁ = bestu₂ = best_vec = Symbol("")
   u₁ = u₂ = 0; lowest_cost = Inf; loadelim = false
   anyisbit = any(ls.loopindexesbit)
@@ -1354,7 +1357,8 @@ function choose_tile(ls::LoopSet, sld::Vector{Vector{Symbol}} = store_load_deps(
       (((newu₁ == newu₂) || reject_reorder(ls, newu₁, true)) || reject_candidate(ls, newu₁, newu₂)) && continue
       new_order, state = iterate(lo) # right now, new_order === best_order
       while true
-        for new_vec ∈ new_order # view to skip first
+        vec_iter = v == 0 ? new_order : vec_iter_prealloc
+        for new_vec ∈ vec_iter
           reject_reorder(ls, new_vec, false) && continue
           if anyisbit && ls.loopindexesbit[getloopid(ls,new_vec)]
             # ((new_vec === newu₁) || (new_vec === newu₂)) || continue
@@ -1405,19 +1409,19 @@ function mismatchedstorereductions(ls::LoopSet)
   false
 end
 # Last in order is the inner most loop
-function choose_order_cost(ls::LoopSet)
+function choose_order_cost(ls::LoopSet, v::Int = 0)
   fill_children!(ls)
   resize!(ls.loop_order, length(ls.loopsymbols))
   sld = store_load_deps(operations(ls))
   if num_loops(ls) > 1
-    torder, tunroll, ttile, tvec, tU, tT, tc, shouldinline = choose_tile(ls, sld)
+    torder, tunroll, ttile, tvec, tU, tT, tc, shouldinline = choose_tile(ls, sld, v)
   else
     torder = names(ls) # dummy
     tunroll = ttile = tvec = Symbol("##undefined##") # dummy
     tU = tT = 0 # dummy
     tc = Inf
   end
-  uorder, uvec, uc = choose_unroll_order(ls, tc, sld)
+  uorder, uvec, uc = choose_unroll_order(ls, tc, sld, v)
   mismatched = mismatchedstorereductions(ls)
   if num_loops(ls) > 1 && tc ≤ uc
     @assert ls.loop_order.bestorder === torder

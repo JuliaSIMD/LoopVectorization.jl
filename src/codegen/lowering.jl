@@ -661,7 +661,7 @@ function push_outer_reduct_types!(pt::Expr, ls::LoopSet, ortypdefined::Bool)
   for j ∈ ls.outer_reductions
     oreducop = ls.operations[j]
     if ortypdefined
-      push!(pt.args, typeof_expr(oreducop))
+      push!(pt.args, eltype_expr(oreducop))
     else
       push!(pt.args, outer_reduct_init_typename(oreducop))
     end
@@ -679,7 +679,7 @@ function determine_eltype(ls::LoopSet, ortypdefined::Bool)::Union{Symbol,Expr}
     else
       oreducop = ls.operations[ls.outer_reductions[1]]
       if ortypdefined
-        return typeof_expr(oreducop)
+        return eltype_expr(oreducop)
       else
         return outer_reduct_init_typename(oreducop)
       end
@@ -886,18 +886,20 @@ function lower(ls::LoopSet, inline::Int = -1)
   order, u₁loop, u₂loop, vectorized, u₁, u₂, c, shouldinline = choose_order_cost(ls)
   lower(ls, order, u₁loop, u₂loop, vectorized, u₁, u₂, inlinedecision(inline, shouldinline))
 end
-function lower(ls::LoopSet, u₁::Int, u₂::Int, inline::Int)
+function lower(ls::LoopSet, u₁::Int, u₂::Int, v::Int, inline::Int)
   fill_offset_memop_collection!(ls)
   fill_children!(ls)
   if u₂ > 1
     @assert num_loops(ls) > 1 "There is only $(num_loops(ls)) loop, but specified blocking parameter u₂ is $u₂."
-    order, u₁loop, u₂loop, vectorized, _u₁, _u₂, c, shouldinline = choose_tile(ls)
+    order, u₁loop, u₂loop, vectorized, _u₁, _u₂, c, shouldinline = choose_tile(ls, store_load_deps(operations(ls)), v)
     copyto!(ls.loop_order.bestorder, order)
-  else
+  elseif u₁ > 0
     u₂ = -1
-    order, vectorized, c = choose_unroll_order(ls, Inf)
+    order, vectorized, c = choose_unroll_order(ls, Inf, store_load_deps(operations(ls)), v)
     u₁loop = first(order); u₂loop = Symbol("##undefined##"); shouldinline = true
     copyto!(ls.loop_order.bestorder, order)
+  else
+    order, u₁loop, u₂loop, vectorized, u₁, u₂, c, shouldinline = choose_order_cost(ls, v)
   end
   doinline = inlinedecision(inline, shouldinline)
   lower(ls, order, u₁loop, u₂loop, vectorized, u₁, u₂, doinline)

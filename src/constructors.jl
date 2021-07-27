@@ -35,28 +35,28 @@ function add_ci_call!(q::Expr, @nospecialize(f), args, syms, i, valarg = nothing
     push!(q.args, Expr(:(=), syms[i], call))
 end
 
-function substitute_broadcast(q::Expr, mod::Symbol, inline::Bool, u₁::Int8, u₂::Int8, threads::Int, warncheckarg::Int)
-    ci = first(Meta.lower(LoopVectorization, q).args).code
-    nargs = length(ci)-1
-    ex = Expr(:block)
-    syms = [gensym() for _ ∈ 1:nargs]
-    configarg = (inline,u₁,u₂,true,threads,warncheckarg)
-    unroll_param_tup = Expr(:call, lv(:avx_config_val), :(Val{$configarg}()), staticexpr(0))
-    for n ∈ 1:nargs
-        ciₙ = ci[n]
-        ciₙargs = ciₙ.args
-        f = first(ciₙargs)
-        if ciₙ.head === :(=)
-            push!(ex.args, Expr(:(=), f, syms[((ciₙargs[2])::Core.SSAValue).id]))
-        elseif isglobalref(f, Base, :materialize!)
-            add_ci_call!(ex, lv(:vmaterialize!), ciₙargs, syms, n, unroll_param_tup, mod)
-        elseif isglobalref(f, Base, :materialize)
-            add_ci_call!(ex, lv(:vmaterialize), ciₙargs, syms, n, unroll_param_tup, mod)
-        else
-            add_ci_call!(ex, f, ciₙargs, syms, n)
-        end
+function substitute_broadcast(q::Expr, mod::Symbol, inline::Bool, u₁::Int8, u₂::Int8, v::Int8, threads::Int, warncheckarg::Int)
+  ci = first(Meta.lower(LoopVectorization, q).args).code
+  nargs = length(ci)-1
+  ex = Expr(:block)
+  syms = [gensym() for _ ∈ 1:nargs]
+  configarg = (inline,u₁,u₂,v,true,threads,warncheckarg)
+  unroll_param_tup = Expr(:call, lv(:avx_config_val), :(Val{$configarg}()), staticexpr(0))
+  for n ∈ 1:nargs
+    ciₙ = ci[n]
+    ciₙargs = ciₙ.args
+    f = first(ciₙargs)
+    if ciₙ.head === :(=)
+      push!(ex.args, Expr(:(=), f, syms[((ciₙargs[2])::Core.SSAValue).id]))
+    elseif isglobalref(f, Base, :materialize!)
+      add_ci_call!(ex, lv(:vmaterialize!), ciₙargs, syms, n, unroll_param_tup, mod)
+    elseif isglobalref(f, Base, :materialize)
+      add_ci_call!(ex, lv(:vmaterialize), ciₙargs, syms, n, unroll_param_tup, mod)
+    else
+      add_ci_call!(ex, f, ciₙargs, syms, n)
     end
-    esc(ex)
+  end
+  esc(ex)
 end
 
 
@@ -75,7 +75,7 @@ function loopset(q::Expr) # for interactive use only
     ls
 end
 
-function check_macro_kwarg(arg, inline::Bool, check_empty::Bool, u₁::Int8, u₂::Int8, threads::Int, warncheckarg::Int)
+function check_macro_kwarg(arg, inline::Bool, check_empty::Bool, u₁::Int8, u₂::Int8, v::Int8, threads::Int, warncheckarg::Int)
     ((arg.head === :(=)) && (length(arg.args) == 2)) || throw(ArgumentError("macro kwarg should be of the form `argname = value`."))
     kw = (arg.args[1])::Symbol
     value = (arg.args[2])
@@ -90,6 +90,8 @@ function check_macro_kwarg(arg, inline::Bool, check_empty::Bool, u₁::Int8, u�
         else
             throw(ArgumentError("Don't know how to process argument in `unroll=$value`."))
         end
+    elseif kw === :vectorize
+        v = convert(Int8, value)
     elseif kw === :check_empty
         check_empty = value::Bool
     elseif kw === :thread
@@ -105,23 +107,23 @@ function check_macro_kwarg(arg, inline::Bool, check_empty::Bool, u₁::Int8, u�
     else
         throw(ArgumentError("Received unrecognized keyword argument $kw. Recognized arguments include:\n`inline`, `unroll`, `check_empty`, and `thread`."))
     end
-    inline, check_empty, u₁, u₂, threads, warncheckarg
+    inline, check_empty, u₁, u₂, v, threads, warncheckarg
 end
-function process_args(args; inline::Bool = false, check_empty::Bool = false, u₁::Int8 = zero(Int8), u₂::Int8 = zero(Int8), threads::Int = 1, warncheckarg::Int = 0)
+function process_args(args; inline::Bool = false, check_empty::Bool = false, u₁::Int8 = zero(Int8), u₂::Int8 = zero(Int8), v::Int8 = zero(Int8), threads::Int = 1, warncheckarg::Int = 0)
   for arg ∈ args
-    inline, check_empty, u₁, u₂, threads, warncheckarg = check_macro_kwarg(arg, inline, check_empty, u₁, u₂, threads, warncheckarg)
+    inline, check_empty, u₁, u₂, v, threads, warncheckarg = check_macro_kwarg(arg, inline, check_empty, u₁, u₂, v, threads, warncheckarg)
   end
-  inline, check_empty, u₁, u₂, threads, warncheckarg
+  inline, check_empty, u₁, u₂, v, threads, warncheckarg
 end
 function turbo_macro(mod, src, q, args...)
   q = macroexpand(mod, q)
   if q.head === :for
     ls = LoopSet(q, mod)
-    inline, check_empty, u₁, u₂, threads, warncheckarg = process_args(args)
-    esc(setup_call(ls, q, src, inline, check_empty, u₁, u₂, threads, warncheckarg))
+    inline, check_empty, u₁, u₂, v, threads, warncheckarg = process_args(args)
+    esc(setup_call(ls, q, src, inline, check_empty, u₁, u₂, v, threads, warncheckarg))
   else
-    inline, check_empty, u₁, u₂, threads, warncheckarg = process_args(args, inline=true)
-    substitute_broadcast(q, Symbol(mod), inline, u₁, u₂, threads, warncheckarg)
+    inline, check_empty, u₁, u₂, v, threads, warncheckarg = process_args(args, inline=true)
+    substitute_broadcast(q, Symbol(mod), inline, u₁, u₂, v, threads, warncheckarg)
   end
 end
 """
@@ -218,7 +220,7 @@ Setting it to an integer > 0 will warn that many times, while setting it to a ne
 an unlimited amount of times. The default is `warn_check_args = 0`.
 """
 macro turbo(args...)
-    turbo_macro(__module__, __source__, last(args), Base.front(args)...)
+  turbo_macro(__module__, __source__, last(args), Base.front(args)...)
 end
 """
     @tturbo
@@ -257,11 +259,11 @@ end
 macro _turbo(arg, q)
   @assert q.head === :for
   q = macroexpand(__module__, q)
-  inline, check_empty, u₁, u₂ = check_macro_kwarg(arg, false, false, zero(Int8), zero(Int8), 1, 0)
+  inline, check_empty, u₁, u₂, v = check_macro_kwarg(arg, false, false, zero(Int8), zero(Int8), zero(Int8), 1, 0)
   ls = LoopSet(q, __module__)
   set_hw!(ls)
   def_outer_reduct_types!(ls)
-  esc(Expr(:block, ls.prepreamble, lower(ls, u₁ % Int, u₂ % Int, -1)))
+  esc(Expr(:block, ls.prepreamble, lower(ls, u₁ % Int, u₂ % Int, v % Int, -1)))
 end
 
 """
