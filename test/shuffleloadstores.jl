@@ -333,60 +333,62 @@ end
 
 
 @testset "shuffles load/stores" begin
-    @show @__LINE__
-    for i ∈ 1:128
-        ac = rand(Complex{Float64}, i);
-        bc = rand(Complex{Float64}, i);
-        dsimd = dot_simd(ac, bc)
-        if VERSION ≥ v"1.6.0-rc1"
-            @test dsimd ≈ cdot_mat(ac, bc)
-        end
-        @test dsimd ≈ cdot_affine(ac, bc) ≈ cdot_stride(ac, bc)
-
-
-        xq = [ntuple(_ -> rand(), Val(4)) for _ ∈ 1:i];
-        yq = [ntuple(_ -> rand(), Val(4)) for _ ∈ 1:i];
-        xqv = reinterpret(Float64, xq);
-        yqv = reinterpret(Float64, yq);
-        qsimd = Base.vect(qdot_simd(xq, yq)...);
-        if VERSION ≥ v"1.6.0-rc1"
-            xqm = reinterpret(reshape, Float64, xq);
-            yqm = reinterpret(reshape, Float64, yq);
-            @test qsimd ≈ Base.vect(qdot_mat(xqm, yqm)...)
-        end
-        @test qsimd ≈ Base.vect(qdot_affine(xqv, yqv)...) ≈ Base.vect(qdot_stride(xqv, yqv)...)
-
-        if VERSION ≥ v"1.6.0-rc1"
-            Ac = rand(Complex{Float64}, i, i);
-            Bc = rand(Complex{Float64}, i, i);
-            Cc1 = Ac*Bc;
-            Cc2 = similar(Cc1);
-            Cc3 = similar(Cc1)
-            @test Cc1 ≈ cmatmul_array!(Cc2, Ac, Bc)
-            Cc2 .= NaN
-            @test Cc1 ≈ cmatmul_array_v2!(Cc2, Ac, Bc)
-        end
-    end
-    @show @__LINE__
+  @show @__LINE__
+  for i ∈ 1:128
+    ac = rand(Complex{Float64}, i);
+    bc = rand(Complex{Float64}, i);
+    dsimd = dot_simd(ac, bc)
     if VERSION ≥ v"1.6.0-rc1"
-        M = 10
-        G = 50
-        J = 50
-        H = 30
-
-        # B = rand(Complex{Float64}, 2*J+1, G-1, H+1, M+1);
-        # ϕ = rand(Complex{Float64}, 2*J+1, G+1, H+1, M+1);
-        rbc = let rb = 1.0:((2*J+17) * (G+15) * (H+17) * (M+17)), rbr = reverse(rb)
-          Complex{Float64}[rb[i] + im * rbr[i] for i ∈ eachindex(rb)];
-        end
-        B = view(reshape(rbc, (2*J+17, G+15, H+17, M+17)), 9:2*J+9, 9:G+9, 9:H+9, 9:M+9) .= rand.() .+ rand.().*im;
-        ϕ = view(fill(1e5+1e7im, 2*J+17, G+17, H+17, M+17), 9:2*J+9, 9:G+9, 9:H+9, 9:M+9) .= rand.() .+ rand.().*im;
-        @test issue209(M, G, J, H, B, ϕ) ≈ issue209_noavx(M, G, J, H, B, ϕ)
+      @test dsimd ≈ cdot_mat(ac, bc)
     end
+    @test dsimd ≈ cdot_affine(ac, bc) ≈ cdot_stride(ac, bc)
 
-    s = Array{Float64}(undef, 4, 128, 128);
-    s2 = rand(4, 2, 128, 128);
-    @test sumdim2_turbo!(s, s2) ≈ sumdim2!(similar(s), s2)
+
+    xq = [ntuple(_ -> rand(), Val(4)) for _ ∈ 1:i];
+    yq = [ntuple(_ -> rand(), Val(4)) for _ ∈ 1:i];
+    xqv = reinterpret(Float64, xq);
+    yqv = reinterpret(Float64, yq);
+    qsimd = Base.vect(qdot_simd(xq, yq)...);
+    if VERSION ≥ v"1.6.0-rc1"
+      xqm = reinterpret(reshape, Float64, xq);
+      yqm = reinterpret(reshape, Float64, yq);
+      @test qsimd ≈ Base.vect(qdot_mat(xqm, yqm)...)
+    end
+    @test qsimd ≈ Base.vect(qdot_affine(xqv, yqv)...) ≈ Base.vect(qdot_stride(xqv, yqv)...)
+
+    if VERSION ≥ v"1.6.0-rc1"
+      for j ∈ max(1,i-5):i+5, k ∈ max(1,i-5,i+5)
+        Ac = rand(Complex{Float64}, j, i);
+        Bc = rand(Complex{Float64}, i, k);
+        Cc1 = Ac*Bc;
+        Cc2 = similar(Cc1);
+        Cc3 = similar(Cc1);
+        @test Cc1 ≈ cmatmul_array!(Cc2, Ac, Bc)
+        Cc2 .= NaN;
+        @test Cc1 ≈ cmatmul_array_v2!(Cc2, Ac, Bc)
+      end
+    end
+  end
+  @show @__LINE__
+  if VERSION ≥ v"1.6.0-rc1"
+    M = 10
+    G = 50
+    J = 50
+    H = 30
+
+    # B = rand(Complex{Float64}, 2*J+1, G-1, H+1, M+1);
+    # ϕ = rand(Complex{Float64}, 2*J+1, G+1, H+1, M+1);
+    rbc = let rb = 1.0:((2*J+17) * (G+15) * (H+17) * (M+17)), rbr = reverse(rb)
+      Complex{Float64}[rb[i] + im * rbr[i] for i ∈ eachindex(rb)];
+    end
+    B = view(reshape(rbc, (2*J+17, G+15, H+17, M+17)), 9:2*J+9, 9:G+9, 9:H+9, 9:M+9) .= rand.() .+ rand.().*im;
+    ϕ = view(fill(1e5+1e7im, 2*J+17, G+17, H+17, M+17), 9:2*J+9, 9:G+9, 9:H+9, 9:M+9) .= rand.() .+ rand.().*im;
+    @test issue209(M, G, J, H, B, ϕ) ≈ issue209_noavx(M, G, J, H, B, ϕ)
+  end
+
+  s = Array{Float64}(undef, 4, 128, 128);
+  s2 = rand(4, 2, 128, 128);
+  @test sumdim2_turbo!(s, s2) ≈ sumdim2!(similar(s), s2)
 
   # issue 287
   out_test = zeros(100, 10);
