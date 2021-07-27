@@ -380,7 +380,7 @@ expandbyoffset(inds::Vector{Int}, offsets::Vector{Int}, expand::Bool) = expandby
 function loopindex!(idxs::Vector{Int}, ls::LoopSet, u::Unsigned, shift::Unsigned)
   mask = (one(shift) << shift) - one(shift) # mask to zero out all but shift-bits
   while u != zero(u)
-    pushfirst!(idxs, ( u % UInt8 ) & mask)
+    pushfirst!(idxs, ( u % typeof(shift) ) & mask)
     u >>= shift
   end
   idxs
@@ -408,8 +408,8 @@ childdependencies(ls::LoopSet, os::OperationStruct, expand = false, offset = 0) 
 # parents(ls::LoopSet, u::UInt128) = loopindexoffset(ls, u, false)
 function parents(ls::LoopSet, u₀::UInt128, u₁::UInt128)
   idxs = Int[]
-  u₁ == zero(u₁) || loopindex!(idxs, ls, u₁, 0x10)
-  loopindex!(idxs, ls, u₀, 0x10)
+  u₁ == zero(u₁) || loopindex!(idxs, ls, u₁, 0x0010)
+  loopindex!(idxs, ls, u₀, 0x0010)
   reverse!(idxs)
 end
 parents(ls::LoopSet, os::OperationStruct) = parents(ls, os.parents₀, os.parents₁)
