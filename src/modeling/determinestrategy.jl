@@ -232,7 +232,7 @@ function unroll_no_reductions(ls, order, vloopsym)
     if iscompute(op)
       compute_rt += rt
       compute_l += sl
-      rpc += rpop # constant loads for special functions reused with unrolling
+      rpc += max(zero(rpop),rpop - one(rpop)) # constant loads for special functions reused with unrolling
     elseif isload(op)
       load_rt += rt
       rpp += rpop # loads are proportional to unrolling
@@ -253,7 +253,7 @@ function unroll_no_reductions(ls, order, vloopsym)
   else
     max(1, min(4, round(Int, 1.75compute_rt / load_rt)))
   end
-  # @show load_rt, store_rt, compute_rt, compute_l, u
+  # @show load_rt, store_rt, compute_rt, compute_l, u, rpc, rpp
   # u = min(u, max(1, (reg_count(ls) ÷ max(1,round(Int,rp)))))
   # commented out here is to decide to align loops
   # if memory_rt > compute_rt && isone(u) && (length(order) > 1) && (last(order) === vloopsym) && length(getloop(ls, last(order))) > 8W
@@ -265,7 +265,18 @@ function unroll_no_reductions(ls, order, vloopsym)
     u = demote_unroll_factor(ls, u, vloopsym)
   end
   remaining_reg = max(8, (reg_count(ls) - round(Int,rpc))) # spilling a few consts isn't so bad
-  reg_constraint = max(1, remaining_reg ÷ max(1,round(Int,rpp)))
+  if compute_l ≥ 4compute_rt ≥ 4rpp
+    # motivation for skipping division by loads here: https://github.com/microhh/stencilbuilder/blob/master/julia/stencil_julia_4th.jl
+    # Some values:
+    # (load_rt, store_rt, compute_rt, compute_l, u, rpc, rpp) = (52.0, 3.0, 92.0, 736.0, 4, 0.0, 52.0)
+    # This is fastest when `u = 4`, but `reg_constraint` was restricting it to 1.
+    # Obviously, this limitation on number of registers didn't seem so important in practice.
+    # So, heuristically I check if compute latency dominates the problem, in which case unrolling could be expected to benefit us.
+    # Ideally, we'd count the number of loads that actually have to be live at a given time. But this heuristic is hopefully okay for now.
+    reg_constraint = max(1, remaining_reg)
+  else
+    reg_constraint = max(1, remaining_reg ÷ max(1,round(Int,rpp)))
+  end
   clamp(u, 1, reg_constraint), unrolled
     # rt = max(compute_rt, load_rt + store_rt)
     # # (iszero(rt) ? 4 : max(1, roundpow2( min( 4, round(Int, 16 / rt) ) ))), unrolled
