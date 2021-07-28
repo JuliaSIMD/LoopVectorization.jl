@@ -13,13 +13,18 @@ function add_operation!(ls_new::LoopSet, included::Vector{Int}, ls::LoopSet, op:
         if isstore(opc) && identifier(opc) ∉ ids
           # @show opp opc op
           # replace opp with a load from opc
+          parentsopc = parents(opc)
+          parentsnew = length(parentsopc) > 1 ? Operation[] : NOPARENTS
           opnew = Operation(
             length(operations(ls_new)), name(opp), opc.elementbytes, instruction(:getindex), memload,
-            loopdependencies(opc), reduceddependencies(opc), NOPARENTS, opc.ref, reducedchildren(opc)
+            loopdependencies(opc), reduceddependencies(opc), parentsnew, opc.ref, reducedchildren(opc)
           )
           addsetv!(ls_new.includedactualarrays, vptr(opc.ref))
           push!(operations(ls_new), opnew)
           push!(vparents, opnew)
+          for i ∈ 2:length(parentsopc)
+            push!(parentsnew, add_operation!(ls_new, included, ls, parentsopc[i], ids, issecond))
+          end
           included[identifier(opp)] = identifier(opnew)
           found = true
           break
