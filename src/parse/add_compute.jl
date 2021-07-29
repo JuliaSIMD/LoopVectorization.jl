@@ -248,78 +248,140 @@ function add_reduction_update_parent!(
   opout
 end
 
-
+function substitute!(ex::Expr, d::Dict{Symbol,Symbol})
+  for (i,arg) ∈ enumerate(ex.args)
+    if arg isa Symbol
+      ex.args[i] = get(d, arg, arg)
+    elseif arg isa Expr
+      substitute!(arg, d)
+    end
+  end
+end
+function argsymbol(ls::LoopSet, arg, mpref, elementbytes::Int, position::Int)::Symbol
+  argsym = gensym!(ls, "anonarg")
+  if mpref === nothing
+    add_operation!(ls, argsym, arg, elementbytes, position)
+  else
+    add_operation!(ls, argsym, arg, mpref, elementbytes, position)
+  end
+  return argsym  
+end
+function add_anon_func!(ls::LoopSet, LHS::Symbol, f::Expr, ex::Expr, position::Int, mpref::Union{Nothing,ArrayReferenceMetaPosition}, elementbytes::Int)::Operation
+  d = Dict{Symbol,Symbol}()
+  anonargs = f.args[1]
+  if anonargs isa Symbol
+    @assert length(ex.args) == 2
+    arg = ex.args[2]
+    if !(arg isa Symbol)
+      argsym = argsymbol(ls, arg, mpref, elementbytes, position)
+    else
+      argsym = arg::Symbol
+    end
+    d[anonargs] = argsym
+  else
+    @assert Meta.isexpr(anonargs, :tuple)
+    callargs = @view(ex.args[2:end])
+    for i ∈ eachindex(anonargs.args, callargs)
+      arg = callargs[i]
+      if !(arg isa Symbol)
+        argsym = argsymbol(ls, arg, mpref, elementbytes, position)
+      else
+        argsym = arg::Symbol
+      end
+      d[anonargs.args[i]] = argsym
+    end
+  end
+  anonbody = f.args[2]
+  substitute!(anonbody, d)
+  for i ∈ 1:length(anonbody.args)-1
+    exᵢ = anonbody.args[i]
+    exᵢ isa Expr && push!(ls, exᵢ, elementbytes, position, mpref)
+  end
+  lastline = last(anonbody.args)
+  retop = if lastline isa Symbol
+    add_compute!(ls, LHS, instruction(:identity), Operation[getop(ls, lastline)], elementbytes)
+  elseif Meta.isexpr(lastline, :call)
+    add_compute!(ls, LHS, lastline, elementbytes, position, mpref)
+  elseif Meta.isexpr(lastline, :(=))
+    add_compute!(ls, LHS, lastline.args[2], elementbytes, position, mpref)
+  else
+    throw(LoopError("Last line of anon func not understood: $lastline"))
+  end
+  return retop
+end
 function add_compute!(
     ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int, position::Int,
     mpref::Union{Nothing,ArrayReferenceMetaPosition} = nothing
-)
-    @assert ex.head === :call
+)::Operation
+  @assert ex.head === :call
+  fexpr = first(ex.args)
+  Meta.isexpr(fexpr, :(->)) && return add_anon_func!(ls, var, fexpr, ex, position, mpref, elementbytes)
   # instr = instruction(first(ex.args))::Symbol
-    instr = instruction!(ls, first(ex.args))::Instruction
-    args = @view(ex.args[2:end])
-    if (instr.instr === :pow_fast || instr.instr === :(^)) && length(args) == 2
-        arg2 = args[2]
-        arg2 isa Number && return add_pow!(ls, var, args[1], arg2, elementbytes, position)
-    end
-    vparents = Operation[]
-    deps = Symbol[]
-    reduceddeps = Symbol[]
-    reduction_ind = 0
-    # @show ex first(operations(ls)) === getop(ls, :kern_1_1, elementbytes) first(operations(ls)) getop(ls, :kern_1_1, elementbytes)
-    for (ind,arg) ∈ enumerate(args)
-        if var === arg
+  instr = instruction!(ls, first(ex.args))::Instruction
+  args = @view(ex.args[2:end])
+  if (instr.instr === :pow_fast || instr.instr === :(^)) && length(args) == 2
+    arg2 = args[2]
+    arg2 isa Number && return add_pow!(ls, var, args[1], arg2, elementbytes, position)
+  end
+  vparents = Operation[]
+  deps = Symbol[]
+  reduceddeps = Symbol[]
+  reduction_ind = 0
+  # @show ex first(operations(ls)) === getop(ls, :kern_1_1, elementbytes) first(operations(ls)) getop(ls, :kern_1_1, elementbytes)
+  for (ind,arg) ∈ enumerate(args)
+    if var === arg
+      reduction_ind = ind
+      # add_reduction!(vparents, deps, reduceddeps, ls, arg, elementbytes)
+      getop(ls, var, elementbytes)
+    elseif arg isa Expr
+      isref, argref = tryrefconvert(ls, arg, elementbytes, varname(mpref))
+      if isref
+        if mpref == argref
+          if varname(mpref) === var
+            id = findfirst(==(mpref.mref), ls.refs_aliasing_syms)
+            mpref.varname = var = id === nothing ? var : ls.syms_aliasing_refs[id]
             reduction_ind = ind
-            # add_reduction!(vparents, deps, reduceddeps, ls, arg, elementbytes)
-            getop(ls, var, elementbytes)
-        elseif arg isa Expr
-            isref, argref = tryrefconvert(ls, arg, elementbytes, varname(mpref))
-            if isref
-                if mpref == argref
-                    if varname(mpref) === var
-                        id = findfirst(==(mpref.mref), ls.refs_aliasing_syms)
-                        mpref.varname = var = id === nothing ? var : ls.syms_aliasing_refs[id]
-                        reduction_ind = ind
-                        mergesetv!(deps, loopdependencies(add_load!(ls, argref, elementbytes)))
-                    else
-                        pushparent!(vparents, deps, reduceddeps, add_load!(ls, argref, elementbytes))
-                    end
-                else
-                    argref.varname = gensym!(ls, "tempload")
-                    pushparent!(vparents, deps, reduceddeps, add_load!(ls, argref, elementbytes))
-                end
-            else
-                add_parent!(vparents, deps, reduceddeps, ls, arg, elementbytes, position)
-            end
-        elseif arg ∈ ls.loopsymbols
-            loopsymop = add_loopvalue!(ls, arg, elementbytes)
-            pushparent!(vparents, deps, reduceddeps, loopsymop)
+            mergesetv!(deps, loopdependencies(add_load!(ls, argref, elementbytes)))
+          else
+            pushparent!(vparents, deps, reduceddeps, add_load!(ls, argref, elementbytes))
+          end
         else
-            add_parent!(vparents, deps, reduceddeps, ls, arg, elementbytes, position)
+          argref.varname = gensym!(ls, "tempload")
+          pushparent!(vparents, deps, reduceddeps, add_load!(ls, argref, elementbytes))
         end
-    end
-    reduction = reduction_ind > 0
-    loopnestview = view(ls.loopsymbols, 1:position)
-    if iszero(length(deps)) && reduction
-        append!(deps, loopnestview)
-        append!(reduceddeps, loopnestview)
+      else
+        add_parent!(vparents, deps, reduceddeps, ls, arg, elementbytes, position)
+      end
+    elseif arg ∈ ls.loopsymbols
+      loopsymop = add_loopvalue!(ls, arg, elementbytes)
+      pushparent!(vparents, deps, reduceddeps, loopsymop)
     else
-        newloopdeps = Symbol[]; newreduceddeps = Symbol[];
-        setdiffv!(newloopdeps, newreduceddeps, deps, loopnestview)
-        mergesetv!(newreduceddeps, reduceddeps)
-        deps = newloopdeps; reduceddeps = newreduceddeps
+      add_parent!(vparents, deps, reduceddeps, ls, arg, elementbytes, position)
     end
-    # @show reduction, search_tree(vparents, var) ex var vparents mpref get(ls.opdict, var, nothing) search_tree_for_ref(ls, vparents, mpref, var) # relies on cycles being forbidden
-    if reduction || search_tree(vparents, var)
-        return add_reduction!(ls, var, reduceddeps, deps, vparents, reduction_ind, elementbytes, instr)
-    else
-        if mpref ≢ nothing && ((length(loopdependencies(mpref)) < position) | (length(reduceddependencies(mpref)) > 0))
-            var, found = search_tree_for_ref(ls, vparents, mpref, var)
-            found && return add_reduction!(ls, var, reduceddeps, deps, vparents, reduction_ind, elementbytes, instr)
-        end
-        op = Operation(length(operations(ls)), var, elementbytes, instr, compute, deps, reduceddeps, vparents)
-        return pushop!(ls, op, var)
+  end
+  reduction = reduction_ind > 0
+  loopnestview = view(ls.loopsymbols, 1:position)
+  if iszero(length(deps)) && reduction
+    append!(deps, loopnestview)
+    append!(reduceddeps, loopnestview)
+  else
+    newloopdeps = Symbol[]; newreduceddeps = Symbol[];
+    setdiffv!(newloopdeps, newreduceddeps, deps, loopnestview)
+    mergesetv!(newreduceddeps, reduceddeps)
+    deps = newloopdeps; reduceddeps = newreduceddeps
+  end
+  # @show reduction, search_tree(vparents, var) ex var vparents mpref get(ls.opdict, var, nothing) search_tree_for_ref(ls, vparents, mpref, var) # relies on cycles being forbidden
+  if reduction || search_tree(vparents, var)
+    return add_reduction!(ls, var, reduceddeps, deps, vparents, reduction_ind, elementbytes, instr)
+  else
+    if mpref ≢ nothing && ((length(loopdependencies(mpref)) < position) | (length(reduceddependencies(mpref)) > 0))
+      var, found = search_tree_for_ref(ls, vparents, mpref, var)
+      found && return add_reduction!(ls, var, reduceddeps, deps, vparents, reduction_ind, elementbytes, instr)
     end
-    # maybe_const_compute!(ls, op, elementbytes, position)
+    op = Operation(length(operations(ls)), var, elementbytes, instr, compute, deps, reduceddeps, vparents)
+    return pushop!(ls, op, var)
+  end
+  # maybe_const_compute!(ls, op, elementbytes, position)
 end
 function add_reduction!(ls::LoopSet, var::Symbol, reduceddeps, deps, vparents, reduction_ind, elementbytes, instr)
     parent = ls.opdict[var]

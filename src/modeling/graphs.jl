@@ -1016,10 +1016,10 @@ function instruction!(ls::LoopSet, x::Expr)
     @assert _x isa Expr
     x = _x
   end
-  if x.head ≢ :(->)
-    instr = last(x.args).value
-    instr ∈ keys(COST) && return Instruction(:LoopVectorization, instr)
-  end
+  # if x.head ≢ :(->)
+  instr = last(x.args).value
+  instr ∈ keys(COST) && return Instruction(:LoopVectorization, instr)
+  # end
   instr = gensym!(ls, "f")
   pushpreamble!(ls, Expr(:(=), instr, x))
   Instruction(Symbol(""), instr)
@@ -1191,7 +1191,7 @@ function add_assignment!(ls::LoopSet, LHS, RHS, elementbytes::Int, position::Int
   end
 end
 
-function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
+function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int, mpref::Union{Nothing,ArrayReferenceMetaPosition} = nothing)
     if ex.head === :call
         finex = first(ex.args)::Symbol
         if finex === :setindex!
@@ -1216,7 +1216,7 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
         @assert localbody.head === :(=)
         @assert length(localbody.args) == 2
         LHS = (localbody.args[1])::Symbol
-        RHS = push!(ls, (localbody.args[2]), elementbytes, position)
+        RHS = push!(ls, (localbody.args[2]), elementbytes, position, mpref)
         if isstore(RHS)
             RHS
         else

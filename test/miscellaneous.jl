@@ -310,7 +310,7 @@ using Test
     function softmax3_coreavx1!(lse, qq, xx, tmpmax, maxk, nk)
         for k in Base.OneTo(maxk)
             @turbo for i in eachindex(lse)
-                tmp = exp(xx[i,k] - tmpmax[i])
+                tmp = (tmpm -> exp(xx[i,k] - tmpm))(tmpmax[i])
                 lse[i] += tmp
                 qq[i,k] = tmp
             end
@@ -342,7 +342,7 @@ using Test
     function softmax3_coreavx2!(lse, qq, xx, tmpmax, maxk, nk)
         @turbo for k in Base.OneTo(maxk)
             for i in eachindex(lse)
-                tmp = exp(xx[i,k] - tmpmax[i])
+                tmp = (yy -> exp(yy[i,k] - tmpmax[i]))(xx)
                 lse[i] += tmp
                 qq[i,k] = tmp
             end
@@ -524,9 +524,10 @@ using Test
         end
     end
     function test_for_with_different_indexavx!(c, a, b, start_sample, num_samples)
-        @turbo for i = start_sample:num_samples + start_sample - 1
-            c[i] = b[i] * a[i]
-        end
+      @turbo for i = start_sample:num_samples + start_sample - 1
+        aᵢ = a[i]
+        c[i] = ((x,y) -> x*y)(b[i], aᵢ)
+      end
     end
     function test_for_with_different_index_avx!(c, a, b, start_sample, num_samples)
         @_avx for i = start_sample:num_samples + start_sample - 1
