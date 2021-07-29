@@ -404,8 +404,8 @@ end
   loopsyms = [gensym!(ls, "n") for n ∈ 1:N]
   add_broadcast_loops!(ls, loopsyms, :dest)
   elementbytes = sizeof(T)
-  add_broadcast!(ls, :dest, :bc, loopsyms, BC, elementbytes)
-  storeop = add_simple_store!(ls, :dest, ArrayReference(:dest, loopsyms), elementbytes)
+  add_broadcast!(ls, :destination, :bc, loopsyms, BC, elementbytes)
+  storeop = add_simple_store!(ls, :destination, ArrayReference(:dest, loopsyms), elementbytes)
   doaddref!(ls, storeop)
   resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
   # return ls
@@ -426,8 +426,8 @@ end
   pushprepreamble!(ls, Expr(:(=), :dest, Expr(:call, :parent, :dest′)))
   add_broadcast_loops!(ls, loopsyms, :dest′)
   elementbytes = sizeof(T)
-  add_broadcast!(ls, :dest, :bc, loopsyms, BC, elementbytes)
-  storeop = add_simple_store!(ls, :dest, ArrayReference(:dest, reverse(loopsyms)), elementbytes)
+  add_broadcast!(ls, :destination, :bc, loopsyms, BC, elementbytes)
+  storeop = add_simple_store!(ls, :destination, ArrayReference(:dest, reverse(loopsyms)), elementbytes)
   doaddref!(ls, storeop)
   resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
   Expr(:block, Expr(:meta,:inline), setup_call(ls, :(Base.Broadcast.materialize!(dest′, bc)), LineNumberNode(0), inline, false, u₁, u₂, v, threads%Int, warncheckarg), :dest′)
