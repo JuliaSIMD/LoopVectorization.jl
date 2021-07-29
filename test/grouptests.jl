@@ -47,6 +47,16 @@ const START_TIME = time()
     @time include("manyloopreductions.jl")
 
     @time include("simplemisc.jl")
+
+    @time include("ifelsemasks.jl")
+
+    @time include("gemv.jl")
+
+    @time include("dot.jl")
+
+    @time include("special.jl")
+
+    @time include("mapreduce.jl")
   end
 
   @time if LOOPVECTORIZATION_TEST == "all" || LOOPVECTORIZATION_TEST == "part3"
@@ -55,7 +65,11 @@ const START_TIME = time()
     @time include("miscellaneous.jl")
 
     @time include("copy.jl")
-  end
+
+    @time include("tensors.jl")
+
+    @time include("staticsize.jl")
+end
 
   @time if LOOPVECTORIZATION_TEST == "all" || LOOPVECTORIZATION_TEST == "part4"
     @time include("threading.jl")
@@ -71,33 +85,14 @@ const START_TIME = time()
     if VERSION ≥ v"1.6"
       @time include("quantum.jl")
     end
-  end
 
-  @time if LOOPVECTORIZATION_TEST == "all" || LOOPVECTORIZATION_TEST == "part5"
     @time include("offsetarrays.jl")
   end
 
-  @time if LOOPVECTORIZATION_TEST == "all" || LOOPVECTORIZATION_TEST == "part6"
+  @time if LOOPVECTORIZATION_TEST == "all" || LOOPVECTORIZATION_TEST == "part5"
     @time include("gemm.jl")
   end
 
-  @time if LOOPVECTORIZATION_TEST == "all" || LOOPVECTORIZATION_TEST == "part7"
-    @time include("tensors.jl")
-
-    @time include("staticsize.jl")
-  end
-
-  @time if LOOPVECTORIZATION_TEST == "all" || LOOPVECTORIZATION_TEST == "part8"
-    @time include("ifelsemasks.jl")
-
-    @time include("gemv.jl")
-
-    @time include("dot.jl")
-
-    @time include("special.jl")
-
-    @time include("mapreduce.jl")
-  end
 end
 
 const ELAPSED_MINUTES = (time() - START_TIME)/60
