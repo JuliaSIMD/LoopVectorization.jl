@@ -47,6 +47,8 @@ const START_TIME = time()
     @time include("manyloopreductions.jl")
 
     @time include("simplemisc.jl")
+
+    @time include("convolutions.jl")
   end
 
   @time if LOOPVECTORIZATION_TEST == "all" || LOOPVECTORIZATION_TEST == "part3"
