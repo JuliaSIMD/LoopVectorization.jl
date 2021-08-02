@@ -1,20 +1,20 @@
 function add_unique_store!(ls::LoopSet, op::Operation)
-    add_vptr!(ls, op)
-    pushop!(ls, op, name(op.ref))
+  add_vptr!(ls, op)
+  pushop!(ls, op, name(op.ref))
 end
 function cse_store!(ls::LoopSet, op::Operation)
-    id = identifier(op)
-    ls.operations[id] = op
-    ls.opdict[op.variable] = op
+  id = identifier(op)
+  ls.operations[id] = op
+  ls.opdict[op.variable] = op
 end
 function add_store!(ls::LoopSet, op::Operation, add_pvar::Bool = !any(r -> r == op.ref, ls.refs_aliasing_syms))
-    @assert isstore(op)
-    if add_pvar
-        push!(ls.syms_aliasing_refs, name(first(parents(op))))
-        push!(ls.refs_aliasing_syms, op.ref)
-    end
-    id = op.identifier
-    id == length(operations(ls)) ? add_unique_store!(ls, op) : cse_store!(ls, op)
+  @assert isstore(op)
+  if add_pvar
+    push!(ls.syms_aliasing_refs, name(first(parents(op))))
+    push!(ls.refs_aliasing_syms, op.ref)
+  end
+  id = op.identifier
+  id == length(operations(ls)) ? add_unique_store!(ls, op) : cse_store!(ls, op)
 end
 function add_copystore!(
     ls::LoopSet, parent::Operation, mpref::ArrayReferenceMetaPosition, elementbytes::Int
@@ -89,7 +89,7 @@ function add_conditional_store!(ls::LoopSet, LHS, condop::Operation, storeop::Op
     id = length(ls.operations)
     @assert pvar ∉ ls.syms_aliasing_refs
     # if pvar ∉ ls.syms_aliasing_refs
-    # FIXME properly handle CSE of conditional stores.
+  # FIXME properly handle CSE of conditional stores.
     push!(ls.syms_aliasing_refs, pvar)
     push!(ls.refs_aliasing_syms, mref)
     storeparents = [storeop, condop]

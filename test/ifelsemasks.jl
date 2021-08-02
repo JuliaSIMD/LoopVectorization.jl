@@ -428,6 +428,46 @@ T = Float32
         return w
     end
 
+
+  function mwe_v(dest, src, lut)
+    # for i in eachindex(src)
+    LoopVectorization.@turbo for i in eachindex(src)
+      v = src[i]
+      s = 128
+      s2 = s | 64
+      s = ifelse(lut[s2] <= v, s2, s)
+      s2 = s | 32
+      s = ifelse(lut[s2] <= v, s2, s)
+      dest[i] = s
+    end
+    return dest
+  end
+
+  function mwe_s(dest, src, lut)
+    for i in eachindex(src)
+      # LoopVectorization.@turbo for i in eachindex(src)
+      v = src[i]
+      s = 128
+      s2 = s | 64
+      s = ifelse(lut[s2] <= v, s2, s)
+      s2 = s | 32
+      s = ifelse(lut[s2] <= v, s2, s)
+      dest[i] = s
+    end
+    return dest
+  end
+
+  function turbocomparison!(m)
+    @turbo for i in eachindex(m)
+      m[i] = ifelse(0<m[i]<0.5, 0.0, m[i])
+    end
+  end
+  function turbocomparison!(m, y)
+    @turbo for i in eachindex(m)
+      m[i] = ifelse(0<m[i]<y[i]<0.5, 0.0, m[i])
+    end
+  end
+
     N = 117
     for T ∈ (Float32, Float64, Int32, Int64)
         @show T, @__LINE__
@@ -612,5 +652,21 @@ T = Float32
         @test barycentric_weight3(X) ≈ bX
         @test barycentric_weight4(X) ≈ bX
     end
+
+  let
+    lut = let x = cumsum(rand(Float32, 256)./128); x[end] = Inf; x end;
+    src = rand(Float32, N);
+
+    @test mwe_v(Vector{Int}(undef, N), src, lut) == mwe_s(Vector{Int}(undef, N), src, lut)
+    @test mwe_v(Vector{Int32}(undef, N), src, lut) == mwe_s(Vector{Int32}(undef, N), src, lut)
+  end
+
+  let m = rand(25, 25), y = rand(25,25), baseline5 = (@. ifelse(0 < m < 0.5, 0.0, m)), baseline7 = @. ifelse(0 < y < m < 0.5, 0.0, y)
+    turbocomparison!(y, m)
+    @test y == baseline7
+    turbocomparison!(m)
+    @test m == baseline5
+  end
+
 end
 

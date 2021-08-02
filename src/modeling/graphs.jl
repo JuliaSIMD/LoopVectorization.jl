@@ -1050,9 +1050,25 @@ strip_op_linenumber_nodes(q::Expr) = only(filter(x -> !isa(x, LineNumberNode), q
 function add_operation!(ls::LoopSet, LHS::Symbol, RHS::Symbol, elementbytes::Int, position::Int)
   add_constant!(ls, RHS, ls.loopsymbols[1:position], LHS, elementbytes)
 end
+function add_comparison!(ls::LoopSet, LHS::Symbol, RHS::Expr, elementbytes::Int, position::Int)
+  Nargs = length(RHS.args)
+  @assert (Nargs ≥ 5) & isodd(Nargs)
+  p1 = add_assignment!(ls, gensym!(ls, "leftcmp"), RHS.args[1], elementbytes, position)::Operation
+  p2 = add_assignment!(ls, gensym!(ls, "middlecmp"), RHS.args[3], elementbytes, position)::Operation
+  cmpname = Nargs == 3 ? LHS : gensym!(ls, "cmp")
+  cmp = add_compute!(ls, cmpname, RHS.args[2], Operation[p1, p2], elementbytes)::Operation
+  for i ∈ 5:2:Nargs
+    pnew = add_assignment!(ls, gensym!(ls, "rightcmp"), RHS.args[i], elementbytes, position)::Operation
+    cmpchain = add_compute!(ls, gensym!(ls, "cmpchain"), RHS.args[i-1], Operation[p2, pnew], elementbytes)::Operation
+    cmpname = Nargs == i ? LHS : gensym!(ls, "cmp")
+    cmp = add_compute!(ls, cmpname, :&, [cmp, cmpchain], elementbytes)::Operation
+    p2 = pnew
+  end
+  return cmp
+end
 function add_operation!(
   ls::LoopSet, LHS::Symbol, RHS::Expr, elementbytes::Int, position::Int
-  )
+)
   if RHS.head === :ref
     add_load_ref!(ls, LHS, RHS, elementbytes)
   elseif RHS.head === :call
@@ -1083,6 +1099,8 @@ function add_operation!(
     # op = add_constant!(ls, c, ls.loopsymbols[1:position], LHS, elementbytes, :numericconstant)
     # pushpreamble!(ls, op, c)
     # op
+  elseif Meta.isexpr(RHS, :comparison)
+    add_comparison!(ls, LHS, RHS, elementbytes, position)
   else
     throw(LoopError("Expression not recognized.", RHS))
   end
@@ -1125,6 +1143,8 @@ function add_operation!(
     # op = add_constant!(ls, c, ls.loopsymbols[1:position], LHS_sym, elementbytes, :numericconstant)
     # pushpreamble!(ls, op, c)
     # op
+  elseif Meta.isexpr(RHS, :comparison, 5)
+    add_comparison!(ls, LHS, RHS, elementbytes, position)
   else
     throw(LoopError("Expression not recognized.", RHS))
   end
@@ -1141,6 +1161,7 @@ function prepare_rhs_for_storage!(ls::LoopSet, RHS::Union{Symbol,Expr}, array, r
   mpref.parents = cachedparents
   op = add_store!(ls, mpref, elementbytes)
   ls.syms_aliasing_refs[findfirst(==(mpref.mref), ls.refs_aliasing_syms)] = lrhs
+  ls.opdict[lrhs] = op
   return op
 end
 
