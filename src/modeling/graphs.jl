@@ -1160,7 +1160,9 @@ function prepare_rhs_for_storage!(ls::LoopSet, RHS::Union{Symbol,Expr}, array, r
   add_operation!(ls, lrhs, RHS, mpref, elementbytes, position)
   mpref.parents = cachedparents
   op = add_store!(ls, mpref, elementbytes)
-  ls.syms_aliasing_refs[findfirst(==(mpref.mref), ls.refs_aliasing_syms)] = lrhs
+  if lrhs ∈ keys(ls.opdict)
+    ls.syms_aliasing_refs[findfirst(==(mpref.mref), ls.refs_aliasing_syms)] = lrhs
+  end
   return op
 end
 
