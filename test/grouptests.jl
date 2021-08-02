@@ -92,6 +92,8 @@ end
   end
 
   @time if LOOPVECTORIZATION_TEST == "all" || LOOPVECTORIZATION_TEST == "part5"
+    @time include("steprange.jl")
+    
     @time include("gemm.jl")
   end
 

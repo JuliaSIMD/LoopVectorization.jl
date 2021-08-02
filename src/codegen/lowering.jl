@@ -412,31 +412,31 @@ function unrollremcomparison(ls::LoopSet, loop::Loop, UFt::Int, n::Int, nisvecto
     end
 end
 function loopvarremcomparison(loop::Loop, UFt::Int, nisvectorized::Bool, remfirst::Bool)
-    loopsym = loop.itersymbol
-    loopstep = loop.step
-    if nisvectorized
-        offset = mulexpr(VECTORWIDTHSYMBOL, UFt, loopstep)
-        itercount = subexpr(last(loop), offset)
-        Expr(:call, GlobalRef(Base,:>), loopsym, itercount)
-    elseif remfirst # requires `isstaticloop(loop)`
-        Expr(:call, GlobalRef(Base,:<), loopsym, gethint(first(loop)) + UFt*gethint(loopstep) - 1)
-    elseif isknown(last(loop))
-        if isknown(loopstep)
-            Expr(:call, GlobalRef(Base,:>), loopsym, gethint(last(loop)) - UFt*gethint(loopstep))
-        elseif isone(UFt)
-            Expr(:call, GlobalRef(Base,:>), loopsym, subexpr(gethint(last(loop)), getsym(loopstep)))
-        else
-            Expr(:call, GlobalRef(Base,:>), loopsym, subexpr(gethint(last(loop)),  mulexpr(getsym(loopstep), UFt)))
-        end
+  loopsym = loop.itersymbol
+  loopstep = loop.step
+  if nisvectorized
+    offset = mulexpr(VECTORWIDTHSYMBOL, UFt, loopstep)
+    itercount = subexpr(last(loop), offset)
+    Expr(:call, GlobalRef(Base,:>), loopsym, itercount)
+  elseif remfirst # requires `isstaticloop(loop)`
+    Expr(:call, GlobalRef(Base,:<), loopsym, gethint(first(loop)) + UFt*gethint(loopstep) - 1)
+  elseif isknown(last(loop))
+    if isknown(loopstep)
+      Expr(:call, GlobalRef(Base,:>), loopsym, gethint(last(loop)) - UFt*gethint(loopstep))
+    elseif isone(UFt)
+      Expr(:call, GlobalRef(Base,:>), loopsym, subexpr(gethint(last(loop)), getsym(loopstep)))
     else
-        if isknown(loopstep)
-            Expr(:call, GlobalRef(Base,:>), loopsym, Expr(:call, lv(:vsub_nsw), getsym(last(loop)), UFt*gethint(loopstep)))
-        elseif isone(UFt)
-            Expr(:call, GlobalRef(Base,:>), loopsym, Expr(:call, lv(:vsub_nsw), getsym(last(loop)), getsym(loopstep)))
-        else
-            Expr(:call, GlobalRef(Base,:>), loopsym, Expr(:call, lv(:vsub_nsw), getsym(last(loop)), mulexpr(getsym(loopstep), UFt)))
-        end
+      Expr(:call, GlobalRef(Base,:>), loopsym, subexpr(gethint(last(loop)),  mulexpr(getsym(loopstep), UFt)))
     end
+  else
+    if isknown(loopstep)
+      Expr(:call, GlobalRef(Base,:>), loopsym, Expr(:call, lv(:vsub_nsw), getsym(last(loop)), UFt*gethint(loopstep)))
+    elseif isone(UFt)
+      Expr(:call, GlobalRef(Base,:>), loopsym, Expr(:call, lv(:vsub_nsw), getsym(last(loop)), getsym(loopstep)))
+    else
+      Expr(:call, GlobalRef(Base,:>), loopsym, Expr(:call, lv(:vsub_nsw), getsym(last(loop)), mulexpr(getsym(loopstep), UFt)))
+    end
+  end
 end
 function pointerremcomparison(ls::LoopSet, termind::Int, UFt::Int, n::Int, nisvectorized::Bool, remfirst::Bool, loop::Loop)
   lssm = ls.lssm

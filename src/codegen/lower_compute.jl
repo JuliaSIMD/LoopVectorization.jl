@@ -62,43 +62,44 @@ function parent_unroll_status(op::Operation, u₁loop::Symbol, u₂loop::Symbol,
 end
 
 function _add_loopvalue!(ex::Expr, loopval::Symbol, vloop::Loop, u::Int)
-    vloopsym = vloop.itersymbol
-    if loopval === vloopsym
-        if iszero(u)
-            push!(ex.args, _MMind(loopval, step(vloop)))
-        else
-            mm = _MMind(loopval, step(vloop))
-            if isone(u)
-                push!(ex.args, Expr(:call, lv(:vadd_nsw), VECTORWIDTHSYMBOL, mm))
-            else
-                push!(ex.args, Expr(:call, lv(:vadd_nsw), Expr(:call, lv(:vmul_nsw), VECTORWIDTHSYMBOL, u), mm))
-            end
-        end
-    elseif u == 0
-        push!(ex.args, loopval)
+  vloopsym = vloop.itersymbol
+  if loopval === vloopsym
+    if iszero(u)
+      push!(ex.args, _MMind(loopval, step(vloop)))
     else
-        push!(ex.args, Expr(:call, lv(:vadd_nsw), loopval, staticexpr(u)))
+      vstep = step(vloop)
+      mm = _MMind(loopval, vstep)
+      if isone(u) & isone(vstep)
+        push!(ex.args, Expr(:call, lv(:vadd_nsw), VECTORWIDTHSYMBOL, mm))
+      else
+        push!(ex.args, Expr(:call, lv(:vadd_nsw), mulexpr(VECTORWIDTHSYMBOL, u, vstep), mm))
+      end
     end
+  elseif u == 0
+    push!(ex.args, loopval)
+  else
+    push!(ex.args, Expr(:call, lv(:vadd_nsw), loopval, staticexpr(u)))
+  end
 end
 function add_loopvalue!(instrcall::Expr, loopval, ua::UnrollArgs, u₁::Int)
-    @unpack u₁loopsym, u₂loopsym, vloopsym, vloop, suffix = ua
-    if loopval === u₁loopsym #parentsunrolled[n]
-        if isone(u₁)
-            _add_loopvalue!(instrcall, loopval, vloop, 0)
-        else
-            t = Expr(:tuple)
-            for u ∈ 0:u₁-1
-                _add_loopvalue!(t, loopval, vloop, u)
-            end
-            push!(instrcall.args, Expr(:call, lv(:VecUnroll), t))
-        end
-    elseif suffix > 0 && loopval === u₂loopsym
-        _add_loopvalue!(instrcall, loopval, vloop, suffix)
-    elseif loopval === vloopsym
-        push!(instrcall.args, _MMind(loopval, step(vloop)))
+  @unpack u₁loopsym, u₂loopsym, vloopsym, vloop, suffix = ua
+  if loopval === u₁loopsym #parentsunrolled[n]
+    if isone(u₁)
+      _add_loopvalue!(instrcall, loopval, vloop, 0)
     else
-        push!(instrcall.args, loopval)
+      t = Expr(:tuple)
+      for u ∈ 0:u₁-1
+        _add_loopvalue!(t, loopval, vloop, u)
+      end
+      push!(instrcall.args, Expr(:call, lv(:VecUnroll), t))
     end
+  elseif suffix > 0 && loopval === u₂loopsym
+    _add_loopvalue!(instrcall, loopval, vloop, suffix)
+  elseif loopval === vloopsym
+    push!(instrcall.args, _MMind(loopval, step(vloop)))
+  else
+    push!(instrcall.args, loopval)
+  end
 end
 
 vecunrolllen(::Type{VecUnroll{N,W,T,V}}) where {N,W,T,V} = (N::Int + 1)

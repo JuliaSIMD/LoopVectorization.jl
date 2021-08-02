@@ -1,29 +1,29 @@
 struct MaybeKnown
-    hint::Int
-    sym::Symbol
-    known::Bool
+  hint::Int
+  sym::Symbol
+  known::Bool
 end
 struct Loop
-    itersymbol::Symbol
-    start::MaybeKnown
-    stop::MaybeKnown
-    step::MaybeKnown
-    rangesym::Symbol# === Symbol("") means loop is static
-    lensym::Symbol
+  itersymbol::Symbol
+  start::MaybeKnown
+  stop::MaybeKnown
+  step::MaybeKnown
+  rangesym::Symbol# === Symbol("") means loop is static
+  lensym::Symbol
 end
 
 struct UnrollSymbols
-    u₁loopsym::Symbol
-    u₂loopsym::Symbol
-    vloopsym::Symbol
+  u₁loopsym::Symbol
+  u₂loopsym::Symbol
+  vloopsym::Symbol
 end
 struct UnrollArgs
-    u₁loop::Loop
-    u₂loop::Loop
-    vloop::Loop
-    u₁::Int
-    u₂max::Int
-    suffix::Int # -1 means not tiled
+  u₁loop::Loop
+  u₂loop::Loop
+  vloop::Loop
+  u₁::Int
+  u₂max::Int
+  suffix::Int # -1 means not tiled
 end
 UnPack.unpack(ua::UnrollArgs, ::Val{:u₁loopsym}) = getfield(getfield(ua, :u₁loop), :itersymbol)
 UnPack.unpack(ua::UnrollArgs, ::Val{:u₂loopsym}) = getfield(getfield(ua, :u₂loop), :itersymbol)
@@ -33,16 +33,16 @@ UnPack.unpack(ua::UnrollArgs, ::Val{:u₂step}) = getfield(getfield(ua, :u₂loo
 UnPack.unpack(ua::UnrollArgs, ::Val{:vstep}) = getfield(getfield(ua, :vloop), :step)
 
 struct UnrollSpecification
-    u₁loopnum::Int
-    u₂loopnum::Int
-    vloopnum::Int
-    u₁::Int
-    u₂::Int
+  u₁loopnum::Int
+  u₂loopnum::Int
+  vloopnum::Int
+  u₁::Int
+  u₂::Int
 end
 # UnrollSpecification(ls::LoopSet, u₁loop::Loop, vloopsym::Symbol, u₁, u₂) = UnrollSpecification(ls, u₁loop.itersymbol, vloopsym, u₁, u₂)
 function UnrollSpecification(us::UnrollSpecification, u₁, u₂)
-    @unpack u₁loopnum, u₂loopnum, vloopnum = us
-    UnrollSpecification(u₁loopnum, u₂loopnum, vloopnum, u₁, u₂)
+  @unpack u₁loopnum, u₂loopnum, vloopnum = us
+  UnrollSpecification(u₁loopnum, u₂loopnum, vloopnum, u₁, u₂)
 end
 # function UnrollSpecification(us::UnrollSpecification; u₁ = us.u₁, u₂ = us.u₂)
 #     @unpack u₁loopnum, u₂loopnum, vloopnum = us
@@ -52,16 +52,16 @@ isunrolled1(us::UnrollSpecification, n::Int) = us.u₁loopnum == n
 isunrolled2(us::UnrollSpecification, n::Int) = !isunrolled1(us, n) && us.u₂loopnum == n
 isvectorized(us::UnrollSpecification, n::Int) = us.vloopnum == n
 function unrollfactor(us::UnrollSpecification, n::Int)
-    @unpack u₁loopnum, u₂loopnum, u₁, u₂ = us
-    (u₁loopnum == n) ? u₁ : ((u₂loopnum == n) ? u₂ : 1)
+  @unpack u₁loopnum, u₂loopnum, u₁, u₂ = us
+  (u₁loopnum == n) ? u₁ : ((u₂loopnum == n) ? u₂ : 1)
 end
 function pushexpr!(ex::Expr, mk::MaybeKnown)
-    if isknown(mk)
-        push!(ex.args, staticexpr(gethint(mk)))
-    else
-        push!(ex.args, getsym(mk))
-    end
-    nothing
+  if isknown(mk)
+    push!(ex.args, staticexpr(gethint(mk)))
+  else
+    push!(ex.args, getsym(mk))
+  end
+  nothing
 end
 pushexpr!(ex::Expr, x::Union{Symbol,Expr}) = (push!(ex.args, x); nothing)
 pushexpr!(ex::Expr, x::Integer) = (push!(ex.args, staticexpr(convert(Int, x))); nothing)
@@ -77,16 +77,16 @@ Base.iszero(mk::MaybeKnown) = isknown(mk) && iszero(gethint(mk))
 gethint(a::Integer) = a
 
 function Loop(
-    itersymbol::Symbol, start::Union{Int,Symbol}, stop::Union{Int,Symbol}, step::Union{Int,Symbol},
-    rangename::Symbol, lensym::Symbol
-)
-    Loop(itersymbol, MaybeKnown(start, 1), MaybeKnown(stop, 1024), MaybeKnown(step, 1), rangename, lensym)
+  itersymbol::Symbol, start::Union{Int,Symbol}, stop::Union{Int,Symbol}, step::Union{Int,Symbol},
+  rangename::Symbol, lensym::Symbol
+  )
+  Loop(itersymbol, MaybeKnown(start, 1), MaybeKnown(stop, 1024), MaybeKnown(step, 1), rangename, lensym)
 end
 startstopΔ(loop::Loop) = gethint(last(loop)) - gethint(first(loop))
 function Base.length(loop::Loop)
-    l = startstopΔ(loop)
-    s = gethint(step(loop))
-    (isone(s) ? l : cld(l, s)) + 1
+  l = startstopΔ(loop)
+  s = gethint(step(loop))
+  (isone(s) ? l : cld(l, s)) + 1
 end
 Base.first(l::Loop) = getfield(l, :start)
 Base.last(l::Loop) = getfield(l, :stop)
@@ -112,12 +112,8 @@ end
 
 pushmulexpr!(q, a, b) = (push!(q.args, mulexpr(a, b)); nothing)
 function pushmulexpr!(q, a, b::Integer)
-    if isone(b)
-        push!(q.args, a)
-    else
-        push!(q.args, mulexpr(a, b))
-    end
-    nothing
+  isone(b) ? push!(q.args, a) : push!(q.args, mulexpr(a, b))
+  nothing
 end
 
 # function arithmetic_expr(f, a, b)
@@ -148,40 +144,46 @@ end
 mulexpr(a,b,c) = arithmeticexpr(*, 1, :vmul_nsw, a, b, c)
 addexpr(a,b,c) = arithmeticexpr(+, 0, :vadd_nsw, a, b, c)
 function arithmeticexpr(op, init, f, a, b, c)
-    ex = Expr(:call, lv(f))
-    p = init
-    if isknown(a)
-        p = op(p, gethint(a))
-        known = 1
-    else
-        pushexpr!(ex, a)
-        known = 0
+  ex = Expr(:call, lv(f))
+  p = init
+  if isknown(a)
+    p = op(p, gethint(a))
+    known = 1
+  else
+    pushexpr!(ex, a)
+    known = 0
+  end
+  if isknown(b)
+    p = op(p, gethint(b))
+    known += 1
+  else
+    pushexpr!(ex, b)
+  end
+  if isknown(c)
+    p = op(p, gethint(c))
+    known += 1
+  else
+    if known == 0
+      ex = Expr(:call, lv(f), ex)
     end
-    if isknown(b)
-        p = op(p, gethint(b))
-        known += 1
-    else
-        pushexpr!(ex, b)
+    pushexpr!(ex, c)
+  end
+  if known == 3
+    return staticexpr(p)
+  else
+    if known == 2
+      pushexpr!(ex, p)
+      return ex
+    elseif known == 1
+      if ((op === (+)) && (p == 0)) || ((op === (*)) && (p == 1))
+        return ex
+      else
+        return Expr(:call, lv(f), ex, staticexpr(p))
+      end
+    else#known == 0
+      return ex
     end
-    if isknown(c)
-        p = op(p, gethint(c))
-        known += 1
-    elseif known == 0
-        ex = Expr(:call, lv(f), ex)
-        pushexpr!(ex, c)
-    end
-    if known == 3
-        return staticexpr(p)
-    else
-        if known == 2
-            pushexpr!(ex, p)
-            return ex
-        elseif known == 1
-            return Expr(:call, lv(f), ex, staticexpr(p))
-        else#known == 0
-            return ex
-        end
-    end
+  end
 end
 
 function addexpr(ex, incr::Integer)
@@ -255,82 +257,82 @@ end
 function terminatecondition(
     loop::Loop, us::UnrollSpecification, n::Int, mangledname::Symbol, inclmask::Bool, UF::Int = unrollfactor(us, n)
 )
-    if !isvectorized(us, n)
-        looprange(loop, UF, mangledname)
-    elseif inclmask
-        looprange(loop, 1, mangledname)
-    else
-        vec_looprange(loop, UF, mangledname) # may not be u₂loop
-    end
+  if !isvectorized(us, n)
+    looprange(loop, UF, mangledname)
+  elseif inclmask
+    looprange(loop, 1, mangledname)
+  else
+    vec_looprange(loop, UF, mangledname) # may not be u₂loop
+  end
 end
 
 function incrementloopcounter(us::UnrollSpecification, n::Int, mangledname::Symbol, UF::Int, l::Loop)
-    incr = step(l)
-    if isknown(incr)
-        incrementloopcounter(us, n, mangledname, UF * gethint(incr))
-    else
-        incrementloopcounter(us, n, mangledname, UF, getsym(incr))
-    end
+  incr = step(l)
+  if isknown(incr)
+    incrementloopcounter(us, n, mangledname, UF * gethint(incr))
+  else
+    incrementloopcounter(us, n, mangledname, UF, getsym(incr))
+  end
 end
 function incrementloopcounter(us::UnrollSpecification, n::Int, mangledname::Symbol, UF::Int)
-    if isvectorized(us, n)
-        if isone(UF)
-            Expr(:(=), mangledname, addexpr(VECTORWIDTHSYMBOL, mangledname))
-        else
-            Expr(:(=), mangledname, addexpr(mulexpr(VECTORWIDTHSYMBOL, staticexpr(UF)), mangledname))
-        end
+  if isvectorized(us, n)
+    if isone(UF)
+      Expr(:(=), mangledname, addexpr(VECTORWIDTHSYMBOL, mangledname))
     else
-        Expr(:(=), mangledname, addexpr(mangledname, UF))
+      Expr(:(=), mangledname, addexpr(mulexpr(VECTORWIDTHSYMBOL, staticexpr(UF)), mangledname))
     end
+  else
+    Expr(:(=), mangledname, addexpr(mangledname, UF))
+  end
 end
 function incrementloopcounter(us::UnrollSpecification, n::Int, mangledname::Symbol, UF::Int, incr::Symbol)
-    if isvectorized(us, n)
-        if isone(UF)
-            Expr(:(=), mangledname, addexpr(mulexpr(VECTORWIDTHSYMBOL, incr), mangledname))
-        else
-            Expr(:(=), mangledname, addexpr(mulexpr(mulexpr(VECTORWIDTHSYMBOL, staticexpr(UF)), incr), mangledname))
-        end
+  if isvectorized(us, n)
+    if isone(UF)
+      Expr(:(=), mangledname, addexpr(mulexpr(VECTORWIDTHSYMBOL, incr), mangledname))
     else
-        Expr(:(=), mangledname, addexpr(mangledname, mulexpr(incr, UF)))
+      Expr(:(=), mangledname, addexpr(mulexpr(mulexpr(VECTORWIDTHSYMBOL, staticexpr(UF)), incr), mangledname))
     end
+  else
+    Expr(:(=), mangledname, addexpr(mangledname, mulexpr(incr, UF)))
+  end
 end
 
 function incrementloopcounter!(q, us::UnrollSpecification, n::Int, UF::Int, l::Loop)
-    incr = step(l)
-    if isknown(incr)
-        incrementloopcounter!(q, us, n, UF * gethint(incr))
-    else
-        incrementloopcounter!(q, us, n, UF, getsym(incr))
-    end
+  incr = step(l)
+  if isknown(incr)
+    incrementloopcounter!(q, us, n, UF * gethint(incr))
+  else
+    incrementloopcounter!(q, us, n, UF, getsym(incr))
+  end
 end
 function incrementloopcounter!(q, us::UnrollSpecification, n::Int, UF::Int)
-    if isvectorized(us, n)
-        if isone(UF)
-            push!(q.args, VECTORWIDTHSYMBOL)
-        else
-            push!(q.args, mulexpr(VECTORWIDTHSYMBOL, staticexpr(UF)))
-        end
+  if isvectorized(us, n)
+    if isone(UF)
+      push!(q.args, VECTORWIDTHSYMBOL)
     else
-        push!(q.args, staticexpr(UF))
+      push!(q.args, mulexpr(VECTORWIDTHSYMBOL, staticexpr(UF)))
     end
+  else
+    push!(q.args, staticexpr(UF))
+  end
 end
 function incrementloopcounter!(q, us::UnrollSpecification, n::Int, UF::Int, incr::Symbol)
-    if isvectorized(us, n)
-        if isone(UF)
-            push!(q.args, mulexpr(VECTORWIDTHSYMBOL, incr))
-        else
-            push!(q.args, mulexpr(mulexpr(VECTORWIDTHSYMBOL, staticexpr(UF)), incr))
-        end
+  if isvectorized(us, n)
+    if isone(UF)
+      push!(q.args, mulexpr(VECTORWIDTHSYMBOL, incr))
     else
-        push!(q.args, mulexpr(staticexpr(UF), incr))
+      push!(q.args, mulexpr(mulexpr(VECTORWIDTHSYMBOL, staticexpr(UF)), incr))
     end
+  else
+    push!(q.args, mulexpr(staticexpr(UF), incr))
+  end
 end
 
 # load/compute/store × isunrolled × istiled × pre/post loop × Loop number
 struct LoopOrder <: AbstractArray{Vector{Operation},5}
-    oporder::Vector{Vector{Operation}}
-    loopnames::Vector{Symbol}
-    bestorder::Vector{Symbol}
+  oporder::Vector{Vector{Operation}}
+  loopnames::Vector{Symbol}
+  bestorder::Vector{Symbol}
 end
 # function LoopOrder(N::Int)
 #     LoopOrder(
@@ -341,14 +343,14 @@ end
 LoopOrder() = LoopOrder(Vector{Operation}[],Symbol[],Symbol[])
 Base.empty!(lo::LoopOrder) = foreach(empty!, lo.oporder)
 function Base.resize!(lo::LoopOrder, N::Int)
-    Nold = length(lo.loopnames)
-    resize!(lo.oporder, 8N)
-    for n ∈ 8Nold+1:8N
-        lo.oporder[n] = Operation[]
-    end
-    resize!(lo.loopnames, N)
-    resize!(lo.bestorder, N)
-    lo
+  Nold = length(lo.loopnames)
+  resize!(lo.oporder, 8N)
+  for n ∈ 8Nold+1:8N
+    lo.oporder[n] = Operation[]
+  end
+  resize!(lo.loopnames, N)
+  resize!(lo.bestorder, N)
+  lo
 end
 Base.size(lo::LoopOrder) = (2,2,2,length(lo.loopnames))
 Base.@propagate_inbounds Base.getindex(lo::LoopOrder, i::Int) = lo.oporder[i]
@@ -358,102 +360,102 @@ Base.@propagate_inbounds Base.getindex(lo::LoopOrder, i::Vararg{Int,K}) where {K
 
 
 struct LoopStartStopManager
-    terminators::Vector{Int}
-    incrementedptrs::Vector{Vector{ArrayReferenceMeta}}
-    uniquearrayrefs::Vector{ArrayReferenceMeta}
+  terminators::Vector{Int}
+  incrementedptrs::Vector{Vector{ArrayReferenceMeta}}
+  uniquearrayrefs::Vector{ArrayReferenceMeta}
 end
 # Must make it easy to iterate
 # outer_reductions is a vector of indices (within operation vectors) of the reduction operation, eg the vmuladd op in a dot product
 # O(N) search is faster at small sizes
 mutable struct LoopSet
-    loopsymbols::Vector{Symbol}
-    loopsymbol_offsets::Vector{Int}  # symbol loopsymbols[i] corresponds to loops[lso[i]+1:lso[i+1]] (CartesianIndex handling)
-    loops::Vector{Loop}
-    opdict::Dict{Symbol,Operation}
-    operations::Vector{Operation} # Split them to make it easier to iterate over just a subset
-    operation_offsets::Vector{Int}
-    outer_reductions::Vector{Int} # IDs of reduction operations that need to be reduced at end.
-    loop_order::LoopOrder
-    preamble::Expr
-    prepreamble::Expr # performs extractions that must be performed first, and don't need further registering
-    preamble_symsym::Vector{Tuple{Int,Symbol}}
-    preamble_symint::Vector{Tuple{Int,Tuple{Int,Int32,Bool}}} # (id,(intval,intsz,signed))
-    preamble_symfloat::Vector{Tuple{Int,Float64}}
-    preamble_zeros::Vector{Tuple{Int,NumberType}}
-    preamble_funcofeltypes::Vector{Tuple{Int,Float64}}
-    includedarrays::Vector{Symbol}
-    includedactualarrays::Vector{Symbol}
-    syms_aliasing_refs::Vector{Symbol}
-    refs_aliasing_syms::Vector{ArrayReferenceMeta}
-    cost_vec::Matrix{Float64}
-    reg_pres::Matrix{Float64}
-    included_vars::Vector{Bool}
-    place_after_loop::Vector{Bool}
-    unrollspecification::UnrollSpecification
-    loadelimination::Bool
-    lssm::LoopStartStopManager
-    vector_width::Int
-    symcounter::Int
-    isbroadcast::Bool
-    register_size::Int
-    register_count::Int
-    cache_linesize::Int
-    cache_size::Tuple{Int,Int,Int}
-    ureduct::Int
-    equalarraydims::Vector{Tuple{Vector{Symbol},Vector{Int}}}
-    omop::OffsetLoadCollection
-    loopordermap::Vector{Int}
-    loopindexesbit::Vector{Bool}
-    validreorder::Vector{UInt8}
-    mod::Symbol
-    LoopSet() = new()
+  loopsymbols::Vector{Symbol}
+  loopsymbol_offsets::Vector{Int}  # symbol loopsymbols[i] corresponds to loops[lso[i]+1:lso[i+1]] (CartesianIndex handling)
+  loops::Vector{Loop}
+  opdict::Dict{Symbol,Operation}
+  operations::Vector{Operation} # Split them to make it easier to iterate over just a subset
+  operation_offsets::Vector{Int}
+  outer_reductions::Vector{Int} # IDs of reduction operations that need to be reduced at end.
+  loop_order::LoopOrder
+  preamble::Expr
+  prepreamble::Expr # performs extractions that must be performed first, and don't need further registering
+  preamble_symsym::Vector{Tuple{Int,Symbol}}
+  preamble_symint::Vector{Tuple{Int,Tuple{Int,Int32,Bool}}} # (id,(intval,intsz,signed))
+  preamble_symfloat::Vector{Tuple{Int,Float64}}
+  preamble_zeros::Vector{Tuple{Int,NumberType}}
+  preamble_funcofeltypes::Vector{Tuple{Int,Float64}}
+  includedarrays::Vector{Symbol}
+  includedactualarrays::Vector{Symbol}
+  syms_aliasing_refs::Vector{Symbol}
+  refs_aliasing_syms::Vector{ArrayReferenceMeta}
+  cost_vec::Matrix{Float64}
+  reg_pres::Matrix{Float64}
+  included_vars::Vector{Bool}
+  place_after_loop::Vector{Bool}
+  unrollspecification::UnrollSpecification
+  loadelimination::Bool
+  lssm::LoopStartStopManager
+  vector_width::Int
+  symcounter::Int
+  isbroadcast::Bool
+  register_size::Int
+  register_count::Int
+  cache_linesize::Int
+  cache_size::Tuple{Int,Int,Int}
+  ureduct::Int
+  equalarraydims::Vector{Tuple{Vector{Symbol},Vector{Int}}}
+  omop::OffsetLoadCollection
+  loopordermap::Vector{Int}
+  loopindexesbit::Vector{Bool}
+  validreorder::Vector{UInt8}
+  mod::Symbol
+  LoopSet() = new()
 end
 
 function UnrollArgs(ls::LoopSet, u₁::Int, unrollsyms::UnrollSymbols, u₂max::Int, suffix::Int)
-    @unpack u₁loopsym, u₂loopsym, vloopsym = unrollsyms
-    u₁loop = getloop(ls, u₁loopsym)
-    u₂loop = u₂loopsym === Symbol("##undefined##") ? u₁loop : getloop(ls, u₂loopsym)
-    vloop = getloop(ls, vloopsym)
-    UnrollArgs(u₁loop, u₂loop, vloop, u₁, u₂max, suffix)
+  @unpack u₁loopsym, u₂loopsym, vloopsym = unrollsyms
+  u₁loop = getloop(ls, u₁loopsym)
+  u₂loop = u₂loopsym === Symbol("##undefined##") ? u₁loop : getloop(ls, u₂loopsym)
+  vloop = getloop(ls, vloopsym)
+  UnrollArgs(u₁loop, u₂loop, vloop, u₁, u₂max, suffix)
 end
 
 
 function cost_vec_buf(ls::LoopSet)
-    cv = @view(ls.cost_vec[:,2])
-    @inbounds for i ∈ 1:4
-        cv[i] = 0.0
-    end
-    cv
+  cv = @view(ls.cost_vec[:,2])
+  @inbounds for i ∈ 1:4
+    cv[i] = 0.0
+  end
+  cv
 end
 function reg_pres_buf(ls::LoopSet)
-    ps = @view(ls.reg_pres[:,2])
-    @inbounds for i ∈ 1:4
-        ps[i] = 0
-    end
-    ps[4] = reg_count(ls)
-    ps
+  ps = @view(ls.reg_pres[:,2])
+  @inbounds for i ∈ 1:4
+    ps[i] = 0
+  end
+  ps[4] = reg_count(ls)
+  ps
 end
 function save_tilecost!(ls::LoopSet)
-    @inbounds for i ∈ 1:4
-        ls.cost_vec[i,1] = ls.cost_vec[i,2]
-        ls.reg_pres[i,1] = ls.reg_pres[i,2]
-    end
-    # ls.reg_pres[5,1] = ls.reg_pres[5,2]
+  @inbounds for i ∈ 1:4
+    ls.cost_vec[i,1] = ls.cost_vec[i,2]
+    ls.reg_pres[i,1] = ls.reg_pres[i,2]
+  end
+  # ls.reg_pres[5,1] = ls.reg_pres[5,2]
 end
 function set_hw!(ls::LoopSet, rs::Int, rc::Int, cls::Int, l1::Int, l2::Int, l3::Int)
-    ls.register_size = rs
-    ls.register_count = rc
-    ls.cache_linesize = cls
-    ls.cache_size = (l1,l2,l3)
-    # ls.opmask_register[] = omr
-    nothing
+  ls.register_size = rs
+  ls.register_count = rc
+  ls.cache_linesize = cls
+  ls.cache_size = (l1,l2,l3)
+  # ls.opmask_register[] = omr
+  nothing
 end
 available_registers() = ifelse(has_opmask_registers(), register_count(), register_count() - One())
 function set_hw!(ls::LoopSet)
-    set_hw!(
-        ls, Int(register_size()), Int(available_registers()), Int(cache_linesize()),
-        Int(cache_size(StaticInt(1))), Int(cache_size(StaticInt(2))), Int(cache_size(StaticInt(3)))
-    )
+  set_hw!(
+    ls, Int(register_size()), Int(available_registers()), Int(cache_linesize()),
+    Int(cache_size(StaticInt(1))), Int(cache_size(StaticInt(2))), Int(cache_size(StaticInt(3)))
+  )
 end
 reg_size(ls::LoopSet) = ls.register_size
 reg_count(ls::LoopSet) = ls.register_count
@@ -462,30 +464,30 @@ cache_sze(ls::LoopSet) = ls.cache_size
 
 pushprepreamble!(ls::LoopSet, ex) = push!(ls.prepreamble.args, ex)
 function pushpreamble!(ls::LoopSet, op::Operation, v::Symbol)
-    if v !== mangledvar(op)
-        push!(ls.preamble_symsym, (identifier(op),v))
-    end
-    nothing
+  if v !== mangledvar(op)
+    push!(ls.preamble_symsym, (identifier(op),v))
+  end
+  nothing
 end
 
 function integer_description(@nospecialize(v::Integer))::Tuple{Int,Int32,Bool}
-    if v isa Bool
-        ((v % Int)::Int, one(Int32), false)
-    else
-        ((v % Int)::Int, ((8sizeof(v))%Int32)::Int32, (v isa Signed)::Bool)
-    end
+  if v isa Bool
+    ((v % Int)::Int, one(Int32), false)
+  else
+    ((v % Int)::Int, ((8sizeof(v))%Int32)::Int32, (v isa Signed)::Bool)
+  end
 end
 
 function pushpreamble!(ls::LoopSet, op::Operation, v::Number)
-    typ = v isa Integer ? HardInt : HardFloat
-    id = identifier(op)
-    if iszero(v)
-        push!(ls.preamble_zeros, (id, typ))
-    elseif v isa Integer
-        push!(ls.preamble_symint, (id, integer_description(v)))
-    else
-        push!(ls.preamble_symfloat, (id, convert(Float64,v)))
-    end
+  typ = v isa Integer ? HardInt : HardFloat
+  id = identifier(op)
+  if iszero(v)
+    push!(ls.preamble_zeros, (id, typ))
+  elseif v isa Integer
+    push!(ls.preamble_symint, (id, integer_description(v)))
+  else
+    push!(ls.preamble_symfloat, (id, convert(Float64,v)))
+  end
 end
 pushpreamble!(ls::LoopSet, ex::Expr) = push!(ls.preamble.args, ex)
 # function pushpreamble!(ls::LoopSet, op::Operation, RHS::Expr)
@@ -501,63 +503,63 @@ pushpreamble!(ls::LoopSet, ex::Expr) = push!(ls.preamble.args, ex)
 #     nothing
 # end
 function zerotype(ls::LoopSet, op::Operation)
-    opid = identifier(op)
-    for (id,typ) ∈ ls.preamble_zeros
-        id == opid && return typ
-    end
-    INVALID
+  opid = identifier(op)
+  for (id,typ) ∈ ls.preamble_zeros
+    id == opid && return typ
+  end
+  INVALID
 end
 
 includesarray(ls::LoopSet, array::Symbol) = array ∈ ls.includedarrays
 
 function LoopSet(mod::Symbol)
-    ls = LoopSet()
-    ls.loopsymbols = Symbol[]
-    ls.loopsymbol_offsets =  [0]
-    ls.loops = Loop[]
-    ls.opdict = Dict{Symbol,Operation}()
-    ls.operations = Operation[]
-    ls.operation_offsets = Int[0]
-    ls.outer_reductions = Int[]
-    ls.loop_order = LoopOrder()
-    ls.preamble = Expr(:block)
-    ls.prepreamble = Expr(:block)
-    ls.preamble_symsym = Tuple{Int,Symbol}[]
-    ls.preamble_symint = Tuple{Int,Tuple{Int,Int32,Bool}}[]
-    ls.preamble_symfloat = Tuple{Int,Float64}[]
-    ls.preamble_zeros = Tuple{Int,NumberType}[]
-    ls.preamble_funcofeltypes = Tuple{Int,Float64}[]
-    ls.includedarrays = Symbol[]
-    ls.includedactualarrays = Symbol[]
-    ls.syms_aliasing_refs = Symbol[]
-    ls.refs_aliasing_syms = ArrayReferenceMeta[]
-    ls.cost_vec = Matrix{Float64}(undef, 4, 2)
-    ls.reg_pres = Matrix{Float64}(undef, 4, 2)
-    ls.included_vars = Bool[]
-    ls.place_after_loop = Bool[]
-    ls.unrollspecification
-    ls.loadelimination = false
-    ls.vector_width = 0
-    ls.symcounter = 0
-    ls.isbroadcast = 0
-    ls.register_size = 0
-    ls.register_count = 0
-    ls.cache_linesize = 0
-    ls.cache_size = (0,0,0)
-    ls.ureduct = -1
-    ls.equalarraydims = Tuple{Vector{Symbol},Vector{Int}}[]
-    ls.omop = OffsetLoadCollection()
-    ls.loopordermap =  Int[]
-    ls.loopindexesbit = Bool[]
-    ls.validreorder = UInt8[]
-    ls.mod = mod
-    ls
+  ls = LoopSet()
+  ls.loopsymbols = Symbol[]
+  ls.loopsymbol_offsets =  [0]
+  ls.loops = Loop[]
+  ls.opdict = Dict{Symbol,Operation}()
+  ls.operations = Operation[]
+  ls.operation_offsets = Int[0]
+  ls.outer_reductions = Int[]
+  ls.loop_order = LoopOrder()
+  ls.preamble = Expr(:block)
+  ls.prepreamble = Expr(:block)
+  ls.preamble_symsym = Tuple{Int,Symbol}[]
+  ls.preamble_symint = Tuple{Int,Tuple{Int,Int32,Bool}}[]
+  ls.preamble_symfloat = Tuple{Int,Float64}[]
+  ls.preamble_zeros = Tuple{Int,NumberType}[]
+  ls.preamble_funcofeltypes = Tuple{Int,Float64}[]
+  ls.includedarrays = Symbol[]
+  ls.includedactualarrays = Symbol[]
+  ls.syms_aliasing_refs = Symbol[]
+  ls.refs_aliasing_syms = ArrayReferenceMeta[]
+  ls.cost_vec = Matrix{Float64}(undef, 4, 2)
+  ls.reg_pres = Matrix{Float64}(undef, 4, 2)
+  ls.included_vars = Bool[]
+  ls.place_after_loop = Bool[]
+  ls.unrollspecification
+  ls.loadelimination = false
+  ls.vector_width = 0
+  ls.symcounter = 0
+  ls.isbroadcast = 0
+  ls.register_size = 0
+  ls.register_count = 0
+  ls.cache_linesize = 0
+  ls.cache_size = (0,0,0)
+  ls.ureduct = -1
+  ls.equalarraydims = Tuple{Vector{Symbol},Vector{Int}}[]
+  ls.omop = OffsetLoadCollection()
+  ls.loopordermap =  Int[]
+  ls.loopindexesbit = Bool[]
+  ls.validreorder = UInt8[]
+  ls.mod = mod
+  ls
 end
 
 """
-Used internally to create symbols unique for this loopset.
-This is used so that identical loops will create identical `_turbo_!` calls in the macroexpansions, hopefully reducing recompilation.
-"""
+  Used internally to create symbols unique for this loopset.
+  This is used so that identical loops will create identical `_turbo_!` calls in the macroexpansions, hopefully reducing recompilation.
+  """
 gensym!(ls::LoopSet, s) = Symbol("###$(s)###$(ls.symcounter += 1)###")
 
 function fill_children!(ls::LoopSet)
@@ -629,15 +631,15 @@ rejectcurly(op::Operation) = op.rejectcurly
 rejectinterleave(op::Operation) = op.rejectinterleave
 num_loops(ls::LoopSet) = length(ls.loops)
 function oporder(ls::LoopSet)
-    N = length(ls.loop_order.loopnames)
-    reshape(ls.loop_order.oporder, (2,2,2,N))
+  N = length(ls.loop_order.loopnames)
+  reshape(ls.loop_order.oporder, (2,2,2,N))
 end
 names(ls::LoopSet) = ls.loop_order.loopnames
 reversenames(ls::LoopSet) = ls.loop_order.bestorder
 function getloopid_or_nothing(ls::LoopSet, s::Symbol)
-    for (loopnum,sym) ∈ enumerate(ls.loopsymbols)
-        s === sym && return loopnum
-    end
+  for (loopnum,sym) ∈ enumerate(ls.loopsymbols)
+    s === sym && return loopnum
+  end
 end
 
 getloopid(ls::LoopSet, s::Symbol) = getloopid_or_nothing(ls, s)::Int
@@ -647,13 +649,13 @@ getloop(ls::LoopSet, s::Symbol) = getloop_from_id(ls, getloopid(ls, s))
 getloopsym(ls::LoopSet, i::Integer) = ls.loopsymbols[i]
 Base.length(ls::LoopSet, s::Symbol) = length(getloop(ls, s))
 function init_loop_map!(ls::LoopSet)
-    @unpack loopordermap = ls
-    order = names(ls)
-    resize!(loopordermap, length(order))
-    for (i,o) ∈ enumerate(order)
-        loopordermap[i] = getloopid(ls,o)
-    end
-    nothing
+  @unpack loopordermap = ls
+  order = names(ls)
+  resize!(loopordermap, length(order))
+  for (i,o) ∈ enumerate(order)
+    loopordermap[i] = getloopid(ls,o)
+  end
+  nothing
 end
 
 # isstaticloop(ls::LoopSet, s::Symbol) = isstaticloop(getloop(ls,s))
@@ -661,27 +663,27 @@ end
 # looprangesym(ls::LoopSet, s::Symbol) = getloop(ls, s).rangesym
 
 """
-getop only works while construction a LoopSet object. You cannot use it while lowering.
-"""
+  getop only works while construction a LoopSet object. You cannot use it while lowering.
+  """
 getop(ls::LoopSet, var::Number, elementbytes) = add_constant!(ls, var, elementbytes)
 function getop(ls::LoopSet, var::Symbol, elementbytes::Int)
-    get!(ls.opdict, var) do
-        add_constant!(ls, var, elementbytes)
-    end
+  get!(ls.opdict, var) do
+    add_constant!(ls, var, elementbytes)
+  end
 end
 function getop(ls::LoopSet, var::Symbol, deps, elementbytes::Int)
-    get!(ls.opdict, var) do
-        add_constant!(ls, var, deps, gensym!(ls, "constant"), elementbytes)
-    end
+  get!(ls.opdict, var) do
+    add_constant!(ls, var, deps, gensym!(ls, "constant"), elementbytes)
+  end
 end
 getop(ls::LoopSet, i::Int) = ls.operations[i]
 
 findop(ls::LoopSet, s::Symbol) = findop(operations(ls), s)
 function findop(ops::Vector{Operation}, s::Symbol)
-    for op ∈ ops
-        name(op) === s && return op
-    end
-    throw(ArgumentError("Symbol $s not found."))
+  for op ∈ ops
+    name(op) === s && return op
+  end
+  throw(ArgumentError("Symbol $s not found."))
 end
 
 # """
@@ -695,16 +697,16 @@ end
 # end
 
 function Operation(
-    ls::LoopSet, variable, elementbytes, instruction,
-    node_type, dependencies, reduced_deps, parents, ref = NOTAREFERENCE
-)
-    Operation(
-        length(operations(ls)), variable, elementbytes, instruction,
-        node_type, dependencies, reduced_deps, parents, ref
-    )
+  ls::LoopSet, variable, elementbytes, instruction,
+  node_type, dependencies, reduced_deps, parents, ref = NOTAREFERENCE
+  )
+  Operation(
+    length(operations(ls)), variable, elementbytes, instruction,
+    node_type, dependencies, reduced_deps, parents, ref
+  )
 end
 function Operation(ls::LoopSet, variable, elementbytes, instr, optype, mpref::ArrayReferenceMetaPosition)
-    Operation(length(operations(ls)), variable, elementbytes, instr, optype, mpref)
+  Operation(length(operations(ls)), variable, elementbytes, instr, optype, mpref)
 end
 
 operations(ls::LoopSet) = ls.operations
@@ -812,74 +814,74 @@ function maybestatic!(expr::Expr)
 end
 add_loop_bound!(ls::LoopSet, itersym::Symbol, bound::Union{Integer,Symbol}, upper::Bool, step::Bool)::MaybeKnown = MaybeKnown(bound, upper ? 1024 : 1)
 function add_loop_bound!(ls::LoopSet, itersym::Symbol, bound::Expr, upper::Bool, step::Bool)::MaybeKnown
-    maybestatic!(bound)
-    N = gensym!(ls, string(itersym) * (upper ? "_loop_upper_bound" : (step ? "_loop_step" : "_loop_lower_bound")))
-    pushprepreamble!(ls, Expr(:(=), N, bound))
-    MaybeKnown(N, upper ? 1024 : 1)
+  maybestatic!(bound)
+  N = gensym!(ls, string(itersym) * (upper ? "_loop_upper_bound" : (step ? "_loop_step" : "_loop_lower_bound")))
+  pushprepreamble!(ls, Expr(:(=), N, bound))
+  MaybeKnown(N, upper ? 1024 : 1)
 end
 static_literals!(s::Symbol) = s
 function static_literals!(q::Expr)
-    for (i,ex) ∈ enumerate(q.args)
-        if ex isa Number
-            q.args[i] = staticexpr(ex)
-        elseif ex isa Expr
-            static_literals!(ex)
-        end
+  for (i,ex) ∈ enumerate(q.args)
+    if ex isa Number
+      q.args[i] = staticexpr(ex)
+    elseif ex isa Expr
+      static_literals!(ex)
     end
-    q
+  end
+  q
 end
 function range_loop!(ls::LoopSet, itersym::Symbol, l::MaybeKnown, u::MaybeKnown, s::MaybeKnown)
-    rangename = gensym!(ls, "range"); lenname = gensym!(ls, "length")
-    range = Expr(:call, :(:))
-    pushexpr!(range, l)
-    isone(s) || pushexpr!(range, s)
-    pushexpr!(range, u)
-    pushprepreamble!(ls, Expr(:(=), rangename, range))
-    pushprepreamble!(ls, Expr(:(=), lenname, Expr(:call, GlobalRef(ArrayInterface,:static_length), rangename)))
-    Loop(itersym, l, u, s, rangename, lenname)
+  rangename = gensym!(ls, "range"); lenname = gensym!(ls, "length")
+  range = Expr(:call, :(:))
+  pushexpr!(range, l)
+  isone(s) || pushexpr!(range, s)
+  pushexpr!(range, u)
+  pushprepreamble!(ls, Expr(:(=), rangename, range))
+  pushprepreamble!(ls, Expr(:(=), lenname, Expr(:call, GlobalRef(ArrayInterface,:static_length), rangename)))
+  Loop(itersym, l, u, s, rangename, lenname)
 end
 function range_loop!(ls::LoopSet, r::Expr, itersym::Symbol)::Loop
-    lower = r.args[2]
-    sii::Bool = if length(r.args) == 3
-        step = 1
-        upper = r.args[3]
-        true
-    elseif length(r.args) == 4
-        step = r.args[3]
-        upper = r.args[4]
-        isa(step, Integer)
-    else
-        throw("Literal ranges must have either 2 or 3 arguments.")
-    end
-    lii::Bool = lower isa Integer
-    uii::Bool = upper isa Integer
-    l::MaybeKnown = add_loop_bound!(ls, itersym, lower, false, false)
-    u::MaybeKnown = add_loop_bound!(ls, itersym, upper, true, false)
-    s::MaybeKnown = add_loop_bound!(ls, itersym, step, false, true)
-    range_loop!(ls, itersym, l, u, s)
+  lower = r.args[2]
+  sii::Bool = if length(r.args) == 3
+    step = 1
+    upper = r.args[3]
+    true
+  elseif length(r.args) == 4
+    step = r.args[3]
+    upper = r.args[4]
+    isa(step, Integer)
+  else
+    throw("Literal ranges must have either 2 or 3 arguments.")
+  end
+  lii::Bool = lower isa Integer
+  uii::Bool = upper isa Integer
+  l::MaybeKnown = add_loop_bound!(ls, itersym, lower, false, false)
+  u::MaybeKnown = add_loop_bound!(ls, itersym, upper, true, false)
+  s::MaybeKnown = add_loop_bound!(ls, itersym, step, false, true)
+  range_loop!(ls, itersym, l, u, s)
 end
 function oneto_loop!(ls::LoopSet, r::Expr, itersym::Symbol)::Loop
-    otN = r.args[2]
-    l = MaybeKnown(1, 0)
-    s = MaybeKnown(1, 0)
-    u::MaybeKnown = if otN isa Integer
-        rangename = lensym = Symbol("")
-        MaybeKnown(convert(Int, otN)::Int, 0)
-    else
-        otN isa Expr && maybestatic!(otN)
-        lensym = N = gensym!(ls, "loop" * string(itersym))
-        rangename = gensym!(ls, "range");
-        pushprepreamble!(ls, Expr(:(=), N, otN))
-        pushprepreamble!(ls, Expr(:(=), rangename, Expr(:call, :(:), staticexpr(1), N)))
-        MaybeKnown(N, 1024)
-    end
-    Loop(itersym, l, u, s, rangename, lensym)
+  otN = r.args[2]
+  l = MaybeKnown(1, 0)
+  s = MaybeKnown(1, 0)
+  u::MaybeKnown = if otN isa Integer
+    rangename = lensym = Symbol("")
+    MaybeKnown(convert(Int, otN)::Int, 0)
+  else
+    otN isa Expr && maybestatic!(otN)
+    lensym = N = gensym!(ls, "loop" * string(itersym))
+    rangename = gensym!(ls, "range");
+    pushprepreamble!(ls, Expr(:(=), N, otN))
+    pushprepreamble!(ls, Expr(:(=), rangename, Expr(:call, :(:), staticexpr(1), N)))
+    MaybeKnown(N, 1024)
+  end
+  Loop(itersym, l, u, s, rangename, lensym)
 end
 
 @inline _reverse(r) = maybestaticlast(r):-static_step(r):maybestaticfirst(r)
 @inline canonicalize_range(r::OptionallyStaticUnitRange) = r
 @inline function canonicalize_range(r::OptionallyStaticRange, ::StaticInt{S}) where {S}
-    ifelse(ArrayInterface.gt(StaticInt{S}(), Zero()), r, _reverse(r))
+  ifelse(ArrayInterface.gt(StaticInt{S}(), Zero()), r, _reverse(r))
 end
 @inline canonicalize_range(r::OptionallyStaticRange, s::Integer) = s > 0 ? r : _reverse(r)
 @inline canonicalize_range(r::CloseOpen) = r
@@ -889,119 +891,119 @@ end
 @inline canonicalize_range(r::CartesianIndices) = CartesianIndices(map(canonicalize_range, r.indices))
 
 function misc_loop!(ls::LoopSet, r::Union{Expr,Symbol}, itersym::Symbol, staticstepone::Bool)::Loop
-    rangename = gensym!(ls, "looprange" * string(itersym)); lenname = gensym!(ls, "looplen" * string(itersym));
-    pushprepreamble!(ls, Expr(:(=), rangename, Expr(:call, lv(:canonicalize_range), :(@inbounds $(static_literals!(r))))))
-    pushprepreamble!(ls, Expr(:(=), lenname, Expr(:call, GlobalRef(ArrayInterface,:static_length), rangename)))
-    L = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticfirst), rangename), false, false)
-    U = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticlast), rangename), true, false)
-    if staticstepone
-        Loop(itersym, L, U, MaybeKnown(1), rangename, lenname)
-    else
-        S = add_loop_bound!(ls, itersym, Expr(:call, lv(:static_step), rangename), false, true)
-        Loop(itersym, L, U, S, rangename, lenname)
-    end
+  rangename = gensym!(ls, "looprange" * string(itersym)); lenname = gensym!(ls, "looplen" * string(itersym));
+  pushprepreamble!(ls, Expr(:(=), rangename, Expr(:call, lv(:canonicalize_range), :(@inbounds $(static_literals!(r))))))
+  pushprepreamble!(ls, Expr(:(=), lenname, Expr(:call, GlobalRef(ArrayInterface,:static_length), rangename)))
+  L = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticfirst), rangename), false, false)
+  U = add_loop_bound!(ls, itersym, Expr(:call, lv(:maybestaticlast), rangename), true, false)
+  if staticstepone
+    Loop(itersym, L, U, MaybeKnown(1), rangename, lenname)
+  else
+    S = add_loop_bound!(ls, itersym, Expr(:call, lv(:static_step), rangename), false, true)
+    Loop(itersym, L, U, S, rangename, lenname)
+  end
 end
 
 function indices_loop!(ls::LoopSet, r::Expr, itersym::Symbol)::Loop
-    if length(r.args) == 3
-        arrays = r.args[2]
-        dims = r.args[3]
-        if isexpr(arrays, :tuple) && length(arrays.args) > 1 && all(s -> s isa Symbol, arrays.args)
-          narrays =  length(arrays.args)::Int
-          axessyms = Vector{Symbol}(undef, narrays)
-          if dims isa Integer
-            # ids = Vector{NTuple{2,Int}}(undef, narrays)
-            vptrs = Vector{Symbol}(undef, narrays)
-            mdims = fill(dims::Int, narrays)
-            # _d::Int = dims
-            for n ∈ 1:narrays
-              a_s::Symbol = arrays.args[n]
-              vptrs[n] = vptr(a_s)
-              axessyms[n] = axsym = gensym!(ls, "#axes#$(a_s)#")
-              pushprepreamble!(ls, Expr(:(=), axsym, Expr(:call, GlobalRef(ArrayInterface, :axes), a_s, staticexpr(dims::Int))))
-              if n > 1
-                axsym_prev = axessyms[n-1]
-                pushprepreamble!(ls, Expr(:call, GlobalRef(VectorizationBase,:assume), Expr(:call, GlobalRef(Base,:(==)), Expr(:call, GlobalRef(ArrayInterface, :static_first), axsym), Expr(:call, GlobalRef(ArrayInterface, :static_first), axsym_prev))))
-                pushprepreamble!(ls, Expr(:call, GlobalRef(VectorizationBase,:assume), Expr(:call, GlobalRef(Base,:(==)), Expr(:call, GlobalRef(ArrayInterface, :static_last), axsym), Expr(:call, GlobalRef(ArrayInterface, :static_last), axsym_prev))))
-              end
-            end
-            push!(ls.equalarraydims, (vptrs, mdims))
-            elseif isexpr(dims, :tuple) && length(dims.args) == narrays && all(i -> i isa Integer, dims.args)
-              # ids = Vector{NTuple{2,Int}}(undef, narrays)
-              vptrs = Vector{Symbol}(undef, narrays)
-              mdims = Vector{Int}(undef, narrays)
-              axessyms = Vector{Symbol}(undef, narrays)
-              for n ∈ 1:narrays
-                a_s::Symbol = arrays.args[n]
-                vptrs[n] = vptr(a_s)
-                mdim::Int = dims.args[n]
-                mdims[n] = mdim
-                axessyms[n] = axsym = gensym!(ls, "#axes#$(a_s)#")
-                pushprepreamble!(ls, Expr(:(=), axsym, Expr(:call, GlobalRef(ArrayInterface, :axes), a_s, staticexpr(mdim))))
-                if n > 1
-                  axsym_prev = axessyms[n-1]
-                  pushprepreamble!(ls, Expr(:call, GlobalRef(VectorizationBase,:assume), Expr(:call, GlobalRef(Base,:(==)), Expr(:call, GlobalRef(ArrayInterface, :static_first), axsym), Expr(:call, GlobalRef(ArrayInterface, :static_first), axsym_prev))))
-                  pushprepreamble!(ls, Expr(:call, GlobalRef(VectorizationBase,:assume), Expr(:call, GlobalRef(Base,:(==)), Expr(:call, GlobalRef(ArrayInterface, :static_last), axsym), Expr(:call, GlobalRef(ArrayInterface, :static_last), axsym_prev))))
-                end
-              end
-              push!(ls.equalarraydims, (vptrs, mdims))
-                # push!(ls.equalarraydims, ids)
-            end
+  if length(r.args) == 3
+    arrays = r.args[2]
+    dims = r.args[3]
+    if isexpr(arrays, :tuple) && length(arrays.args) > 1 && all(s -> s isa Symbol, arrays.args)
+      narrays =  length(arrays.args)::Int
+      axessyms = Vector{Symbol}(undef, narrays)
+      if dims isa Integer
+        # ids = Vector{NTuple{2,Int}}(undef, narrays)
+        vptrs = Vector{Symbol}(undef, narrays)
+        mdims = fill(dims::Int, narrays)
+        # _d::Int = dims
+        for n ∈ 1:narrays
+          a_s::Symbol = arrays.args[n]
+          vptrs[n] = vptr(a_s)
+          axessyms[n] = axsym = gensym!(ls, "#axes#$(a_s)#")
+          pushprepreamble!(ls, Expr(:(=), axsym, Expr(:call, GlobalRef(ArrayInterface, :axes), a_s, staticexpr(dims::Int))))
+          if n > 1
+            axsym_prev = axessyms[n-1]
+            pushprepreamble!(ls, Expr(:call, GlobalRef(VectorizationBase,:assume), Expr(:call, GlobalRef(Base,:(==)), Expr(:call, GlobalRef(ArrayInterface, :static_first), axsym), Expr(:call, GlobalRef(ArrayInterface, :static_first), axsym_prev))))
+            pushprepreamble!(ls, Expr(:call, GlobalRef(VectorizationBase,:assume), Expr(:call, GlobalRef(Base,:(==)), Expr(:call, GlobalRef(ArrayInterface, :static_last), axsym), Expr(:call, GlobalRef(ArrayInterface, :static_last), axsym_prev))))
+          end
         end
+        push!(ls.equalarraydims, (vptrs, mdims))
+      elseif isexpr(dims, :tuple) && length(dims.args) == narrays && all(i -> i isa Integer, dims.args)
+        # ids = Vector{NTuple{2,Int}}(undef, narrays)
+        vptrs = Vector{Symbol}(undef, narrays)
+        mdims = Vector{Int}(undef, narrays)
+        axessyms = Vector{Symbol}(undef, narrays)
+        for n ∈ 1:narrays
+          a_s::Symbol = arrays.args[n]
+          vptrs[n] = vptr(a_s)
+          mdim::Int = dims.args[n]
+          mdims[n] = mdim
+          axessyms[n] = axsym = gensym!(ls, "#axes#$(a_s)#")
+          pushprepreamble!(ls, Expr(:(=), axsym, Expr(:call, GlobalRef(ArrayInterface, :axes), a_s, staticexpr(mdim))))
+          if n > 1
+            axsym_prev = axessyms[n-1]
+            pushprepreamble!(ls, Expr(:call, GlobalRef(VectorizationBase,:assume), Expr(:call, GlobalRef(Base,:(==)), Expr(:call, GlobalRef(ArrayInterface, :static_first), axsym), Expr(:call, GlobalRef(ArrayInterface, :static_first), axsym_prev))))
+            pushprepreamble!(ls, Expr(:call, GlobalRef(VectorizationBase,:assume), Expr(:call, GlobalRef(Base,:(==)), Expr(:call, GlobalRef(ArrayInterface, :static_last), axsym), Expr(:call, GlobalRef(ArrayInterface, :static_last), axsym_prev))))
+          end
+        end
+        push!(ls.equalarraydims, (vptrs, mdims))
+        # push!(ls.equalarraydims, ids)
+      end
     end
-    misc_loop!(ls, r, itersym, true)
+  end
+  misc_loop!(ls, r, itersym, true)
 end
 
 """
-This function creates a loop, while switching from 1 to 0 based indices
-"""
+  This function creates a loop, while switching from 1 to 0 based indices
+  """
 function register_single_loop!(ls::LoopSet, looprange::Expr)
-    itersym = (looprange.args[1])::Symbol
-    r = looprange.args[2]
-    loop = if isexpr(r, :call)
-        r = r::Expr        # julia#37342
-        f = first(r.args)
-        if f === :(:)
-            range_loop!(ls, r, itersym)
-        elseif f === :OneTo || isscopedname(f, :Base, :OneTo)
-            oneto_loop!(ls, r, itersym)
-        elseif f === :indices || (isexpr(f, :(.), 2) && (f.args[2] === QuoteNode(:indices)) && ((f.args[1] === :ArrayInterface) || (f.args[1] === :LoopVectorization)))
-            indices_loop!(ls, r, itersym)
-        else
-            misc_loop!(ls, r, itersym, (f === :eachindex) | (f === :axes))
-        end
-    elseif isa(r, Symbol)
-        misc_loop!(ls, r, itersym, false)
+  itersym = (looprange.args[1])::Symbol
+  r = looprange.args[2]
+  loop = if isexpr(r, :call)
+    r = r::Expr        # julia#37342
+    f = first(r.args)
+    if f === :(:)
+      range_loop!(ls, r, itersym)
+    elseif f === :OneTo || isscopedname(f, :Base, :OneTo)
+      oneto_loop!(ls, r, itersym)
+    elseif f === :indices || (isexpr(f, :(.), 2) && (f.args[2] === QuoteNode(:indices)) && ((f.args[1] === :ArrayInterface) || (f.args[1] === :LoopVectorization)))
+      indices_loop!(ls, r, itersym)
     else
-        throw(LoopError("Unrecognized loop range type: $r."))
+      misc_loop!(ls, r, itersym, (f === :eachindex) | (f === :axes))
     end
-    add_loop!(ls, loop, itersym)
-    nothing
+  elseif isa(r, Symbol)
+    misc_loop!(ls, r, itersym, false)
+  else
+    throw(LoopError("Unrecognized loop range type: $r."))
+  end
+  add_loop!(ls, loop, itersym)
+  nothing
 end
 function register_loop!(ls::LoopSet, looprange::Expr)
-    if looprange.head === :block # multiple loops
-        for lr ∈ looprange.args
-            register_single_loop!(ls, lr::Expr)
-        end
-    else
-        @assert looprange.head === :(=)
-        register_single_loop!(ls, looprange)
+  if looprange.head === :block # multiple loops
+    for lr ∈ looprange.args
+      register_single_loop!(ls, lr::Expr)
     end
+  else
+    @assert looprange.head === :(=)
+    register_single_loop!(ls, looprange)
+  end
 end
 function add_loop!(ls::LoopSet, q::Expr, elementbytes::Int)
-    register_loop!(ls, q.args[1]::Expr)
-    body = q.args[2]::Expr
-    position = length(ls.loopsymbols)
-    if body.head === :block
-      add_block!(ls, body, elementbytes, position)
-    else
-        push!(ls, q, elementbytes, position)
-    end
+  register_loop!(ls, q.args[1]::Expr)
+  body = q.args[2]::Expr
+  position = length(ls.loopsymbols)
+  if body.head === :block
+    add_block!(ls, body, elementbytes, position)
+  else
+    push!(ls, q, elementbytes, position)
+  end
 end
 function add_loop!(ls::LoopSet, loop::Loop, itersym::Symbol = loop.itersymbol)
-    push!(ls.loopsymbols, itersym)
-    push!(ls.loops, loop)
-    nothing
+  push!(ls.loopsymbols, itersym)
+  push!(ls.loops, loop)
+  nothing
 end
 
 # function instruction(x)
@@ -1026,11 +1028,11 @@ function instruction!(ls::LoopSet, x::Expr)
 end
 instruction!(ls::LoopSet, x::Symbol) = instruction(x)
 function instruction!(ls::LoopSet, f::F) where {F <: Function}
-    get(FUNCTIONSYMBOLS, F) do
-        instr = gensym!(ls, "f")
-        pushpreamble!(ls, Expr(:(=), instr, f))
-        Instruction(Symbol(""), instr)
-    end
+  get(FUNCTIONSYMBOLS, F) do
+    instr = gensym!(ls, "f")
+    pushpreamble!(ls, Expr(:(=), instr, f))
+    Instruction(Symbol(""), instr)
+  end
 end
 
 
@@ -1046,86 +1048,86 @@ end
 strip_op_linenumber_nodes(q::Expr) = only(filter(x -> !isa(x, LineNumberNode), q.args))
 
 function add_operation!(ls::LoopSet, LHS::Symbol, RHS::Symbol, elementbytes::Int, position::Int)
-    add_constant!(ls, RHS, ls.loopsymbols[1:position], LHS, elementbytes)
+  add_constant!(ls, RHS, ls.loopsymbols[1:position], LHS, elementbytes)
 end
 function add_operation!(
-    ls::LoopSet, LHS::Symbol, RHS::Expr, elementbytes::Int, position::Int
-)
-    if RHS.head === :ref
-        add_load_ref!(ls, LHS, RHS, elementbytes)
-    elseif RHS.head === :call
-        f = first(RHS.args)
-        if f === :getindex
-            add_load_getindex!(ls, LHS, RHS, elementbytes)
-        elseif f isa Symbol && Base.sym_in(f, (:zero, :one, :typemin, :typemax))
-            c = gensym!(ls, f)
-            op = add_constant!(ls, c, ls.loopsymbols[1:position], LHS, elementbytes, :numericconstant)
-            if f === :zero
-                push!(ls.preamble_zeros, (identifier(op), IntOrFloat))
-            else
-                push!(ls.preamble_funcofeltypes, (identifier(op), reduction_zero_class(f)))
-            end
-            op
-        else
-          # maybe_const_compute!(ls, add_compute!(ls, LHS, RHS, elementbytes, position), elementbytes, position)
-            add_compute!(ls, LHS, RHS, elementbytes, position)
-        end
-    elseif RHS.head === :if
-        add_if!(ls, LHS, RHS, elementbytes, position)
-    elseif RHS.head === :block
-        add_operation!(ls, LHS, strip_op_linenumber_nodes(RHS), elementbytes, position)
-    elseif RHS.head === :(.)
-        c = gensym!(ls, "getproperty")
-        pushpreamble!(ls, Expr(:(=), c, RHS))
-        add_constant!(ls, c, elementbytes)
-        # op = add_constant!(ls, c, ls.loopsymbols[1:position], LHS, elementbytes, :numericconstant)
-        # pushpreamble!(ls, op, c)
-        # op
+  ls::LoopSet, LHS::Symbol, RHS::Expr, elementbytes::Int, position::Int
+  )
+  if RHS.head === :ref
+    add_load_ref!(ls, LHS, RHS, elementbytes)
+  elseif RHS.head === :call
+    f = first(RHS.args)
+    if f === :getindex
+      add_load_getindex!(ls, LHS, RHS, elementbytes)
+    elseif f isa Symbol && Base.sym_in(f, (:zero, :one, :typemin, :typemax))
+      c = gensym!(ls, f)
+      op = add_constant!(ls, c, ls.loopsymbols[1:position], LHS, elementbytes, :numericconstant)
+      if f === :zero
+        push!(ls.preamble_zeros, (identifier(op), IntOrFloat))
+      else
+        push!(ls.preamble_funcofeltypes, (identifier(op), reduction_zero_class(f)))
+      end
+      op
     else
-        throw(LoopError("Expression not recognized.", RHS))
+      # maybe_const_compute!(ls, add_compute!(ls, LHS, RHS, elementbytes, position), elementbytes, position)
+      add_compute!(ls, LHS, RHS, elementbytes, position)
     end
+  elseif RHS.head === :if
+    add_if!(ls, LHS, RHS, elementbytes, position)
+  elseif RHS.head === :block
+    add_operation!(ls, LHS, strip_op_linenumber_nodes(RHS), elementbytes, position)
+  elseif RHS.head === :(.)
+    c = gensym!(ls, "getproperty")
+    pushpreamble!(ls, Expr(:(=), c, RHS))
+    add_constant!(ls, c, elementbytes)
+    # op = add_constant!(ls, c, ls.loopsymbols[1:position], LHS, elementbytes, :numericconstant)
+    # pushpreamble!(ls, op, c)
+    # op
+  else
+    throw(LoopError("Expression not recognized.", RHS))
+  end
 end
 add_operation!(ls::LoopSet, RHS::Expr, elementbytes::Int, position::Int) = add_operation!(ls, gensym!(ls, "LHS"), RHS, elementbytes, position)
 function add_operation!(
-    ls::LoopSet, LHS_sym::Symbol, RHS::Expr, LHS_ref::ArrayReferenceMetaPosition, elementbytes::Int, position::Int
-)
-    if RHS.head === :ref# || (RHS.head === :call && first(RHS.args) === :getindex)
-        array, rawindices = ref_from_expr!(ls, RHS)
-        RHS_ref = array_reference_meta!(ls, array, rawindices, elementbytes, gensym!(ls, LHS_sym))
-        op = add_load!(ls, RHS_ref, elementbytes)
-        iop = add_compute!(ls, LHS_sym, :identity, [op], elementbytes)
-        # pushfirst!(LHS_ref.parents, iop)
-    elseif RHS.head === :call
-        f = first(RHS.args)
-        if f === :getindex
-            add_load!(ls, LHS_sym, LHS_ref, elementbytes)
-        elseif f isa Symbol && Base.sym_in(f, (:zero, :one, :typemin, :typemax))
-            c = gensym!(ls, f)
-            op = add_constant!(ls, c, ls.loopsymbols[1:position], LHS_sym, elementbytes, :numericconstant)
-            # op = add_constant!(ls, c, Symbol[], LHS_sym, elementbytes, :numericconstant)
-            if f === :zero
-                push!(ls.preamble_zeros, (identifier(op), IntOrFloat))
-            else
-                push!(ls.preamble_funcofeltypes, (identifier(op), reduction_zero_class(f)))
-            end
-            op
-        else
-            add_compute!(ls, LHS_sym, RHS, elementbytes, position, LHS_ref)
-        end
-    elseif RHS.head === :if
-        add_if!(ls, LHS_sym, RHS, elementbytes, position, LHS_ref)
-    elseif RHS.head === :block
-        add_operation!(ls, LHS, strip_op_linenumber_nodes(RHS), elementbytes, position)
-    elseif RHS.head === :(.)
-        c = gensym!(ls, "getproperty")
-        pushpreamble!(ls, Expr(:(=), c, RHS))
-        add_constant!(ls, c, elementbytes)
-        # op = add_constant!(ls, c, ls.loopsymbols[1:position], LHS_sym, elementbytes, :numericconstant)
-        # pushpreamble!(ls, op, c)
-        # op
+  ls::LoopSet, LHS_sym::Symbol, RHS::Expr, LHS_ref::ArrayReferenceMetaPosition, elementbytes::Int, position::Int
+  )
+  if RHS.head === :ref# || (RHS.head === :call && first(RHS.args) === :getindex)
+    array, rawindices = ref_from_expr!(ls, RHS)
+    RHS_ref = array_reference_meta!(ls, array, rawindices, elementbytes, gensym!(ls, LHS_sym))
+    op = add_load!(ls, RHS_ref, elementbytes)
+    iop = add_compute!(ls, LHS_sym, :identity, [op], elementbytes)
+    # pushfirst!(LHS_ref.parents, iop)
+  elseif RHS.head === :call
+    f = first(RHS.args)
+    if f === :getindex
+      add_load!(ls, LHS_sym, LHS_ref, elementbytes)
+    elseif f isa Symbol && Base.sym_in(f, (:zero, :one, :typemin, :typemax))
+      c = gensym!(ls, f)
+      op = add_constant!(ls, c, ls.loopsymbols[1:position], LHS_sym, elementbytes, :numericconstant)
+      # op = add_constant!(ls, c, Symbol[], LHS_sym, elementbytes, :numericconstant)
+      if f === :zero
+        push!(ls.preamble_zeros, (identifier(op), IntOrFloat))
+      else
+        push!(ls.preamble_funcofeltypes, (identifier(op), reduction_zero_class(f)))
+      end
+      op
     else
-        throw(LoopError("Expression not recognized.", RHS))
+      add_compute!(ls, LHS_sym, RHS, elementbytes, position, LHS_ref)
     end
+  elseif RHS.head === :if
+    add_if!(ls, LHS_sym, RHS, elementbytes, position, LHS_ref)
+  elseif RHS.head === :block
+    add_operation!(ls, LHS, strip_op_linenumber_nodes(RHS), elementbytes, position)
+  elseif RHS.head === :(.)
+    c = gensym!(ls, "getproperty")
+    pushpreamble!(ls, Expr(:(=), c, RHS))
+    add_constant!(ls, c, elementbytes)
+    # op = add_constant!(ls, c, ls.loopsymbols[1:position], LHS_sym, elementbytes, :numericconstant)
+    # pushpreamble!(ls, op, c)
+    # op
+  else
+    throw(LoopError("Expression not recognized.", RHS))
+  end
 end
 
 function prepare_rhs_for_storage!(ls::LoopSet, RHS::Union{Symbol,Expr}, array, rawindices, elementbytes::Int, position::Int)::Operation
@@ -1194,88 +1196,88 @@ function add_assignment!(ls::LoopSet, LHS, RHS, elementbytes::Int, position::Int
 end
 
 function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int, mpref::Union{Nothing,ArrayReferenceMetaPosition} = nothing)
-    if ex.head === :call
-        finex = first(ex.args)::Symbol
-        if finex === :setindex!
-            array, rawindices = ref_from_setindex!(ls, ex)
-            prepare_rhs_for_storage!(ls, ex.args[3]::Union{Symbol,Expr}, array, rawindices, elementbytes, position)
-        else
-            error("Function $finex not recognized.")
-        end
-    elseif ex.head === :(=)
-        add_assignment!(ls, ex.args[1], ex.args[2], elementbytes, position)
-    elseif ex.head === :block
-        add_block!(ls, ex, elementbytes, position)
-    elseif ex.head === :for
-        add_loop!(ls, ex, elementbytes)
-    elseif ex.head === :&&
-        add_andblock!(ls, ex, elementbytes, position)
-    elseif ex.head === :||
-        add_orblock!(ls, ex, elementbytes, position)
-    elseif ex.head === :local # Handle locals introduced by `@inbounds`; using `local` with `@turbo` is not recomended (nor is `@inbounds`; which applies automatically regardless)
-        @assert length(ex.args) == 1 # TODO replace assert + first with "only" once support for Julia < 1.4 is dropped
-        localbody = first(ex.args)
-        @assert localbody.head === :(=)
-        @assert length(localbody.args) == 2
-        LHS = (localbody.args[1])::Symbol
-        RHS = push!(ls, (localbody.args[2]), elementbytes, position, mpref)
-        if isstore(RHS)
-            RHS
-        else
-            add_compute!(ls, LHS, :identity, [RHS], elementbytes)
-        end
+  if ex.head === :call
+    finex = first(ex.args)::Symbol
+    if finex === :setindex!
+      array, rawindices = ref_from_setindex!(ls, ex)
+      prepare_rhs_for_storage!(ls, ex.args[3]::Union{Symbol,Expr}, array, rawindices, elementbytes, position)
     else
-        throw(LoopError("Don't know how to handle expression.", ex))
+      error("Function $finex not recognized.")
     end
+  elseif ex.head === :(=)
+    add_assignment!(ls, ex.args[1], ex.args[2], elementbytes, position)
+  elseif ex.head === :block
+    add_block!(ls, ex, elementbytes, position)
+  elseif ex.head === :for
+    add_loop!(ls, ex, elementbytes)
+  elseif ex.head === :&&
+    add_andblock!(ls, ex, elementbytes, position)
+  elseif ex.head === :||
+    add_orblock!(ls, ex, elementbytes, position)
+  elseif ex.head === :local # Handle locals introduced by `@inbounds`; using `local` with `@turbo` is not recomended (nor is `@inbounds`; which applies automatically regardless)
+    @assert length(ex.args) == 1 # TODO replace assert + first with "only" once support for Julia < 1.4 is dropped
+    localbody = first(ex.args)
+    @assert localbody.head === :(=)
+    @assert length(localbody.args) == 2
+    LHS = (localbody.args[1])::Symbol
+    RHS = push!(ls, (localbody.args[2]), elementbytes, position, mpref)
+    if isstore(RHS)
+      RHS
+    else
+      add_compute!(ls, LHS, :identity, [RHS], elementbytes)
+    end
+  else
+    throw(LoopError("Don't know how to handle expression.", ex))
+  end
 end
 
 function UnrollSpecification(ls::LoopSet, u₁loop::Symbol, u₂loop::Symbol, vloopsym::Symbol, u₁, u₂)
-    order = names(ls)
-    nu₁ = findfirst(Base.Fix2(===,u₁loop), order)::Int
-    nu₂ = u₂ == -1 ? nu₁ : findfirst(Base.Fix2(===,u₂loop), order)::Int
-    nv = findfirst(Base.Fix2(===,vloopsym), order)::Int
-    UnrollSpecification(nu₁, nu₂, nv, u₁, u₂)
+  order = names(ls)
+  nu₁ = findfirst(Base.Fix2(===,u₁loop), order)::Int
+  nu₂ = u₂ == -1 ? nu₁ : findfirst(Base.Fix2(===,u₂loop), order)::Int
+  nv = findfirst(Base.Fix2(===,vloopsym), order)::Int
+  UnrollSpecification(nu₁, nu₂, nv, u₁, u₂)
 end
 
 """
-  looplengthprod(ls::LoopSet)
+    looplengthprod(ls::LoopSet)
 
-Convert to `Float64` for the sake of non-64 bit platforms.
-"""
+  Convert to `Float64` for the sake of non-64 bit platforms.
+  """
 function looplengthprod(ls::LoopSet)
-    l = 1.0
-    for loop ∈ ls.loops
-        l *= Float64(length(loop))
-    end
-    l
+  l = 1.0
+  for loop ∈ ls.loops
+    l *= Float64(length(loop))
+  end
+  l
 end
-    # prod(Float64 ∘ length, ls.loops)
+# prod(Float64 ∘ length, ls.loops)
 
 
 function looplength(ls::LoopSet, s::Symbol)
-    # search_tree(parents(operations(ls)[i]), name(op)) && return true
-    id = getloopid_or_nothing(ls, s)
-    if id === nothing
-        l = 0.0
-        # TODO: we could double count a loop.
-        for op ∈ operations(ls)
-            name(op) === s || continue
-            for opp ∈ parents(op)
-                if isloopvalue(opp)
-                    oppname = first(loopdependencies(opp))
-                    l += looplength(ls, oppname)
-                elseif iscompute(opp)
-                    oppname = name(opp)
-                    l += looplength(ls, oppname)
-                    # TODO elseif isconstant(opp)
-                end
-            end
-            l += 1 - length(parents(op))
+  # search_tree(parents(operations(ls)[i]), name(op)) && return true
+  id = getloopid_or_nothing(ls, s)
+  if id === nothing
+    l = 0.0
+    # TODO: we could double count a loop.
+    for op ∈ operations(ls)
+      name(op) === s || continue
+      for opp ∈ parents(op)
+        if isloopvalue(opp)
+          oppname = first(loopdependencies(opp))
+          l += looplength(ls, oppname)
+        elseif iscompute(opp)
+          oppname = name(opp)
+          l += looplength(ls, oppname)
+          # TODO elseif isconstant(opp)
         end
-        l
-    else
-        Float64(length(ls.loops[id]))
+      end
+      l += 1 - length(parents(op))
     end
+    l
+  else
+    Float64(length(ls.loops[id]))
+  end
 end
 
 function accept_reorder_according_to_tracked_reductions(ls::LoopSet, reordered::Symbol)
@@ -1341,124 +1343,124 @@ end
 
 offsetloadcollection(ls::LoopSet) = ls.omop
 function fill_offset_memop_collection!(ls::LoopSet)
-    omop = offsetloadcollection(ls)
-    ops = operations(ls)
-    num_ops = length(ops)
-    @unpack opids, opidcollectionmap, batchedcollections, batchedcollectionmap = omop
-    length(opidcollectionmap) == 0 || return
-    resize!(opidcollectionmap, num_ops)
-    fill!(opidcollectionmap, (0,0));
-    resize!(batchedcollectionmap, num_ops)
-    fill!(batchedcollectionmap, (0,0))
-    empty!(opids);# empty!(offsets);
-    for i ∈ 1:num_ops
-        op = ops[i]
-        isconditionalmemop(op) && continue # not supported yet
-        opref = op.ref.ref
-        opisload = isload(op)
-        (opisload | isstore(op)) || continue
-        opidcollectionmap[i] === (0,0) || continue # if not -1, we already handled
-        isdiscontiguous(op) && continue
-        collectionsize = 0
-        for j ∈ i+1:num_ops
-            opp = ops[j]
-            isconditionalmemop(opp) && continue # not supported yet
-            if opisload # Each collection is either entirely loads or entirely stores
-                isload(opp) || continue
-            else
-                isstore(opp) || continue
-            end
-            oppref = opp.ref.ref
-            sameref(opref, oppref) || continue
-            if collectionsize == 0
-                push!(opids, [identifier(op), identifier(opp)])
-                # push!(offsets, [opref.offsets, oppref.offsets])
-                opidcollectionmap[identifier(op)] = (length(opids),1)
-            else
-                push!(last(opids), identifier(opp))
-                # push!(last(offsets), oppref.offsets)
-            end
-            opidcollectionmap[identifier(opp)] = (length(opids),length(last(opids)))
-            collectionsize += 1
-        end
+  omop = offsetloadcollection(ls)
+  ops = operations(ls)
+  num_ops = length(ops)
+  @unpack opids, opidcollectionmap, batchedcollections, batchedcollectionmap = omop
+  length(opidcollectionmap) == 0 || return
+  resize!(opidcollectionmap, num_ops)
+  fill!(opidcollectionmap, (0,0));
+  resize!(batchedcollectionmap, num_ops)
+  fill!(batchedcollectionmap, (0,0))
+  empty!(opids);# empty!(offsets);
+  for i ∈ 1:num_ops
+    op = ops[i]
+    isconditionalmemop(op) && continue # not supported yet
+    opref = op.ref.ref
+    opisload = isload(op)
+    (opisload | isstore(op)) || continue
+    opidcollectionmap[i] === (0,0) || continue # if not -1, we already handled
+    isdiscontiguous(op) && continue
+    collectionsize = 0
+    for j ∈ i+1:num_ops
+      opp = ops[j]
+      isconditionalmemop(opp) && continue # not supported yet
+      if opisload # Each collection is either entirely loads or entirely stores
+        isload(opp) || continue
+      else
+        isstore(opp) || continue
+      end
+      oppref = opp.ref.ref
+      sameref(opref, oppref) || continue
+      if collectionsize == 0
+        push!(opids, [identifier(op), identifier(opp)])
+        # push!(offsets, [opref.offsets, oppref.offsets])
+        opidcollectionmap[identifier(op)] = (length(opids),1)
+      else
+        push!(last(opids), identifier(opp))
+        # push!(last(offsets), oppref.offsets)
+      end
+      opidcollectionmap[identifier(opp)] = (length(opids),length(last(opids)))
+      collectionsize += 1
     end
-    for (collectionid,opidc) ∈ enumerate(opids)
-        length(opidc) > 1 || continue
+  end
+  for (collectionid,opidc) ∈ enumerate(opids)
+    length(opidc) > 1 || continue
 
-        # we check if we can turn the offsets into an unroll
-        # we have up to `length(opidc)` loads to do, so we allocate that many "base" vectors
-        # then we iterate through them, adding them to collections as appropriate
-        # inner vector tuple is of (op_pos_w/in collection,o)
-        unroll_collections = Vector{Vector{Tuple{Int,Int}}}(undef, length(opidc))
-        num_unroll_collections = 0
-        # num_ops_considered = length(opidc)
-        r = 2:length(getindices(ops[first(opidc)]))
+    # we check if we can turn the offsets into an unroll
+    # we have up to `length(opidc)` loads to do, so we allocate that many "base" vectors
+    # then we iterate through them, adding them to collections as appropriate
+    # inner vector tuple is of (op_pos_w/in collection,o)
+    unroll_collections = Vector{Vector{Tuple{Int,Int}}}(undef, length(opidc))
+    num_unroll_collections = 0
+    # num_ops_considered = length(opidc)
+    r = 2:length(getindices(ops[first(opidc)]))
 
-        for (i,opid) ∈ enumerate(opidc)
-            op = ops[opid]
-            offset = getoffsets(op)
-            o = offset[1]
-            v = view(offset, r)
-            found_match = false
-            for j ∈ 1:num_unroll_collections
-                collectionⱼ = unroll_collections[j]
-                # giet id (`first`) of first item in collection to get base offsets for comparison
-                if view(getoffsets(ops[opidc[first(first(collectionⱼ))]]), r) == v
-                    found_match = true
-                    push!(collectionⱼ, (i, o))
-                end
-            end
-            if !found_match
-                num_unroll_collections += 1 # the `i` points to position within `opidc`
-                unroll_collections[num_unroll_collections] = [(i,o)]
-            end
+    for (i,opid) ∈ enumerate(opidc)
+      op = ops[opid]
+      offset = getoffsets(op)
+      o = offset[1]
+      v = view(offset, r)
+      found_match = false
+      for j ∈ 1:num_unroll_collections
+        collectionⱼ = unroll_collections[j]
+        # giet id (`first`) of first item in collection to get base offsets for comparison
+        if view(getoffsets(ops[opidc[first(first(collectionⱼ))]]), r) == v
+          found_match = true
+          push!(collectionⱼ, (i, o))
         end
-        for j ∈ 1:num_unroll_collections
-            collectionⱼ = unroll_collections[j]
-            collen = length(collectionⱼ)
-            collen ≤ 1 && continue
-            # we have multiple, easiest to process if we sort them
-            sort!(collectionⱼ, by=last)
-            istart = 1; ostart = last(first(collectionⱼ))
-            oprev = ostart
-            for i ∈ 2:collen
-                onext = last(collectionⱼ[i])
-                if onext == oprev + 1
-                    oprev = onext
-                    continue
-                end
-                # we skipped one, so we must now lower all previous
-                if oprev ≠ ostart # it's just 1
-                    pushbatchedcollection!(batchedcollections, batchedcollectionmap, opidc, ops, collectionⱼ, istart, i-1)
-                end
-                # restart istart and ostart
-                istart = i
-                ostart = onext
-                oprev = onext
-            end
-            if istart ≠ collen
-                pushbatchedcollection!(batchedcollections, batchedcollectionmap, opidc, ops, collectionⱼ, istart, collen)
-            end
-        end
+      end
+      if !found_match
+        num_unroll_collections += 1 # the `i` points to position within `opidc`
+        unroll_collections[num_unroll_collections] = [(i,o)]
+      end
     end
-    check_valid_reorder_dims!(ls)
+    for j ∈ 1:num_unroll_collections
+      collectionⱼ = unroll_collections[j]
+      collen = length(collectionⱼ)
+      collen ≤ 1 && continue
+      # we have multiple, easiest to process if we sort them
+      sort!(collectionⱼ, by=last)
+      istart = 1; ostart = last(first(collectionⱼ))
+      oprev = ostart
+      for i ∈ 2:collen
+        onext = last(collectionⱼ[i])
+        if onext == oprev + 1
+          oprev = onext
+          continue
+        end
+        # we skipped one, so we must now lower all previous
+        if oprev ≠ ostart # it's just 1
+          pushbatchedcollection!(batchedcollections, batchedcollectionmap, opidc, ops, collectionⱼ, istart, i-1)
+        end
+        # restart istart and ostart
+        istart = i
+        ostart = onext
+        oprev = onext
+      end
+      if istart ≠ collen
+        pushbatchedcollection!(batchedcollections, batchedcollectionmap, opidc, ops, collectionⱼ, istart, collen)
+      end
+    end
+  end
+  check_valid_reorder_dims!(ls)
 end
 
 function pushbatchedcollection!(batchedcollections, batchedcollectionmap, opidc, ops, collectionⱼ, istart, istop)
-    colview = view(collectionⱼ, istart:istop)
-    push!(batchedcollections, colview)
-    bclen = length(batchedcollections)
-    for (i,(k,_)) ∈ enumerate(colview)
-        # batchedcollectionmap[identifier(op)] gives index into `batchedcollections` containing `colview`
-        batchedcollectionmap[identifier(ops[opidc[k]])] = (bclen,i)
-    end
+  colview = view(collectionⱼ, istart:istop)
+  push!(batchedcollections, colview)
+  bclen = length(batchedcollections)
+  for (i,(k,_)) ∈ enumerate(colview)
+    # batchedcollectionmap[identifier(op)] gives index into `batchedcollections` containing `colview`
+    batchedcollectionmap[identifier(ops[opidc[k]])] = (bclen,i)
+  end
 end
 
 """
-Returns `0` if the op is the declaration of the constant outerreduction variable.
-Returns `n`, where `n` is the constant declarations's index among parents(op), if op is an outter reduction.
-Returns `-1` if not an outerreduction.
-"""
+  Returns `0` if the op is the declaration of the constant outerreduction variable.
+  Returns `n`, where `n` is the constant declarations's index among parents(op), if op is an outter reduction.
+  Returns `-1` if not an outerreduction.
+  """
 function isouterreduction(ls::LoopSet, op::Operation)
   if isconstant(op) # equivalent to checking if length(loopdependencies(op)) == 0
     instr = op.instruction
@@ -1491,12 +1493,12 @@ function isouterreduction(ls::LoopSet, op::Operation)
 end
 
 struct LoopError <: Exception
-    msg
-    ex
-    LoopError(msg, ex=nothing) = new(msg, ex)
+  msg
+  ex
+  LoopError(msg, ex=nothing) = new(msg, ex)
 end
 
 function Base.showerror(io::IO, err::LoopError)
-    printstyled(io, err.msg; color = :red)
-    err.ex === nothing || printstyled(io, '\n', err.ex)
+  printstyled(io, err.msg; color = :red)
+  err.ex === nothing || printstyled(io, '\n', err.ex)
 end
