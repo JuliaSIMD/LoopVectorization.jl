@@ -32,7 +32,7 @@ function add_load!(ls::LoopSet, op::Operation, actualarray::Bool = true)
         end
       end
     end
-    allmatch && isstore(opp) ? first(parents(opp)) : opp
+    allmatch && return isstore(opp) ? first(parents(opp)) : opp
   end
   add_vptr!(ls, op.ref.ref.array, vptr(op), actualarray)
   pushop!(ls, op, name(op))
