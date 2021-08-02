@@ -1128,16 +1128,18 @@ function add_operation!(
     end
 end
 
-function prepare_rhs_for_storage!(ls::LoopSet, RHS::Union{Symbol,Expr}, array, rawindices, elementbytes::Int, position::Int)
-    RHS isa Symbol && return add_store!(ls, RHS, array, rawindices, elementbytes)
-    mpref = array_reference_meta!(ls, array, rawindices, elementbytes)
-    cachedparents = copy(mpref.parents)
-    ref = mpref.mref.ref
-    lrhs = gensym!(ls, "RHS")
-    mpref.varname = lrhs
-    add_operation!(ls, lrhs, RHS, mpref, elementbytes, position)
-    mpref.parents = cachedparents
-    add_store!(ls, mpref, elementbytes)
+function prepare_rhs_for_storage!(ls::LoopSet, RHS::Union{Symbol,Expr}, array, rawindices, elementbytes::Int, position::Int)::Operation
+  RHS isa Symbol && return add_store!(ls, RHS, array, rawindices, elementbytes)
+  mpref = array_reference_meta!(ls, array, rawindices, elementbytes)
+  cachedparents = copy(mpref.parents)
+  ref = mpref.mref.ref
+  lrhs = gensym!(ls, "RHS")
+  mpref.varname = lrhs
+  add_operation!(ls, lrhs, RHS, mpref, elementbytes, position)
+  mpref.parents = cachedparents
+  op = add_store!(ls, mpref, elementbytes)
+  ls.syms_aliasing_refs[findfirst(==(mpref.mref), ls.refs_aliasing_syms)] = lrhs
+  return op
 end
 
 function add_assignment!(ls::LoopSet, LHS, RHS, elementbytes::Int, position::Int)

@@ -48,6 +48,8 @@ const START_TIME = time()
 
     @time include("simplemisc.jl")
 
+    @time include("convolutions.jl")
+
     @time include("ifelsemasks.jl")
 
     @time include("gemv.jl")
