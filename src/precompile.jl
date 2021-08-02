@@ -2,21 +2,21 @@ function _precompile_()
     ccall(:jl_generating_output, Cint, ()) == 1 || return nothing
     # Base.precompile(Tuple{typeof(which(_turbo_!,(Val{UNROLL},Val{OPS},Val{ARF},Val{AM},Val{LPSYM},Tuple{LB, V},)).generator.gen),Any,Any,Any,Any,Any,Any,Any,Any,Type,Type,Type,Type,Any,Any})   # time: 1.0198073
   # Base.precompile(Tuple{typeof(gespf1),Any,Tuple{Any, VectorizationBase.NullStep}})   # time: 0.1096832
-    Base.precompile(avx_body, (LoopSet, Tuple{Bool,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt}))
+    Base.precompile(avx_body, (LoopSet, Tuple{Bool,Int8,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt}))
     Base.precompile(lower_and_split_loops, (LoopSet, Int))
-    Base.precompile(lower, (LoopSet, Int, Int, Int))
+    Base.precompile(lower, (LoopSet, Int, Int, Int, Int))
     Base.precompile(Tuple{typeof(turbo_macro),Module,LineNumberNode,Expr})   # time: 0.09183489
     Base.precompile(Tuple{typeof(gespf1),StridedPointer{Float64, 1, 1, 0, (1,), Tuple{StaticInt{8}}, Tuple{StaticInt{1}}},Tuple{StaticInt{1}}})   # time: 0.05469272
     Base.precompile(Tuple{typeof(zerorangestart),UnitRange{Int}})   # time: 0.04291692
     Base.precompile(Tuple{Type{LoopSet},Symbol})   # time: 0.03362425
     Base.precompile(Tuple{typeof(recursive_muladd_search!),Expr,Vector{Any},Nothing,Bool,Bool})   # time: 0.029960306
     Base.precompile(Tuple{typeof(add_constant!),LoopSet,Float64,Vector{Symbol},Symbol,Int})   # time: 0.027501073
-    Base.precompile(Tuple{typeof(_turbo_loopset),Any,Any,Any,Any,Core.SimpleVector,Core.SimpleVector,Tuple{Bool, Int8, Int8, Bool, Int, Int, Int, Int, Int, Int, Int, UInt}})   # time: 0.02345788
-    Base.precompile(Tuple{typeof(substitute_broadcast),Expr,Symbol,Bool,Int8,Int8,Int,Int})   # time: 0.02281322
+    Base.precompile(Tuple{typeof(_turbo_loopset),Any,Any,Any,Any,Core.SimpleVector,Core.SimpleVector,Tuple{Bool, Int8, Int8, Int8, Bool, Int, Int, Int, Int, Int, Int, Int, UInt}})   # time: 0.02345788
+    Base.precompile(Tuple{typeof(substitute_broadcast),Expr,Symbol,Bool,Int8,Int8,Int8,Int,Int})   # time: 0.02281322
     Base.precompile(Tuple{typeof(push!),LoopSet,Expr,Int,Int})   # time: 0.022659862
     Base.precompile(Tuple{typeof(add_compute!),LoopSet,Symbol,Expr,Int,Int,Nothing})   # time: 0.02167476
     Base.precompile(Tuple{typeof(checkforoffset!),LoopSet,Symbol,Int,Vector{Operation},Vector{Symbol},Vector{Int8},Vector{Int8},Vector{Bool},Vector{Symbol},Vector{Symbol},Expr})   # time: 0.020454278
-    Base.precompile(Tuple{typeof(generate_call),LoopSet,Tuple{Bool, Int8, Int8},UInt,Bool})   # time: 0.020274462
+    Base.precompile(Tuple{typeof(generate_call),LoopSet,Tuple{Bool, Int8, Int8, Int8},UInt,Bool})   # time: 0.020274462
     Base.precompile(Tuple{typeof(expandbyoffset!),Vector{Tuple{Int, Tuple{Int, Int32, Bool}}},Vector{Any},Vector{Int}})   # time: 0.019860294
     Base.precompile(Tuple{typeof(isscopedname),Symbol,Symbol,Symbol})   # time: 0.016642524
     # Base.precompile(Tuple{typeof(which(vmaterialize!,(Union{Adjoint{T<:Union{Bool, Float32, Float64, Int16, Int32, Int, Int8, UInt16, UInt32, UInt, UInt8, VectorizationBase.Bit}, A<:AbstractArray{T<:Union{Bool, Float32, Float64, Int16, Int32, Int, Int8, UInt16, UInt32, UInt, UInt8, VectorizationBase.Bit}, N}}, Transpose{T<:Union{Bool, Float32, Float64, Int16, Int32, Int, Int8, UInt16, UInt32, UInt, UInt8, VectorizationBase.Bit}, A<:AbstractArray{T<:Union{Bool, Float32, Float64, Int16, Int32, Int, Int8, UInt16, UInt32, UInt, UInt8, VectorizationBase.Bit}, N}}},BC<:Union{Base.Broadcast.Broadcasted, LoopVectorization.Product},Val{Mod},Val{UNROLL},)).generator.gen),Any,Any,Any,Any,Any,Any,Any,Any,Any,Type,Any})   # time: 0.016243948
