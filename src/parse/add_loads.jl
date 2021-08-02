@@ -14,7 +14,7 @@ end
 function add_load!(ls::LoopSet, op::Operation, actualarray::Bool = true)
   @assert isload(op)
   if (id = maybeaddref!(ls, op)) > 0 # try to CSE
-    opp = ls.opdict[ls.syms_aliasing_refs[id]] # throw an error if not found.
+    opp = ls.opdict[ls.syms_aliasing_refs[id]]
     op_inds = getindicesonly(op)
     li = op.ref.loopedindex
     allmatch = true
