@@ -13,7 +13,7 @@ end
 ```
 To execute the loop using SIMD (Single Instruction Multiple Data) instructions, you have to unroll the loop. Rather than evaluating the loop as written -- adding element-wise products to a single accumulator one after the other -- you can multiply short vectors loaded from `a` and `b` and add their results to a vector of accumulators. 
 
-Most modern CPUs found in laptops or desktops have the AVX instruction set, which allows them to operate on 256 bit vectors -- meaning the vectors can hold 4 double precision (64 bit) floats. Some have the AVX512 instruction set, which increases the vector size to 512 bits, and also adds many new instructions that make vectorizing easier. To be gemeral across CPUs and data types, I'll refer to the number of elements in the vectors with `W`. I'll also refer to unrolling a loop by a factor of `W` and loading vectors from it as "vectorizing" that loop.
+Most modern CPUs found in laptops or desktops have the AVX instruction set, which allows them to operate on 256 bit vectors -- meaning the vectors can hold 4 double precision (64 bit) floats. Some have the AVX512 instruction set, which increases the vector size to 512 bits, and also adds many new instructions that make vectorizing easier. To be general across CPUs and data types, I'll refer to the number of elements in the vectors with `W`. I'll also refer to unrolling a loop by a factor of `W` and loading vectors from it as "vectorizing" that loop.
 
 In addition to vectorizing the loop, we'll want to unroll it by an additional factor. Given that we have single or double precision floating point elements, most recent CPU cores have a potential throughput of two fused multiply-add (`fma`) instructions per clock cycle. However, it actually takes about four clock cycles for any of these instructions to execute; a single core is able to work on several in parallel.
 
@@ -23,7 +23,7 @@ If we had 8 accumulators, then theoretically we could perform two per clock cycl
 However, there is another bottle neck: we can only perform 2 aligned loads per clock cycle (or 1 unaligned load). [Alignment here means with respect to a memory address boundary, if your vectors are 256 bits, then a load/store is aligned if it is with respect to a memory address that is an integer multiple of 32 bytes (256 bits = 32 bytes).]
 Thus, in 4 clock cycles, we can do up to 8 loads. But each `fma` requires 2 loads, meaning we are limited to 4 of them per 4 clock cyles, and any unrolling beyond 4 gives us no benefit.
 
-Double precision benchmarks pitting Julia's builtin dot product (named `MKL` here), and code compiled with a variety of compilers:
+Double precision benchmarks pitting Julia's builtin dot product, and code compiled with a variety of compilers:
 ![dot](../assets/bench_dot_v2.png)
 What we just described is the core of the approach used by all these compilers. The variation in results is explained mostly by how they handle vectors with lengths that are not an integer multiple of `W`. I ran these on a computer with AVX512 so that `W = 8`. LLVM, the backend compiler of both Julia and Clang, shows rapid performance degredation as `N % 4W` increases, where `N` is the length of the vectors.
 This is because, to handle the remainder, it uses a scalar loop that runs as written: multiply and add single elements, one after the other. 
