@@ -130,6 +130,16 @@ function test_broadcast(::Type{T}) where {T}
   @test D1 ≈ D2
   D2 = @outline @turbo @. C + A *ˡ (b + x');
   @test D1 ≈ D2
+  if T === Int64
+    xd = rand(-1_000_000_000_000:1_000_000_000_000,89);
+  elseif T === Int32
+    xd = rand(-Int32(10_000_000):Int32(10_000_000),89);
+  else
+    xd = rand(R,89);
+  end;
+  yd = rand(R,89);
+  yd[yd .== 0] .= 77;
+  @test xd .÷ yd == @turbo xd .÷ yd
   
   if T <: Union{Float32,Float64}
     D3 = cos.(B');
