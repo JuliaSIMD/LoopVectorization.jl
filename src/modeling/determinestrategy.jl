@@ -1182,7 +1182,28 @@ struct LoopOrders
   buff::Vector{Symbol}
 end
 
-function LoopOrders(ls::LoopSet)
+function outer_reduct_loopordersplit(ls::LoopSet)
+  ops = operations(ls)
+  nonouterreducts = Int[]
+  for i ∈ eachindex(ops)
+    i ∈ ls.outer_reductions || push!(nonouterreducts, i)
+  end
+  reductsyms = Symbol[]
+  nonreductsyms = Symbol[]
+  for l ∈ ls.loopsymbols
+    isreduct = false
+    for opid ∈ nonouterreducts
+      if l ∈ reduceddependencies(ops[opid])
+        isreduct = true
+        push!(reductsyms, l)
+        break
+      end
+    end
+    isreduct || push!(nonreductsyms, l)
+  end
+  reductsyms, nonreductsyms
+end
+function loopordersplit(ls::LoopSet)
   reductsyms = Symbol[]
   nonreductsyms = Symbol[]
   for l ∈ ls.loopsymbols
@@ -1195,6 +1216,14 @@ function LoopOrders(ls::LoopSet)
       end
     end
     isreduct || push!(nonreductsyms, l)
+  end
+  reductsyms, nonreductsyms
+end
+function LoopOrders(ls::LoopSet)
+  if length(ls.outer_reductions) == 0
+    reductsyms, nonreductsyms = loopordersplit(ls)
+  else
+    reductsyms, nonreductsyms = outer_reduct_loopordersplit(ls)
   end
   LoopOrders(nonreductsyms, reductsyms, Vector{Symbol}(undef, length(ls.loopsymbols)))
 end
