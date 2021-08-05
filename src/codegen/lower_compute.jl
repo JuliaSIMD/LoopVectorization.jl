@@ -234,6 +234,7 @@ end
             push!(q.args, :($gf(vargs, $k, false)))
         end
         return Expr(:block, Expr(:meta, :inline), q)
+        # return Expr(:block, Expr(:meta, :inline), :(@show($q)))
     end
     if Sreduced
         M = N
@@ -272,6 +273,7 @@ end
         push!(t.args, :($gf(dd, $m, false)))
     end
     push!(q.args, :(VecUnroll($t)))
+    # push!(q.args, :(@show(VecUnroll($t))))
     q
 end
 
@@ -560,7 +562,8 @@ function lower_compute!(
             end
         end
     end
-    selfdepreduce = ifelse(((!u₁unrolledsym) & isu₁unrolled(op)) & (u₁ > 1), selfdep, 0)
+  selfdepreduce = ifelse(((!u₁unrolledsym) & isu₁unrolled(op)) & (u₁ > 1), selfdep, 0)
+  # @show selfdepreduce, selfdep, maskreduct, op
     if maskreduct
         ifelsefunc = if us.u₁ == 1
             :ifelse # don't need to be fancy
@@ -577,7 +580,7 @@ function lower_compute!(
                 insert!(instrcall.args, 4, staticexpr(u₁))
                 insert!(instrcall.args, 5, staticexpr(selfdepreduce))
             end
-        elseif all(in(loopdependencies(op)), reduceddeps) || any(opp -> mangledvar(opp) === mangledvar(op), parents_op)
+        elseif all(in(loopdependencies(op)), reduceddeps) || selfdep ≠ 0#any(opp -> mangledvar(opp) === mangledvar(op), parents_op)
             # Here, we are evaluating the function, and then `ifelse`-ing it with `hasf == false`.
             # That means we still need to adjust the `instrcall` in case we're reducing/accumulating across the unroll
             if ifelsefunc ≡ :ifelse # ifelse means it's unrolled by 1, no need
@@ -593,8 +596,8 @@ function lower_compute!(
                 push!(q.args, Expr(:(=), varsym, Expr(:call, lv(:ifelse), MASKSYMBOL, instrcall, selfopname)))
             end
             return
-        elseif selfdep != 0
-            make_partial_map!(instrcall, selfopname, u₁, selfdepreduce)
+        # elseif selfdep != 0
+        #   make_partial_map!(instrcall, selfopname, u₁, selfdepreduce)
         end
     elseif selfdep != 0 && (dopartialmap ||
         (isouterreduct && (opunrolled) && (u₁ < us.u₁)) ||

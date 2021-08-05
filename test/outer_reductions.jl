@@ -54,6 +54,48 @@ function test_awmean(::Type{T}) where {T}
     end
 end
 
+function logℒ_fast(α, β, t, c, x)
+    eα = abs(α)
+    n, k = size(x)
+  
+    (n == length(t) == length(c) && length(β) == k + 1) || throw(DimensionMismatch())
+    s = zero(typeof(α))
+    @inbounds for i in 1:n
+      xb = sum(@inbounds(x[i, j] * β[j+1]) for j in 1:k) + β[1]
+      ti = t[i]
+      s += (1 - (c[i] == ti)) * (log(eα) + (eα - 1) * log(ti) + xb) - ti^eα * exp(xb)
+    end
+    return s
+end
+function logℒ_fast_turbo(α, β, t, c, x)
+    eα = abs(α)
+    n, k = size(x)
+  
+    (n == length(t) == length(c) && length(β) == k + 1) || throw(DimensionMismatch())
+    s = zero(typeof(α))
+    @turbo for i in 1:n
+      xb0 = 0.0
+      for j in 1:k
+        xb0 += x[i,j] * β[j+1]
+      end
+      xb = xb0 + β[1]
+      ti = t[i]
+      s += (1 - (c[i] == ti)) * (log(eα) + (eα - 1) * log(ti) + xb) - ti^eα * exp(xb)
+    end
+    return s
+end
+
+function test_logℒ(n, k)
+  t = rand(n)
+  c = copy(t);
+  b = rand(n) .> 0.5
+  c[b] .= rand.();
+  x = rand(n,k)
+  α = 2.85
+  β = rand(k+1)
+  @test logℒ_fast(α, β, t, c, x) ≈ logℒ_fast_turbo(α, β, t, c, x)
+end
+
 function not_an_outer_reduct!(r, N::Int, x = 2.0, y= nothing) # there was a bug where this was classified as one
   @turbo for i ∈ eachindex(r)
     acc = y === nothing ? x : r[i]
@@ -69,5 +111,8 @@ end
     test_awmean(T)
   end
   @test all(==(7.4), not_an_outer_reduct!(Vector{Float64}(undef, 5), 17, 7.4))
+  for n ∈ 1:20, k ∈ 1:5
+    test_logℒ(n,k)
+  end
 end
 
