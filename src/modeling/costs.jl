@@ -269,7 +269,9 @@ const COST = Dict{Symbol,InstructionCost}(
   :convert => InstructionCost(4,0.5),
   :vpermilps177 => InstructionCost(1, 1.0),
   :vmovsldup => InstructionCost(1, 1.0),
-  :vmovshdup => InstructionCost(1, 1.0)
+  :vmovshdup => InstructionCost(1, 1.0),
+  :exponent => InstructionCost(8, 1.0),
+  :significand => InstructionCost(8, 1.0)
 )
 
 # # @inline prefetch0(x::Ptr, i) = VectorizationBase.prefetch(x, Val{3}(), Val{0}())
@@ -596,7 +598,7 @@ const FUNCTIONSYMBOLS = IdDict{Type{<:Function},Instruction}(
     typeof(ifelse) => :ifelse,
     typeof(identity) => :identity,
     typeof(conj) => :identity,#conj,
-    typeof(÷) => :div_fast
+    typeof(÷) => :vdiv_fast
     # typeof(zero) => :zero,
     # typeof(one) => :one,
     # typeof(axes) => :axes,
