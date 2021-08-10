@@ -683,12 +683,6 @@ function _turbo_loopset(
     avx_loopset!(ls, instr, ops, arsv, tovector(AMsv), tovector(LPSYMsv), LBsv, vargs)
 end
 
-@static if VERSION ≥ v"1.7.0-DEV.421"
-  using Base: @aggressive_constprop
-else
-  macro aggressive_constprop(ex); esc(ex); end
-end
-
 """
     _turbo_!(unroll, ops, arf, am, lpsym, lb, vargs...)
 
@@ -708,7 +702,7 @@ Execute an `@turbo` block. The block's code is represented via the arguments:
   `StaticLowerUnitRange(1)` because the lower bound of the iterator can be determined to be 1.
 - `vargs...` holds the encoded pointers of all the arrays (see `VectorizationBase`'s various pointer types).
 """
-@aggressive_constprop @generated function _turbo_!(
+@generated function _turbo_!(
     ::Val{var"#UNROLL#"}, ::Val{var"#OPS#"}, ::Val{var"#ARF#"}, ::Val{var"#AM#"}, ::Val{var"#LPSYM#"}, ::Val{Tuple{var"#LB#",var"#V#"}}, var"#flattened#var#arguments#"::Vararg{Any,var"#num#vargs#"}
 ) where {var"#UNROLL#", var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#", var"#V#", var"#num#vargs#"}
   1 + 1 # Irrelevant line you can comment out/in to force recompilation...

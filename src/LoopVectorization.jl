@@ -112,6 +112,8 @@ LoopVectorization
 include("precompile.jl")
 _precompile_()
 
+_vreduce(+, Float64[1.0])
+
 # import ChainRulesCore, ForwardDiff
 # include("vmap_grad.jl")
 function __init__()

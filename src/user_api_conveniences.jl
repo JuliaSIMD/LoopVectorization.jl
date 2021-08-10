@@ -23,3 +23,12 @@ end
 end
 matmul_params() = matmul_params(register_size(), register_count(), cache_linesize())
 
+# function dotturbo(x,y)
+#   s = zero(promote_type(eltype(x),eltype(y)))
+#   @turbo for i ∈ eachindex(x,y)
+#     s += x[i]*y[i]
+#   end
+#   s
+# end
+# dotturbo(Float64[1.0], Float64[2.0])
+
