@@ -13,7 +13,6 @@ Base.promote_rule(::Type{T}, ::Type{UpperBoundedInteger{N,S}}) where {N,T<:Base.
 Base.promote_rule(::Type{UpperBoundedInteger{N,S}}, ::Type{T}) where {N,T<:Base.BitInteger,S} = promote_rule(S,T)
 Base.convert(::Type{T}, i::UpperBoundedInteger) where {T<:Number} = convert(T, i.i)
 Base.convert(::Type{UpperBoundedInteger{N,T}}, i::UpperBoundedInteger{N,T}) where {N,T<:Base.BitInteger} = i
-Base.convert(::Type{Any}, i::UpperBoundedInteger) = i
 upper_bound(_) = typemax(Int)
 upper_bound(::Type{CloseOpen{T,UpperBoundedInteger{N,S}}}) where {T,N,S} = N - 1
 
@@ -560,7 +559,7 @@ function add_array_symbols!(ls::LoopSet, arraysymbolinds::Vector{Symbol}, offset
     for as ∈ arraysymbolinds
         pushpreamble!(ls, Expr(:(=), as, extract_varg((offset+=1))))
     end
-    return offset   
+    return offset
 end
 function extract_external_functions!(ls::LoopSet, offset::Int, vargs)
     for op ∈ operations(ls)
