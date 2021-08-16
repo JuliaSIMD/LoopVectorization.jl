@@ -408,9 +408,9 @@ end
   storeop = add_simple_store!(ls, :destination, ArrayReference(:dest, loopsyms), elementbytes)
   doaddref!(ls, storeop)
   resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
+  # return ls
   sc = setup_call(ls, :(Base.Broadcast.materialize!(dest, bc)), LineNumberNode(0), inline, false, u₁, u₂, v, threads%Int, warncheckarg)
   Expr(:block, Expr(:meta,:inline), sc, :dest)
-  # setup_call_debug(ls)
 end
 @generated function vmaterialize!(
     dest′::Union{Adjoint{T,A},Transpose{T,A}}, bc::BC, ::Val{Mod}, ::Val{UNROLL}
@@ -460,6 +460,9 @@ end
   end
 end
 
+@inline function vmaterialize(bc::Broadcasted{Base.Broadcast.DefaultArrayStyle{0}}, ::Val{Mod}, ::Val{UNROLL}) where {Mod,UNROLL}
+  Base.materialize(bc)
+end
 @inline function vmaterialize(
     bc::Broadcasted, ::Val{Mod}, ::Val{UNROLL}
 ) where {Mod,UNROLL}
