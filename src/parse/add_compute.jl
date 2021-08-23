@@ -189,14 +189,14 @@ function add_reduction_update_parent!(
   # if parent is not an outer reduction...
   # if !isouterreduction && !isreductzero(parent, ls, reduct_zero)
   # @show isouterreduction, parent, length(loopdependencies(parent))
-  add_reduct_instruct = !isouterreduction && !isconstant(parent)
+  add_reduct_instruct = (!isouterreduction && !isconstant(parent)) && (instr.instr ≢ :ifelse)
   if add_reduct_instruct
-    if instr.instr === :ifelse
-      @assert length(vparents) == 2
-      instrclass = reduction_instruction_class(instruction(vparents[2])) # key allows for faster lookups
-    else
+    # if instr.instr === :ifelse
+      # @assert length(vparents) == 2
+      # instrclass = reduction_instruction_class(instruction(vparents[2])) # key allows for faster lookups
+    # else
       instrclass = reduction_instruction_class(instr) # key allows for faster lookups
-    end
+    # end
     reduct_zero = reduction_zero(instrclass)
     # We add
     reductcombine = reduction_scalar_combine(instrclass)

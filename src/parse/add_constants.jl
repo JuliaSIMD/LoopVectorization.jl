@@ -1,5 +1,6 @@
 const CONSTANT_SYMBOLS = (:nothing, :Float64, :Float32, :Int8, :UInt8, :Int16, :UInt16, :Int32, :UInt32, :Int64, :UInt64)
 function add_constant!(ls::LoopSet, var::Symbol, elementbytes::Int)
+  var ∈ ls.loopsymbols && return add_loopvalue!(ls, var, elementbytes)
   globalconst = Base.sym_in(var, CONSTANT_SYMBOLS)
   instr = globalconst ? Instruction(GLOBALCONSTANT, var) : LOOPCONSTANT
   op = Operation(length(operations(ls)), var, elementbytes, instr, constant, NODEPENDENCY, Symbol[], NOPARENTS)
@@ -123,7 +124,8 @@ end
 # assignedsym will be assigned to value within the preamble
 function add_constant!(
     ls::LoopSet, value::Symbol, deps::Vector{Symbol}, assignedsym::Symbol, elementbytes::Int, f::Symbol = Symbol("")
-  )
+)
+  value ∈ ls.loopsymbols && return add_loopvalue!(ls, value, elementbytes)
   retop = get(ls.opdict, value, nothing)
   if retop === nothing
     op = Operation(length(operations(ls)), assignedsym, elementbytes, Instruction(f, value), constant, deps, NODEPENDENCY, NOPARENTS)

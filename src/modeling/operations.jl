@@ -404,3 +404,79 @@ end
     # # access stride info?
     # op.numerical_metadata[symposition(op,sym)]
 # end
+function find_cmp_args_from_ifelse(op::Operation)
+  parents_op = parents(op)
+  @assert length(parents_op) == 3
+  cmp = parents_op[1]
+  a = parents_op[2]
+  b = parents_op[3]
+  not = false
+  cmp_instr = instruction(cmp).instr
+  parents_cmp = parents(cmp)
+  while length(parents_cmp) == 1
+    @assert (cmp_instr === :(!)) || (cmp_instr === :(~))
+    not = !not
+    cmp = only(parents_cmp)
+    cmp_instr = instruction(cmp).instr
+    parents_cmp = parents(cmp)
+  end
+  @assert length(parents_cmp) == 2
+  cmpa = parents_cmp[1]
+  cmpb = parents_cmp[2]
+  if (cmpa ≡ b) && (cmpb ≡ a)
+    not = !not
+    cmpa, cmpb = cmpb, cmpa
+    cmp, cmpb, cmpa, !not, true
+  else
+    cmp, cmpa, cmpb, not, ((cmpa === a) & (cmpb === b))
+  end
+end
+
+function ifelse_reduce_fun_expr(f::Symbol, op::Operation)
+  cmp, cmpa, cmpb, not, success = find_cmp_args_from_ifelse(op)
+  lvcmp_instr = lv(instruction(cmp).instr)
+  if success
+    lvf = lv(f)
+    return not ? Expr(:call, lvf, :($(!) ∘ $lvcmp_instr)) : Expr(:call, lvf, lvcmp_instr)
+  end
+  options = children(cmp)
+  for oop ∈ options
+    oop === op && continue
+    _cmp, _cmpa, _cmpb, _not, _success = find_cmp_args_from_ifelse(oop)
+    _success || continue
+    lvf = lv(Symbol(f,:Mirror))
+    expr = not ? Expr(:call, lvf, :($(!) ∘ $lvcmp_instr)) : Expr(:call, lvf, lvcmp_instr)
+    push!(expr.args, name(_cmpa), name(_cmpb))
+    return expr
+  end
+  throw("Failed to find matching reduction to select")
+end
+
+function ifelse_reduction(f::F, rsym::Symbol, op::Operation) where {F}
+  cmp, cmpa, cmpb, not, success = find_cmp_args_from_ifelse(op)
+  lvcmp_instr = lv(instruction(cmp).instr)
+  if success
+    lvf = lv(rsym)
+    return not ? Expr(:call, lvf, :($(!) ∘ $lvcmp_instr)) : Expr(:call, lvf, lvcmp_instr)
+  end
+  options = children(cmp)
+  for oop ∈ options
+    oop === op && continue
+    _cmp, _cmpa, _cmpb, _not, _success = find_cmp_args_from_ifelse(oop)
+    _success || continue
+    lvf = lv(Symbol(rsym,:Mirror))
+    foop, goop = f(oop)
+    return not ? Expr(:call, lvf, :($(!) ∘ $lvcmp_instr), foop, goop...) : Expr(:call, lvf, lvcmp_instr, foop, goop...)
+  end
+  throw("Failed to find matching reduction to select")
+end
+
+# for f ∈ [:reduction_scalar_combine, :reduction_to_scalar, :reduce_number_of_vectors, (:reduce_to_onevecunroll,:IfElseOp),(:reduction_to_single_vector,:IfElseCollapser)]
+for f ∈ [:reduction_scalar_combine, :reduction_to_scalar, :reduce_number_of_vectors,:reduce_to_onevecunroll,:reduction_to_single_vector]
+  @eval begin
+    $f(x) = $f(reduction_instruction_class(x))
+    $f(op::Operation)::GlobalRef = lv($f(instruction(op)))
+  end
+end
+
+

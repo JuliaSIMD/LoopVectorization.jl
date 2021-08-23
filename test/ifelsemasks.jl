@@ -468,135 +468,158 @@ T = Float32
     end
   end
 
-    N = 117
-    for T ∈ (Float32, Float64, Int32, Int64)
-        @show T, @__LINE__
-        if T <: Integer
-            a = rand(-T(100):T(100), N); b = rand(-T(100):T(100), N);
-        else
-            a = rand(T, N); b = rand(T, N);
-        end;
-        c1 = similar(a); c2 = similar(a);
-
-        promote_bool_store!(c1, a, b);
-        promote_bool_storeavx!(c2, a, b);
-        @test c1 == c2
-        fill!(c2, -999999999); promote_bool_store_avx!(c2, a, b);
-        @test c1 == c2
-        fill!(c2, -999999999); promote_bool_storeavx2!(c2, a, b);
-        @test c1 == c2
-        fill!(c2, -999999999); promote_bool_store_avx2!(c2, a, b);
-        @test c1 == c2
-
-        fill!(c1,  999999999); addormul!(c1, a, b)
-        fill!(c2, -999999999); addormul_avx!(c2, a, b)
-        @test c1 ≈ c2
-        fill!(c2, -999999999); addormulavx!(c2, a, b)
-        @test c1 ≈ c2
-        fill!(c2, -999999999); addifelsemul_avx!(c2, a, b)
-        @test c1 ≈ c2
-        fill!(c2, -999999999); addifelsemulavx!(c2, a, b)
-        @test c1 ≈ c2
-        addormulp1!(c1, a, b)
-        addormulp1_avx!(c2, a, b)
-        @test c1 ≈ c2
-        fill!(c2, -999999999); addormulp1avx!(c2, a, b)
-        @test c1 ≈ c2
-        fill!(c2, -999999999); addifelsemulp1_avx!(c2, a, b)
-        @test c1 ≈ c2
-        fill!(c2, -999999999); addifelsemulp1avx!(c2, a, b)
-        @test c1 ≈ c2
-
-        fill!(c1, -999999999); maybewriteand!(c1, a, b)
-        fill!(c2, -999999999); maybewriteand_avx!(c2, a, b)
-        @test c1 ≈ c2
-        fill!(c2, -999999999); maybewriteandavx!(c2, a, b)
-        @test c1 ≈ c2
-
-        fill!(c1, -999999999); maybewriteor!(c1, a, b)
-        fill!(c2, -999999999); maybewriteor_avx!(c2, a, b)
-        @test c1 ≈ c2
-        fill!(c2, -999999999); maybewriteoravx!(c2, a, b)
-        @test c1 ≈ c2
-
-        andorassignment!(c1, a, b);
-        andorassignmentavx!(c2, a, b);
-        @test c1 ≈ c2
-        fill!(c2, -999999999); andorassignment_avx!(c2, a, b);
-        @test c1 ≈ c2
-
-        a1 = copy(a); a2 = copy(a);
-        ifelseoverwrite!(a1)
-        ifelseoverwriteavx!(a2)
-        @test a1 ≈ a2
-        
-        if T <: Union{Float32,Float64}
-            a .*= 100;
-        end;
-        b1 = copy(a);
-        b2 = copy(a);
-        condstore!(b1)
-        condstore1avx!(b2)
-        @test b1 == b2
-        copyto!(b2, a); condstore1_avx!(b2)
-        @test b1 == b2
-        copyto!(b2, a); condstore2avx!(b2)
-        @test b1 == b2
-        copyto!(b2, a); condstore2_avx!(b2)
-        @test b1 == b2
-
-        M, K, N = 83, 85, 79;
-        if T <: Integer
-            A = rand(T(-100):T(100), K, M);
-            B = rand(T(-100):T(100), K, N);
-            C1 = rand(T(-100):T(100), M, N);
-            b = rand(T(-100):T(100), N);
-            d = rand(T(-100):T(100), N);
-        else
-            A = randn(T, K, M);
-            B = randn(T, K, N);
-            C1 = randn(T, M, N);
-            b = randn(T, N);
-            d = randn(T, N);
-        end;
-        C2 = copy(C1); C3 = copy(C1);
-        AtmulBpos!(C1, A, B)
-        AtmulBposavx!(C2, A, B)
-        AtmulBpos_avx!(C3, A, B)
-        @test C1 ≈ C2
-        @test C1 ≈ C3
-        C1 = similar(B);
-        C2 = similar(B);
-        notacondload!(C1, B, b)
-        notacondloadavx!(C2, B, b)
-        @test C1 ≈ C2
-        maskedloadscalar!(C1, B, b)
-        maskedloadscalaravx!(C2, B, b)
-        @test C1 ≈ C2
-        condloadscalar!(C1, B, b, d)
-        condloadscalaravx!(C2, B, b, d)
-        @test C1 ≈ C2
-
-        if T <: Integer
-            half = rand(T(1):T(100), 7);
-            m = rand(T(-10):T(10), 7);
-        else
-            half = rand(T, 7); m = rand(T, 7);
-        end;
-        if sizeof(T) == 4
-            res1 = Vector{Float32}(undef, 7);
-            res2 = Vector{Float32}(undef, 7);
-        else
-            res1 = Vector{Float64}(undef, 7);
-            res2 = Vector{Float64}(undef, 7);
-        end
-
-        for keep ∈ (nothing,true), final ∈ (nothing,true)
-            @test twoifelses!(res1, half, m) ≈ twoifelses_avx!(res2, half, m)
-        end
-
+  function findminturbo(x)
+    indmin = 0
+    minval = typemax(eltype(x))
+    @turbo for i ∈ eachindex(x)
+      newmin = x[i] < minval
+      minval = newmin ? x[i] : minval
+      indmin = newmin ?   i  : indmin
     end
+    minval, indmin
+  end
+  function findminturbo_u2(x)
+    indmin = 0
+    minval = typemax(eltype(x))
+    @turbo unroll=2 for i ∈ eachindex(x)
+      newmin = x[i] < minval
+      minval = newmin ? x[i] : minval
+      indmin = newmin ?   i  : indmin
+    end
+    minval, indmin
+  end
+  
+  N = 117
+  for T ∈ (Float32, Float64, Int32, Int64)
+    @show T, @__LINE__
+    if T <: Integer
+      a = rand(-T(100):T(100), N); b = rand(-T(100):T(100), N);
+    else
+      a = rand(T, N); b = rand(T, N);
+    end;
+    c1 = similar(a); c2 = similar(a);
+
+    @test findmin(a) == findminturbo(a) == findminturbo_u2(a)
+
+    promote_bool_store!(c1, a, b);
+    promote_bool_storeavx!(c2, a, b);
+    @test c1 == c2
+    fill!(c2, -999999999); promote_bool_store_avx!(c2, a, b);
+    @test c1 == c2
+    fill!(c2, -999999999); promote_bool_storeavx2!(c2, a, b);
+    @test c1 == c2
+    fill!(c2, -999999999); promote_bool_store_avx2!(c2, a, b);
+    @test c1 == c2
+
+    fill!(c1,  999999999); addormul!(c1, a, b)
+    fill!(c2, -999999999); addormul_avx!(c2, a, b)
+    @test c1 ≈ c2
+    fill!(c2, -999999999); addormulavx!(c2, a, b)
+    @test c1 ≈ c2
+    fill!(c2, -999999999); addifelsemul_avx!(c2, a, b)
+    @test c1 ≈ c2
+    fill!(c2, -999999999); addifelsemulavx!(c2, a, b)
+    @test c1 ≈ c2
+    addormulp1!(c1, a, b)
+    addormulp1_avx!(c2, a, b)
+    @test c1 ≈ c2
+    fill!(c2, -999999999); addormulp1avx!(c2, a, b)
+    @test c1 ≈ c2
+    fill!(c2, -999999999); addifelsemulp1_avx!(c2, a, b)
+    @test c1 ≈ c2
+    fill!(c2, -999999999); addifelsemulp1avx!(c2, a, b)
+    @test c1 ≈ c2
+
+    fill!(c1, -999999999); maybewriteand!(c1, a, b)
+    fill!(c2, -999999999); maybewriteand_avx!(c2, a, b)
+    @test c1 ≈ c2
+    fill!(c2, -999999999); maybewriteandavx!(c2, a, b)
+    @test c1 ≈ c2
+
+    fill!(c1, -999999999); maybewriteor!(c1, a, b)
+    fill!(c2, -999999999); maybewriteor_avx!(c2, a, b)
+    @test c1 ≈ c2
+    fill!(c2, -999999999); maybewriteoravx!(c2, a, b)
+    @test c1 ≈ c2
+
+    andorassignment!(c1, a, b);
+    andorassignmentavx!(c2, a, b);
+    @test c1 ≈ c2
+    fill!(c2, -999999999); andorassignment_avx!(c2, a, b);
+    @test c1 ≈ c2
+
+    a1 = copy(a); a2 = copy(a);
+    ifelseoverwrite!(a1)
+    ifelseoverwriteavx!(a2)
+    @test a1 ≈ a2
     
+    if T <: Union{Float32,Float64}
+      a .*= 100;
+    end;
+    b1 = copy(a);
+    b2 = copy(a);
+    condstore!(b1)
+    condstore1avx!(b2)
+    @test b1 == b2
+    copyto!(b2, a); condstore1_avx!(b2)
+    @test b1 == b2
+    copyto!(b2, a); condstore2avx!(b2)
+    @test b1 == b2
+    copyto!(b2, a); condstore2_avx!(b2)
+    @test b1 == b2
+
+    M, K, N = 83, 85, 79;
+    if T <: Integer
+      A = rand(T(-100):T(100), K, M);
+      B = rand(T(-100):T(100), K, N);
+      C1 = rand(T(-100):T(100), M, N);
+      b = rand(T(-100):T(100), N);
+      d = rand(T(-100):T(100), N);
+    else
+      A = randn(T, K, M);
+      B = randn(T, K, N);
+      C1 = randn(T, M, N);
+      b = randn(T, N);
+      d = randn(T, N);
+    end;
+    C2 = copy(C1); C3 = copy(C1);
+    AtmulBpos!(C1, A, B)
+    AtmulBposavx!(C2, A, B)
+    AtmulBpos_avx!(C3, A, B)
+    @test C1 ≈ C2
+    @test C1 ≈ C3
+    C1 = similar(B);
+    C2 = similar(B);
+    notacondload!(C1, B, b)
+    notacondloadavx!(C2, B, b)
+    @test C1 ≈ C2
+    maskedloadscalar!(C1, B, b)
+    maskedloadscalaravx!(C2, B, b)
+    @test C1 ≈ C2
+    condloadscalar!(C1, B, b, d)
+    condloadscalaravx!(C2, B, b, d)
+    @test C1 ≈ C2
+
+    if T <: Integer
+      half = rand(T(1):T(100), 7);
+      m = rand(T(-10):T(10), 7);
+    else
+      half = rand(T, 7); m = rand(T, 7);
+    end;
+    if sizeof(T) == 4
+      res1 = Vector{Float32}(undef, 7);
+      res2 = Vector{Float32}(undef, 7);
+    else
+      res1 = Vector{Float64}(undef, 7);
+      res2 = Vector{Float64}(undef, 7);
+    end
+
+    for keep ∈ (nothing,true), final ∈ (nothing,true)
+      @test twoifelses!(res1, half, m) ≈ twoifelses_avx!(res2, half, m)
+    end
+
+  end
+  
     
     a = rand(-10:10, 43);
     bit = a .> 0.5; bool = copyto!(Vector{Bool}(undef, length(bit)), bit);

@@ -5,51 +5,55 @@ function opisreduced(op::Operation)
   false
 end
 function storeinstr_preprend(op::Operation, vloopsym::Symbol)
-    # defaultstoreop = :vstore!
-    # defaultstoreop = :vnoaliasstore!
-    isvectorized(op) && return Symbol("")
-    vloopsym ∉ reduceddependencies(op) && return Symbol("")
-    # vectorized is not a loopdep, but is a reduced dep
-    opp::Operation = first(parents(op))
-    # while vectorized ∉ loopdependencies(opp)
-    while ((!isvectorized(opp)) || opisreduced(opp))
-        oppold = opp
-        for oppp ∈ parents(opp)
-            if vloopsym ∈ reduceddependencies(oppp)
-                @assert opp !== oppp "More than one parent is a reduction over the vectorized variable."
-                opp = oppp
-            end
-        end
-        @assert opp !== oppold "Failed to find any parents "
+  # defaultstoreop = :vstore!
+  # defaultstoreop = :vnoaliasstore!
+  isvectorized(op) && return Symbol("")
+  vloopsym ∉ reduceddependencies(op) && return Symbol("")
+  # vectorized is not a loopdep, but is a reduced dep
+  opp::Operation = first(parents(op))
+  # while vectorized ∉ loopdependencies(opp)
+  while ((!isvectorized(opp)) || opisreduced(opp))
+    oppold = opp
+    for oppp ∈ parents(opp)
+      if vloopsym ∈ reduceddependencies(oppp)
+        @assert opp !== oppp "More than one parent is a reduction over the vectorized variable."
+        opp = oppp
+      end
     end
-    reduction_to_scalar(reduction_instruction_class(instruction(opp)))
+    @assert opp !== oppold "Failed to find any parents "
+  end
+  instr = instruction(opp).instr
+  instr === :ifelse && return Symbol("") #throw(LoopError("ifelse not yet supported for inner reductions"))
+  return reduction_to_scalar(instr)
+  # if instr ≢ :ifelse
+  #   Expr(:(.), LoopVectorization, QuoteNode(reduction_to_scalar(instr))) # :IfElseReducer
+  # else
+  #   ifelse_reduction(:IfElseReducer,opp) do opv
+  #     throw(LoopError("Does not support storing mirrored ifelse-reductions yet"))
+  #   end
+  # end
 end
 
-function reduce_expr_u₂(toreduct::Symbol, instr::Instruction, u₂::Int, suffix::Symbol)
-    t = Expr(:tuple)
-    for u ∈ 0:u₂-1
-        push!(t.args, Symbol(toreduct, u, suffix))
-    end
-    Expr(:call, lv(:reduce_tup), reduce_to_onevecunroll(instr), t)
+function reduce_expr_u₂(toreduct::Symbol, op::Operation, u₂::Int, suffix::Symbol)
+  t = Expr(:tuple)
+  for u ∈ 0:u₂-1
+    push!(t.args, Symbol(toreduct, u, suffix))
+  end
+  Expr(:call, lv(:reduce_tup), reduce_to_onevecunroll(op), t)
 end
-function reduce_expr!(q::Expr, toreduct::Symbol, instr::Instruction, u₁::Int, u₂::Int, isu₁unrolled::Bool, isu₂unrolled::Bool)
-    if isu₂unrolled# u₂ != -1
-        _toreduct = Symbol(toreduct, 0)
-        push!(q.args, Expr(:(=), _toreduct, reduce_expr_u₂(toreduct, instr, u₂, Symbol(""))))
-    else#if u₂ == -1
-        _toreduct = Symbol(toreduct, '_', u₁)
-    # else
-        # _toreduct = Symbol(toreduct, 0)
-    end
-    # @show toreduct, _toreduct, u₁, u₂, isu₁unrolled, isu₂unrolled
-    if (u₁ == 1) | (~isu₁unrolled)
-        push!(q.args, Expr(:(=), Symbol(toreduct, "##onevec##"), _toreduct))
-    else
-        push!(q.args, Expr(:(=), Symbol(toreduct, "##onevec##"), Expr(:call, lv(reduction_to_single_vector(instr)), _toreduct)))
-        # push!(q.args, :(@show $_toreduct))
-        # push!(q.args, Expr(:(=), Symbol(toreduct, "##onevec##"), :(@show $(Expr(:call, lv(reduction_to_single_vector(instr)), _toreduct)))))
-    end
-    nothing
+function reduce_expr!(q::Expr, toreduct::Symbol, op::Operation, u₁::Int, u₂::Int, isu₁unrolled::Bool, isu₂unrolled::Bool)
+  if isu₂unrolled# u₂ != -1
+    _toreduct = Symbol(toreduct, 0)
+    push!(q.args, Expr(:(=), _toreduct, reduce_expr_u₂(toreduct, op, u₂, Symbol(""))))
+  else#if u₂ == -1
+    _toreduct = Symbol(toreduct, '_', u₁)
+  end
+  if (u₁ == 1) | (~isu₁unrolled)
+    push!(q.args, Expr(:(=), Symbol(toreduct, "##onevec##"), _toreduct))
+  else
+    push!(q.args, Expr(:(=), Symbol(toreduct, "##onevec##"), Expr(:call, reduction_to_single_vector(op), _toreduct)))
+  end
+  nothing
 end
 
 function lower_store_collection!(
@@ -278,7 +282,7 @@ function lower_tiled_store!(blockq::Expr, op::Operation, ls::LoopSet, ua::Unroll
     end
     opp = first(parents(op))
     if (opp.instruction.instr === reductfunc) && isone(length(parents(opp)))
-        throw("Operation $opp's instruction is $reductfunc, shouldn't be able to reach here.")
+        throw(LoopError("Operation $opp's instruction is $reductfunc, shouldn't be able to reach here."))
         # opp = only(parents(opp))
     end
     isu₁, isu₂ = isunrolled_sym(opp, u₁loopsym, u₂loopsym, vloopsym, ls)#, u₂)

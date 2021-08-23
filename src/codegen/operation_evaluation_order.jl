@@ -35,15 +35,7 @@ function isnopidentity(ls::LoopSet, op::Operation, u₁loop::Symbol, u₂loop::S
     Base.iterate(parents_op, state) === nothing || return false
     name(opp) === name(op) || return false
     # @show op opp isu₁unrolled(op), isu₁unrolled(opp), isu₂unrolled(op), isu₂unrolled(opp)
-    if (isu₁unrolled(op) == isu₁unrolled(opp)) & (isu₂unrolled(op) == isu₂unrolled(opp))
-      true
-    else
-      # if isvectorized(opp) & (!isvectorized(op))
-      #     op.instruction = reduction_to_scalar(instruction(opp))
-      #     op.mangledvariable = gensym(op.mangledvariable)
-      # end
-      false
-    end
+    (isu₁unrolled(op) == isu₁unrolled(opp)) & (isu₂unrolled(op) == isu₂unrolled(opp))
   else
     false
   end

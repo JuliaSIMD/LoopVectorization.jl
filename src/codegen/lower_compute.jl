@@ -303,7 +303,7 @@ function parent_op_name!(
         parent = Symbol(parent, suffix_, '_', u)
       elseif u₂max > 1
         t = Expr(:tuple)
-        reduction = Expr(:call, GlobalRef(ArrayInterface, :reduce_tup), reduce_to_onevecunroll(instruction(opp)), t)
+        reduction = Expr(:call, GlobalRef(ArrayInterface, :reduce_tup), reduce_to_onevecunroll(opp), t)
         for u₂ ∈ 0:u₂max-1
           push!(t.args, Symbol(parent, u₂, "__", u))
         end
@@ -388,7 +388,14 @@ function reduce_parent!(q::Expr, ls::LoopSet, op::Operation, opp::Operation, par
     return parent
   end
   newp = gensym(parent)
-  push!(q.args, Expr(:(=), newp, Expr(:call, lv(reduction_to_scalar(reduct_class)), parent)))
+  if instruction(op).instr ≢ :ifelse
+    push!(q.args, Expr(:(=), newp, Expr(:call, lv(reduction_to_scalar(reduct_class)), parent)))#IfElseReducer
+  else
+    reductexpr = ifelse_reduction(:IfElseReducer,op) do opv
+      throw(LoopError("Does not support storing mirrored ifelse-reductions yet"))
+    end
+    push!(q.args, Expr(:(=), newp, Expr(:call, reductexpr, parent)))
+  end
   newp
 end
 function lower_compute!(
@@ -439,7 +446,7 @@ function lower_compute!(
             else
                 newpname = Symbol(newparentname, '_', u₁)
                 push!(q.args, Expr(:(=), newpname, Symbol(parentname, '_', u₁)))
-                reduce_expr!(q, newparentname, instruction(newparentop), u₁, -1, true, false)
+                reduce_expr!(q, newparentname, newparentop, u₁, -1, true, false)
                 push!(q.args, Expr(:(=), Symbol(newparentname, '_', 1), Symbol(newparentname, "##onevec##")))
             end
         end
@@ -542,7 +549,7 @@ function lower_compute!(
           # elseif parents_u₂syms[n] & (!u₂unrolledsym)
             #&& (isouterreduction(ls, opp) != -1)
             # this checks if the parent is u₂ unrolled but this operation is not, in which case we need to reduce it.
-          reduced_u₂ = reduce_expr_u₂(mangledvar(opp), instruction(opp), u₂max, Symbol("__", u₁))#ureduct(ls))
+            reduced_u₂ = reduce_expr_u₂(mangledvar(opp), opp, u₂max, Symbol("__", u₁))#ureduct(ls))
             reducedparentname = gensym!(ls, "reducedop")
             push!(q.args, Expr(:(=), reducedparentname, reduced_u₂))
             reduced_u₂ = reduce_parent!(q, ls, op, opp, reducedparentname)

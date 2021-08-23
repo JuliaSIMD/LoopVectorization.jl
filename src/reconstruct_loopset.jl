@@ -584,7 +584,14 @@ function extract_outerreduct_types!(ls::LoopSet, offset::Int, vargs)
   # for op
   for or ∈ ls.outer_reductions
     extractt = Expr(:call, GlobalRef(Core,:getfield), Symbol("#vargs#"), (offset+=1), false)
-    pushpreamble!(ls, Expr(:(=), outer_reduct_init_typename(operations(ls)[or]), extractt))
+    op = operations(ls)[or]
+    if instruction(op).instr ≢ :ifelse
+      pushpreamble!(ls, Expr(:(=), outer_reduct_init_typename(op), extractt))
+    else
+      opextractbase = Symbol(name(op), "##BASE##EXTRACT##")
+      pushpreamble!(ls, Expr(:(=), opextractbase, extractt))
+      pushpreamble!(ls, Expr(:(=), outer_reduct_init_typename(op), Expr(:call, lv(:typeof), opextractbase)))
+    end
   end
   offset
 end
@@ -704,7 +711,7 @@ Execute an `@turbo` block. The block's code is represented via the arguments:
 @generated function _turbo_!(
     ::Val{var"#UNROLL#"}, ::Val{var"#OPS#"}, ::Val{var"#ARF#"}, ::Val{var"#AM#"}, ::Val{var"#LPSYM#"}, ::Val{Tuple{var"#LB#",var"#V#"}}, var"#flattened#var#arguments#"::Vararg{Any,var"#num#vargs#"}
 ) where {var"#UNROLL#", var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#", var"#V#", var"#num#vargs#"}
-  1 + 1 # Irrelevant line you can comment out/in to force recompilation...
+  # 1 + 1 # Irrelevant line you can comment out/in to force recompilation...
   ls = _turbo_loopset(var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#".parameters, var"#V#".parameters, var"#UNROLL#")
   pushfirst!(ls.preamble.args, :(var"#lv#tuple#args#" = reassemble_tuple(Tuple{var"#LB#",var"#V#"}, var"#flattened#var#arguments#")))
   # return @show avx_body(ls, var"#UNROLL#")

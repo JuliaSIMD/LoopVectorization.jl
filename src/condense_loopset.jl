@@ -629,6 +629,7 @@ end
 
 function generate_call(ls::LoopSet, inlineu₁u₂::Tuple{Bool,Int8,Int8,Int8}, thread::UInt, debug::Bool)
   extra_args = Expr(:tuple)
+  fill_children!(ls)
   preserve, shouldindbyind, roots = add_grouped_strided_pointer!(extra_args, ls)
   generate_call_split(ls, preserve, shouldindbyind, roots, extra_args, inlineu₁u₂, thread, debug)
 end
@@ -712,7 +713,12 @@ typeof_expr(op::Operation) = Expr(:call, GlobalRef(Base,:typeof), name(op))
 eltype_expr(op::Operation) = Expr(:call, GlobalRef(Base,:eltype), name(op))
 function add_outerreduct_types!(extra_args::Expr, ls::LoopSet) # extract_outerreduct_types!
   for or ∈ ls.outer_reductions
-    push!(extra_args.args, eltype_expr(operations(ls)[or]))
+    op = operations(ls)[or]
+    if instruction(op).instr ≢ :ifelse
+      push!(extra_args.args, eltype_expr(op))
+    else
+      push!(extra_args.args, name(op))
+    end
   end
 end
 """
@@ -776,10 +782,26 @@ function gc_preserve(call::Expr, preserve::Vector{Symbol})
     q
 end
 
+# @generated function ifelse_reduce(f::F, x::Vec{W,T}) where {F,T,W}
+#   Wt = W >>> 1
+#   # uw = Symbol(:x_, Wt)
+#   # lw = Symbol(:x_, Wt)
+#   xw = Symbol(:x_, Wt)
+#   q = Expr(:block, Expr(:meta,:inline), :($xw = f($(VectorizationBase.uppervector)(x), $(VectorizationBase.lowervector)(x))))
+#   while Wt > 2
+#     Wt >>>= 1
+#     ex = :(f($(VectorizationBase.uppervector)($xw), $(VectorizationBase.lowervector)($xw)))
+#     xw = Symbol(:x_, Wt)
+#     push!(q.args, :($xw = $ex))
+#   end
+  
+# end
+
 # function setup_call_inline(ls::LoopSet, inline::Bool, u₁::Int8, u₂::Int8, thread::Int)
 #   call, preserve = generate_call_split(ls, (inline,u₁,u₂), thread % UInt, false)
 #   setup_call_ret!(ls, call, preserve)
 # end
+setup_outerreduct_preserve_mangler(op::Operation) = Symbol(mangledvar(op), "##onevec##")
 function setup_outerreduct_preserve(ls::LoopSet, call::Expr, preserve::Vector{Symbol})
   iszero(length(ls.outer_reductions)) && return gc_preserve(call, preserve)
   retv = loopset_return_value(ls, Val(false))
@@ -788,10 +810,20 @@ function setup_outerreduct_preserve(ls::LoopSet, call::Expr, preserve::Vector{Sy
     op = ls.operations[or]
     var = name(op)
     # push!(call.args, Symbol("##TYPEOF##", var))
-    mvar = mangledvar(op)
     instr = instruction(op)
-    out = Symbol(mvar, "##onevec##")
-    push!(q.args, Expr(:(=), var, Expr(:call, lv(reduction_scalar_combine(instr)), Expr(:call, lv(:vecmemaybe), out), var)))
+    out = setup_outerreduct_preserve_mangler(op)
+    reducq = if instr.instr ≢ :ifelse
+      Expr(:call, reduction_scalar_combine(op), Expr(:call, lv(:vecmemaybe), out), var)
+    else
+      opinstr = ifelse_reduction(:IfElseReduced, op) do opv
+        opvname = name(opv)
+        oporig = gensym(opvname)
+        pushfirst!(q.args, Expr(:(=), oporig, opvname))
+        Expr(:call, lv(:vecmemaybe), setup_outerreduct_preserve_mangler(opv)), (oporig,)
+      end
+      Expr(:call, opinstr, Expr(:call, lv(:vecmemaybe), out), var)
+    end
+    push!(q.args, Expr(:(=), var, reducq))
   end
   q
 end

@@ -297,12 +297,110 @@ end
 # instruction(f::Symbol, m::Symbol) = f ∈ keys(COST) ? Instruction(:LoopVectorization, f) : Instruction(m, f)
 Instruction(instr::Symbol) = instruction(instr)
 
+struct IfElseOp{F}; f::F; end
+struct IfElseReducer{F}; f::F; end
+struct IfElseReduced{F}; f::F; end
+struct IfElseReduceTo{F}; f::F; end
+struct IfElseCollapser{F}; f::F; end
+@inline (ieo::IfElseOp)(a, b) = ifelse(ieo.f(a, b), a, b)
+
+@inline (ier::IfElseReducer)(a) = VectorizationBase.ifelse_reduce(ier.f, a)
+@inline function (ier::IfElseReducer)(a, b)
+  f = ier.f
+  r = VectorizationBase.ifelse_reduce(f, b)
+  ifelse(f(a,r), a, r)
+end
+@inline (ier::IfElseReducer)(a::VecUnroll) = VecUnroll(VectorizationBase.fmap(ier, VectorizationBase.data(a)))
+@inline (ier::IfElseReducer)(a::VecUnroll, b::VecUnroll) = VecUnroll(VectorizationBase.fmap(ier, VectorizationBase.data(a), VectorizationBase.data(b)))
+
+
+@inline (ier::IfElseReduced)(x::NativeTypes, y::NativeTypes) = ifelse(ier.f(x,y), x, y)
+@inline (ier::IfElseReduced)(x::AbstractSIMD{W}, y::AbstractSIMD{W}) where {W} = ifelse(ier.f(x,y), x, y)
+@inline function (ier::IfElseReduced)(x::AbstractSIMD, y::AbstractSIMD)
+  r = IfElseReduceTo(ier.f)(x, y)
+  ifelse(ier.f(r,y), r, y)
+end
+@inline (ier::IfElseReduced)(x::VecUnroll, y::VecUnroll) = VecUnroll(fmap(ier, getfield(x, :data), getfield(y, :data)))
+@inline function (ier::IfElseReduced)(x::AbstractSIMD, y::NativeTypes)
+  f = ier.f
+  r = VectorizationBase.ifelse_reduce(f, x)
+  ifelse(f(r, y), r, y)
+end
+
+
+@inline (ier::IfElseReduceTo)(a::NativeTypes, ::NativeTypes) = a
+@inline (ier::IfElseReduceTo)(a::AbstractSIMD, ::NativeTypes) = VectorizationBase.ifelse_reduce(ier.f, a)
+@inline (ier::IfElseReduceTo)(a::AbstractSIMD{W}, ::AbstractSIMD{W}) where {W} = a
+@inline function (ier::IfElseReduceTo)(a::AbstractSIMD, b::AbstractSIMD)
+  x, y = VectorizationBase.splitvector(a) # halve recursively
+  ier(ifelse(ier.f(x,y), x, y), b)
+end
+@inline (ier::IfElseReduceTo)(a::VecUnroll, b::VecUnroll) = VecUnroll(VectorizationBase.fmap(ier, VectorizationBase.data(a), VectorizationBase.data(b)))
+
+@inline (iec::IfElseCollapser)(a) = VectorizationBase.collapse(IfElseOp(iec.f), a)
+@inline (iec::IfElseCollapser)(a, ::StaticInt{C}) where {C} = VectorizationBase.contract(IfElseOp(iec.f), a, StaticInt{C}())
+
+struct IfElseOpMirror{F,A,B}; f::F; a::A; b::B; end
+struct IfElseReducerMirror{F,A,B}; f::F; a::A; b::B; end
+struct IfElseReducedMirror{F,A,B}; f::F; a::A; b::B; end
+struct IfElseReduceToMirror{F,A}; f::F; a::A; end
+struct IfElseCollapserMirror{F,A}; f::F; a::A; end
+@inline (ieo::IfElseOpMirror)(a, b) = ifelse(ieo.f(ieo.a, ieo.b), a, b)
+
+@inline _first_ifelse_reduce_mirror(f::F, a, b) where {F} = getfield(VectorizationBase.ifelse_reduce_mirror(f, a, b), 1, false)
+@inline (ier::IfElseReducerMirror)(a) = _ifelse_reduce_mirror(ier.f, a, ier.a)
+@inline function _ifelse_reduce_mirror(f::F, a, b, c, d) where {F}
+  r, rm = VectorizationBase.ifelse_reduce_mirror(f, b, d)
+  ifelse(f(c, rm), a, r)
+end
+@inline (ier::IfElseReducerMirror)(a, b) = _ifelse_reduce_mirror(ier.f, a, b, ier.a, ier.b)
+@inline (ier::IfElseReducerMirror)(a::VecUnroll) = VecUnroll(VectorizationBase.fmap(_first_ifelse_reduce_mirror, ier.f, VectorizationBase.data(a), VectorizationBase.data(ier.a)))
+@inline function (ier::IfElseReducerMirror)(a::VecUnroll, b::VecUnroll)
+  VecUnroll(VectorizationBase.fmap(_ifelse_reduce_mirror, ier.f, VectorizationBase.data(a), VectorizationBase.data(b), VectorizationBase.data(ier.a), VectorizationBase.data(ier.b)))
+end
+
+@inline IfElseReducedMirror(f::F, a::A) where {F,A} = IfElseReducedMirror{F,A,Nothing}(f, a, nothing)
+@inline (ier::IfElseReducedMirror)(x::NativeTypes, y::NativeTypes) = ifelse(ier.f(ier.a, ier.b), x, y)
+@inline (ier::IfElseReducedMirror)(x::AbstractSIMD{W}, y::AbstractSIMD{W}) where {W} = ifelse(ier.f(ier.a, ier.b), x, y)
+@inline function _reduce_mirror(f::F, x, y, a, b) where {F}
+  r, rm = IfElseReduceToMirror(f, a, b)(x, y)
+  ifelse(f(r,y), r, y)
+end
+@inline (ier::IfElseReducedMirror)(x::AbstractSIMD, y::AbstractSIMD) = _reduce_mirror(ier.f, x, y, ier.a, ier.b)
+@inline (ier::IfElseReducedMirror)(x::VecUnroll, y::VecUnroll) = VecUnroll(fmap(_reduce_mirror, ier.f, getfield(x, :data), getfield(y, :data), getfield(ier.a, :data), getfield(ier.b, :data)))
+@inline function (ier::IfElseReducedMirror)(x::AbstractSIMD, y::NativeTypes)
+  f = ier.f
+  r, rm = VectorizationBase.ifelse_reduce_mirror(f, x, ier.a)
+  # @show rm, ier.b, r, y
+  ifelse(f(rm, ier.b), r, y)
+end
+
+
+@inline (ier::IfElseReduceToMirror)(a::NativeTypes, ::NativeTypes) = a
+@inline (ier::IfElseReduceToMirror)(a::AbstractSIMD, ::NativeTypes) = VectorizationBase.ifelse_reduce_mirror(ier.f, a, ier.a)
+@inline (ier::IfElseReduceToMirror)(a::AbstractSIMD{W}, ::AbstractSIMD{W}) where {W} = a
+@inline function (ier::IfElseReduceToMirror)(a::AbstractSIMD, b::AbstractSIMD)
+  x, y = VectorizationBase.splitvector(a) # halve recursively
+  w, z = VectorizationBase.splitvector(ier.a) # halve recursively
+  f = ier.f
+  fwz = f(w,z)
+  IfElseReduceToMirror(f, ifelse(fwz, w, z))(ifelse(fwz, x, y), b)
+end
+@inline (ier::IfElseReduceToMirror)(a::VecUnroll, b::VecUnroll) = VecUnroll(VectorizationBase.fmap(ier, VectorizationBase.data(a), VectorizationBase.data(b)))
+
+@inline (iec::IfElseCollapserMirror)(a) = getfield(VectorizationBase.ifelse_collapse_mirror(iec.f, a, iec.a), 1, false)
+@inline (iec::IfElseCollapserMirror)(a, ::StaticInt{1}) = getfield(VectorizationBase.ifelse_collapse_mirror(iec.f, a, iec.a), 1, false)
+# @inline function (iec::IfElseCollapserMirror)(a, ::StaticInt{C}) where {C}
+#   VectorizationBase.contract(IfElseOp(iec.f), a, StaticInt{C}())
+# end
+
 const ADDITIVE_IN_REDUCTIONS = 1.0
 const MULTIPLICATIVE_IN_REDUCTIONS = 2.0
 const ANY = 3.0
 const ALL = 4.0
 const MAX = 5.0
 const MIN = 6.0
+const IFELSE = 7.0
 
 const REDUCTION_CLASS = Dict{Symbol,Float64}(
     :+ => ADDITIVE_IN_REDUCTIONS,
@@ -375,7 +473,6 @@ function reduction_to_single_vector(x::Float64)
         throw("Reduction not found.")
     end
 end
-reduction_to_single_vector(x) = reduction_to_single_vector(reduction_instruction_class(x))
 function reduce_to_onevecunroll(x::Float64)
     if x == ADDITIVE_IN_REDUCTIONS
         :+
@@ -393,7 +490,6 @@ function reduce_to_onevecunroll(x::Float64)
         throw("Reduction not found.")
     end
 end
-reduce_to_onevecunroll(x) = reduce_to_onevecunroll(reduction_instruction_class(x))
 function reduce_number_of_vectors(x::Float64)
     if x == ADDITIVE_IN_REDUCTIONS
         :contract_add
@@ -411,12 +507,6 @@ function reduce_number_of_vectors(x::Float64)
         throw("Reduction not found.")
     end
 end
-reduce_number_of_vectors(x) = reduce_number_of_vectors(reduction_instruction_class(x))
-# function reduction_to_scalar(x::Float64)
-#     # x == 1.0 ? :vsum : x == 2.0 ? :vprod : x == 3.0 ? :vany : x == 4.0 ? :vall : x == 5.0 ? :maximum : x == 6.0 ? :minimum : throw("Reduction not found.")
-#     x == 1.0 ? :vsum : x == 2.0 ? :vprod : x == 5.0 ? :maximum : x == 6.0 ? :minimum : throw("Reduction not found.")
-# end
-# reduction_to_scalar(x) = reduction_to_scalar(reduction_instruction_class(x))
 function reduction_to_scalar(x::Float64)
     if x == ADDITIVE_IN_REDUCTIONS
         :vsum
@@ -434,10 +524,9 @@ function reduction_to_scalar(x::Float64)
         throw("Reduction not found.")
     end
 end
-reduction_to_scalar(x) = reduction_to_scalar(reduction_instruction_class(x))
 function reduction_scalar_combine(x::Float64)
     # x == 1.0 ? :reduced_add : x == 2.0 ? :reduced_prod : x == 3.0 ? :reduced_any : x == 4.0 ? :reduced_all : x == 5.0 ? :reduced_max : x == 6.0 ? :reduced_min : throw("Reduction not found.")
-    if x == ADDITIVE_IN_REDUCTIONS
+  if x == ADDITIVE_IN_REDUCTIONS
         :reduced_add
     elseif x == MULTIPLICATIVE_IN_REDUCTIONS
         :reduced_prod
@@ -453,12 +542,7 @@ function reduction_scalar_combine(x::Float64)
         throw("Reduction not found.")
     end
 end
-reduction_scalar_combine(x) = reduction_scalar_combine(reduction_instruction_class(x))
-# function reduction_combine_to(x::Float64)
-#     # x == 1.0 ? :reduce_to_add : x == 2.0 ? :reduce_to_prod : x == 3.0 ? :reduce_to_any : x == 4.0 ? :reduce_to_all : x == 5.0 ? :reduce_to_max : x == 6.0 ? :reduce_to_min : throw("Reduction not found.")
-#     x == ADDITIVE_IN_REDUCTIONS ? :reduce_to_add : x == MULTIPLICATIVE_IN_REDUCTIONS ? :reduce_to_prod : x == MAX ? :reduce_to_max : x == MIN ? :reduce_to_min : throw("Reduction not found.")
-# end
-# reduction_combine_to(x) = reduction_combine_to(reduction_instruction_class(x))
+
 function reduction_zero(x::Float64)
     # x == 1.0 ? :zero : x == 2.0 ? :one : x == 3.0 ? :false : x == 4.0 ? :true : x == 5.0 ? :typemin : x == 6.0 ? :typemax : throw("Reduction not found.")
     if x == ADDITIVE_IN_REDUCTIONS
@@ -495,6 +579,7 @@ function reduction_zero_class(x::Symbol)::Float64
   end
 end
 reduction_zero(x) = reduction_zero(reduction_instruction_class(x))
+
 
 function isreductcombineinstr(instr::Symbol)
     instr ∈ (:reduced_add, :reduced_prod, :reduce_to_add, :reduce_to_prod, :reduced_max, :reduced_min, :reduce_to_max, :reduce_to_min)
