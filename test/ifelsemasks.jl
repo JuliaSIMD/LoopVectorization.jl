@@ -495,8 +495,8 @@ T = Float32
     if T <: Integer
       a = rand(-T(100):T(100), N); b = rand(-T(100):T(100), N);
       mv, mi = findminturbo(a)
-      @test (mv,mi) == findminturbo_u2(a)
-      @test a[mi] == minimum(a)
+      mv2, mi2 = findminturbo_u2(a)
+      @test mv == a[mi] == minimum(a) == mv2 == a[mi2]
     else
       a = rand(T, N); b = rand(T, N);
       @test findmin(a) == findminturbo(a) == findminturbo_u2(a)
