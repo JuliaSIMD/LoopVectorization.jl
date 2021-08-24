@@ -19,7 +19,7 @@ UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 VectorizationBase = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
 
 [compat]
-ArrayInterface = "3.1.9 - 3.1.23"
+ArrayInterface = "3.1.9 - 3.1.23, 3"
 DocStringExtensions = "0.8"
 IfElse = "0.1"
 OffsetArrays = "1.4.1"
