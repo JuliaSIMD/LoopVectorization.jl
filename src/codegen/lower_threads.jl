@@ -387,7 +387,8 @@ function thread_one_loops_expr(
       var"#nrequest#" = vsub_nw((var"#nthreads#" % UInt32), 0x00000001)
       var"##do#thread##" = var"#nrequest#" ≠ 0x00000000
       if var"##do#thread##"
-        var"#threads#tuple#", var"#torelease#tuple#" = Polyester.request_threads(Threads.threadid()%UInt32, var"#nrequest#")
+        var"#threads#tuple#", var"#torelease#tuple#" = Polyester.request_threads(var"#nrequest#")
+        # var"#threads#tuple#", var"#torelease#tuple#" = Polyester.request_threads(Threads.threadid()%UInt32, var"#nrequest#")
         
         var"#thread#factor#0#" = var"#nthreads#"
         $iterdef
@@ -425,7 +426,7 @@ function thread_one_loops_expr(
         end
       else# eliminate undef var errors that the compiler should be able to figure out are unreachable, but doesn't
         var"#torelease#tuple#" = (zero(Polyester.worker_type()),)
-        var"#threads#tuple#" = (Polyester.UnsignedIteratorEarlyStop(var"#torelease#", 0x00000000),)
+        var"#threads#tuple#" = (Polyester.UnsignedIteratorEarlyStop(zero(Polyester.worker_type()), 0x00000000),)
       end
     end
     var"#avx#call#args#" = $avxcall_args
@@ -629,8 +630,8 @@ function thread_two_loops_expr(
           end
         end
       else# eliminate undef var errors that the compiler should be able to figure out are unreachable, but doesn't
-        var"#torelease#tuple#" = zero(Polyester.worker_type())
-        var"#threads#tuple#" = Polyester.UnsignedIteratorEarlyStop(var"#torelease#", 0x00000000)
+        var"#torelease#tuple#" = (zero(Polyester.worker_type()),)
+        var"#threads#tuple#" = Polyester.UnsignedIteratorEarlyStop(zero(Polyester.worker_type()), 0x00000000)
       end
     end
     # @show $lastboundexpr
