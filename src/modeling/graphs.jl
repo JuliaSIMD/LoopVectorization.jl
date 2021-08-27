@@ -889,6 +889,7 @@ end
 @inline canonicalize_range(r::OptionallyStaticRange) = canonicalize_range(r, static_step(r))
 @inline canonicalize_range(r::AbstractRange) = canonicalize_range(maybestaticfirst(r):static_step(r):maybestaticlast(r))
 @inline canonicalize_range(r::CartesianIndices) = CartesianIndices(map(canonicalize_range, r.indices))
+@inline canonicalize_range(r::Base.OneTo{U}) where {U <: Unsigned} = One():last(r)
 
 function misc_loop!(ls::LoopSet, r::Union{Expr,Symbol}, itersym::Symbol, staticstepone::Bool)::Loop
   rangename = gensym!(ls, "looprange" * string(itersym)); lenname = gensym!(ls, "looplen" * string(itersym));

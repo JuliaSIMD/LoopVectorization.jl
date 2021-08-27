@@ -196,10 +196,10 @@ function _precompile_()
     Base.precompile(Tuple{typeof(gespf1),StridedPointer{Float64, 2, 1, 0, (1, 2), Tuple{StaticInt{8}, Int}, Tuple{StaticInt{1}, StaticInt{1}}},Tuple{StaticInt{1}, StaticInt{0}}})   # time: 0.002004319
     Base.precompile(Tuple{typeof(gespf1),StridedPointer{Float32, 2, 1, 0, (1, 2), Tuple{StaticInt{4}, Int}, Tuple{StaticInt{1}, StaticInt{1}}},Tuple{StaticInt{1}, StaticInt{0}}})   # time: 0.001979018
     Base.precompile(Tuple{typeof(gespf1),StridedPointer{Int32, 2, 1, 0, (1, 2), Tuple{StaticInt{4}, Int}, Tuple{StaticInt{1}, StaticInt{1}}},Tuple{StaticInt{1}, StaticInt{3}}})   # time: 0.00197391
-    Base.precompile(Tuple{typeof(gespf1),StridedBitPointer{1, 1, 0, (1,), Tuple{StaticInt{1}}},Tuple{StaticInt{1}}})   # time: 0.001972721
+    # Base.precompile(Tuple{typeof(gespf1),StridedBitPointer{1, 1, 0, (1,), Tuple{StaticInt{1}}},Tuple{StaticInt{1}}})   # time: 0.001972721
     Base.precompile(Tuple{typeof(gespf1),StridedPointer{Float64, 2, 1, 0, (1, 2), Tuple{StaticInt{8}, Int}, Tuple{StaticInt{1}, StaticInt{1}}},Tuple{StaticInt{1}, StaticInt{3}}})   # time: 0.001924342
     Base.precompile(Tuple{typeof(gespf1),StridedPointer{Float64, 1, 1, 0, (1,), Tuple{StaticInt{8}}, Tuple{StaticInt{1}}},Tuple{Int}})   # time: 0.001891342
-    Base.precompile(Tuple{typeof(gespf1),StridedBitPointer{2, 1, 0, (1, 2), Tuple{StaticInt{1}, Int}},Tuple{StaticInt{1}, StaticInt{1}}})   # time: 0.001850312
+    # Base.precompile(Tuple{typeof(gespf1),StridedBitPointer{2, 1, 0, (1, 2), Tuple{StaticInt{1}, Int}},Tuple{StaticInt{1}, StaticInt{1}}})   # time: 0.001850312
     Base.precompile(Tuple{typeof(gespf1),StridedPointer{Float64, 2, 1, 0, (1, 2), Tuple{StaticInt{8}, Int}, Tuple{StaticInt{1}, StaticInt{1}}},Tuple{StaticInt{0}, StaticInt{1}}})   # time: 0.001846808
     Base.precompile(Tuple{Type{Loop},LoopSet,Expr,Symbol,Type{UnitRange{Int}}})   # time: 0.001817677
     Base.precompile(Tuple{typeof(matches),Operation,Operation})   # time: 0.001813882

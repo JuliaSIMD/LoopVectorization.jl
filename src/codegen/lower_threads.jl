@@ -235,99 +235,99 @@ function outer_reduct_combine_expressions(ls::LoopSet, retv)
 end
 
 function thread_loop_summary!(ls::LoopSet, ua::UnrollArgs, threadedloop::Loop, issecondthreadloop::Bool)
-    W = ls.vector_width
-    @unpack u₁loop, u₂loop, vloop, u₁, u₂max = ua
-    u₂ = u₂max
-    threadloopnumtag = Int(issecondthreadloop)
-    lensym = Symbol("#len#thread#$threadloopnumtag#")
-    define_len = if isstaticloop(threadedloop)
-        :($lensym = $(length(threadedloop)) % UInt)
+  W = ls.vector_width
+  @unpack u₁loop, u₂loop, vloop, u₁, u₂max = ua
+  u₂ = u₂max
+  threadloopnumtag = Int(issecondthreadloop)
+  lensym = Symbol("#len#thread#$threadloopnumtag#")
+  define_len = if isstaticloop(threadedloop)
+    :($lensym = $(length(threadedloop)) % UInt)
+  else
+    :($lensym = $((threadedloop.lensym)) % UInt)
+  end
+  unroll_factor = Core.ifelse(threadedloop === vloop, W, 1)
+  num_unroll_sym = Symbol("#num#unrolls#thread#$threadloopnumtag#")
+  define_num_unrolls = if unroll_factor == 1
+    :($num_unroll_sym = $lensym)
+  else
+    # :($num_unroll_sym = Base.udiv_int($lensym, $(UInt(unroll_factor))))
+    :($num_unroll_sym = Base.udiv_int(vadd_nw($lensym, $(UInt(unroll_factor-1))), $(UInt(unroll_factor))))
+  end
+  iterstart_sym = Symbol("#iter#start#$threadloopnumtag#")
+  iterstop_sym = Symbol("#iter#stop#$threadloopnumtag#")
+  blksz_sym = Symbol("#nblock#size#thread#$threadloopnumtag#")
+  loopstart = if isknown(first(threadedloop))
+    :($iterstart_sym::Int = $(gethint(first(threadedloop))))
+  else
+    :($iterstart_sym::Int = $(getsym(first(threadedloop))))
+  end
+  if isknown(step(threadedloop))
+    mf = gethint(step(threadedloop))
+    if isone(mf)
+      iterstop = :($iterstop_sym::Int = vadd_nsw($iterstart_sym, $blksz_sym))
+      looprange = :(CloseOpen($iterstart_sym))
+      lastrange = :(CloseOpen($iterstart_sym))
+      push_loopbound_ends!(looprange, lastrange, unroll_factor, threadedloop, iterstop_sym, true)
     else
-        :($lensym = $((threadedloop.lensym)) % UInt)
+      iterstop = :($iterstop_sym::Int = vadd_nsw($iterstart_sym, vmul_nw($blksz_sym, $mf)))
+      looprange = :($iterstart_sym:StaticInt{$mf}())
+      lastrange = :($iterstart_sym:StaticInt{$mf}())
+      push_loopbound_ends!(looprange, lastrange, unroll_factor, threadedloop, :(vsub_nsw($iterstop_sym,one($iterstop_sym))), false)
     end
-    unroll_factor = Core.ifelse(threadedloop === vloop, W, 1)
-    num_unroll_sym = Symbol("#num#unrolls#thread#$threadloopnumtag#")
-    define_num_unrolls = if unroll_factor == 1
-      :($num_unroll_sym = $lensym)
-    else
-        # :($num_unroll_sym = Base.udiv_int($lensym, $(UInt(unroll_factor))))
-      :($num_unroll_sym = Base.udiv_int(vadd_nw($lensym, $(UInt(unroll_factor-1))), $(UInt(unroll_factor))))
-    end
-    iterstart_sym = Symbol("#iter#start#$threadloopnumtag#")
-    iterstop_sym = Symbol("#iter#stop#$threadloopnumtag#")
-    blksz_sym = Symbol("#nblock#size#thread#$threadloopnumtag#")
-    loopstart = if isknown(first(threadedloop))
-        :($iterstart_sym::Int = $(gethint(first(threadedloop))))
-    else
-        :($iterstart_sym::Int = $(getsym(first(threadedloop))))
-    end
-    if isknown(step(threadedloop))
-        mf = gethint(step(threadedloop))
-        if isone(mf)
-            iterstop = :($iterstop_sym::Int = vadd_nsw($iterstart_sym, $blksz_sym))
-            looprange = :(CloseOpen($iterstart_sym))
-            lastrange = :(CloseOpen($iterstart_sym))
-            push_loopbound_ends!(looprange, lastrange, unroll_factor, threadedloop, iterstop_sym, true)
-        else
-            iterstop = :($iterstop_sym::Int = vadd_nsw($iterstart_sym, vmul_nw($blksz_sym, $mf)))
-            looprange = :($iterstart_sym:StaticInt{$mf}())
-            lastrange = :($iterstart_sym:StaticInt{$mf}())
-            push_loopbound_ends!(looprange, lastrange, unroll_factor, threadedloop, :(vsub_nsw($iterstop_sym,one($iterstop_sym))), false)
-        end
-    else
-        stepthread_sym = Symbol("#step#thread#$threadloopnumtag#")
-        pushpreamble!(ls, :($stepthread_sym = $(getsym(step(threadedloop)))))
-        iterstop = :($iterstop_sym = vadd_nsw($iterstart_sym, vmul_nw($blksz_sym, $stepthread_sym)))
-        looprange = :($iterstart_sym:$stepthread_sym)
-        lastrange = :($iterstart_sym:$stepthread_sym)
-        push_loopbound_ends!(looprange, lastrange, unroll_factor, threadedloop, :(vsub_nsw($iterstop_sym,one($iterstop_sym))), false)
-    end
-    define_len, define_num_unrolls, loopstart, iterstop, looprange, lastrange
+  else
+    stepthread_sym = Symbol("#step#thread#$threadloopnumtag#")
+    pushpreamble!(ls, :($stepthread_sym = $(getsym(step(threadedloop)))))
+    iterstop = :($iterstop_sym = vadd_nsw($iterstart_sym, vmul_nw($blksz_sym, $stepthread_sym)))
+    looprange = :($iterstart_sym:$stepthread_sym)
+    lastrange = :($iterstart_sym:$stepthread_sym)
+    push_loopbound_ends!(looprange, lastrange, unroll_factor, threadedloop, :(vsub_nsw($iterstop_sym,one($iterstop_sym))), false)
+  end
+  define_len, define_num_unrolls, loopstart, iterstop, looprange, lastrange
 end
 function push_last_bound!(looprange::Expr, lastrange::Expr, lastexpr, iterstop, unroll_factor::Int)
-    push!(lastrange.args, lastexpr)
-    unroll_factor ≠ 1 && push!(looprange.args, :(min($lastexpr, $iterstop)))
-    nothing
+  push!(lastrange.args, lastexpr)
+  unroll_factor ≠ 1 && push!(looprange.args, :(min($lastexpr, $iterstop)))
+  nothing
 end
 function push_loopbound_ends!(
-    looprange::Expr, lastrange::Expr, unroll_factor::Int,
-    threadedloop::Loop, iterstop, offsetlast::Bool
-)
-    if unroll_factor == 1
-        push!(looprange.args, iterstop)
-    end
-    if isknown(last(threadedloop))
-        push_last_bound!(looprange, lastrange, gethint(last(threadedloop)) + offsetlast, iterstop, unroll_factor)
+  looprange::Expr, lastrange::Expr, unroll_factor::Int,
+  threadedloop::Loop, iterstop, offsetlast::Bool
+  )
+  if unroll_factor == 1
+    push!(looprange.args, iterstop)
+  end
+  if isknown(last(threadedloop))
+    push_last_bound!(looprange, lastrange, gethint(last(threadedloop)) + offsetlast, iterstop, unroll_factor)
+  else
+    lastsym = getsym(last(threadedloop))
+    if offsetlast
+      push_last_bound!(looprange, lastrange, :(vadd_nsw($lastsym, one($lastsym))), iterstop, unroll_factor)
     else
-        lastsym = getsym(last(threadedloop))
-        if offsetlast
-            push_last_bound!(looprange, lastrange, :(vadd_nsw($lastsym, one($lastsym))), iterstop, unroll_factor)
-        else
-            push_last_bound!(looprange, lastrange, lastsym, iterstop, unroll_factor)
-        end
+      push_last_bound!(looprange, lastrange, lastsym, iterstop, unroll_factor)
     end
-    nothing
+  end
+  nothing
 end
 function define_block_size(threadedloop, vloop, tn, W)
-    baseblocksizeuint = Symbol("#base#block#size#thread#uint#$tn#")
-    baseblocksizeint = Symbol("#base#block#size#thread#$tn#")
-    nrem = Symbol("#nrem#thread#$tn#")
-    remstep = Symbol("#block#rem#step#$tn#")
-    num_unroll = Symbol("#num#unrolls#thread#$tn#")
-    thread_factor = Symbol("#thread#factor#$tn#")
-    if threadedloop === vloop
-        quote
-            $baseblocksizeuint, $nrem = divrem_fast($num_unroll, $thread_factor)
-            $baseblocksizeint = ($baseblocksizeuint << $(VectorizationBase.intlog2(W))) % Int
-            $remstep = $(Int(W))
-        end
-    else
-        quote
-            $baseblocksizeuint, $nrem = divrem_fast($num_unroll, $thread_factor)
-            $baseblocksizeint = $baseblocksizeuint % Int
-            $remstep = 1
-        end
+  baseblocksizeuint = Symbol("#base#block#size#thread#uint#$tn#")
+  baseblocksizeint = Symbol("#base#block#size#thread#$tn#")
+  nrem = Symbol("#nrem#thread#$tn#")
+  remstep = Symbol("#block#rem#step#$tn#")
+  num_unroll = Symbol("#num#unrolls#thread#$tn#")
+  thread_factor = Symbol("#thread#factor#$tn#")
+  if threadedloop === vloop
+    quote
+      $baseblocksizeuint, $nrem = divrem_fast($num_unroll, $thread_factor)
+      $baseblocksizeint = ($baseblocksizeuint << $(VectorizationBase.intlog2(W))) % Int
+      $remstep = $(Int(W))
     end
+  else
+    quote
+      $baseblocksizeuint, $nrem = divrem_fast($num_unroll, $thread_factor)
+      $baseblocksizeint = $baseblocksizeuint % Int
+      $remstep = 1
+    end
+  end
 end
 function scale_cost(c, looplen)
   c = 0.05 * c / looplen
@@ -387,16 +387,19 @@ function thread_one_loops_expr(
       var"#nrequest#" = vsub_nw((var"#nthreads#" % UInt32), 0x00000001)
       var"##do#thread##" = var"#nrequest#" ≠ 0x00000000
       if var"##do#thread##"
-        var"#threads#", var"#torelease#" = Polyester.request_threads(Threads.threadid()%UInt32, var"#nrequest#")
-        var"#nrequest#" = var"#threads#".i
-        var"##do#thread##" = var"#nrequest#" ≠ zero(var"#nrequest#")
-        if var"##do#thread##"
-          var"#thread#factor#0#" = var"#nthreads#"
-          $iterdef
+        var"#threads#tuple#", var"#torelease#tuple#" = Polyester.request_threads(Threads.threadid()%UInt32, var"#nrequest#")
+        
+        var"#thread#factor#0#" = var"#nthreads#"
+        $iterdef
+        var"#thread#id#" = 0x00000000
+        var"##do#thread##" = false
+        for var"#threads#" in var"#threads#tuple#"
+          
           var"#thread#launch#count#" = 0x00000000
-          var"#thread#id#" = 0x00000000
           var"#thread#mask#" = Polyester.mask(var"#threads#")
-          var"#threads#remain#" = true
+          var"#nrequest#" = length(var"#threads#")
+          var"#threads#remain#" = var"#thread#launch#count#" ≠ var"#nrequest#"
+          var"##do#thread##" |= var"#threads#remain#"
           while var"#threads#remain#"
             VectorizationBase.assume(var"#thread#mask#" ≠ zero(var"#thread#mask#"))
             var"#trailzing#zeros#" = Base.trailing_zeros(var"#thread#mask#") % UInt32
@@ -418,29 +421,34 @@ function thread_one_loops_expr(
             var"#thread#launch#count#" = vadd_nw(var"#thread#launch#count#", 0x00000001)
             var"#threads#remain#" = var"#thread#launch#count#" ≠ var"#nrequest#"
           end
+          var"#nrem#thread#0#" -= var"#nrequest#"
         end
       else# eliminate undef var errors that the compiler should be able to figure out are unreachable, but doesn't
-        var"#torelease#" = zero(Polyester.worker_type())
-        var"#threads#" = Polyester.UnsignedIteratorEarlyStop(var"#torelease#", 0x00000000)
+        var"#torelease#tuple#" = (zero(Polyester.worker_type()),)
+        var"#threads#tuple#" = (Polyester.UnsignedIteratorEarlyStop(var"#torelease#", 0x00000000),)
       end
     end
     var"#avx#call#args#" = $avxcall_args
     $_turbo_call_
     var"##do#thread##" || $retexpr
     var"#thread#id#" = 0x00000000
-    var"#thread#mask#" = Polyester.mask(var"#threads#")
-    var"#threads#remain#" = true
-    while var"#threads#remain#"
-      VectorizationBase.assume(var"#thread#mask#" ≠ zero(var"#thread#mask#"))
-      var"#trailzing#zeros#" = vadd_nw(Base.trailing_zeros(var"#thread#mask#") % UInt32, 0x00000001)
-      var"#thread#mask#" >>>= var"#trailzing#zeros#"
-      var"#thread#id#" = vadd_nw(var"#thread#id#", var"#trailzing#zeros#")
-      var"#thread#ptr#" = ThreadingUtilities.taskpointer(var"#thread#id#")
-      ThreadingUtilities.wait(var"#thread#ptr#", var"#thread#id#")
-      $update_return_values
-      var"#threads#remain#" = var"#thread#mask#" ≠ 0x00000000
+    for var"#i#" ∈ eachindex(var"#threads#tuple#")
+      var"#threads#" = var"#threads#tuple#"[var"#i#"]
+      
+      var"#thread#mask#" = Polyester.mask(var"#threads#")
+      var"#threads#remain#" = (length(var"#threads#tuple#") == 1) || (var"#thread#mask#" ≠ zero(var"#thread#mask#"))
+      while var"#threads#remain#"
+        VectorizationBase.assume(var"#thread#mask#" ≠ zero(var"#thread#mask#"))
+        var"#trailzing#zeros#" = vadd_nw(Base.trailing_zeros(var"#thread#mask#") % UInt32, 0x00000001)
+        var"#thread#mask#" >>>= var"#trailzing#zeros#"
+        var"#thread#id#" = vadd_nw(var"#thread#id#", var"#trailzing#zeros#")
+        var"#thread#ptr#" = ThreadingUtilities.taskpointer(var"#thread#id#")
+        ThreadingUtilities.wait(var"#thread#ptr#", var"#thread#id#")
+        $update_return_values
+        var"#threads#remain#" = var"#thread#mask#" ≠ 0x00000000
+      end
+      Polyester.free_threads!(var"#torelease#tuple#"[var"#i#"])
     end
-    Polyester.free_threads!(var"#torelease#")
     $retexpr
   end
   # Expr(:block, Expr(:meta,:inline), ls.preamble, q)
@@ -572,19 +580,21 @@ function thread_two_loops_expr(
       var"#loop#1#start#init#" = var"#iter#start#0#"
       var"##do#thread##" = var"#nrequest#" ≠ 0x00000000
       if var"##do#thread##"
-        var"#threads#", var"#torelease#" = Polyester.request_threads(Threads.threadid(), var"#nrequest#")
-        var"#nrequest#" = var"#threads#".i
-        var"##do#thread##" = var"#nrequest#" ≠ zero(var"#nrequest#")
-        if var"##do#thread##"
-          $iterdef1
-          $iterdef2
+        # var"#threads#tuple#", var"#torelease#tuple#" = Polyester.request_threads(Threads.threadid(), var"#nrequest#")
+        var"#threads#tuple#", var"#torelease#tuple#" = Polyester.request_threads(var"#nrequest#")
+        var"##do#thread##" = false
+        $iterdef1
+        $iterdef2
+        var"#thread#launch#count#0#" = 0x00000000
+        var"#thread#launch#count#1#" = 0x00000000
+        var"#thread#id#" = 0x00000000
+        for var"#threads#" ∈ var"#threads#tuple#"
+          var"#nrequest#" = length(var"#threads#")
           # @show var"#base#block#size#thread#0#", var"#block#rem#step#0#" var"#base#block#size#thread#1#", var"#block#rem#step#1#"
           var"#thread#launch#count#" = 0x00000000
-          var"#thread#launch#count#0#" = 0x00000000
-          var"#thread#launch#count#1#" = 0x00000000
-          var"#thread#id#" = 0x00000000
           var"#thread#mask#" = Polyester.mask(var"#threads#")
-          var"#threads#remain#" = true
+          var"#threads#remain#" = var"#thread#launch#count#" ≠ var"#nrequest#"
+          var"##do#thread##" |= var"#threads#remain#"
           while var"#threads#remain#"
             VectorizationBase.assume(var"#thread#mask#" ≠ zero(var"#thread#mask#"))
             var"#trailzing#zeros#" = Base.trailing_zeros(var"#thread#mask#") % UInt32
@@ -619,29 +629,31 @@ function thread_two_loops_expr(
           end
         end
       else# eliminate undef var errors that the compiler should be able to figure out are unreachable, but doesn't
-        var"#torelease#" = zero(Polyester.worker_type())
-        var"#threads#" = Polyester.UnsignedIteratorEarlyStop(var"#torelease#", 0x00000000)
+        var"#torelease#tuple#" = zero(Polyester.worker_type())
+        var"#threads#tuple#" = Polyester.UnsignedIteratorEarlyStop(var"#torelease#", 0x00000000)
       end
     end
     # @show $lastboundexpr
     var"#avx#call#args#" = $avxcall_args
     $_turbo_call_
     var"##do#thread##" || $retexpr
-    # @show $retv
     var"#thread#id#" = 0x00000000
-    var"#thread#mask#" = Polyester.mask(var"#threads#")
-    var"#threads#remain#" = true
-    while var"#threads#remain#"
-      VectorizationBase.assume(var"#thread#mask#" ≠ zero(var"#thread#mask#"))
-      var"#trailzing#zeros#" = vadd_nw(Base.trailing_zeros(var"#thread#mask#") % UInt32, 0x00000001)
-      var"#thread#mask#" >>>= var"#trailzing#zeros#"
-      var"#thread#id#" = vadd_nw(var"#thread#id#", var"#trailzing#zeros#")
-      var"#thread#ptr#" = ThreadingUtilities.taskpointer(var"#thread#id#")
-      ThreadingUtilities.wait(var"#thread#ptr#", var"#thread#id#")
-      $update_return_values
-      var"#threads#remain#" = var"#thread#mask#" ≠ 0x00000000
+    for var"#i#" ∈ eachindex(var"#threads#tuple#")
+      var"#threads#" = var"#threads#tuple#"[var"#i#"]
+      var"#thread#mask#" = Polyester.mask(var"#threads#")
+      var"#threads#remain#" = (length(var"#threads#tuple#") == 1) || (var"#thread#mask#" ≠ zero(var"#thread#mask#"))
+      while var"#threads#remain#"
+        VectorizationBase.assume(var"#thread#mask#" ≠ zero(var"#thread#mask#"))
+        var"#trailzing#zeros#" = vadd_nw(Base.trailing_zeros(var"#thread#mask#") % UInt32, 0x00000001)
+        var"#thread#mask#" >>>= var"#trailzing#zeros#"
+        var"#thread#id#" = vadd_nw(var"#thread#id#", var"#trailzing#zeros#")
+        var"#thread#ptr#" = ThreadingUtilities.taskpointer(var"#thread#id#")
+        ThreadingUtilities.wait(var"#thread#ptr#", var"#thread#id#")
+        $update_return_values
+        var"#threads#remain#" = var"#thread#mask#" ≠ 0x00000000
+      end
+      Polyester.free_threads!(var"#torelease#tuple#"[var"#i#"])
     end
-    Polyester.free_threads!(var"#torelease#")
     $retexpr
   end
   # Expr(:block, Expr(:meta,:inline), ls.preamble, q)

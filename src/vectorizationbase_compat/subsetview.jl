@@ -1,36 +1,34 @@
 
+function copy_sp_data_range!(newR, newstrd, newoffsets, ind, R, rg)
+  for i ∈ rg
+    push!(newR.args, R[i])
+    push!(newstrd.args, :($getfield(strd, $i, false)))
+    push!(newoffsets.args, :($getfield(offs, $i, false)))
+    push!(ind.args, :($getfield(offs, $i, false)))
+  end
+  nothing
+end
 @generated function subsetview(
-    ptr::StridedPointer{T,N,C,B,R,X,O}, ::StaticInt{I}, i::Integer
+    ptr::AbstractStridedPointer{T,N,C,B,R,X,O}, ::StaticInt{I}, i::Integer
 ) where {T,N,C,B,R,X,O,I}
-    I > N && return :ptr
-    @assert B ≤ 0 "Batched dims not currently supported."
-    newC = C == I ? -1 : (C < I ? C : C - 1)
-    newR = Expr(:tuple)
-    newstrd = Expr(:tuple)
-    newoffsets = Expr(:tuple)
-    ind = Expr(:tuple)
-    for i ∈ 1:I-1
-        push!(newR.args, R[i])
-        push!(newstrd.args, :(strd[$i]))
-        push!(newoffsets.args, :(offsets[$i]))
-        push!(ind.args, :(offsets[$i]))
-        # push!(ind.args, Expr(:call, lv(:Zero)))
-    end
-    push!(ind.args, :i)
-    for i ∈ I+1:N
-        push!(newR.args, R[i])
-        push!(newstrd.args, :(strd[$i]))
-        push!(newoffsets.args, :(offsets[$i]))
-        push!(ind.args, :(offsets[$i]))
-        # push!(ind.args, Expr(:call, lv(:Zero)))
-    end
-    gptr = Expr(:call, :gep, :ptr, ind)
-    quote
-        $(Expr(:meta,:inline))
-        strd = ptr.strd
-        offsets = ptr.offsets
-        StridedPointer{$T,$(N-1),$newC,$B,$newR}($gptr, $newstrd, $newoffsets)
-    end
+  I > N && return :ptr
+  @assert B ≤ 0 "Batched dims not currently supported."
+  newC = C == I ? -1 : (C < I ? C : C - 1)
+  newR = Expr(:tuple)
+  newstrd = Expr(:tuple)
+  newoffsets = Expr(:tuple)
+  ind = Expr(:tuple)
+  copy_sp_data_range!(newR, newstrd, newoffsets, ind, R, 1:I-1)
+  push!(ind.args, :i)
+  copy_sp_data_range!(newR, newstrd, newoffsets, ind, R, I+1:N)
+  gptr = Expr(:call, :gep, :ptr, ind)
+  quote
+    $(Expr(:meta,:inline))
+    strd = strides(ptr)
+    offs = offsets(ptr)
+    si = ArrayInterface.StrideIndex{$(N-1),$newR,$newC}($newstrd, $newoffsets)
+    stridedpointer($gptr, si, StaticInt{$B}())
+  end
 end
 @inline _gesp(sp::VectorizationBase.FastRange, ::StaticInt{1}, i) = gesp(sp, (i,))
 @generated function _gesp(sp::AbstractStridedPointer{T,N}, ::StaticInt{I}, i::Integer) where {I,N,T}

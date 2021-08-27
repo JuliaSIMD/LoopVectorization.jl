@@ -346,58 +346,27 @@ val(x) = Expr(:call, Expr(:curly, :Val, x))
 @inline gespf1(x::StridedBitPointer{T,1}, i::Tuple{I}) where {T,I<:Integer} = gesp(x, i)
 @inline gespf1(x::StridedPointer{T,1}, i::Tuple{Zero}) where {T} = x
 @inline gespf1(x::StridedBitPointer{T,1}, i::Tuple{Zero}) where {T} = x
-@generated function gespf1(x::StridedPointer{T,N,C,B,R}, i::Tuple{I}) where {T,N,I<:Integer,C,B,R}
-  # I === Zero && return :x
-  ri = 0; rm = typemax(Int)
-  for (i, r) ∈ enumerate(R)
-    if r < rm
-      rm = r
-      ri = i
-    end
-  end
-  ri = max(1, ri)
+@generated function gespf1(x::AbstractStridedPointer{T,N,C,B,R}, i::Tuple{I}) where {T,N,I<:Integer,C,B,R}
+  ri = argmin(R)
   quote
     $(Expr(:meta,:inline))
-    p, li = VectorizationBase.tdot(x, (vsub_nsw(getfield(i,1,false),one($I)),), VectorizationBase.strides(x))
+    p, li = VectorizationBase.tdot(x, (vsub_nsw(getfield(i,1,false),one($I)),), strides(x))
     ptr = gep(p, li)
-    StridedPointer{$T,1,$(C===1 ? 1 : 0),$(B===1 ? 1 : 0),$(R[ri],)}(ptr, (getfield(getfield(x,:strd), $ri, false),), (Zero(),))
+    si = ArrayInterface.StrideIndex{1,$(R[ri],),$(C===1 ? 1 : 0)}(
+      (getfield(strides(x), $ri, false),), (Zero(),)
+    )
+    stridedpointer(ptr, si, StaticInt{$(B===1 ? 1 : 0)}())
   end
 end
-@generated function gespf1(x::StridedPointer{T,N,C,B,R}, ::Tuple{VectorizationBase.NullStep}) where {T,N,C,B,R}
-  ri = 0; rm = typemax(Int)
-  for (i, r) ∈ enumerate(R)
-    if r < rm
-      rm = r
-      ri = i
-    end
-  end
-  ri = max(1, ri)
+@generated function gespf1(x::AbstractStridedPointer{T,N,C,B,R}, ::Tuple{VectorizationBase.NullStep}) where {T,N,C,B,R}
+  ri = argmin(R)
   quote
     $(Expr(:meta,:inline))
-    StridedPointer{$T,1,$(C===1 ? 1 : 0),$(B===1 ? 1 : 0),$(R[ri],)}(pointer(x), (getfield(getfield(x,:strd), $ri, false),), (getfield(getfield(x,:offsets), $ri, false),))
-  end
-end
-@generated function gespf1(x::StridedBitPointer{N,C,B,R}, ::Tuple{VectorizationBase.NullStep}) where {N,C,B,R}
-  ri = 0; rm = typemax(Int)
-  for (i, r) ∈ enumerate(R)
-    if r < rm
-      rm = r
-      ri = i
-    end
-  end
-  ri = max(1, ri)
-  quote
-    $(Expr(:meta,:inline))
-    StridedBitPointer{1,$(C===1 ? 1 : 0),$(B===1 ? 1 : 0),$(R[ri],)}(pointer(x), (getfield(getfield(x,:strd), $ri, false),), (getfield(getfield(x,:offsets), $ri, false),))
-  end
-end
-@generated function gespf1(x::StridedBitPointer{T,N,C,B,R}, i::Tuple{I}) where {T,N,I<:Integer,C,B,R}
-  I === Zero && return :x
-  quote
-    $(Expr(:meta,:inline))
-    p, li = VectorizationBase.tdot(x, (vsub_nsw(getfield(i,1,false),1),), VectorizationBase.strides(x))
-    ptr = gep(p, li)
-    StridedBitPointer{1,$(C===1 ? 1 : 0),$(B===1 ? 1 : 0),$(first(R),)}(ptr, (first(getfield(x,:strd)),), (Zero(),))
+    si = ArrayInterface.StrideIndex{1,$(R[ri],),$(C===1 ? 1 : 0)}(
+      (getfield(strides(x), $ri, false),),
+      (getfield(offsets(x), $ri, false),)
+    )
+    stridedpointer(pointer(x), si, StaticInt{$(B==1 ? 1 : 0)}())
   end
 end
 function findfirstcontaining(ref, ind)
@@ -849,7 +818,7 @@ function setup_call(
   call = check_empty ? check_if_empty(ls, call) : call
   argfailure = make_crashy(make_fast(q))
   if warncheckarg ≠ 0
-    warning = :(@warn "`LoopVectorization.check_args` on your inputs failed; running fallback `@inbounds @fastmath` loop instead.")
+    warning = :(@warn "`LoopVectorization.check_args` on your inputs failed; running fallback `@inbounds @fastmath` loop instead.\nUse `warch_check_args=false`, e.g. `@turbo warn_check_args=false ...`, to disable this warning.")
     warncheckarg > 0 && push!(warning.args, :(maxlog=$warncheckarg))
     argfailure = Expr(:block,  warning, argfailure)
   end

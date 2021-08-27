@@ -109,7 +109,7 @@ function check_macro_kwarg(arg, inline::Bool, check_empty::Bool, u₁::Int8, u�
     end
     inline, check_empty, u₁, u₂, v, threads, warncheckarg
 end
-function process_args(args; inline::Bool = false, check_empty::Bool = false, u₁::Int8 = zero(Int8), u₂::Int8 = zero(Int8), v::Int8 = zero(Int8), threads::Int = 1, warncheckarg::Int = 0)
+function process_args(args; inline::Bool = false, check_empty::Bool = false, u₁::Int8 = zero(Int8), u₂::Int8 = zero(Int8), v::Int8 = zero(Int8), threads::Int = 1, warncheckarg::Int = 1)
   for arg ∈ args
     inline, check_empty, u₁, u₂, v, threads, warncheckarg = check_macro_kwarg(arg, inline, check_empty, u₁, u₂, v, threads, warncheckarg)
   end

@@ -69,7 +69,10 @@ function add_andblock!(ls::LoopSet, condop::Operation, LHS, RHS, elementbytes::I
     add_andblock!(ls, condop, LHS, rhsop, elementbytes, position)
 end
 function add_andblock!(ls::LoopSet, condexpr::Expr, condeval::Expr, elementbytes::Int, position::Int)
-    condop = add_operation!(ls, gensym!(ls, "mask"), condexpr, elementbytes, position)
+  condop = add_operation!(ls, gensym!(ls, "mask"), condexpr, elementbytes, position)
+  add_andblock!(ls, condop, condeval, elementbytes, position)
+end
+function add_andblock!(ls::LoopSet, condop::Operation, condeval::Expr, elementbytes::Int, position::Int)
     if condeval.head === :call
         @assert first(condeval.args) === :setindex!
         array, raw_indices = ref_from_setindex!(ls, condeval)
@@ -83,7 +86,12 @@ function add_andblock!(ls::LoopSet, condexpr::Expr, condeval::Expr, elementbytes
     add_andblock!(ls, condop, LHS, RHS, elementbytes, position)
 end
 function add_andblock!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
-    add_andblock!(ls, first(ex.args)::Expr, last(ex.args)::Expr, elementbytes, position)
+  condexpr = first(ex.args)
+  if condexpr isa Expr
+    add_andblock!(ls, condexpr, last(ex.args)::Expr, elementbytes, position)
+  else
+    add_andblock!(ls, getop(ls, condexpr, elementbytes), last(ex.args)::Expr, elementbytes, position)
+  end
 end
 
 function add_orblock!(ls::LoopSet, condop::Operation, LHS, rhsop::Operation, elementbytes::Int, position::Int)

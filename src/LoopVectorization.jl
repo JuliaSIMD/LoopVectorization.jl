@@ -10,7 +10,7 @@ using VectorizationBase: register_size, register_count, cache_linesize, cache_si
     maybestaticfirst, maybestaticlast, gep, gesp, NativeTypes, #llvmptr,
     vfmadd, vfmsub, vfnmadd, vfnmsub, vfmadd_fast, vfmsub_fast, vfnmadd_fast, vfnmsub_fast, vfmadd231, vfmsub231, vfnmadd231, vfnmsub231,
     vfma_fast, vmuladd_fast, vdiv_fast, vadd_fast, vsub_fast, vmul_fast,
-    relu, stridedpointer, stridedpointer_preserve, StridedPointer, StridedBitPointer, AbstractStridedPointer, _vload, _vstore!,
+    relu, stridedpointer, StridedPointer, StridedBitPointer, AbstractStridedPointer, _vload, _vstore!,
     reduced_add, reduced_prod, reduce_to_add, reduce_to_prod, reduced_max, reduced_min, reduce_to_max, reduce_to_min,
     reduced_all, reduced_any, reduce_to_all, reduce_to_any,
     vsum, vprod, vmaximum, vminimum, vany, vall, unwrap, Unroll, VecUnroll,
@@ -22,9 +22,11 @@ using VectorizationBase: register_size, register_count, cache_linesize, cache_si
     contract_and, collapse_and,
     contract_or,  collapse_or,
     num_threads, num_cores,
-    max_mask#,zero_mask
+    max_mask, maybestaticsize#,zero_mask
 
-using VectorizationBase: maybestaticsize # for compatibility
+
+
+using LayoutPointers: stridedpointer_preserve, GroupedStridedPointers
 
 using IfElse: ifelse
 
@@ -39,7 +41,7 @@ using Base.FastMath: add_fast, sub_fast, mul_fast, div_fast, inv_fast, abs2_fast
 using SLEEFPirates: log_fast, log2_fast, log10_fast, pow, sin_fast, cos_fast, sincos_fast
 
 using ArrayInterface
-using ArrayInterface: OptionallyStaticUnitRange, OptionallyStaticRange, Zero, One, StaticBool, True, False, reduce_tup, indices, UpTri, LoTri
+using ArrayInterface: OptionallyStaticUnitRange, OptionallyStaticRange, Zero, One, StaticBool, True, False, reduce_tup, indices, UpTri, LoTri, strides, offsets, size, StrideIndex
 using StrideArraysCore: CloseOpen, PtrArray
 # @static if VERSION ≥ v"1.6.0-rc1" #TODO: delete `else` when dropping 1.5 support
     # using ArrayInterface: static_step

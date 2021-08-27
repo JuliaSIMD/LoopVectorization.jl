@@ -227,8 +227,8 @@ function _add_mref!(sptrs::Expr, ls::LoopSet, ar::ArrayReferenceMeta, T_sym, C::
   offsets_tup = Expr(:tuple)
   gf = GlobalRef(Core,:getfield)
   offsets = gensym(:offsets); strides = gensym(:strides)
-  pushpreamble!(ls, Expr(:(=), offsets, Expr(:call, gf, tmpsp, QuoteNode(:offsets))))
-  pushpreamble!(ls, Expr(:(=), strides, Expr(:call, gf, tmpsp, QuoteNode(:strd))))
+  pushpreamble!(ls, Expr(:(=), offsets, Expr(:call, lv(:offsets), tmpsp)))
+  pushpreamble!(ls, Expr(:(=), strides, Expr(:call, lv(:strides), tmpsp)))
   for (i, p) ∈ enumerate(sp)
     push!(strd_tup.args, Expr(:call, gf, strides, p, false))
     push!(offsets_tup.args, Expr(:call, gf, offsets, p, false))
@@ -238,8 +238,10 @@ function _add_mref!(sptrs::Expr, ls::LoopSet, ar::ArrayReferenceMeta, T_sym, C::
   for n ∈ eachindex(sp)
     push!(column_major.args, n)
   end
-  sptype = Expr(:curly, lv(:StridedPointer), T_sym, length(sp), (C == -1 ? -1 : 1), B, column_major)
-  sptr = Expr(:call, sptype, Expr(:call, :pointer, tmpsp), strd_tup, offsets_tup)
+  sitype = Expr(:curly, lv(:StrideIndex), length(sp), column_major, (C == -1 ? -1 : 1))
+  siexpr = Expr(:call, sitype, strd_tup, offsets_tup)
+  sptr = Expr(:call, lv(:stridedpointer), Expr(:call, lv(:pointer), tmpsp), siexpr, staticexpr(B))
+  
   pushpreamble!(ls, Expr(:(=), name, sptr))
   nothing
 end
@@ -289,7 +291,7 @@ function stabilize_grouped_stridedpointer_type(C, B, R)
 end
 function create_mrefs!(
   ls::LoopSet, arf::Vector{ArrayRefStruct}, as::Vector{Symbol}, os::Vector{Symbol},
-  nopsv::Vector{NOpsType}, expanded::Vector{Bool}, @nospecialize(_::Type{VectorizationBase.GroupedStridedPointers{P,C,B,R,I,X,O}})
+  nopsv::Vector{NOpsType}, expanded::Vector{Bool}, @nospecialize(_::Type{GroupedStridedPointers{P,C,B,R,I,X,O}})
 ) where {P,C,B,R,I,X,O}
 
   Cv,Bv,Rv = stabilize_grouped_stridedpointer_type(C, B, R)
@@ -711,7 +713,7 @@ Execute an `@turbo` block. The block's code is represented via the arguments:
 @generated function _turbo_!(
     ::Val{var"#UNROLL#"}, ::Val{var"#OPS#"}, ::Val{var"#ARF#"}, ::Val{var"#AM#"}, ::Val{var"#LPSYM#"}, ::Val{Tuple{var"#LB#",var"#V#"}}, var"#flattened#var#arguments#"::Vararg{Any,var"#num#vargs#"}
 ) where {var"#UNROLL#", var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#", var"#V#", var"#num#vargs#"}
-  # 1 + 1 # Irrelevant line you can comment out/in to force recompilation...
+  1 + 1 # Irrelevant line you can comment out/in to force recompilation...
   ls = _turbo_loopset(var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#".parameters, var"#V#".parameters, var"#UNROLL#")
   pushfirst!(ls.preamble.args, :(var"#lv#tuple#args#" = reassemble_tuple(Tuple{var"#LB#",var"#V#"}, var"#flattened#var#arguments#")))
   # return @show avx_body(ls, var"#UNROLL#")
