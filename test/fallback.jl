@@ -34,7 +34,7 @@
     @test @inferred !LoopVectorization.check_args(Diagonal(x))
 
     @test_nowarn msdavx(x)
-    @test_logs (:warn,"`LoopVectorization.check_args` on your inputs failed; running fallback `@inbounds @fastmath` loop instead.") msdavx(FallbackArrayWrapper(x))
+    @test_logs (:warn,"`LoopVectorization.check_args` on your inputs failed; running fallback `@inbounds @fastmath` loop instead.\nUse `warn_check_args=false`, e.g. `@turbo warn_check_args=false ...`, to disable this warning.") msdavx(FallbackArrayWrapper(x))
     @test msdavx(FallbackArrayWrapper(x)) == 1e18
     @test msd(x) == msdavx(FallbackArrayWrapper(x))
     @test msdavx(x) != msdavx(FallbackArrayWrapper(x))

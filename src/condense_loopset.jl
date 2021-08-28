@@ -818,7 +818,7 @@ function setup_call(
   call = check_empty ? check_if_empty(ls, call) : call
   argfailure = make_crashy(make_fast(q))
   if warncheckarg ≠ 0
-    warning = :(@warn "`LoopVectorization.check_args` on your inputs failed; running fallback `@inbounds @fastmath` loop instead.\nUse `warch_check_args=false`, e.g. `@turbo warn_check_args=false ...`, to disable this warning.")
+    warning = :(@warn "`LoopVectorization.check_args` on your inputs failed; running fallback `@inbounds @fastmath` loop instead.\nUse `warn_check_args=false`, e.g. `@turbo warn_check_args=false ...`, to disable this warning.")
     warncheckarg > 0 && push!(warning.args, :(maxlog=$warncheckarg))
     argfailure = Expr(:block,  warning, argfailure)
   end
