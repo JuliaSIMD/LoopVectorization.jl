@@ -472,42 +472,57 @@ function add_pow!(
   elseif x isa Number
     return add_constant!(ls, x ^ p, elementbytes, var)::Operation
   end
-  pint = round(Int, p)
+  local pnum::Int, pden::Int
+  if p isa Integer
+    pnum = Int(p)::Int
+    pden = 1
+  else
+    prational = rationalize(p)
+    @unpack num, den = prational
+    pnum = convert(Int,num)::Int
+    pden = convert(Int,den)::Int
+  end
+  if pden == 1
+    nothing
+  elseif pden == 2
+    if pnum == 1
+      return add_compute!(ls, var, :sqrt, [xop], elementbytes)
+    else
+      xop = add_compute!(ls, gensym!(ls,"root"), :sqrt, [xop], elementbytes)
+    end
+  elseif pden == 3
+    if pnum == 1
+      return add_compute!(ls, var, :cbrt, [xop], elementbytes)
+    else
+      xop = add_compute!(ls, gensym!(ls,"cbroot"), :cbrt, [xop], elementbytes)
+    end
+  elseif pden == 4
+    xop = add_compute!(ls, gensym!(ls,"root"), :sqrt, [xop], elementbytes)
+    if pnum == 1
+      return add_compute!(ls, var, :sqrt, [xop], elementbytes)
+    else
+      xop = add_compute!(ls, gensym!(ls,"root"), :sqrt, [xop], elementbytes)
+    end
+  else
+    pop = add_constant!(ls, p, elementbytes)
+    return add_compute!(ls, var, :^, [xop, pop], elementbytes)
+  end
+  pint = pnum
   if pint == -1
     return add_compute!(ls, var, :inv, [xop], elementbytes)
   elseif pint < 0
     xop = add_compute!(ls, gensym!(ls, "inverse"), :inv, [xop], elementbytes)
-    p = -p
-    pint = - pint
-  end
-  if p == 0.5
-    return add_compute!(ls, var, :sqrt, [xop], elementbytes)
-  elseif p == 1/3
-    return add_compute!(ls, var, :cbrt, [xop], elementbytes)
-  elseif p == 2/3
-    xop = add_compute!(ls, gensym!(ls, "cbrt"), :cbrt, [xop], elementbytes)
-    return add_compute!(ls, var, :abs2_fast, [xop], elementbytes)
-  elseif p == 0.75
-    xop = add_compute!(ls, gensym!(ls, "root1"), :sqrt, [xop], elementbytes)
-    xop = add_compute!(ls, gensym!(ls, "root2"), :sqrt, [xop], elementbytes)
-    pint = 3
-  elseif p == 0.25
-    xop = add_compute!(ls, gensym!(ls, "root1"), :sqrt, [xop], elementbytes)
-    return add_compute!(ls, var, :sqrt, [xop], elementbytes)
-  elseif p != pint
-    pop = add_constant!(ls, p, elementbytes)
-    return add_compute!(ls, var, :^, [xop, pop], elementbytes)
+    pint = -pint
   end
   if pint == 0
     op = Operation(length(operations(ls)), var, elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS)
     push!(ls.preamble_funcofeltypes, (identifier(op),MULTIPLICATIVE_IN_REDUCTIONS))
     return pushop!(ls, op)
-  elseif pint == 1
+  elseif pint == 1#requires `pden ≠ 1`.
     return add_compute!(ls, var, :identity, [xop], elementbytes)
   elseif pint == 2
     return add_compute!(ls, var, :abs2_fast, [xop], elementbytes)
   end
-
   # Implementation from https://github.com/JuliaLang/julia/blob/a965580ba7fd0e8314001521df254e30d686afbf/base/intfuncs.jl#L216
   t = trailing_zeros(pint) + 1
   pint >>= t

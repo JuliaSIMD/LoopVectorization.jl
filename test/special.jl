@@ -263,6 +263,14 @@
             y[i] = x[i] ^ p[i]
         end; y
     end
+  @generated function vpow!(y, x, ::Val{p}) where {p}
+    quote
+      @turbo for i ∈ eachindex(y,x)
+        y[i] = x[i] ^ $p
+      end
+      return y
+    end
+  end
     
     function csetanh!(y, z, x)
         for j in axes(x, 2)
@@ -427,7 +435,12 @@
         @test vpowf!(r1, x) ≈ (r2 .= x .^ 2.3)
         @test vpowf!(r1, x, -1.7) ≈ (r2 .= x .^ -1.7)
         p = randn(length(x));
-        @test vpowf!(r1, x, x) ≈ (r2 .= x .^ x)
+      @test vpowf!(r1, x, x) ≈ (r2 .= x .^ x)
+      @test vpow!(r1, x, Val(0.75)) ≈ (r2 .= x .^ 0.75)
+      @test vpow!(r1, x, Val(2/3)) ≈ (r2 .= x .^ (2/3))
+      @test vpow!(r1, x, Val(0.5)) == (r2 .= sqrt.(x))
+      @test vpow!(r1, x, Val(1/4)) ≈ (r2 .= x .^ (1/4))
+      @test vpow!(r1, x, Val(4.5)) ≈ (r2 .= x .^ 4.5)
 
         X = rand(T, N, M); Z = rand(T, N, M);
         Y1 = similar(X); Y2 = similar(Y1);
