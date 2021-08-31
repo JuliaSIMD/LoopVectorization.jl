@@ -452,59 +452,78 @@ end
 function add_pow!(
     ls::LoopSet, var::Symbol, @nospecialize(x), p::Real, elementbytes::Int, position::Int
 )
-    xop::Operation = if x isa Expr
-        add_operation!(ls, Symbol("###xpow###$(length(operations(ls)))###"), x, elementbytes, position)
-    elseif x isa Symbol
-        if x ∈ ls.loopsymbols
-            add_loopvalue!(ls, x, elementbytes)
+  xop::Operation = if x isa Expr
+    add_operation!(ls, Symbol("###xpow###$(length(operations(ls)))###"), x, elementbytes, position)
+  elseif x isa Symbol
+    if x ∈ ls.loopsymbols
+      add_loopvalue!(ls, x, elementbytes)
+    else
+      xo = get(ls.opdict, x, nothing)
+      if xo === nothing
+        if round(Int,p) ≠ p
+          pushpreamble!(ls, Expr(:(=), var, Expr(:call, :(^), x, p)))
+          return add_constant!(ls, var, elementbytes)
         else
-            xo = get(ls.opdict, x, nothing)
-            if xo === nothing
-                pushpreamble!(ls, Expr(:(=), var, Expr(:call, :(^), x, p)))
-                return add_constant!(ls, var, elementbytes)
-            end
-            xo
+          xo = add_constant!(ls, x, elementbytes)::Operation
         end
-    elseif x isa Number
-      return add_constant!(ls, x ^ p, elementbytes, var)::Operation
+      end
+      xo
     end
-    pint = round(Int, p)
-    if p != pint
-        pop = add_constant!(ls, p, elementbytes)
-        return add_compute!(ls, var, :^, [xop, pop], elementbytes)
-    end
-    if pint == -1
-        return add_compute!(ls, var, :inv, [xop], elementbytes)
-    elseif pint < 0
-        xop = add_compute!(ls, gensym!(ls, "inverse"), :inv, [xop], elementbytes)
-        pint = - pint
-    end
-    if pint == 0
-        op = Operation(length(operations(ls)), var, elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS)
-        push!(ls.preamble_funcofeltypes, (identifier(op),MULTIPLICATIVE_IN_REDUCTIONS))
-        return pushop!(ls, op)
-    elseif pint == 1
-        return add_compute!(ls, var, :identity, [xop], elementbytes)
-    elseif pint == 2
-        return add_compute!(ls, var, :abs2_fast, [xop], elementbytes)
-    end
+  elseif x isa Number
+    return add_constant!(ls, x ^ p, elementbytes, var)::Operation
+  end
+  pint = round(Int, p)
+  if pint == -1
+    return add_compute!(ls, var, :inv, [xop], elementbytes)
+  elseif pint < 0
+    xop = add_compute!(ls, gensym!(ls, "inverse"), :inv, [xop], elementbytes)
+    p = -p
+    pint = - pint
+  end
+  if p == 0.5
+    return add_compute!(ls, var, :sqrt, [xop], elementbytes)
+  elseif p == 1/3
+    return add_compute!(ls, var, :cbrt, [xop], elementbytes)
+  elseif p == 2/3
+    xop = add_compute!(ls, gensym!(ls, "cbrt"), :cbrt, [xop], elementbytes)
+    return add_compute!(ls, var, :abs2_fast, [xop], elementbytes)
+  elseif p == 0.75
+    xop = add_compute!(ls, gensym!(ls, "root1"), :sqrt, [xop], elementbytes)
+    xop = add_compute!(ls, gensym!(ls, "root2"), :sqrt, [xop], elementbytes)
+    pint = 3
+  elseif p == 0.25
+    xop = add_compute!(ls, gensym!(ls, "root1"), :sqrt, [xop], elementbytes)
+    return add_compute!(ls, var, :sqrt, [xop], elementbytes)
+  elseif p != pint
+    pop = add_constant!(ls, p, elementbytes)
+    return add_compute!(ls, var, :^, [xop, pop], elementbytes)
+  end
+  if pint == 0
+    op = Operation(length(operations(ls)), var, elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS)
+    push!(ls.preamble_funcofeltypes, (identifier(op),MULTIPLICATIVE_IN_REDUCTIONS))
+    return pushop!(ls, op)
+  elseif pint == 1
+    return add_compute!(ls, var, :identity, [xop], elementbytes)
+  elseif pint == 2
+    return add_compute!(ls, var, :abs2_fast, [xop], elementbytes)
+  end
 
-    # Implementation from https://github.com/JuliaLang/julia/blob/a965580ba7fd0e8314001521df254e30d686afbf/base/intfuncs.jl#L216
+  # Implementation from https://github.com/JuliaLang/julia/blob/a965580ba7fd0e8314001521df254e30d686afbf/base/intfuncs.jl#L216
+  t = trailing_zeros(pint) + 1
+  pint >>= t
+  while (t -= 1) > 0
+    varname = (iszero(pint) && isone(t)) ? var : gensym!(ls, "pbs")
+    xop = add_compute!(ls, varname, :abs2_fast, [xop], elementbytes)
+  end
+  yop = xop
+  while pint > 0
     t = trailing_zeros(pint) + 1
     pint >>= t
-    while (t -= 1) > 0
-        varname = (iszero(pint) && isone(t)) ? var : gensym!(ls, "pbs")
-        xop = add_compute!(ls, varname, :abs2_fast, [xop], elementbytes)
+    while (t -= 1) >= 0
+      xop = add_compute!(ls, gensym!(ls, "pbs"), :abs2_fast, [xop], elementbytes)
     end
-    yop = xop
-    while pint > 0
-        t = trailing_zeros(pint) + 1
-        pint >>= t
-        while (t -= 1) >= 0
-            xop = add_compute!(ls, gensym!(ls, "pbs"), :abs2_fast, [xop], elementbytes)
-        end
-        yop = add_compute!(ls, iszero(pint) ? var : gensym!(ls, "pbs"), :mul_fast, [xop, yop], elementbytes)
-    end
-    yop
+    yop = add_compute!(ls, iszero(pint) ? var : gensym!(ls, "pbs"), :mul_fast, [xop, yop], elementbytes)
+  end
+  yop
 end
 
