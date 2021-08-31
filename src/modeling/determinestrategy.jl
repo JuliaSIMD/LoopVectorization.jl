@@ -45,61 +45,61 @@ function unitstride(ls::LoopSet, op::Operation, s::Symbol)
 end
 
 function cost(ls::LoopSet, op::Operation, (u₁,u₂)::Tuple{Symbol,Symbol}, vloopsym::Symbol, Wshift::Int, size_T::Int = op.elementbytes)
-    isconstant(op) && return 0.0, 0, 1.0#Float64(length(loopdependencies(op)) > 0)
-    isloopvalue(op) && return 0.0, 0, 0.0
-    instr = instruction(op)
-    if length(parents(op)) == 1
-        if instr == Instruction(:-) || instr === Instruction(:sub_fast) || instr == Instruction(:+) || instr == Instruction(:add_fast)
-            return 0.0, 0, 0.0
-        end
-    elseif iscompute(op) &&
-        (Base.sym_in(instruction(op).instr, (:vadd_nsw, :vsub_nsw, :(+), :(-), :add_fast, :sub_fast)) &&
-        all(opp -> (isloopvalue(opp)), parents(op)))# || (reg_count(ls) == 32) && (instruction(op).instr === :ifelse))
-        # all(opp -> (isloopvalue(opp) | isconstant(opp)), parents(op))
-        return 0.0, 0, 0.0
+  isconstant(op) && return 0.0, 0, 1.0#Float64(length(loopdependencies(op)) > 0)
+  isloopvalue(op) && return 0.0, 0, 0.0
+  instr = instruction(op)
+  if length(parents(op)) == 1
+    if instr == Instruction(:-) || instr === Instruction(:sub_fast) || instr == Instruction(:+) || instr == Instruction(:add_fast)
+      return 0.0, 0, 0.0
     end
-    opisvectorized = isvectorized(op)
-    srt, sl, srp = opisvectorized ? vector_cost(instr, Wshift, size_T) : scalar_cost(instr)
-    if accesses_memory(op)
-        # either vbroadcast/reductionstore, vmov(a/u)pd, or gather/scatter
-        if opisvectorized
-            if !unitstride(ls, op, vloopsym)# || !isdense(op) # need gather/scatter
-                indices = getindices(op)
-                contigind = first(indices)
-                shifter = max(2,Wshift)
-                if rejectinterleave(op)
-                    offset = 0.0 # gather/scatter, alignment doesn't matter
-                else
-                    shifter -= 1
-                    offset = 0.5reg_size(ls) / cache_lnsze(ls)
-                end
-                if shifter > 1 &&
-                    (!rejectcurly(op) && (((contigind === CONSTANTZEROINDEX) && ((length(indices) > 1) && (indices[2] === u₁) || (indices[2] === u₂))) ||
-                    ((u₁ === contigind) | (u₂ === contigind))))
+  elseif iscompute(op) &&
+    (Base.sym_in(instruction(op).instr, (:vadd_nsw, :vsub_nsw, :(+), :(-), :add_fast, :sub_fast)) &&
+    all(opp -> (isloopvalue(opp)), parents(op)))# || (reg_count(ls) == 32) && (instruction(op).instr === :ifelse))
+    # all(opp -> (isloopvalue(opp) | isconstant(opp)), parents(op))
+    return 0.0, 0, 0.0
+  end
+  opisvectorized = isvectorized(op)
+  srt, sl, srp = opisvectorized ? vector_cost(instr, Wshift, size_T) : scalar_cost(instr)
+  if accesses_memory(op)
+    # either vbroadcast/reductionstore, vmov(a/u)pd, or gather/scatter
+    if opisvectorized
+      if !unitstride(ls, op, vloopsym)# || !isdense(op) # need gather/scatter
+        indices = getindices(op)
+        contigind = first(indices)
+        shifter = max(2,Wshift)
+        if rejectinterleave(op)
+          offset = 0.0 # gather/scatter, alignment doesn't matter
+        else
+          shifter -= 1
+          offset = 0.5reg_size(ls) / cache_lnsze(ls)
+          if shifter > 1 &&
+            (!rejectcurly(op) && (((contigind === CONSTANTZEROINDEX) && ((length(indices) > 1) && (indices[2] === u₁) || (indices[2] === u₂))) ||
+            ((u₁ === contigind) | (u₂ === contigind))))
 
-                    shifter -= 1
-                    offset = 0.5reg_size(ls) / cache_lnsze(ls)
-                end
-                r = 1 << shifter
-                srt = srt*r + offset
-                sl *= r
-            elseif isload(op) & (length(loopdependencies(op)) > 1)# vmov(a/u)pd
-                # penalize vectorized loads with more than 1 loopdep
-                # heuristic; more than 1 loopdep means that many loads will not be aligned
-                # Roughly corresponds to double-counting loads crossing cacheline boundaries
-                # TODO: apparently the new ARM A64FX CPU (with 512 bit vectors) is NOT penalized for unaligned loads
-                #       would be nice to add a check for this CPU, to see if such a penalty is still appropriate.
-                #       Also, once more SVE (scalable vector extension) CPUs are released, would be nice to know if
-                #       this feature is common to all of them.
-                srt += 0.5reg_size(ls) / cache_lnsze(ls)
-                # srt += 0.25reg_size(ls) / cache_lnsze(ls)
-            end
-        elseif isstore(op) # broadcast or reductionstore; if store we want to penalize reduction
-            srt *= 3
-            sl *= 3
+            shifter -= 1
+            offset = 0.5reg_size(ls) / cache_lnsze(ls)
+          end
         end
+        r = 1 << shifter
+        srt = srt*r + offset
+        sl *= r
+      elseif isload(op) & (length(loopdependencies(op)) > 1)# vmov(a/u)pd
+        # penalize vectorized loads with more than 1 loopdep
+        # heuristic; more than 1 loopdep means that many loads will not be aligned
+        # Roughly corresponds to double-counting loads crossing cacheline boundaries
+        # TODO: apparently the new ARM A64FX CPU (with 512 bit vectors) is NOT penalized for unaligned loads
+        #       would be nice to add a check for this CPU, to see if such a penalty is still appropriate.
+        #       Also, once more SVE (scalable vector extension) CPUs are released, would be nice to know if
+        #       this feature is common to all of them.
+        srt += 0.5reg_size(ls) / cache_lnsze(ls)
+        # srt += 0.25reg_size(ls) / cache_lnsze(ls)
+      end
+    elseif isstore(op) # broadcast or reductionstore; if store we want to penalize reduction
+      srt *= 3
+      sl *= 3
     end
-    srt, sl, Float64(srp+1)
+  end
+  srt, sl, Float64(srp+1)
 end
 
     # Base._return_type()
