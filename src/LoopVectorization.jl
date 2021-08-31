@@ -115,6 +115,7 @@ include("precompile.jl")
 _precompile_()
 
 _vreduce(+, Float64[1.0])
+# matmul_params(64, 32, 64)
 
 # import ChainRulesCore, ForwardDiff
 # include("vmap_grad.jl")

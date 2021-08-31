@@ -19,7 +19,7 @@ if LOOPVECTORIZATION_TEST == "all"
     env = copy(ENV)
     env["LOOPVECTORIZATION_TEST"] = "part$i"
     env["JULIA_NUM_THREADS"] = string(Threads.nthreads())
-    processes[i] = run(pipeline(setenv(`$(Base.julia_cmd()) $(@__FILE__)`, env), stderr = io, stdout = io), wait=false)
+    processes[i] = run(pipeline(setenv(`$(Base.julia_cmd()) $(@__FILE__) --project=$(Base.active_project())`, env), stderr = io, stdout = io), wait=false)
   end
   completed = fill(false, NUMGROUPS)
   while true

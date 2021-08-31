@@ -633,17 +633,17 @@
     C[m,n] = ΔCₘₙ
     end) |> LoopVectorization.loopset;
     if LoopVectorization.register_count() == 32
-        if LoopVectorization.register_size() == 64
-        # @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 1, 8)
-            @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :k, :n, :m, 1, 8)
-        elseif LoopVectorization.register_size() == 16
-            @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 4, 4)
-        end            
+      if LoopVectorization.register_size() == 64
+        @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 1, 8)
+        # @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :k, :n, :m, 1, 8)
+      elseif LoopVectorization.register_size() == 16
+        @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 4, 4)
+      end            
     elseif LoopVectorization.register_count() == 16
-        # @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 2, 4)
-        @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :n, :m, :n, 2, 4)
+      @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 2, 4)
+      # @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :n, :m, :n, 2, 4)
     elseif LoopVectorization.register_count() == 8
-        @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 1, 4)
+      @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 1, 4)
     end
     
     struct SizedMatrix{M,N,T} <: DenseMatrix{T}
