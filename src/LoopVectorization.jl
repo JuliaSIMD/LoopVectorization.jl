@@ -41,7 +41,7 @@ using Base.FastMath: add_fast, sub_fast, mul_fast, div_fast, inv_fast, abs2_fast
 using SLEEFPirates: log_fast, log2_fast, log10_fast, pow, sin_fast, cos_fast, sincos_fast
 
 using ArrayInterface
-using ArrayInterface: OptionallyStaticUnitRange, OptionallyStaticRange, Zero, One, StaticBool, True, False, reduce_tup, indices, UpTri, LoTri, strides, offsets, size, StrideIndex
+using ArrayInterface: OptionallyStaticUnitRange, OptionallyStaticRange, Zero, One, StaticBool, True, False, reduce_tup, indices, UpTri, LoTri, strides, offsets, size, axes, StrideIndex
 using StrideArraysCore: CloseOpen, PtrArray
 # @static if VERSION ≥ v"1.6.0-rc1" #TODO: delete `else` when dropping 1.5 support
     # using ArrayInterface: static_step

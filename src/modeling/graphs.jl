@@ -971,6 +971,7 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
     elseif f === :indices || (isexpr(f, :(.), 2) && (f.args[2] === QuoteNode(:indices)) && ((f.args[1] === :ArrayInterface) || (f.args[1] === :LoopVectorization)))
       indices_loop!(ls, r, itersym)
     else
+      (f === :axes) && (r.args[1] = lv(:axes))
       misc_loop!(ls, r, itersym, (f === :eachindex) | (f === :axes))
     end
   elseif isa(r, Symbol)
