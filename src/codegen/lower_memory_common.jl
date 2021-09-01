@@ -407,12 +407,12 @@ function add_memory_mask!(memopexpr::Expr, op::Operation, td::UnrollArgs, mask::
       else
         push!(memopexpr.args, condvar)
       end
-    elseif u₁i == 0# !condbroadcast && !vecunrolled
+    elseif u₁ᵢ == 0# !condbroadcast && !vecunrolled
       push!(memopexpr.args, Expr(:call, lv(:and_last), condvar, MASKSYMBOL))
-    elseif u₁i == u₁ # mask
-      push!(memopexpr.args, Expr(:call, lv(:&), :($getfield($getfield(condvar,1),$u₁i,false)), MASKSYMBOL))
+    elseif u₁ᵢ == u₁ # mask
+      push!(memopexpr.args, Expr(:call, lv(:&), :($getfield($getfield(condvar,1),$u₁ᵢ,false)), MASKSYMBOL))
     else
-      push!(memopexpr.args, Expr(:call, lv(:&), :($getfield($getfield(condvar,1),$u₁i,false))))
+      push!(memopexpr.args, Expr(:call, lv(:&), :($getfield($getfield(condvar,1),$u₁ᵢ,false))))
     end
   elseif mask && isvectorized(op)
     push!(memopexpr.args, MASKSYMBOL)
