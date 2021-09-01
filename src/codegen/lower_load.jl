@@ -6,7 +6,6 @@ function prefetchisagoodidea(ls::LoopSet, op::Operation, td::UnrollArgs)
     isvectorized(op) || return 0
     ((u₁ > 1) & (u₂max > 1)) || return 0
     u₂loopsym === Symbol("##undefined##") && return 0
-    # @show cache_lnsze(ls) reg_size(ls) pointer_from_objref(ls.register_size)
     dontskip = (cache_lnsze(ls) ÷ reg_size(ls)) - 1
     # u₂loopsym is vectorized
     # u₁vectorized = vectorized === u₁loopsym
@@ -209,7 +208,6 @@ function lower_load_for_optranslation!(
     step₂ = gethint(step(u₂loop))
     # abs of steps are equal
     equal_steps = (step₁ == step₂) ⊻ (posindicator ≠ 0x03)
-    # @show step₁, step₂, posindicator, equal_steps
     _td = UnrollArgs(u₁loop, u₂loop, vloop, u₁, u₂max, Core.ifelse(equal_steps, 0, u₂max - 1))
     gespinds = mem_offset(op, _td, inds_by_ptroff, false, ls)
     ptr = vptr(op)
@@ -230,7 +228,6 @@ function lower_load_for_optranslation!(
     indices = copy(getindices(ref))
     # old_translation_index = indices[translationind]
     # indices[translationind] = u₁loop.itersymbol
-    # @show indices, translationind, vloop
     # getindicesonly returns a view of `getindices`
     dummyref = ArrayReference(ref.array, indices, zero(getoffsets(ref)), getstrides(ref))
     # loopedindex[translationind] = true
@@ -249,10 +246,8 @@ function lower_load_for_optranslation!(
             end
         end
     end
-    # @show indices
     _td = UnrollArgs(u₁loop, u₂loop, vloop, total_unroll, u₂max, -1)
     op.ref = dummymref
-    # @show isu₁unrolled(op), isu₂unrolled(op)
     _lower_load!(q, ls, op, _td, mask)
     # set old values
     op.ref = mref
@@ -329,7 +324,6 @@ function _lower_load!(
     omop = offsetloadcollection(ls)
     @unpack opids, opidcollectionmap, batchedcollections, batchedcollectionmap = omop
     batchid, opind = batchedcollectionmap[identifier(op)]
-    @show batchid, opind
     for (bid, oid) ∈ batchedcollectionmap # this relies on `for op ∈ ops` in codegen/operation_evaluation_order.jl
       if bid == batchid
         if oid == opind
@@ -362,7 +356,6 @@ function rejectcurly(ls::LoopSet, op::Operation, u₁loopsym::Symbol, vloopsym::
   li = op.ref.loopedindex
   AV = AU = false
   for (n,ind) ∈ enumerate(indices)
-    # @show AU, op, n, ind, vloopsym, u₁loopsym
     if li[n]
       if ind === vloopsym
         AV && return true
@@ -374,7 +367,6 @@ function rejectcurly(ls::LoopSet, op::Operation, u₁loopsym::Symbol, vloopsym::
       end
     else
       opp = findop(parents(op), ind)
-      # @show opp
       if isvectorized(opp)
         AV && return true
         AV = true

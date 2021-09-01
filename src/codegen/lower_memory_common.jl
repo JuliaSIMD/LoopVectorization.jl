@@ -387,7 +387,7 @@ function add_memory_mask!(memopexpr::Expr, op::Operation, td::UnrollArgs, mask::
     # broadcast both, so can do so implicitly
     # this is true whether or not `condbroadcast`
     if !mask || (!isvectorized(op))
-      if u₁ᵢ == 0 | (u == 1)
+      if (u₁ᵢ == 0) | (u == 1)
         push!(memopexpr.args, condvar)
       else
         push!(memopexpr.args, :($getfield($getfield($condvar, 1), $(u₁ᵢ), false)))
