@@ -125,7 +125,7 @@ function child_cost_untill_vectorized(op::Operation)
   for child ∈ children(op)
     if (!isvectorized(child) & iscompute(child))
       # FIXME: can double count
-      c += COST[instruction(child).instr].scalar_reciprocal_throughput + child_cost_untill_vectorized(child)
+      c += instruction_cost(instruction(child)).scalar_reciprocal_throughput + child_cost_untill_vectorized(child)
     end
   end
   c
