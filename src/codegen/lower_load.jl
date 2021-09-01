@@ -119,55 +119,73 @@ function pushbroadcast!(q::Expr, mvar::Symbol)
     push!(q.args, Expr(:(=), broadcastedname(mvar), Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, mvar)))
 end
 
+function child_cost_untill_vectorized(op::Operation)
+  isvectorized(op) && return 0.0
+  c = 0.0
+  for child ∈ children(op)
+    if (!isvectorized(child) & iscompute(child))
+      # FIXME: can double count
+      c += COST[instruction(child).instr].scalar_reciprocal_throughput + child_cost_untill_vectorized(child)
+    end
+  end
+  c
+end
+function vectorization_profitable(op::Operation)
+  # if op is vectorized itself, return true
+  isvectorized(op) && return true
+  # otherwise, check if descendents until hitting a vectorized portion are expensive enough
+  child_cost_untill_vectorized(op) ≥ 5
+end
+
 function lower_load_no_optranslation!(
     q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, mask::Bool, inds_calc_by_ptr_offset::Vector{Bool}
 )
-    @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, suffix = td
-    loopdeps = loopdependencies(op)
-    # @assert isvectorized(op)
-    opu₁, opu₂ = isunrolled_sym(op, u₁loopsym, u₂loopsym, vloopsym, ls)
-    u = ifelse(opu₁, u₁, 1)
-    mvar = Symbol(variable_name(op, Core.ifelse(opu₂, suffix,-1)), '_', u)
-    falseexpr = Expr(:call, lv(:False)); rs = staticexpr(reg_size(ls))
-    if all(op.ref.loopedindex) && !rejectcurly(op)
-        inds = unrolledindex(op, td, mask, inds_calc_by_ptr_offset, ls)
-        loadexpr = Expr(:call, lv(:_vload), sptr(op), inds)
-        add_memory_mask!(loadexpr, op, td, mask, ls)
-        push!(loadexpr.args, falseexpr, rs) # unaligned load
-        push!(q.args, Expr(:(=), mvar, loadexpr))
-    elseif (u₁ > 1) & opu₁
-        t = Expr(:tuple)
-        sptrsym = sptr!(q, op)
-        for u ∈ 1:u₁
-            inds = mem_offset_u(op, td, inds_calc_by_ptr_offset, true, u-1, ls)
-            loadexpr = Expr(:call, lv(:_vload), sptrsym, inds)
-            domask = mask && (isvectorized(op) & ((u == u₁) | (vloopsym !== u₁loopsym)))
-            add_memory_mask!(loadexpr, op, td, domask, ls)
-            push!(loadexpr.args, falseexpr, rs)
-            push!(t.args, loadexpr)
-            # push!(q.args, Expr(:(=), mvar, loadexpr))
-        end
-        push!(q.args, Expr(:(=), mvar, Expr(:call, lv(:VecUnroll), t)))
-    else
-        inds = mem_offset_u(op, td, inds_calc_by_ptr_offset, true, 0, ls)
-        loadexpr = Expr(:call, lv(:_vload), sptr(op), inds)
-        add_memory_mask!(loadexpr, op, td, mask, ls)
-        push!(loadexpr.args, falseexpr, rs)
-        push!(q.args, Expr(:(=), mvar, loadexpr))
+  @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, suffix = td
+  loopdeps = loopdependencies(op)
+  # @assert isvectorized(op)
+  opu₁, opu₂ = isunrolled_sym(op, u₁loopsym, u₂loopsym, vloopsym, ls)
+  u = ifelse(opu₁, u₁, 1)
+  mvar = Symbol(variable_name(op, Core.ifelse(opu₂, suffix,-1)), '_', u)
+  falseexpr = Expr(:call, lv(:False)); rs = staticexpr(reg_size(ls))
+  if (all(op.ref.loopedindex) && !rejectcurly(op)) && vectorization_profitable(op)
+    inds = unrolledindex(op, td, mask, inds_calc_by_ptr_offset, ls)
+    loadexpr = Expr(:call, lv(:_vload), sptr(op), inds)
+    add_memory_mask!(loadexpr, op, td, mask, ls)
+    push!(loadexpr.args, falseexpr, rs) # unaligned load
+    push!(q.args, Expr(:(=), mvar, loadexpr))
+  elseif (u₁ > 1) & opu₁
+    t = Expr(:tuple)
+    sptrsym = sptr!(q, op)
+    for u ∈ 1:u₁
+      inds = mem_offset_u(op, td, inds_calc_by_ptr_offset, true, u-1, ls)
+      loadexpr = Expr(:call, lv(:_vload), sptrsym, inds)
+      domask = mask && (isvectorized(op) & ((u == u₁) | (vloopsym !== u₁loopsym)))
+      add_memory_mask!(loadexpr, op, td, domask, ls)
+      push!(loadexpr.args, falseexpr, rs)
+      push!(t.args, loadexpr)
+      # push!(q.args, Expr(:(=), mvar, loadexpr))
     end
-    if isvectorized(op)
-        prefetchind = prefetchisagoodidea(ls, op, td)
-        iszero(prefetchind) || add_prefetches!(q, ls, op, td, prefetchind)
-    elseif any(isvectorized, children(op))
-        pushbroadcast!(q, mvar)
-    end
-    nothing
+    push!(q.args, Expr(:(=), mvar, Expr(:call, lv(:VecUnroll), t)))
+  else
+    inds = mem_offset_u(op, td, inds_calc_by_ptr_offset, true, 0, ls)
+    loadexpr = Expr(:call, lv(:_vload), sptr(op), inds)
+    add_memory_mask!(loadexpr, op, td, mask, ls)
+    push!(loadexpr.args, falseexpr, rs)
+    push!(q.args, Expr(:(=), mvar, loadexpr))
+  end
+  if isvectorized(op)
+    prefetchind = prefetchisagoodidea(ls, op, td)
+    iszero(prefetchind) || add_prefetches!(q, ls, op, td, prefetchind)
+  elseif any(isvectorized, children(op))
+    pushbroadcast!(q, mvar)
+  end
+  nothing
 end
 function indisvectorized(ls::LoopSet, ind::Symbol)
-    for op ∈ operations(ls)
-        ((op.variable === ind) && isvectorized(op)) && return true
-    end
-    false
+  for op ∈ operations(ls)
+    ((op.variable === ind) && isvectorized(op)) && return true
+  end
+  false
 end
 @inline firstunroll(vu::VecUnroll) = getfield(getfield(vu,:data),1,false)
 @inline firstunroll(x) = x
@@ -311,6 +329,7 @@ function _lower_load!(
     omop = offsetloadcollection(ls)
     @unpack opids, opidcollectionmap, batchedcollections, batchedcollectionmap = omop
     batchid, opind = batchedcollectionmap[identifier(op)]
+    @show batchid, opind
     for (bid, oid) ∈ batchedcollectionmap # this relies on `for op ∈ ops` in codegen/operation_evaluation_order.jl
       if bid == batchid
         if oid == opind
@@ -335,38 +354,38 @@ function additive_vectorized_loopinductvar_only(op::Operation)
 end
 # Checks if we cannot use `Unroll`
 function rejectcurly(ls::LoopSet, op::Operation, td::UnrollArgs)
-    @unpack u₁loopsym, vloopsym = td
-    rejectcurly(ls, op, u₁loopsym, vloopsym)
+  @unpack u₁loopsym, vloopsym = td
+  rejectcurly(ls, op, u₁loopsym, vloopsym)
 end
 function rejectcurly(ls::LoopSet, op::Operation, u₁loopsym::Symbol, vloopsym::Symbol)
-    indices = getindicesonly(op)
-    li = op.ref.loopedindex
-    AV = AU = false
-    for (n,ind) ∈ enumerate(indices)
-        # @show AU, op, n, ind, vloopsym, u₁loopsym
-        if li[n]
-            if ind === vloopsym
-                AV && return true
-                AV = true
-            end
-            if ind === u₁loopsym
-                AU && return true
-                AU = true
-            end
-        else
-            opp = findop(parents(op), ind)
-            # @show opp
-            if isvectorized(opp)
-                AV && return true
-                AV = true
-            end
-            if (u₁loopsym === CONSTANTZEROINDEX) ? (CONSTANTZEROINDEX ∈ loopdependencies(opp)) : (isu₁unrolled(opp))
-                AU && return true
-                AU = true
-            end
-        end
+  indices = getindicesonly(op)
+  li = op.ref.loopedindex
+  AV = AU = false
+  for (n,ind) ∈ enumerate(indices)
+    # @show AU, op, n, ind, vloopsym, u₁loopsym
+    if li[n]
+      if ind === vloopsym
+        AV && return true
+        AV = true
+      end
+      if ind === u₁loopsym
+        AU && return true
+        AU = true
+      end
+    else
+      opp = findop(parents(op), ind)
+      # @show opp
+      if isvectorized(opp)
+        AV && return true
+        AV = true
+      end
+      if (u₁loopsym === CONSTANTZEROINDEX) ? (CONSTANTZEROINDEX ∈ loopdependencies(opp)) : (isu₁unrolled(opp))
+        AU && return true
+        AU = true
+      end
     end
-    false
+  end
+  false
 end
 function rejectinterleave(ls::LoopSet, op::Operation, vloop::Loop, idsformap::SubArray{Tuple{Int,Int}, 1, Vector{Tuple{Int,Int}}, Tuple{UnitRange{Int}}, true})
   strd = step(vloop)
