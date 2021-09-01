@@ -150,7 +150,7 @@ function lower_load_no_optranslation!(
   if (all(op.ref.loopedindex) && !rejectcurly(op)) && vectorization_profitable(op)
     inds = unrolledindex(op, td, mask, inds_calc_by_ptr_offset, ls)
     loadexpr = Expr(:call, lv(:_vload), sptr(op), inds)
-    add_memory_mask!(loadexpr, op, td, mask, ls)
+    add_memory_mask!(loadexpr, op, td, mask, ls, 0)
     push!(loadexpr.args, falseexpr, rs) # unaligned load
     push!(q.args, Expr(:(=), mvar, loadexpr))
   elseif (u₁ > 1) & opu₁
@@ -160,7 +160,7 @@ function lower_load_no_optranslation!(
       inds = mem_offset_u(op, td, inds_calc_by_ptr_offset, true, u-1, ls)
       loadexpr = Expr(:call, lv(:_vload), sptrsym, inds)
       domask = mask && (isvectorized(op) & ((u == u₁) | (vloopsym !== u₁loopsym)))
-      add_memory_mask!(loadexpr, op, td, domask, ls)
+      add_memory_mask!(loadexpr, op, td, domask, ls, u)
       push!(loadexpr.args, falseexpr, rs)
       push!(t.args, loadexpr)
       # push!(q.args, Expr(:(=), mvar, loadexpr))
@@ -169,7 +169,7 @@ function lower_load_no_optranslation!(
   else
     inds = mem_offset_u(op, td, inds_calc_by_ptr_offset, true, 0, ls)
     loadexpr = Expr(:call, lv(:_vload), sptr(op), inds)
-    add_memory_mask!(loadexpr, op, td, mask, ls)
+    add_memory_mask!(loadexpr, op, td, mask, ls, 0)
     push!(loadexpr.args, falseexpr, rs)
     push!(q.args, Expr(:(=), mvar, loadexpr))
   end
@@ -465,7 +465,7 @@ function lower_load_collection!(
     uinds = Expr(:call, unrollcurl₂, inds)
     sptrsym = sptr!(q, op)
     loadexpr = Expr(:call, lv(:_vload), sptrsym, uinds)
-    # not using `add_memory_mask!(storeexpr, op, ua, mask, ls)` because we checked `isconditionalmemop` earlier in `lower_load_collection!`
+    # not using `add_memory_mask!(storeexpr, op, ua, mask, ls, 0)` because we checked `isconditionalmemop` earlier in `lower_load_collection!`
     u₁vectorized = u₁loopsym === vloopsym
     if (mask && isvectorized(op))
         if !(manualunrollu₁ & u₁vectorized)

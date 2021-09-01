@@ -192,7 +192,7 @@ function lower_store!(
     else
       Expr(:call, lv(:_vstore!), lv(reductfunc), sptr(op), mvar, inds)
     end
-    add_memory_mask!(storeexpr, op, ua, mask, ls)
+    add_memory_mask!(storeexpr, op, ua, mask, ls, 0)
     push!(storeexpr.args, falseexpr, aliasexpr, falseexpr, rs)
     push!(q.args, storeexpr)
   else
@@ -223,7 +223,7 @@ function lower_store!(
           Expr(:call, lv(:_vstore!), lv(reductfunc), sptrsym, mvar, inds)
         end
         domask = mask && (isvectorized(op) & ((u == u₁) | (vloopsym !== u₁loopsym)))
-        add_memory_mask!(storeexpr, op, ua, domask, ls)# & ((u == u₁) | isvectorized(op)))
+        add_memory_mask!(storeexpr, op, ua, domask, ls, u)# & ((u == u₁) | isvectorized(op)))
         push!(storeexpr.args, falseexpr, aliasexpr, falseexpr, rs)
         push!(q.args, storeexpr)
       end
@@ -234,7 +234,7 @@ function lower_store!(
       else
         Expr(:call, lv(:_vstore!), lv(reductfunc), sptr(op), mvar, inds)
       end
-      add_memory_mask!(storeexpr, op, ua, mask, ls)
+      add_memory_mask!(storeexpr, op, ua, mask, ls, 0)
       push!(storeexpr.args, falseexpr, aliasexpr, falseexpr, rs)
       push!(q.args, storeexpr)
     end

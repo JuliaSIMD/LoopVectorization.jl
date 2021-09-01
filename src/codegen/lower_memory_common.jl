@@ -367,45 +367,57 @@ end
 
 
 isconditionalmemop(op::Operation) = (instruction(op).instr === :conditionalload) || (instruction(op).instr === :conditionalstore!)
-function add_memory_mask!(memopexpr::Expr, op::Operation, td::UnrollArgs, mask::Bool, ls::LoopSet)
-    @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, u₂max, suffix = td
-    if isconditionalmemop(op)
-        condop = last(parents(op))
-        opu₂ = (suffix ≠ -1) && isu₂unrolled(op)
-        condvar, condu₁unrolled = condvarname_and_unroll(condop, u₁loopsym, u₂loopsym, vloopsym, suffix, opu₂, ls)
-        # if it isn't unrolled, then `m`
-        u = condu₁unrolled ? u₁ : 1
-        # u = isu₁unrolled(condop) ? u₁ : 1
-        condvar = Symbol(condvar, '_', u)
-        # If we need to apply `MASKSYMBOL` and the condvar
-        # 2 condvar possibilities:
-        #   `VecUnroll` applied everywhere
-        #    single mask "broadcast"
-        # 2 mask possibilities
-        #    u₁loopsym ≠  vloopsym, and we mask all
-        #    u₁loopsym == vloopsym, and we mask last
-        # broadcast both, so can do so implicitly
-        # this is true whether or not `condbroadcast`
-        if !mask || (!isvectorized(op))
-            push!(memopexpr.args, condvar)
-        elseif (u₁loopsym ≢ vloopsym) | (u₁ == 1) # mask all equivalenetly
-            push!(memopexpr.args, Expr(:call, lv(:&), condvar, MASKSYMBOL))
-            # if the condition `(u₁loopsym ≢ vloopsym) | (u₁ == 1)` failed, we need to apply `MASKSYMBOL` only to last unroll.
-        elseif !condu₁unrolled && isu₁unrolled(op) # condbroadcast
-            # explicitly broadcast `condvar`, and apply `MASKSYMBOL` to end
-            t = Expr(:call, lv(:promote))
-            for um ∈ 1:u₁-1
-                push!(t.args, condvar)
-            end
-            push!(t.args, Expr(:call, lv(:&), condvar, MASKSYMBOL))
-            push!(memopexpr.args, Expr(:call, lv(:VecUnroll), t))
-        else# !condbroadcast && !vecunrolled
-            push!(memopexpr.args, Expr(:call, lv(:and_last), condvar, MASKSYMBOL))
+function add_memory_mask!(memopexpr::Expr, op::Operation, td::UnrollArgs, mask::Bool, ls::LoopSet, u₁ᵢ::Int)
+  @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, u₂max, suffix = td
+  if isconditionalmemop(op)
+    condop = last(parents(op))
+    opu₂ = (suffix ≠ -1) && isu₂unrolled(op)
+    condvar, condu₁unrolled = condvarname_and_unroll(condop, u₁loopsym, u₂loopsym, vloopsym, suffix, opu₂, ls)
+    # if it isn't unrolled, then `m`
+    u = condu₁unrolled ? u₁ : 1
+    # u = isu₁unrolled(condop) ? u₁ : 1
+    condvar = Symbol(condvar, '_', u)
+    # If we need to apply `MASKSYMBOL` and the condvar
+    # 2 condvar possibilities:
+    #   `VecUnroll` applied everywhere
+    #    single mask "broadcast"
+    # 2 mask possibilities
+    #    u₁loopsym ≠  vloopsym, and we mask all
+    #    u₁loopsym == vloopsym, and we mask last
+    # broadcast both, so can do so implicitly
+    # this is true whether or not `condbroadcast`
+    if !mask || (!isvectorized(op))
+      if u₁ᵢ == 0 | (u == 1)
+        push!(memopexpr.args, condvar)
+      else
+        push!(memopexpr.args, :($getfield($getfield($condvar, 1), $(u₁ᵢ), false)))
+      end
+    elseif (u₁loopsym ≢ vloopsym) | (u₁ == 1) # mask all equivalenetly
+      push!(memopexpr.args, Expr(:call, lv(:&), condvar, MASKSYMBOL))
+      # if the condition `(u₁loopsym ≢ vloopsym) | (u₁ == 1)` failed, we need to apply `MASKSYMBOL` only to last unroll.
+    elseif ((!condu₁unrolled)) && isu₁unrolled(op)  # condbroadcast
+      if u₁ᵢ == 0
+        # explicitly broadcast `condvar`, and apply `MASKSYMBOL` to end
+        t = Expr(:call, lv(:promote))
+        for um ∈ 1:u₁-1
+          push!(t.args, condvar)
         end
-    elseif mask && isvectorized(op)
-        push!(memopexpr.args, MASKSYMBOL)
+        push!(t.args, Expr(:call, lv(:&), condvar, MASKSYMBOL))
+        push!(memopexpr.args, Expr(:call, lv(:VecUnroll), t))
+      else
+        push!(memopexpr.args, condvar)
+      end
+    elseif u₁i == 0# !condbroadcast && !vecunrolled
+      push!(memopexpr.args, Expr(:call, lv(:and_last), condvar, MASKSYMBOL))
+    elseif u₁i == u₁ # mask
+      push!(memopexpr.args, Expr(:call, lv(:&), :($getfield($getfield(condvar,1),$u₁i,false)), MASKSYMBOL))
+    else
+      push!(memopexpr.args, Expr(:call, lv(:&), :($getfield($getfield(condvar,1),$u₁i,false))))
     end
-    nothing
+  elseif mask && isvectorized(op)
+    push!(memopexpr.args, MASKSYMBOL)
+  end
+  nothing
 end
 
 # varassignname(var::Symbol, u::Int, isunrolled::Bool) = isunrolled ? Symbol(var, u) : var
