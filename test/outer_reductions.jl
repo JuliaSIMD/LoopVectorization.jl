@@ -1,3 +1,24 @@
+function reg_term(omega, B = size(omega,2); alpha=0.01)
+  reg = 0.0
+  for b in 1:B
+    t = maximum(@views omega[:, b]) - omega[b,b]
+    reg += t
+  end
+  return alpha*reg
+end
+
+function reg_term_turbo(omega, B = size(omega,2); alpha=0.01)
+  reg = 0.0
+  @turbo for b in 1:B
+    m = -Inf
+    for i in axes(omega,1)
+      m = max(m, omega[i,b])
+    end
+    t = m - omega[b,b]
+    reg += t
+  end
+  return alpha*reg
+end
 
 function awmean_lv(x::AbstractArray{T1}, σ::AbstractArray{T2}) where {T1<:Number,T2<:Number}
   n = length(x)
@@ -114,5 +135,8 @@ end
   for n ∈ 1:20, k ∈ 1:5
     test_logℒ(n,k)
   end
+  omega = rand(87,87);
+  @test reg_term(omega) ≈ reg_term_turbo(omega)
+
 end
 
