@@ -50,8 +50,15 @@ function reduce_expr!(q::Expr, toreduct::Symbol, op::Operation, u₁::Int, u₂:
   end
   if (u₁ == 1) | (~isu₁unrolled)
     push!(q.args, Expr(:(=), Symbol(toreduct, "##onevec##"), _toreduct))
-  else
+  elseif instruction(op).instr ≢ :ifelse
     push!(q.args, Expr(:(=), Symbol(toreduct, "##onevec##"), Expr(:call, reduction_to_single_vector(op), _toreduct)))
+  else
+    fifelse = let u₁=u₁
+      ifelse_reduction(:IfElseCollapser,op) do opv
+        Symbol(mangledvar(opv), '_', u₁), tuple()
+      end
+    end
+    push!(q.args, Expr(:(=), Symbol(toreduct, "##onevec##"), Expr(:call, fifelse, _toreduct, staticexpr(1))))
   end
   nothing
 end

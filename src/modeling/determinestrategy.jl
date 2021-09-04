@@ -428,7 +428,7 @@ function solve_unroll_iter(X, R, u₁L, u₂L, u₁range, u₂range)
     u₁best, u₂best, bestcost
 end
 
-function solve_unroll_lagrange(X, R, u₁L, u₂L, u₁step::Int, u₂step::Int, atleast32registers::Bool)
+function solve_unroll_lagrange(X, R, u₁L, u₂L, u₁step::Int, u₂step::Int, atleast31registers::Bool)
     X₁, X₂, X₃, X₄ = X[1], X[2], X[3], X[4]
     # If we don't have opmask registers, masks probably occupy a vector register (e.g., on CPUs with AVX but not AVX512)
     R₁, R₂, R₃, R₄ = R[1], R[2], R[3], R[4]
@@ -443,8 +443,8 @@ function solve_unroll_lagrange(X, R, u₁L, u₂L, u₁step::Int, u₂step::Int,
     u₂float = (RR - u₁float*R₂)/(u₁float*R₁)
     if !(isfinite(u₂float) & isfinite(u₁float)) # brute force
         u₁low = u₂low = 1
-        u₁high = iszero(X₂) ? 2 : (atleast32registers ? 8 : 6)
-        u₂high = iszero(X₃) ? 2 : (atleast32registers ? 8 : 6)
+        u₁high = iszero(X₂) ? 2 : (atleast31registers ? 8 : 6)
+        u₂high = iszero(X₃) ? 2 : (atleast31registers ? 8 : 6)
         return solve_unroll_iter(X, R, u₁L, u₂L, u₁low:u₁step:u₁high, u₂low:u₂step:u₂high)
     end
     u₁low = floor(Int, u₁float)
@@ -457,7 +457,7 @@ function solve_unroll_lagrange(X, R, u₁L, u₂L, u₁step::Int, u₂step::Int,
     if u₂low ≥ u₂high
         u₂low = solve_unroll_constU(R, u₁high)
     end
-    maxunroll = atleast32registers ? (((X₂ > 0) & (X₃ > 0)) ? 10 : 8) : 6
+    maxunroll = atleast31registers ? (((X₂ > 0) & (X₃ > 0)) ? 10 : 8) : 6
     u₁low = (clamp(u₁low, 1, maxunroll) ÷ u₁step) * u₁step
     u₂low = (clamp(u₂low, 1, maxunroll) ÷ u₂step) * u₂step
     u₁high = clamp(u₁high, 1, maxunroll)
@@ -482,9 +482,9 @@ end
 #     floor(Int, (dynamic_register_count() - R[3] - R[4] - u₂*R[5]) / (u₂ * R[1] + R[2]))
 # end
 # Tiling here is about alleviating register pressure for the UxT
-function solve_unroll(X, R, u₁max, u₂max, u₁L, u₂L, u₁step, u₂step, atleast32registers::Bool)
+function solve_unroll(X, R, u₁max, u₂max, u₁L, u₂L, u₁step, u₂step, atleast31registers::Bool)
     # iszero(first(R)) && return -1,-1,Inf #solve_smalltilesize(X, R, u₁max, u₂max)
-    u₁, u₂, cost = solve_unroll_lagrange(X, R, u₁L, u₂L, u₁step, u₂step, atleast32registers)
+    u₁, u₂, cost = solve_unroll_lagrange(X, R, u₁L, u₂L, u₁step, u₂step, atleast31registers)
     # u₂ -= u₂ & 1
     # u₁ = min(u₁, u₂)
     u₁_too_large = u₁ > u₁max
@@ -539,7 +539,7 @@ function solve_unroll(
     u₁loop = getloop(ls, u₁loopsym)
     u₂loop = getloop(ls, u₂loopsym)
     solve_unroll(
-        u₁loopsym, u₂loopsym, cost_vec, reg_pressure, W, vloopsym, u₁loop, u₂loop, u₁step, u₂step, reg_count(ls) ≥ 32
+        u₁loopsym, u₂loopsym, cost_vec, reg_pressure, W, vloopsym, u₁loop, u₂loop, u₁step, u₂step, reg_count(ls) ≥ 31
     )
 end
 
@@ -550,9 +550,9 @@ function solve_unroll(
     W::Int, vloopsym::Symbol,
     u₁loop::Loop, u₂loop::Loop,
     u₁step::Int, u₂step::Int,
-    atleast32registers::Bool
+    atleast31registers::Bool
 )
-    maxu₂base = maxu₁base = atleast32registers ? 10 : 6#8
+    maxu₂base = maxu₁base = atleast31registers ? 10 : 6#8
     maxu₂ = maxu₂base#8
     maxu₁ = maxu₁base#8
     u₁L = length(u₁loop)
@@ -593,7 +593,7 @@ function solve_unroll(
     else
         u₂Lf = Float64(u₂L)
     end
-    u₁, u₂, cost = solve_unroll(cost_vec, reg_pressure, maxu₁, maxu₂, u₁Lf, u₂Lf, u₁step, u₂step, atleast32registers)
+    u₁, u₂, cost = solve_unroll(cost_vec, reg_pressure, maxu₁, maxu₂, u₁Lf, u₂Lf, u₁step, u₂step, atleast31registers)
     # heuristic to more evenly divide small numbers of iterations
     if isstaticloop(u₂loop)
         u₂ = maybedemotesize(u₂, length(u₂loop), u₁, u₁loop, maxu₂base)

@@ -360,7 +360,7 @@
         if LoopVectorization.cache_linesize() == LoopVectorization.register_size()
             @test LoopVectorization.choose_order(lsr2amb) == ([:n, :m, :k], :m, :n, :m, 3, 7)
         else
-            @test LoopVectorization.choose_order(lsr2amb) == ([:m, :n, :k], :n, :m, :m, 5, 4)
+            @test LoopVectorization.choose_order(lsr2amb) == ([:m, :n, :k], :m, :n, :m, 3, 7)
         end
     elseif LoopVectorization.register_count() == 16
         # @test LoopVectorization.choose_order(lsr2amb) == ([:m, :n, :k], :m, :n, :m, 1, 6)
@@ -637,7 +637,7 @@
         @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 1, 8)
         # @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :k, :n, :m, 1, 8)
       elseif LoopVectorization.register_size() == 16
-        @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 4, 4)
+        @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 2, 8)
       end            
     elseif LoopVectorization.register_count() == 16
       @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 2, 4)

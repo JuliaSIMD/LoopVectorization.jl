@@ -9,11 +9,12 @@ using Test
               s += x[m] * A[m,n] * y[n]
               end);
     lsdot3 = LoopVectorization.loopset(dot3q);
-    if LoopVectorization.register_count() == 32
-        # @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :m, :n, :m, Unum, Tnum)#&-2
+    if LoopVectorization.register_count() ≠ 32
+      @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :n, :m, :m, 2, 6)
+    elseif Bool(LoopVectorization.has_opmask_registers())
       @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :n, Symbol("##undefined##"), :m, 4, -1)
     else
-      @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :n, :m, :m, 2, 6)
+      @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :n, :m, :m, 2, 8)
     end
 
     @static if VERSION < v"1.4"
@@ -71,7 +72,7 @@ using Test
     lssubcol = LoopVectorization.loopset(subcolq);
     # @test LoopVectorization.choose_order(lssubcol) == (Symbol[:i,:j], :i, Symbol("##undefined##"), :j, 1, -1)
     # @test LoopVectorization.choose_order(lssubcol) == (Symbol[:i,:j], :j, :i, :j, 1, 8)
-    @test LoopVectorization.choose_order(lssubcol) == (Symbol[:i,:j], :j, :i, :j, 1, ifelse(LoopVectorization.register_count() == 32, 8, 6))
+    @test LoopVectorization.choose_order(lssubcol) == (Symbol[:i,:j], :j, :i, :j, 1, ifelse((LoopVectorization.register_count() == 32), 8, 6))
 
     # if LoopVectorization.register_count() != 8
     #     # @test LoopVectorization.choose_order(lssubcol) == (Symbol[:j,:i], :j, :i, :j, Unum, Tnum)
