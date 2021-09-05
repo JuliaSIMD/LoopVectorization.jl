@@ -388,8 +388,12 @@ end
 end
 @inline (ier::IfElseReduceToMirror)(a::VecUnroll, b::VecUnroll) = VecUnroll(VectorizationBase.fmap(ier, VectorizationBase.data(a), VectorizationBase.data(b)))
 
-@inline (iec::IfElseCollapserMirror)(a) = getfield(VectorizationBase.ifelse_collapse_mirror(iec.f, a, iec.a), 1, false)
-@inline (iec::IfElseCollapserMirror)(a, ::StaticInt{1}) = getfield(VectorizationBase.ifelse_collapse_mirror(iec.f, a, iec.a), 1, false)
+# @inline (iec::IfElseCollapserMirror)(a) = getfield(VectorizationBase.ifelse_collapse_mirror(iec.f, a, iec.a), 1, false)
+# @inline (iec::IfElseCollapserMirror)(a, ::StaticInt{N}) where {N} = getfield(VectorizationBase.ifelse_collapse_mirror(iec.f, a, iec.a, StaticInt{N}()), 1, false)
+
+@inline (iec::IfElseCollapserMirror)(a) = VectorizationBase.ifelse_collapse_mirror(iec.f, a, iec.a)
+@inline (iec::IfElseCollapserMirror)(a, ::StaticInt{N}) where {N} = VectorizationBase.ifelse_collapse_mirror(iec.f, a, iec.a, StaticInt{N}())
+
 # @inline function (iec::IfElseCollapserMirror)(a, ::StaticInt{C}) where {C}
 #   VectorizationBase.contract(IfElseOp(iec.f), a, StaticInt{C}())
 # end

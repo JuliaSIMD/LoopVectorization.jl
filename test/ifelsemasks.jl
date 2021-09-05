@@ -478,10 +478,10 @@ T = Float32
     end
     minval, indmin
   end
-  function findminturbo_u2(x)
+  function findminturbo_u4(x)
     indmin = 0
     minval = typemax(eltype(x))
-    @turbo unroll=2 for i ∈ eachindex(x)
+    @turbo unroll=4 for i ∈ eachindex(x)
       newmin = x[i] < minval
       minval = newmin ? x[i] : minval
       indmin = newmin ?   i  : indmin
@@ -495,11 +495,11 @@ T = Float32
     if T <: Integer
       a = rand(-T(100):T(100), N); b = rand(-T(100):T(100), N);
       mv, mi = findminturbo(a)
-      mv2, mi2 = findminturbo_u2(a)
+      mv2, mi2 = findminturbo_u4(a)
       @test mv == a[mi] == minimum(a) == mv2 == a[mi2]
     else
       a = rand(T, N); b = rand(T, N);
-      @test findmin(a) == findminturbo(a) == findminturbo_u2(a)
+      @test findmin(a) == findminturbo(a) == findminturbo_u4(a)
     end;
     c1 = similar(a); c2 = similar(a);
 

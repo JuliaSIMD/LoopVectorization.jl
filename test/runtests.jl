@@ -1,6 +1,6 @@
 include("testsetup.jl")
 
-import InteractiveUtils, Aqua
+import InteractiveUtils
 
 InteractiveUtils.versioninfo(stdout; verbose = true)
 

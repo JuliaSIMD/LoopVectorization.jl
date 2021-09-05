@@ -11,6 +11,7 @@ const START_TIME = time()
   end
 
   @time if LOOPVECTORIZATION_TEST == "all" || LOOPVECTORIZATION_TEST == "part2"
+    using Aqua
     @time Aqua.test_all(LoopVectorization, ambiguities = VERSION ≥ v"1.6")
     # @test isempty(detect_unbound_args(LoopVectorization))
 

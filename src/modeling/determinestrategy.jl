@@ -283,112 +283,113 @@ function unroll_no_reductions(ls, order, vloopsym)
     # (iszero(rt) ? 4 : max(1, VectorizationBase.nextpow2( min( 4, round(Int, 8 / rt) ) ))), unrolled
 end
 function determine_unroll_factor(
-    ls::LoopSet, order::Vector{Symbol}, unrolled::Symbol, vloopsym::Symbol
+  ls::LoopSet, order::Vector{Symbol}, unrolled::Symbol, vloopsym::Symbol
 )
-    cacheunrolled!(ls, unrolled, Symbol(""), vloopsym)
-    size_T = biggest_type_size(ls)
-    W, Wshift = lsvecwidthshift(ls, vloopsym, size_T)
+  cacheunrolled!(ls, unrolled, Symbol(""), vloopsym)
+  size_T = biggest_type_size(ls)
+  W, Wshift = lsvecwidthshift(ls, vloopsym, size_T)
 
-    # So if num_reductions > 0, we set the unroll factor to be high enough so that the CPU can be kept busy
-    # if there are, U = max(1, round(Int, max(latency) * throughput / num_reductions)) = max(1, round(Int, latency / (recip_throughput * num_reductions)))
-    # We also make sure register pressure is not too high.
-    latency = 1.0
-    # compute_recip_throughput_u = 0.0
-    compute_recip_throughput = 0.0
-    visited_nodes = fill(false, length(operations(ls)))
-    load_recip_throughput = 0.0
-    store_recip_throughput = 0.0
-    for op ∈ operations(ls)
-        if isreduction(op)
-            rt, sl = depchain_cost!(ls, visited_nodes, op, unrolled, vloopsym, Wshift, size_T)
-            if isouterreduction(ls, op) ≠ -1 || unrolled ∉ reduceddependencies(op)
-                latency = max(sl, latency)
-            end
-            # if unrolled ∈ loopdependencies(op)
-            #     compute_recip_throughput_u += rt
-            # else
-            compute_recip_throughput += rt
-            # end
-        elseif isload(op)
-            load_recip_throughput += first(cost(ls, op, (unrolled,Symbol("")), vloopsym, Wshift, size_T))
-        elseif isstore(op)
-            store_recip_throughput += first(cost(ls, op, (unrolled,Symbol("")), vloopsym, Wshift, size_T))
-        end
+  # So if num_reductions > 0, we set the unroll factor to be high enough so that the CPU can be kept busy
+  # if there are, U = max(1, round(Int, max(latency) * throughput / num_reductions)) = max(1, round(Int, latency / (recip_throughput * num_reductions)))
+  # We also make sure register pressure is not too high.
+  latency = 1.0
+  # compute_recip_throughput_u = 0.0
+  compute_recip_throughput = 0.0
+  visited_nodes = fill(false, length(operations(ls)))
+  load_recip_throughput = 0.0
+  store_recip_throughput = 0.0
+  for op ∈ operations(ls)
+    if isreduction(op)
+      rt, sl = depchain_cost!(ls, visited_nodes, op, unrolled, vloopsym, Wshift, size_T)
+      if isouterreduction(ls, op) ≠ -1 || unrolled ∉ reduceddependencies(op)
+        latency = max(sl, latency)
+      end
+      # if unrolled ∈ loopdependencies(op)
+      #     compute_recip_throughput_u += rt
+      # else
+      compute_recip_throughput += rt
+      # end
+    elseif isload(op)
+      load_recip_throughput += first(cost(ls, op, (unrolled,Symbol("")), vloopsym, Wshift, size_T))
+    elseif isstore(op)
+      store_recip_throughput += first(cost(ls, op, (unrolled,Symbol("")), vloopsym, Wshift, size_T))
     end
-    recip_throughput = max(
-        compute_recip_throughput,
-        load_recip_throughput,
-        store_recip_throughput
-    )
-    recip_throughput, latency
+  end
+  recip_throughput = max(
+    compute_recip_throughput,
+    load_recip_throughput,
+    store_recip_throughput
+  )
+  # @show latency, recip_throughput
+  recip_throughput, latency
 end
 function count_reductions(ls::LoopSet)
-    num_reductions = 0
-    for op ∈ operations(ls)
-        if isreduction(op) & iscompute(op) && parentsnotreduction(op)
-            num_reductions += 1
-        end
+  num_reductions = 0
+  for op ∈ operations(ls)
+    if isreduction(op) & iscompute(op) && parentsnotreduction(op)
+      num_reductions += 1
     end
-    num_reductions
+  end
+  num_reductions
 end
 
 demote_unroll_factor(ls::LoopSet, UF, loop::Symbol) = demote_unroll_factor(ls, UF, getloop(ls, loop))
 function demote_unroll_factor(ls::LoopSet, UF, loop::Loop)
-    W = ls.vector_width
-    if !iszero(W) && isstaticloop(loop)
-        UFW = maybedemotesize(UF*W, length(loop))
-        UF = cld(UFW, W)
-    end
-    UF
+  W = ls.vector_width
+  if !iszero(W) && isstaticloop(loop)
+    UFW = maybedemotesize(UF*W, length(loop))
+    UF = cld(UFW, W)
+  end
+  UF
 end
 
 function determine_unroll_factor(ls::LoopSet, order::Vector{Symbol}, vloopsym::Symbol)
-    num_reductions = count_reductions(ls)
-    # The strategy is to use an unroll factor of 1, unless there appears to be loop carried dependencies (ie, num_reductions > 0)
-    # The assumption here is that unrolling provides no real benefit, unless it is needed to enable OOO execution by breaking up these dependency chains
-    loopindexesbit = ls.loopindexesbit
-    if iszero(length(loopindexesbit)) || ((!loopindexesbit[getloopid(ls, vloopsym)]))
-        if iszero(num_reductions)
-            return unroll_no_reductions(ls, order, vloopsym)
-        else
-            return determine_unroll_factor(ls, order, vloopsym, num_reductions)
-        end
-    elseif iszero(num_reductions) # handle `BitArray` loops w/out reductions
-        return 8 ÷ ls.vector_width, vloopsym
-    else # handle `BitArray` loops with reductions
-        rttemp, ltemp = determine_unroll_factor(ls, order, vloopsym, vloopsym)
-        UF = min(8, VectorizationBase.nextpow2(max(1, round(Int, ltemp / (rttemp) ) )))
-        UFfactor = 8 ÷ ls.vector_width
-        cld(UF, UFfactor)*UFfactor, vloopsym
+  num_reductions = count_reductions(ls)
+  # The strategy is to use an unroll factor of 1, unless there appears to be loop carried dependencies (ie, num_reductions > 0)
+  # The assumption here is that unrolling provides no real benefit, unless it is needed to enable OOO execution by breaking up these dependency chains
+  loopindexesbit = ls.loopindexesbit
+  if iszero(length(loopindexesbit)) || ((!loopindexesbit[getloopid(ls, vloopsym)]))
+    if iszero(num_reductions)
+      return unroll_no_reductions(ls, order, vloopsym)
+    else
+      return determine_unroll_factor(ls, order, vloopsym, num_reductions)
     end
+  elseif iszero(num_reductions) # handle `BitArray` loops w/out reductions
+    return 8 ÷ ls.vector_width, vloopsym
+  else # handle `BitArray` loops with reductions
+    rttemp, ltemp = determine_unroll_factor(ls, order, vloopsym, vloopsym)
+    UF = min(8, VectorizationBase.nextpow2(max(1, round(Int, ltemp / (rttemp) ) )))
+    UFfactor = 8 ÷ ls.vector_width
+    cld(UF, UFfactor)*UFfactor, vloopsym
+  end
 end
 # function scale_unrolled()
 # end
 function determine_unroll_factor(ls::LoopSet, order::Vector{Symbol}, vloopsym::Symbol, num_reductions::Int)
-    innermost_loop = last(order)
-    rt = Inf; rtcomp = Inf; latency = Inf; best_unrolled = Symbol("")
-    for unrolled ∈ order
-        reject_reorder(ls, unrolled, false) && continue
-        rttemp, ltemp = determine_unroll_factor(ls, order, unrolled, vloopsym)
-        rtcomptemp = rttemp + (0.01 * ((vloopsym === unrolled) + (unrolled === innermost_loop) - latency))
-        if rtcomptemp < rtcomp
-            rt = rttemp
-            rtcomp = rtcomptemp
-            latency = ltemp
-            best_unrolled = unrolled
-        end
+  innermost_loop = last(order)
+  rt = Inf; rtcomp = Inf; latency = Inf; best_unrolled = Symbol("")
+  for unrolled ∈ order
+    reject_reorder(ls, unrolled, false) && continue
+    rttemp, ltemp = determine_unroll_factor(ls, order, unrolled, vloopsym)
+    rtcomptemp = rttemp + (0.01 * ((vloopsym === unrolled) + (unrolled === innermost_loop) - latency))
+    if rtcomptemp < rtcomp
+      rt = rttemp
+      rtcomp = rtcomptemp
+      latency = ltemp
+      best_unrolled = unrolled
     end
-    # min(8, roundpow2(max(1, round(Int, latency / (rt * num_reductions) ) ))), best_unrolled
-    lrtratio  = latency / rt
-    if lrtratio ≥ 7.0
-        UF = 8
-    else
-        UF = VectorizationBase.nextpow2(round(Int, clamp(lrtratio, 1.0, 4.0)))
-    end
-    if best_unrolled === vloopsym
-        UF = demote_unroll_factor(ls, UF, vloopsym)
-    end
-    UF, best_unrolled
+  end
+  # min(8, roundpow2(max(1, round(Int, latency / (rt * num_reductions) ) ))), best_unrolled
+  lrtratio  = latency / rt
+  if lrtratio ≥ 7.0
+    UF = 8
+  else
+    UF = VectorizationBase.nextpow2(round(Int, clamp(lrtratio, 1.0, 4.0), RoundUp))
+  end
+  if best_unrolled === vloopsym
+    UF = demote_unroll_factor(ls, UF, vloopsym)
+  end
+  UF, best_unrolled
 end
 
 @inline function unroll_cost(X, u₁, u₂, u₁L, u₂L)
