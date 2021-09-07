@@ -726,7 +726,7 @@ Execute an `@turbo` block. The block's code is represented via the arguments:
     )
   else
     # Main.BODY[] = avx_body(ls, var"#UNROLL#")
-    # @show avx_body(ls, var"#UNROLL#")
+    # return @show avx_body(ls, var"#UNROLL#")
     avx_body(ls, var"#UNROLL#")
   end
   # @show var"#UNROLL#", var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#"

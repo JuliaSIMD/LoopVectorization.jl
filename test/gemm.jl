@@ -558,6 +558,17 @@
         end
         return C
     end
+  function dense!(f::F, C, A, B) where {F}
+    K = ArrayInterface.size(A, StaticInt(2))
+    Kp1 = K + StaticInt(1)
+    @turbo for n ∈ indices((B,C),2), m ∈ indices((A,C),1)
+      Cmn = zero(eltype(C))
+      for k ∈ 1:K
+        Cmn += A[m,k] * B[k,n]
+      end
+      C[m,n] = f(Cmn + A[m,Kp1])
+    end
+  end
 
     # TODO: add fast=false option to `@turbo`
     # function gemm_accurate!(C, A, B)
@@ -712,6 +723,9 @@
             At = copy(A');
             Bt = copy(B');
             C2 = similar(C);
+            A2 = rand(R, M, K+1)
+            dense!(VectorizationBase.relu, C, A2, B);
+            @test C ≈ VectorizationBase.relu.(@view(A2[:,begin:end-1]) * B .+ @view(A2[:,end]))
             @testset "avx $T dynamc gemm" begin
                 AmulB!(C2, A, B)
                 AmulBavx1!(C, A, B)

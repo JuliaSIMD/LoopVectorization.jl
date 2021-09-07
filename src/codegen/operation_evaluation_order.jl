@@ -114,6 +114,18 @@ function load_short_static_reduction_first!(ls::LoopSet, u₁loop::Symbol, u₂l
   for op ∈ operations(ls)
     iscompute(op) || continue
     length(reduceddependencies(op)) == 0 && continue
+    parents_op = parents(op)
+    length(parents_op) == 2 || continue
+    found = false
+    parent₁deps = loopdependencies(parents_op[1])
+    parent₂deps = loopdependencies(parents_op[2])
+    for reduced_dep ∈ reduceddependencies(op)
+      if (reduced_dep ∈ parent₁deps) || (reduced_dep ∈ parent₂deps)
+        found = true
+        break
+      end
+    end
+    found || continue
     if (instruction(op).instr === :reduced_add)
       vecloop = getloop(ls, vectorized)
       if isstaticloop(vecloop) && (length(vecloop) ≤ 16) && nounrollreduction(op, u₁loop, u₂loop, vectorized)
@@ -121,8 +133,7 @@ function load_short_static_reduction_first!(ls::LoopSet, u₁loop::Symbol, u₂l
         length(children(opsub)) == 1 || continue
         opsearch = parents(op)[1]
         opcheck = search_for_reductinit!(opsearch, opsub, name(opsearch), loopdependencies(op))
-        opcheck === opsearch || replace_reduct_init!(ls, op, opsub, opcheck)
-        
+        opcheck === opsearch || replace_reduct_init!(ls, op, opsub, opcheck)        
       end
     elseif (instruction(op).instr === :add_fast) && (instruction(first(parents(op))).instr === :identity)
       vecloop = getloop(ls, vectorized)
