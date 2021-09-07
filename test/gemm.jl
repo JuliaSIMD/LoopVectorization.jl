@@ -724,8 +724,8 @@
             Bt = copy(B');
             C2 = similar(C);
             A2 = rand(R, M, K+1)
-            dense!(VectorizationBase.relu, C, A2, B);
-            @test C ≈ VectorizationBase.relu.(@view(A2[:,begin:end-1]) * B .+ @view(A2[:,end]))
+            dense!(LoopVectorization.relu, C, A2, B);
+            @test C ≈ LoopVectorization.relu.(@view(A2[:,begin:end-1]) * B .+ @view(A2[:,end]))
             @testset "avx $T dynamc gemm" begin
                 AmulB!(C2, A, B)
                 AmulBavx1!(C, A, B)
