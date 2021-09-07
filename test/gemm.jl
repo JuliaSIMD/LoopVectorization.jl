@@ -559,8 +559,8 @@
         return C
     end
   function dense!(f::F, C, A, B) where {F}
-    K = LoopVectorization.size(A, StaticInt(2))
-    Kp1 = K + StaticInt(1)
+    Kp1 = LoopVectorization.size(A, LoopVectorization.StaticInt(2))
+    K = Kp1 - LoopVectorization.StaticInt(1)
     @turbo for n ∈ indices((B,C),2), m ∈ indices((A,C),1)
       Cmn = zero(eltype(C))
       for k ∈ 1:K
@@ -723,7 +723,7 @@
             At = copy(A');
             Bt = copy(B');
             C2 = similar(C);
-            A2 = rand(R, M, K+1)
+            A2 = rand(R, M, K+1);
             dense!(LoopVectorization.relu, C, A2, B);
             @test C ≈ LoopVectorization.relu.(@view(A2[:,begin:end-1]) * B .+ @view(A2[:,end]))
             @testset "avx $T dynamc gemm" begin
