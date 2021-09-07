@@ -559,7 +559,7 @@
         return C
     end
   function dense!(f::F, C, A, B) where {F}
-    K = ArrayInterface.size(A, StaticInt(2))
+    K = LoopVectorization.size(A, StaticInt(2))
     Kp1 = K + StaticInt(1)
     @turbo for n ∈ indices((B,C),2), m ∈ indices((A,C),1)
       Cmn = zero(eltype(C))
