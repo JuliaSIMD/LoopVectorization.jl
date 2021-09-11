@@ -193,7 +193,7 @@ function vmap_multithread!(
     W, Wshift = VectorizationBase.pick_vector_width_shift(T)
     ptry, ptrargs, N = setup_vmap!(f, y, Val{NonTemporal}(), args...)
     # nt = min(Threads.nthreads(), VectorizationBase.SYS_CPU_THREADS, N >> (Wshift + 3))
-    nt = min(Threads.nthreads(), VectorizationBase.num_cores(), N >> (Wshift + 5))
+    nt = min(Threads.nthreads(), num_cores(), N >> (Wshift + 5))
 
     # if !((nt > 1) && iszero(ccall(:jl_in_threaded_region, Cint, ())))
     if nt < 2

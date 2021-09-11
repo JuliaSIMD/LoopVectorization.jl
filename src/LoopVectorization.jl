@@ -2,8 +2,8 @@ module LoopVectorization
 
 using Static: StaticInt, gt
 using VectorizationBase, SLEEFPirates, UnPack, OffsetArrays
-using VectorizationBase: register_size, register_count, cache_linesize, cache_size, has_opmask_registers,
-  mask, pick_vector_width, MM, AbstractMask, data, grouped_strided_pointer, AbstractSIMD,
+using VectorizationBase: 
+  mask, MM, AbstractMask, data, grouped_strided_pointer, AbstractSIMD,
   vzero, offsetprecalc, lazymul,
   vadd_nw, vadd_nsw, vadd_nuw, vsub_nw, vsub_nsw, vsub_nuw, vmul_nw, vmul_nsw, vmul_nuw,
   vfmaddsub, vfmsubadd, vpermilps177, vmovsldup, vmovshdup,
@@ -21,10 +21,10 @@ using VectorizationBase: register_size, register_count, cache_linesize, cache_si
     contract_min, collapse_min,
     contract_and, collapse_and,
     contract_or,  collapse_or,
-    num_threads, num_cores,
     max_mask, maybestaticsize#,zero_mask
 
-
+using HostCPUFeatures: pick_vector_width, register_size, register_count, has_opmask_registers
+using CPUSummary: num_threads, num_cores, cache_linesize, cache_size
 
 using LayoutPointers: stridedpointer_preserve, GroupedStridedPointers
 

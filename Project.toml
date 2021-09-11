@@ -5,8 +5,10 @@ version = "0.12.73"
 
 [deps]
 ArrayInterface = "4fba245c-0d91-5ea0-9b3e-6abc04ee57a9"
+CPUSummary = "2a0fbf3d-bb9c-48f3-b0a9-814d99fd7ab9"
 CloseOpenIntervals = "fb6a15b2-703c-40df-9091-08a04967cfa9"
 DocStringExtensions = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
+HostCPUFeatures = "3e5b6fbb-0976-4d2c-9146-d79de83f2fb0"
 IfElse = "615f187c-cbe4-4ef1-ba3b-2fcf58d6d173"
 LayoutPointers = "10f19ff3-798f-405d-979b-55457f8fc047"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -21,7 +23,10 @@ VectorizationBase = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
 
 [compat]
 ArrayInterface = "3.1.32"
+CPUSummary = "0.1.3"
+CloseOpenIntervals = "0.1.2"
 DocStringExtensions = "0.8"
+HostCPUFeatures = "0.1.3"
 IfElse = "0.1"
 LayoutPointers = "0.1.2"
 OffsetArrays = "1.4.1"
