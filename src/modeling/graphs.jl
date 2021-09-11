@@ -200,12 +200,12 @@ function addexpr(ex, incr::Integer)
 end
 staticmulincr(ptr, incr) = Expr(:call, lv(:staticmul), Expr(:call, :eltype, ptr), incr)
 
-@inline cmpend(i::Int, r::CloseOpen) = i < getfield(r,:upper)
+@inline cmpend(i::Int, r::AbstractCloseOpen) = i < getfield(r,:upper)
 @inline cmpend(i::Int, r::AbstractUnitRange) = i ≤ last(r)
 @inline cmpend(i::Int, r::AbstractRange) = i ≤ last(r)
 
-@inline vcmpend(i::Int, r::CloseOpen, ::StaticInt{W}) where {W} = i ≤ vsub_nsw((getfield(r,:upper) % Int), W)
-@inline vcmpendzs(i::Int, r::CloseOpen, ::StaticInt{W}) where {W} = i ≠ ((getfield(r,:upper) % Int) &  (-W))
+@inline vcmpend(i::Int, r::AbstractCloseOpen, ::StaticInt{W}) where {W} = i ≤ vsub_nsw((getfield(r,:upper) % Int), W)
+@inline vcmpendzs(i::Int, r::AbstractCloseOpen, ::StaticInt{W}) where {W} = i ≠ ((getfield(r,:upper) % Int) &  (-W))
 @inline vcmpend(i::Int, r::AbstractUnitRange, ::StaticInt{W}) where {W} = i ≤ vsub_nsw(last(r), W-1)
 @inline vcmpendzs(i::Int, r::AbstractUnitRange, ::StaticInt{W}) where {W} = i ≠ (length(r) &  (-W))
 # i = 0
@@ -884,7 +884,7 @@ end
   ifelse(ArrayInterface.gt(StaticInt{S}(), Zero()), r, _reverse(r))
 end
 @inline canonicalize_range(r::OptionallyStaticRange, s::Integer) = s > 0 ? r : _reverse(r)
-@inline canonicalize_range(r::CloseOpen) = r
+@inline canonicalize_range(r::AbstractCloseOpen) = r
 @inline canonicalize_range(r::AbstractUnitRange) = maybestaticfirst(r):maybestaticlast(r)
 @inline canonicalize_range(r::OptionallyStaticRange) = canonicalize_range(r, static_step(r))
 @inline canonicalize_range(r::AbstractRange) = canonicalize_range(maybestaticfirst(r):static_step(r):maybestaticlast(r))

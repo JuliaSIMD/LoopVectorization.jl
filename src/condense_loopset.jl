@@ -222,8 +222,8 @@ end
 ## turn a LoopSet into a type object which can be used to reconstruct the LoopSet.
 
 @inline zerorangestart(r::Base.OneTo) = CloseOpen(maybestaticlast(r))
-@inline zerorangestart(r::CloseOpen) = CloseOpen(length(r))
-@inline zerorangestart(r::CloseOpen{Zero}) = r
+@inline zerorangestart(r::AbstractCloseOpen) = CloseOpen(length(r))
+@inline zerorangestart(r::AbstractCloseOpen{Zero}) = r
 @inline zerorangestart(r::AbstractUnitRange) = Zero():One():(maybestaticlast(r)-maybestaticfirst(r))
 @inline zerorangestart(r::AbstractRange) = Zero():static_step(r):(maybestaticlast(r)-maybestaticfirst(r))
 @inline zerorangestart(r::CartesianIndices) = CartesianIndices(map(zerorangestart, r.indices))
@@ -420,7 +420,6 @@ end
 
 
 @inline densewrapper(sp, A) = sp
-# @inline dummy_ptrarray(sp::AbstractStridedPointer{T,N}, A::AbstractArray{T,N}) where {T,N} = PtrArray(sp, VectorizationBase.zerotuple(Val{N}()), VectorizationBase.val_dense_dims(A))
 @inline densewrapper(sp::AbstractStridedPointer{T,N}, A::AbstractArray{T,N}) where {T,N} = _densewrapper(sp, VectorizationBase.val_dense_dims(A))
 @inline _densewrapper(sp, ::Nothing) = sp
 @inline _densewrapper(sp::AbstractStridedPointer, ::Val{D}) where {D} = VectorizationBase.DensePointerWrapper{D}(sp)

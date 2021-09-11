@@ -387,8 +387,8 @@ function thread_one_loops_expr(
       var"#nrequest#" = vsub_nw((var"#nthreads#" % UInt32), 0x00000001)
       var"##do#thread##" = var"#nrequest#" ≠ 0x00000000
       if var"##do#thread##"
-        var"#threads#tuple#", var"#torelease#tuple#" = Polyester.request_threads(var"#nrequest#")
-        # var"#threads#tuple#", var"#torelease#tuple#" = Polyester.request_threads(Threads.threadid()%UInt32, var"#nrequest#")
+        var"#threads#tuple#", var"#torelease#tuple#" = PolyesterWeave.request_threads(var"#nrequest#")
+        # var"#threads#tuple#", var"#torelease#tuple#" = PolyesterWeave.request_threads(Threads.threadid()%UInt32, var"#nrequest#")
         
         var"#thread#factor#0#" = var"#nthreads#"
         $iterdef
@@ -397,7 +397,7 @@ function thread_one_loops_expr(
         for var"#threads#" in var"#threads#tuple#"
           
           var"#thread#launch#count#" = 0x00000000
-          var"#thread#mask#" = Polyester.mask(var"#threads#")
+          var"#thread#mask#" = PolyesterWeave.mask(var"#threads#")
           var"#nrequest#" = length(var"#threads#")
           var"#threads#remain#" = var"#thread#launch#count#" ≠ var"#nrequest#"
           var"##do#thread##" |= var"#threads#remain#"
@@ -425,8 +425,8 @@ function thread_one_loops_expr(
           var"#nrem#thread#0#" -= var"#nrequest#"
         end
       else# eliminate undef var errors that the compiler should be able to figure out are unreachable, but doesn't
-        var"#torelease#tuple#" = (zero(Polyester.worker_type()),)
-        var"#threads#tuple#" = (Polyester.UnsignedIteratorEarlyStop(zero(Polyester.worker_type()), 0x00000000),)
+        var"#torelease#tuple#" = (zero(PolyesterWeave.worker_type()),)
+        var"#threads#tuple#" = (PolyesterWeave.UnsignedIteratorEarlyStop(zero(PolyesterWeave.worker_type()), 0x00000000),)
       end
     end
     var"#avx#call#args#" = $avxcall_args
@@ -436,7 +436,7 @@ function thread_one_loops_expr(
     for var"#i#" ∈ eachindex(var"#threads#tuple#")
       var"#threads#" = var"#threads#tuple#"[var"#i#"]
       
-      var"#thread#mask#" = Polyester.mask(var"#threads#")
+      var"#thread#mask#" = PolyesterWeave.mask(var"#threads#")
       var"#threads#remain#" = (length(var"#threads#tuple#") == 1) || (var"#thread#mask#" ≠ zero(var"#thread#mask#"))
       while var"#threads#remain#"
         VectorizationBase.assume(var"#thread#mask#" ≠ zero(var"#thread#mask#"))
@@ -448,7 +448,7 @@ function thread_one_loops_expr(
         $update_return_values
         var"#threads#remain#" = var"#thread#mask#" ≠ 0x00000000
       end
-      Polyester.free_threads!(var"#torelease#tuple#"[var"#i#"])
+      PolyesterWeave.free_threads!(var"#torelease#tuple#"[var"#i#"])
     end
     $retexpr
   end
@@ -581,8 +581,8 @@ function thread_two_loops_expr(
       var"#loop#1#start#init#" = var"#iter#start#0#"
       var"##do#thread##" = var"#nrequest#" ≠ 0x00000000
       if var"##do#thread##"
-        # var"#threads#tuple#", var"#torelease#tuple#" = Polyester.request_threads(Threads.threadid(), var"#nrequest#")
-        var"#threads#tuple#", var"#torelease#tuple#" = Polyester.request_threads(var"#nrequest#")
+        # var"#threads#tuple#", var"#torelease#tuple#" = PolyesterWeave.request_threads(Threads.threadid(), var"#nrequest#")
+        var"#threads#tuple#", var"#torelease#tuple#" = PolyesterWeave.request_threads(var"#nrequest#")
         var"##do#thread##" = false
         $iterdef1
         $iterdef2
@@ -593,7 +593,7 @@ function thread_two_loops_expr(
           var"#nrequest#" = length(var"#threads#")
           # @show var"#base#block#size#thread#0#", var"#block#rem#step#0#" var"#base#block#size#thread#1#", var"#block#rem#step#1#"
           var"#thread#launch#count#" = 0x00000000
-          var"#thread#mask#" = Polyester.mask(var"#threads#")
+          var"#thread#mask#" = PolyesterWeave.mask(var"#threads#")
           var"#threads#remain#" = var"#thread#launch#count#" ≠ var"#nrequest#"
           var"##do#thread##" |= var"#threads#remain#"
           while var"#threads#remain#"
@@ -630,8 +630,8 @@ function thread_two_loops_expr(
           end
         end
       else# eliminate undef var errors that the compiler should be able to figure out are unreachable, but doesn't
-        var"#torelease#tuple#" = (zero(Polyester.worker_type()),)
-        var"#threads#tuple#" = Polyester.UnsignedIteratorEarlyStop(zero(Polyester.worker_type()), 0x00000000)
+        var"#torelease#tuple#" = (zero(PolyesterWeave.worker_type()),)
+        var"#threads#tuple#" = PolyesterWeave.UnsignedIteratorEarlyStop(zero(PolyesterWeave.worker_type()), 0x00000000)
       end
     end
     # @show $lastboundexpr
@@ -641,7 +641,7 @@ function thread_two_loops_expr(
     var"#thread#id#" = 0x00000000
     for var"#i#" ∈ eachindex(var"#threads#tuple#")
       var"#threads#" = var"#threads#tuple#"[var"#i#"]
-      var"#thread#mask#" = Polyester.mask(var"#threads#")
+      var"#thread#mask#" = PolyesterWeave.mask(var"#threads#")
       var"#threads#remain#" = (length(var"#threads#tuple#") == 1) || (var"#thread#mask#" ≠ zero(var"#thread#mask#"))
       while var"#threads#remain#"
         VectorizationBase.assume(var"#thread#mask#" ≠ zero(var"#thread#mask#"))
@@ -653,7 +653,7 @@ function thread_two_loops_expr(
         $update_return_values
         var"#threads#remain#" = var"#thread#mask#" ≠ 0x00000000
       end
-      Polyester.free_threads!(var"#torelease#tuple#"[var"#i#"])
+      PolyesterWeave.free_threads!(var"#torelease#tuple#"[var"#i#"])
     end
     $retexpr
   end

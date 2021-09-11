@@ -14,12 +14,12 @@ Base.promote_rule(::Type{UpperBoundedInteger{N,S}}, ::Type{T}) where {N,T<:Base.
 Base.convert(::Type{T}, i::UpperBoundedInteger) where {T<:Number} = convert(T, i.i)
 Base.convert(::Type{UpperBoundedInteger{N,T}}, i::UpperBoundedInteger{N,T}) where {N,T<:Base.BitInteger} = i
 upper_bound(_) = typemax(Int)
-upper_bound(::Type{CloseOpen{T,UpperBoundedInteger{N,S}}}) where {T,N,S} = N - 1
+upper_bound(::Type{CO}) where {T,N,S,CO<:AbstractCloseOpen{T,UpperBoundedInteger{N,S}}} = N - 1
 
-@inline Base.last(r::CloseOpen{<:Integer,<:UpperBoundedInteger}) = getfield(getfield(r,:upper),:i) - One()
+@inline Base.last(r::AbstractCloseOpen{<:Integer,<:UpperBoundedInteger}) = getfield(getfield(r,:upper),:i) - One()
 @inline ArrayInterface.static_last(r::CloseOpen{<:Integer,<:UpperBoundedInteger}) = getfield(getfield(r,:upper),:i) - One()
-@inline Base.length(r::CloseOpen{<:Integer,<:UpperBoundedInteger}) = getfield(getfield(r,:upper),:i) - getfield(r,:start)
-@inline Base.length(r::CloseOpen{Zero,<:UpperBoundedInteger}) = getfield(getfield(r,:upper),:i)
+@inline Base.length(r::AbstractCloseOpen{<:Integer,<:UpperBoundedInteger}) = getfield(getfield(r,:upper),:i) - getfield(r,:start)
+@inline Base.length(r::AbstractCloseOpen{Zero,<:UpperBoundedInteger}) = getfield(getfield(r,:upper),:i)
 
 function Loop(ls::LoopSet, ex::Expr, sym::Symbol, f, s, l, ub::Int)
     if (f !== nothing) && (s !== nothing) && (l !== nothing)
@@ -70,7 +70,7 @@ end
 function Loop(::LoopSet, ::Expr, sym::Symbol, ::Type{ArrayInterface.OptionallyStaticStepRange{StaticInt{L}, StaticInt{S}, StaticInt{U}}}) where {L,S,U}
     static_loop(sym, L, S, U)
 end
-function Loop(::LoopSet, ::Expr, sym::Symbol, ::Type{CloseOpen{Static{L}, Static{U}}}) where {L,U}
+function Loop(::LoopSet, ::Expr, sym::Symbol, ::Type{CO}) where {L,U,CO<:AbstractCloseOpen{Static{L}, Static{U}}}
     static_loop(sym, L, 1, U - 1)
 end
 

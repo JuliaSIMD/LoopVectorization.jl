@@ -30,7 +30,7 @@ using LayoutPointers: stridedpointer_preserve, GroupedStridedPointers
 
 using IfElse: ifelse
 
-using ThreadingUtilities, Polyester
+using ThreadingUtilities, PolyesterWeave
 using Base.Broadcast: Broadcasted, DefaultArrayStyle
 using LinearAlgebra: Adjoint, Transpose, Diagonal
 using Base.Meta: isexpr
@@ -42,7 +42,7 @@ using SLEEFPirates: log_fast, log2_fast, log10_fast, pow, sin_fast, cos_fast, si
 
 using ArrayInterface
 using ArrayInterface: OptionallyStaticUnitRange, OptionallyStaticRange, Zero, One, StaticBool, True, False, reduce_tup, indices, UpTri, LoTri, strides, offsets, size, axes, StrideIndex
-using StrideArraysCore: CloseOpen, PtrArray
+using CloseOpenIntervals: AbstractCloseOpen, CloseOpen#, SafeCloseOpen
 # @static if VERSION ≥ v"1.6.0-rc1" #TODO: delete `else` when dropping 1.5 support
     # using ArrayInterface: static_step
 # else # Julia 1.5 did not define `step` on CartesianIndices
