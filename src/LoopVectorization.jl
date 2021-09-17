@@ -38,7 +38,7 @@ using DocStringExtensions
 import LinearAlgebra # for check_args
 
 using Base.FastMath: add_fast, sub_fast, mul_fast, div_fast, inv_fast, abs2_fast, rem_fast, max_fast, min_fast, pow_fast, sqrt_fast
-using SLEEFPirates: log_fast, log2_fast, log10_fast, pow, sin_fast, cos_fast, sincos_fast
+using SLEEFPirates: log_fast, log2_fast, log10_fast, pow, sin_fast, cos_fast, sincos_fast, tan_fast
 
 using ArrayInterface
 using ArrayInterface: OptionallyStaticUnitRange, OptionallyStaticRange, Zero, One, StaticBool, True, False, reduce_tup, indices, UpTri, LoTri, strides, offsets, size, axes, StrideIndex
