@@ -30,6 +30,11 @@ end
     stridedpointer($gptr, si, StaticInt{$B}())
   end
 end
+@inline _subsetview(ptr::AbstractStridedPointer, ::StaticInt{I}, J::Tuple{}) where {I} = ptr
+@inline _subsetview(ptr::AbstractStridedPointer, ::StaticInt{I}, J::Tuple{J1}) where {I,J1} = subsetview(ptr, StaticInt{I}(), first(J))
+@inline _subsetview(ptr::AbstractStridedPointer, ::StaticInt{I}, J::Tuple{J1,J2,Vararg}) where {I,J1,J2} = _subsetview(subsetview(ptr, StaticInt{I}(), first(J)), StaticInt{I}(), Base.tail(J))
+@inline subsetview(ptr::AbstractStridedPointer, ::StaticInt{I}, J::CartesianIndex) where {I} = _subsetview(ptr, StaticInt{I}(), Tuple(J))
+
 @inline _gesp(sp::VectorizationBase.FastRange, ::StaticInt{1}, i) = gesp(sp, (i,))
 @generated function _gesp(sp::AbstractStridedPointer{T,N}, ::StaticInt{I}, i::Integer) where {I,N,T}
   t = Expr(:tuple)
