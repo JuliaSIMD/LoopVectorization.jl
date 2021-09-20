@@ -1,6 +1,11 @@
 using LoopVectorization
 using LinearAlgebra
+using OffsetArrays
 using Test
+
+if !isdefined(@__MODULE__, Symbol("@_avx"))
+    include("testsetup.jl")
+end
 
 @testset "Miscellaneous" begin
 # T = Float32
@@ -48,7 +53,7 @@ using Test
             s += t * y[n]
            end);
     ls = LoopVectorization.loopset(q);
-    
+
     function dot3avx24(x, A, y)
         M, N = size(A)
         s = zero(promote_type(eltype(x), eltype(A), eltype(y)))
@@ -157,7 +162,7 @@ using Test
         # @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, Symbol("##undefined##"), :j, 8, -1)
     #     @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, 2, 6)
     # end
-    
+
     function myvar!(s², A, x̄)
         @. s² = 0
         @inbounds for i ∈ 1:size(A,2)
@@ -197,7 +202,7 @@ using Test
             Z[i, j] = acc
         end
     end
-    function setcolumstovectorplus100avx!(Z::AbstractArray{T}, A) where {T} 
+    function setcolumstovectorplus100avx!(Z::AbstractArray{T}, A) where {T}
         @turbo for i = axes(A,1), j = axes(Z,2)
             acc = zero(T)
             acc = acc + A[i] + (26 + 74)
@@ -508,7 +513,7 @@ using Test
     function test_bit_shiftavx(counter)
         accu = zero(first(counter))
         @turbo for i ∈ eachindex(counter)
-            accu += counter[i] << (-3 * 4 + 13) 
+            accu += counter[i] << (-3 * 4 + 13)
         end
         accu
     end
@@ -892,7 +897,7 @@ end
         setcolumstovectorplus100!(A, x)
         setcolumstovectorplus100avx!(A2, x)
         @test A == A2
-        
+
         maxdeg = 20; nbasis = 1_000; dim = 15;
         r = T == Float32 ? (Int32(1):Int32(maxdeg+1)) : (1:maxdeg+1)
         basis = rand(r, (dim, nbasis));
@@ -1033,7 +1038,7 @@ end
         @test c_re_1 ≈ c_re_2
 
         @test loopinductvardivision(X1) ≈ loopinductvardivisionavx(X2)
-        
+
         mh = (
             Wt_D_W = Matrix{T}(undef, 181, 181),
             Wt = rand(T, 181, 191),
@@ -1050,7 +1055,7 @@ end
         @test maxavx!(R, Q, true) == max.(vec(maximum(Q, dims=(2,3))), Rc)
 
         @test manyreturntest(Q) ≈ manyreturntestavx(Q)
-        
+
         U0 = randn(T, 15, 17); E0 = randn(T, 17);
         U1, E1 = splitintonoloop_reference(copy(U0), copy(E0));
         U2, E2 = splitintonoloop(copy(U0), copy(E0));
@@ -1064,7 +1069,7 @@ end
         @test all(isequal(81), powcseliteral!(E0))
         @test all(isequal(81), powcsesymbol!(E3))
 
-        
+
         @test isapprox(
             maybe_const_issue144!(zeros(T, 3,4), (value=one(T),), collect(reshape(1:12, 3,4)), ones(T, 4)),
             maybe_const_issue144_avx!(zeros(T,3,4), (value=one(T),), collect(reshape(1:12, 3,4)), ones(T,4)),
@@ -1144,13 +1149,48 @@ end
         s
     end
 
-    for T ∈ (Float32, Float64)
+    function smoothdim_kernel_tile!(out, z, src::AbstractArray, kernel::AbstractVector, Rpre::CartesianIndices, axout_tile, Rpost::CartesianIndices)
+        # z is an "overflow-safe zero". This is needed in cases where both `src` and `kernel` have eltypes vulnerable to arithmetic overflow.
+        axkernel = axes(kernel, 1)
+        for Ipost in Rpost
+            for i in axout_tile
+                for Ipre in Rpre
+                    tmp = convert(eltype(out), z)
+                    for j in axkernel
+                        tmp += oftype(z, src[Ipre,i+j,Ipost])*kernel[j]
+                    end
+                    out[Ipre,i,Ipost] = tmp
+                end
+            end
+        end
+        out
+    end
+    function smoothdim_kernel_tile_avx!(out, z, src::AbstractArray, kernel::AbstractVector, Rpre::CartesianIndices, axout_tile, Rpost::CartesianIndices)
+        axkernel = axes(kernel, 1)
+        zout = convert(eltype(out), z)
+        for Ipost in Rpost
+            for i in axout_tile
+                @turbo for Ipre in Rpre
+                    tmp = zout
+                    # tmp = convert(eltype(out), z)    # failing to hoist this leads to an "UndefVarError: tmp not defined"
+                    for j in axkernel
+                        tmp += oftype(z, src[Ipre,i+j,Ipost])*kernel[j]
+                    end
+                    out[Ipre,i,Ipost] = tmp
+                end
+            end
+        end
+        out
+    end
+
+
+    for T ∈ (UInt8,Float32, Float64)
         @testset "Mixed CartesianIndex/Int indexing" begin
             @show T, @__LINE__
             # A demo similar to the exponential filtering demo from https://julialang.org/blog/2016/02/iteration/,
             # but with no loop-carried dependency.
 
-            # s = dest1; 
+            # s = dest1;
             # ifirst, ilast = first(axes(x, d)), last(axes(x, d))
             # ls = LoopVectorization.@turbo_debug for Ipost in Rpost, i = ifirst:ilast, Ipre in Rpre
             #     xi = x[Ipre, i, Ipost]
@@ -1160,8 +1200,8 @@ end
             # LoopVectorization.choose_order(ls);
 
             M = 11;
-            x = rand(M,M,M,M,M);
-            dest1, dest2 = similar(x), similar(x);
+            x = rand(T,M,M,M,M,M);
+            dest1, dest2 = similar(x,float(T)), similar(x,float(T));
             α = 0.3
             for d = 1:ndims(x)
                 # @show d
@@ -1173,11 +1213,28 @@ end
                 fill!(dest2, NaN); smoothdim_ifelse_avx!(dest2, x, α, Rpre, axes(x, d), Rpost);
                 @test dest1 ≈ dest2
             end
+
+            # Mimic of ImageFiltering/ArrayFiltering's separable filters
+            σ = 3
+            ax = OffsetArray(-6:6, -6:6)
+            kernel = float(T)[exp(-i^2/(2*σ^2)) for i in ax]   # 1-d Gaussian kernel
+            srcax = 1+firstindex(ax):M+lastindex(ax)
+            Mpad = length(srcax)
+            src = OffsetArray(rand(T,Mpad,Mpad,Mpad,Mpad,Mpad),srcax,srcax,srcax,srcax,srcax)
+            dest1 = Array{float(T),5}(undef,M,M,M,M,M)
+            dest2 = similar(dest1)
+            for d = 1:ndims(src)
+                Rpre  = CartesianIndices(axes(dest1)[1:d-1]);
+                Rpost = CartesianIndices(axes(dest1)[d+1:end]);
+                smoothdim_kernel_tile!(    dest1, float(zero(T)), src, kernel, Rpre, axes(dest1, d), Rpost);
+                smoothdim_kernel_tile_avx!(dest2, float(zero(T)), src, kernel, Rpre, axes(dest2, d), Rpost);
+                @test dest1 ≈ dest2
+            end
         end
     end
 
 
-    function mul1!(y::Vector{T}, A::Matrix{UInt8}, x::Vector{T}) where T 
+    function mul1!(y::Vector{T}, A::Matrix{UInt8}, x::Vector{T}) where T
         packedstride = size(A, 1)
         m, n = size(A)
         @turbo for j ∈ eachindex(x)
@@ -1190,7 +1247,7 @@ end
         end
         y
     end
-    function mul2!(y::Vector{T}, A::Matrix{UInt8}, x::Vector{T}) where T 
+    function mul2!(y::Vector{T}, A::Matrix{UInt8}, x::Vector{T}) where T
         packedstride = size(A, 1)
         m, n = size(A)
         for j ∈ eachindex(x)
@@ -1318,7 +1375,7 @@ end
       A0 = Vector{Float64}(undef, i-1); A1 = similar(A0);
       @test issue_257!(A0,G) ≈ issue_257_avx!(A1,G)
     end
-    
+
   end
 
 
