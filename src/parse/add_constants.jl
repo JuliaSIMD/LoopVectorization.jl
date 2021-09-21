@@ -99,9 +99,7 @@ function ensure_constant_lowered!(ls::LoopSet, mpref::ArrayReferenceMetaPosition
   end
   return nothing
 end
-function add_constant!(ls::LoopSet, mpref::ArrayReferenceMetaPosition, elementbytes::Int)
-  op = Operation(length(operations(ls)), varname(mpref), elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS, mpref.mref)
-  add_vptr!(ls, op)
+function add_constant_vload!(ls::LoopSet, op::Operation, mpref::ArrayReferenceMetaPosition, elementbytes::Int)
   temp = gensym!(ls, "intermediateconstref")
   vloadcall = Expr(:call, lv(:_vload), mpref.mref.ptr)
   nindices = length(getindices(op))
@@ -117,6 +115,12 @@ function add_constant!(ls::LoopSet, mpref::ArrayReferenceMetaPosition, elementby
   pushpreamble!(ls, Expr(:(=), temp, vloadcall))
   pushpreamble!(ls, Expr(:(=), name(op), temp))
   pushpreamble!(ls, op, temp)
+  return temp
+end
+function add_constant!(ls::LoopSet, mpref::ArrayReferenceMetaPosition, elementbytes::Int)
+  op = Operation(length(operations(ls)), varname(mpref), elementbytes, LOOPCONSTANT, constant, NODEPENDENCY, Symbol[], NOPARENTS, mpref.mref)
+  add_vptr!(ls, op)
+  temp = add_constant_vload!(ls, op, mpref, elementbytes)
   pushop!(ls, op, temp)
 end
 # This version has loop dependencies. var gets assigned to sym when lowering.

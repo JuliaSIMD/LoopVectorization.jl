@@ -741,6 +741,7 @@ make_crashy(q) = Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__,
 
 @inline vecmemaybe(x::NativeTypes) = x
 @inline vecmemaybe(x::VectorizationBase._Vec) = Vec(x)
+@inline vecmemaybe(x::VectorizationBase.Vec) = x
 @inline vecmemaybe(x::Tuple) = VectorizationBase.VecUnroll(x)
 @inline vecmemaybe(x::Mask) = x
 
@@ -770,28 +771,31 @@ end
 #   setup_call_ret!(ls, call, preserve)
 # end
 setup_outerreduct_preserve_mangler(op::Operation) = Symbol(mangledvar(op), "##onevec##")
+
+function outer_reduction_to_scalar_reduceq!(q::Expr, op::Operation, var = name(op))
+  instr = instruction(op)
+  out = setup_outerreduct_preserve_mangler(op)
+  if instr.instr ≢ :ifelse
+    Expr(:call, reduction_scalar_combine(op), Expr(:call, lv(:vecmemaybe), out), var)
+  else
+    opinstr = ifelse_reduction(:IfElseReduced, op) do opv
+      opvname = name(opv)
+      oporig = gensym(opvname)
+      pushfirst!(q.args, Expr(:(=), oporig, opvname))
+      Expr(:call, lv(:vecmemaybe), setup_outerreduct_preserve_mangler(opv)), (oporig,)
+    end
+    Expr(:call, opinstr, Expr(:call, lv(:vecmemaybe), out), var)
+  end
+end
 function setup_outerreduct_preserve(ls::LoopSet, call::Expr, preserve::Vector{Symbol})
   iszero(length(ls.outer_reductions)) && return gc_preserve(call, preserve)
   retv = loopset_return_value(ls, Val(false))
   q = Expr(:block, gc_preserve(Expr(:(=), retv, call), preserve))
   for or ∈ ls.outer_reductions
     op = ls.operations[or]
-    var = name(op)
     # push!(call.args, Symbol("##TYPEOF##", var))
-    instr = instruction(op)
-    out = setup_outerreduct_preserve_mangler(op)
-    reducq = if instr.instr ≢ :ifelse
-      Expr(:call, reduction_scalar_combine(op), Expr(:call, lv(:vecmemaybe), out), var)
-    else
-      opinstr = ifelse_reduction(:IfElseReduced, op) do opv
-        opvname = name(opv)
-        oporig = gensym(opvname)
-        pushfirst!(q.args, Expr(:(=), oporig, opvname))
-        Expr(:call, lv(:vecmemaybe), setup_outerreduct_preserve_mangler(opv)), (oporig,)
-      end
-      Expr(:call, opinstr, Expr(:call, lv(:vecmemaybe), out), var)
-    end
-    push!(q.args, Expr(:(=), var, reducq))
+    reducq = outer_reduction_to_scalar_reduceq!(q, op)
+    push!(q.args, Expr(:(=), name(op), reducq))
   end
   q
 end

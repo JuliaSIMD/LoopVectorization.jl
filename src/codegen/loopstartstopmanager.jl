@@ -37,35 +37,36 @@ function uniquearrayrefs_csesummary(ls::LoopSet)
 end
 
 function uniquearrayrefs(ls::LoopSet)
-    uniquerefs = ArrayReferenceMeta[]
-    includeinlet = Bool[]
-    # for arrayref ∈ ls.refs_aliasing_syms
-    for op ∈ operations(ls)
-        arrayref = op.ref
-        arrayref === NOTAREFERENCE && continue
-        notunique = false
-        isonlyname = true
-        for ref ∈ uniquerefs
-            notunique = sameref(arrayref, ref)
-            isonlyname &= vptr(arrayref) !== vptr(ref)
-            # if they're not the sameref, they may still have the same name
-            # if they have different names, they're definitely not sameref
-            notunique && break
-        end
-        if !notunique
-            push!(uniquerefs, arrayref)
-            push!(includeinlet, isonlyname)
-        end
+  uniquerefs = ArrayReferenceMeta[]
+  includeinlet = Bool[]
+  # for arrayref ∈ ls.refs_aliasing_syms
+  for op ∈ operations(ls)
+    op.instruction === DROPPEDCONSTANT && continue
+    arrayref = op.ref
+    arrayref === NOTAREFERENCE && continue
+    notunique = false
+    isonlyname = true
+    for ref ∈ uniquerefs
+      notunique = sameref(arrayref, ref)
+      isonlyname &= vptr(arrayref) !== vptr(ref)
+      # if they're not the sameref, they may still have the same name
+      # if they have different names, they're definitely not sameref
+      notunique && break
     end
-    uniquerefs, includeinlet
+    if !notunique
+      push!(uniquerefs, arrayref)
+      push!(includeinlet, isonlyname)
+    end
+  end
+  uniquerefs, includeinlet
 end
 
 otherindexunrolled(loopsym::Symbol, ind::Symbol, loopdeps::Vector{Symbol}) = (loopsym !== ind) && (loopsym ∈ loopdeps)
 function otherindexunrolled(ls::LoopSet, ind::Symbol, ref::ArrayReferenceMeta)
-    us = ls.unrollspecification
-    u₁sym = names(ls)[us.u₁loopnum]
-    u₂sym = us.u₂loopnum > 0 ? names(ls)[us.u₂loopnum] : Symbol("##undefined##")
-    otherindexunrolled(u₁sym, ind, loopdependencies(ref)) || otherindexunrolled(u₂sym, ind, loopdependencies(ref))
+  us = ls.unrollspecification
+  u₁sym = names(ls)[us.u₁loopnum]
+  u₂sym = us.u₂loopnum > 0 ? names(ls)[us.u₂loopnum] : Symbol("##undefined##")
+  otherindexunrolled(u₁sym, ind, loopdependencies(ref)) || otherindexunrolled(u₂sym, ind, loopdependencies(ref))
 end
 function multiple_with_name(n::Symbol, v::Vector{ArrayReferenceMeta})
   found = false
@@ -79,26 +80,26 @@ end
 # multiple_with_name(n::Symbol, v::Vector{ArrayReferenceMeta}) = sum(ref -> n === vptr(ref), v) > 1
 # TODO: DRY between indices_calculated_by_pointer_offsets and use_loop_induct_var
 function indices_calculated_by_pointer_offsets(ls::LoopSet, ar::ArrayReferenceMeta)
-    indices = getindices(ar)
-    ls.isbroadcast && return fill(false, length(indices))
-    looporder = names(ls)
-    offset = isdiscontiguous(ar)
-    gespinds = Expr(:tuple)
-    out = Vector{Bool}(undef, length(indices))
-    li = ar.loopedindex
-    for i ∈ eachindex(li)
-        ii = i + offset
-        ind = indices[ii]
-        if (!li[i]) || (ind === CONSTANTZEROINDEX) || multiple_with_name(vptr(ar), ls.lssm.uniquearrayrefs) ||
-            (iszero(ls.vector_width) && isstaticloop(getloop(ls, ind)))# ||
-            out[i] = false
-        elseif (isone(ii) && (first(looporder) === ind))
-            out[i] = otherindexunrolled(ls, ind, ar)
-        else
-            out[i] = true
-        end
+  indices = getindices(ar)
+  ls.isbroadcast && return fill(false, length(indices))
+  looporder = names(ls)
+  offset = isdiscontiguous(ar)
+  gespinds = Expr(:tuple)
+  out = Vector{Bool}(undef, length(indices))
+  li = ar.loopedindex
+  for i ∈ eachindex(li)
+    ii = i + offset
+    ind = indices[ii]
+    if (!li[i]) || (ind === CONSTANTZEROINDEX) || multiple_with_name(vptr(ar), ls.lssm.uniquearrayrefs) ||
+      (iszero(ls.vector_width) && isstaticloop(getloop(ls, ind)))# ||
+      out[i] = false
+    elseif (isone(ii) && (first(looporder) === ind))
+      out[i] = otherindexunrolled(ls, ind, ar)
+    else
+      out[i] = true
     end
-    out
+  end
+  out
 end
 
 # @generated function set_first_stride(sptr::StridedPointer{T,N,C,B,R}) where {T,N,C,B,R}
@@ -139,8 +140,8 @@ end
 
 # end
 function set_ref_loopedindex_and_ind!(ref::ArrayReferenceMeta, i::Int, ii::Int, li::Bool, ind::Symbol)
-    ref.loopedindex[i] = li
-    getindices(ref)[ii] = ind
+  ref.loopedindex[i] = li
+  getindices(ref)[ii] = ind
 end
 function set_all_to_constant_index!(
   ls::LoopSet, i::Int, ii::Int, indop::Operation, allarrayrefs::Vector{ArrayReferenceMeta},
