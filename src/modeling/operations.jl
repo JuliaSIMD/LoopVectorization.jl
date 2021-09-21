@@ -375,19 +375,18 @@ getstrides(ref) = arrayref(ref).strides
 
 isdiscontiguous(ref) = isdiscontiguous_inds(getindices(ref))
 function isdiscontiguous_inds(inds)
-    # (first(inds) === DISCONTIGUOUS) || (first(inds) === CONSTANTZEROINDEX)
-    first(inds) === DISCONTIGUOUS
+  length(inds) == 0 ? false : (@inbounds(inds[begin]) === DISCONTIGUOUS)
 end
 function makediscontiguous!(inds)
-    if iszero(length(inds)) || !isdiscontiguous_inds(inds)
-        pushfirst!(inds, DISCONTIGUOUS)
-    end
-    nothing
+  if iszero(length(inds)) || !isdiscontiguous_inds(inds)
+    pushfirst!(inds, DISCONTIGUOUS)
+  end
+  nothing
 end
 
 function getindicesonly(ref)
-    indices = getindices(ref)
-    @view(indices[isdiscontiguous(ref) + 1:end])
+  indices = getindices(ref)
+  @view(indices[isdiscontiguous(ref) + 1:end])
 end
 # function hasintersection(s1::Set{T}, s2::Set{T}) where {T}
     # for x ∈ s1

@@ -716,8 +716,9 @@ Execute an `@turbo` block. The block's code is represented via the arguments:
   # 1 + 1 # Irrelevant line you can comment out/in to force recompilation...
   ls = _turbo_loopset(var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#".parameters, var"#V#".parameters, var"#UNROLL#")
   pushfirst!(ls.preamble.args, :(var"#lv#tuple#args#" = reassemble_tuple(Tuple{var"#LB#",var"#V#"}, var"#flattened#var#arguments#")))
+  post = hoist_constant_memory_accesses!(ls)
   # return @show avx_body(ls, var"#UNROLL#")
-  if last(var"#UNROLL#") > 1
+  q = if last(var"#UNROLL#") > 1
     inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, l1, l2, l3, nt = var"#UNROLL#"
     # wrap in `var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#"` in `Expr` to homogenize types
     avx_threads_expr(
@@ -729,5 +730,6 @@ Execute an `@turbo` block. The block's code is represented via the arguments:
     # return @show avx_body(ls, var"#UNROLL#")
     avx_body(ls, var"#UNROLL#")
   end
+  post === ls.preamble ? q : Expr(:block, q, post)
   # @show var"#UNROLL#", var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#"
 end
