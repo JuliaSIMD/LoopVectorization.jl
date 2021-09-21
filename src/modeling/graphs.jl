@@ -723,7 +723,7 @@ function add_constant_compute!(ls::LoopSet, op::Operation, var::Symbol)::Operati
   op.node_type = constant
   instr = instruction(op)
   opparents = parents(op)
-  if Base.sym_in(instr.instr, (:add_fast,:mul_fast,:sub_fast,:div_fast,:vfmadd_fast, :vfnmadd_fast, :vfmsub_fast, :vfnmsub_fast))
+  if Base.sym_in(instr.instr, (:add_fast,:mul_fast,:sub_fast,:div_fast,:(//),:vfmadd_fast, :vfnmadd_fast, :vfmsub_fast, :vfnmsub_fast))
     getconstfailed, vals = getconstvalues(ls, opparents)
     if !getconstfailed
       f = instr.instr
@@ -737,7 +737,7 @@ function add_constant_compute!(ls::LoopSet, op::Operation, var::Symbol)::Operati
         elseif length(opparents) == 1
           return add_constant!(ls, - vals[1], 8)::Operation
         end
-      elseif f === :div_fast
+      elseif (f === :div_fast) || (f === :(//))
         if length(opparents) == 2
           return add_constant!(ls, vals[1] / vals[2], 8)::Operation
         end
