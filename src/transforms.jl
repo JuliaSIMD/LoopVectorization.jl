@@ -54,9 +54,9 @@ function hoist_constant_store!(q::Expr, ls::LoopSet, op::Operation)
   
   init = return_empty_reductinit(opr, name(opr)).instruction.instr
   pushpreamble!(ls, Expr(:(=), outer_reduct_init_typename(opr), Expr(:call, lv(:typeof), init)))
-  q = Expr(:block)
-  push!(q.args, Expr(:call, lv(:unsafe_store!), Expr(:call, lv(:pointer), op.ref.ptr), outer_reduction_to_scalar_reduceq!(q, opr, init)))
-  length(q.args) == 0 || pushpreamble!(ls, q) # creating `Expr` and pushing because `outer_reduction_to_scalar_reduceq!` uses `pushfirst!(q.args`, and we don't want it at the start of the preamble
+  qpre = Expr(:block)
+  push!(q.args, Expr(:call, lv(:unsafe_store!), Expr(:call, lv(:pointer), op.ref.ptr), outer_reduction_to_scalar_reduceq!(qpre, opr, init)))
+  length(qpre.args) == 0 || pushpreamble!(ls, qpre) # creating `Expr` and pushing because `outer_reduction_to_scalar_reduceq!` uses `pushfirst!(q.args`, and we don't want it at the start of the preamble
   return nothing
 end
 
