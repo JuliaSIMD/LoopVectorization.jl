@@ -1182,6 +1182,22 @@ end
         end
         out
     end
+    function smoothdim_kernel_tile_avx_2!(out, z, src::AbstractArray, kernel::AbstractVector, Rpre::CartesianIndices, axout_tile, Rpost::CartesianIndices)
+        axkernel = axes(kernel, 1)
+        for Ipost in Rpost
+            for i in axout_tile
+                @turbo for Ipre in Rpre
+                    tmp = zero(eltype(out))
+                    # tmp = convert(eltype(out), z)    # failing to hoist this leads to an "UndefVarError: tmp not defined"
+                    for j in axkernel
+                        tmp += oftype(z, src[Ipre,i+j,Ipost])*kernel[j]
+                    end
+                    out[Ipre,i,Ipost] = tmp
+                end
+            end
+        end
+        out
+    end
 
 
     for T ∈ (UInt8,Float32, Float64)
@@ -1228,6 +1244,8 @@ end
                 Rpost = CartesianIndices(axes(dest1)[d+1:end]);
                 smoothdim_kernel_tile!(    dest1, float(zero(T)), src, kernel, Rpre, axes(dest1, d), Rpost);
                 smoothdim_kernel_tile_avx!(dest2, float(zero(T)), src, kernel, Rpre, axes(dest2, d), Rpost);
+                @test dest1 ≈ dest2
+                fill!(dest2,NaN); smoothdim_kernel_tile_avx_2!(dest2, float(zero(T)), src, kernel, Rpre, axes(dest2, d), Rpost);
                 @test dest1 ≈ dest2
             end
         end
