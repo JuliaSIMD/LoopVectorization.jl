@@ -316,12 +316,12 @@ function skip_constant(instr::Instruction)
 end
 
 function add_reassigned_syms!(q::Expr, ls::LoopSet)
-    for op ∈ operations(ls)
-        if isconstant(op)
-            instr = instruction(op)
-            skip_constant(instr) || push!(q.args, instr.instr)
-        end
+  for op ∈ operations(ls)
+    if isconstant(op)
+      instr = instruction(op)
+      skip_constant(instr) || push!(q.args, instr.instr)
     end
+  end
 end
 function add_external_functions!(q::Expr, ls::LoopSet)
     for op ∈ operations(ls)
@@ -625,7 +625,7 @@ function generate_call_types(
   ops = operations(ls)
   for op ∈ ops
     instr::Instruction = instruction(op)
-    if (isconstant(op) && (instr == LOOPCONSTANT)) && (!roots[identifier(op)])
+    if ((isconstant(op) && (instr == LOOPCONSTANT)) && (!roots[identifier(op)]))
       instr = op.instruction = DROPPEDCONSTANT
     end
     push!(operation_descriptions.args, QuoteNode(instr.mod))

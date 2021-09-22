@@ -1306,7 +1306,7 @@ end
 
 function accept_reorder_according_to_tracked_reductions(ls::LoopSet, reordered::Symbol)
   for op ∈ operations(ls)
-    if reordered ∈ loopdependencies(op)
+    if (reordered ∈ loopdependencies(op)) && !(iscompute(op) & iszero(length(children(op))))
       for opp ∈ parents(op)
         (iscompute(opp) && isanouterreduction(ls, opp)) && return 0x00
       end
@@ -1367,6 +1367,7 @@ end
 
 offsetloadcollection(ls::LoopSet) = ls.omop
 function fill_offset_memop_collection!(ls::LoopSet)
+  fill_children!(ls)
   omop = offsetloadcollection(ls)
   ops = operations(ls)
   num_ops = length(ops)

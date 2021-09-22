@@ -917,7 +917,6 @@ function lower(ls::LoopSet, inline::Int = -1)
 end
 function lower(ls::LoopSet, u₁::Int, u₂::Int, v::Int, inline::Int)
   fill_offset_memop_collection!(ls)
-  fill_children!(ls)
   if u₂ > 1
     @assert num_loops(ls) > 1 "There is only $(num_loops(ls)) loop, but specified blocking parameter u₂ is $u₂."
     order, u₁loop, u₂loop, vectorized, _u₁, _u₂, c, shouldinline = choose_tile(ls, store_load_deps(operations(ls)), v)

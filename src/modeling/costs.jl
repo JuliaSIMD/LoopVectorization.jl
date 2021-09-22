@@ -267,6 +267,7 @@ const COST = Dict{Symbol,InstructionCost}(
     :prefetch1 => InstructionCost(0,0.0,0.0,0),
     :prefetch2 => InstructionCost(0,0.0,0.0,0),
   :convert => InstructionCost(4,0.5),
+  :oftype => InstructionCost(4,0.5),
   :vpermilps177 => InstructionCost(1, 1.0),
   :vmovsldup => InstructionCost(1, 1.0),
   :vmovshdup => InstructionCost(1, 1.0),
