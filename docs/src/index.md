@@ -15,6 +15,7 @@ Pages = [
     "examples/array_interface.md",
     "examples/matrix_vector_ops.md",
     "examples/dot_product.md",
+    "examples/datetime_arrays.md",
     "examples/filtering.md",
     "examples/special_functions.md",
     "examples/sum_of_squared_error.md",
