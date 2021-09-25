@@ -412,21 +412,21 @@ end
 # end
 
 function solve_unroll_iter(X, R, u₁L, u₂L, u₁range, u₂range)
-    R₁, R₂, R₃, R₄ = R[1], R[2], R[3], R[4]
-    RR = R₄
-    u₁best, u₂best = 0, 0
-    bestcost = Inf
-    for u₁temp ∈ u₁range
-        for u₂temp ∈ u₂range
-            RR ≥ u₁temp*u₂temp*R₁ + u₁temp*R₂ + u₂temp*R₃ || continue
-            tempcost = unroll_cost(X, u₁temp, u₂temp, u₁L, u₂L)
-            if tempcost ≤ bestcost
-                bestcost = tempcost
-                u₁best, u₂best = u₁temp, u₂temp
-            end
-        end
+  R₁, R₂, R₃, R₄ = R[1], R[2], R[3], R[4]
+  RR = R₄
+  u₁best, u₂best = 0, 0
+  bestcost = Inf
+  for u₁temp ∈ u₁range
+    for u₂temp ∈ u₂range
+      RR ≥ u₁temp*u₂temp*R₁ + u₁temp*R₂ + u₂temp*R₃ || continue
+      tempcost = unroll_cost(X, u₁temp, u₂temp, u₁L, u₂L)
+      if tempcost ≤ bestcost
+        bestcost = tempcost
+        u₁best, u₂best = u₁temp, u₂temp
+      end
     end
-    u₁best, u₂best, bestcost
+  end
+  u₁best, u₂best, bestcost
 end
 
 function solve_unroll_lagrange(X, R, u₁L, u₂L, u₁step::Int, u₂step::Int, atleast31registers::Bool)
@@ -871,64 +871,67 @@ function store_load_deps(ops::Vector{Operation})
 end
 
 function add_constant_offset_load_elmination_cost!(
-    X, R, choose_to_inline, ls::LoopSet, op::Operation, iters, unrollsyms::UnrollSymbols, u₁reduces::Bool, u₂reduces::Bool, Wshift::Int, size_T::Int, opisininnerloop::Bool
+  X, R, choose_to_inline, ls::LoopSet, op::Operation, iters, unrollsyms::UnrollSymbols, u₁reduces::Bool, u₂reduces::Bool, Wshift::Int, size_T::Int, opisininnerloop::Bool
 )
-    @unpack u₁loopsym, u₂loopsym, vloopsym = unrollsyms
-    offset, uid = maxnegativeoffset(ls, op, unrollsyms)
-    if -4 < offset < 0
-        udependent_reduction = (-1 - offset) / 3
-        uindependent_increase = (4 + offset) / 3
-        rt, lat, rp = cost(ls, op, (u₁loopsym, u₂loopsym), vloopsym, Wshift, size_T)
-        rt *= iters
-        rp = opisininnerloop ? rp : zero(rp)
-        # if loadintostore(ls, op) # For now, let's just avoid unrolling in this way...
-        #     rt = Inf
-        # end
-        # u_uid is getting eliminated
-        # we treat this as the unrolled loop getting eliminated is split into 2 parts:
-        # 1 a non-cost-reduced part, with factor udependent_reduction
-        # 2 a cost-reduced part, with factor uindependent_increase
-        (r, i) = if uid == 1 # u₁reduces was false
-            @assert !u₁reduces
-            u₂reduces ? (4, 2) : (3, 1)
-        elseif uid == 2 # u₂reduces was false
-            @assert !u₂reduces
-            u₁reduces ? (4, 3) : (2, 1)
-        else
-            throw("uid somehow did not return 1 or 2, even though offset > -4.")
-        end
-        X[r             ] += rt * uindependent_increase
-        R[r == 3 ? 4 : r] += rp * uindependent_increase
-        X[i             ] += rt * udependent_reduction
-        R[i == 3 ? 4 : i] += rp * udependent_reduction
-        choose_to_inline[] = true
-        return true
+  @unpack u₁loopsym, u₂loopsym, vloopsym = unrollsyms
+  offset, uid = maxnegativeoffset(ls, op, unrollsyms)
+  if -4 < offset < 0
+    udependent_reduction = (-1 - offset) / 3 # -3, -2, -1 -> 2/3, 1/3, 0/3
+    uindependent_increase = (4 + offset) / 3 # -3, -2, -1 -> 1/3, 2/3, 3/3
+    rt, lat, rp = cost(ls, op, (u₁loopsym, u₂loopsym), vloopsym, Wshift, size_T)
+    rt *= iters
+    rp = opisininnerloop ? rp : zero(rp)
+    # if loadintostore(ls, op) # For now, let's just avoid unrolling in this way...
+    #     rt = Inf
+    # end
+    # u_uid is getting eliminated
+    # we treat this as the unrolled loop getting eliminated is split into 2 parts:
+    # 1 a non-cost-reduced part, with factor udependent_reduction
+    # 2 a cost-reduced part, with factor uindependent_increase
+    if uid == 1 # u₁reduces was false
+      @assert !u₁reduces
+      # max negative offset was in the u₁ unroll direction
+      update_cost_vec!(X, rt * uindependent_increase, true, u₂reduces)
+      update_cost_vec!(X, rt * udependent_reduction, false, u₂reduces)
+      update_reg_pres!(R, rp * uindependent_increase, true, u₂reduces)
+      update_reg_pres!(R, rp * udependent_reduction, false, u₂reduces)
+    elseif uid == 2 # u₂reduces was false
+      @assert !u₂reduces
+      update_cost_vec!(X, rt * uindependent_increase, u₁reduces, true)
+      update_cost_vec!(X, rt * udependent_reduction, u₁reduces, false)
+      update_reg_pres!(R, rp * uindependent_increase, u₁reduces, true)
+      update_reg_pres!(R, rp * udependent_reduction, u₁reduces, false)
     else
-        return false
+      throw("uid somehow did not return 1 or 2, even though offset > -4.")
     end
+    choose_to_inline[] = true
+    return true
+  else
+    return false
+  end
 end
 
 function update_cost_vec!(costs, cost, u₁reduces, u₂reduces)
-    if u₁reduces & u₂reduces
-        costs[4] += cost
-    elseif u₂reduces # cost decreased by unrolling u₂loop
-        costs[2] += cost
-    elseif u₁reduces # cost decreased by unrolling u₁loop
-        costs[3] += cost
-    else # no cost decrease; cost must be repeated
-        costs[1] += cost
-    end
+  @inbounds if u₁reduces & u₂reduces
+    costs[4] += cost
+  elseif u₂reduces # cost decreased by unrolling u₂loop
+    costs[2] += cost
+  elseif u₁reduces # cost decreased by unrolling u₁loop
+    costs[3] += cost
+  else # no cost decrease; cost must be repeated
+    costs[1] += cost
+  end
 end
 function update_reg_pres!(rp, cost, u₁reduces, u₂reduces)
-    if u₁reduces# & u₂reduces
-        rp[4] -= cost
-    elseif u₂reduces # cost decreased by unrolling u₂loop
-        rp[2] += cost
+  @inbounds if u₁reduces# & u₂reduces
+    rp[4] -= cost
+  elseif u₂reduces # cost decreased by unrolling u₂loop
+    rp[2] += cost
     # elseif u₁reduces # cost decreased by unrolling u₁loop
-        # rp[4] -= cost
-    else # no cost decrease; cost must be repeated
-        rp[1] += cost
-    end
+    # rp[4] -= cost
+  else # no cost decrease; cost must be repeated
+    rp[1] += cost
+  end
 end
 function child_dependent_u₁u₂(op::Operation)
   u₁ = u₂ = false
@@ -1061,7 +1064,6 @@ function evaluate_cost_tile!(
   for (id, op) ∈ enumerate(ops)
     iters[id] == -99.9 && continue
     opisininnerloop = descendentsininnerloop[id]
-
     u₁reducesrt, u₂reducesrt = reduced_by_unrolling[1,1,id], reduced_by_unrolling[2,1,id]
     u₁reducesrp, u₂reducesrp = reduced_by_unrolling[1,2,id], reduced_by_unrolling[2,2,id]
     if isload(op)
