@@ -1,6 +1,7 @@
 using LoopVectorization
 using LinearAlgebra
 using OffsetArrays
+using Static
 using Test
 
 if !isdefined(@__MODULE__, Symbol("@_avx"))
@@ -1234,6 +1235,7 @@ end
             σ = 3
             ax = OffsetArray(-6:6, -6:6)
             kernel = float(T)[exp(-i^2/(2*σ^2)) for i in ax]   # 1-d Gaussian kernel
+            kernel ./= sum(kernel)
             srcax = 1+firstindex(ax):M+lastindex(ax)
             Mpad = length(srcax)
             src = OffsetArray(rand(T,Mpad,Mpad,Mpad,Mpad,Mpad),srcax,srcax,srcax,srcax,srcax)
@@ -1248,6 +1250,30 @@ end
                 fill!(dest2,NaN); smoothdim_kernel_tile_avx_2!(dest2, float(zero(T)), src, kernel, Rpre, axes(dest2, d), Rpost);
                 @test dest1 ≈ dest2
             end
+
+            # Mimic RGB-valued array
+            src = OffsetArray([(rand(T),rand(T),rand(T)) for i in srcax, j in srcax, k in srcax], srcax, srcax, srcax)
+            srcr = reinterpret(reshape, T, src)
+            fT = float(T)
+            dest1 = Array{Tuple{fT,fT,fT}}(undef, M, M, M)
+            dest2 = similar(dest1)
+            dest1r = reinterpret(reshape, fT, dest1)
+            dest2r = reinterpret(reshape, fT, dest2)
+            for d = 1:ndims(src)
+                Rpre  = CartesianIndices((static(1):static(3), axes(dest1)[1:d-1]...));
+                Rpost = CartesianIndices(axes(dest1)[d+1:end]);
+                smoothdim_kernel_tile!(    dest1r, float(zero(T)), srcr, kernel, Rpre, axes(dest1, d), Rpost);
+                smoothdim_kernel_tile_avx!(dest2r, float(zero(T)), srcr, kernel, Rpre, axes(dest2, d), Rpost);
+                @test dest1r ≈ dest2r
+                fill!(dest2, (NaN,NaN,NaN)); smoothdim_kernel_tile_avx_2!(dest2r, float(zero(T)), srcr, kernel, Rpre, axes(dest2, d), Rpost);
+                @test dest1r ≈ dest2r
+            end
+            # # Make it easy to check whether the above are ~3x slower than the grayscale version
+            # srcg = OffsetArray([rand(T) for i in srcax, j in srcax, k in srcax], srcax, srcax, srcax);
+            # destg = Array{eltype(srcg)}(undef, M, M, M);
+            # Rpre  = CartesianIndices(axes(destg)[1:d-1]);
+            # Rpost = CartesianIndices(axes(destg)[d+1:end]);
+            # smoothdim_kernel_tile_avx!(destg, float(zero(T)), srcg, kernel, Rpre, axes(destg, d), Rpost);
         end
     end
 
