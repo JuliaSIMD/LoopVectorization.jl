@@ -1,7 +1,6 @@
 using LoopVectorization
 using LinearAlgebra
 using OffsetArrays
-using Static
 using Test
 
 if !isdefined(@__MODULE__, Symbol("@_avx"))
@@ -1260,7 +1259,7 @@ end
             dest1r = reinterpret(reshape, fT, dest1)
             dest2r = reinterpret(reshape, fT, dest2)
             for d = 1:ndims(src)
-                Rpre  = CartesianIndices((static(1):static(3), axes(dest1)[1:d-1]...));
+                Rpre  = CartesianIndices((LoopVectorization.Static(1):LoopVectorization.Static(3), axes(dest1)[1:d-1]...));
                 Rpost = CartesianIndices(axes(dest1)[d+1:end]);
                 smoothdim_kernel_tile!(    dest1r, float(zero(T)), srcr, kernel, Rpre, axes(dest1, d), Rpost);
                 smoothdim_kernel_tile_avx!(dest2r, float(zero(T)), srcr, kernel, Rpre, axes(dest2, d), Rpost);
