@@ -185,41 +185,41 @@ end
 # end
 
 function vmap_multithread!(
-    f::F,
-    y::AbstractArray{T},
-    ::Val{NonTemporal},
-    args::Vararg{AbstractArray,A}
+  f::F,
+  y::AbstractArray{T},
+  ::Val{NonTemporal},
+  args::Vararg{AbstractArray,A}
 ) where {F,T,A,NonTemporal}
-    W, Wshift = VectorizationBase.pick_vector_width_shift(T)
-    ptry, ptrargs, N = setup_vmap!(f, y, Val{NonTemporal}(), args...)
-    # nt = min(Threads.nthreads(), VectorizationBase.SYS_CPU_THREADS, N >> (Wshift + 3))
-    nt = min(Threads.nthreads(), num_cores(), N >> (Wshift + 5))
+  W, Wshift = VectorizationBase.pick_vector_width_shift(T)
+  ptry, ptrargs, N = setup_vmap!(f, y, Val{NonTemporal}(), args...)
+  # nt = min(Threads.nthreads(), VectorizationBase.SYS_CPU_THREADS, N >> (Wshift + 3))
+  nt = min(Threads.nthreads(), num_cores(), N >> (Wshift + 5))
 
-    # if !((nt > 1) && iszero(ccall(:jl_in_threaded_region, Cint, ())))
-    if nt < 2
-        _vmap_singlethread!(f, ptry, Zero(), N, Val{NonTemporal}(), ptrargs)
-        return
-    end
+  # if !((nt > 1) && iszero(ccall(:jl_in_threaded_region, Cint, ())))
+  if nt < 2
+    _vmap_singlethread!(f, ptry, Zero(), N, Val{NonTemporal}(), ptrargs)
+    return
+  end
 
-    cfunc = vmap_closure(f, ptry, ptrargs, Val{NonTemporal}())
-    vmc = VmapClosure{NonTemporal}(f, ptry, ptrargs)
-    Nveciter = (N + (W-1)) >> Wshift
-    Nd, Nr = divrem(Nveciter, nt)
-    NdW = Nd << Wshift
-    NdWr = NdW + W
-    GC.@preserve cfunc begin
-        start = 0
-        for tid ∈ 1:nt-1
-            stop = start + ifelse(tid ≤ Nr, NdWr, NdW)
-            launch_thread_vmap!(tid, cfunc, ptry, ptrargs, start, stop)
-            start = stop
-        end
-        _vmap_singlethread!(f, ptry, start, N, Val{NonTemporal}(), ptrargs)
-        for tid ∈ 1:nt-1
-            ThreadingUtilities.wait(tid)
-        end
+  cfunc = vmap_closure(f, ptry, ptrargs, Val{NonTemporal}())
+  vmc = VmapClosure{NonTemporal}(f, ptry, ptrargs)
+  Nveciter = (N + (W-1)) >> Wshift
+  Nd, Nr = divrem(Nveciter, nt)
+  NdW = Nd << Wshift
+  NdWr = NdW + W
+  GC.@preserve cfunc begin
+    start = 0
+    for tid ∈ 1:nt-1
+      stop = start + ifelse(tid ≤ Nr, NdWr, NdW)
+      launch_thread_vmap!(tid, cfunc, ptry, ptrargs, start, stop)
+      start = stop
     end
-    nothing
+    _vmap_singlethread!(f, ptry, start, N, Val{NonTemporal}(), ptrargs)
+    for tid ∈ 1:nt-1
+      ThreadingUtilities.wait(tid)
+    end
+  end
+  nothing
 end
 @generated function gc_preserve_vmap!(f::F,
     y::AbstractArray,
@@ -356,6 +356,7 @@ function vmapnt!(
 ) where {F,A}
   if check_args(y, args...) && all_dense(y, args...)
     gc_preserve_vmap!(f, y, Val{true}(), Val{false}(), args...)
+    Threads.atomic_fence()
   else
     map!(f, y, args...)
   end
@@ -370,6 +371,7 @@ function vmapntt!(
 ) where {F,A}
   if check_args(y, args...) && all_dense(y, args...)
     gc_preserve_vmap!(f, y, Val{true}(), Val{true}(), args...)
+    Threads.atomic_fence()
   else
     map!(f, y, args...)
   end
