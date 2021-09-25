@@ -208,7 +208,7 @@ end
 function unroll_no_reductions(ls, order, vloopsym)
   size_T = biggest_type_size(ls)
   W, Wshift = lsvecwidthshift(ls, vloopsym, size_T)
-
+  
   compute_rt = load_rt = store_rt = 0.0
   unrolled = last(order)
   i = 0
@@ -222,7 +222,8 @@ function unroll_no_reductions(ls, order, vloopsym)
       unrolled = unrolled_candidate
     end
   end
-    # latency not a concern, because no depchains
+  # latency not a concern, because no depchains
+  innerloop = last(order)
   compute_l = 0.0
   rpp = 0 # register pressure proportional to unrolling
   rpc = 0 # register pressure independent of unroll factor
@@ -246,8 +247,12 @@ function unroll_no_reductions(ls, order, vloopsym)
   u = if compute_rt ≤ 1
     4
   elseif compute_rt > memory_rt
-    clamp(round(Int, compute_l / compute_rt), 1, 4)
-    # max(1, VectorizationBase.nextpow2( min( 4, round(Int, 8 / compute_rt) ) ))
+    # @show load_rt, store_rt, compute_rt, compute_l, rpc, rpp
+    # if compute_rt > 40
+      # max(VectorizationBase.nextpow2( min( 4, round(Int, compute_rt / memory_rt) ) ), 1)
+    # else
+    clamp(round(Int, compute_l / compute_rt), 1, Core.ifelse(compute_rt>80, 2, 4))
+    # end
   elseif iszero(load_rt)
     iszero(store_rt) ? 4 : max(1, min(4, round(Int, 2compute_rt / store_rt)))
   else
@@ -269,7 +274,7 @@ function unroll_no_reductions(ls, order, vloopsym)
     # motivation for skipping division by loads here: https://github.com/microhh/stencilbuilder/blob/master/julia/stencil_julia_4th.jl
     # Some values:
     # (load_rt, store_rt, compute_rt, compute_l, u, rpc, rpp) = (52.0, 3.0, 92.0, 736.0, 4, 0.0, 52.0)
-    # This is fastest when `u = 4`, but `reg_constraint` was restricting it to 1.
+    # This is fastest when `u = 4`, but `reg_constraint` was restricting it to 1. ## later benchmarks were faster with u = 2?
     # Obviously, this limitation on number of registers didn't seem so important in practice.
     # So, heuristically I check if compute latency dominates the problem, in which case unrolling could be expected to benefit us.
     # Ideally, we'd count the number of loads that actually have to be live at a given time. But this heuristic is hopefully okay for now.
@@ -1462,7 +1467,7 @@ function choose_order_cost(ls::LoopSet, v::Int = 0)
   fill_children!(ls)
   resize!(ls.loop_order, length(ls.loopsymbols))
   sld = store_load_deps(operations(ls))
-  if num_loops(ls) > 1
+  if (num_loops(ls) > 1) && (length(ls.operations) ≤ 100)
     torder, tunroll, ttile, tvec, tU, tT, tc, shouldinline = choose_tile(ls, sld, v)
   else
     torder = names(ls) # dummy
