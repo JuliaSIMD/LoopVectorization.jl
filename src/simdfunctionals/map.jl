@@ -129,6 +129,7 @@ function (m::VmapClosure{NonTemporal,F,D,N,A})(p::Ptr{UInt}) where {NonTemporal,
   (offset, stop ) = ThreadingUtilities.load(p, Int, offset)
   
   _vmap_singlethread!(m.f, dest, start, stop, Val{NonTemporal}(), args)
+  NonTemporal && Threads.atomic_fence()
   nothing
 end
 
@@ -221,26 +222,27 @@ function vmap_multithread!(
   end
   nothing
 end
-@generated function gc_preserve_vmap!(f::F,
-    y::AbstractArray,
-    ::Val{NonTemporal},
-    ::Val{Threaded},
-    args::Vararg{AbstractArray,A}
+@generated function gc_preserve_vmap!(
+  f::F,
+  y::AbstractArray,
+  ::Val{NonTemporal},
+  ::Val{Threaded},
+  args::Vararg{AbstractArray,A}
 ) where {F,A,NonTemporal,Threaded}
-    m = Threaded ? :vmap_multithread! : :vmap_singlethread!
-    call = Expr(:call, m, :f, :y, Expr(:call, Expr(:curly, :Val, NonTemporal)))
-    q = Expr(:block, Expr(:meta, :inline))
-    gcpres = Expr(:gc_preserve, call)
-    for a ∈ 1:A
-        arg = Symbol(:arg_,a)
-        parg = Symbol(:parg_,a)
-        push!(q.args, Expr(:(=), arg, :(@inbounds args[$a])))#Expr(:ref, :args, a)))
-        push!(q.args, Expr(:(=), parg, Expr(:call, :preserve_buffer, arg)))
-        push!(call.args, arg)
-        push!(gcpres.args, parg)
-    end
-    push!(q.args, gcpres, :y)
-    q
+  m = Threaded ? :vmap_multithread! : :vmap_singlethread!
+  call = Expr(:call, m, :f, :y, Expr(:call, Expr(:curly, :Val, NonTemporal)))
+  q = Expr(:block, Expr(:meta, :inline))
+  gcpres = Expr(:gc_preserve, call)
+  for a ∈ 1:A
+    arg = Symbol(:arg_,a)
+    parg = Symbol(:parg_,a)
+    push!(q.args, Expr(:(=), arg, :(@inbounds args[$a])))#Expr(:ref, :args, a)))
+    push!(q.args, Expr(:(=), parg, Expr(:call, :preserve_buffer, arg)))
+    push!(call.args, arg)
+    push!(gcpres.args, parg)
+  end
+  push!(q.args, gcpres, :y)
+  q
 end
 
 
@@ -356,7 +358,6 @@ function vmapnt!(
 ) where {F,A}
   if check_args(y, args...) && all_dense(y, args...)
     gc_preserve_vmap!(f, y, Val{true}(), Val{false}(), args...)
-    Threads.atomic_fence()
   else
     map!(f, y, args...)
   end
@@ -371,7 +372,6 @@ function vmapntt!(
 ) where {F,A}
   if check_args(y, args...) && all_dense(y, args...)
     gc_preserve_vmap!(f, y, Val{true}(), Val{true}(), args...)
-    Threads.atomic_fence()
   else
     map!(f, y, args...)
   end

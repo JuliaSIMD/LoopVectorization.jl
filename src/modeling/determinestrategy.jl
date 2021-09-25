@@ -792,46 +792,48 @@ function maxnegativeoffset(ls::LoopSet, op::Operation, unrollsyms::UnrollSymbols
     mno, i
 end
 function load_elimination_cost_factor!(
-    cost_vec, reg_pressure, choose_to_inline, ls::LoopSet, op::Operation, iters, unrollsyms::UnrollSymbols, Wshift, size_T
+  cost_vec, reg_pressure, choose_to_inline, ls::LoopSet, op::Operation, iters, unrollsyms::UnrollSymbols, Wshift, size_T
 )
-    @unpack u₁loopsym, u₂loopsym, vloopsym = unrollsyms
-    if !iszero(first(isoptranslation(ls, op, unrollsyms)))
-        rt, lat, rp = cost(ls, op, (u₁loopsym, u₂loopsym), vloopsym, Wshift, size_T)
-        # rt = Core.ifelse(isvectorized(op), 0.5rt, rt)
-        rto = rt
-        rt *= iters
-            # rt *= factor1; rp *= factor2;
-        choose_to_inline[] = true
-        # for loop ∈ ls.loops
-        #     # If another loop is short, assume that LLVM will unroll it, in which case
-        #     # we want to be a little more conservative in terms of register pressure.
-        #     #FIXME: heuristic hack to get some desired behavior.
-        #     if isstaticloop(loop) && length(loop) ≤ 4
-        #         itersym = loop.itersymbol
-        #         if itersym !== u₁loopsym && itersym !== u₂loopsym
-        #             return (0.25, dynamic_register_count() == 32 ? 2.0 : 1.0)
-        #             # return (0.25, 1.0)
-        #             return true
-        #         end
-        #     end
-        # end
-        # # (0.25, dynamic_register_count() == 32 ? 1.2 : 1.0)
-        # (0.25, 1.0)
-        # cost_vec[1] -= rt
-        # cost_vec[1] -= 0.5625 * iters
-      # cost_vec[1] -= 0.5625 * iters / 2
-      # @show rto, 0.8rt, op
-        reg_pressure[1] += 0.25rp
-        cost_vec[2] += rt
-        reg_pressure[2] += rp
-        cost_vec[3] += rt
-        # currently only place `reg_pressure[3]` is updated
-        reg_pressure[3] += rp
-        true
-    else
-        (1.0, 1.0)
-        false
-    end
+  @unpack u₁loopsym, u₂loopsym, vloopsym = unrollsyms
+  if !iszero(first(isoptranslation(ls, op, unrollsyms)))
+    rt, lat, rp = cost(ls, op, (u₁loopsym, u₂loopsym), vloopsym, Wshift, size_T)
+    # rt = Core.ifelse(isvectorized(op), 0.5rt, rt)
+    rto = rt
+    rt *= iters
+    # rt *= factor1; rp *= factor2;
+    choose_to_inline[] = true
+    # for loop ∈ ls.loops
+    #     # If another loop is short, assume that LLVM will unroll it, in which case
+    #     # we want to be a little more conservative in terms of register pressure.
+    #     #FIXME: heuristic hack to get some desired behavior.
+    #     if isstaticloop(loop) && length(loop) ≤ 4
+    #         itersym = loop.itersymbol
+    #         if itersym !== u₁loopsym && itersym !== u₂loopsym
+    #             return (0.25, dynamic_register_count() == 32 ? 2.0 : 1.0)
+    #             # return (0.25, 1.0)
+    #             return true
+    #         end
+    #     end
+    # end
+    # u₁c, u₂c = child_dependent_u₁u₂(op)
+    # rp = max(zero(rp), rp - one(rp))
+    # # (0.25, dynamic_register_count() == 32 ? 1.2 : 1.0)
+    # (0.25, 1.0)
+    # cost_vec[1] -= rt
+    # cost_vec[1] -= 0.5625 * iters
+    # cost_vec[1] -= 0.5625 * iters / 2
+    # @show rto, 0.8rt, op
+    reg_pressure[1] += 0.25rp
+    cost_vec[2] += rt
+    reg_pressure[2] += rp
+    cost_vec[3] += rt
+    # currently only place `reg_pressure[3]` is updated
+    reg_pressure[3] += rp
+    true
+  else
+    (1.0, 1.0)
+    false
+  end
 end
 function loadintostore(ls::LoopSet, op::Operation)
   isload(op) || return false # leads to bad behavior more than it helps
@@ -888,6 +890,10 @@ function add_constant_offset_load_elmination_cost!(
     # we treat this as the unrolled loop getting eliminated is split into 2 parts:
     # 1 a non-cost-reduced part, with factor udependent_reduction
     # 2 a cost-reduced part, with factor uindependent_increase
+    if opisininnerloop
+      u₁c, u₂c = child_dependent_u₁u₂(op)
+      rp = max(zero(rp), rp - one(rp))
+    end
     if uid == 1 # u₁reduces was false
       @assert !u₁reduces
       # max negative offset was in the u₁ unroll direction
