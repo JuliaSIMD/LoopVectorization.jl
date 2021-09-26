@@ -651,8 +651,9 @@
         @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 2, 8)
       end            
     elseif LoopVectorization.register_count() == 16
-      @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 2, 4)
-      # @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :n, :m, :n, 2, 4)
+      # vectorizing `n` is better, as we unroll `m`, neaning `C` can use shuffle stores
+      # as we don't unroll `k`, we can't use shuffle loads from `C`
+      @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :n, :m, :n, 2, 4)
     elseif LoopVectorization.register_count() == 8
       @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 1, 4)
     end

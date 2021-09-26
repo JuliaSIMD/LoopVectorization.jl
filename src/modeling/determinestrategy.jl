@@ -83,23 +83,9 @@ function cost(ls::LoopSet, op::Operation, (u₁,u₂)::Tuple{Symbol,Symbol}, vlo
           if isload(op) & (length(loopdependencies(op)) > 1)# vmov(a/u)pd
             srt += 0.5reg_size(ls) / cache_lnsze(ls)
           end
-          # srt += 0.3shifter # shifter == number of shuffles
-          # sl += 0.3shifter
           srt += shifter # shifter == number of shuffles
           sl += shifter
-          # shifter -= 1
-          # offset = 0.5reg_size(ls) / cache_lnsze(ls)
-          # r = 1 << shifter
-          # srt = srt*r + offset
-          # sl *= r
-        #   if shifter > 1 && (!(cannot_shuffle(op, u₁, u₂, contigind, indices)))
-        #     shifter -= 1
-        #     offset = 0.5reg_size(ls) / cache_lnsze(ls)
-        #   end
-        # else
         end
-        # @show srt, sl
-        # @show shifter, offset, dont_shuffle
       elseif isload(op) & (length(loopdependencies(op)) > 1)# vmov(a/u)pd
         # penalize vectorized loads with more than 1 loopdep
         # heuristic; more than 1 loopdep means that many loads will not be aligned
