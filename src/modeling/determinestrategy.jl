@@ -43,7 +43,10 @@ function unitstride(ls::LoopSet, op::Operation, s::Symbol)
     end
     true
 end
-
+function cannot_shuffle(op::Operation, u₁::Symbol, u₂::Symbol, contigind::Symbol, indices) # assumes isvectorized and !unitstride
+  !((!rejectcurly(op) && (((contigind === CONSTANTZEROINDEX) && ((length(indices) > 1) && (indices[2] === u₁) || (indices[2] === u₂))) ||
+    ((u₁ === contigind) | (u₂ === contigind)))))
+end
 function cost(ls::LoopSet, op::Operation, (u₁,u₂)::Tuple{Symbol,Symbol}, vloopsym::Symbol, Wshift::Int, size_T::Int = op.elementbytes)
   isconstant(op) && return 0.0, 0, 1.0#Float64(length(loopdependencies(op)) > 0)
   isloopvalue(op) && return 0.0, 0, 0.0
@@ -67,22 +70,36 @@ function cost(ls::LoopSet, op::Operation, (u₁,u₂)::Tuple{Symbol,Symbol}, vlo
         indices = getindices(op)
         contigind = first(indices)
         shifter = max(2,Wshift)
-        if rejectinterleave(op)
-          offset = 0.0 # gather/scatter, alignment doesn't matter
-        else
-          shifter -= 1
-          offset = 0.5reg_size(ls) / cache_lnsze(ls)
-          if shifter > 1 &&
-            (!rejectcurly(op) && (((contigind === CONSTANTZEROINDEX) && ((length(indices) > 1) && (indices[2] === u₁) || (indices[2] === u₂))) ||
-            ((u₁ === contigind) | (u₂ === contigind))))
-
-            shifter -= 1
-            offset = 0.5reg_size(ls) / cache_lnsze(ls)
+        # rejectinterleave false means omop
+        # cannot shuffle false means reject curly
+        # either false means shuffle
+        dont_shuffle = rejectinterleave(op) && cannot_shuffle(op, u₁, u₂, contigind, indices)
+        if dont_shuffle
+          # offset = 0.0 # gather/scatter, alignment doesn't matter
+          r = 1 << shifter
+          srt = srt*r# + offset
+          sl *= r
+        else#if rejectinterleave(op) # means omop
+          if isload(op) & (length(loopdependencies(op)) > 1)# vmov(a/u)pd
+            srt += 0.5reg_size(ls) / cache_lnsze(ls)
           end
+          # srt += 0.3shifter # shifter == number of shuffles
+          # sl += 0.3shifter
+          srt += shifter # shifter == number of shuffles
+          sl += shifter
+          # shifter -= 1
+          # offset = 0.5reg_size(ls) / cache_lnsze(ls)
+          # r = 1 << shifter
+          # srt = srt*r + offset
+          # sl *= r
+        #   if shifter > 1 && (!(cannot_shuffle(op, u₁, u₂, contigind, indices)))
+        #     shifter -= 1
+        #     offset = 0.5reg_size(ls) / cache_lnsze(ls)
+        #   end
+        # else
         end
-        r = 1 << shifter
-        srt = srt*r + offset
-        sl *= r
+        # @show srt, sl
+        # @show shifter, offset, dont_shuffle
       elseif isload(op) & (length(loopdependencies(op)) > 1)# vmov(a/u)pd
         # penalize vectorized loads with more than 1 loopdep
         # heuristic; more than 1 loopdep means that many loads will not be aligned
@@ -94,7 +111,7 @@ function cost(ls::LoopSet, op::Operation, (u₁,u₂)::Tuple{Symbol,Symbol}, vlo
         srt += 0.5reg_size(ls) / cache_lnsze(ls)
         # srt += 0.25reg_size(ls) / cache_lnsze(ls)
       end
-    elseif isstore(op) # broadcast or reductionstore; if store we want to penalize reduction
+    elseif isstore(op)# && isvectorized(first(parents(op))) # broadcast or reductionstore; if store we want to penalize reduction
       srt *= 3
       sl *= 3
     end
@@ -828,6 +845,7 @@ function load_elimination_cost_factor!(
     # cost_vec[1] -= 0.5625 * iters
     # cost_vec[1] -= 0.5625 * iters / 2
     # @show rto, 0.8rt, op
+    # reg_pressure[1] += 0.25rp
     reg_pressure[1] += 0.25rp
     cost_vec[2] += rt
     reg_pressure[2] += rp

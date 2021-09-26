@@ -146,7 +146,7 @@ function lower_load_no_optranslation!(
   u = ifelse(opu₁, u₁, 1)
   mvar = Symbol(variable_name(op, Core.ifelse(opu₂, suffix,-1)), '_', u)
   falseexpr = Expr(:call, lv(:False)); rs = staticexpr(reg_size(ls))
-  if (all(op.ref.loopedindex) && !rejectcurly(op)) && vectorization_profitable(op)
+  if (!rejectcurly(op)) && vectorization_profitable(op)
     inds = unrolledindex(op, td, mask, inds_calc_by_ptr_offset, ls)
     loadexpr = Expr(:call, lv(:_vload), sptr(op), inds)
     add_memory_mask!(loadexpr, op, td, mask, ls, 0)
@@ -222,7 +222,7 @@ function lower_load_for_optranslation!(
     ip = GlobalRef(VectorizationBase, :increment_ptr)
     vpo = vptr_offset(gptr)
     push!(q.args, Expr(:(=), vpo, Expr(:call, ip, ptr, vptr_offset(ptr), gespinds)))
-    push!(q.args, Expr(:(=), gptr, ptr))#Expr(:call, GlobalRef(VectorizationBase, :reconstruct_ptr), 
+    push!(q.args, Expr(:(=), gptr, ptr))#Expr(:call, GlobalRef(VectorizationBase, :reconstruct_ptr),
     fill!(inds_by_ptroff, true)
     @unpack ref, loopedindex = mref
     indices = copy(getindices(ref))
@@ -367,9 +367,27 @@ function rejectcurly(ls::LoopSet, op::Operation, u₁loopsym::Symbol, vloopsym::
       end
     else
       opp = findop(parents(op), ind)
+      (isu₁unrolled(opp) || isu₂unrolled(opp)) && return true
+      length(parents(opp)) == 2 || return true
+      if instruction(opp).instr === :(+) || instruction(opp).instr === :add_fast
+        isadd = true
+      elseif instruction(opp).instr === :(-) || instruction(opp).instr === :sub_fast
+        isadd = false
+      else
+        return true
+      end
+      opp1 = parents(opp)[1]
+      opp2 = parents(opp)[2]
       if isvectorized(opp)
         AV && return true
         AV = true
+        if isvectorized(opp1)
+          isvectorized(opp2) && return true
+          isloopvalue(opp1) || return true
+        else# opp2 vectorized
+          isadd || return true
+          isloopvalue(opp2) || return true
+        end
       end
       if (u₁loopsym === CONSTANTZEROINDEX) ? (CONSTANTZEROINDEX ∈ loopdependencies(opp)) : (isu₁unrolled(opp))
         AU && return true
@@ -393,7 +411,7 @@ function rejectinterleave(ls::LoopSet, op::Operation, vloop::Loop, idsformap::Su
       end
     end
   end
-  vloopsym = vloop.itersymbol; 
+  vloopsym = vloop.itersymbol;
   (first(getindices(op)) === vloopsym) && (length(idsformap) ≠ first(getstrides(op)) * gethint(strd))
 end
 # function lower_load_collection_manual_u₁unroll!(
@@ -501,7 +519,7 @@ function lower_load_collection!(
         u = Core.ifelse(opu₁, u₁, 1)
         for (i,(opid,o)) ∈ enumerate(idsformap)
             extractedv = Expr(:call, gf, collectionname, i, false)
-            
+
             _op = ops[opidmap[opid]]
             mvar = Symbol(variable_name(_op, Core.ifelse(opu₂, suffix, -1)), '_', u)
             push!(q.args, Expr(:(=), mvar, extractedv))
@@ -509,4 +527,3 @@ function lower_load_collection!(
         # unpack_collection!(q, ls, opidmap, idsformap, ua, loadexpr, collectionname, op, true)
     end
 end
-

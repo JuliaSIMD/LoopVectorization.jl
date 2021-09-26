@@ -570,21 +570,24 @@ function fill_children!(ls::LoopSet)
     end
   end
 end
+function rejectinterleave!(ls::LoopSet, op::Operation, u₁loop::Symbol, u₂loop::Symbol, vloopsym::Symbol, vloop::Loop)
+  setunrolled!(ls, op, u₁loop, u₂loop, vloopsym)
+  if accesses_memory(op)
+    rc = rejectcurly(ls, op, u₁loop, vloopsym)
+    op.rejectcurly = rc
+    if rc
+      op.rejectinterleave = true
+    else
+      omop = ls.omop
+      batchid, opind = omop.batchedcollectionmap[identifier(op)]
+      op.rejectinterleave = ((batchid == 0) || (!isvectorized(op))) || rejectinterleave(ls, op, vloop, omop.batchedcollections[batchid])
+    end
+  end
+end
 function cacheunrolled!(ls::LoopSet, u₁loop::Symbol, u₂loop::Symbol, vloopsym::Symbol)
   vloop = getloop(ls, vloopsym)
   for op ∈ operations(ls)
-    setunrolled!(ls, op, u₁loop, u₂loop, vloopsym)
-    if accesses_memory(op)
-      rc = rejectcurly(ls, op, u₁loop, vloopsym)
-      op.rejectcurly = rc
-      if rc
-        op.rejectinterleave = true
-      else
-        omop = ls.omop
-        batchid, opind = omop.batchedcollectionmap[identifier(op)]
-        op.rejectinterleave = ((batchid == 0) || (!isvectorized(op))) || rejectinterleave(ls, op, vloop, omop.batchedcollections[batchid])
-      end
-    end
+    rejectinterleave!(ls, op, u₁loop, u₂loop, vloopsym, vloop)
   end
 end
 function setunrolled!(ls::LoopSet, op::Operation, u₁loopsym::Symbol, u₂loopsym::Symbol, vectorized::Symbol)
@@ -1411,7 +1414,6 @@ function fill_offset_memop_collection!(ls::LoopSet)
   end
   for (collectionid,opidc) ∈ enumerate(opids)
     length(opidc) > 1 || continue
-
     # we check if we can turn the offsets into an unroll
     # we have up to `length(opidc)` loads to do, so we allocate that many "base" vectors
     # then we iterate through them, adding them to collections as appropriate
