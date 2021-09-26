@@ -894,6 +894,26 @@ end
 @inline canonicalize_range(r::CartesianIndices) = CartesianIndices(map(canonicalize_range, r.indices))
 @inline canonicalize_range(r::Base.OneTo{U}) where {U <: Unsigned} = One():last(r)
 
+function canonicalize_range(x)
+  throw(ArgumentError("""
+    `@turbo` only supports loops iterating over ranges, and not objects of type `$(typeof(x))`.
+    It is recommended to instead iterate over `eachindex(...)` and then index the object in the loop.
+    For example, rewrite
+    ```julia
+      @turbo for xᵢ in x
+        ...
+      end
+    ```
+    as
+    ```julia
+      @turbo for i in eachindex(x)
+        xᵢ = x[i]
+        ...
+      end
+    ```
+  """))
+end
+
 function misc_loop!(ls::LoopSet, r::Union{Expr,Symbol}, itersym::Symbol, staticstepone::Bool)::Loop
   rangename = gensym!(ls, "looprange" * string(itersym)); lenname = gensym!(ls, "looplen" * string(itersym));
   pushprepreamble!(ls, Expr(:(=), rangename, Expr(:call, lv(:canonicalize_range), :(@inbounds $(static_literals!(r))))))

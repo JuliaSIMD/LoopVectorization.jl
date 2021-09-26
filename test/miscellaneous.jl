@@ -1419,6 +1419,15 @@ end
       @test issue_257!(A0,G) ≈ issue_257_avx!(A1,G)
     end
 
+    function sum_range(x)
+      s = zero(eltype(x))
+      @turbo for xᵢ ∈ x
+        s += xᵢ
+      end
+      s
+    end
+    @test sum_range(-3:8) == sum(-3:8)
+    @test_throws ArgumentError sum_range(Int[1,2])
   end
 
 
