@@ -127,9 +127,71 @@ function not_an_outer_reduct!(r, N::Int, x = 2.0, y= nothing) # there was a bug 
   end
   r
 end
+function tk(v::Vector{T}, c_::Vector{T}, n::Int) where {T}
+  l00 = l10 = l01 = l11 = zero(T)
+  @turbo for j ∈ 1:n-1
+    a00 =  v[3n-3j+1]
+    a01 = -v[3n-3j+2]
+    a10 =  v[3n-3j+2]
+    a11 =  v[3n-3j+3]
+    b00 =  c_[4j+1]
+    b01 =  c_[4j+2]
+    b10 =  c_[4j+3]
+    b11 =  c_[4j+4]
+    l00 += a00*b00 + a01*b10
+    l01 += a00*b01 + a01*b11
+    l10 += a10*b00 + a11*b10
+    l11 += a10*b01 + a11*b11
+  end
+  l00 + l01 + l10 + l11  
+end
+function tk2(v::Vector{T}, c_::Vector{T}, n::Int) where {T}
+  l00 = l10 = l01 = l11 = zero(T)
+  @turbo for j ∈ 1:n-1
+    i = n-j
+    a00 =  v[3i+1]
+    a01 = -v[3i+2]
+    a10 =  v[3i+2]
+    a11 =  v[3i+3]
+    b00 =  c_[4j+1]
+    b01 =  c_[4j+2]
+    b10 =  c_[4j+3]
+    b11 =  c_[4j+4]
+    l00 += a00*b00 + a01*b10
+    l01 += a00*b01 + a01*b11
+    l10 += a10*b00 + a11*b10
+    l11 += a10*b01 + a11*b11
+  end
+  l00 + l01 + l10 + l11  
+end
+function tk_base(v::Vector{T}, c_::Vector{T}, n::Int) where {T}
+  l00 = l10 = l01 = l11 = zero(T)
+  @inbounds @simd for j ∈ 1:n-1
+    a00 =  v[3n-3j+1]
+    a01 = -v[3n-3j+2]
+    a10 =  v[3n-3j+2]
+    a11 =  v[3n-3j+3]
+    i = n-j
+    a00 =  v[3i+1]
+    a01 = -v[3i+2]
+    a10 =  v[3i+2]
+    a11 =  v[3i+3]
+    b00 =  c_[4j+1]
+    b01 =  c_[4j+2]
+    b10 =  c_[4j+3]
+    b11 =  c_[4j+4]
+    l00 += a00*b00 + a01*b10
+    l01 += a00*b01 + a01*b11
+    l10 += a10*b00 + a11*b10
+    l11 += a10*b01 + a11*b11
+  end
+  l00 + l01 + l10 + l11  
+end
 @testset "Outer Reductions" begin
   for T ∈ [Float32,Float64,Int32,Int64]
     test_awmean(T)
+    v = rand(T, 4*127); c = rand(T, 4*127); 
+    @test tk(v, c, 127) ≈ tk2(v, c, 127) ≈ tk_base(v, c, 127);
   end
   @test all(==(7.4), not_an_outer_reduct!(Vector{Float64}(undef, 5), 17, 7.4))
   for n ∈ 1:20, k ∈ 1:5
@@ -137,6 +199,5 @@ end
   end
   omega = rand(87,87);
   @test reg_term(omega) ≈ reg_term_turbo(omega)
-
 end
 

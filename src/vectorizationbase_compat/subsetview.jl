@@ -35,16 +35,18 @@ end
 @inline _subsetview(ptr::AbstractStridedPointer, ::StaticInt{I}, J::Tuple{J1,J2,Vararg}) where {I,J1,J2} = _subsetview(subsetview(ptr, StaticInt{I}(), first(J)), StaticInt{I}(), Base.tail(J))
 @inline subsetview(ptr::AbstractStridedPointer, ::StaticInt{I}, J::CartesianIndex) where {I} = _subsetview(ptr, StaticInt{I}(), Tuple(J))
 
-@inline _gesp(sp::VectorizationBase.FastRange, ::StaticInt{1}, i) = gesp(sp, (i,))
-@generated function _gesp(sp::AbstractStridedPointer{T,N}, ::StaticInt{I}, i::Integer) where {I,N,T}
+@inline _gesp(sp::VectorizationBase.FastRange, ::StaticInt{1}, i, ::StaticInt{1}) = gesp(sp, (i,))
+@generated function _gesp(sp::AbstractStridedPointer{T,N}, ::StaticInt{I}, i::Integer, ::StaticInt{D}) where {I,N,T,D}
   t = Expr(:tuple)
   for j ∈ 1:I-1
-    push!(t.args, staticexpr(0))
+    # push!(t.args, staticexpr(0))
+    push!(t.args, VectorizationBase.NullStep())
   end
   push!(t.args, :i)
-  if I > 1
+  if D > 1
     for j ∈ I+1:N
-      push!(t.args, staticexpr(0))
+      # push!(t.args, staticexpr(0))
+      push!(t.args, VectorizationBase.NullStep())
     end
   end
   quote

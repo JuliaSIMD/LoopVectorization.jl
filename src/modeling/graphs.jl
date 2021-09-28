@@ -574,6 +574,7 @@ function rejectinterleave!(ls::LoopSet, op::Operation, u₁loop::Symbol, u₂loo
   setunrolled!(ls, op, u₁loop, u₂loop, vloopsym)
   if accesses_memory(op)
     rc = rejectcurly(ls, op, u₁loop, vloopsym)
+      # @show rc, op
     op.rejectcurly = rc
     if rc
       op.rejectinterleave = true

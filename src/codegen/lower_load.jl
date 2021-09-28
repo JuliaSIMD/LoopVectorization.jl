@@ -316,7 +316,7 @@ function lower_load!(
     _lower_load!(q, ls, op, td, mask)
 end
 function _lower_load!(
-    q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, mask::Bool, inds_calc_by_ptr_offset::Vector{Bool} = indices_calculated_by_pointer_offsets(ls, op.ref)
+  q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, mask::Bool, inds_calc_by_ptr_offset::Vector{Bool} = indices_calculated_by_pointer_offsets(ls, op.ref)
 )
   if rejectinterleave(op)
     return lower_load_no_optranslation!(q, ls, op, td, mask, inds_calc_by_ptr_offset)
@@ -367,8 +367,12 @@ function rejectcurly(ls::LoopSet, op::Operation, u₁loopsym::Symbol, vloopsym::
       end
     else
       opp = findop(parents(op), ind)
-      (isu₁unrolled(opp) || isu₂unrolled(opp)) && return true
-      length(parents(opp)) == 2 || return true
+      isu₂unrolled(opp) && return true
+      if length(parents(opp)) == 3
+        instruction(opp).instr === :muladd 
+      elseif length(parents(opp)) ≠ 2
+        return true
+      end
       if instruction(opp).instr === :(+) || instruction(opp).instr === :add_fast
         isadd = true
       elseif instruction(opp).instr === :(-) || instruction(opp).instr === :sub_fast
@@ -412,7 +416,8 @@ function rejectinterleave(ls::LoopSet, op::Operation, vloop::Loop, idsformap::Su
     end
   end
   vloopsym = vloop.itersymbol;
-  (first(getindices(op)) === vloopsym) && (length(idsformap) ≠ first(getstrides(op)) * gethint(strd))
+  # @show op first(getindices(op)) length(idsformap), first(getstrides(op)), gethint(strd)
+  (first(getindices(op)) === vloopsym) && (length(idsformap) ≠ abs(first(getstrides(op)) * gethint(strd)))
 end
 # function lower_load_collection_manual_u₁unroll!(
 #     q::Expr, ls::LoopSet, opidmap::Vector{Int},
