@@ -66,7 +66,7 @@ function add_prefetches!(q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, pr
         prefetchstride *= gethint(prefetchloop_step)
     end
     offsets[prefetchind] = inner_offset + prefetchstride
-    gespinds = mem_offset_u(op, td, indices_calculated_by_pointer_offsets(ls, op.ref), false, 0, ls)
+    gespinds = mem_offset_u(op, td, indices_calculated_by_pointer_offsets(ls, op.ref), false, 0, ls, false)
     offsets[prefetchind] = inner_offset
     ptr = vptr(op)
     gptr = Symbol(ptr, "##GESPEDPREFETCH##")
@@ -151,12 +151,13 @@ function lower_load_no_optranslation!(
     loadexpr = Expr(:call, lv(:_vload), sptr(op), inds)
     add_memory_mask!(loadexpr, op, td, mask, ls, 0)
     push!(loadexpr.args, falseexpr, rs) # unaligned load
+    # @show op loadexpr
     push!(q.args, Expr(:(=), mvar, loadexpr))
   elseif (u₁ > 1) & opu₁
     t = Expr(:tuple)
     sptrsym = sptr!(q, op)
     for u ∈ 1:u₁
-      inds = mem_offset_u(op, td, inds_calc_by_ptr_offset, true, u-1, ls)
+      inds = mem_offset_u(op, td, inds_calc_by_ptr_offset, true, u-1, ls, false)
       loadexpr = Expr(:call, lv(:_vload), sptrsym, inds)
       domask = mask && (isvectorized(op) & ((u == u₁) | (vloopsym !== u₁loopsym)))
       add_memory_mask!(loadexpr, op, td, domask, ls, u)
@@ -166,7 +167,7 @@ function lower_load_no_optranslation!(
     end
     push!(q.args, Expr(:(=), mvar, Expr(:call, lv(:VecUnroll), t)))
   else
-    inds = mem_offset_u(op, td, inds_calc_by_ptr_offset, true, 0, ls)
+    inds = mem_offset_u(op, td, inds_calc_by_ptr_offset, true, 0, ls, false#= not unrolled =#)
     loadexpr = Expr(:call, lv(:_vload), sptr(op), inds)
     add_memory_mask!(loadexpr, op, td, mask, ls, 0)
     push!(loadexpr.args, falseexpr, rs)
@@ -209,7 +210,7 @@ function lower_load_for_optranslation!(
     # abs of steps are equal
     equal_steps = (step₁ == step₂) ⊻ (posindicator ≠ 0x03)
     _td = UnrollArgs(u₁loop, u₂loop, vloop, u₁, u₂max, Core.ifelse(equal_steps, 0, u₂max - 1))
-    gespinds = mem_offset(op, _td, inds_by_ptroff, false, ls)
+    gespinds = mem_offset(op, _td, inds_by_ptroff, false, ls, false)
     ptr = vptr(op)
     gptr = Symbol(ptr, "##GESPED##")
     for i ∈ eachindex(gespinds.args)
@@ -457,7 +458,7 @@ function lower_load_collection!(
     # construct dummy unrolled loop
     offset_dummy_loop = Loop(first(opindices), MaybeKnown(1), MaybeKnown(1024), MaybeKnown(1), Symbol(""), Symbol(""))
     unrollcurl₂ = unrolled_curly(op, nouter, offset_dummy_loop, vloop, mask, 1) # interleave always 1 here
-    inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false, 0, ls)
+    inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false, 0, ls, false)
     falseexpr = Expr(:call, lv(:False)); rs = staticexpr(reg_size(ls));
 
     opu₁, opu₂ = isunrolled_sym(op, u₁loopsym, u₂loopsym, vloopsym, ls)
@@ -499,7 +500,7 @@ function lower_load_collection!(
         for u ∈ 0:u₁-1
             collectionname_u = Symbol(collectionname, :_, u)
             if u ≠ 0
-                inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false, u, ls)
+                inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false, u, ls, false)
                 uinds = Expr(:call, unrollcurl₂, inds)
                 loadexpr = copy(loadexpr)
                 loadexpr.args[3] = Expr(:call, unrollcurl₂, inds)

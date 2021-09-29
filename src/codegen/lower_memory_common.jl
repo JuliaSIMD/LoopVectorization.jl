@@ -139,7 +139,7 @@ unrolled loads are calculated as offsets with respect to an initial gesp. This h
 Therefore, unrolled === true results in inds being ignored.
 _mm means to insert `mm`s.
 """
-function mem_offset(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Vector{Bool}, _mm::Bool, ls::LoopSet)
+function mem_offset(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Vector{Bool}, _mm::Bool, ls::LoopSet, preserve_vecunroll::Bool)
   # @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
   ret = Expr(:tuple)
   indices = getindicesonly(op)
@@ -163,19 +163,17 @@ function mem_offset(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Vect
       # addoffset!(ret, newname, stride, offset, _mmi)
       _mmi = indvectorized && parent !== op && (!isvectorized(parent))
       @assert !_mmi "Please file an issue with an example of how you got this."
-      if isu₁unrolled(parent) & (td.u₁ > 1)
+      if (isu₁unrolled(parent) & (td.u₁ > 1)) & (!preserve_vecunroll)
         gf = GlobalRef(Core,:getfield)
         firstnew = Expr(:call, gf, Expr(:call, gf, newname, 1), 1, false)
         if isvectorized(parent) & (!_mm)
           firstnew = Expr(:call, lv(:unmm), firstnew)
         end
         addoffset!(ret, 0, firstnew, offset, false)
+      elseif isvectorized(parent) & (!_mm)
+        addoffset!(ret, 0, Expr(:call, lv(:unmm), newname), offset, false)
       else
-        if isvectorized(parent) & (!_mm)
-          addoffset!(ret, 0, Expr(:call, lv(:unmm), newname), offset, false)
-        else
-          addoffset!(ret, 0, newname, offset, false)
-        end
+        addoffset!(ret, 0, newname, offset, false)
       end
     end
   end
@@ -275,18 +273,18 @@ function unrolled_curly(op::Operation, u₁::Int, u₁loop::Loop, vloop::Loop, m
   end
 end
 function unrolledindex(op::Operation, td::UnrollArgs, mask::Bool, inds_calc_by_ptr_offset::Vector{Bool}, ls::LoopSet)
-    @unpack u₁, u₁loopsym, u₁loop, vloop = td
-    isone(u₁) && return mem_offset_u(op, td, inds_calc_by_ptr_offset, true, 0, ls)
-    any(==(u₁loopsym), getindicesonly(op)) || return mem_offset_u(op, td, inds_calc_by_ptr_offset, true, 0, ls)
+  @unpack u₁, u₁loopsym, u₁loop, vloop = td
+  isone(u₁) && return mem_offset_u(op, td, inds_calc_by_ptr_offset, true, 0, ls, false)
+  any(==(u₁loopsym), getindicesonly(op)) || return mem_offset_u(op, td, inds_calc_by_ptr_offset, true, 0, ls, true)
 
-    unrollcurl = unrolled_curly(op, u₁, u₁loop, vloop, mask)
-    ind = mem_offset_u(op, td, inds_calc_by_ptr_offset, false, 0, ls)
-    Expr(:call, unrollcurl, ind)
+  unrollcurl = unrolled_curly(op, u₁, u₁loop, vloop, mask)
+  ind = mem_offset_u(op, td, inds_calc_by_ptr_offset, false, 0, ls, false)
+  Expr(:call, unrollcurl, ind)
 end
 
 function mem_offset_u(
-  op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Vector{Bool}, _mm::Bool, incr₁::Int, ls::LoopSet
-  )
+  op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Vector{Bool}, _mm::Bool, incr₁::Int, ls::LoopSet, preserve_vecunroll::Bool
+)
   @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
   @unpack u₁loopsym, u₂loopsym, vloopsym, u₁step, u₂step, vstep, suffix = td
 
@@ -299,7 +297,7 @@ function mem_offset_u(
   # allbasezero = all(inds_calc_by_ptr_offset) && all(iszero, offsets)
   loopedindex = op.ref.loopedindex
   if iszero(incr₁) & iszero(incr₂)
-    return mem_offset(op, td, inds_calc_by_ptr_offset, _mm, ls)
+    return mem_offset(op, td, inds_calc_by_ptr_offset, _mm, ls, preserve_vecunroll)
     # append_inds!(ret, indices, loopedindex)
   else
     for (n,ind) ∈ enumerate(indices)
@@ -334,7 +332,7 @@ function mem_offset_u(
             newname_unmm = mulexpr(newname_unmm,stride)
           end
           addoffset!(ret, 0, newname_unmm, offset, false)
-        elseif isu₁unrolled(parent) & (td.u₁ > 1)
+        elseif (isu₁unrolled(parent) & (td.u₁ > 1)) && !preserve_vecunroll
           gf = GlobalRef(Core,:getfield)
           firstnew = Expr(:call, gf, Expr(:call, gf, newname, 1), incr₁+1, false)
           if stride ≠ 1
@@ -419,20 +417,6 @@ function add_memory_mask!(memopexpr::Expr, op::Operation, td::UnrollArgs, mask::
   end
   nothing
 end
-
-# varassignname(var::Symbol, u::Int, isunrolled::Bool) = isunrolled ? Symbol(var, u) : var
-# # name_memoffset only gets called when vectorized
-# function name_memoffset(var::Symbol, op::Operation, td::UnrollArgs, u₁unrolled::Bool, inds_calc_by_ptr_offset::Vector{Bool}, ls::LoopSet)
-#     @unpack u₁, u₁loopsym, u₂loopsym, suffix = td
-#     if (suffix == -1) && u₁ < 0 # u₁ == -1 sentinel value meaning not unrolled
-#         name = var
-#         mo = mem_offset(op, td, inds_calc_by_ptr_offset, true, 0, ls)
-#     else
-#         name = u₁unrolled ? Symbol(var, u₁) : var
-#         mo = mem_offset_u(op, td, inds_calc_by_ptr_offset, true, 0, ls)
-#     end
-#     name, mo
-# end
 
 function condvarname_and_unroll(cond::Operation, u₁loop::Symbol, u₂loop::Symbol, vloop::Symbol, suffix::Int, opu₂::Bool, ls::LoopSet)
     condvar, condu₁, condu₂ = variable_name_and_unrolled(cond, u₁loop, u₂loop, vloop, Core.ifelse(opu₂, suffix, -1), ls)

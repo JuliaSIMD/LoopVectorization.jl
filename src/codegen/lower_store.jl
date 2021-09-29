@@ -92,7 +92,7 @@ function lower_store_collection!(
     
     offset_dummy_loop = Loop(first(getindices(op)), MaybeKnown(1), MaybeKnown(1024), MaybeKnown(1), Symbol(""), Symbol(""))
     unrollcurl₂ = unrolled_curly(op, nouter, offset_dummy_loop, vloop, mask, 1)
-    inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false, 0, ls)
+    inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false, 0, ls, false)
     falseexpr = Expr(:call, lv(:False));
     aliasexpr = falseexpr;
     # trueexpr = Expr(:call, lv(:True));
@@ -150,7 +150,7 @@ function lower_store_collection!(
             end
             storeexpr_tmp.args[3] = Expr(:call, lv(:VecUnroll), vut)
             if u ≠ 0
-                storeexpr_tmp.args[4] = Expr(:call, unrollcurl₂, mem_offset_u(op, ua, inds_calc_by_ptr_offset, false, u, ls))
+                storeexpr_tmp.args[4] = Expr(:call, unrollcurl₂, mem_offset_u(op, ua, inds_calc_by_ptr_offset, false, u, ls, false))
             end
             push!(q.args, storeexpr_tmp)
         end
@@ -216,7 +216,7 @@ function lower_store!(
       data_u₁ && push!(q.args, Expr(:(=), mvard, Expr(:call, lv(:data), mvar)))
       sptrsym = sptr!(q, op)
       for u ∈ 1:u₁
-        inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, true, u-1, ls)
+        inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, true, u-1, ls, false)
         # @show isu₁unrolled(opp), opp
         storeexpr = if data_u₁
           if reductfunc === Symbol("")
@@ -235,7 +235,7 @@ function lower_store!(
         push!(q.args, storeexpr)
       end
     else
-      inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, true, 0, ls)
+      inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, true, 0, ls, false)
       storeexpr = if reductfunc === Symbol("")
         Expr(:call, lv(:_vstore!), sptr(op), mvar, inds)
       else
@@ -300,7 +300,7 @@ function lower_tiled_store!(blockq::Expr, op::Operation, ls::LoopSet, ua::Unroll
         push!(tup.args, Symbol(variable_name(opp, ifelse(isu₂, t, -1)), '_', u))
     end
     vut = Expr(:call, lv(:VecUnroll), tup) # `VecUnroll` of `VecUnroll`s
-    inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false, 0, ls)
+    inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false, 0, ls, false)
     unrollcurl₂ = unrolled_curly(op, u₂, u₂loop, vloop, mask)
     falseexpr = Expr(:call, lv(:False));
     aliasexpr = falseexpr;

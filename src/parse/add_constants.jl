@@ -109,7 +109,7 @@ function add_constant_vload!(ls::LoopSet, op::Operation, mpref::ArrayReferenceMe
     for ind ∈ getindicesonly(op)
       ensure_constant_lowered!(ls, mpref, ind)
     end
-    push!(vloadcall.args, mem_offset(op, UnrollArgs(dummyloop, dummyloop, dummyloop, 0, 0, 0), fill(false,nindices), true, ls))
+    push!(vloadcall.args, mem_offset(op, UnrollArgs(dummyloop, dummyloop, dummyloop, 0, 0, 0), fill(false,nindices), true, ls, false))
   end
   push!(vloadcall.args, Expr(:call, lv(:False)), staticexpr(reg_size(ls)))
   pushpreamble!(ls, Expr(:(=), temp, vloadcall))
