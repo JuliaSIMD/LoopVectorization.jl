@@ -1192,6 +1192,44 @@ function prepare_rhs_for_storage!(ls::LoopSet, RHS::Union{Symbol,Expr}, array, r
   return op
 end
 
+function unpack_tuple!(ls::LoopSet, LHS::Expr, RHS, elementbytes::Int, position::Int)
+  if Meta.isexpr(RHS, :tuple)
+    for i ∈ eachindex(LHS.args)
+      add_assignment!(ls, LHS.args[i], RHS.args[i], elementbytes, position)
+    end
+    return last(operations(ls)) # FIXME: dummy
+  end
+  @assert length(LHS.args) ≤ 14 "Functions returning more than 9 values aren't currently supported."
+  lhstemp = gensym!(ls, "lhstuple")
+  vparents = Operation[maybe_const_compute!(ls, lhstemp, add_operation!(ls, lhstemp, RHS, elementbytes, position), elementbytes, position)]
+  unpack_tuple!(ls, LHS, vparents, elementbytes, position)
+end
+
+function unpack_tuple!(ls::LoopSet, LHS::Expr, vparents::Vector{Operation}, elementbytes::Int, position::Int)
+  for i ∈ eachindex(LHS.args)
+    f = (:first,:second,:third,:fourth,:fifth,:sixth,:seventh,:eighth,:ninth,:tenth,:eleventh,:twelfth,:thirteenth,:last)[i]
+    lhsi = LHS.args[i]
+    if lhsi isa Symbol
+      add_compute!(ls, lhsi, f, vparents, elementbytes)
+      continue
+    elseif lhsi isa Expr
+      if lhsi.head === :ref
+        tempunpacksym = gensym!(ls, "tempunpack")
+        add_compute!(ls, tempunpacksym, f, vparents, elementbytes)
+        add_store_ref!(ls, tempunpacksym, lhsi, elementbytes)
+        continue
+      elseif lhsi.head === :tuple
+        lhstemp = gensym!(ls, "lhstuple")
+        op = add_compute!(ls, lhstemp, f, vparents, elementbytes)
+        unpack_tuple!(ls, lhsi, [op], elementbytes, position)
+        continue
+      end
+    end
+    throw(LoopError("Unpacking the above expression in the left hand side was not understood/supported.", lhsi))
+  end
+  first(vparents)
+end
+
 function add_assignment!(ls::LoopSet, LHS, RHS, elementbytes::Int, position::Int)
   if LHS isa Symbol
     if RHS isa Expr
@@ -1212,29 +1250,7 @@ function add_assignment!(ls::LoopSet, LHS, RHS, elementbytes::Int, position::Int
         add_store_ref!(ls, RHS, LHS, elementbytes)  # is this necessary? (Extension API?)
       end
     elseif LHS.head === :tuple
-      if RHS.head === :tuple
-        for i ∈ eachindex(LHS.args)
-          add_assignment!(ls, LHS.args[i], RHS.args[i], elementbytes, position)
-        end
-        return last(operations(ls)) # FIXME: dummy
-      end
-      @assert length(LHS.args) ≤ 14 "Functions returning more than 9 values aren't currently supported."
-      lhstemp = gensym!(ls, "lhstuple")
-      vparents = Operation[maybe_const_compute!(ls, lhstemp, add_operation!(ls, lhstemp, RHS, elementbytes, position), elementbytes, position)]
-      for i ∈ eachindex(LHS.args)
-        f = (:first,:second,:third,:fourth,:fifth,:sixth,:seventh,:eighth,:ninth,:tenth,:eleventh,:twelfth,:thirteenth,:last)[i]
-        lhsi = LHS.args[i]
-        if lhsi isa Symbol
-          add_compute!(ls, lhsi, f, vparents, elementbytes)
-        elseif lhsi isa Expr && lhsi.head === :ref
-          tempunpacksym = gensym!(ls, "tempunpack")
-          add_compute!(ls, tempunpacksym, f, vparents, elementbytes)
-          add_store_ref!(ls, tempunpacksym, lhsi, elementbytes)
-        else
-          throw(LoopError("Unpacking the above expression in the left hand side was not understood/supported.", lhsi))
-        end
-      end
-      first(vparents)
+      unpack_tuple!(ls, LHS, RHS, elementbytes, position)
     else
       throw(LoopError("LHS not understood; only `:ref`s and `:tuple`s are currently supported.", LHS))
     end
