@@ -1120,7 +1120,7 @@ function add_operation!(
     add_operation!(ls, LHS, strip_op_linenumber_nodes(RHS), elementbytes, position)
   elseif RHS.head === :(.)
     c = gensym!(ls, "getproperty")
-    pushpreamble!(ls, Expr(:(=), c, RHS))
+    pushprepreamble!(ls, Expr(:(=), c, RHS))
     add_constant!(ls, c, elementbytes)
     # op = add_constant!(ls, c, ls.loopsymbols[1:position], LHS, elementbytes, :numericconstant)
     # pushpreamble!(ls, op, c)
