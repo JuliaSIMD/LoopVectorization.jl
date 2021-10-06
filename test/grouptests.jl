@@ -12,7 +12,8 @@ const START_TIME = time()
 
   @time if LOOPVECTORIZATION_TEST == "all" || LOOPVECTORIZATION_TEST == "part2"
     using Aqua
-    @time Aqua.test_all(LoopVectorization, ambiguities = VERSION ≥ v"1.6")
+    @time Aqua.test_all(LoopVectorization, ambiguities = VERSION ≥ v"1.6", stale_deps = false)
+    @time Aqua.test_stale_deps(LoopVectorization, ignore = [:SIMDDualNumbers])
     # @test isempty(detect_unbound_args(LoopVectorization))
 
     @time include("printmethods.jl")
