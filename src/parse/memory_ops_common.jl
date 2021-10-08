@@ -93,7 +93,7 @@ function subset_vptr!(ls::LoopSet, vptr::Symbol, indnum::Int, ind, previndices, 
   subsetvptr
 end
 
-function gesp_const_offset!(ls::LoopSet, vptrarray, ninds, indices, loopedindex, mlt::Integer, sym, D)
+function gesp_const_offset!(ls::LoopSet, vptrarray::Symbol, ninds::Int, indices::Vector{Symbol}, loopedindex::Vector{Bool}, mlt::Integer, sym, D::Int)
   if isone(mlt)
     subset_vptr!(ls, vptrarray, ninds, sym, indices, loopedindex, D)
   else        
@@ -102,7 +102,7 @@ function gesp_const_offset!(ls::LoopSet, vptrarray, ninds, indices, loopedindex,
     subset_vptr!(ls, vptrarray, ninds, mltsym, indices, loopedindex, D)
   end
 end
-function gesp_const_offsets!(ls::LoopSet, vptrarray, ninds, indices, loopedindex, mltsyms, D)
+function gesp_const_offsets!(ls::LoopSet, vptrarray::Symbol, ninds::Int, indices::Vector{Symbol}, loopedindex::Vector{Bool}, mltsyms::Vector{Tuple{Int,Symbol}}, D::Int)
   length(mltsyms) > 1 && sort!(mltsyms, by = last) # if multiple have same combination of syms, make sure they match even if order is different
   for (mlt,sym) ∈ mltsyms
     vptrarray = gesp_const_offset!(ls, vptrarray, ninds, indices, loopedindex, mlt, sym, D)

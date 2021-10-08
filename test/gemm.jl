@@ -9,6 +9,12 @@
     if LoopVectorization.register_count() != 8
         @test @inferred(LoopVectorization.matmul_params()) == (Unum, Tnum)
     end
+
+  @test LoopVectorization.matmul_params(64, 32, 64; M=8, K=100, N=100, W=8) == (1, 25)
+  @test LoopVectorization.matmul_params(64, 32, 64; M=8, K=100, N= 96, W=8) == (1, 24)
+  @test LoopVectorization.matmul_params(64, 32, 64; M=8, K=100, N= 92, W=8) == (1, 23)
+  @test LoopVectorization.matmul_params(64, 32, 64; M=8, K=100, N= 95, W=8) == (1, 10)
+
     AmulBtq1 = :(for m ∈ axes(A,1), n ∈ axes(B,2)
                  C[m,n] = zeroB
                  for k ∈ axes(A,2)
