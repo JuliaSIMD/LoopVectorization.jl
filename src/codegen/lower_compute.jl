@@ -333,14 +333,16 @@ function getuouterreduct(ls::LoopSet, op::Operation, suffix)
 end
 
 function getu₁full(ls::LoopSet, u₁::Int)
-    Ureduct = ureduct(ls)
-    ufull = if Ureduct == -1 # no reducing
-        ls.unrollspecification.u₁
-    else
-        Ureduct
-    end
+  Ureduct = ureduct(ls)
+  ufull = ls.unrollspecification.u₁
+  ufull = Core.ifelse(Ureduct == -1, ufull, min(ufull, Ureduct))
+    # ufull = if Ureduct == -1 # no reducing
+    #     ls.unrollspecification.u₁
+    # else
+    #     Ureduct
+    # end
     # max is because we may be in the extended (non-reduct) region
-    return max(u₁, ufull)
+  return max(u₁, ufull)
 end
 function getu₁forreduct(ls::LoopSet, op::Operation, u₁::Int)
     !isu₁unrolled(op) && return 1
@@ -399,241 +401,244 @@ function reduce_parent!(q::Expr, ls::LoopSet, op::Operation, opp::Operation, par
   newp
 end
 function lower_compute!(
-    q::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs, mask::Bool
-)
-    @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, u₂max, suffix = ua
-    var = name(op)
-    instr = instruction(op)
-    parents_op = parents(op)
-    nparents = length(parents_op)
-    # __u₂max = ls.unrollspecification.u₂
-    # TODO: perhaps allos for swithcing unrolled axis again
-    mvar, u₁unrolledsym, u₂unrolledsym = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, vloopsym, suffix, ls)
-    opunrolled = u₁unrolledsym || isu₁unrolled(op)
-    us = ls.unrollspecification
-    parents_u₁syms, parents_u₂syms = parent_unroll_status(op, u₁loopsym, u₂loopsym, vloopsym, u₂max, us)
-    # tiledouterreduction = if num_loops(ls) == 1# (suffix == -1)# || (vloopsym === u₂loopsym)
-    tiledouterreduction = if (suffix == -1)# || (vloopsym === u₂loopsym)
-        suffix_ = Symbol("")
-        -1
-    else
-        suffix_ = Symbol(suffix, :_)
-        isouterreduction(ls, op)
+  q::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs, mask::Bool
+  )
+  @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, u₂max, suffix = ua
+  var = name(op)
+  instr = instruction(op)
+  parents_op = parents(op)
+  nparents = length(parents_op)
+  # __u₂max = ls.unrollspecification.u₂
+  # TODO: perhaps allos for swithcing unrolled axis again
+  mvar, u₁unrolledsym, u₂unrolledsym = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, vloopsym, suffix, ls)
+  opunrolled = u₁unrolledsym || isu₁unrolled(op)
+  us = ls.unrollspecification
+  parents_u₁syms, parents_u₂syms = parent_unroll_status(op, u₁loopsym, u₂loopsym, vloopsym, u₂max, us)
+  # tiledouterreduction = if num_loops(ls) == 1# (suffix == -1)# || (vloopsym === u₂loopsym)
+  tiledouterreduction = if (suffix == -1)# || (vloopsym === u₂loopsym)
+    suffix_ = Symbol("")
+    -1
+  else
+    suffix_ = Symbol(suffix, :_)
+    isouterreduction(ls, op)
+  end
+  if !opunrolled && any(parents_u₁syms) # TODO: Clean up this mess, refactor the naming code, putting it in one place and have everywhere else use it for easy equivalence.
+    parents_op = copy(parents_op) # don't mutate the original!
+    for i ∈ eachindex(parents_u₁syms)
+      parents_u₁syms[i] || continue
+      parents_u₁syms[i] = false
+      parentop = parents_op[i]
+      i == tiledouterreduction && isconstant(parentop) && continue
+      newparentop = Operation(
+        parentop.identifier, gensym(parentop.variable), parentop.elementbytes, parentop.instruction, parentop.node_type,
+        parentop.dependencies, parentop.reduced_deps, parentop.parents, parentop.ref, parentop.reduced_children
+      )
+      newparentop.vectorized = false
+      newparentop.u₁unrolled = false
+      newparentop.u₂unrolled = parents_u₂syms[i]
+      parentname = mangledvar(parentop)
+      newparentname = mangledvar(newparentop)
+      parents_op[i] = newparentop
+      if parents_u₂syms[i]
+        parentname = Symbol(parentname, suffix_)
+        newparentname = Symbol(newparentname, suffix_)
+      end
+      if isconstant(newparentop)
+        push!(q.args, Expr(:(=), Symbol(newparentname, '_', 1), Symbol(parentname, '_', 1)))
+      else
+        newpname = Symbol(newparentname, '_', u₁)
+        push!(q.args, Expr(:(=), newpname, Symbol(parentname, '_', u₁)))
+        reduce_expr!(q, newparentname, newparentop, u₁, -1, true, false)
+        push!(q.args, Expr(:(=), Symbol(newparentname, '_', 1), Symbol(newparentname, "##onevec##")))
+      end
     end
-    if !opunrolled && any(parents_u₁syms) # TODO: Clean up this mess, refactor the naming code, putting it in one place and have everywhere else use it for easy equivalence.
-        parents_op = copy(parents_op) # don't mutate the original!
-        for i ∈ eachindex(parents_u₁syms)
-            parents_u₁syms[i] || continue
-            parents_u₁syms[i] = false
-            parentop = parents_op[i]
-            i == tiledouterreduction && isconstant(parentop) && continue
-            newparentop = Operation(
-                parentop.identifier, gensym(parentop.variable), parentop.elementbytes, parentop.instruction, parentop.node_type,
-                parentop.dependencies, parentop.reduced_deps, parentop.parents, parentop.ref, parentop.reduced_children
-            )
-            newparentop.vectorized = false
-            newparentop.u₁unrolled = false
-            newparentop.u₂unrolled = parents_u₂syms[i]
-            parentname = mangledvar(parentop)
-            newparentname = mangledvar(newparentop)
-            parents_op[i] = newparentop
-            if parents_u₂syms[i]
-                parentname = Symbol(parentname, suffix_)
-                newparentname = Symbol(newparentname, suffix_)
-            end
-            if isconstant(newparentop)
-                push!(q.args, Expr(:(=), Symbol(newparentname, '_', 1), Symbol(parentname, '_', 1)))
-            else
-                newpname = Symbol(newparentname, '_', u₁)
-                push!(q.args, Expr(:(=), newpname, Symbol(parentname, '_', u₁)))
-                reduce_expr!(q, newparentname, newparentop, u₁, -1, true, false)
-                push!(q.args, Expr(:(=), Symbol(newparentname, '_', 1), Symbol(newparentname, "##onevec##")))
-            end
-        end
-    end
-    # if suffix === nothing# &&
-    # end
-    # cache unroll and tiling check of parents
-    # not broadcasted, because we use frequent checks of individual bools
-    # making BitArrays inefficient.
-    # parentsyms = [opp.variable for opp ∈ parents(op)]
-    Uiter = opunrolled ? u₁ - 1 : 0
-    isreduct = isreduction(op)
-    if Base.libllvm_version < v"11.0.0" && (suffix ≠ -1) && isreduct# && (iszero(suffix) || (ls.unrollspecification.u₂ - 1 == suffix))
+  end
+  # if suffix === nothing# &&
+  # end
+  # cache unroll and tiling check of parents
+  # not broadcasted, because we use frequent checks of individual bools
+  # making BitArrays inefficient.
+  # parentsyms = [opp.variable for opp ∈ parents(op)]
+  Uiter = opunrolled ? u₁ - 1 : 0
+  isreduct = isreduction(op)
+  if Base.libllvm_version < v"11.0.0" && (suffix ≠ -1) && isreduct# && (iszero(suffix) || (ls.unrollspecification.u₂ - 1 == suffix))
     # if (length(reduceddependencies(op)) > 0) | (length(reducedchildren(op)) > 0)# && (iszero(suffix) || (ls.unrollspecification.u₂ - 1 == suffix))
-        # instrfid = findfirst(isequal(instr.instr), (:vfmadd, :vfnmadd, :vfmsub, :vfnmsub))
-        instrfid = findfirst(Base.Fix2(===,instr.instr), (:vfmadd_fast, :vfnmadd_fast, :vfmsub_fast, :vfnmsub_fast))
-        # instrfid = findfirst(isequal(instr.instr), (:vfnmadd_fast, :vfmsub_fast, :vfnmsub_fast))
-        # want to instcombine when parent load's deps are superset
-        # also make sure opp is unrolled
-        if !(instrfid === nothing) && (opunrolled && u₁ > 1) && sub_fmas(ls, op, ua)
-            specific_fmas = Base.libllvm_version >= v"11.0.0" ? (:vfmadd, :vfnmadd, :vfmsub, :vfnmsub) : (:vfmadd231, :vfnmadd231, :vfmsub231, :vfnmsub231)
-            # specific_fmas = Base.libllvm_version >= v"11.0.0" ? (:vfnmadd, :vfmsub, :vfnmsub) : (:vfnmadd231, :vfmsub231, :vfnmsub231)
-            # specific_fmas = (:vfmadd231, :vfnmadd231, :vfmsub231, :vfnmsub231)
-            instr = Instruction(specific_fmas[instrfid])
-        end
+    # instrfid = findfirst(isequal(instr.instr), (:vfmadd, :vfnmadd, :vfmsub, :vfnmsub))
+    instrfid = findfirst(Base.Fix2(===,instr.instr), (:vfmadd_fast, :vfnmadd_fast, :vfmsub_fast, :vfnmsub_fast))
+    # instrfid = findfirst(isequal(instr.instr), (:vfnmadd_fast, :vfmsub_fast, :vfnmsub_fast))
+    # want to instcombine when parent load's deps are superset
+    # also make sure opp is unrolled
+    if !(instrfid === nothing) && (opunrolled && u₁ > 1) && sub_fmas(ls, op, ua)
+      specific_fmas = Base.libllvm_version >= v"11.0.0" ? (:vfmadd, :vfnmadd, :vfmsub, :vfnmsub) : (:vfmadd231, :vfnmadd231, :vfmsub231, :vfnmsub231)
+      # specific_fmas = Base.libllvm_version >= v"11.0.0" ? (:vfnmadd, :vfmsub, :vfnmsub) : (:vfnmadd231, :vfmsub231, :vfnmsub231)
+      # specific_fmas = (:vfmadd231, :vfnmadd231, :vfmsub231, :vfnmsub231)
+      instr = Instruction(specific_fmas[instrfid])
     end
-    reduceddeps = reduceddependencies(op)
-    vecinreduceddeps = isreduct && vloopsym ∈ reduceddeps
-    maskreduct = mask & vecinreduceddeps #any(opp -> opp.variable === var, parents_op)
-    # if vecinreduceddeps && vectorized ∉ loopdependencies(op) # screen parent opps for those needing a reduction to scalar
-    #     # parents_op = reduce_vectorized_parents!(q, op, parents_op, U, u₁loopsym, u₂loopsym, vectorized, suffix)
-    #     isreducingidentity!(q, op, parents_op, U, u₁loopsym, u₂loopsym, vectorized, suffix) && return
-    # end    
-    # if a parent is not unrolled, the compiler should handle broadcasting CSE.
-    # because unrolled/tiled parents result in an unrolled/tiled dependendency,
-    # we handle both the tiled and untiled case here.
-    # bajillion branches that go the same way on each iteration
-    # but smaller function is probably worthwhile. Compiler could theoreically split anyway
-    # but I suspect that the branches are so cheap compared to the cost of everything else going on
-    # that smaller size is more advantageous.
-    opisvectorized = isvectorized(op)
-    modsuffix = 0
-    # for u ∈ 0:Uiter
-    isouterreduct = false
-    instrcall = callexpr(instr)
-    dopartialmap = false
-    varsym = if tiledouterreduction > 0 # then suffix ≠ -1
-        # modsuffix = ((u + suffix*(Uiter + 1)) & 7)
-        isouterreduct = true
-        # if u₁unrolledsym
-        #     modsuffix = ls.unrollspecification.u₁#getu₁full(ls, u₁)#u₁
-        #     Symbol(mangledvar(op), '_', modsuffix)
-        # else
-        if u₁unrolledsym
-          # modsuffix = 0
-          modsuffix = ls.unrollspecification.u₁
-          Symbol(mangledvar(op), '_', modsuffix)
-        else
-          modsuffix = suffix % ls.ureduct
-          Symbol(mangledvar(op), modsuffix)
-        end
-      # @show op, u₁unrolledsym, u₂unrolledsym
-        # end
-        # dopartialmap = u₁ > 1
-
-        # Symbol(mvar, modsuffix)
-        # elseif u₁unrolledsym
-        #     Symbol(mvar, u)
-    elseif u₁unrolledsym
-        if isreduct #(isanouterreduction(ls, op))
-            # isouterreduct = true
-            isouterreduct = isanouterreduction(ls, op)
-            u₁reduct = isouterreduct ? getu₁full(ls, u₁) : getu₁forreduct(ls, op, u₁)
-            dopartialmap = u₁reduct ≠ u₁
-            Symbol(mvar, '_', u₁reduct)
-        else
-            Symbol(mvar, '_', u₁)
-        end
+  end
+  reduceddeps = reduceddependencies(op)
+  vecinreduceddeps = isreduct && vloopsym ∈ reduceddeps
+  maskreduct = mask & vecinreduceddeps #any(opp -> opp.variable === var, parents_op)
+  # if vecinreduceddeps && vectorized ∉ loopdependencies(op) # screen parent opps for those needing a reduction to scalar
+  #     # parents_op = reduce_vectorized_parents!(q, op, parents_op, U, u₁loopsym, u₂loopsym, vectorized, suffix)
+  #     isreducingidentity!(q, op, parents_op, U, u₁loopsym, u₂loopsym, vectorized, suffix) && return
+  # end    
+  # if a parent is not unrolled, the compiler should handle broadcasting CSE.
+  # because unrolled/tiled parents result in an unrolled/tiled dependendency,
+  # we handle both the tiled and untiled case here.
+  # bajillion branches that go the same way on each iteration
+  # but smaller function is probably worthwhile. Compiler could theoreically split anyway
+  # but I suspect that the branches are so cheap compared to the cost of everything else going on
+  # that smaller size is more advantageous.
+  opisvectorized = isvectorized(op)
+  modsuffix = 0
+  # for u ∈ 0:Uiter
+  isouterreduct = false
+  instrcall = callexpr(instr)
+  dopartialmap = false
+  varsym = if tiledouterreduction > 0 # then suffix ≠ -1
+    # modsuffix = ((u + suffix*(Uiter + 1)) & 7)
+    isouterreduct = true
+    # if u₁unrolledsym
+    #     modsuffix = ls.unrollspecification.u₁#getu₁full(ls, u₁)#u₁
+    #     Symbol(mangledvar(op), '_', modsuffix)
+    # else
+    if u₁unrolledsym
+      # modsuffix = 0
+      modsuffix = ls.unrollspecification.u₁
+      Symbol(mangledvar(op), '_', modsuffix)
     else
-        Symbol(mvar, '_', 1)
+      modsuffix = suffix % ls.ureduct
+      Symbol(mangledvar(op), modsuffix)
     end
-    selfopname = varsym
-    selfdep = 0
-    for n ∈ 1:nparents
-        opp = parents_op[n]
-        if isloopvalue(opp)
-            loopval = first(loopdependencies(opp))
-            add_loopvalue!(instrcall, loopval, ua, u₁)
-        elseif name(opp) === name(op)
-            selfdep = n
-            if ((isvectorized(opp) && !isvectorized(op))) ||
-                (parents_u₁syms[n] != u₁unrolledsym) || (parents_u₂syms[n] != u₂unrolledsym)
+    # @show op, u₁unrolledsym, u₂unrolledsym
+    # end
+    # dopartialmap = u₁ > 1
 
-              selfopname, uₚ = parent_op_name!(q, ls, parents_op, n, modsuffix, suffix_, parents_u₁syms, parents_u₂syms, u₁, u₂max, u₂unrolledsym, op, tiledouterreduction)
-              push!(instrcall.args, selfopname)
-            else
-              push!(instrcall.args, varsym)
-            end
-        elseif ((!isu₂unrolled(op)) & isu₂unrolled(opp)) && (parents_u₂syms[n] & (!u₂unrolledsym))
-          # elseif parents_u₂syms[n] & (!u₂unrolledsym)
-            #&& (isouterreduction(ls, opp) != -1)
-            # this checks if the parent is u₂ unrolled but this operation is not, in which case we need to reduce it.
-            reduced_u₂ = reduce_expr_u₂(mangledvar(opp), opp, u₂max, Symbol("__", u₁))#ureduct(ls))
-            reducedparentname = gensym!(ls, "reducedop")
-            push!(q.args, Expr(:(=), reducedparentname, reduced_u₂))
-            reduced_u₂ = reduce_parent!(q, ls, op, opp, reducedparentname)
-            push!(instrcall.args, reduced_u₂)
-        elseif isconstant(opp) && instruction(opp).mod === GLOBALCONSTANT
-            push!(instrcall.args, GlobalRef(Base, instruction(opp).instr))
-        else
-            parent, uₚ = parent_op_name!(q, ls, parents_op, n, modsuffix, suffix_, parents_u₁syms, parents_u₂syms, u₁, u₂max, u₂unrolledsym, op, tiledouterreduction)
-            parent = reduce_parent!(q, ls, op, opp, parent)
-            if (selfdep == 0) && search_tree(parents(opp), name(op))
-                selfdep = n
-                push!(instrcall.args, parent)
-            elseif (uₚ ≠ 0) & (uₚ > u₁)
-                push!(instrcall.args, :(subset_vec_unroll($parent, StaticInt{$u₁}())))
-            else
-                push!(instrcall.args, parent)
-            end
-        end
+    # Symbol(mvar, modsuffix)
+    # elseif u₁unrolledsym
+    #     Symbol(mvar, u)
+  elseif u₁unrolledsym
+    if isreduct #(isanouterreduction(ls, op))
+      # isouterreduct = true
+      isouterreduct = isanouterreduction(ls, op)
+      u₁reduct = isouterreduct ? getu₁full(ls, u₁) : getu₁forreduct(ls, op, u₁)
+      dopartialmap = u₁reduct ≠ u₁
+      Symbol(mvar, '_', u₁reduct)
+    else
+      Symbol(mvar, '_', u₁)
     end
+  else
+    Symbol(mvar, '_', 1)
+  end
+  selfopname = varsym
+  selfdep = 0
+  # @show u₁unrolledsym
+  for n ∈ 1:nparents
+    opp = parents_op[n]
+    if isloopvalue(opp)
+      loopval = first(loopdependencies(opp))
+      add_loopvalue!(instrcall, loopval, ua, u₁)
+    elseif name(opp) === name(op)
+      selfdep = n
+      if ((isvectorized(opp) && !isvectorized(op))) ||
+        (parents_u₁syms[n] != u₁unrolledsym) || (parents_u₂syms[n] != u₂unrolledsym)
+
+        selfopname, uₚ = parent_op_name!(q, ls, parents_op, n, modsuffix, suffix_, parents_u₁syms, parents_u₂syms, u₁, u₂max, u₂unrolledsym, op, tiledouterreduction)
+        # @show selfopname, uₚ, tiledouterreduction opp op
+        push!(instrcall.args, selfopname)
+      else
+        push!(instrcall.args, varsym)
+      end
+    elseif ((!isu₂unrolled(op)) & isu₂unrolled(opp)) && (parents_u₂syms[n] & (!u₂unrolledsym))
+      # elseif parents_u₂syms[n] & (!u₂unrolledsym)
+      #&& (isouterreduction(ls, opp) != -1)
+      # this checks if the parent is u₂ unrolled but this operation is not, in which case we need to reduce it.
+      reduced_u₂ = reduce_expr_u₂(mangledvar(opp), opp, u₂max, Symbol("__", u₁))#ureduct(ls))
+      reducedparentname = gensym!(ls, "reducedop")
+      push!(q.args, Expr(:(=), reducedparentname, reduced_u₂))
+      reduced_u₂ = reduce_parent!(q, ls, op, opp, reducedparentname)
+      push!(instrcall.args, reduced_u₂)
+    elseif isconstant(opp) && instruction(opp).mod === GLOBALCONSTANT
+      push!(instrcall.args, GlobalRef(Base, instruction(opp).instr))
+    else
+      parent, uₚ = parent_op_name!(q, ls, parents_op, n, modsuffix, suffix_, parents_u₁syms, parents_u₂syms, u₁, u₂max, u₂unrolledsym, op, tiledouterreduction)
+      parent = reduce_parent!(q, ls, op, opp, parent)
+      if (selfdep == 0) && search_tree(parents(opp), name(op))
+        selfdep = n
+        push!(instrcall.args, parent)
+      elseif (uₚ ≠ 0) & (uₚ > u₁)
+        push!(instrcall.args, :(subset_vec_unroll($parent, StaticInt{$u₁}())))
+      else
+        push!(instrcall.args, parent)
+      end
+    end
+  end
   selfdepreduce = ifelse(((!u₁unrolledsym) & isu₁unrolled(op)) & (u₁ > 1), selfdep, 0)
   # @show selfdepreduce, selfdep, maskreduct, op
-    if maskreduct
-        ifelsefunc = if us.u₁ == 1
-            :ifelse # don't need to be fancy
-        elseif (u₁loopsym !== vloopsym)
-            :ifelsepartial # ifelse all the early ones
-        else# mask last u₁
-            :ifelselast # ifelse only the last one
-        end
-        if last(instrcall.args) === varsym
-            pushfirst!(instrcall.args, lv(ifelsefunc))
-            # showexpr = true
-            insert!(instrcall.args, 3, MASKSYMBOL)
-            if !(ifelsefunc === :ifelse)
-                insert!(instrcall.args, 4, staticexpr(u₁))
-                insert!(instrcall.args, 5, staticexpr(selfdepreduce))
-            end
-        elseif all(in(loopdependencies(op)), reduceddeps) || selfdep ≠ 0#any(opp -> mangledvar(opp) === mangledvar(op), parents_op)
-            # Here, we are evaluating the function, and then `ifelse`-ing it with `hasf == false`.
-            # That means we still need to adjust the `instrcall` in case we're reducing/accumulating across the unroll
-            if ifelsefunc ≡ :ifelse # ifelse means it's unrolled by 1, no need
-                # push!(q.args, Expr(:(=), varsym, Expr(:call, lv(ifelsefunc), MASKSYMBOL, instrcall, selfopname)))
-                push!(q.args, Expr(:(=), varsym, Expr(:call, lv(ifelsefunc), MASKSYMBOL, instrcall, selfopname)))
-            elseif ((u₁ ≡ 1) | (selfdepreduce ≡ 0))
-                # if the current unroll is 1, no need to accumulate. Same if there is no selfdepreduce, but there has to be if we're here?
-                # push!(q.args, Expr(:(=), varsym, Expr(:call, lv(ifelsefunc), MASKSYMBOL, staticexpr(u₁), staticexpr(selfdepreduce), instrcall, selfopname)))
-                push!(q.args, Expr(:(=), varsym, Expr(:call, lv(ifelsefunc), MASKSYMBOL, staticexpr(u₁), staticexpr(selfdepreduce), instrcall, selfopname)))
-            else
-                make_partial_map!(instrcall, selfopname, u₁, selfdepreduce)
-                # partialmap accumulates
-                push!(q.args, Expr(:(=), varsym, Expr(:call, lv(:ifelse), MASKSYMBOL, instrcall, selfopname)))
-            end
-            return
-        # elseif selfdep != 0
-        #   make_partial_map!(instrcall, selfopname, u₁, selfdepreduce)
-        end
-    elseif selfdep != 0 && (dopartialmap ||
-        (isouterreduct && (opunrolled) && (u₁ < us.u₁)) ||
-        (isreduct & (u₁ > 1) & (!u₁unrolledsym) & isu₁unrolled(op))) # TODO: DRY `selfdepreduce` definition
-        # first possibility (`isouterreduct && opunrolled && (u₁ < ls.unrollspecification.u₁)`):
-        # checks if we're in the "reduct" part of an outer reduction
-        #
-        # second possibility (`(isreduct & (u₁ > 1) & (!u₁unrolledsym) & isu₁unrolled(op))`):
-        # if the operation is repeated across u₁ (indicated by `isu₁unrolled(op)`) but
-        # the variables are not correspondingly replicated across u₁ (indicated by `!u₁unrolledsym`)
-        # then we need to accumulate it.
+  if maskreduct
+    ifelsefunc = if us.u₁ == 1
+      :ifelse # don't need to be fancy
+    elseif (u₁loopsym !== vloopsym)
+      :ifelsepartial # ifelse all the early ones
+    else# mask last u₁
+      :ifelselast # ifelse only the last one
+    end
+    if last(instrcall.args) === varsym
+      pushfirst!(instrcall.args, lv(ifelsefunc))
+      # showexpr = true
+      insert!(instrcall.args, 3, MASKSYMBOL)
+      if !(ifelsefunc === :ifelse)
+        insert!(instrcall.args, 4, staticexpr(u₁))
+        insert!(instrcall.args, 5, staticexpr(selfdepreduce))
+      end
+    elseif all(in(loopdependencies(op)), reduceddeps) || selfdep ≠ 0#any(opp -> mangledvar(opp) === mangledvar(op), parents_op)
+      # Here, we are evaluating the function, and then `ifelse`-ing it with `hasf == false`.
+      # That means we still need to adjust the `instrcall` in case we're reducing/accumulating across the unroll
+      if ifelsefunc ≡ :ifelse # ifelse means it's unrolled by 1, no need
+        # push!(q.args, Expr(:(=), varsym, Expr(:call, lv(ifelsefunc), MASKSYMBOL, instrcall, selfopname)))
+        push!(q.args, Expr(:(=), varsym, Expr(:call, lv(ifelsefunc), MASKSYMBOL, instrcall, selfopname)))
+      elseif ((u₁ ≡ 1) | (selfdepreduce ≡ 0))
+        # if the current unroll is 1, no need to accumulate. Same if there is no selfdepreduce, but there has to be if we're here?
+        # push!(q.args, Expr(:(=), varsym, Expr(:call, lv(ifelsefunc), MASKSYMBOL, staticexpr(u₁), staticexpr(selfdepreduce), instrcall, selfopname)))
+        push!(q.args, Expr(:(=), varsym, Expr(:call, lv(ifelsefunc), MASKSYMBOL, staticexpr(u₁), staticexpr(selfdepreduce), instrcall, selfopname)))
+      else
         make_partial_map!(instrcall, selfopname, u₁, selfdepreduce)
+        # partialmap accumulates
+        push!(q.args, Expr(:(=), varsym, Expr(:call, lv(:ifelse), MASKSYMBOL, instrcall, selfopname)))
+      end
+      return
+      # elseif selfdep != 0
+      #   make_partial_map!(instrcall, selfopname, u₁, selfdepreduce)
+    end
+  elseif selfdep != 0 && (dopartialmap ||
+    (isouterreduct && (opunrolled) && (u₁ < us.u₁)) ||
+    (isreduct & (u₁ > 1) & (!u₁unrolledsym) & isu₁unrolled(op))) # TODO: DRY `selfdepreduce` definition
+    # first possibility (`isouterreduct && opunrolled && (u₁ < ls.unrollspecification.u₁)`):
+    # checks if we're in the "reduct" part of an outer reduction
+    #
+    # second possibility (`(isreduct & (u₁ > 1) & (!u₁unrolledsym) & isu₁unrolled(op))`):
+    # if the operation is repeated across u₁ (indicated by `isu₁unrolled(op)`) but
+    # the variables are not correspondingly replicated across u₁ (indicated by `!u₁unrolledsym`)
+    # then we need to accumulate it.
+    make_partial_map!(instrcall, selfopname, u₁, selfdepreduce)
     # elseif 
+  end
+  if instr.instr === :identity && isone(length(parents_op))
+    if instrcall.args[2] !== varsym
+      push!(q.args, Expr(:(=), varsym, instrcall.args[2]))
     end
-    if instr.instr === :identity && isone(length(parents_op))
-        if instrcall.args[2] !== varsym
-            push!(q.args, Expr(:(=), varsym, instrcall.args[2]))
-        end
-    elseif identifier(op) ∉ ls.outer_reductions && should_broadcast_op(op)
-        push!(q.args, Expr(:(=), varsym, Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, instrcall)))
-    else
-        push!(q.args, Expr(:(=), varsym, instrcall))
-    end
-    # end
+  elseif identifier(op) ∉ ls.outer_reductions && should_broadcast_op(op)
+    push!(q.args, Expr(:(=), varsym, Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, instrcall)))
+  else
+    push!(q.args, Expr(:(=), varsym, instrcall))
+  end
+  # end
 end
 function make_partial_map!(instrcall, selfopname, u₁, selfdep)
-    pushfirst!(instrcall.args, lv(:partialmap))
-    insert!(instrcall.args, 3, selfopname)
-    insert!(instrcall.args, 4, staticexpr(u₁))
-    insert!(instrcall.args, 5, staticexpr(selfdep))
-    nothing
+  pushfirst!(instrcall.args, lv(:partialmap))
+  insert!(instrcall.args, 3, selfopname)
+  insert!(instrcall.args, 4, staticexpr(u₁))
+  insert!(instrcall.args, 5, staticexpr(selfdep))
+  nothing
 end
+

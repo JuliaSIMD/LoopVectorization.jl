@@ -53,6 +53,30 @@ function n2testloop(output1,output2,output3,output_nonstatic0,output_nonstatic1)
     @test output_nonstatic0 ≈ output_nonstatic1 # nonstatic test
   end
 end
+function update!(B⁻¹yₖ, B⁻¹, yₖ, sₖᵀyₖ⁻¹)
+  yₖᵀB⁻¹yₖ = zero(eltype(B⁻¹))
+  @inbounds @fastmath for c ∈ axes(B⁻¹,2)
+    t = zero(yₖᵀB⁻¹yₖ)
+    for r ∈ axes(B⁻¹,1)
+      t += yₖ[r] * B⁻¹[r,c]
+    end
+    B⁻¹yₖ[c] = t * sₖᵀyₖ⁻¹
+    yₖᵀB⁻¹yₖ += t * yₖ[c]
+  end
+  yₖᵀB⁻¹yₖ
+end
+function update_turbo!(B⁻¹yₖ, B⁻¹, yₖ, sₖᵀyₖ⁻¹)
+  yₖᵀB⁻¹yₖ = zero(eltype(B⁻¹))
+  @turbo for c ∈ axes(B⁻¹,2)
+    t = zero(yₖᵀB⁻¹yₖ)
+    for r ∈ axes(B⁻¹,1)
+      t += yₖ[r] * B⁻¹[r,c]
+    end
+    B⁻¹yₖ[c] = t * sₖᵀyₖ⁻¹
+    yₖᵀB⁻¹yₖ += t * yₖ[c]
+  end
+  yₖᵀB⁻¹yₖ
+end
 
 @testset "Statically Sized Arrays" begin
   @show @__LINE__
@@ -63,6 +87,12 @@ end
     output_nonstatic0 = StrideArray(undef, n1, n3)
     output_nonstatic1 = StrideArray(undef, n1, n3)
     n2testloop(output1,output2,output3,output_nonstatic0,output_nonstatic1)
+
+    y = StrideArray(undef, StaticInt(n1)); y .= rand.();
+    By0 = StrideArray(undef, StaticInt(n3))
+    By1 = StrideArray(undef, StaticInt(n3))
+    @test update_turbo!(By0, output1, y, 0.124) ≈ update!(By1, output1, y, 0.124)
+    @test By0 ≈ By1
   end
 end
 

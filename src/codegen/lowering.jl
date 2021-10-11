@@ -509,29 +509,31 @@ end
 
 # TODO: handle tiled outer reductions; they will require a suffix arg
 function initialize_outer_reductions!(
-    q::Expr, ls::LoopSet, op::Operation, _Umax::Int, us::UnrollSpecification, rs::Expr
-)
-    @unpack u₁, u₂ = us
-    Umax = u₂ == -1 ? _Umax : u₁
+  q::Expr, ls::LoopSet, op::Operation, _Umax::Int, us::UnrollSpecification, rs::Expr
+  )
+  @unpack u₁, u₂ = us
+  Umax = u₂ == -1 ? _Umax : u₁
   
-    u₁u, u₂u = isunrolled_sym(op, getloop(ls, us.u₁loopnum).itersymbol, getloop(ls, us.u₂loopnum).itersymbol, getloop(ls, us.vloopnum).itersymbol, ls)#, u₂)
-    z = outer_reduction_zero(op, u₁u, Umax, reduction_instruction_class(instruction(op)), rs)
-    mvar = variable_name(op, -1)
-    if (u₂ == -1)
-        push!(q.args, Expr(:(=), Symbol(mvar, '_', _Umax), z))
-    elseif u₁u
-      # if isu₂unrolled(op) # is a tiledouter reduction
-      #   push!(q.args, Expr(:(=), Symbol(mvar, 0), z))
-      # else # is not, because if `suffix == 0`, will return -1
-      push!(q.args, Expr(:(=), Symbol(mvar, '_', u₁), z))
-      # end
-    else # we unroll u₂
-      for u ∈ 0:_Umax-1
-        # push!(q.args, Expr(:(=), Symbol(mvar, '_', u), z))
-        push!(q.args, Expr(:(=), Symbol(mvar, u), z))
-      end
+  u₁u, u₂u = isunrolled_sym(op, getloop(ls, us.u₁loopnum).itersymbol, getloop(ls, us.u₂loopnum).itersymbol, getloop(ls, us.vloopnum).itersymbol, ls)#, u₂)
+  z = outer_reduction_zero(op, u₁u, Umax, reduction_instruction_class(instruction(op)), rs)
+  mvar = variable_name(op, -1)
+  if (u₂ == -1)
+    push!(q.args, Expr(:(=), Symbol(mvar, '_', _Umax), z))
+  elseif u₁u
+    # if isu₂unrolled(op) # is a tiledouter reduction
+    #   push!(q.args, Expr(:(=), Symbol(mvar, 0), z))
+    # else # is not, because if `suffix == 0`, will return -1
+    push!(q.args, Expr(:(=), Symbol(mvar, '_', u₁), z))
+    # end
+  elseif isu₂unrolled(op) # we unroll u₂
+    for u ∈ 0:_Umax-1
+      # push!(q.args, Expr(:(=), Symbol(mvar, '_', u), z))
+      push!(q.args, Expr(:(=), Symbol(mvar, u), z))
     end
-    nothing
+  else
+    push!(q.args, Expr(:(=), Symbol(mvar, '_', 1), z))
+  end
+  nothing
 end
 function initialize_outer_reductions!(q::Expr, ls::LoopSet, Umax::Int)
     rs = staticexpr(reg_size(ls))
