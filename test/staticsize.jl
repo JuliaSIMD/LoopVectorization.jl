@@ -81,6 +81,7 @@ end
 @testset "Statically Sized Arrays" begin
   @show @__LINE__
   for n1 ∈ 1:MAXTESTSIZE, n3 ∈ 1:MAXTESTSIZE
+    # @show n1, n3
     output1 = StrideArray(undef, StaticInt(n1), StaticInt(n3))
     output2 = StrideArray(undef, StaticInt(n1), StaticInt(n3))
     output3 = StrideArray(undef, StaticInt(n1), StaticInt(n3))
@@ -91,8 +92,11 @@ end
     y = StrideArray(undef, StaticInt(n1)); y .= rand.();
     By0 = StrideArray(undef, StaticInt(n3))
     By1 = StrideArray(undef, StaticInt(n3))
-    @test update_turbo!(By0, output1, y, 0.124) ≈ update!(By1, output1, y, 0.124)
-    @test By0 ≈ By1
+    GC.@preserve By0 By1 output1 y begin
+      # @show update!(Vector{Float64}(undef, n3), output1, y, 0.124)
+      @test update_turbo!(By0, output1, y, 0.124) ≈ update!(By1, output1, y, 0.124)
+      @test By0 ≈ By1
+    end
   end
 end
 

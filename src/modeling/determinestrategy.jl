@@ -269,9 +269,9 @@ function unroll_no_reductions(ls, order, vloopsym)
   #         isstore(op) && isu₁unrolled(op)
   #     end
   # end
-  if unrolled === vloopsym
-    u = demote_unroll_factor(ls, u, vloopsym)
-  end
+  # if unrolled === vloopsym
+  #   u = demote_unroll_factor(ls, u, vloopsym)
+  # end
   remaining_reg = max(8, (reg_count(ls) - round(Int,rpc))) # spilling a few consts isn't so bad
   if compute_l ≥ 4compute_rt ≥ 4rpp
     # motivation for skipping division by loads here: https://github.com/microhh/stencilbuilder/blob/master/julia/stencil_julia_4th.jl
@@ -285,7 +285,7 @@ function unroll_no_reductions(ls, order, vloopsym)
   else
     reg_constraint = max(1, remaining_reg ÷ max(1,round(Int,rpp)))
   end
-  clamp(u, 1, reg_constraint), unrolled
+  maybe_demote_unroll(ls, clamp(u, 1, reg_constraint), unrolled, vloopsym), unrolled
     # rt = max(compute_rt, load_rt + store_rt)
     # # (iszero(rt) ? 4 : max(1, roundpow2( min( 4, round(Int, 16 / rt) ) ))), unrolled
     # (iszero(rt) ? 4 : max(1, VectorizationBase.nextpow2( min( 4, round(Int, 8 / rt) ) ))), unrolled
@@ -369,6 +369,8 @@ function determine_unroll_factor(ls::LoopSet, order::Vector{Symbol}, vloopsym::S
     UF = min(8, VectorizationBase.nextpow2(max(1, round(Int, ltemp / (rttemp) ) )))
     UFfactor = 8 ÷ ls.vector_width
     cld(UF, UFfactor)*UFfactor, vloopsym
+    # UF2 = cld(UF, UFfactor)*UFfactor, vloopsym
+    # maybe_demote_unroll(ls, UF2, vloopsym, vloopsym), vloopsym
   end
 end
 # function scale_unrolled()
@@ -394,10 +396,16 @@ function determine_unroll_factor(ls::LoopSet, order::Vector{Symbol}, vloopsym::S
   else
     UF = VectorizationBase.nextpow2(round(Int, clamp(lrtratio, 1.0, 4.0), RoundUp))
   end
-  if best_unrolled === vloopsym
-    UF = demote_unroll_factor(ls, UF, vloopsym)
-  end
+  UF = maybe_demote_unroll(ls, UF, best_unrolled, vloopsym)
   UF, best_unrolled
+end
+function maybe_demote_unroll(ls::LoopSet, UF::Int, unrollsym::Symbol, vloopsym::Symbol)::Int
+  if unrollsym === vloopsym
+    return demote_unroll_factor(ls, UF, vloopsym)
+  else
+    ul = getloop(ls, unrollsym)
+    isstaticloop(ul) ? min(length(ul), UF) : UF
+  end
 end
 
 @inline function unroll_cost(X, u₁, u₂, u₁L, u₂L)
@@ -553,64 +561,64 @@ function solve_unroll(
 end
 
 function solve_unroll(
-    u₁loopsym::Symbol, u₂loopsym::Symbol,
-    cost_vec::AbstractVector{Float64},
-    reg_pressure::AbstractVector{Float64},
-    W::Int, vloopsym::Symbol,
-    u₁loop::Loop, u₂loop::Loop,
-    u₁step::Int, u₂step::Int,
-    atleast31registers::Bool
+  u₁loopsym::Symbol, u₂loopsym::Symbol,
+  cost_vec::AbstractVector{Float64},
+  reg_pressure::AbstractVector{Float64},
+  W::Int, vloopsym::Symbol,
+  u₁loop::Loop, u₂loop::Loop,
+  u₁step::Int, u₂step::Int,
+  atleast31registers::Bool
 )
-    maxu₂base = maxu₁base = atleast31registers ? 10 : 6#8
-    maxu₂ = maxu₂base#8
-    maxu₁ = maxu₁base#8
-    u₁L = length(u₁loop)
-    u₂L = length(u₂loop)
-    if isstaticloop(u₂loop)
-      if u₂loopsym !== vloopsym && u₂L ≤ 4
-        if isstaticloop(u₁loop)
-          u₁ = max(solve_unroll_constT(reg_pressure, u₂L), 1)
-          u₁ = maybedemotesize(u₁, u₁loopsym === vloopsym ? cld(u₁L,W) : u₁L)
-        else
-          u₁ = clamp(solve_unroll_constT(reg_pressure, u₂L), 1, 8)
-        end
-        return u₁, u₂L, unroll_cost(cost_vec, u₁, u₂L, u₁L, u₂L)
+  maxu₂base = maxu₁base = atleast31registers ? 10 : 6#8
+  maxu₂ = maxu₂base#8
+  maxu₁ = maxu₁base#8
+  u₁L = length(u₁loop)
+  u₂L = length(u₂loop)
+  if isstaticloop(u₂loop)
+    if u₂loopsym !== vloopsym && u₂L ≤ 4
+      if isstaticloop(u₁loop)
+        u₁ = max(solve_unroll_constT(reg_pressure, u₂L), 1)
+        u₁ = maybedemotesize(u₁, u₁loopsym === vloopsym ? cld(u₁L,W) : u₁L)
+      else
+        u₁ = clamp(solve_unroll_constT(reg_pressure, u₂L), 1, 8)
       end
-      u₂Ltemp = u₂loopsym === vloopsym ? cld(u₂L, W) : u₂L
-      maxu₂ = min(4maxu₂, u₂Ltemp)
+      return u₁, u₂L, unroll_cost(cost_vec, u₁, u₂L, u₁L, u₂L)
     end
-    if isstaticloop(u₁loop)
-      if u₁loopsym !== vloopsym && u₁L ≤ 4
-        if isstaticloop(u₂loop)
-          u₂ = max(solve_unroll_constU(reg_pressure, u₁L), 1)
-          u₂ = maybedemotesize(u₂, u₂loopsym === vloopsym ? cld(u₂L,W) : u₂L)
-        else
-          u₂ = clamp(solve_unroll_constU(reg_pressure, u₁L), 1, 8)
-        end
-        return u₁L, u₂, unroll_cost(cost_vec, u₁L, u₂, u₁L, u₂L)
+    u₂Ltemp = u₂loopsym === vloopsym ? cld(u₂L, W) : u₂L
+    maxu₂ = min(4maxu₂, u₂Ltemp)
+  end
+  if isstaticloop(u₁loop)
+    if u₁loopsym !== vloopsym && u₁L ≤ 4
+      if isstaticloop(u₂loop)
+        u₂ = max(solve_unroll_constU(reg_pressure, u₁L), 1)
+        u₂ = maybedemotesize(u₂, u₂loopsym === vloopsym ? cld(u₂L,W) : u₂L)
+      else
+        u₂ = clamp(solve_unroll_constU(reg_pressure, u₁L), 1, 8)
       end
-      u₁Ltemp = u₁loopsym === vloopsym ? cld(u₁L, W) : u₁L
-      maxu₁ = min(4maxu₁, u₁Ltemp)
+      return u₁L, u₂, unroll_cost(cost_vec, u₁L, u₂, u₁L, u₂L)
     end
-    if u₁loopsym === vloopsym
-        u₁Lf = u₁L / W
-    else
-        u₁Lf = Float64(u₁L)
-    end
-    if u₂loopsym === vloopsym
-        u₂Lf = u₂L / W
-    else
-        u₂Lf = Float64(u₂L)
-    end
-    u₁, u₂, cost = solve_unroll(cost_vec, reg_pressure, maxu₁, maxu₂, u₁Lf, u₂Lf, u₁step, u₂step, atleast31registers)
-    # heuristic to more evenly divide small numbers of iterations
-    if isstaticloop(u₂loop)
-        u₂ = maybedemotesize(u₂, length(u₂loop), u₁, u₁loop, maxu₂base)
-    end
-    if isstaticloop(u₁loop)
-        u₁ = maybedemotesize(u₁, length(u₁loop), u₂, u₂loop, maxu₁base)
-    end
-    u₁, u₂, cost
+    u₁Ltemp = u₁loopsym === vloopsym ? cld(u₁L, W) : u₁L
+    maxu₁ = min(4maxu₁, u₁Ltemp)
+  end
+  if u₁loopsym === vloopsym
+    u₁Lf = u₁L / W
+  else
+    u₁Lf = Float64(u₁L)
+  end
+  if u₂loopsym === vloopsym
+    u₂Lf = u₂L / W
+  else
+    u₂Lf = Float64(u₂L)
+  end
+  u₁, u₂, cost = solve_unroll(cost_vec, reg_pressure, maxu₁, maxu₂, u₁Lf, u₂Lf, u₁step, u₂step, atleast31registers)
+  # heuristic to more evenly divide small numbers of iterations
+  if isstaticloop(u₂loop)
+    u₂ = maybedemotesize(u₂, length(u₂loop), u₁, u₁loop, maxu₂base)
+  end
+  if isstaticloop(u₁loop)
+    u₁ = maybedemotesize(u₁, length(u₁loop), u₂, u₂loop, maxu₁base)
+  end
+  u₁, u₂, cost
 end
 
 function set_upstream_family!(adal::Vector{T}, op::Operation, val::T) where {T}
