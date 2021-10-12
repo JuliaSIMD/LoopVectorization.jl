@@ -292,7 +292,7 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     end
   end
   q = if unsigned(Ureduct) < unsigned(UF) # unsigned(-1) == typemax(UInt); 
-    add_cleanup = !loopisstatic# true
+    add_cleanup = Core.ifelse(loopisstatic, !nisvectorized, true)# true
     if isone(Ureduct)
       UF_cleanup = 1
       if nisvectorized
