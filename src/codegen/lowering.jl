@@ -292,19 +292,19 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     end
   end
   q = if unsigned(Ureduct) < unsigned(UF) # unsigned(-1) == typemax(UInt); 
-    add_cleanup = true
+    add_cleanup = !loopisstatic# true
     if isone(Ureduct)
       UF_cleanup = 1
       if nisvectorized
         blockhead = :while
       else
         blockhead = if UF == 2
-        if loopisstatic
-          add_cleanup = UFt == 1
-          :block
-        else
-          :if
-        end
+          if loopisstatic
+            # add_cleanup = UFt == 1
+            :block
+          else
+            :if
+          end
         else
           :while
         end
@@ -319,6 +319,12 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     end
     _q = if dynamicbounded
       initialize_outer_reductions!(q, ls, Ureduct); q
+    elseif loopisstatic
+      if length(loop) < UF*W
+        Expr(:block)
+      else
+        Expr(:block, add_upper_outer_reductions(ls, q, Ureduct, UF, loop, nisvectorized))
+      end
     else
       Expr(:block, add_upper_outer_reductions(ls, q, Ureduct, UF, loop, nisvectorized))
     end
@@ -587,6 +593,12 @@ function add_upper_outer_reductions(ls::LoopSet, loopq::Expr, Ulow::Int, Uhigh::
   end
   push!(ifq.args, t)
   ifqfull = Expr(:let, ifqlet, ifq)
+  if isstaticloop(unrolledloop)
+    W = Core.ifelse(reductisvectorized, ls.vector_width, 1)
+    if Uhigh*W*gethint(step(unrolledloop)) ≤ length(unrolledloop)
+      return Expr(:(=), mvartl, ifqfull)
+    end
+  end
   ncomparison = if reductisvectorized
     add_upper_comp_check(unrolledloop, mulexpr(VECTORWIDTHSYMBOL, Uhigh, step(unrolledloop)))
   elseif isknown(step(unrolledloop))
@@ -848,44 +860,49 @@ end
 #     cld(u₂, cld(u₂, unroll))
 # end
 function calc_Ureduct!(ls::LoopSet, us::UnrollSpecification)
-    @unpack u₁loopnum, u₁, u₂, vloopnum = us
-    ur = if iszero(length(ls.outer_reductions))
-        -1
-    elseif u₂ == -1
-        if u₁loopnum == num_loops(ls)
-            loopisstatic = isstaticloop(getloop(ls, u₁loopnum))
-            loopisstatic &= ((vloopnum != u₁loopnum) | (!iszero(ls.vector_width)))
-            # loopisstatic ? u₁ : min(u₁, 4) # much worse than the other two options, don't use this one
-            if Sys.CPU_NAME === "znver1"
-                loopisstatic ? u₁ : 1
-            else
-                loopisstatic ? u₁ : (u₁ ≥ 4 ? 2 : 1)
-            end
-        else
-            -1
-        end
+  @unpack u₁loopnum, u₁, u₂, vloopnum = us
+  ur = if iszero(length(ls.outer_reductions))
+    -1
+  elseif u₂ == -1
+    if u₁loopnum == num_loops(ls)
+      u₁loop = getloop(ls, u₁loopnum)
+      loopisstatic = isstaticloop(u₁loop)
+      loopisstatic &= ((vloopnum != u₁loopnum) | (!iszero(ls.vector_width)))
+      # loopisstatic ? u₁ : min(u₁, 4) # much worse than the other two options, don't use this one
+      if loopisstatic
+        W = Core.ifelse(vloopnum == u₁loopnum, ls.vector_width, 1)
+        UFt = cld(length(u₁loop) % (W*u₁), W)
+        Core.ifelse(UFt == 0, u₁, UFt)
+        # rem = length(u₁loop) - 
+        # max(1, cld(rem, u₁))
+      else
+        Core.ifelse(Sys.CPU_NAME === "znver1", 1, Core.ifelse(u₁ ≥ 4, 2, 1))
+      end
     else
-        u₁ui = u₂ui = -1
-        u₁loopsym = getloop(ls,    u₁loopnum).itersymbol
-        u₂loopsym = getloop(ls, us.u₂loopnum).itersymbol
-        vloopsym  = getloop(ls,     vloopnum).itersymbol
-        for or ∈ ls.outer_reductions
-            op = ls.operations[or]
-            u₁u, u₂u = isunrolled_sym(op, u₁loopsym, u₂loopsym, vloopsym, us)
-            if u₁ui == -1
-                u₁ui = Int(u₁u)
-                u₂ui = Int(u₁u)
-            elseif !((u₁ui == Int(u₁u)) & (u₂ui == Int(u₁u)))
-                throw(ArgumentError("Doesn't currenly handle differently unrolled reductions yet, please file an issue with an example."))
-            end
-        end
-        if u₁ui % Bool
-            u₁
-        else
-            u₂
-        end
+      -1
     end
-    ls.ureduct = ur
+  else
+    u₁ui = u₂ui = -1
+    u₁loopsym = getloop(ls,    u₁loopnum).itersymbol
+    u₂loopsym = getloop(ls, us.u₂loopnum).itersymbol
+    vloopsym  = getloop(ls,     vloopnum).itersymbol
+    for or ∈ ls.outer_reductions
+      op = ls.operations[or]
+      u₁u, u₂u = isunrolled_sym(op, u₁loopsym, u₂loopsym, vloopsym, us)
+      if u₁ui == -1
+        u₁ui = Int(u₁u)
+        u₂ui = Int(u₁u)
+      elseif !((u₁ui == Int(u₁u)) & (u₂ui == Int(u₁u)))
+        throw(ArgumentError("Doesn't currenly handle differently unrolled reductions yet, please file an issue with an example."))
+      end
+    end
+    if u₁ui % Bool
+      u₁
+    else
+      u₂
+    end
+  end
+  ls.ureduct = ur
 end
 ureduct(ls::LoopSet) = ls.ureduct
 function lower_unrollspec(ls::LoopSet)

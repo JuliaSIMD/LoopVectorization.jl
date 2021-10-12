@@ -78,6 +78,21 @@ function update_turbo!(B⁻¹yₖ, B⁻¹, yₖ, sₖᵀyₖ⁻¹)
   yₖᵀB⁻¹yₖ
 end
 
+function maxabs(x)
+  s = -Inf
+  @turbo for i ∈ eachindex(x)
+    s = max(s, abs(x[i]))
+  end
+  s
+end
+function sum_turbo(x)
+  s = zero(eltype(x))
+  @turbo for i ∈ eachindex(x)
+    s += x[i]
+  end
+  s
+end
+
 @testset "Statically Sized Arrays" begin
   @show @__LINE__
   for n1 ∈ 1:MAXTESTSIZE, n3 ∈ 1:MAXTESTSIZE
@@ -97,6 +112,13 @@ end
       @test update_turbo!(By0, output1, y, 0.124) ≈ update!(By1, output1, y, 0.124)
       @test By0 ≈ By1
     end
+    
+  end
+  for i in 1:65
+    x = StrideArray(undef, StaticInt(i))
+    x .= randn.();
+    @test maxabs(x) == maximum(abs, x)
+    @test sum_turbo(x) ≈ sum(x)
   end
 end
 

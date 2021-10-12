@@ -234,7 +234,6 @@ end
             push!(q.args, :($gf(vargs, $k, false)))
         end
         return Expr(:block, Expr(:meta, :inline), q)
-        # return Expr(:block, Expr(:meta, :inline), :(@show($q)))
     end
     if Sreduced
         M = N
@@ -273,7 +272,6 @@ end
         push!(t.args, :($gf(dd, $m, false)))
     end
     push!(q.args, :(VecUnroll($t)))
-    # push!(q.args, :(@show(VecUnroll($t))))
     q
 end
 
@@ -366,20 +364,11 @@ function getu₁forreduct(ls::LoopSet, op::Operation, u₁::Int)
 end
 isidentityop(op::Operation) = iscompute(op) && (instruction(op).instr === :identity) && (length(parents(op)) == 1)
 function reduce_parent!(q::Expr, ls::LoopSet, op::Operation, opp::Operation, parent::Symbol)
-  # if instruction(op).instr === :log_fast
-  #   @show op opp isvectorized(op) isvectorized(opp) dependent_outer_reducts(ls, op)
-  # end
   isvectorized(op) && return parent
-  # if dependent_outer_reducts(ls, op)
-    
-  #   return parent
-  # end
-  # @show op opp isvectorized(opp)
   if isvectorized(opp)
     oppt = opp
   elseif isidentityop(opp)
     oppt = parents(opp)[1]
-    # @show oppt
     isvectorized(oppt) || return parent
   else
     return parent
@@ -510,13 +499,6 @@ function lower_compute!(
       modsuffix = suffix % ls.ureduct
       Symbol(mangledvar(op), modsuffix)
     end
-    # @show op, u₁unrolledsym, u₂unrolledsym
-    # end
-    # dopartialmap = u₁ > 1
-
-    # Symbol(mvar, modsuffix)
-    # elseif u₁unrolledsym
-    #     Symbol(mvar, u)
   elseif u₁unrolledsym
     if isreduct #(isanouterreduction(ls, op))
       # isouterreduct = true
@@ -532,7 +514,6 @@ function lower_compute!(
   end
   selfopname = varsym
   selfdep = 0
-  # @show u₁unrolledsym
   for n ∈ 1:nparents
     opp = parents_op[n]
     if isloopvalue(opp)
@@ -544,7 +525,6 @@ function lower_compute!(
         (parents_u₁syms[n] != u₁unrolledsym) || (parents_u₂syms[n] != u₂unrolledsym)
 
         selfopname, uₚ = parent_op_name!(q, ls, parents_op, n, modsuffix, suffix_, parents_u₁syms, parents_u₂syms, u₁, u₂max, u₂unrolledsym, op, tiledouterreduction)
-        # @show selfopname, uₚ, tiledouterreduction opp op
         push!(instrcall.args, selfopname)
       else
         push!(instrcall.args, varsym)
@@ -574,7 +554,6 @@ function lower_compute!(
     end
   end
   selfdepreduce = ifelse(((!u₁unrolledsym) & isu₁unrolled(op)) & (u₁ > 1), selfdep, 0)
-  # @show selfdepreduce, selfdep, maskreduct, op
   if maskreduct
     ifelsefunc = if us.u₁ == 1
       :ifelse # don't need to be fancy
