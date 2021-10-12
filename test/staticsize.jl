@@ -104,17 +104,16 @@ end
     output_nonstatic1 = StrideArray(undef, n1, n3)
     n2testloop(output1,output2,output3,output_nonstatic0,output_nonstatic1)
 
-    y = StrideArray(undef, StaticInt(n1)); y .= rand.();
+    y = StrideArray(undef, StaticInt(max(n1,n3))); y .= rand.();
     By0 = StrideArray(undef, StaticInt(n3))
     By1 = StrideArray(undef, StaticInt(n3))
     GC.@preserve By0 By1 output1 y begin
-      # @show update!(Vector{Float64}(undef, n3), output1, y, 0.124)
       @test update_turbo!(By0, output1, y, 0.124) ≈ update!(By1, output1, y, 0.124)
       @test By0 ≈ By1
     end
-    
   end
   for i in 1:65
+    # @show i
     x = StrideArray(undef, StaticInt(i))
     x .= randn.();
     @test maxabs(x) == maximum(abs, x)
