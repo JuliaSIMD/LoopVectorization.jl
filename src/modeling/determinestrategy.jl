@@ -461,10 +461,9 @@ function solve_unroll_lagrange(X, R, u₁L, u₂L, u₁step::Int, u₂step::Int,
   u₁float_finite = isfinite(u₁float)
   u₂float_finite = isfinite(u₂float)
   if !(u₁float_finite & u₂float_finite) # brute force
-    u₁low = u₂low = 1
-    u₁high = Core.ifelse(iszero(X₃), 1, Core.ifelse(atleast31registers, 8, 6))
-    u₂high = Core.ifelse(iszero(X₂), 1, Core.ifelse(atleast31registers, 8, 6))
-    return solve_unroll_iter(X, R, u₁L, u₂L, u₁low:u₁step:u₁high, u₂low:u₂step:u₂high)
+    u₁high = Core.ifelse(iszero(X₃), u₁step, Core.ifelse(atleast31registers, 8, 6))
+    u₂high = Core.ifelse(iszero(X₂), u₂step, Core.ifelse(atleast31registers, 8, 6))
+    return solve_unroll_iter(X, R, u₁L, u₂L, u₁step:u₁step:u₁high, u₂step:u₂step:u₂high)
   end
   u₁low = floor(Int, u₁float)
   u₂low = max(u₂step, floor(Int, 0.8u₂float)) # must be at least 1
@@ -477,8 +476,8 @@ function solve_unroll_lagrange(X, R, u₁L, u₂L, u₁step::Int, u₂step::Int,
     u₂low = solve_unroll_constU(R, u₁high)
   end
   maxunroll = atleast31registers ? (((X₂ > 0) & (X₃ > 0)) ? 10 : 8) : 6
-  u₁low = (clamp(u₁low, 1, maxunroll) ÷ u₁step) * u₁step
-  u₂low = (clamp(u₂low, 1, maxunroll) ÷ u₂step) * u₂step
+  u₁low = (clamp(u₁low, u₁step, maxunroll) ÷ u₁step) * u₁step
+  u₂low = (clamp(u₂low, u₂step, maxunroll) ÷ u₂step) * u₂step
   u₁high = clamp(u₁high, 1, maxunroll)
   u₂high = clamp(u₂high, 1, maxunroll)
   solve_unroll_iter(X, R, u₁L, u₂L, reverse(u₁low:u₁step:u₁high), reverse(u₂low:u₂step:u₂high))
