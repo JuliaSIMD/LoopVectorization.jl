@@ -15,11 +15,14 @@ end
               end);
     lsdot3 = LoopVectorization.loopset(dot3q);
     if LoopVectorization.register_count() ≠ 32
-      @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :n, :m, :m, 2, 6)
+      # @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :n, :m, :m, 1, 6)
+      @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :m, :n, :m, 1, 6)
     elseif Bool(LoopVectorization.has_opmask_registers())
-      @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :n, Symbol("##undefined##"), :m, 4, -1)
+      # @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :n, Symbol("##undefined##"), :m, 4, -1)
+      @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :m, :n, :m, 1, 8)
     else
-      @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :n, :m, :m, 2, 8)
+      @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :m, :n, :m, 1, 8)
+      # @test LoopVectorization.choose_order(lsdot3) == ([:n, :m], :n, :m, :m, 1, 8)
     end
 
     @static if VERSION < v"1.4"

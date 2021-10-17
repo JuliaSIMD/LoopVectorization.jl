@@ -446,40 +446,42 @@ function solve_unroll_iter(X, R, u₁L, u₂L, u₁range, u₂range)
 end
 
 function solve_unroll_lagrange(X, R, u₁L, u₂L, u₁step::Int, u₂step::Int, atleast31registers::Bool)
-    X₁, X₂, X₃, X₄ = X[1], X[2], X[3], X[4]
+  X₁, X₂, X₃, X₄ = X[1], X[2], X[3], X[4]
     # If we don't have opmask registers, masks probably occupy a vector register (e.g., on CPUs with AVX but not AVX512)
-    R₁, R₂, R₃, R₄ = R[1], R[2], R[3], R[4]
-    iszero(R₃) || return solve_unroll_iter(X, R, u₁L, u₂L, u₁step:u₁step:10, u₂step:u₂step:10)
-    RR = R₄
-    a = R₂^2*X₃ -R₁*X₄ * R₂ - R₁*X₂*RR
-    b = R₁ * X₄ * RR - R₁ * X₄ * RR - 2X₃*RR*R₂
-    c = X₃*RR^2
-    discriminant = b^2 - 4a*c
-    discriminant < 0 && return -1,-1,Inf
-    u₁float = max((sqrt(discriminant) + b) / (-2a), float(u₁step)) # must be at least 1
-    u₂float = (RR - u₁float*R₂)/(u₁float*R₁)
-    if !(isfinite(u₂float) & isfinite(u₁float)) # brute force
-        u₁low = u₂low = 1
-        u₁high = iszero(X₂) ? 2 : (atleast31registers ? 8 : 6)
-        u₂high = iszero(X₃) ? 2 : (atleast31registers ? 8 : 6)
-        return solve_unroll_iter(X, R, u₁L, u₂L, u₁low:u₁step:u₁high, u₂low:u₂step:u₂high)
-    end
-    u₁low = floor(Int, u₁float)
-    u₂low = max(u₂step, floor(Int, 0.8u₂float)) # must be at least 1
-    u₁high = solve_unroll_constT(R, u₂low) + u₁step
-    u₂high = solve_unroll_constU(R, u₁low) + u₂step
-    if u₁low ≥ u₁high
-        u₁low = solve_unroll_constT(R, u₂high)
-    end
-    if u₂low ≥ u₂high
-        u₂low = solve_unroll_constU(R, u₁high)
-    end
-    maxunroll = atleast31registers ? (((X₂ > 0) & (X₃ > 0)) ? 10 : 8) : 6
-    u₁low = (clamp(u₁low, 1, maxunroll) ÷ u₁step) * u₁step
-    u₂low = (clamp(u₂low, 1, maxunroll) ÷ u₂step) * u₂step
-    u₁high = clamp(u₁high, 1, maxunroll)
-    u₂high = clamp(u₂high, 1, maxunroll)
-    solve_unroll_iter(X, R, u₁L, u₂L, reverse(u₁low:u₁step:u₁high), reverse(u₂low:u₂step:u₂high))
+  R₁, R₂, R₃, R₄ = R[1], R[2], R[3], R[4]
+  iszero(R₃) || return solve_unroll_iter(X, R, u₁L, u₂L, u₁step:u₁step:10, u₂step:u₂step:10)
+  RR = R₄
+  a = R₂^2*X₃ -R₁*X₄ * R₂ - R₁*X₂*RR
+  b = R₁ * X₄ * RR - R₁ * X₄ * RR - 2X₃*RR*R₂
+  c = X₃*RR^2
+  discriminant = b^2 - 4a*c
+  discriminant < 0 && return -1,-1,Inf
+  u₁float = max((sqrt(discriminant) + b) / (-2a), float(u₁step)) # must be at least 1
+  u₂float = (RR - u₁float*R₂)/(u₁float*R₁)
+  u₁float_finite = isfinite(u₁float)
+  u₂float_finite = isfinite(u₂float)
+  if !(u₁float_finite & u₂float_finite) # brute force
+    u₁low = u₂low = 1
+    u₁high = Core.ifelse(iszero(X₃), 1, Core.ifelse(atleast31registers, 8, 6))
+    u₂high = Core.ifelse(iszero(X₂), 1, Core.ifelse(atleast31registers, 8, 6))
+    return solve_unroll_iter(X, R, u₁L, u₂L, u₁low:u₁step:u₁high, u₂low:u₂step:u₂high)
+  end
+  u₁low = floor(Int, u₁float)
+  u₂low = max(u₂step, floor(Int, 0.8u₂float)) # must be at least 1
+  u₁high = solve_unroll_constT(R, u₂low) + u₁step
+  u₂high = solve_unroll_constU(R, u₁low) + u₂step
+  if u₁low ≥ u₁high
+    u₁low = solve_unroll_constT(R, u₂high)
+  end
+  if u₂low ≥ u₂high
+    u₂low = solve_unroll_constU(R, u₁high)
+  end
+  maxunroll = atleast31registers ? (((X₂ > 0) & (X₃ > 0)) ? 10 : 8) : 6
+  u₁low = (clamp(u₁low, 1, maxunroll) ÷ u₁step) * u₁step
+  u₂low = (clamp(u₂low, 1, maxunroll) ÷ u₂step) * u₂step
+  u₁high = clamp(u₁high, 1, maxunroll)
+  u₂high = clamp(u₂high, 1, maxunroll)
+  solve_unroll_iter(X, R, u₁L, u₂L, reverse(u₁low:u₁step:u₁high), reverse(u₂low:u₂step:u₂high))
 end
 
 function solve_unroll_constU(R::AbstractVector, u₁::Int)
@@ -1105,7 +1107,11 @@ function evaluate_cost_tile!(
       prefetch_good_idea = prefetchisagoodidea(ls, op, UnrollArgs(ls, 4, unrollsyms, 4, 0)) ≠ 0
     end
     # rp = (opisininnerloop && !(loadintostore(ls, op))) ? rp : zero(rp) # we only care about register pressure within the inner most loop
-    rp = opisininnerloop ? rp : zero(rp) # we only care about register pressure within the inner most loop
+    rp = if opisininnerloop # we only care about register pressure within the inner most loop
+      rp
+    else #FIXME: hack to not go crazy
+      max(zero(rp), rp - one(rp))
+    end
     rto = rt
     rt *= iters[id]
     # @show (u₁reducesrt, u₂reducesrt), (u₁reducesrp, u₂reducesrp), rto, rt, lat, rp, op

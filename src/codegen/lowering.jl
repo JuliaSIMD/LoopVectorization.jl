@@ -533,7 +533,7 @@ function initialize_outer_reductions!(
     # end
   elseif isu₂unrolled(op) # we unroll u₂
     for u ∈ 0:_Umax-1
-      # push!(q.args, Expr(:(=), Symbol(mvar, '_', u), z))
+      # push!(q.args, Expr(:(=), Symbol(mvar, u, "__1"), z))
       push!(q.args, Expr(:(=), Symbol(mvar, u), z))
     end
   else

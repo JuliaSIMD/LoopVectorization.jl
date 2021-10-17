@@ -2,8 +2,7 @@ using LoopVectorization
 using Test
 # T = Float32
 @testset "GEMV" begin
-    # Unum, Tnum = LoopVectorization.VectorizationBase.register_count() == 16 ? (3, 4) : (4, 6)
-    Unum, Tnum = LoopVectorization.VectorizationBase.register_count() == 16 ? (2, 6) : (2, 8)
+    Unum, Tnum = LoopVectorization.VectorizationBase.register_count() == 16 ? (1, 6) : (1, 8)
     gemvq = :(for i ∈ eachindex(y)
               yᵢ = 0.0
               for j ∈ eachindex(x)
@@ -13,7 +12,7 @@ using Test
               end)
     lsgemv = LoopVectorization.loopset(gemvq);
     if LoopVectorization.register_count() != 8
-        @test LoopVectorization.choose_order(lsgemv) == (Symbol[:i, :j], :i, :j, :i, Unum, Tnum)
+        @test LoopVectorization.choose_order(lsgemv) == (Symbol[:i, :j], :j, :i, :i, Unum, Tnum)
     end
     
     function mygemv!(y, A, x)
@@ -143,7 +142,7 @@ using Test
               end)
     lsgemv = LoopVectorization.loopset(gemvq);
     if LoopVectorization.register_count() != 8
-        @test LoopVectorization.choose_order(lsgemv) == ([:d1,:d2], :d1, :d2, :d2, Unum, Tnum)
+        @test LoopVectorization.choose_order(lsgemv) == ([:d1,:d2], :d2, :d1, :d2, Unum, Tnum)
     end
     function AtmulvB_avx3!(G, B,κ)
         d = size(G,1)
@@ -162,7 +161,7 @@ using Test
            end)
     lsp = LoopVectorization.loopset(pq);
     if LoopVectorization.register_count() != 8
-        @test LoopVectorization.choose_order(lsp) == ([:d1, :d2], :d1, :d2, :d2, Unum, Tnum)
+        @test LoopVectorization.choose_order(lsp) == ([:d1, :d2], :d2, :d1, :d2, Unum, Tnum)
     end
     # lsp.preamble_symsym
 

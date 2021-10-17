@@ -1542,6 +1542,7 @@ function isouterreduction(ls::LoopSet, op::Operation)
       if rop === op
         for (n,opp) ∈ enumerate(parents(op))
           opp.variable === var && return n
+          search_tree(parents(opp), var) && return n
         end
       else
         for (n,opp) ∈ enumerate(parents(op))

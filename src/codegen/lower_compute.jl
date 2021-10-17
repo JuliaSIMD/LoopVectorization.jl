@@ -276,7 +276,7 @@ end
 end
 
 function parent_op_name!(
-  q, ls::LoopSet, parents_op::Vector{Operation}, n::Int, modsuffix, suffix_, parents_u₁syms, parents_u₂syms, u₁, u₂max, u₂unrolledsym, op, tiledouterreduction
+  q, ls::LoopSet, parents_op::Vector{Operation}, n::Int, modsuffix, suffix, parents_u₁syms, parents_u₂syms, u₁, u₂max, u₂unrolledsym, op, tiledouterreduction
 )
   opp = parents_op[n]
   opisvectorized = isvectorized(op)
@@ -289,21 +289,22 @@ function parent_op_name!(
       Symbol(parent, '_', modsuffix)
     end
   else
+    isouterreduct = isouterreduction(ls, opp) ≠ -1
     u = if !parents_u₁syms[n]
       1
-    elseif isouterreduction(ls, opp) ≠ -1
+    elseif isouterreduct
       getu₁full(ls, u₁)
     else
       getu₁forreduct(ls, opp, u₁)
     end
     if parents_u₂syms[n]
-      if isu₂unrolled(op) # u₂unrolledsym || 
-        parent = Symbol(parent, suffix_, '_', u)
+      if isu₂unrolled(op) # u₂unrolledsym ||
+        parent = isouterreduct ? Symbol(parent, suffix) : Symbol(parent, suffix, '_', '_', u)
       elseif u₂max > 1
         t = Expr(:tuple)
         reduction = Expr(:call, GlobalRef(ArrayInterface, :reduce_tup), reduce_to_onevecunroll(opp), t)
         for u₂ ∈ 0:u₂max-1
-          push!(t.args, Symbol(parent, u₂, "__", u))
+          push!(t.args, Symbol(parent, u₂, '_', '_', u))
         end
         parent = gensym!(ls, parent)
         push!(q.args, Expr(:(=), parent, reduction))
@@ -524,7 +525,7 @@ function lower_compute!(
       if ((isvectorized(opp) && !isvectorized(op))) ||
         (parents_u₁syms[n] != u₁unrolledsym) || (parents_u₂syms[n] != u₂unrolledsym)
 
-        selfopname, uₚ = parent_op_name!(q, ls, parents_op, n, modsuffix, suffix_, parents_u₁syms, parents_u₂syms, u₁, u₂max, u₂unrolledsym, op, tiledouterreduction)
+        selfopname, uₚ = parent_op_name!(q, ls, parents_op, n, modsuffix, suffix, parents_u₁syms, parents_u₂syms, u₁, u₂max, u₂unrolledsym, op, tiledouterreduction)
         push!(instrcall.args, selfopname)
       else
         push!(instrcall.args, varsym)
@@ -541,7 +542,8 @@ function lower_compute!(
     elseif isconstant(opp) && instruction(opp).mod === GLOBALCONSTANT
       push!(instrcall.args, GlobalRef(Base, instruction(opp).instr))
     else
-      parent, uₚ = parent_op_name!(q, ls, parents_op, n, modsuffix, suffix_, parents_u₁syms, parents_u₂syms, u₁, u₂max, u₂unrolledsym, op, tiledouterreduction)
+      # 0 for tiledouterreduction, because `name(opp) ≢ name(op)`
+      parent, uₚ = parent_op_name!(q, ls, parents_op, n, modsuffix, suffix, parents_u₁syms, parents_u₂syms, u₁, u₂max, u₂unrolledsym, op, 0)
       parent = reduce_parent!(q, ls, op, opp, parent)
       if (selfdep == 0) && search_tree(parents(opp), name(op))
         selfdep = n
