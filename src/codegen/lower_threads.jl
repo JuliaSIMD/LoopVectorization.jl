@@ -225,7 +225,7 @@ function outer_reduct_combine_expressions(ls::LoopSet, retv)
     instrcall::Expr = if instr.instr ≢ :ifelse
       Expr(:call, lv(reduce_to_onevecunroll(instr)))
     else
-      reductexpr::Expr = let ls = ls  #FIXME: this should be tested...
+      reductexpr::Expr = let ls = ls 
         ifelse_reduction(:IfElseReduced, op) do opv
           @assert length(ls.outer_reductions) > 1
           j = findfirst(==(identifier(opv)), ls.outer_reductions)
