@@ -468,10 +468,28 @@ T = Float32
     end
   end
 
+  function absmax_tturbo(a) # LV threaded
+    result=zero(eltype(a))
+    @tturbo for i in 1:length(a)
+      abs(a[i])>result && (result=abs(a[i]))
+    end
+    result
+  end
+
   function findminturbo(x)
     indmin = 0
     minval = typemax(eltype(x))
     @turbo for i ∈ eachindex(x)
+      newmin = x[i] < minval
+      minval = newmin ? x[i] : minval
+      indmin = newmin ?   i  : indmin
+    end
+    minval, indmin
+  end
+  function findmintturbo(x)
+    indmin = 0
+    minval = typemax(eltype(x))
+    @tturbo for i ∈ eachindex(x)
       newmin = x[i] < minval
       minval = newmin ? x[i] : minval
       indmin = newmin ?   i  : indmin
@@ -497,9 +515,21 @@ T = Float32
       mv, mi = findminturbo(a)
       mv2, mi2 = findminturbo_u4(a)
       @test mv == a[mi] == minimum(a) == mv2 == a[mi2]
+      for n in 1000:1000:10_000
+        x = rand(-T(100):T(100), n);
+        @test absmax_tturbo(x) == mapreduce(abs, max, x)
+        mv, mi = findmintturbo(x)
+        @test mv == x[mi] == minimum(x)
+      end
     else
       a = rand(T, N); b = rand(T, N);
       @test findmin(a) == findminturbo(a) == findminturbo_u4(a)
+      for n in 1000:1000:10_000
+        x = randn(T, n);
+        @test absmax_tturbo(x) == mapreduce(abs, max, x)
+        mv, mi = findmintturbo(x)
+        @test mv == x[mi] == minimum(x)
+      end
     end;
     c1 = similar(a); c2 = similar(a);
 

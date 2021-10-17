@@ -1,3 +1,4 @@
+
 function reg_term(omega, B = size(omega,2); alpha=0.01)
   reg = 0.0
   for b in 1:B
@@ -199,5 +200,6 @@ end
   end
   omega = rand(87,87);
   @test reg_term(omega) ≈ reg_term_turbo(omega)
+
 end
 

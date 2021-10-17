@@ -213,25 +213,38 @@ end
 end
 
 function outer_reduct_combine_expressions(ls::LoopSet, retv)
-    gf = GlobalRef(Core, :getfield)
-    q = Expr(:block, :(var"#load#thread#ret#" = $gf(ThreadingUtilities.load(var"#thread#ptr#", typeof($retv), $(reg_size(ls))),2,false)))
-    # push!(q.args, :(@show var"#load#thread#ret#"))
-    for (i,or) ∈ enumerate(ls.outer_reductions)
-        op = ls.operations[or]
-        var = name(op)
-        mvar = mangledvar(op)
-        instr = instruction(op)
-        out = Symbol(mvar, "##onevec##")
-        instrcall = Expr(:call, lv(reduce_to_onevecunroll(instr)))
-        push!(instrcall.args, Expr(:call, lv(:vecmemaybe), out))
-        if length(ls.outer_reductions) > 1
-            push!(instrcall.args, Expr(:call, lv(:vecmemaybe), Expr(:call, gf, Symbol("#load#thread#ret#"), i, false)))
-        else
-            push!(instrcall.args, Expr(:call, lv(:vecmemaybe), Symbol("#load#thread#ret#")))
+  gf = GlobalRef(Core, :getfield)
+  q = Expr(:block, :(var"#load#thread#ret#" = $gf(ThreadingUtilities.load(var"#thread#ptr#", typeof($retv), $(reg_size(ls))),2,false)))
+  # push!(q.args, :(@show var"#load#thread#ret#"))
+  for (i,or) ∈ enumerate(ls.outer_reductions)
+    op = ls.operations[or]
+    var = name(op)
+    mvar = mangledvar(op)
+    instr = instruction(op)
+    out = Symbol(mvar, "##onevec##")
+    instrcall::Expr = if instr.instr ≢ :ifelse
+      Expr(:call, lv(reduce_to_onevecunroll(instr)))
+    else
+      reductexpr::Expr = let ls = ls  #FIXME: this should be tested...
+        ifelse_reduction(:IfElseReduced, op) do opv
+          @assert length(ls.outer_reductions) > 1
+          j = findfirst(==(identifier(opv)), ls.outer_reductions)
+          otherarg = Expr(:call, lv(:vecmemaybe), Expr(:call, GlobalRef(Core,:getfield), Symbol("#load#thread#ret#"), j, false))
+          Expr(:call, lv(:vecmemaybe), Symbol(mangledvar(opv), "##onevec##")), (otherarg,)
         end
-        push!(q.args, Expr(:(=), out, Expr(:call, :data, instrcall)))
+      end
+      Expr(:call, reductexpr)
     end
-    q
+    push!(instrcall.args, Expr(:call, lv(:vecmemaybe), out))
+    if length(ls.outer_reductions) > 1
+      push!(instrcall.args, Expr(:call, lv(:vecmemaybe), Expr(:call, gf, Symbol("#load#thread#ret#"), i, false)))
+    else
+      push!(instrcall.args, Expr(:call, lv(:vecmemaybe), Symbol("#load#thread#ret#")))
+    end
+    push!(q.args, Expr(:(=), out, Expr(:call, :data, instrcall)))
+    # push!(q.args, Expr(:(=), out, :(@show $data($instrcall))))
+  end
+  q
 end
 
 function thread_loop_summary!(ls::LoopSet, ua::UnrollArgs, threadedloop::Loop, issecondthreadloop::Bool)
