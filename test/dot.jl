@@ -65,11 +65,11 @@ using Test
         s
     end
     function myselfdotavx(a)
-        s = zero(eltype(a))
-        @turbo for i ∈ eachindex(a)
-            s += a[i]*a[i]
-        end
-        s
+      s = zero(eltype(a))
+      @turbo for i ∈ eachindex(a)
+        s += a[i]*a[i]
+      end
+      s
     end
     function myselfdotavx_v2(a)
         s = zero(eltype(a))
@@ -93,13 +93,15 @@ using Test
         end
         s
     end
-    function dot_unroll2avx(x::Vector{T}, y::Vector{T}) where {T<:Number}
-        z = zero(T)
-        @turbo unroll=2 for i ∈ 1:length(x)
-            z += x[i]*y[i]
-        end
-        z
+  function dot_unroll2avx(x::Vector{T}, y::Vector{T}) where {T<:Number}
+    z = zero(T)
+    o = (3,)
+    b = (3,)
+    @turbo unroll=2 for i ∈ 1:length(x)
+      z += x[i]*y[i+o[1]-b[1]]
     end
+    z
+  end
     function dot_unroll3avx(x::Vector{T}, y::Vector{T}) where {T<:Number}
         z = zero(T)
         @turbo unroll=3 for i ∈ 1:length(x)
