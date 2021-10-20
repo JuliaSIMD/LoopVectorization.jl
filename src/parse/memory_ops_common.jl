@@ -11,6 +11,7 @@ function extract_array_symbol_from_ref!(ls::LoopSet, ex::Expr, offset1::Int)::Sy
     return ar
   elseif isa(ar, Expr) && (ar.head === :(.) || ar.head === :ref)
     s = dottosym(ar)
+    # pushpreamble!(ls, Expr(:(=), s, ar))
     pushprepreamble!(ls, Expr(:(=), s, ar))
     return s
   else
@@ -97,8 +98,10 @@ function gesp_const_offset!(ls::LoopSet, vptrarray::Symbol, ninds::Int, indices:
   if isone(mlt)
     subset_vptr!(ls, vptrarray, ninds, sym, indices, loopedindex, D)
   else        
+    # want same name for arrays to be given the same name if possible
     mltsym = Symbol(sym, "##multiplied##by##", mlt)
-    pushprepreamble!(ls, Expr(:(=), mltsym, Expr(:call, :(*), mlt, sym))) # want same name for arrays to be given the same name if possible
+    pushpreamble!(ls, Expr(:(=), mltsym, Expr(:call, :(*), mlt, sym)))
+    # pushprepreamble!(ls, Expr(:(=), mltsym, Expr(:call, :(*), mlt, sym)))
     subset_vptr!(ls, vptrarray, ninds, mltsym, indices, loopedindex, D)
   end
 end

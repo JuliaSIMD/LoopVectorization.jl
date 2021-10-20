@@ -1,6 +1,6 @@
 module LoopVectorization
 
-using Static: StaticInt, gt
+using Static: StaticInt, gt, static
 using VectorizationBase, SLEEFPirates, UnPack, OffsetArrays
 using VectorizationBase: 
   mask, MM, AbstractMask, data, grouped_strided_pointer, AbstractSIMD,
@@ -54,7 +54,7 @@ const Static = StaticInt
 using Requires
 
 
-export LowDimArray, stridedpointer, indices,
+export LowDimArray, stridedpointer, indices,  static,
     @avx, @avxt, @turbo, @tturbo, *ˡ, _turbo_!,
     vmap, vmap!, vmapt, vmapt!, vmapnt, vmapnt!, vmapntt, vmapntt!,
     tanh_fast, sigmoid_fast,
