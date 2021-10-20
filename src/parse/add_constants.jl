@@ -101,7 +101,8 @@ function ensure_constant_lowered!(ls::LoopSet, mpref::ArrayReferenceMetaPosition
 end
 function add_constant_vload!(ls::LoopSet, op::Operation, mpref::ArrayReferenceMetaPosition, elementbytes::Int)
   temp = gensym!(ls, "intermediateconstref")
-  vloadcall = Expr(:call, lv(:_vload), mpref.mref.ptr)
+  use_getindex = vptr(name(mpref)) === mpref.mref.ptr
+  vloadcall = use_getindex ? Expr(:call, Base.getindex, name(mpref)) : Expr(:call, lv(:_vload), mpref.mref.ptr)
   nindices = length(getindices(op))
   # getoffsets(op) .+= 1
   if nindices > 0
@@ -109,10 +110,18 @@ function add_constant_vload!(ls::LoopSet, op::Operation, mpref::ArrayReferenceMe
     for ind ∈ getindicesonly(op)
       ensure_constant_lowered!(ls, mpref, ind)
     end
-    push!(vloadcall.args, mem_offset(op, UnrollArgs(dummyloop, dummyloop, dummyloop, 0, 0, 0), fill(false,nindices), true, ls, false))
+    if use_getindex
+      append!(vloadcall.args, mem_offset(op, UnrollArgs(dummyloop, dummyloop, dummyloop, 0, 0, 0), fill(false,nindices), true, ls, false).args)
+    else
+      push!(vloadcall.args, mem_offset(op, UnrollArgs(dummyloop, dummyloop, dummyloop, 0, 0, 0), fill(false,nindices), true, ls, false))
+    end
   end
-  push!(vloadcall.args, Expr(:call, lv(:False)), staticexpr(reg_size(ls)))
-  pushpreamble!(ls, Expr(:(=), temp, vloadcall))
+  if use_getindex
+    pushpreamble!(ls, Expr(:(=), temp, :(@inbounds $vloadcall)))
+  else
+    push!(vloadcall.args, Expr(:call, lv(:False)), staticexpr(reg_size(ls)))
+    pushpreamble!(ls, Expr(:(=), temp, vloadcall))
+  end
   pushpreamble!(ls, Expr(:(=), name(op), temp))
   pushpreamble!(ls, op, temp)
   return temp
