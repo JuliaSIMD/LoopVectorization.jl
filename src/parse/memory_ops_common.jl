@@ -100,7 +100,7 @@ function gesp_const_offset!(ls::LoopSet, vptrarray::Symbol, ninds::Int, indices:
   else        
     # want same name for arrays to be given the same name if possible
     mltsym = Symbol(sym, "##multiplied##by##", mlt)
-    # pushpreamble!(ls, Expr(:(=), mltsym, Expr(:call, :(*), mlt, sym)))
+    pushpreamble!(ls, Expr(:(=), mltsym, Expr(:call, :(*), mlt, sym)))
     # pushprepreamble!(ls, Expr(:(=), mltsym, Expr(:call, :(*), mlt, sym)))
     subset_vptr!(ls, vptrarray, ninds, mltsym, indices, loopedindex, D)
   end
