@@ -1,7 +1,7 @@
 name = "LoopVectorization"
 uuid = "bdcacae8-1622-11e9-2a5c-532679323890"
 authors = ["Chris Elrod <elrodc@gmail.com>"]
-version = "0.12.88"
+version = "0.12.89"
 
 [deps]
 ArrayInterface = "4fba245c-0d91-5ea0-9b3e-6abc04ee57a9"
@@ -35,7 +35,7 @@ PolyesterWeave = "0.1"
 Requires = "1"
 SIMDDualNumbers = "0.1"
 SLEEFPirates = "0.6.23"
-Static = "0.3.3"
+Static = "0.3.3, 0.4"
 ThreadingUtilities = "0.4.5"
 UnPack = "1"
 VectorizationBase = "0.21.4"
