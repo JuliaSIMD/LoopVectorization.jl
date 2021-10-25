@@ -97,6 +97,8 @@ end
     @time include("steprange.jl")
     
     @time include("gemm.jl")
+
+    @time include("inner_reductions.jl")
   end
 
 end

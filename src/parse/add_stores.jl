@@ -7,6 +7,7 @@ function cse_store!(ls::LoopSet, op::Operation)
   ls.operations[id] = op
   ls.opdict[op.variable] = op
 end
+
 function add_store!(ls::LoopSet, op::Operation, add_pvar::Bool = !any(r -> r == op.ref, ls.refs_aliasing_syms))
   @assert isstore(op)
   if add_pvar
@@ -26,29 +27,29 @@ end
 
 
 function add_store!(
-    ls::LoopSet, mpref::ArrayReferenceMetaPosition, elementbytes::Int, parent = getop(ls, varname(mpref), mpref.loopdependencies, elementbytes)
+  ls::LoopSet, mpref::ArrayReferenceMetaPosition, elementbytes::Int, parent = getop(ls, varname(mpref), mpref.loopdependencies, elementbytes)
 )
-    isload(parent) && return add_copystore!(ls, parent, mpref, elementbytes)
-    vparents = mpref.parents
-    ldref = mpref.loopdependencies
-    reduceddeps = mpref.reduceddeps
-    pvar = name(parent)
-    id = length(ls.operations)
-    # try to cse store, by replacing the previous one
-    mref = mpref.mref
-    add_pvar = true
-    for opp ∈ operations(ls)
-        if mref == opp.ref
-            isstore(opp) && (id = opp.identifier)
-            add_pvar = false
-            break
-        end
-        # add_pvar &= (name(first(parents(opp))) != pvar)
+  isload(parent) && return add_copystore!(ls, parent, mpref, elementbytes)
+  vparents = mpref.parents
+  ldref = mpref.loopdependencies
+  reduceddeps = mpref.reduceddeps
+  pvar = name(parent)
+  id = length(ls.operations)
+  # try to cse store, by replacing the previous one
+  mref = mpref.mref
+  add_pvar = true
+  for opp ∈ operations(ls)
+    if mref == opp.ref
+      isstore(opp) && (id = opp.identifier)
+      add_pvar = false
+      break
     end
-    pushfirst!(vparents, parent)
-    update_deps!(ldref, reduceddeps, parent)
-    op = Operation( id, name(mpref), elementbytes, :setindex!, memstore, mpref )
-    add_store!(ls, op, add_pvar)
+    # add_pvar &= (name(first(parents(opp))) != pvar)
+  end
+  pushfirst!(vparents, parent)
+  update_deps!(ldref, reduceddeps, parent)
+  op = Operation( id, name(mpref), elementbytes, :setindex!, memstore, mpref )
+  add_store!(ls, op, add_pvar)
 end
 
 function add_store!(

@@ -309,6 +309,47 @@ function add_anon_func!(ls::LoopSet, LHS::Symbol, f::Expr, ex::Expr, position::I
   end
   return retop
 end
+# TODO: DRY, this is similar to `find_samename_constparent` in `condense_loopset.jl`
+function find_inner_reduct_parent(op::Operation, opname::Symbol)
+  for opp ∈ parents(op)
+    (((isconstant(opp)) && (name(opp) === opname))) && return opp
+    opptemp = find_samename_constparent(opp, opname)
+    opptemp === opp || return opptemp
+  end
+  op
+end
+
+function maybe_fix_reduced_deps!(ls::LoopSet, deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, parent::Operation, mpref::ArrayReferenceMetaPosition, position::Int)
+  loopdeps_parent = loopdependencies(parent)
+  reduceddeps_parent = reduceddependencies(parent)
+  loopdeps_mpref = loopdependencies(mpref)
+  loopdeps_new = Symbol[]
+  # pushv = Vector{Symbol}[loopdeps_new, reduceddeps_parent]
+  instr = instruction(parent).instr
+  pparent_id = findfirst(Base.Fix2(===,name(parent)) ∘ name, parents(parent))
+  pparent_id === nothing && return deps, reduceddeps
+  pparent = parents(parent)[pparent_id]
+  @assert length(loopdependencies(pparent)) == length(loopdeps_parent) + length(reduceddeps_parent)
+  reduceddeps_pparent = reduceddependencies(pparent)
+  # if instr === :identity
+  #   push!(pushv, 
+  # if Base.sym_in(instr, :ident
+  for ld ∈ loopdeps_parent
+    if ld ∈ loopdeps_mpref
+      push!(loopdeps_new, ld)
+    else
+      push!(reduceddeps_parent, ld)
+      push!(reduceddeps_pparent, ld)
+      # foreach(Base.Fix2(push!, ld), pushv)
+    end
+  end
+  parent.dependencies = loopdeps_new
+  reduct_init = find_inner_reduct_parent(pparent, name(pparent))
+  reduct_init.dependencies = loopdeps_new
+  reduct_init.reduced_children = reduceddeps_pparent
+  # ld = loopdependencies(mpref)
+  return loopdeps_new, copy(reduceddeps_parent)
+end
 function add_compute!(
     ls::LoopSet, var::Symbol, ex::Expr, elementbytes::Int, position::Int,
     mpref::Union{Nothing,ArrayReferenceMetaPosition} = nothing
@@ -350,8 +391,8 @@ function add_compute!(
           pushparent!(vparents, deps, reduceddeps, add_load!(ls, argref, elementbytes))
         end
       else
-        add_parent!(vparents, deps, reduceddeps, ls, arg, elementbytes, position)
-      end
+        add_parent!(vparents, deps, reduceddeps, ls, arg, elementbytes, position) 
+     end
     elseif arg ∈ ls.loopsymbols
       loopsymop = add_loopvalue!(ls, arg, elementbytes)
       pushparent!(vparents, deps, reduceddeps, loopsymop)
@@ -369,6 +410,10 @@ function add_compute!(
     setdiffv!(newloopdeps, newreduceddeps, deps, loopnestview)
     mergesetv!(newreduceddeps, reduceddeps)
     deps = newloopdeps; reduceddeps = newreduceddeps
+  end
+  # fix for #347
+  if (mpref ≢ nothing) && ((reduction_ind ≠ 0) & (mpref.varname === var) & (position > length(loopdependencies(mpref)))) && isone(length(vparents)) && (position == length(loopdependencies(only(vparents))))
+    deps, reduceddeps = maybe_fix_reduced_deps!(ls, deps,reduceddeps, only(vparents), mpref, position)
   end
   # @show reduction, search_tree(vparents, var) ex var vparents mpref get(ls.opdict, var, nothing) search_tree_for_ref(ls, vparents, mpref, var) # relies on cycles being forbidden
   if reduction || search_tree(vparents, var)
