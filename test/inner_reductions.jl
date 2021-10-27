@@ -73,15 +73,15 @@ function mul4_turbo_v4!(target_arr, src, range_a, range_b, padded_axis_a, padded
 end
 
 @testset "Inner reductions" begin
-  src = ones(19, 101)
-  max_a = 7; max_b = 9
-  range_a = -max_a:max_a
-  range_b = -max_b:max_b
+  src = ones(19, 101);
+  max_a = 7; max_b = 9;
+  range_a = -max_a:max_a;
+  range_b = -max_b:max_b;
 
-  target_arr = zeros(Float64, length(range_b), length(range_b))
+  target_arr = zeros(Float64, length(range_b), length(range_b));
 
-  padded_axis_b = (first(axes(src,2)) .+ max_b):(last(axes(src,2)) - max_b)
-  padded_axis_a = (first(axes(src,1)) .+ max_a):(last(axes(src,1)) - max_a)
+  padded_axis_b = (first(axes(src,2)) .+ max_b):(last(axes(src,2)) - max_b);
+  padded_axis_a = (first(axes(src,1)) .+ max_a):(last(axes(src,1)) - max_a);
 
   target_ref = zero(target_arr);
   reference_mul4!(target_ref, src, range_a, range_b, padded_axis_a, padded_axis_b)

@@ -64,100 +64,100 @@ function reduce_expr!(q::Expr, toreduct::Symbol, op::Operation, u₁::Int, u₂:
 end
 
 function lower_store_collection!(
-    q::Expr, ls::LoopSet, op::Operation, ua::UnrollArgs, mask::Bool, inds_calc_by_ptr_offset::Vector{Bool}
+  q::Expr, ls::LoopSet, op::Operation, ua::UnrollArgs, mask::Bool, inds_calc_by_ptr_offset::Vector{Bool}
 )
-    omop = offsetloadcollection(ls)
-    batchid, bopind = omop.batchedcollectionmap[identifier(op)]
-    collectionid, copind = omop.opidcollectionmap[identifier(op)]
-    opidmap = offsetloadcollection(ls).opids[collectionid]
-    idsformap = omop.batchedcollections[batchid]
+  omop = offsetloadcollection(ls)
+  batchid, bopind = omop.batchedcollectionmap[identifier(op)]
+  collectionid, copind = omop.opidcollectionmap[identifier(op)]
+  opidmap = offsetloadcollection(ls).opids[collectionid]
+  idsformap = omop.batchedcollections[batchid]
 
-    @unpack u₁, u₁loop, u₁loopsym, u₂loopsym, vloopsym, vloop, u₂max, suffix = ua
-    ops = operations(ls)
-    # __u₂max = ls.unrollspecification.u₂
-    nouter = length(idsformap)
+  @unpack u₁, u₁loop, u₁loopsym, u₂loopsym, vloopsym, vloop, u₂max, suffix = ua
+  ops = operations(ls)
+  # __u₂max = ls.unrollspecification.u₂
+  nouter = length(idsformap)
 
-    t = Expr(:tuple)
-    for (i,(opid,_)) ∈ enumerate(idsformap)
-        opp = first(parents(ops[opidmap[opid]]))
+  t = Expr(:tuple)
+  for (i,(opid,_)) ∈ enumerate(idsformap)
+    opp = first(parents(ops[opidmap[opid]]))
 
-        isu₁, isu₂ = isunrolled_sym(opp, u₁loopsym, u₂loopsym, vloopsym, ls)#, __u₂max)
-        u = Core.ifelse(isu₁, u₁, 1)
-        mvar = Symbol(variable_name(opp, ifelse(isu₂, suffix, -1)), '_', u)
-        # mvar = Symbol(variable_name(_op, suffix), '_', u)
-        # mvar = Symbol(variable_name(_op, ifelse(isu₂, suffix, -1)), '_', u)
-        # @show mvar, isu₂, isu₂unrolled(opp)
-        push!(t.args, mvar)
-    end
-    
-    offset_dummy_loop = Loop(first(getindices(op)), MaybeKnown(1), MaybeKnown(1024), MaybeKnown(1), Symbol(""), Symbol(""))
-    unrollcurl₂ = unrolled_curly(op, nouter, offset_dummy_loop, vloop, mask, 1)
-    inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false, 0, ls, false)
-    falseexpr = Expr(:call, lv(:False));
-    aliasexpr = falseexpr;
-    # trueexpr = Expr(:call, lv(:True));
-    rs = staticexpr(reg_size(ls));
-    manualunrollu₁ = if isu₁unrolled(op) && u₁ > 1 # both unrolled
-        if isknown(step(u₁loop)) && sum(Base.Fix2(===,u₁loopsym), getindicesonly(op)) == 1
-            if first(getindices(op)) === vloopsym
-                interleaveval = -nouter
-            else
-                interleaveval = 0
-            end
-            unrollcurl₁ = unrolled_curly(op, u₁, ua.u₁loop, vloop, mask, interleaveval)
-            inds = Expr(:call, unrollcurl₁, inds)
-            false
-        else
-            true
-        end
+    isu₁, isu₂ = isunrolled_sym(opp, u₁loopsym, u₂loopsym, vloopsym, ls)#, __u₂max)
+    u = Core.ifelse(isu₁, u₁, 1)
+    mvar = Symbol(variable_name(opp, ifelse(isu₂, suffix, -1)), '_', u)
+    # mvar = Symbol(variable_name(_op, suffix), '_', u)
+    # mvar = Symbol(variable_name(_op, ifelse(isu₂, suffix, -1)), '_', u)
+    push!(t.args, mvar)
+  end
+  offset_dummy_loop = Loop(first(getindices(op)), MaybeKnown(1), MaybeKnown(1024), MaybeKnown(1), Symbol(""), Symbol(""))
+  unrollcurl₂ = unrolled_curly(op, nouter, offset_dummy_loop, vloop, mask, 1)
+  inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false, 0, ls, false)
+  falseexpr = Expr(:call, lv(:False));
+  aliasexpr = falseexpr;
+  # trueexpr = Expr(:call, lv(:True));
+  rs = staticexpr(reg_size(ls));
+  manualunrollu₁ = if isu₁unrolled(op) && u₁ > 1 # both unrolled
+    # unrollcurl₂ is unrolled along `first(getindices(op))` by factor of `nouter`
+    # 
+    # if isknown(step(u₁loop)) && sum(Base.Fix2(===,u₁loopsym), getindicesonly(op)) == 1
+    if (isknown(step(u₁loop)) && sum(Base.Fix2(===,u₁loopsym), getindicesonly(op)) == 1)# && (isone(step(u₁loop)) | (first(getindices(op)) ≢ u₁loopsym))
+      # if first(getindices(op)) === u₁loopsym#vloopsym
+      #   interleaveval = -nouter
+      # else
+        interleaveval = 0
+      # end
+      unrollcurl₁ = unrolled_curly(op, u₁, u₁loop, vloop, mask, interleaveval)
+      inds = Expr(:call, unrollcurl₁, inds)
+      false
     else
-        false
+      true
     end
-    uinds = Expr(:call, unrollcurl₂, inds)
-    vp = vptr(op)
-    sptrsym = sptr!(q, op)
-    storeexpr = Expr(:call, lv(:_vstore!), sptrsym, Expr(:call, lv(:VecUnroll), t), uinds)
-    # not using `add_memory_mask!(storeexpr, op, ua, mask, ls)` because we checked `isconditionalmemop` earlier in `lower_load_collection!`
-    u₁vectorized = u₁loopsym === vloopsym
-    if mask# && isvectorized(op))
-        if !(manualunrollu₁ & u₁vectorized)
-            push!(storeexpr.args, MASKSYMBOL)
-        end
+  else
+    false
+  end
+  uinds = Expr(:call, unrollcurl₂, inds)
+  vp = vptr(op)
+  sptrsym = sptr!(q, op)
+  storeexpr = Expr(:call, lv(:_vstore!), sptrsym, Expr(:call, lv(:VecUnroll), t), uinds)
+  # not using `add_memory_mask!(storeexpr, op, ua, mask, ls)` because we checked `isconditionalmemop` earlier in `lower_load_collection!`
+  u₁vectorized = u₁loopsym === vloopsym
+  if mask# && isvectorized(op))
+    if !(manualunrollu₁ & u₁vectorized)
+      push!(storeexpr.args, MASKSYMBOL)
     end
-    push!(storeexpr.args, falseexpr, aliasexpr, falseexpr, rs)
-    if manualunrollu₁
-        masklast = mask & u₁vectorized
-        gf = GlobalRef(Core,:getfield)
-        tv = Vector{Symbol}(undef, length(t.args))
-        for i ∈ eachindex(tv)
-            s = gensym!(ls, "##tmp##collection##store##")
-            tv[i] = s
-            push!(q.args, Expr(:(=), s, Expr(:call, gf, t.args[i], 1)))
-        end
-        # @show u₁, t
-        for u ∈ 0:u₁-1
-            lastiter = (u+1) == u₁
-            storeexpr_tmp = if lastiter
-                storeexpr
-                (((u+1) == u₁) & masklast) && insert!(storeexpr.args, length(storeexpr.args)-3, MASKSYMBOL) # 3 for falseexpr, aliasexpr, falseexpr
-                storeexpr
-            else
-                copy(storeexpr)
-            end
-            vut = Expr(:tuple)
-            for i ∈ eachindex(tv)
-                push!(vut.args, Expr(:call, gf, tv[i], u+1, false))
-            end
-            storeexpr_tmp.args[3] = Expr(:call, lv(:VecUnroll), vut)
-            if u ≠ 0
-                storeexpr_tmp.args[4] = Expr(:call, unrollcurl₂, mem_offset_u(op, ua, inds_calc_by_ptr_offset, false, u, ls, false))
-            end
-            push!(q.args, storeexpr_tmp)
-        end
-    else
-        push!(q.args, storeexpr)
+  end
+  push!(storeexpr.args, falseexpr, aliasexpr, falseexpr, rs)
+  if manualunrollu₁
+    masklast = mask & u₁vectorized
+    gf = GlobalRef(Core,:getfield)
+    tv = Vector{Symbol}(undef, length(t.args))
+    for i ∈ eachindex(tv)
+      s = gensym!(ls, "##tmp##collection##store##")
+      tv[i] = s
+      push!(q.args, Expr(:(=), s, Expr(:call, gf, t.args[i], 1)))
     end
-    nothing
+    for u ∈ 0:u₁-1
+      lastiter = (u+1) == u₁
+      storeexpr_tmp = if lastiter
+        storeexpr
+        (((u+1) == u₁) & masklast) && insert!(storeexpr.args, length(storeexpr.args)-3, MASKSYMBOL) # 3 for falseexpr, aliasexpr, falseexpr
+        storeexpr
+      else
+        copy(storeexpr)
+      end
+      vut = Expr(:tuple)
+      for i ∈ eachindex(tv)
+        push!(vut.args, Expr(:call, gf, tv[i], u+1, false))
+      end
+      storeexpr_tmp.args[3] = Expr(:call, lv(:VecUnroll), vut)
+      if u ≠ 0
+        storeexpr_tmp.args[4] = Expr(:call, unrollcurl₂, mem_offset_u(op, ua, inds_calc_by_ptr_offset, false, u, ls, false))
+      end
+      push!(q.args, storeexpr_tmp)
+    end
+  else
+    push!(q.args, storeexpr)
+  end
+  nothing
 end
 gf(s::Symbol, n::Int) = Expr(:call, GlobalRef(Core,:getfield), s, n, false)
 function lower_store!(
@@ -188,8 +188,6 @@ function lower_store!(
   end
   # __u₂max = ls.unrollspecification.u₂
   isu₁, isu₂ = isunrolled_sym(opp, u₁loopsym, u₂loopsym, vloopsym, ls)#, __u₂max)
-  # @show isu₁, isu₂, u₁loopsym, u₂loopsym
-  # @show isu₁, isu₂, opp, u₁loopsym, u₂loopsym, vloopsym
   u = isu₁ ? u₁ : 1
   mvar = Symbol(variable_name(opp, ifelse(isu₂, suffix, -1)), '_', u)
   if all(op.ref.loopedindex)
@@ -217,7 +215,6 @@ function lower_store!(
       sptrsym = sptr!(q, op)
       for u ∈ 1:u₁
         inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, true, u-1, ls, false)
-        # @show isu₁unrolled(opp), opp
         storeexpr = if data_u₁
           if reductfunc === Symbol("")
             Expr(:call, lv(:_vstore!), sptrsym, gf(mvard,u), inds)

@@ -151,7 +151,6 @@ function lower_load_no_optranslation!(
     loadexpr = Expr(:call, lv(:_vload), sptr(op), inds)
     add_memory_mask!(loadexpr, op, td, mask, ls, 0)
     push!(loadexpr.args, falseexpr, rs) # unaligned load
-    # @show op loadexpr
     push!(q.args, Expr(:(=), mvar, loadexpr))
   elseif (u₁ > 1) & opu₁
     t = Expr(:tuple)
@@ -417,7 +416,6 @@ function rejectinterleave(ls::LoopSet, op::Operation, vloop::Loop, idsformap::Su
     end
   end
   vloopsym = vloop.itersymbol;
-  # @show op first(getindices(op)) length(idsformap), first(getstrides(op)), gethint(strd)
   (first(getindices(op)) === vloopsym) && (length(idsformap) ≠ abs(first(getstrides(op)) * gethint(strd)))
 end
 # function lower_load_collection_manual_u₁unroll!(
@@ -436,100 +434,99 @@ end
 #     op.mangledvariable = _mvar
 # end
 function lower_load_collection!(
-    q::Expr, ls::LoopSet, opidmap::Vector{Int},
-    idsformap::SubArray{Tuple{Int,Int}, 1, Vector{Tuple{Int,Int}}, Tuple{UnitRange{Int}}, true},
-    ua::UnrollArgs, mask::Bool, inds_calc_by_ptr_offset::Vector{Bool}
+  q::Expr, ls::LoopSet, opidmap::Vector{Int},
+  idsformap::SubArray{Tuple{Int,Int}, 1, Vector{Tuple{Int,Int}}, Tuple{UnitRange{Int}}, true},
+  ua::UnrollArgs, mask::Bool, inds_calc_by_ptr_offset::Vector{Bool}
 )
-    @unpack u₁, u₁loop, u₁loopsym, u₂loopsym, vloopsym, vloop, suffix = ua
+  @unpack u₁, u₁loop, u₁loopsym, u₂loopsym, vloopsym, vloop, suffix = ua
 
-    ops = operations(ls)
-    nouter = length(idsformap)
-    # ua = UnrollArgs(nouter, unrollsyms, u₂, 0)
-    # idsformap contains (index, offset) pairs
-    op = ops[opidmap[first(first(idsformap))]]
-    # if isu₁unrolled(op) && u₁ > 1 && !isknown(step(u₁loop))
-    #     return lower_load_collection_manual_u₁unroll!(
-    #         q, ls, opidmap, idsformap, ua,
-    #         mask, inds_calc_by_ptr_offset, op
-    #     )
-    # end
-    opindices = getindices(op)
-    interleave = first(opindices) === vloopsym
-    # construct dummy unrolled loop
-    offset_dummy_loop = Loop(first(opindices), MaybeKnown(1), MaybeKnown(1024), MaybeKnown(1), Symbol(""), Symbol(""))
-    unrollcurl₂ = unrolled_curly(op, nouter, offset_dummy_loop, vloop, mask, 1) # interleave always 1 here
-    inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false, 0, ls, false)
-    falseexpr = Expr(:call, lv(:False)); rs = staticexpr(reg_size(ls));
+  ops = operations(ls)
+  nouter = length(idsformap)
+  # ua = UnrollArgs(nouter, unrollsyms, u₂, 0)
+  # idsformap contains (index, offset) pairs
+  op = ops[opidmap[first(first(idsformap))]]
+  # if isu₁unrolled(op) && u₁ > 1 && !isknown(step(u₁loop))
+  #     return lower_load_collection_manual_u₁unroll!(
+  #         q, ls, opidmap, idsformap, ua,
+  #         mask, inds_calc_by_ptr_offset, op
+  #     )
+  # end
+  opindices = getindices(op)
+  # construct dummy unrolled loop
+  offset_dummy_loop = Loop(first(opindices), MaybeKnown(1), MaybeKnown(1024), MaybeKnown(1), Symbol(""), Symbol(""))
+  unrollcurl₂ = unrolled_curly(op, nouter, offset_dummy_loop, vloop, mask, 1) # interleave always 1 here
+  inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false, 0, ls, false)
+  falseexpr = Expr(:call, lv(:False)); rs = staticexpr(reg_size(ls));
 
-    opu₁, opu₂ = isunrolled_sym(op, u₁loopsym, u₂loopsym, vloopsym, ls)
-    manualunrollu₁ = if opu₁ && u₁ > 1 # both unrolled
-        if isknown(step(u₁loop)) && sum(Base.Fix2(===,u₁loopsym), getindicesonly(op)) == 1
-            if interleave # TODO: handle this better than using `rejectinterleave`
-                interleaveval = -nouter
-            else
-                interleaveval = 0
-            end
-            unrollcurl₁ = unrolled_curly(op, u₁, ua.u₁loop, vloop, mask, interleaveval)
-            inds = Expr(:call, unrollcurl₁, inds)
-            false
-        else
-            true # u₁ > 1 already checked to reach here
-        end
+  opu₁, opu₂ = isunrolled_sym(op, u₁loopsym, u₂loopsym, vloopsym, ls)
+  manualunrollu₁ = if opu₁ && u₁ > 1 # both unrolled
+    if isknown(step(u₁loop)) && sum(Base.Fix2(===,u₁loopsym), getindicesonly(op)) == 1
+      # if first(opindices) === u₁loopsym#vloopsym
+      #   interleaveval = -nouter
+      # else
+        interleaveval = 0
+      # end
+      unrollcurl₁ = unrolled_curly(op, u₁, ua.u₁loop, vloop, mask, interleaveval)
+      inds = Expr(:call, unrollcurl₁, inds)
+      false
     else
-        false
+      true # u₁ > 1 already checked to reach here
     end
-    uinds = Expr(:call, unrollcurl₂, inds)
-    sptrsym = sptr!(q, op)
-    loadexpr = Expr(:call, lv(:_vload), sptrsym, uinds)
-    # not using `add_memory_mask!(storeexpr, op, ua, mask, ls, 0)` because we checked `isconditionalmemop` earlier in `lower_load_collection!`
-    u₁vectorized = u₁loopsym === vloopsym
-    if (mask && isvectorized(op))
-        if !(manualunrollu₁ & u₁vectorized)
-            push!(loadexpr.args, MASKSYMBOL)
-        end
+  else
+    false
+  end
+  uinds = Expr(:call, unrollcurl₂, inds)
+  sptrsym = sptr!(q, op)
+  loadexpr = Expr(:call, lv(:_vload), sptrsym, uinds)
+  # not using `add_memory_mask!(storeexpr, op, ua, mask, ls, 0)` because we checked `isconditionalmemop` earlier in `lower_load_collection!`
+  u₁vectorized = u₁loopsym === vloopsym
+  if (mask && isvectorized(op))
+    if !(manualunrollu₁ & u₁vectorized)
+      push!(loadexpr.args, MASKSYMBOL)
     end
-    push!(loadexpr.args, falseexpr, rs)
-    collectionname = Symbol(vptr(op), "##collection##number#", opidmap[first(first(idsformap))], "#", suffix, "##size##", nouter, "##u₁##", u₁)
-    gf = GlobalRef(Core,:getfield)
-    if manualunrollu₁
-        masklast = mask & u₁vectorized & isvectorized(op)
-        extractedvs = Vector{Expr}(undef, length(idsformap))
-        for i ∈ eachindex(extractedvs)
-            extractedvs[i] = Expr(:tuple)
+  end
+  push!(loadexpr.args, falseexpr, rs)
+  collectionname = Symbol(vptr(op), "##collection##number#", opidmap[first(first(idsformap))], "#", suffix, "##size##", nouter, "##u₁##", u₁)
+  gf = GlobalRef(Core,:getfield)
+  if manualunrollu₁
+    masklast = mask & u₁vectorized & isvectorized(op)
+    extractedvs = Vector{Expr}(undef, length(idsformap))
+    for i ∈ eachindex(extractedvs)
+      extractedvs[i] = Expr(:tuple)
+    end
+    for u ∈ 0:u₁-1
+      collectionname_u = Symbol(collectionname, :_, u)
+      if u ≠ 0
+        inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false, u, ls, false)
+        uinds = Expr(:call, unrollcurl₂, inds)
+        loadexpr = copy(loadexpr)
+        loadexpr.args[3] = Expr(:call, unrollcurl₂, inds)
+        (((u+1) == u₁) & masklast) && insert!(loadexpr.args, length(loadexpr.args)-1, MASKSYMBOL) # 1 for `falseexpr` pushed at end
+      end
+      # unpack_collection!(q, ls, opidmap, idsformap, ua, loadexpr, collectionname, op, false)
+      push!(q.args, Expr(:(=), collectionname_u, Expr(:call, gf, loadexpr, 1)))
+      # getfield to extract data from `VecUnroll` object, so we have a tuple
+      for (i,(opid,o)) ∈ enumerate(idsformap)
+        ext = extractedvs[i]
+        if (u+1) == u₁
+          _op = ops[opidmap[opid]]
+          mvar = Symbol(variable_name(_op, Core.ifelse(opu₂, suffix, -1)), '_', u₁)
+          push!(q.args, Expr(:(=), mvar, Expr(:call, lv(:VecUnroll), ext)))
         end
-        for u ∈ 0:u₁-1
-            collectionname_u = Symbol(collectionname, :_, u)
-            if u ≠ 0
-                inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false, u, ls, false)
-                uinds = Expr(:call, unrollcurl₂, inds)
-                loadexpr = copy(loadexpr)
-                loadexpr.args[3] = Expr(:call, unrollcurl₂, inds)
-                (((u+1) == u₁) & masklast) && insert!(loadexpr.args, length(loadexpr.args)-1, MASKSYMBOL) # 1 for `falseexpr` pushed at end
-            end
-            # unpack_collection!(q, ls, opidmap, idsformap, ua, loadexpr, collectionname, op, false)
-            push!(q.args, Expr(:(=), collectionname_u, Expr(:call, gf, loadexpr, 1)))
-            # getfield to extract data from `VecUnroll` object, so we have a tuple
-            for (i,(opid,o)) ∈ enumerate(idsformap)
-                ext = extractedvs[i]
-                if (u+1) == u₁
-                    _op = ops[opidmap[opid]]
-                    mvar = Symbol(variable_name(_op, Core.ifelse(opu₂, suffix, -1)), '_', u₁)
-                    push!(q.args, Expr(:(=), mvar, Expr(:call, lv(:VecUnroll), ext)))
-                end
-                push!(ext.args, Expr(:call, gf, collectionname_u, i, false))
-            end
-        end
-    else
-        push!(q.args, Expr(:(=), collectionname, Expr(:call, gf, loadexpr, 1)))
-        # getfield to extract data from `VecUnroll` object, so we have a tuple
-        u = Core.ifelse(opu₁, u₁, 1)
-        for (i,(opid,o)) ∈ enumerate(idsformap)
-            extractedv = Expr(:call, gf, collectionname, i, false)
+        push!(ext.args, Expr(:call, gf, collectionname_u, i, false))
+      end
+    end
+  else
+    push!(q.args, Expr(:(=), collectionname, Expr(:call, gf, loadexpr, 1)))
+    # getfield to extract data from `VecUnroll` object, so we have a tuple
+    u = Core.ifelse(opu₁, u₁, 1)
+    for (i,(opid,o)) ∈ enumerate(idsformap)
+      extractedv = Expr(:call, gf, collectionname, i, false)
 
-            _op = ops[opidmap[opid]]
-            mvar = Symbol(variable_name(_op, Core.ifelse(opu₂, suffix, -1)), '_', u)
-            push!(q.args, Expr(:(=), mvar, extractedv))
-        end
-        # unpack_collection!(q, ls, opidmap, idsformap, ua, loadexpr, collectionname, op, true)
+      _op = ops[opidmap[opid]]
+      mvar = Symbol(variable_name(_op, Core.ifelse(opu₂, suffix, -1)), '_', u)
+      push!(q.args, Expr(:(=), mvar, extractedv))
     end
+    # unpack_collection!(q, ls, opidmap, idsformap, ua, loadexpr, collectionname, op, true)
+  end
 end

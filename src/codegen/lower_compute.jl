@@ -61,7 +61,7 @@ function parent_unroll_status(op::Operation, u₁loop::Symbol, u₂loop::Symbol,
     parents_u₁syms, parents_u₂syms
 end
 
-function _add_loopvalue!(ex::Expr, loopval::Symbol, vloop::Loop, u::Int)
+function _add_loopvalue!(ex::Expr, loopval::Symbol, vloop::Loop, u::Int, loop::Loop)
   vloopsym = vloop.itersymbol
   if loopval === vloopsym
     if iszero(u)
@@ -77,24 +77,26 @@ function _add_loopvalue!(ex::Expr, loopval::Symbol, vloop::Loop, u::Int)
     end
   elseif u == 0
     push!(ex.args, loopval)
+  elseif isknown(step(loop))
+    push!(ex.args, Expr(:call, lv(:vadd_nsw), loopval, staticexpr(u*gethint(step(loop)))))
   else
-    push!(ex.args, Expr(:call, lv(:vadd_nsw), loopval, staticexpr(u)))
+    push!(ex.args, Expr(:call, lv(:vadd_nsw), loopval, mulexpr(step(loop), u)))
   end
 end
-function add_loopvalue!(instrcall::Expr, loopval, ua::UnrollArgs, u₁::Int)
+function add_loopvalue!(instrcall::Expr, loopval, ua::UnrollArgs, u₁::Int, loop::Loop)
   @unpack u₁loopsym, u₂loopsym, vloopsym, vloop, suffix = ua
   if loopval === u₁loopsym #parentsunrolled[n]
     if isone(u₁)
-      _add_loopvalue!(instrcall, loopval, vloop, 0)
+      _add_loopvalue!(instrcall, loopval, vloop, 0, loop)
     else
       t = Expr(:tuple)
       for u ∈ 0:u₁-1
-        _add_loopvalue!(t, loopval, vloop, u)
+        _add_loopvalue!(t, loopval, vloop, u, loop)
       end
       push!(instrcall.args, Expr(:call, lv(:VecUnroll), t))
     end
   elseif suffix > 0 && loopval === u₂loopsym
-    _add_loopvalue!(instrcall, loopval, vloop, suffix)
+    _add_loopvalue!(instrcall, loopval, vloop, suffix, loop)
   elseif loopval === vloopsym
     push!(instrcall.args, _MMind(loopval, step(vloop)))
   else
@@ -519,7 +521,7 @@ function lower_compute!(
     opp = parents_op[n]
     if isloopvalue(opp)
       loopval = first(loopdependencies(opp))
-      add_loopvalue!(instrcall, loopval, ua, u₁)
+      add_loopvalue!(instrcall, loopval, ua, u₁, getloop(ls,loopval))
     elseif name(opp) === name(op)
       selfdep = n
       if ((isvectorized(opp) && !isvectorized(op))) ||

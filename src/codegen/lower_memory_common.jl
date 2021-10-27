@@ -113,9 +113,6 @@ end
 function addvectoroffset!(
     ret::Expr, mm::Bool, unrolledsteps::Int, unrolledloopstride, vloopstride, indexstride::Integer, index, offset::Integer, calcbypointeroffset::Bool, indvectorized::Bool
 ) # 10 -> (7 or 8) args
-    # if !isknown(unrolledloopstride)
-    #     @show unrolledsteps, calcbypointeroffset, _isone(unrolledloopstride)
-    # end
     if unrolledsteps == 0 # neither unrolledloopstride or indexstride can be 0
         addoffset!(ret, mm, vloopstride, indexstride, index, offset, calcbypointeroffset) # 7 arg
     elseif indvectorized
@@ -203,7 +200,6 @@ function unrolled_curly(op::Operation, u₁::Int, u₁loop::Loop, vloop::Loop, m
   # @unpack u₁, u₁loopsym, vloopsym = td
   AV = AU = -1
   for (n,ind) ∈ enumerate(indices)
-    # @show AU, op, n, ind, vloopsym, u₁loopsym
     if li[n]
       if ind === vloopsym
         @assert AV == -1 # FIXME: these asserts should be replaced with checks that prevent using `unrolled_curly` in these cases (also to be reflected in cost modeling, to avoid those)
@@ -218,12 +214,13 @@ function unrolled_curly(op::Operation, u₁::Int, u₁loop::Loop, vloop::Loop, m
       end
     else
       opp = findop(parents(op), ind)
-      # @show opp
       if isvectorized(opp)
         @assert AV == -1
         AV = n
       end
-      if (u₁loopsym === CONSTANTZEROINDEX) ? (CONSTANTZEROINDEX ∈ loopdependencies(opp)) : (isu₁unrolled(opp) || (ind === u₁loopsym))
+      # if (u₁loopsym === CONSTANTZEROINDEX) ? (CONSTANTZEROINDEX ∈ loopdependencies(opp)) : (isu₁unrolled(opp) || (ind === u₁loopsym))
+      # can't check isu₁unrolled(opp) because we may be lying.
+      if (u₁loopsym === CONSTANTZEROINDEX) ? (CONSTANTZEROINDEX ∈ loopdependencies(opp)) : (u₁loopsym ∈ loopdependencies(opp) || (ind === u₁loopsym))
         @assert AU == -1
         AU = n
       end
@@ -247,18 +244,24 @@ function unrolled_curly(op::Operation, u₁::Int, u₁loop::Loop, vloop::Loop, m
   @assert isknown(step(u₁loop)) "Unrolled loops must have known steps to use `Unroll` type; this is a bug, shouldn't have reached here"
   if AV > 0
     @assert isknown(step(vloop)) "Vectorized loops must have known steps to use `Unroll` type; this is a bug, shouldn't have reached here."
+    XU = convert(Int, getstrides(op)[AU]) * gethint(step(u₁loop))
     X = convert(Int, getstrides(op)[AV])
     X *= gethint(step(vloop))
     intvecsym = :(Int($VECTORWIDTHSYMBOL))
     if interleave > 0
       Expr(:curly, lv(:Unroll), AU, interleave, u₁, AV, intvecsym, M, X)
     elseif interleave < 0
-      unrollstepexpr = :(Int($(mulexpr(VECTORWIDTHSYMBOL, -interleave))))
-      Expr(:curly, lv(:Unroll), AU, unrollstepexpr, u₁, AV, intvecsym, M, X)
+      interleave *= -XU
+      if AU == AV
+        unrollstepexpr = :(Int($(mulexpr(VECTORWIDTHSYMBOL, interleave))))
+        Expr(:curly, lv(:Unroll), AU, unrollstepexpr, u₁, AV, intvecsym, M, X)
+      else
+        Expr(:curly, lv(:Unroll), AU, interleave, u₁, AV, intvecsym, M, X)
+      end
     else
       if vecnotunrolled
         # Expr(:call, Expr(:curly, lv(:Unroll), AU, 1, u₁, AV, intvecsym, M, 1), ind)
-        Expr(:curly, lv(:Unroll), AU, gethint(step(u₁loop)), u₁, AV, intvecsym, M, X)
+        Expr(:curly, lv(:Unroll), AU, XU, u₁, AV, intvecsym, M, X)
       else
         if isone(X)
           Expr(:curly, lv(:Unroll), AU, intvecsym, u₁, AV, intvecsym, M, X)
@@ -269,7 +272,7 @@ function unrolled_curly(op::Operation, u₁::Int, u₁loop::Loop, vloop::Loop, m
       end
     end
   else
-    Expr(:curly, lv(:Unroll), AU, gethint(step(u₁loop)), u₁, 0, 1, M, 1)
+    Expr(:curly, lv(:Unroll), AU, convert(Int, getstrides(op)[AU])*gethint(step(u₁loop)), u₁, 0, 1, M, 1)
   end
 end
 function unrolledindex(op::Operation, td::UnrollArgs, mask::Bool, inds_calc_by_ptr_offset::Vector{Bool}, ls::LoopSet)
@@ -309,9 +312,6 @@ function mem_offset_u(
       if ind === u₁loopsym
         addvectoroffset!(ret, indvectorizedmm, incr₁, u₁step, vstep, stride, ind, offset, ind_by_offset, indvectorized) # 9 arg
       elseif ind === u₂loopsym
-        # if isstore(op)
-        #     @show indvectorized, ind === vloopsym, u₂loopsym, incr₂
-        # end
         addvectoroffset!(ret, indvectorizedmm, incr₂, u₂step, vstep, stride, ind, offset, ind_by_offset, indvectorized) # 9 arg
       elseif loopedindex[n]
         addoffset!(ret, indvectorizedmm, vstep, stride, ind, offset, ind_by_offset) # 7 arg

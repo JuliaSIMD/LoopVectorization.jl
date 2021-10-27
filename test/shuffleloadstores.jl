@@ -331,6 +331,56 @@ function readraw!(img, raw)
   img
 end
 
+function issue348_ref!(hi, lo)
+  @inbounds @fastmath for j in 0:(size(hi, 2)-3)÷3 # This tturbo 
+    for i in 0:(size(hi, 1)-3)÷3
+      hi[3i+2, 3j+2] = lo[i+2, j+2]
+      hi[3i+3, 3j+2] = lo[i+2, j+2]
+      hi[3i+4, 3j+2] = lo[i+2, j+2]
+      hi[3i+2, 3j+3] = lo[i+2, j+2]
+      hi[3i+3, 3j+3] = lo[i+2, j+2]
+      hi[3i+4, 3j+3] = lo[i+2, j+2]
+      hi[3i+2, 3j+4] = lo[i+2, j+2]
+      hi[3i+3, 3j+4] = lo[i+2, j+2]
+      hi[3i+4, 3j+4] = lo[i+2, j+2]
+    end
+  end
+end
+function issue348_v0!(hi, lo)
+  @turbo for j in 0:(size(hi, 2)-3)÷3 # This tturbo 
+    for i in 0:(size(hi, 1)-3)÷3
+      hi[3i+2, 3j+2] = lo[i+2, j+2]
+      hi[3i+3, 3j+2] = lo[i+2, j+2]
+      hi[3i+4, 3j+2] = lo[i+2, j+2]
+      hi[3i+2, 3j+3] = lo[i+2, j+2]
+      hi[3i+3, 3j+3] = lo[i+2, j+2]
+      hi[3i+4, 3j+3] = lo[i+2, j+2]
+      hi[3i+2, 3j+4] = lo[i+2, j+2]
+      hi[3i+3, 3j+4] = lo[i+2, j+2]
+      hi[3i+4, 3j+4] = lo[i+2, j+2]
+    end
+  end
+end
+function issue348_v1!(hi, lo)
+  @turbo for j in 0:3:size(hi, 2)-3 # This tturbo 
+    for i in 0:3:size(hi, 1)-3
+      i_lo = i÷3 + 2
+      j_lo = j÷3 + 2
+      i_hi = i + 2
+      j_hi = j + 2
+      hi[i_hi  , j_hi  ] = lo[i_lo, j_lo]
+      hi[i_hi+1, j_hi  ] = lo[i_lo, j_lo]
+      hi[i_hi+2, j_hi  ] = lo[i_lo, j_lo]
+      hi[i_hi  , j_hi+1] = lo[i_lo, j_lo]
+      hi[i_hi+1, j_hi+1] = lo[i_lo, j_lo]
+      hi[i_hi+2, j_hi+1] = lo[i_lo, j_lo]
+      hi[i_hi  , j_hi+2] = lo[i_lo, j_lo]
+      hi[i_hi+1, j_hi+2] = lo[i_lo, j_lo]
+      hi[i_hi+2, j_hi+2] = lo[i_lo, j_lo]
+    end
+  end
+end
+
 
 @testset "shuffles load/stores" begin
   @show @__LINE__
@@ -408,4 +458,23 @@ end
   img1 = Matrix{UInt8}(undef, w, w);
   img2 = Matrix{UInt8}(undef, w, w);
   @test readraw!(img1, raw) == readraw_turbo!(img2, raw)
+
+  for n_hi ∈ (9,71,72,73)
+    @show n_hi
+    n_hi = 9
+    n_lo = n_hi ÷ 3
+    a_lo_gc = rand(n_lo+2, n_lo+2);
+    a_hi_tmp_ref = zeros(size(a_hi_gc));
+    a_hi_tmp0 = zeros(size(a_hi_gc));
+    # a_hi_tmp1 = zeros(size(a_hi_gc));
+
+    issue348_ref!(a_hi_tmp_ref, a_lo_gc)
+    issue348_v0!(a_hi_tmp0, a_lo_gc)
+    @test a_hi_tmp_ref == a_hi_tmp0
+    a_hi_tmp1 = view(zeros(size(a_hi_gc) .* 9), map((x,y) -> x .+ (4y), axes(a_hi_gc), size(a_hi_gc))...);
+    issue348_v1!(a_hi_tmp1, a_lo_gc)
+    @test a_hi_tmp_ref == a_hi_tmp1
+    @turbo a_hi_tmp1 .= 0;
+    @test all(iszero, parent(a_hi_tmp1))
+  end
 end

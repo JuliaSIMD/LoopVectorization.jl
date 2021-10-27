@@ -251,6 +251,44 @@ function muladd_index!(
     end
 end
 
+function getintconstant(ls::LoopSet, op::Operation)
+  for (i, (v,bits,bool)) ∈ ls.preamble_symint
+    i == identifier(op) || continue
+    return byterepresentable(v), v%Int8
+  end
+  return false, zero(Int8)
+end
+
+function add_additive_index!(ls::LoopSet, opparents, vptrarray, sym, mop, ninds, indices, offsets, strides, loopedindex, loopdependencies, reduceddeps, offset, mlt, D)
+  factor = Core.ifelse((instruction(mop).instr === :sub_fast), -1, 1)
+  if length(parents(mop)) == 2
+    sub1 = parents(mop)[1]
+    sub2 = parents(mop)[2]
+    if isloopvalue(sub1) & isconstant(sub2)
+      isliteralint, literalval = getintconstant(ls, sub2)
+      if isliteralint
+        _addoffset!(indices, offsets, strides, loopedindex, loopdependencies, name(sub1), offset+literalval, mlt)
+      else
+        vptrarray = gesp_const_offset!(ls, vptrarray, ninds, indices, loopedindex, factor*mlt, name(sub2), D)
+        _addoffset!(indices, offsets, strides, loopedindex, loopdependencies, name(sub1), offset, mlt)
+      end
+    elseif isloopvalue(sub2) & isconstant(sub1)
+      isliteralint, literalval = getintconstant(ls, sub1)
+      if isliteralint
+        _addoffset!(indices, offsets, strides, loopedindex, loopdependencies, name(sub2), offset+literalval, factor*mlt)
+      else
+        vptrarray = gesp_const_offset!(ls, vptrarray, ninds, indices, loopedindex, mlt, name(sub1), D)
+        _addoffset!(indices, offsets, strides, loopedindex, loopdependencies, name(sub2), offset, factor*mlt)
+      end
+    else
+      muladd_index!(ls, opparents, loopdependencies, reduceddeps, indices, offsets, strides, loopedindex, mlt, sym, offset)
+    end
+  else
+    muladd_index!(ls, opparents, loopdependencies, reduceddeps, indices, offsets, strides, loopedindex, mlt, sym, offset)
+  end
+  vptrarray
+end
+
 function checkforoffset!(
     ls::LoopSet, vptrarray::Symbol, ninds::Int, opparents::Vector{Operation}, indices::Vector{Symbol}, offsets::Vector{Int8}, strides::Vector{Int8},
     loopedindex::Vector{Bool}, loopdependencies::Vector{Symbol}, reduceddeps::Vector{Symbol}, ind::Expr, D::Int
@@ -320,22 +358,7 @@ function checkforoffset!(
         vptrarray = gesp_const_offset!(ls, vptrarray, ninds, indices, loopedindex, mlt, name(mop), D)
         addconstindex!(indices, offsets, strides, loopedindex, offset)
       elseif (instruction(mop).instr === :add_fast) || (instruction(mop).instr === :sub_fast)
-        factor = Core.ifelse((instruction(mop).instr === :sub_fast), -1, 1)
-        if length(parents(mop)) == 2
-          sub1 = parents(mop)[1]
-          sub2 = parents(mop)[2]
-          if isloopvalue(sub1) & isconstant(sub2)
-            vptrarray = gesp_const_offset!(ls, vptrarray, ninds, indices, loopedindex, factor*mlt, name(sub2), D)
-            _addoffset!(indices, offsets, strides, loopedindex, loopdependencies, name(sub1), offset, mlt)
-          elseif isloopvalue(sub2) & isconstant(sub1)
-            vptrarray = gesp_const_offset!(ls, vptrarray, ninds, indices, loopedindex, mlt, name(sub1), D)
-            _addoffset!(indices, offsets, strides, loopedindex, loopdependencies, name(sub2), offset, factor*mlt)
-          else
-            muladd_index!(ls, opparents, loopdependencies, reduceddeps, indices, offsets, strides, loopedindex, mlt, sym, offset)
-          end
-        else
-          muladd_index!(ls, opparents, loopdependencies, reduceddeps, indices, offsets, strides, loopedindex, mlt, sym, offset)
-        end
+        vptrarray = add_additive_index!(ls, opparents, vptrarray, sym, mop, ninds, indices, offsets, strides, loopedindex, loopdependencies, reduceddeps, offset, mlt, D)
       else
         muladd_index!(ls, opparents, loopdependencies, reduceddeps, indices, offsets, strides, loopedindex, mlt, sym, offset)
       end
@@ -497,11 +520,15 @@ function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementby
       else
         indop = get(ls.opdict, ind, nothing)
         if indop !== nothing  && !isconstant(indop)
-          pushparent!(parents, loopdependencies, reduceddeps, indop)
-          push!(indices, name(indop)); ninds += 1
-          push!(offsets, zero(Int8))
-          push!(strides, one(Int8))
-          push!(loopedindex, false)
+          if iscompute(indop) && Base.sym_in(instruction(indop).instr, (:add_fast, :sub_fast))
+            vptrarray = add_additive_index!(ls, parents, vptrarray, ind, indop, ninds, indices, offsets, strides, loopedindex, loopdependencies, reduceddeps, 0, 1, D)
+          else
+            pushparent!(parents, loopdependencies, reduceddeps, indop)
+            push!(indices, name(indop)); ninds += 1
+            push!(offsets, zero(Int8))
+            push!(strides, one(Int8))
+            push!(loopedindex, false)
+          end
         else
           vptrarray = subset_vptr!(ls, vptrarray, ninds, ind, indices, loopedindex, 0)
           length(indices) == 0 && push!(indices, DISCONTIGUOUS)

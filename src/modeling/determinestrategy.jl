@@ -73,7 +73,7 @@ function cost(ls::LoopSet, op::Operation, (u₁,u₂)::Tuple{Symbol,Symbol}, vlo
         # rejectinterleave false means omop
         # cannot shuffle false means reject curly
         # either false means shuffle
-        dont_shuffle = rejectinterleave(op) && cannot_shuffle(op, u₁, u₂, contigind, indices)
+        dont_shuffle = rejectinterleave(op) && (cannot_shuffle(op, u₁, u₂, contigind, indices))
         if dont_shuffle
           # offset = 0.0 # gather/scatter, alignment doesn't matter
           r = 1 << shifter

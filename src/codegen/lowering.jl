@@ -906,18 +906,18 @@ function calc_Ureduct!(ls::LoopSet, us::UnrollSpecification)
 end
 ureduct(ls::LoopSet) = ls.ureduct
 function lower_unrollspec(ls::LoopSet)
-    us = ls.unrollspecification
-    @unpack vloopnum, u₁, u₂ = us
-    order = names(ls)
-    init_loop_map!(ls)
-    vectorized = order[vloopnum]
-    Ureduct = calc_Ureduct!(ls, us)
-    setup_preamble!(ls, us, Ureduct)
-    initgesps = add_loop_start_stop_manager!(ls)
-    q = Expr(:let, initgesps, lower_unrolled_dynamic(ls, us, num_loops(ls), false))
-    q = gc_preserve( ls, Expr(:block, q) )
-    reduce_expr!(q, ls, Ureduct)
-    lsexpr(ls, q)
+  us = ls.unrollspecification
+  @unpack vloopnum, u₁, u₂ = us
+  order = names(ls)
+  init_loop_map!(ls)
+  vectorized = order[vloopnum]
+  Ureduct = calc_Ureduct!(ls, us)
+  setup_preamble!(ls, us, Ureduct)
+  initgesps = add_loop_start_stop_manager!(ls)
+  q = Expr(:let, initgesps, lower_unrolled_dynamic(ls, us, num_loops(ls), false))
+  q = gc_preserve( ls, Expr(:block, q) )
+  reduce_expr!(q, ls, Ureduct)
+  lsexpr(ls, q)
 end
 
 function lower(ls::LoopSet, order, u₁loop, u₂loop, vectorized, u₁, u₂, inline::Bool)
