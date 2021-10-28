@@ -459,19 +459,17 @@ end
   img2 = Matrix{UInt8}(undef, w, w);
   @test readraw!(img1, raw) == readraw_turbo!(img2, raw)
 
-  for n_hi ∈ (9,71,72,73)
-    @show n_hi
-    n_hi = 9
+  for n_hi ∈ 9:100
+    iszero((n_hi-1)%3) && continue
     n_lo = n_hi ÷ 3
     a_lo_gc = rand(n_lo+2, n_lo+2);
-    a_hi_tmp_ref = zeros(size(a_hi_gc));
-    a_hi_tmp0 = zeros(size(a_hi_gc));
-    # a_hi_tmp1 = zeros(size(a_hi_gc));
+    a_hi_tmp_ref = zeros(n_hi+2, n_hi+2);
+    a_hi_tmp0 = zeros(n_hi+2, n_hi+2);
 
     issue348_ref!(a_hi_tmp_ref, a_lo_gc)
     issue348_v0!(a_hi_tmp0, a_lo_gc)
     @test a_hi_tmp_ref == a_hi_tmp0
-    a_hi_tmp1 = view(zeros(size(a_hi_gc) .* 9), map((x,y) -> x .+ (4y), axes(a_hi_gc), size(a_hi_gc))...);
+    a_hi_tmp1 = view(zeros(size(a_hi_tmp0) .* 9), map((x,y) -> x .+ (4y), axes(a_hi_tmp0), size(a_hi_tmp0))...);
     issue348_v1!(a_hi_tmp1, a_lo_gc)
     @test a_hi_tmp_ref == a_hi_tmp1
     @turbo a_hi_tmp1 .= 0;
