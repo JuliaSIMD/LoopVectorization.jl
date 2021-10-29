@@ -2,19 +2,18 @@
 # const LOOPVECBENCHDIR = joinpath(pkgdir("LoopVectorization"), "benchmarks")
 # includet(joinpath(LOOPVECBENCHDIR, "driver.jl"))
 
-using Distributed, LoopVectorization, JLD2
-
+using Distributed, LoopVectorization, JLD2, ProgressMeter
 const LOOPVECBENCHDIR = joinpath(pkgdir(LoopVectorization), "benchmark")
 include(joinpath(LOOPVECBENCHDIR, "benchmarkflops.jl"))
 include(joinpath(LOOPVECBENCHDIR, "plotbenchmarks.jl"))
 
 
-# nprocs_to_add() = (Sys.CPU_THREADS >> 1) - 1
-nprocs_to_add() = (Sys.CPU_THREADS >> 1)
+nprocs_to_add() = ((Sys.CPU_THREADS)::Int >> 1)
+# nprocs_to_add() = ((Sys.CPU_THREADS)::Int >> 1) - 1
 start_worker(wid) = remotecall(include, wid, joinpath(LOOPVECBENCHDIR, "setup_worker.jl"))
-function start_workers()
-    addprocs(nprocs_to_add())
-    foreach(wait, map(start_worker, workers()))
+function start_workers(nprocs=nprocs_to_add())
+  addprocs(nprocs, exeflags="--project=$(Base.active_project())")
+  foreach(wait, map(start_worker, workers()))
 end
 stop_workers() = rmprocs(workers())
 
@@ -29,36 +28,36 @@ function blastests()
 end
 function benchmark_AmulB(sizes)
     tests = blastests()
-    start_workers()
+    start_workers(nprocs_to_add()>>1)
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
-    pmap(is -> A_mul_B_bench!(sm, is[2], is[1]), enumerate(sizes))
+    @showprogress pmap(is -> A_mul_B_bench!(sm, is[2], is[1]), enumerate(sizes))
     br = BenchmarkResult(Matrix(sm), tests, sizes)
     stop_workers()
     br
 end
 function benchmark_AmulBt(sizes)
     tests = blastests()
-    start_workers()
+    start_workers(nprocs_to_add()>>1)
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
-    pmap(is -> A_mul_Bt_bench!(sm, is[2], is[1]), enumerate(sizes))
+    @showprogress pmap(is -> A_mul_Bt_bench!(sm, is[2], is[1]), enumerate(sizes))
     br = BenchmarkResult(Matrix(sm), tests, sizes)
     stop_workers()
     br
 end
 function benchmark_AtmulB(sizes)
     tests = blastests()
-    start_workers()
+    start_workers(nprocs_to_add()>>1)
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
-    pmap(is -> At_mul_B_bench!(sm, is[2], is[1]), enumerate(sizes))
+    @showprogress pmap(is -> At_mul_B_bench!(sm, is[2], is[1]), enumerate(sizes))
     br = BenchmarkResult(Matrix(sm), tests, sizes)
     stop_workers()
     br
 end
 function benchmark_AtmulBt(sizes)
     tests = blastests()
-    start_workers()
+    start_workers(nprocs_to_add()>>1)
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
-    pmap(is -> At_mul_Bt_bench!(sm, is[2], is[1]), enumerate(sizes))
+    @showprogress pmap(is -> At_mul_Bt_bench!(sm, is[2], is[1]), enumerate(sizes))
     br = BenchmarkResult(Matrix(sm), tests, sizes)
     stop_workers()
     br
@@ -73,7 +72,7 @@ function benchmark_dot(sizes)
     tests = dot_tests()
     start_workers()
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
-    pmap(is -> dot_bench!(sm, is[2], is[1]), enumerate(sizes))
+    @showprogress pmap(is -> dot_bench!(sm, is[2], is[1]), enumerate(sizes))
     br = BenchmarkResult(Matrix(sm), tests, sizes)
     stop_workers()
     br
@@ -82,7 +81,7 @@ function benchmark_selfdot(sizes)
     tests = dot_tests()
     start_workers()
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
-    pmap(is -> selfdot_bench!(sm, is[2], is[1]), enumerate(sizes))
+    @showprogress pmap(is -> selfdot_bench!(sm, is[2], is[1]), enumerate(sizes))
     br = BenchmarkResult(Matrix(sm), tests, sizes)
     stop_workers()
     br
@@ -91,7 +90,7 @@ function benchmark_Amulvb(sizes)
     tests = blastests()
     start_workers()
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
-    pmap(is -> A_mul_vb_bench!(sm, is[2], is[1]), enumerate(sizes))
+    @showprogress pmap(is -> A_mul_vb_bench!(sm, is[2], is[1]), enumerate(sizes))
     br = BenchmarkResult(Matrix(sm), tests, sizes)
     stop_workers()
     br
@@ -100,7 +99,7 @@ function benchmark_Atmulvb(sizes)
     tests = blastests()
     start_workers()
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
-    pmap(is -> At_mul_vb_bench!(sm, is[2], is[1]), enumerate(sizes))
+    @showprogress pmap(is -> At_mul_vb_bench!(sm, is[2], is[1]), enumerate(sizes))
     br = BenchmarkResult(Matrix(sm), tests, sizes)
     stop_workers()
     br
@@ -108,10 +107,10 @@ end
 function benchmark_dot3(sizes)
     tests = ["LoopVectorization", "Julia", "Clang", "GFortran"]
     INTEL_BENCH && push!(tests, "icc", "ifort")
-    push!(test, "g++ & Eigen-3", "clang++ & Eigen-3", "LinearAlgebra")
+    push!(tests, "g++ & Eigen-3", "clang++ & Eigen-3", "LinearAlgebra")
     start_workers()
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
-    pmap(is -> dot3_bench!(sm, is[2], is[1]), enumerate(sizes))
+    @showprogress pmap(is -> dot3_bench!(sm, is[2], is[1]), enumerate(sizes))
     br = BenchmarkResult(Matrix(sm), tests, sizes)
     stop_workers()
     br
@@ -119,12 +118,12 @@ end
 function benchmark_sse(sizes)
     tests = ["LoopVectorization", "Julia", "Clang", "GFortran"]
     INTEL_BENCH && push!(tests, "icc", "ifort")
-    push!(test, "g++ & Eigen-3", "clang++ & Eigen-3", "MKL")
+    push!(tests, "g++ & Eigen-3", "clang++ & Eigen-3")
     MKL_BENCH && push!(tests, "MKL")
 
     start_workers()
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
-    pmap(is -> sse_bench!(sm, is[2], is[1]), enumerate(sizes))
+    @showprogress pmap(is -> sse_bench!(sm, is[2], is[1]), enumerate(sizes))
     br = BenchmarkResult(Matrix(sm), tests, sizes)
     stop_workers()
     br
@@ -134,7 +133,7 @@ function benchmark_exp(sizes)
     INTEL_BENCH && push!(tests, "icc", "ifort")
     start_workers()
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
-    pmap(is -> exp_bench!(sm, is[2], is[1]), enumerate(sizes))
+    @showprogress pmap(is -> exp_bench!(sm, is[2], is[1]), enumerate(sizes))
     br = BenchmarkResult(Matrix(sm), tests, sizes)
     stop_workers()
     br
@@ -145,7 +144,7 @@ function benchmark_aplusBc(sizes)
     push!(tests, "g++ & Eigen-3", "clang++ & Eigen-3")
     start_workers()
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
-    pmap(is -> aplusBc_bench!(sm, is[2], is[1]), enumerate(sizes))
+    @showprogress pmap(is -> aplusBc_bench!(sm, is[2], is[1]), enumerate(sizes))
     br = BenchmarkResult(Matrix(sm), tests, sizes)
     stop_workers()
     br
@@ -157,7 +156,7 @@ function benchmark_AplusAt(sizes)
     INTEL_BENCH && push!(tests, "ifort-builtin")
     start_workers()
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
-    pmap(is -> AplusAt_bench!(sm, is[2], is[1]), enumerate(sizes))
+    @showprogress pmap(is -> AplusAt_bench!(sm, is[2], is[1]), enumerate(sizes))
     br = BenchmarkResult(Matrix(sm), tests, sizes)
     stop_workers()
     br
@@ -167,7 +166,7 @@ function benchmark_random_access(sizes)
     INTEL_BENCH && push!(tests, "icc", "ifort")
     start_workers()
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
-    pmap(is -> randomaccess_bench!(sm, is[2], is[1]), enumerate(sizes))
+    @showprogress pmap(is -> randomaccess_bench!(sm, is[2], is[1]), enumerate(sizes))
     br = BenchmarkResult(Matrix(sm), tests, sizes)
     stop_workers()
     br
@@ -179,7 +178,7 @@ function benchmark_logdettriangle(sizes)
     push!(tests, "LinearAlgebra")
     start_workers()
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
-    pmap(is -> logdettriangle_bench!(sm, is[2], is[1]), enumerate(sizes))
+    @showprogress pmap(is -> logdettriangle_bench!(sm, is[2], is[1]), enumerate(sizes))
     br = BenchmarkResult(Matrix(sm), tests, sizes)
     stop_workers()
     br
@@ -189,7 +188,7 @@ function benchmark_filter2d(sizes, K)
     INTEL_BENCH && push!(tests, "icc", "ifort")
     start_workers()
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
-    pmap(is -> filter2d_bench_run!(sm, is[2], is[1], K), enumerate(sizes))
+    @showprogress pmap(is -> filter2d_bench_run!(sm, is[2], is[1], K), enumerate(sizes))
     br = BenchmarkResult(Matrix(sm), tests, sizes)
     stop_workers()
     br
@@ -208,7 +207,7 @@ function benchmark_filter2dunrolled(sizes)
     start_workers()
     sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
     K = SizedOffsetMatrix{Float64,-1,1,-1,1}(rand(3,3))
-    pmap(is -> filter2dunrolled_bench_run!(sm, is[2], is[1], K), enumerate(sizes))
+    @showprogress pmap(is -> filter2dunrolled_bench_run!(sm, is[2], is[1], K), enumerate(sizes))
     br = BenchmarkResult(Matrix(sm), tests, sizes)
     stop_workers()
     br
@@ -234,7 +233,6 @@ println("A' * b benchmark results:"); Atmulvb_bench = benchmark_Atmulvb(sizes); 
 println("a' * b benchmark results:"); dot_bench = benchmark_dot(longsizes); println(dot_bench)
 println("a' * a benchmark results:"); selfdot_bench = benchmark_selfdot(longsizes); println(selfdot_bench)
 
-println("Benchmark resutls of summing squared error:"); sse_bench = benchmark_sse(sizes); println(sse_bench)
 println("Benchmark results of a .+ B .* c':"); aplusBc_bench = benchmark_aplusBc(sizes); println(aplusBc_bench)
 println("Benchmark results of A .+ A':"); AplusAt_bench = benchmark_AplusAt(sizes); println(AplusAt_bench)
 
@@ -242,13 +240,15 @@ println("Benchmark results for dynamically sized 3x3 convolution:"); filter2d_dy
 println("Benchmark results for statically sized 3x3 convolution:"); filter2d_3x3_bench = benchmark_filter2d3x3(sizes); println(filter2d_3x3_bench)
 println("Benchmark results for unrolled 3x3 convolution:"); filter2d_unrolled_bench = benchmark_filter2dunrolled(sizes); println(filter2d_unrolled_bench)
 
+println("Benchmark resutls of summing squared error:"); sse_bench = benchmark_sse(sizes); println(sse_bench)
 println("Benchmark results of exponentiating a vector:"); vexp_bench = benchmark_exp(sizes); println(vexp_bench)
 println("Benchmark results from using a vector of indices:"); randomaccess_bench = benchmark_random_access(sizes); println(randomaccess_bench)
 
 const v = 2
-using Cairo, Fontconfig
+# using Cairo, Fontconfig
 const PICTURES = joinpath(pkgdir(LoopVectorization), "docs", "src", "assets")
-saveplot(f, br) = draw(PNG(joinpath(PICTURES, f * "$v.png"), 12inch, 8inch), plot(br))
+# saveplot(f, br) = draw(PNG(joinpath(PICTURES, f * "$v.png"), 12inch, 8inch), plot(br))
+saveplot(f, br) = draw(SVG(joinpath(PICTURES, f * "$v.svg"), 12inch, 8inch), plot(br))
 
 # If only rerunning a few, remove them from load.
 # @load "benchmarkresults.jld2" logdettriangle_bench filter2d_dynamic_bench filter2d_3x3_bench filter2d_unrolled_bench dot_bench selfdot_bench dot3_bench sse_bench aplusBc_bench AplusAt_bench vexp_bench randomaccess_bench AmulB_bench AmulBt_bench AtmulB_bench AtmulBt_bench Amulvb_bench Atmulvb_bench

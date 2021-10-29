@@ -1,4 +1,5 @@
 [deps]
+ArrayInterface = "4fba245c-0d91-5ea0-9b3e-6abc04ee57a9"
 Cairo = "159f3aea-2a34-519c-b102-8c37f9878175"
 ColorSchemes = "35d6a980-a343-548e-a6ea-1d62b119f2f4"
 Colors = "5ae59095-9a9b-59fe-a467-6f913c188581"
@@ -12,5 +13,6 @@ MKL_jll = "856f044c-d86e-5d09-b602-aeab76dc8ba7"
 OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
 OpenBLAS_jll = "4536629a-c528-5b80-bd46-f80d51c5b363"
 PrettyTables = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
+ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
 SLEEFPirates = "476501e8-09a2-5ece-8869-fb82de89a1fa"
 VectorizationBase = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
