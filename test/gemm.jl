@@ -1,7 +1,7 @@
 @testset "GEMM" begin
     # using LoopVectorization, LinearAlgebra, Test; T = Float64
     if LoopVectorization.cache_linesize() == 64
-        Unum, Tnum = LoopVectorization.register_count() == 16 ? (2, 6) : (3, 9)
+        Unum, Tnum = LoopVectorization.register_count() == 16 ? (2, 6) : (LoopVectorization.register_size() == 64 ? (3, 9) : (4, 6))
     else
         Unum, Tnum = LoopVectorization.register_count() == 16 ? (2, 6) : (4, 6)
     end
@@ -707,6 +707,7 @@
 #     LoopVectorization.VectorizationBase.ZeroInitializedStridedPointer(LoopVectorization.VectorizationBase.stridedpointer(A.data))
 # end
 
+@testset "Matmuls" begin
     for T ∈ (Float32, Float64, Int32, Int64)
         TC = sizeof(T) == 4 ? Float32 : Float64
         R = T <: Integer ? (T(-1000):T(1000)) : T
@@ -975,7 +976,8 @@
                 fill!(C, 9999.999); rank2AmulBavx_noinline!(C, Aₘ, Aₖ′', B)
                 @test C ≈ C2
             end
-        end
+      end
     end
+  end
 end
 

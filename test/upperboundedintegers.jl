@@ -36,6 +36,6 @@ using OffsetArrays, Test
     # It may evaluate less than the upper bound, depending on the mask's value.
     # We check that the first few match
     @test @view(ubdouble!(xs, x)[begin:3]) == @view(x[begin:3]) .* 2;
-    @test xs[end] ≠ 2x[end]
+    LoopVectorization.register_size() > 16 && (@test xs[end] ≠ 2x[end])
   end
 end
