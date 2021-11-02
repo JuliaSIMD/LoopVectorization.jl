@@ -61,6 +61,8 @@ const START_TIME = time()
     @time include("special.jl")
 
     @time include("mapreduce.jl")
+
+    @time include("index_processing.jl")
   end
 
   @time if LOOPVECTORIZATION_TEST == "all" || LOOPVECTORIZATION_TEST == "part3"
