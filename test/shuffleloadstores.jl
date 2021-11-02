@@ -380,7 +380,26 @@ function issue348_v1!(hi, lo)
     end
   end
 end
-
+function reverse_part(n1,n2)
+  A = zeros(n1,n2)
+  @turbo for i=1:n1÷2, j = 1:n2
+    c = 1.0
+    A[i, j] = c
+    r = n1 + 1 - i
+    A[r, j] = c
+  end
+  return A
+end
+function reverse_part_ref(n1,n2)
+  A = zeros(n1,n2)
+  @inbounds for i=1:n1÷2; @simd for j = 1:n2
+    c = 1.0
+    A[i, j] = c
+    r = n1 + 1 - i
+    A[r, j] = c
+  end; end
+  return A
+end
 
 @testset "shuffles load/stores" begin
   @show @__LINE__
@@ -474,5 +493,7 @@ end
     @test a_hi_tmp_ref == a_hi_tmp1
     @turbo a_hi_tmp1 .= 0;
     @test all(iszero, parent(a_hi_tmp1))
+
+    @test reverse_part(n_hi,4) == reverse_part_ref(n_hi,4)
   end
 end

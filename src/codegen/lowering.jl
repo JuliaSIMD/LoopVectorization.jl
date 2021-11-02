@@ -614,10 +614,12 @@ end
 ## This performs reduction to one `Vec`
 function reduce_expr!(q::Expr, ls::LoopSet, U::Int)
   us = ls.unrollspecification
-  u₁f, u₂f = if us.u₂ == -1
-    ifelse(U == -1, us.u₁, U), -1
+  if us.u₂ == -1
+    u₁f = ifelse(U == -1, us.u₁, U)
+    u₂f = -1
   else
-    us.u₁, U
+    u₁f = us.u₁
+    u₂f = U
   end
   # u₁loop, u₂loop = getunrolled(ls)
   u₁loop = getloop(ls, us.u₁loopnum).itersymbol
