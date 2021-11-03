@@ -34,7 +34,7 @@ function setdiffv!(s4::AbstractVector{T}, s3::AbstractVector{T}, s1::AbstractVec
 end
 function update_deps!(deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, parent::Operation)
     mergesetv!(deps, loopdependencies(parent))#, reduceddependencies(parent))
-    if !(isload(parent) || isconstant(parent)) && !isreductcombineinstr(parent)
+    if !(isload(parent) || isconstant(parent)) #&& !isreductcombineinstr(parent)
         mergesetv!(reduceddeps, reduceddependencies(parent))
     end
     nothing
