@@ -718,7 +718,7 @@ Execute an `@turbo` block. The block's code is represented via the arguments:
   pushfirst!(ls.preamble.args, :(var"#lv#tuple#args#" = reassemble_tuple(Tuple{var"#LB#",var"#V#"}, var"#flattened#var#arguments#")))
   post = hoist_constant_memory_accesses!(ls)
   # return @show avx_body(ls, var"#UNROLL#")
-  q = if last(var"#UNROLL#") > 1
+  q = if (last(var"#UNROLL#") > 1) && length(var"#LPSYM#") == length(ls.loops)
     inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, l1, l2, l3, nt = var"#UNROLL#"
     # wrap in `var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#"` in `Expr` to homogenize types
     avx_threads_expr(
