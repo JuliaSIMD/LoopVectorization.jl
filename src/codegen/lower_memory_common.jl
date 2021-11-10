@@ -13,7 +13,7 @@ function symbolind(ind::Symbol, op::Operation, td::UnrollArgs, ls::LoopSet)
     Symbol(pvar, '_', Core.ifelse(u₁op, u₁, 1)), parent
 end
 
-staticexpr(x::Int) = Expr(:call, Expr(:curly, lv(:StaticInt), x))
+staticexpr(x::Int) = StaticInt{x}()
 staticexpr(x::Union{Symbol,Expr}) = Expr(:call, lv(:StaticInt), x)
 
 _MMind(ind::Union{Symbol,Expr}, str::Int) = Expr(:call, lv(:MM), VECTORWIDTHSYMBOL, ind, staticexpr(str))
