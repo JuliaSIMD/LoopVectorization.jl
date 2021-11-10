@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Composite Types: DateTime Arrays · LoopVectorization.jl</title><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.039/juliamono-regular.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.13.11/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img src="../../assets/logo.svg" alt="LoopVectorization.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">LoopVectorization.jl</a></span></div><form class="docs-search" action="../../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../getting_started/">Getting Started</a></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../multithreading/">Multithreading</a></li><li><a class="tocitem" href="../matrix_multiplication/">Matrix Multiplication</a></li><li><a class="tocitem" href="../array_interface/">Array Interface</a></li><li><a class="tocitem" href="../matrix_vector_ops/">Matrix-Vector Operations</a></li><li><a class="tocitem" href="../dot_product/">Dot Products</a></li><li class="is-active"><a class="tocitem" href>Composite Types: DateTime Arrays</a><ul class="internal"><li><a class="tocitem" href="#Setting-up-the-Problem"><span>Setting up the Problem</span></a></li><li><a class="tocitem" href="#First-Attempt:-Sequential-version-of-the-loop"><span>First Attempt: Sequential version of the loop</span></a></li><li><a class="tocitem" href="#Second-Attempt:-Turbo-Loop"><span>Second Attempt: Turbo Loop</span></a></li><li><a class="tocitem" href="#Benchmarks"><span>Benchmarks</span></a></li></ul></li><li><a class="tocitem" href="../special_functions/">Special Functions</a></li><li><a class="tocitem" href="../sum_of_squared_error/">Sum of squared error</a></li><li><a class="tocitem" href="../filtering/">Image Filtering</a></li></ul></li><li><a class="tocitem" href="../../vectorized_convenience_functions/">Vectorized Convenience Functions</a></li><li><a class="tocitem" href="../../future_work/">Future Work</a></li><li><a class="tocitem" href="../../api/">API reference</a></li><li><span class="tocitem">Developer Documentation</span><ul><li><a class="tocitem" href="../../devdocs/overview/">Developer Overview</a></li><li><a class="tocitem" href="../../devdocs/loopset_structure/">LoopSet Structure</a></li><li><a class="tocitem" href="../../devdocs/constructing_loopsets/">Constructing LoopSets</a></li><li><a class="tocitem" href="../../devdocs/evaluating_loops/">Determining the strategy for evaluating loops</a></li><li><a class="tocitem" href="../../devdocs/lowering/">Lowering</a></li><li><a class="tocitem" href="../../devdocs/reference/">Internals reference</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>Composite Types: DateTime Arrays</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Composite Types: DateTime Arrays</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/JuliaSIMD/LoopVectorization.jl/blob/master/docs/src/examples/datetime_arrays.md" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="Composite-Types:-DateTime-Arrays"><a class="docs-heading-anchor" href="#Composite-Types:-DateTime-Arrays">Composite Types: DateTime Arrays</a><a id="Composite-Types:-DateTime-Arrays-1"></a><a class="docs-heading-anchor-permalink" href="#Composite-Types:-DateTime-Arrays" title="Permalink"></a></h1><p>Currently, loops over <em>some</em> types are easier to work with than others. Here we show: (1) a sequential loop over <code>Vector{DateTime}</code> that cannot have <code>@turbo</code> applied directly, and (2) a solution that uses the interpreted integer representation of <code>DateTime</code>.</p><p>This may be applicable if you have a composite type that may be represented with primitive types.</p><h2 id="Setting-up-the-Problem"><a class="docs-heading-anchor" href="#Setting-up-the-Problem">Setting up the Problem</a><a id="Setting-up-the-Problem-1"></a><a class="docs-heading-anchor-permalink" href="#Setting-up-the-Problem" title="Permalink"></a></h2><p>Here&#39;s a simple problem involving timestamps:</p><p><strong>Problem statement</strong>:</p><ul><li><em>Given</em>: a vector of <em>strictly increasing</em> timestamps.</li><li><em>Output</em>: a vector of the same length starting at <code>0.0</code> and ending at <code>1.0</code>. Each intermediate element is scaled proportionally to the length of time since the beginning.</li></ul><p><strong>Sample Output</strong>:</p><pre><code class="language-julia hljs">using Dates
+
+sample_input = [
+    Dates.DateTime(2021, 5, 5, 10, 0, 0),
+    Dates.DateTime(2021, 5, 5, 10, 5, 15),
+    Dates.DateTime(2021, 5, 6, 10, 0, 0),
+    Dates.DateTime(2021, 5, 6, 10, 5, 15),
+    Dates.DateTime(2021, 5, 7, 10, 0, 20),
+]
+
+expected_output = [
+    0.0,
+    0.0018227057053581761,
+    0.499942136326814,
+    0.5017648420321722,
+    1.0,
+]</code></pre><h2 id="First-Attempt:-Sequential-version-of-the-loop"><a class="docs-heading-anchor" href="#First-Attempt:-Sequential-version-of-the-loop">First Attempt: Sequential version of the loop</a><a id="First-Attempt:-Sequential-version-of-the-loop-1"></a><a class="docs-heading-anchor-permalink" href="#First-Attempt:-Sequential-version-of-the-loop" title="Permalink"></a></h2><p>This implementation satisfies the problem statement by iterating over the examples:</p><pre><code class="language-julia hljs">using Dates
+
+function scale_timeseries_sequential(data::Vector{Dates.DateTime})
+  out = similar(data, Float64)
+  ϕ = (data[lastindex(data)] - data[1]).value
+
+  @inbounds for i ∈ eachindex(data)
+      out[i] = (data[i] - data[1]).value / ϕ
+  end
+
+  return out
+end</code></pre><h2 id="Second-Attempt:-Turbo-Loop"><a class="docs-heading-anchor" href="#Second-Attempt:-Turbo-Loop">Second Attempt: Turbo Loop</a><a id="Second-Attempt:-Turbo-Loop-1"></a><a class="docs-heading-anchor-permalink" href="#Second-Attempt:-Turbo-Loop" title="Permalink"></a></h2><p>Our <code>Vector{Dates.DateTime}</code> has an integer interpretation which we can take advantage of here. We&#39;ll <code>reinterpret</code> our vector as <code>Int</code>, make the needed adjustments, then apply the <code>@turbo</code> macro to our loop:</p><pre><code class="language-julia hljs">using LoopVectorization, Dates
+
+function scale_timeseries_turbo(data::Vector{Dates.DateTime})
+
+  # Interpret our DateTime vector as Int
+  tsi = reinterpret(Int, data)
+
+  out = similar(data, Float64)
+
+  # We&#39;ve interpreted our data as integers, so we no longer need `.value`
+  ϕ = tsi[lastindex(tsi)] - tsi[1]
+
+  @turbo for i ∈ eachindex(tsi)
+      out[i] = (tsi[i] - tsi[1]) / ϕ
+  end
+
+  return out
+end</code></pre><h2 id="Benchmarks"><a class="docs-heading-anchor" href="#Benchmarks">Benchmarks</a><a id="Benchmarks-1"></a><a class="docs-heading-anchor-permalink" href="#Benchmarks" title="Permalink"></a></h2><p>We&#39;ll benchmark with randomly generated data:</p><pre><code class="language-julia hljs">function generate_timestamps(N::Int64)
+    data = Vector{Dates.DateTime}(undef,N)
+    v = DateTime(1990, 1, 1, 0, 0, 0)
+    for i in 1:N
+        v += Second(rand(1:5, 1)[1])
+        data[i] =v
+    end
+    return data
+end</code></pre><p>Briefly, the benchmark suggests that the mean time for the sequential vs. turbo solution is a ~3x speedup while holding memory requirements constant:</p><pre><code class="language-julia hljs">julia&gt; using BenchmarkTools
+
+julia&gt; data_100000 = generate_timestamps(100000);
+
+julia&gt; data_200000 = generate_timestamps(200000);
+
+julia&gt; @benchmark scale_timeseries_sequential(data_100000)
+BenchmarkTools.Trial: 10000 samples with 1 evaluation.
+ Range (min … max):  318.864 μs … 967.760 μs  ┊ GC (min … max): 0.00% … 40.41%
+ Time  (median):     321.291 μs               ┊ GC (median):    0.00%
+ Time  (mean ± σ):   332.503 μs ±  52.040 μs  ┊ GC (mean ± σ):  1.97% ±  6.98%
+
+  █▆▅▂▂▂▁                                                       ▁
+  █████████▆▆▆▅▅▅▅▅▄▄▄▄▁▁▄▁▁▃▁▁▄▄▃▃▁▃▄▁▃▁▁▁▃▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▅█▇ █
+  319 μs        Histogram: log(frequency) by time        701 μs &lt;
+
+ Memory estimate: 781.33 KiB, allocs estimate: 2.
+
+julia&gt; @benchmark scale_timeseries_turbo(data_100000)
+BenchmarkTools.Trial: 10000 samples with 1 evaluation.
+ Range (min … max):   71.942 μs … 933.400 μs  ┊ GC (min … max):  0.00% … 71.93%
+ Time  (median):      87.926 μs               ┊ GC (median):     0.00%
+ Time  (mean ± σ):   100.082 μs ±  89.095 μs  ┊ GC (mean ± σ):  11.63% ± 11.43%
+
+  ▄█▃▁                                                        ▁ ▁
+  ████▇▄▁▁▁▁▁▁▁▁▃▄▆▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█ █
+  71.9 μs       Histogram: log(frequency) by time        764 μs &lt;
+
+ Memory estimate: 781.33 KiB, allocs estimate: 2.
+
+julia&gt; @benchmark scale_timeseries_sequential(data_200000)
+BenchmarkTools.Trial: 7153 samples with 1 evaluation.
+ Range (min … max):  637.692 μs …   2.277 ms  ┊ GC (min … max): 0.00% … 65.01%
+ Time  (median):     640.729 μs               ┊ GC (median):    0.00%
+ Time  (mean ± σ):   694.282 μs ± 184.965 μs  ┊ GC (mean ± σ):  3.69% ±  8.68%
+
+  █▆▅▃▂▁                                                        ▁
+  ███████▇▅▆▆▄▄▅▁▁▁▁▁▁▆██▇▅▄▄▁▃▁▃▃▄▁▁▁▁▁▁▁▁▁▁▁▇█▇▇▅▅▄▃▄▄▁▁▁▄▄█▇ █
+  638 μs        Histogram: log(frequency) by time       1.71 ms &lt;
+
+ Memory estimate: 1.53 MiB, allocs estimate: 2.
+
+julia&gt; @benchmark scale_timeseries_turbo(data_200000)
+BenchmarkTools.Trial: 10000 samples with 1 evaluation.
+ Range (min … max):  159.023 μs …   2.092 ms  ┊ GC (min … max):  0.00% … 50.30%
+ Time  (median):     176.559 μs               ┊ GC (median):     0.00%
+ Time  (mean ± σ):   230.513 μs ± 189.542 μs  ┊ GC (mean ± σ):  11.86% ± 12.80%
+
+  █▇▅▄▄▃▂▂▁          ▁▁                                         ▂
+  ██████████▇▅▅▃▁▄▁▃▁██▇▆▄▅▄▄▅▄▅▃▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▇▅▅▅▅▄▅▄▅█▇▇ █
+  159 μs        Histogram: log(frequency) by time       1.22 ms &lt;
+
+ Memory estimate: 1.53 MiB, allocs estimate: 2.</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../dot_product/">« Dot Products</a><a class="docs-footer-nextpage" href="../special_functions/">Special Functions »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.10 on <span class="colophon-date" title="Wednesday 10 November 2021 09:33">Wednesday 10 November 2021</span>. Using Julia version 1.6.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
