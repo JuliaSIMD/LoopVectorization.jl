@@ -690,35 +690,53 @@ function stride_penalty(ls::LoopSet, order::Vector{Symbol})
         10.0sum(maximum, values(stridepenaltydict)) * Base.power_by_squaring(0.0009765625, length(order))
     end
 end
-function isoptranslation(ls::LoopSet, op::Operation, unrollsyms::UnrollSymbols)
-    @unpack u₁loopsym, u₂loopsym, vloopsym = unrollsyms
-    (vloopsym == u₁loopsym || vloopsym == u₂loopsym) && return 0, 0x00
-    (isu₁unrolled(op) && isu₂unrolled(op)) || return 0, 0x00
-    u₁step = step(getloop(ls, u₁loopsym))
-    u₂step = step(getloop(ls, u₂loopsym))
-    (isknown(u₁step) & isknown(u₂step)) || return 0, 0x00
-    abs(gethint(u₁step)) == abs(gethint(u₂step)) || return 0, 0x00
 
-    istranslation = 0
-    inds = getindices(op); li = op.ref.loopedindex
-    for i ∈ eachindex(li)
-        if !li[i]
-            opp = findparent(ls, inds[i + (first(inds) === DISCONTIGUOUS)])
-            if isu₁unrolled(opp) && isu₂unrolled(opp)
-                if Base.sym_in(instruction(opp).instr, (:vadd_nsw, :(+)))
-                    return i, 0x03 # 00000011 - both positive
-                elseif Base.sym_in(instruction(opp).instr, (:vsub_nsw, :(-)))
-                    oppp1 = parents(opp)[1]
-                    if isu₁unrolled(oppp1)
-                        return i, 0x01 # 00000001 - u₁ positive, u₂ negative
-                    else#isu₂unrolled(oppp1)
-                        return i, 0x02 # 00000010 - u₂ positive, u₁ negative
-                    end
-                end
-            end
-        end
+function isuniqueinindices(ls::LoopSet, op::Operation, opp::Operation, i::Int)
+  ld = loopdependencies(opp);
+  inds = getindicesonly(op)
+  li = op.ref.loopedindex
+  for j ∈ eachindex(inds)
+    i == j && continue
+    if li[j]
+      inds[j] ∈ ld && return false
+    else
+      opp = findparent(ls, inds[i + (first(inds) === DISCONTIGUOUS)])
+      any(in(ld), loopdependencies(opp)) && return false
     end
-    0, 0x00
+  end
+  true
+end
+function isoptranslation(ls::LoopSet, op::Operation, unrollsyms::UnrollSymbols)
+  @unpack u₁loopsym, u₂loopsym, vloopsym = unrollsyms
+  (vloopsym == u₁loopsym || vloopsym == u₂loopsym) && return 0, 0x00
+  (isu₁unrolled(op) && isu₂unrolled(op)) || return 0, 0x00
+  u₁step = step(getloop(ls, u₁loopsym))
+  u₂step = step(getloop(ls, u₂loopsym))
+  (isknown(u₁step) & isknown(u₂step)) || return 0, 0x00
+  abs(gethint(u₁step)) == abs(gethint(u₂step)) || return 0, 0x00
+  
+  istranslation = 0
+  inds = getindices(op); li = op.ref.loopedindex
+  for i ∈ eachindex(li)
+    if !li[i]
+      opp = findparent(ls, inds[i + (first(inds) === DISCONTIGUOUS)])
+      if isu₁unrolled(opp) & isu₂unrolled(opp)
+        if Base.sym_in(instruction(opp).instr, (:vadd_nsw, :(+)))
+          isuniqueinindices(ls, op, opp, i) || return 0, 0x00
+          return i, 0x03 # 00000011 - both positive
+        elseif Base.sym_in(instruction(opp).instr, (:vsub_nsw, :(-)))
+          isuniqueinindices(ls, op, opp, i) || return 0, 0x00
+          oppp1 = parents(opp)[1]
+          if isu₁unrolled(oppp1)
+            return i, 0x01 # 00000001 - u₁ positive, u₂ negative
+          else#isu₂unrolled(oppp1)
+            return i, 0x02 # 00000010 - u₂ positive, u₁ negative
+          end
+        end
+      end
+    end
+  end
+  0, 0x00
 end
 # function maxnegativeoffset_old(ls::LoopSet, op::Operation, u::Symbol)
 #     opmref = op.ref
