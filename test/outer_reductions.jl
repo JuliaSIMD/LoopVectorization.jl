@@ -1,3 +1,4 @@
+using OffsetArrays
 
 function reg_term(omega, B = size(omega,2); alpha=0.01)
   reg = 0.0
@@ -188,6 +189,52 @@ function tk_base(v::Vector{T}, c_::Vector{T}, n::Int) where {T}
   end
   l00 + l01 + l10 + l11  
 end
+
+
+function noturbosum(x, kern)
+  ks = zero(eltype(x))
+  @inbounds @fastmath for i=2:size(x,1)-1
+    for j in axes(kern,1), m in axes(kern,2)
+      ks += x[i+j, i+m] * kern[j,m]
+    end
+  end
+  ks
+end
+function outersum(x, kern)
+  ks = zero(eltype(x))
+  @turbo for i=2:size(x,1)-1
+    for j in axes(kern,1), m in axes(kern,2)
+      ks += x[i+j, i+m] * kern[j,m]
+    end
+  end
+  ks
+end
+function insum(x, kern)
+  ks = zero(eltype(x))
+  @turbo for i=2:size(x,1)-1
+    s1 = zero(eltype(x))
+    for j in axes(kern,1), m in axes(kern,2)
+      s1 += x[i+j, i+m] * kern[j,m]
+    end
+    ks += s1
+  end
+  ks
+end
+function in2sum(x, kern)
+  ks = zero(eltype(x))
+  @turbo for i=2:size(x,1)-1
+    for j in axes(kern,1)
+      s0 = zero(eltype(x))
+      for m in axes(kern,2)
+        s0 += x[i+j, i+m] * kern[j,m]
+      end
+      ks += s0
+    end
+  end
+  ks
+end
+
+
 @testset "Outer Reductions" begin
   for T ∈ [Float32,Float64,Int32,Int64]
     test_awmean(T)
@@ -201,5 +248,11 @@ end
   omega = rand(87,87);
   @test reg_term(omega) ≈ reg_term_turbo(omega)
 
+  x = rand(100,100);
+  kern = OffsetArray(rand(3,3),-2,-2);
+  s = noturbosum(x, kern)
+  @test s ≈ outersum(x, kern)
+  @test s ≈ insum(x, kern)
+  @test s ≈ in2sum(x, kern)
 end
 
