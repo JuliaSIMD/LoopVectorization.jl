@@ -771,40 +771,45 @@ end
 #     mno, id
 # end
 function maxnegativeoffset(ls::LoopSet, op::Operation, u::Symbol)
-    mno::Int = typemin(Int)
-    id = 0
-    isknown(step(getloop(ls, u))) || return mno, id
-    omop = offsetloadcollection(ls)
-    collectionid, opind = omop.opidcollectionmap[identifier(op)]
-    collectionid == 0 && return mno, id
-    @unpack opids = omop
+  mno::Int = typemin(Int)
+  id = 0
+  isknown(step(getloop(ls, u))) || return mno, id
+  omop = offsetloadcollection(ls)
+  collectionid, opind = omop.opidcollectionmap[identifier(op)]
+  collectionid == 0 && return mno, id
+  @unpack opids = omop
 
-    # offsetcol = offsets[collectionid]
-    opidcol = opids[collectionid]
-    opid = identifier(op)
-    # opoffs = offsetcol[opind]
-    opoffs = getoffsets(op)
-    ops = operations(ls)
-    opindices = getindicesonly(op)
-    for (i,oppid) ∈ enumerate(opidcol)
-        opid == oppid && continue
-        opp = ops[oppid]
-        oppoffs = getoffsets(opp)
-        mnonew::Int = typemin(Int)
-        for i ∈ eachindex(opindices)
-            if opindices[i] === u
-                mnonew = ((opoffs[i] % Int) - (oppoffs[i] % Int))
-            elseif opoffs[i] != oppoffs[i]
-                mnonew = 1
-                break
-            end
-        end
-        if mno < mnonew < 0
-            mno = mnonew
-            id = identifier(opp)
-        end
+  opidcol = opids[collectionid]
+  opid = identifier(op)
+  opoffs = getoffsets(op)
+  opstrd = getstrides(op)
+  ops = operations(ls)
+  opindices = getindicesonly(op)
+  for oppid ∈ opidcol
+    opid == oppid && continue
+    opp = ops[oppid]
+    oppoffs = getoffsets(opp)
+    oppstrd = getstrides(opp)
+    mnonew::Int = typemin(Int)
+    for i ∈ eachindex(opindices)
+      strd = opstrd[i]
+      strd == oppstrd[i] == 1 || continue
+      if opindices[i] === u
+        mnonew = (opoffs[i] % Int) - (oppoffs[i] % Int)
+        # mnonew_t, mnonew_rem = divrem((opoffs[i] % Int) - (oppoffs[i] % Int), strd % Int)
+        # mnonew_rem == 0 || continue
+        # mnonew = mnonew_t
+      elseif opoffs[i] != oppoffs[i]
+        mnonew = 1
+        break
+      end
     end
-    mno, id
+    if mno < mnonew < 0
+      mno = mnonew
+      id = identifier(opp)
+    end
+  end
+  mno, id
 end
 function maxnegativeoffset(ls::LoopSet, op::Operation, unrollsyms::UnrollSymbols)
     @unpack u₁loopsym, u₂loopsym, vloopsym = unrollsyms

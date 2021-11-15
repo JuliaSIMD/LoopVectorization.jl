@@ -401,6 +401,31 @@ function reverse_part_ref(n1,n2)
   return A
 end
 
+
+function tullio_issue_131_ref(arr)
+  M, N = size(arr)
+  out = zeros(M >>> 1, N >>> 1)
+  @inbounds @fastmath for j in axes(out,2)
+    for i in axes(out,1)
+      out[i, j] = arr[2i, 2j] +  arr[2i - 1, 2j] + arr[2i - 1, 2j - 1] + arr[2i, 2j - 1]
+    end
+  end
+  out
+end
+
+
+function tullio_issue_131(arr)
+  M, N = size(arr)
+  out = zeros(M >>> 1, N >>> 1)
+  @turbo for j in axes(out,2)
+    for i in axes(out,1)
+      out[i, j] = arr[2i, 2j] +  arr[2i - 1, 2j] + arr[2i - 1, 2j - 1] + arr[2i, 2j - 1]
+    end
+  end
+  out
+end
+
+
 @testset "shuffles load/stores" begin
   @show @__LINE__
   for i ∈ 1:128
@@ -425,8 +450,10 @@ end
     end
     @test qsimd ≈ Base.vect(qdot_affine(xqv, yqv)...) ≈ Base.vect(qdot_stride(xqv, yqv)...)
 
-    if VERSION ≥ v"1.6.0-rc1"
-      for j ∈ max(1,i-5):i+5, k ∈ max(1,i-5,i+5)
+    for j ∈ max(1,i-5):i+5, k ∈ max(1,i-5,i+5)
+      A = rand(j+1, k);
+      @test tullio_issue_131(A) ≈ tullio_issue_131_ref(A)
+      if VERSION ≥ v"1.6.0-rc1"
         Ac = rand(Complex{Float64}, j, i);
         Bc = rand(Complex{Float64}, i, k);
         Cc1 = Ac*Bc;
