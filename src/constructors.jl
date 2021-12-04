@@ -173,7 +173,7 @@ Advanced users can customize the implementation of the `@turbo`-annotated block
 using keyword arguments:
 
 ```julia
-@turbo inline=false unroll=2 body
+@turbo inline=false unroll=2 thread=4 body
 ```
 
 where `body` is the code of the block (e.g., `for ... end`).
