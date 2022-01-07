@@ -51,9 +51,6 @@ using CloseOpenIntervals: AbstractCloseOpen, CloseOpen#, SafeCloseOpen
 # end
 const Static = StaticInt
 
-using Requires
-
-
 export LowDimArray, stridedpointer, indices,  static,
     @avx, @avxt, @turbo, @tturbo, *ˡ, _turbo_!,
     vmap, vmap!, vmapt, vmapt!, vmapnt, vmapnt!, vmapntt, vmapntt!,
@@ -120,12 +117,9 @@ _vreduce(+, Float64[1.0])
 
 # import ChainRulesCore, ForwardDiff
 # include("vmap_grad.jl")
-function __init__()
-  @require ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4" include("simdfunctionals/vmap_grad_rrule.jl")
-  @require ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210" include("simdfunctionals/vmap_grad_forwarddiff.jl")
-  @require SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b" begin
-    @eval SpecialFunctions.erf(x::AbstractSIMD) = VectorizationBase.verf(float(x))
-  end
-end
+using ChainRulesCore, ForwardDiff, SpecialFunctions
+include("simdfunctionals/vmap_grad_rrule.jl")
+include("simdfunctionals/vmap_grad_forwarddiff.jl")
+@inline SpecialFunctions.erf(x::AbstractSIMD) = VectorizationBase.verf(float(x))
 
 end # module

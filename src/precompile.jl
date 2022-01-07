@@ -263,4 +263,6 @@ function _precompile_()
     Base.precompile(Tuple{typeof(choose_order),LoopSet})   # time: 0.001016861
     Base.precompile(Tuple{typeof(capture_a_muladd),Expr,Nothing})   # time: 0.001010088
     Base.precompile(Tuple{typeof(canonicalize_range),CartesianIndices{4, NTuple{4, Base.OneTo{Int}}}})   # time: 0.001000169
+
+  Base.precompile(reduce_expr!, (Expr, LoopSet, Int))
 end

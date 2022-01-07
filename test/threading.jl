@@ -102,6 +102,14 @@ function convlayer_direct!(
     out
 end
 
+function thread_cartesian_indices!(dst, src)
+  @turbo thread=true for i in eachindex(dst, src)
+    dst[i] = src[i]
+  end
+end
+
+
+
 @testset "Threading" begin
   @show @__LINE__
   dcd = DenseConvDims{2,(5,5),3,6}()
@@ -139,6 +147,10 @@ end
     out2 = similar(out1);
     @test conv!(out1, A, kern) ≈ conv_baseline!(out2, A, kern)
   end
+
+  src_big = rand(4, 10); dst_big = similar(src_big); src = view(src_big, 2:3, :); dst = view(dst_big, 2:3, :);
+  thread_cartesian_indices!(dst, src); dst ≈ src
+
 end
 
 

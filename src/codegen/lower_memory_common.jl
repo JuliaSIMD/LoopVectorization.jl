@@ -13,7 +13,7 @@ function symbolind(ind::Symbol, op::Operation, td::UnrollArgs, ls::LoopSet)
     Symbol(pvar, '_', Core.ifelse(u₁op, u₁, 1)), parent
 end
 
-staticexpr(x::Int) = Expr(:call, Expr(:curly, lv(:StaticInt), x))
+staticexpr(x::Int) = StaticInt{x}()
 staticexpr(x::Union{Symbol,Expr}) = Expr(:call, lv(:StaticInt), x)
 
 _MMind(ind::Union{Symbol,Expr}, str::Int) = Expr(:call, lv(:MM), VECTORWIDTHSYMBOL, ind, staticexpr(str))
@@ -307,12 +307,14 @@ function mem_offset_u(
       ind_by_offset = inds_calc_by_ptr_offset[n] | (ind === CONSTANTZEROINDEX)
       offset = convert(Int, offsets[n])
       stride = convert(Int, strides[n])
+      # @show stride, ind, u₂loopsym
       indvectorized = ind === vloopsym
       indvectorizedmm = _mm & indvectorized
       if ind === u₁loopsym
+        # TODO: should it be stride*incr₁ ???
         addvectoroffset!(ret, indvectorizedmm, incr₁, u₁step, vstep, stride, ind, offset, ind_by_offset, indvectorized) # 9 arg
       elseif ind === u₂loopsym
-        addvectoroffset!(ret, indvectorizedmm, incr₂, u₂step, vstep, stride, ind, offset, ind_by_offset, indvectorized) # 9 arg
+        addvectoroffset!(ret, indvectorizedmm, stride * incr₂, u₂step, vstep, stride, ind, offset, ind_by_offset, indvectorized) # 9 arg
       elseif loopedindex[n]
         addoffset!(ret, indvectorizedmm, vstep, stride, ind, offset, ind_by_offset) # 7 arg
       else

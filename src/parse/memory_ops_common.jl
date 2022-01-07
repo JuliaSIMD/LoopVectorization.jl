@@ -522,6 +522,7 @@ function array_reference_meta!(ls::LoopSet, array::Symbol, rawindices, elementby
         if indop !== nothing  && !isconstant(indop)
           if iscompute(indop) && Base.sym_in(instruction(indop).instr, (:add_fast, :sub_fast))
             vptrarray = add_additive_index!(ls, parents, vptrarray, ind, indop, ninds, indices, offsets, strides, loopedindex, loopdependencies, reduceddeps, 0, 1, D)
+            ninds += 1
           else
             pushparent!(parents, loopdependencies, reduceddeps, indop)
             push!(indices, name(indop)); ninds += 1

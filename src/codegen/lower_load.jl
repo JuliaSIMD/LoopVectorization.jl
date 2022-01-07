@@ -456,8 +456,8 @@ function lower_load_collection!(
   offset_dummy_loop = Loop(first(opindices), MaybeKnown(1), MaybeKnown(1024), MaybeKnown(1), Symbol(""), Symbol(""))
   unrollcurl₂ = unrolled_curly(op, nouter, offset_dummy_loop, vloop, mask, 1) # interleave always 1 here
   inds = mem_offset_u(op, ua, inds_calc_by_ptr_offset, false, 0, ls, false)
+  # @show op suffix, inds
   falseexpr = Expr(:call, lv(:False)); rs = staticexpr(reg_size(ls));
-
   opu₁, opu₂ = isunrolled_sym(op, u₁loopsym, u₂loopsym, vloopsym, ls)
   manualunrollu₁ = if opu₁ && u₁ > 1 # both unrolled
     if isknown(step(u₁loop)) && sum(Base.Fix2(===,u₁loopsym), getindicesonly(op)) == 1

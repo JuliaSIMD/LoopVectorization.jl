@@ -71,7 +71,7 @@ df = runbenches(1:24, Float64);
 df |> @vlplot(:line, x = :Size, y = :GFLOPS, color = :MulType, height=640,width=960) |> save("sarraymatmul.svg")
 ```
 This yields:
-![sarray_benchmarks](../assets/sarraymatmul.png)
+![sarray_benchmarks](https://raw.githubusercontent.com/JuliaSIMD/LoopVectorization.jl/docsassets/docs/src/assets/sarraymatmul.svg)
 Our `AmulB!` for `MMatrix`es was the fastest at all sizes except `2`x`2`, where it lost out to `AmulB` for `SMatrix`, which in turn was faster than the hundreds of lines of
 `StaticArray`s code at all sizes except `3`x`3`,  `5`x`5`, and  `6`x`6`.
 

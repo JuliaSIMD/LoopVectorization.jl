@@ -690,35 +690,53 @@ function stride_penalty(ls::LoopSet, order::Vector{Symbol})
         10.0sum(maximum, values(stridepenaltydict)) * Base.power_by_squaring(0.0009765625, length(order))
     end
 end
-function isoptranslation(ls::LoopSet, op::Operation, unrollsyms::UnrollSymbols)
-    @unpack u₁loopsym, u₂loopsym, vloopsym = unrollsyms
-    (vloopsym == u₁loopsym || vloopsym == u₂loopsym) && return 0, 0x00
-    (isu₁unrolled(op) && isu₂unrolled(op)) || return 0, 0x00
-    u₁step = step(getloop(ls, u₁loopsym))
-    u₂step = step(getloop(ls, u₂loopsym))
-    (isknown(u₁step) & isknown(u₂step)) || return 0, 0x00
-    abs(gethint(u₁step)) == abs(gethint(u₂step)) || return 0, 0x00
 
-    istranslation = 0
-    inds = getindices(op); li = op.ref.loopedindex
-    for i ∈ eachindex(li)
-        if !li[i]
-            opp = findparent(ls, inds[i + (first(inds) === DISCONTIGUOUS)])
-            if isu₁unrolled(opp) && isu₂unrolled(opp)
-                if Base.sym_in(instruction(opp).instr, (:vadd_nsw, :(+)))
-                    return i, 0x03 # 00000011 - both positive
-                elseif Base.sym_in(instruction(opp).instr, (:vsub_nsw, :(-)))
-                    oppp1 = parents(opp)[1]
-                    if isu₁unrolled(oppp1)
-                        return i, 0x01 # 00000001 - u₁ positive, u₂ negative
-                    else#isu₂unrolled(oppp1)
-                        return i, 0x02 # 00000010 - u₂ positive, u₁ negative
-                    end
-                end
-            end
-        end
+function isuniqueinindices(ls::LoopSet, op::Operation, opp::Operation, i::Int)
+  ld = loopdependencies(opp);
+  inds = getindicesonly(op)
+  li = op.ref.loopedindex
+  for j ∈ eachindex(inds)
+    i == j && continue
+    if li[j]
+      inds[j] ∈ ld && return false
+    else
+      opp = findparent(ls, inds[i + (first(inds) === DISCONTIGUOUS)])
+      any(in(ld), loopdependencies(opp)) && return false
     end
-    0, 0x00
+  end
+  true
+end
+function isoptranslation(ls::LoopSet, op::Operation, unrollsyms::UnrollSymbols)
+  @unpack u₁loopsym, u₂loopsym, vloopsym = unrollsyms
+  (vloopsym == u₁loopsym || vloopsym == u₂loopsym) && return 0, 0x00
+  (isu₁unrolled(op) && isu₂unrolled(op)) || return 0, 0x00
+  u₁step = step(getloop(ls, u₁loopsym))
+  u₂step = step(getloop(ls, u₂loopsym))
+  (isknown(u₁step) & isknown(u₂step)) || return 0, 0x00
+  abs(gethint(u₁step)) == abs(gethint(u₂step)) || return 0, 0x00
+  
+  istranslation = 0
+  inds = getindices(op); li = op.ref.loopedindex
+  for i ∈ eachindex(li)
+    if !li[i]
+      opp = findparent(ls, inds[i + (first(inds) === DISCONTIGUOUS)])
+      if isu₁unrolled(opp) & isu₂unrolled(opp)
+        if Base.sym_in(instruction(opp).instr, (:vadd_nsw, :(+)))
+          isuniqueinindices(ls, op, opp, i) || return 0, 0x00
+          return i, 0x03 # 00000011 - both positive
+        elseif Base.sym_in(instruction(opp).instr, (:vsub_nsw, :(-)))
+          isuniqueinindices(ls, op, opp, i) || return 0, 0x00
+          oppp1 = parents(opp)[1]
+          if isu₁unrolled(oppp1)
+            return i, 0x01 # 00000001 - u₁ positive, u₂ negative
+          else#isu₂unrolled(oppp1)
+            return i, 0x02 # 00000010 - u₂ positive, u₁ negative
+          end
+        end
+      end
+    end
+  end
+  0, 0x00
 end
 # function maxnegativeoffset_old(ls::LoopSet, op::Operation, u::Symbol)
 #     opmref = op.ref
@@ -753,40 +771,45 @@ end
 #     mno, id
 # end
 function maxnegativeoffset(ls::LoopSet, op::Operation, u::Symbol)
-    mno::Int = typemin(Int)
-    id = 0
-    isknown(step(getloop(ls, u))) || return mno, id
-    omop = offsetloadcollection(ls)
-    collectionid, opind = omop.opidcollectionmap[identifier(op)]
-    collectionid == 0 && return mno, id
-    @unpack opids = omop
+  mno::Int = typemin(Int)
+  id = 0
+  isknown(step(getloop(ls, u))) || return mno, id
+  omop = offsetloadcollection(ls)
+  collectionid, opind = omop.opidcollectionmap[identifier(op)]
+  collectionid == 0 && return mno, id
+  @unpack opids = omop
 
-    # offsetcol = offsets[collectionid]
-    opidcol = opids[collectionid]
-    opid = identifier(op)
-    # opoffs = offsetcol[opind]
-    opoffs = getoffsets(op)
-    ops = operations(ls)
-    opindices = getindicesonly(op)
-    for (i,oppid) ∈ enumerate(opidcol)
-        opid == oppid && continue
-        opp = ops[oppid]
-        oppoffs = getoffsets(opp)
-        mnonew::Int = typemin(Int)
-        for i ∈ eachindex(opindices)
-            if opindices[i] === u
-                mnonew = ((opoffs[i] % Int) - (oppoffs[i] % Int))
-            elseif opoffs[i] != oppoffs[i]
-                mnonew = 1
-                break
-            end
-        end
-        if mno < mnonew < 0
-            mno = mnonew
-            id = identifier(opp)
-        end
+  opidcol = opids[collectionid]
+  opid = identifier(op)
+  opoffs = getoffsets(op)
+  opstrd = getstrides(op)
+  ops = operations(ls)
+  opindices = getindicesonly(op)
+  for oppid ∈ opidcol
+    opid == oppid && continue
+    opp = ops[oppid]
+    oppoffs = getoffsets(opp)
+    oppstrd = getstrides(opp)
+    mnonew::Int = typemin(Int)
+    for i ∈ eachindex(opindices)
+      strd = opstrd[i]
+      strd == oppstrd[i] == 1 || continue
+      if opindices[i] === u
+        mnonew = (opoffs[i] % Int) - (oppoffs[i] % Int)
+        # mnonew_t, mnonew_rem = divrem((opoffs[i] % Int) - (oppoffs[i] % Int), strd % Int)
+        # mnonew_rem == 0 || continue
+        # mnonew = mnonew_t
+      elseif opoffs[i] != oppoffs[i]
+        mnonew = 1
+        break
+      end
     end
-    mno, id
+    if mno < mnonew < 0
+      mno = mnonew
+      id = identifier(opp)
+    end
+  end
+  mno, id
 end
 function maxnegativeoffset(ls::LoopSet, op::Operation, unrollsyms::UnrollSymbols)
     @unpack u₁loopsym, u₂loopsym, vloopsym = unrollsyms

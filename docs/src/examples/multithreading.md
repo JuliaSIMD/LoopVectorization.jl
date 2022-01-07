@@ -91,7 +91,7 @@ julia> @btime cdot($x, $y)
 2480.2964467112092
 ```
 All these times are fairly fast; `wait(Threads.@spawn 1+1)` will typically take much longer than even `@cdot` did here.
-![realdot](../assets/threadeddotproduct.svg)
+![realdot](https://github.com/JuliaSIMD/LoopVectorization.jl/raw/docsassets/docs/src/assets/threadeddotproduct.svg)
 
 
 Now let's look at a more complex example:
@@ -134,7 +134,7 @@ end
 
 The complex dot product is more compute bound. Given the same number of elements, we require `2x` the memory for complex numbers, `4x` the floating point arithmetic,
 and as we have an array of structs rather than structs of arrays, we need additional instructions to shuffle the data.
-![complexdot](../assets/threadedcomplexdotproduct.svg)
+![complexdot](https://github.com/JuliaSIMD/LoopVectorization.jl/raw/docsassets/docs/src/assets/threadedcomplexdotproduct.svg)
 
 
 If we take this further to the three-argument dot product, which isn't implemented in BLAS, `@tturbo` now holds a substantial advantage over the competition:
@@ -186,7 +186,7 @@ function cdot(x::AbstractVector{Complex{Float64}}, A::AbstractMatrix{Complex{Flo
     c[]
 end
 ```
-![complexdot3](../assets/threadedcomplexdot3product.svg)
+![complexdot3](https://github.com/JuliaSIMD/LoopVectorization.jl/raw/docsassets/docs/src/assets/threadedcomplexdot3product.svg)
 
 When testing on my laptop, the `C` implentation ultimately won, but I will need to investigate further to tell whether this benchmark benefits from hyperthreading,
 or if it's because LoopVectorization's memory access patterns are less friendly.
@@ -208,7 +208,7 @@ function A_mul_B!(C, A, B)
 end
 ```
 Benchmarks over the size range `10:5:300`:
-![matmul](../assets/gemm_Float64_10_300_cascadelake_AVX512__multithreaded_logscale.svg)
+![matmul](https://raw.githubusercontent.com/JuliaSIMD/LoopVectorization.jl/docsassets/docs/src/assets/gemm_Float64_10_500_cascadelake_AVX512__multithreaded.svg)
 
 Because LoopVectorization doesn't do cache optimizations yet, MKL, OpenBLAS, and Octavian will all pull ahead for larger matrices. This CPU has a 1 MiB L2 cache per core and 18 cores:
 ```julia

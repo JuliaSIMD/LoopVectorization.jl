@@ -20,6 +20,7 @@ function ArrayInterface.strides(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR
     (Static{1}(), (Static{UR}() - Static{LR}() + Static{1}()))
 end
 ArrayInterface.offsets(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} = (Static{LR}(), Static{LC}())
+ArrayInterface.parent_type(::Type{<:SizedOffsetMatrix{T}}) where {T} = Matrix{T}
 Base.getindex(A::SizedOffsetMatrix, i, j) = LoopVectorization.vload(LoopVectorization.stridedpointer(A), (i,j))
 
 

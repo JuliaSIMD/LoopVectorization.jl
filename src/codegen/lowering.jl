@@ -474,7 +474,7 @@ end
     S
   end
 end
-function outer_reduction_zero(op::Operation, u₁u::Bool, Umax::Int, reduct_class::Float64, rs::Expr)
+function outer_reduction_zero(op::Operation, u₁u::Bool, Umax::Int, reduct_class::Float64, rs::Union{Expr, StaticInt})
   isifelse = instruction(op).instr === :ifelse
   reduct_zero = if isifelse
     Symbol(name(op), "##BASE##EXTRACT##")
@@ -515,7 +515,7 @@ end
 
 # TODO: handle tiled outer reductions; they will require a suffix arg
 function initialize_outer_reductions!(
-  q::Expr, ls::LoopSet, op::Operation, _Umax::Int, us::UnrollSpecification, rs::Expr
+  q::Expr, ls::LoopSet, op::Operation, _Umax::Int, us::UnrollSpecification, rs::Union{Expr, StaticInt}
   )
   @unpack u₁, u₂ = us
   Umax = u₂ == -1 ? _Umax : u₁
@@ -541,7 +541,7 @@ function initialize_outer_reductions!(
   end
   nothing
 end
-function initialize_outer_reductions!(q::Expr, ls::LoopSet, Umax::Int)
+function initialize_outer_reductions!(q::Expr, ls::LoopSet, Umax::Union{Int, StaticInt})
     rs = staticexpr(reg_size(ls))
     us = ls.unrollspecification
     for or ∈ ls.outer_reductions
@@ -614,10 +614,12 @@ end
 ## This performs reduction to one `Vec`
 function reduce_expr!(q::Expr, ls::LoopSet, U::Int)
   us = ls.unrollspecification
-  u₁f, u₂f = if us.u₂ == -1
-    ifelse(U == -1, us.u₁, U), -1
+  if us.u₂ == -1
+    u₁f = ifelse(U == -1, us.u₁, U)
+    u₂f = -1
   else
-    us.u₁, U
+    u₁f = us.u₁
+    u₂f = U
   end
   # u₁loop, u₂loop = getunrolled(ls)
   u₁loop = getloop(ls, us.u₁loopnum).itersymbol

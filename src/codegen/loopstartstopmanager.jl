@@ -61,11 +61,14 @@ function uniquearrayrefs(ls::LoopSet)
   uniquerefs, includeinlet
 end
 
-otherindexunrolled(loopsym::Symbol, ind::Symbol, loopdeps::Vector{Symbol}) = (loopsym !== ind) && (loopsym ∈ loopdeps)
+otherindexunrolled(loopsym::Symbol, ind::Symbol, loopdeps::Vector{Symbol}) = ((loopsym ≢ ind) & (loopsym ≢ Symbol("##undefined##"))) && (loopsym ∈ loopdeps)
 function otherindexunrolled(ls::LoopSet, ind::Symbol, ref::ArrayReferenceMeta)
   us = ls.unrollspecification
-  u₁sym = names(ls)[us.u₁loopnum]
-  u₂sym = us.u₂loopnum > 0 ? names(ls)[us.u₂loopnum] : Symbol("##undefined##")
+  @unpack u₁loopnum, u₂loopnum, u₁, u₂ = us
+  u₁sym = u₁ > 1 ? names(ls)[u₁loopnum] : Symbol("##undefined##")
+  u₂sym = ((u₂ > 1) & (u₂loopnum > 0)) ? names(ls)[u₂loopnum] : Symbol("##undefined##")
+  # u₁sym = names(ls)[u₁loopnum]
+  # u₂sym = ((u₂loopnum > 0)) ? names(ls)[u₂loopnum] : Symbol("##undefined##")
   otherindexunrolled(u₁sym, ind, loopdependencies(ref)) || otherindexunrolled(u₂sym, ind, loopdependencies(ref))
 end
 function multiple_with_name(n::Symbol, v::Vector{ArrayReferenceMeta})
@@ -86,12 +89,13 @@ function indices_calculated_by_pointer_offsets(ls::LoopSet, ar::ArrayReferenceMe
   offset = isdiscontiguous(ar)
   gespinds = Expr(:tuple)
   out = Vector{Bool}(undef, length(indices))
+  strds = getstrides(ar)
   li = ar.loopedindex
   for i ∈ eachindex(li)
     ii = i + offset
     ind = indices[ii]
     if (!li[i]) || (ind === CONSTANTZEROINDEX) || multiple_with_name(vptr(ar), ls.lssm.uniquearrayrefs) ||
-      (iszero(ls.vector_width) && isstaticloop(getloop(ls, ind)))# ||
+      (iszero(ls.vector_width) && isstaticloop(getloop(ls, ind))) || (strds[i] ≤ 0)
       out[i] = false
     elseif (isone(ii) && (first(looporder) === ind))
       out[i] = otherindexunrolled(ls, ind, ar)
@@ -99,6 +103,7 @@ function indices_calculated_by_pointer_offsets(ls::LoopSet, ar::ArrayReferenceMe
       out[i] = true
     end
   end
+  # @show ar out
   out
 end
 
@@ -677,6 +682,7 @@ function use_loop_induct_var!(
   looporder = reversenames(ls)
   uliv = Vector{Int}(undef, length(li))
   indices = getindices(ar)
+  strds = getstrides(ar)
   offset = first(indices) === DISCONTIGUOUS
   if length(indices) != offset + length(li)
     println(ar)
@@ -711,7 +717,7 @@ function use_loop_induct_var!(
     elseif isbroadcast ||
       ((isone(ii) && (last(looporder) === ind)) && !(otherindexunrolled(ls, ind, ar)) ||
       multiple_with_name(vptrar, allarrayrefs)) ||
-      (iszero(ls.vector_width) && isstaticloop(getloop(ls, ind)))# ||
+      (iszero(ls.vector_width) && isstaticloop(getloop(ls, ind))) || (strds[i] ≤ 0)
       # Not doing normal offset indexing
       uliv[i] = -findfirst(Base.Fix2(===,ind), looporder)::Int
       push!(offsetprecalc_descript.args, 0) # not doing offset indexing, so push 0

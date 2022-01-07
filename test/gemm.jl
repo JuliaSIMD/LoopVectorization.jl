@@ -707,6 +707,7 @@
 #     LoopVectorization.VectorizationBase.ZeroInitializedStridedPointer(LoopVectorization.VectorizationBase.stridedpointer(A.data))
 # end
 
+@testset "Matmuls" begin
     for T ∈ (Float32, Float64, Int32, Int64)
         TC = sizeof(T) == 4 ? Float32 : Float64
         R = T <: Integer ? (T(-1000):T(1000)) : T
@@ -975,7 +976,8 @@
                 fill!(C, 9999.999); rank2AmulBavx_noinline!(C, Aₘ, Aₖ′', B)
                 @test C ≈ C2
             end
-        end
+      end
     end
+  end
 end
 

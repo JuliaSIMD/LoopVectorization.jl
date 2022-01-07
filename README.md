@@ -184,8 +184,8 @@ Test Passed
 julia> 2e-9M*K*N ./ (111.722e-6, 4.891e-3, 117.221e-6)
 (110.50516460500171, 2.524199141279902, 105.32121377568868)
 ```
-It can produce a good macro kernel. An implementation of matrix multiplication able to handle large matrices would need to be perform blocking and packing of arrays to prevent the operations from being memory bottle-necked.
-Some day, LoopVectorization may itself may try to model the costs of memory movement in the L1 and L2 cache, and use these to generate loops around the macro kernel following the work of [Low, et al. (2016)](http://www.cs.utexas.edu/users/flame/pubs/TOMS-BLIS-Analytical.pdf).
+It can produce a good macro kernel. An implementation of matrix multiplication able to handle large matrices would need to perform blocking and packing of arrays to prevent the operations from being memory bottle-necked.
+Some day, LoopVectorization may itself try to model the costs of memory movement in the L1 and L2 cache, and use these to generate loops around the macro kernel following the work of [Low, et al. (2016)](http://www.cs.utexas.edu/users/flame/pubs/TOMS-BLIS-Analytical.pdf).
 
 But for now, you should view it as a tool for generating efficient computational kernels, leaving tasks of parallelization and cache efficiency to you.
 
@@ -236,7 +236,7 @@ julia> AmulBtest2!(X2, B, C, D, view(A,1,:))
 julia> @test X1 ≈ X2
 Test Passed
 ```
-The lazy matrix multiplication operator `*ˡ` escapes broadcasts and fuses, making it easy to write code that avoids intermediates. However, I would recomend always checking if splitting the operation into pieces, or at least isolating the matrix multiplication, increases performance. That will often be the case, especially if the matrices are large, where a separate multiplication can leverage BLAS (and perhaps take advantage of threads).
+The lazy matrix multiplication operator `*ˡ` escapes broadcasts and fuses, making it easy to write code that avoids intermediates. However, I would recommend always checking if splitting the operation into pieces, or at least isolating the matrix multiplication, increases performance. That will often be the case, especially if the matrices are large, where a separate multiplication can leverage BLAS (and perhaps take advantage of threads).
 This may improve as the optimizations within LoopVectorization improve.
 
 Note that loops will be faster than broadcasting in general. This is because the behavior of broadcasts is determined by runtime information (i.e., dimensions other than the leading dimension of size `1` will be broadcasted; it is not known which these will be at compile time).
