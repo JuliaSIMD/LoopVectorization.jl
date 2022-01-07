@@ -1,7 +1,7 @@
 @testset "GEMM" begin
     # using LoopVectorization, LinearAlgebra, Test; T = Float64
     if LoopVectorization.cache_linesize() == 64
-        Unum, Tnum = LoopVectorization.register_count() == 16 ? (2, 6) : (3, 9)
+        Unum, Tnum = LoopVectorization.register_count() == 16 ? (2, 6) : (LoopVectorization.register_size() == 64 ? (3, 9) : (4, 6))
     else
         Unum, Tnum = LoopVectorization.register_count() == 16 ? (2, 6) : (4, 6)
     end
