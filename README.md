@@ -357,5 +357,7 @@ Similar approaches can be taken to make kernels working with a variety of numeri
 * [DianoiaML.jl](https://github.com/SkyWorld117/DianoiaML.jl)
 * [TropicalGEMM.jl](https://github.com/TensorBFS/TropicalGEMM.jl)
 * [Trixi.jl](https://github.com/trixi-framework/Trixi.jl)
+* [VectorizedStatistics.jl](https://github.com/JuliaSIMD/VectorizedStatistics.jl)
+* [NaNStatistics.jl](https://github.com/brenhinkeller/NaNStatistics.jl)
 
 If you're using LoopVectorization, please feel free to file a PR adding yours to the list!
