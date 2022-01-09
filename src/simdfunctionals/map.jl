@@ -53,7 +53,7 @@ function vmap_singlethread!(
     f::F, y::AbstractArray{T},
     ::Val{NonTemporal},
     args::Vararg{AbstractArray,A}
-) where {F,T <: Base.HWReal, A, NonTemporal}
+) where {F,T <: NativeTypes, A, NonTemporal}
   ptry, ptrargs, N = setup_vmap!(f, y, Val{NonTemporal}(), args...)
   _vmap_singlethread!(f, ptry, Zero(), N, Val{NonTemporal}(), ptrargs)
   nothing
@@ -97,7 +97,7 @@ function _vmap_singlethread!(
     i = vadd_nw(i, W)
   end
   if i < N
-    m = mask(T, N & (W - 1))
+    m = mask(StaticInt(W), N & (W - 1))
     vfinal = f(map1(vload, ptrargs, (MM{W}(i),), m)...)
     if NonTemporal
       _vstore!(ptry, vfinal, (MM{W}(i,),), m, True(), True(), False(), register_size())
@@ -383,9 +383,13 @@ end
 @inline vmapnt!(f, args...) = map!(f, args...)
 @inline vmapntt!(f, args...) = map!(f, args...)
 
+# similar_bit(x, ::Type{T}) where {T} = similar(x, T)
+# similar_bit(x, ::Type{Bool}) = BitArray(undef, size(x))
+
 function vmap_call(f::F, vm!::V, args::Vararg{Any,N}) where {V,F,N}
   T = Base._return_type(f, Base.Broadcast.eltypes(args))
   dest = similar(first(args), T)
+  # dest = similar_bit(first(args), T)
   vm!(f, dest, args...)
 end
 

@@ -26,6 +26,7 @@
     map!(xᵢ -> clenshaw(xᵢ, c), y1, x)
     vmap!(xᵢ -> clenshaw(xᵢ, c), y2, x)
     @test y1 ≈ y2
+    @test vmap(>(T(0.5)), c) == map(>(T(0.5)), c)
   end
   @test vmap(abs2, 1:100) == map(abs2, 1:100)
   @test vmapt(abs2, 1:3:10000) == map(abs2, 1:3:10000)
