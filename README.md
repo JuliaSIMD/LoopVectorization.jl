@@ -10,6 +10,8 @@
 [![CI (Julia nightly)](https://github.com/JuliaSIMD/LoopVectorization.jl/workflows/CI%20(Julia%20nightly)/badge.svg)](https://github.com/JuliaSIMD/LoopVectorization.jl/actions?query=workflow%3A%22CI+%28Julia+nightly%29%22)
 [![Codecov](https://codecov.io/gh/JuliaSIMD/LoopVectorization.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/JuliaSIMD/LoopVectorization.jl)
 
+[![LoopVectorization Downloads](https://shields.io/endpoint?url=https://pkgs.genieframework.com/api/v1/badge/LoopVectorization)](https://pkgs.genieframework.com?packages=LoopVectorization)
+
 ## Installation
 
 ```julia
