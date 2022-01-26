@@ -1283,7 +1283,9 @@ function Base.push!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int, mpr
     @assert localbody.head === :(=)
     @assert length(localbody.args) == 2
     LHS = (localbody.args[1])::Symbol
-    RHS = push!(ls, (localbody.args[2]), elementbytes, position, mpref)
+    RHS_1 = localbody.args[2]
+    RHS_1 isa Symbol && return push!(ls, localbody, elementbytes, position, mpref)
+    RHS = push!(ls, RHS_1, elementbytes, position, mpref)
     if isstore(RHS)
       RHS
     else
