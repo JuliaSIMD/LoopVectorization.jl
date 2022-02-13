@@ -22,7 +22,7 @@ upper_bound(::Type{CO}) where {T,N,S,CO<:AbstractCloseOpen{T,UpperBoundedInteger
 @inline Base.length(r::AbstractCloseOpen{Zero,<:UpperBoundedInteger}) = getfield(getfield(r,:upper),:i)
 
 function Loop(ls::LoopSet, ex::Expr, sym::Symbol, f, s, l, ub::Int)
-    if (f !== nothing) && (s !== nothing) && (l !== nothing)
+    if (f !== missing) && (s !== missing) && (l !== missing)
         return static_loop(sym, f, s, l)
     end
     ssym = String(sym)
@@ -30,21 +30,21 @@ function Loop(ls::LoopSet, ex::Expr, sym::Symbol, f, s, l, ub::Int)
     lensym = gensym(ssym * "_looplen")
     pushpreamble!(ls, Expr(:(=), rangesym, ex))
     pushpreamble!(ls, Expr(:(=), lensym, Expr(:call, GlobalRef(ArrayInterface,:static_length), rangesym)))
-    F = if f === nothing
+    F = if f === missing
         start = gensym(ssym*"_loopstart")
         pushpreamble!(ls, Expr(:(=), start, Expr(:call, %, Expr(:call, lv(:first), rangesym), Int)))
         MaybeKnown(start, 1)
     else
         MaybeKnown(f)
     end
-    S = if s === nothing
+    S = if s === missing
         step = gensym(ssym*"_loopstep")
         pushpreamble!(ls, Expr(:(=), step, Expr(:call, %, Expr(:call, lv(:step), rangesym), Int)))
         MaybeKnown(step, 1)
     else
         MaybeKnown(s)
     end
-    L = if l === nothing
+    L = if l === missing
         stop = gensym(ssym*"_loopstop")
         pushpreamble!(ls, Expr(:(=), stop, Expr(:call, %, Expr(:call, lv(:last), rangesym), Int)))
         MaybeKnown(stop, min(ub, 1024))
