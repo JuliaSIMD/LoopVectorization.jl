@@ -4,12 +4,13 @@ struct TURBO{UNROLL,OPS,ARF,AM,LPSYM,LBV,FLBV} <: Function end
 # hopefully shouldn't add much to compile time.
 
 function (::TURBO{UNROLL,OPS,ARF,AM,LPSYM,LBV,FLBV})(p::Ptr{UInt}) where {UNROLL,OPS,ARF,AM,LPSYM,K,LBV,FLBV<:Tuple{Vararg{Any,K}}}
-    (_, _vargs) = ThreadingUtilities.load(p, FLBV, 2*sizeof(UInt))
+  (_, _vargs) = ThreadingUtilities.load(p, FLBV, 2*sizeof(UInt))
   # Main.VARGS[Threads.threadid()] = first(_vargs)
   # Threads.threadid() == 2 && Core.println(typeof(_vargs))
-    ret = _turbo_!(Val{UNROLL}(), Val{OPS}(), Val{ARF}(), Val{AM}(), Val{LPSYM}(), Val{LBV}(), _vargs...)
-    ThreadingUtilities.store!(p, ret, Int(register_size()))
-    nothing
+  ret = _turbo_!(Val{UNROLL}(), Val{OPS}(), Val{ARF}(), Val{AM}(), Val{LPSYM}(), Val{LBV}(), _vargs...)
+  ThreadingUtilities.store!(p, ret, Int(register_size()))
+  ThreadingUtilities._atomic_store!(p, ThreadingUtilities.SPIN)
+  nothing
 end
 @generated function Base.pointer(::TURBO{UNROLL,OPS,ARF,AM,LPSYM,LBV,FLBV}) where {UNROLL,OPS,ARF,AM,LPSYM,K,LBV,FLBV<:Tuple{Vararg{Any,K}}}
     f = TURBO{UNROLL,OPS,ARF,AM,LPSYM,LBV,FLBV}()
