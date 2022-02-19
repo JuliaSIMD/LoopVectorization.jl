@@ -224,7 +224,6 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
   isone(UF) && return lower_no_unroll(ls, us, n, inclmask)
   @unpack u₁loopnum, vloopnum, u₁, u₂ = us
   order = names(ls)
-  loopsym = order[n]
   loop = getloop(ls, n)
   vectorized = order[vloopnum]
   nisunrolled = isunrolled1(us, n)
@@ -274,7 +273,7 @@ function lower_unrolled_dynamic(ls::LoopSet, us::UnrollSpecification, n::Int, in
     end
     remblock = Expr(:block)
     (nisvectorized && (UFt > 0) && isone(num_loops(ls))) && push!(remblock.args, definemask(loop))
-    unroll_cleanup = true
+    # unroll_cleanup = true
   else
     remblock = init_remblock(loop, ls.lssm, n)#loopsym)
     # unroll_cleanup = Ureduct > 0 || (nisunrolled ? (u₂ > 1) : (u₁ > 1))
@@ -463,7 +462,7 @@ end
 @generated function of_same_size(::Type{T}, ::Type{S}) where {T,S}
   sizeof_S = sizeof(S)
   sizeof(T) == sizeof_S && return T
-  Tfloat = T <: Union{Float32,Float64}
+  # Tfloat = T <: Union{Float32,Float64}
   if T <: Union{Float32,Float64}
     sizeof_S ≥ 8 ? Float64 : Float32
   elseif T <: Signed
@@ -504,7 +503,7 @@ function outer_reduction_zero(op::Operation, u₁u::Bool, Umax::Int, reduct_clas
       end
     end
   elseif isifelse
-    Expr(:call, identify, reduct_zero) # type stability within LV
+    Expr(:call, identity, reduct_zero) # type stability within LV
   else
     Expr(:call, reduct_zero, Tsym)
   end
@@ -670,7 +669,7 @@ function reinit_and_update_tiled_outer_reduct!(letblock::Expr, block::Expr, ls::
     instr = instruction(op).instr
     instr === :ifelse && continue # FIXME - skipping this will result in bad performance
     u₁u, u₂u = isunrolled_sym(op, u₁loopsym, u₂loopsym, vloopsym, ls)
-    reduct_class = reduction_instruction_class(instr)
+    reduct_class::Float64 = reduction_instruction_class(instr)
     z = outer_reduction_zero(op, u₁u, Umax, reduct_class, rs)
     reduct = reduce_to_onevecunroll(reduct_class)
     mvar = variable_name(op, -1)
@@ -820,8 +819,6 @@ end
 function setup_preamble!(ls::LoopSet, us::UnrollSpecification, Ureduct::Int)
     @unpack u₁loopnum, u₂loopnum, vloopnum, u₁, u₂ = us
     order = names(ls)
-    u₁loopsym = order[u₁loopnum]
-    u₂loopsym = order[u₂loopnum]
     vectorized = order[vloopnum]
     set_vector_width!(ls, vectorized)
     iszero(length(ls.includedactualarrays) + length(ls.outer_reductions)) || define_eltype_vec_width!(ls.preamble, ls, vectorized, false)
@@ -844,15 +841,15 @@ function setup_preamble!(ls::LoopSet, us::UnrollSpecification, Ureduct::Int)
     end
 end
 function lsexpr(ls::LoopSet, q)
-    Expr(:block, ls.preamble, q)
+  Expr(:block, ls.preamble, q)
 end
 
 function isanouterreduction(ls::LoopSet, op::Operation)
-    opname = name(op)
-    for or ∈ ls.outer_reductions
-        name(ls.operations[or]) === opname && return true
-    end
-    false
+  opname = name(op)
+  for or ∈ ls.outer_reductions
+    name(ls.operations[or]) === opname && return true
+  end
+  false
 end
 
 # tiled_outerreduct_unroll(ls::LoopSet) = tiled_outerreduct_unroll(ls.unrollspecification)
@@ -912,7 +909,6 @@ function lower_unrollspec(ls::LoopSet)
   @unpack vloopnum, u₁, u₂ = us
   order = names(ls)
   init_loop_map!(ls)
-  vectorized = order[vloopnum]
   Ureduct = calc_Ureduct!(ls, us)
   setup_preamble!(ls, us, Ureduct)
   initgesps = add_loop_start_stop_manager!(ls)

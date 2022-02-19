@@ -1138,12 +1138,12 @@ function add_operation!(
     array, rawindices = ref_from_expr!(ls, RHS)
     RHS_ref = array_reference_meta!(ls, array, rawindices, elementbytes, gensym!(ls, LHS_sym))
     op = add_load!(ls, RHS_ref, elementbytes)
-    iop = add_compute!(ls, LHS_sym, :identity, [op], elementbytes)
+    add_compute!(ls, LHS_sym, :identity, [op], elementbytes)
     # pushfirst!(LHS_ref.parents, iop)
   elseif RHS.head === :call
     f = first(RHS.args)
     if f === :getindex
-      add_load!(ls, LHS_sym, LHS_ref, elementbytes)
+      add_load_getindex!(ls, LHS_sym, RHS, elementbytes)
     elseif f isa Symbol && Base.sym_in(f, (:zero, :one, :typemin, :typemax))
       c = gensym!(ls, f)
       op = add_constant!(ls, c, ls.loopsymbols[1:position], LHS_sym, elementbytes, :numericconstant)
@@ -1160,7 +1160,7 @@ function add_operation!(
   elseif RHS.head === :if
     add_if!(ls, LHS_sym, RHS, elementbytes, position, LHS_ref)
   elseif RHS.head === :block
-    add_operation!(ls, LHS, strip_op_linenumber_nodes(RHS), elementbytes, position)
+    add_operation!(ls, LHS_sym, strip_op_linenumber_nodes(RHS), elementbytes, position)
   elseif RHS.head === :(.)
     c = gensym!(ls, "getproperty")
     pushpreamble!(ls, Expr(:(=), c, RHS))
@@ -1169,7 +1169,7 @@ function add_operation!(
     # pushpreamble!(ls, op, c)
     # op
   elseif Meta.isexpr(RHS, :comparison, 5)
-    add_comparison!(ls, LHS, RHS, elementbytes, position)
+    add_comparison!(ls, LHS_sym, RHS, elementbytes, position)
   else
     throw(LoopError("Expression not recognized.", RHS))
   end
@@ -1179,7 +1179,6 @@ function prepare_rhs_for_storage!(ls::LoopSet, RHS::Union{Symbol,Expr}, array, r
   RHS isa Symbol && return add_store!(ls, RHS, array, rawindices, elementbytes)
   mpref = array_reference_meta!(ls, array, rawindices, elementbytes)
   cachedparents = copy(mpref.parents)
-  ref = mpref.mref.ref
   lrhs = gensym!(ls, "RHS")
   mpref.varname = lrhs
   add_operation!(ls, lrhs, RHS, mpref, elementbytes, position)
@@ -1361,7 +1360,6 @@ function check_valid_reorder_dims!(ls::LoopSet)
   fill!(validreorder, 0x03)
   omop = offsetloadcollection(ls)
   @unpack opids = omop
-  num_collections = length(opids)
   ops = operations(ls)
   for i ∈ eachindex(opids)
     opidsᵢ = opids[i]
@@ -1450,7 +1448,7 @@ function fill_offset_memop_collection!(ls::LoopSet)
       collectionsize += 1
     end
   end
-  for (collectionid,opidc) ∈ enumerate(opids)
+  for opidc ∈ opids
     length(opidc) > 1 || continue
     # we check if we can turn the offsets into an unroll
     # we have up to `length(opidc)` loads to do, so we allocate that many "base" vectors

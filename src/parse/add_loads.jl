@@ -48,7 +48,7 @@ function add_load!(
     mpref = array_reference_meta!(ls, array, rawindices, elementbytes, var)
     add_load!(ls, mpref, elementbytes)
 end
-function load_is_constant(ls::LoopSet, mpref::ArrayReferenceMetaPosition)
+function load_is_constant(mpref::ArrayReferenceMetaPosition)
   li = mpref.mref.loopedindex
   inds = getindicesonly(mpref)
   for i ∈ eachindex(li)
@@ -62,7 +62,7 @@ end
 function add_load!(
   ls::LoopSet, mpref::ArrayReferenceMetaPosition, elementbytes::Int
 )
-  if length(mpref.loopdependencies) == 0 || load_is_constant(ls, mpref)
+  if length(mpref.loopdependencies) == 0 || load_is_constant(mpref)
     return add_constant!(ls, mpref, elementbytes)
   end
   op = Operation( ls, varname(mpref), elementbytes, :getindex, memload, mpref )

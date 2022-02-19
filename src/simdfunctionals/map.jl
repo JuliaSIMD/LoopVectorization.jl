@@ -66,7 +66,6 @@ function _vmap_singlethread!(
   i = convert(Int, start)
   V = VectorizationBase.pick_vector_width(promote_type(T, reduce(promote_type, map(eltype, ptrargs))))
   W = unwrap(V)
-  st = VectorizationBase.static_sizeof(T)
   UNROLL = 4
   LOG2UNROLL = 2
   while i < vsub_nsw(N, ((W << LOG2UNROLL) - 1))
@@ -129,6 +128,7 @@ function (m::VmapClosure{NonTemporal,F,D,N,A})(p::Ptr{UInt}) where {NonTemporal,
   (offset, stop ) = ThreadingUtilities.load(p, Int, offset)
   
   _vmap_singlethread!(m.f, dest, start, stop, Val{NonTemporal}(), args)
+  ThreadingUtilities._atomic_store!(p, ThreadingUtilities.SPIN)
   NonTemporal && Threads.atomic_fence()
   nothing
 end
@@ -165,25 +165,6 @@ end
   vmc = VmapClosure{NonTemporal}(f, ptry, ptrargs)
   @cfunction($vmc, Cvoid, (Ptr{UInt},))
 end
-# @inline function _cfunc_closure(f, ptry, ptrargs, ::Val{NonTemporal}) where {NonTemporal}
-#     vmc = VmapClosure{NonTemporal}(f, ptry, ptrargs)
-#     @cfunction($vmc, Cvoid, (Ptr{UInt},))
-# end
-# @generated function vmap_closure(f::F, ptry::D, ptrargs::A, ::Val{NonTemporal}) where {F,D<:StridedPointer,N,A<:Tuple{Vararg{StridedPointer,N}},NonTemporal}
-#     # fsym = get(FUNCTIONSYMBOLS, F, Symbol("##NOTFOUND##"))
-#      # fsym === Symbol("##NOTFOUND##")
-#     if false# iszero(sizeof(F))
-#         quote
-#             $(Expr(:meta,:inline))
-#             VmapKnownClosure{$NonTemporal,$F,$D,$N,$A}()
-#         end
-#     else
-#         quote
-#             $(Expr(:meta,:inline))
-#             _cfunc_closure(f, ptry, ptrargs, Val{$NonTemporal}())
-#         end
-#     end
-# end
 
 function vmap_multithread!(
   f::F,
@@ -203,7 +184,6 @@ function vmap_multithread!(
   end
 
   cfunc = vmap_closure(f, ptry, ptrargs, Val{NonTemporal}())
-  vmc = VmapClosure{NonTemporal}(f, ptry, ptrargs)
   Nveciter = (N + (W-1)) >> Wshift
   Nd, Nr = divrem(Nveciter, nt)
   NdW = Nd << Wshift

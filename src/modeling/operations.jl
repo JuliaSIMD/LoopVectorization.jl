@@ -471,11 +471,22 @@ function ifelse_reduction(f::F, rsym::Symbol, op::Operation) where {F}
 end
 
 # for f ∈ [:reduction_scalar_combine, :reduction_to_scalar, :reduce_number_of_vectors, (:reduce_to_onevecunroll,:IfElseOp),(:reduction_to_single_vector,:IfElseCollapser)]
-for f ∈ [:reduction_scalar_combine, :reduction_to_scalar, :reduce_number_of_vectors,:reduce_to_onevecunroll,:reduction_to_single_vector]
-  @eval begin
-    $f(x) = $f(reduction_instruction_class(x))
-    $f(op::Operation)::GlobalRef = lv($f(instruction(op)))
-  end
-end
+# for f ∈ [:reduction_scalar_combine, :reduction_to_scalar, :reduce_number_of_vectors,:reduce_to_onevecunroll,:reduction_to_single_vector]
+#   @eval begin
+#     $f(x) = $f(reduction_instruction_class(x))
+#     $f(op::Operation)::GlobalRef = lv($f(instruction(op)))
+#   end
+# end
+# No `@eval` to make the language server happy
+reduction_scalar_combine(x) = reduction_scalar_combine(reduction_instruction_class(x))
+reduction_scalar_combine(op::Operation)::GlobalRef = lv(reduction_scalar_combine(instruction(op)))
+reduction_to_scalar(x) = reduction_to_scalar(reduction_instruction_class(x))
+reduction_to_scalar(op::Operation)::GlobalRef = lv(reduction_to_scalar(instruction(op)))
+reduce_number_of_vectors(x) = reduce_number_of_vectors(reduction_instruction_class(x))
+reduce_number_of_vectors(op::Operation)::GlobalRef = lv(reduce_number_of_vectors(instruction(op)))
+reduce_to_onevecunroll(x) = reduce_to_onevecunroll(reduction_instruction_class(x))
+reduce_to_onevecunroll(op::Operation)::GlobalRef = lv(reduce_to_onevecunroll(instruction(op)))
+reduction_to_single_vector(x) = reduction_to_single_vector(reduction_instruction_class(x))
+reduction_to_single_vector(op::Operation)::GlobalRef = lv(reduction_to_single_vector(instruction(op)))
 
 

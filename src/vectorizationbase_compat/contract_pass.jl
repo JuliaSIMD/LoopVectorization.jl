@@ -188,7 +188,7 @@ function capture_a_muladd(ex::Expr, mod)
   if mod === nothing
     call.args[1] = f
   else
-    call.args[1] = Expr(:(.), mod, QuoteNote(f))#_fast))
+    call.args[1] = Expr(:(.), mod, QuoteNode(f))
   end
   true, call
 end

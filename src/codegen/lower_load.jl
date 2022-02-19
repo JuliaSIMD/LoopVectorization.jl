@@ -140,7 +140,6 @@ function lower_load_no_optranslation!(
     q::Expr, ls::LoopSet, op::Operation, td::UnrollArgs, mask::Bool, inds_calc_by_ptr_offset::Vector{Bool}
 )
   @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, suffix = td
-  loopdeps = loopdependencies(op)
   # @assert isvectorized(op)
   opu₁, opu₂ = isunrolled_sym(op, u₁loopsym, u₂loopsym, vloopsym, ls)
   u = ifelse(opu₁, u₁, 1)
@@ -215,8 +214,6 @@ function lower_load_for_optranslation!(
     for i ∈ eachindex(gespinds.args)
         if i == translationind
             gespinds.args[i] = Expr(:call, lv(Core.ifelse(equal_steps, :firstunroll, :lastunroll)), gespinds.args[i])
-        # else
-        #     gespinds.args[i] = Expr(:call, lv(:unmm), gespinds.args[i])
         end
     end
     ip = GlobalRef(VectorizationBase, :increment_ptr)
@@ -262,7 +259,7 @@ function lower_load_for_optranslation!(
         broadcasted_data = broadcastedname(variable_name_data)
         push!(q.args, :($broadcasted_data = getfield($(broadcastedname(variable_name_u)), 1)))
     end
-    gf = GlobalRef(Core,:getfield)
+    gf = GlobalRef(Core, :getfield)
     for u₂ ∈ 0:u₂max-1
         variable_name_u₂ = Symbol(variable_name(op, u₂), '_', u₁)
         t = Expr(:tuple)
@@ -285,7 +282,7 @@ function lower_load_for_optranslation!(
             push!(q.args, Expr(:(=), broadcastedname(variable_name_u₂), Expr(:call, lv(:VecUnroll), tb)))
         end
     end
-    nothing
+  nothing
 end
 
 # TODO: this code should be rewritten to be more "orthogonal", so that we're just combining separate pieces.
@@ -306,7 +303,6 @@ function lower_load!(
             if -suffix < mno < 0 # already checked that `suffix != -1` above
                 varnew = variable_name(op, suffix)
                 varold = variable_name(operations(ls)[id], suffix + mno)
-                opold = operations(ls)[id]
                 u = isu₁unrolled(op) ? u₁ : 1
                 push!(q.args, Expr(:(=), Symbol(varnew, '_', u), Symbol(varold, '_', u)))
                 return

@@ -4,7 +4,7 @@ function hoist_constant_memory_accesses!(ls::LoopSet)
   hoist_stores = false
   for op ∈ operations(ls)
     if isload(op)
-      length(getindicesonly(op)) == 0 && host_constant_load!(ls, op)
+      length(getindicesonly(op)) == 0 && hoist_constant_vload!(ls, op)
     elseif isstore(op) && iszero(length(getindicesonly(op)))
       hoist_stores = true
     end
@@ -29,7 +29,7 @@ function hoist_constant_vload!(ls::LoopSet, op::Operation)
 end
 
 function return_empty_reductinit(op::Operation, var::Symbol)
-  for (i,opp) ∈ enumerate(parents(op))
+  for opp ∈ parents(op)
     if (name(opp) === var) && (length(reduceddependencies(opp)) == 0) && (length(loopdependencies(opp)) == 0) && (length(children(opp)) == 1)
       return opp
     end
