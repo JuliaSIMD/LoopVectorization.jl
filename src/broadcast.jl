@@ -10,7 +10,7 @@ Base.@propagate_inbounds Base.getindex(A::LowDimArray, i::Vararg{Union{Integer,C
 
 @inline ArrayInterface.parent_type(::Type{LowDimArray{D,T,N,A}}) where {T,D,N,A} = A
 @inline Base.strides(A::LowDimArray) = map(Int, strides(A))
-@inline ArrayInterface.device(A::LowDimArray) = ArrayInterface.CPUPointer()
+@inline ArrayInterface.device(::LowDimArray) = ArrayInterface.CPUPointer()
 @generated function ArrayInterface.size(A::LowDimArray{D,T,N}) where {D,T,N}
   t = Expr(:tuple)
   gf = GlobalRef(Core,:getfield)
@@ -335,9 +335,8 @@ end
 
 function add_broadcast!(
     ls::LoopSet, destname::Symbol, bcname::Symbol, loopsyms::Vector{Symbol},
-    @nospecialize(LDA::Type{LowDimArray{D,T,N,A}}), elementbytes::Int
+    @nospecialize(_::Type{LowDimArray{D,T,N,A}}), elementbytes::Int
 ) where {D,T,N,A}
-    # D,T,N::Int,_ = LDA.parameters
     Dlen = length(D)
     if Dlen == N && !any(D) # array is a scalar, as it is broadcasted on all dimensions
         return extract_all_1_array!(ls, bcname, N, elementbytes)
@@ -422,7 +421,6 @@ function add_broadcast!(
         Instruction(bcname, f)
     end
     args = A.parameters
-    Nargs = length(args)
     bcargs = gensym!(ls, "bcargs")
     pushprepreamble!(ls, Expr(:(=), bcargs, Expr(:(.), bcname, QuoteNode(:args))))
     # this is the var name in the loop
@@ -447,7 +445,7 @@ end
 function add_broadcast_loops!(ls::LoopSet, loopsyms::Vector{Symbol}, destsym::Symbol)
     axes_tuple = Expr(:tuple)
     pushpreamble!(ls, Expr(:(=), axes_tuple, Expr(:call, :axes, destsym)))
-    for (n,itersym) ∈ enumerate(loopsyms)
+    for itersym ∈ loopsyms
         Nrange = gensym!(ls, "N")
         Nlower = gensym!(ls, "N")
         Nupper = gensym!(ls, "N")
@@ -464,15 +462,15 @@ end
 @generated function vmaterialize!(
     dest::AbstractArray{T,N}, bc::BC, ::Val{Mod}, ::Val{UNROLL}
 ) where {T <: NativeTypes, N, BC <: Union{Broadcasted,Product}, Mod, UNROLL}
-  # 2+1
+  2+1
   # we have an N dimensional loop.
   # need to construct the LoopSet
   # @show typeof(dest)
   ls = LoopSet(Mod)
-  inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, l1, l2, l3, threads, warncheckarg = UNROLL
+  inline, u₁, u₂, v, isbroadcast, _, rs, rc, cls, l1, l2, l3, threads, warncheckarg = UNROLL
   set_hw!(ls, rs, rc, cls, l1, l2, l3)
   ls.isbroadcast = isbroadcast # maybe set `false` in a DiffEq-like `@..` macro
-  loopsyms = [gensym!(ls, "n") for n ∈ 1:N]
+  loopsyms = [gensym!(ls, "n") for _ ∈ 1:N]
   add_broadcast_loops!(ls, loopsyms, :dest)
   elementbytes = sizeof(T)
   add_broadcast!(ls, :destination, :bc, loopsyms, BC, elementbytes)
@@ -481,6 +479,7 @@ end
   resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
   # return ls
   sc = setup_call(ls, :(Base.Broadcast.materialize!(dest, bc)), LineNumberNode(0), inline, false, u₁, u₂, v, threads%Int, warncheckarg)
+  # for n in loopsyms; push!(sc.args, :(@show $n)); end
   Expr(:block, Expr(:meta,:inline), sc, :dest)
 end
 @generated function vmaterialize!(
@@ -489,10 +488,10 @@ end
   # we have an N dimensional loop.
   # need to construct the LoopSet
   ls = LoopSet(Mod)
-  inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, l1, l2, l3, threads, warncheckarg = UNROLL
+  inline, u₁, u₂, v, isbroadcast, _, rs, rc, cls, l1, l2, l3, threads, warncheckarg = UNROLL
   set_hw!(ls, rs, rc, cls, l1, l2, l3)
   ls.isbroadcast = isbroadcast # maybe set `false` in a DiffEq-like `@..` macro
-  loopsyms = [gensym!(ls, "n") for n ∈ 1:N]
+  loopsyms = [gensym!(ls, "n") for _ ∈ 1:N]
   pushprepreamble!(ls, Expr(:(=), :dest, Expr(:call, :parent, :dest′)))
   add_broadcast_loops!(ls, loopsyms, :dest′)
   elementbytes = sizeof(T)
