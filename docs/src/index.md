@@ -20,6 +20,7 @@ Pages = [
     "examples/special_functions.md",
     "examples/sum_of_squared_error.md",
     "vectorized_convenience_functions.md",
+    "performance_accuracy_fastmath.md",
     "future_work.md",
     "devdocs/overview.md",
     "devdocs/loopset_structure.md",
