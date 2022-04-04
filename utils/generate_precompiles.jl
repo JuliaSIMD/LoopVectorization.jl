@@ -8,12 +8,36 @@ lv, pcslv = last(pcs);
 @assert lv === LoopVectorization
 
 blacklist = (
-  :_turbo_!, :vmaterialize!, :vmaterialize, Symbol("vreduce##kw"), :_vreduce_dims!, :vreduce, :vmapreduce, :SIMDMapBack, :launch_thread_vmap!, :_turbo_loopset_debug, :all_dense,
-  :sigmoid_fast, :rrule, :add_broadcast!, :create_mrefs!, :avx_config_val, :subsetview, :ifelsepartial, :tanh_fast, :check_args, :relu, :init_dual
+  :_turbo_!,
+  :vmaterialize!,
+  :vmaterialize,
+  Symbol("vreduce##kw"),
+  :_vreduce_dims!,
+  :vreduce,
+  :vmapreduce,
+  :SIMDMapBack,
+  :launch_thread_vmap!,
+  :_turbo_loopset_debug,
+  :all_dense,
+  :sigmoid_fast,
+  :rrule,
+  :add_broadcast!,
+  :create_mrefs!,
+  :avx_config_val,
+  :subsetview,
+  :ifelsepartial,
+  :tanh_fast,
+  :check_args,
+  :relu,
+  :init_dual,
 )
-filteredmethods = filter(m -> !Base.sym_in(m[2].def.name, blacklist), last(pcslv)); length(filteredmethods)
+filteredmethods = filter(m -> !Base.sym_in(m[2].def.name, blacklist), last(pcslv));
+length(filteredmethods);
 
-SnoopCompile.write("/tmp/precompile_loopvec", [LoopVectorization => (sum(first,filteredmethods),filteredmethods)])
+SnoopCompile.write(
+  "/tmp/precompile_loopvec",
+  [LoopVectorization => (sum(first, filteredmethods), filteredmethods)],
+)
 
 
 # pc = SnoopCompile.parcel(tinf; blacklist=["vmaterialize", "vmaterialize!", "vreduce", "Base.Broadcast.materialize", "_vreduce_dims!", "vmapreduce"])

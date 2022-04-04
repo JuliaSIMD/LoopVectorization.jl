@@ -3,9 +3,9 @@ using SIMDDualNumbers
 
 @generated function init_dual(v::Tuple{Vararg{AbstractSIMD,A}}) where {A}
   res = Expr(:tuple)
-  q = Expr(:block, Expr(:meta,:inline))
+  q = Expr(:block, Expr(:meta, :inline))
   for a ∈ 1:A
-    v_a = Symbol(:v_,a)
+    v_a = Symbol(:v_, a)
     push!(q.args, Expr(:(=), v_a, Expr(:ref, :v, a)))
     partials = Expr(:tuple)
     for i ∈ 1:A
@@ -16,9 +16,14 @@ using SIMDDualNumbers
   push!(q.args, res)
   q
 end
-@generated function dual_store!(∂p::Tuple{Vararg{AbstractStridedPointer,A}}, p::AbstractStridedPointer, ∂v, im::Vararg{Any,N}) where {A,N}
+@generated function dual_store!(
+  ∂p::Tuple{Vararg{AbstractStridedPointer,A}},
+  p::AbstractStridedPointer,
+  ∂v,
+  im::Vararg{Any,N},
+) where {A,N}
   quote
-    $(Expr(:meta,:inline))
+    $(Expr(:meta, :inline))
     v = ∂v.value
     ∂ = ∂v.partials
     Base.Cartesian.@nextract $N im im
@@ -31,5 +36,3 @@ end
     nothing
   end
 end
-
-

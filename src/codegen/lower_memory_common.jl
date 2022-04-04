@@ -1,27 +1,32 @@
 function parentind(ind::Symbol, op::Union{Operation,ArrayReferenceMetaPosition})
-  for (id,opp) ∈ enumerate(parents(op))
+  for (id, opp) ∈ enumerate(parents(op))
     name(opp) === ind && return id
   end
   -1
 end
 function symbolind(ind::Symbol, op::Operation, td::UnrollArgs, ls::LoopSet)
-    id = parentind(ind, op)
-    id == -1 && return ind, op
-    @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, u₂max, suffix = td
-    parent = parents(op)[id]
-    pvar, u₁op, u₂op = variable_name_and_unrolled(parent, u₁loopsym, u₂loopsym, vloopsym, suffix, ls)
-    Symbol(pvar, '_', Core.ifelse(u₁op, u₁, 1)), parent
+  id = parentind(ind, op)
+  id == -1 && return ind, op
+  @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, u₂max, suffix = td
+  parent = parents(op)[id]
+  pvar, u₁op, u₂op =
+    variable_name_and_unrolled(parent, u₁loopsym, u₂loopsym, vloopsym, suffix, ls)
+  Symbol(pvar, '_', Core.ifelse(u₁op, u₁, 1)), parent
 end
 
 staticexpr(x::StaticInt) = x
 staticexpr(x::Int) = StaticInt{x}()
 staticexpr(x::Union{Symbol,Expr}) = Expr(:call, lv(:StaticInt), x)
 
-_MMind(ind::Union{Symbol,Expr}, str::Int) = Expr(:call, lv(:MM), VECTORWIDTHSYMBOL, ind, staticexpr(str))
-_MMind(ind::Int, str::Int) = Expr(:call, lv(:MM), VECTORWIDTHSYMBOL, staticexpr(ind), staticexpr(str))
+_MMind(ind::Union{Symbol,Expr}, str::Int) =
+  Expr(:call, lv(:MM), VECTORWIDTHSYMBOL, ind, staticexpr(str))
+_MMind(ind::Int, str::Int) =
+  Expr(:call, lv(:MM), VECTORWIDTHSYMBOL, staticexpr(ind), staticexpr(str))
 
-_MMind(ind::Union{Int,Symbol,Expr}, str::Union{Symbol,Expr}) = addexpr(mulexpr(_MMind(0,1),str),ind)
-_MMind(ind, str::MaybeKnown) = isknown(str) ? _MMind(ind, gethint(str)) : _MMind(ind, getsym(str))
+_MMind(ind::Union{Int,Symbol,Expr}, str::Union{Symbol,Expr}) =
+  addexpr(mulexpr(_MMind(0, 1), str), ind)
+_MMind(ind, str::MaybeKnown) =
+  isknown(str) ? _MMind(ind, gethint(str)) : _MMind(ind, getsym(str))
 
 _iszero(::Symbol) = false
 _iszero(::Expr) = false
@@ -32,12 +37,12 @@ _isone(x) = isone(x)
 # To make this code type stable, despite potentially pushing `Int`s, `Symbol`s, or `Expr`s into `ret`,
 # it takes the form of nested calls, each branching and popping off an argument.
 function addoffset!(ret::Expr, stride, ind) # 3 args
-    if _iszero(stride)
-        pushexpr!(ret, ind)
-    else
-        pushexpr!(ret, _MMind(ind, stride))
-    end
-    nothing
+  if _iszero(stride)
+    pushexpr!(ret, ind)
+  else
+    pushexpr!(ret, _MMind(ind, stride))
+  end
+  nothing
 end
 # dropping `calcbypointeroffset` has to be delayed until after multiplying the `indexstride` by `index.
 function addoffset!(ret::Expr, stride, ind, offset, calcbypointeroffset::Bool) # 5 -> 3 args
@@ -49,87 +54,243 @@ function addoffset!(ret::Expr, stride, ind, offset, calcbypointeroffset::Bool) #
     addoffset!(ret, stride, addexpr(ind, offset))
   end
 end
-function _addoffset!(ret::Expr, vloopstride, indexstride::Union{Integer,MaybeKnown}, index, offset, calcbypointeroffset::Bool) # 6 -> 5 args
+function _addoffset!(
+  ret::Expr,
+  vloopstride,
+  indexstride::Union{Integer,MaybeKnown},
+  index,
+  offset,
+  calcbypointeroffset::Bool,
+) # 6 -> 5 args
   if _isone(indexstride)
     addoffset!(ret, vloopstride, index, offset, calcbypointeroffset)
   else
     __addoffset!(ret, vloopstride, indexstride, index, offset, calcbypointeroffset)
   end
 end
-function _addoffset!(ret::Expr, vloopstride, indexstride, index, offset, calcbypointeroffset::Bool) # 6 -> 5 args
+function _addoffset!(
+  ret::Expr,
+  vloopstride,
+  indexstride,
+  index,
+  offset,
+  calcbypointeroffset::Bool,
+) # 6 -> 5 args
   ___addoffset!(ret, vloopstride, indexstride, index, offset, calcbypointeroffset)
 end
-function __addoffset!(ret::Expr, vloopstride, indexstride, index, offset, calcbypointeroffset::Bool) # 6 -> 5 args
+function __addoffset!(
+  ret::Expr,
+  vloopstride,
+  indexstride,
+  index,
+  offset,
+  calcbypointeroffset::Bool,
+) # 6 -> 5 args
   ___addoffset!(ret, vloopstride, indexstride, index, offset, calcbypointeroffset)
 end
-function __addoffset!(ret::Expr, vloopstride::Union{Integer,MaybeKnown}, indexstride::Union{Integer,MaybeKnown}, index, offset, calcbypointeroffset::Bool) # 6 -> 5 args
+function __addoffset!(
+  ret::Expr,
+  vloopstride::Union{Integer,MaybeKnown},
+  indexstride::Union{Integer,MaybeKnown},
+  index,
+  offset,
+  calcbypointeroffset::Bool,
+) # 6 -> 5 args
   if isknown(vloopstride) & isknown(indexstride)
-    addoffset!(ret, gethint(vloopstride)*gethint(indexstride), index, offset, calcbypointeroffset)
+    addoffset!(
+      ret,
+      gethint(vloopstride) * gethint(indexstride),
+      index,
+      offset,
+      calcbypointeroffset,
+    )
   else
     ___addoffset!(ret, vloopstride, indexstride, index, offset, calcbypointeroffset)
   end
 end
-function ___addoffset!(ret::Expr, vloopstride, indexstride, index, offset, calcbypointeroffset::Bool) # 6 -> 5 args
-  addoffset!(ret, mulexpr(vloopstride,indexstride), index, offset, calcbypointeroffset)
+function ___addoffset!(
+  ret::Expr,
+  vloopstride,
+  indexstride,
+  index,
+  offset,
+  calcbypointeroffset::Bool,
+) # 6 -> 5 args
+  addoffset!(ret, mulexpr(vloopstride, indexstride), index, offset, calcbypointeroffset)
 end
 # multiply `index` by `indexstride`
-function addoffset!(ret::Expr, vloopstride, indexstride, index, offset, calcbypointeroffset::Bool) # 6 -> (5 or 6) args
-    if _isone(indexstride)
-        addoffset!(ret, vloopstride, index, offset, calcbypointeroffset) # 5
-    elseif calcbypointeroffset # `ind` is getting dropped, no need to allocate via `mulexpr`
-        _addoffset!(ret, vloopstride, indexstride, index, offset, calcbypointeroffset) # 6
-    else # multiply index by stride
-        _addoffset!(ret, vloopstride, indexstride, mulexpr(index, indexstride), offset, calcbypointeroffset) # 6
-    end
+function addoffset!(
+  ret::Expr,
+  vloopstride,
+  indexstride,
+  index,
+  offset,
+  calcbypointeroffset::Bool,
+) # 6 -> (5 or 6) args
+  if _isone(indexstride)
+    addoffset!(ret, vloopstride, index, offset, calcbypointeroffset) # 5
+  elseif calcbypointeroffset # `ind` is getting dropped, no need to allocate via `mulexpr`
+    _addoffset!(ret, vloopstride, indexstride, index, offset, calcbypointeroffset) # 6
+  else # multiply index by stride
+    _addoffset!(
+      ret,
+      vloopstride,
+      indexstride,
+      mulexpr(index, indexstride),
+      offset,
+      calcbypointeroffset,
+    ) # 6
+  end
 end
 
 
-function addoffset!(ret::Expr, indvectorized::Bool, vloopstride, indexstride, index, offset, calcbypointeroffset::Bool) # 7 -> (5 or 6) args
-    if indvectorized
-        addoffset!(ret, vloopstride, indexstride, index, offset, calcbypointeroffset)
-    elseif _isone(indexstride)
-        addoffset!(ret, 0, index, offset, calcbypointeroffset)
-    else
-        addoffset!(ret, 0, lazymulexpr(index, indexstride), offset, calcbypointeroffset)
-    end
+function addoffset!(
+  ret::Expr,
+  indvectorized::Bool,
+  vloopstride,
+  indexstride,
+  index,
+  offset,
+  calcbypointeroffset::Bool,
+) # 7 -> (5 or 6) args
+  if indvectorized
+    addoffset!(ret, vloopstride, indexstride, index, offset, calcbypointeroffset)
+  elseif _isone(indexstride)
+    addoffset!(ret, 0, index, offset, calcbypointeroffset)
+  else
+    addoffset!(ret, 0, lazymulexpr(index, indexstride), offset, calcbypointeroffset)
+  end
 end
 
-function addvectoroffset!(ret::Expr, indvectorized::Bool, unrolledsteps, vloopstride, indexstride, index, offset, calcbypointeroffset::Bool) # 8 -> 7 args
-    # if _iszero(unrolledsteps) # if no steps, pass through; should be unreachable
-    #     addoffset!(ret, indvectorized, vloopstride, indexstride, index, offset, calcbypointeroffset)
-    # else
-    if calcbypointeroffset # if we previously would've dropped the index, we now replace it with the `VECTORWIDTH` step
-        if _isone(unrolledsteps)
-            addoffset!(ret, indvectorized, vloopstride, indexstride, VECTORWIDTHSYMBOL, offset, false)
-        else
-            addoffset!(ret, indvectorized, vloopstride, indexstride, mulexpr(VECTORWIDTHSYMBOL,unrolledsteps), offset, false)
-        end
-    elseif _isone(unrolledsteps) # add the step to the index
-        addoffset!(ret, indvectorized, vloopstride, indexstride, addexpr(VECTORWIDTHSYMBOL,index), offset, false)
+function addvectoroffset!(
+  ret::Expr,
+  indvectorized::Bool,
+  unrolledsteps,
+  vloopstride,
+  indexstride,
+  index,
+  offset,
+  calcbypointeroffset::Bool,
+) # 8 -> 7 args
+  # if _iszero(unrolledsteps) # if no steps, pass through; should be unreachable
+  #     addoffset!(ret, indvectorized, vloopstride, indexstride, index, offset, calcbypointeroffset)
+  # else
+  if calcbypointeroffset # if we previously would've dropped the index, we now replace it with the `VECTORWIDTH` step
+    if _isone(unrolledsteps)
+      addoffset!(
+        ret,
+        indvectorized,
+        vloopstride,
+        indexstride,
+        VECTORWIDTHSYMBOL,
+        offset,
+        false,
+      )
     else
-        addoffset!(ret, indvectorized, vloopstride, indexstride, addexpr(mulexpr(VECTORWIDTHSYMBOL,unrolledsteps),index), offset, false)
+      addoffset!(
+        ret,
+        indvectorized,
+        vloopstride,
+        indexstride,
+        mulexpr(VECTORWIDTHSYMBOL, unrolledsteps),
+        offset,
+        false,
+      )
     end
+  elseif _isone(unrolledsteps) # add the step to the index
+    addoffset!(
+      ret,
+      indvectorized,
+      vloopstride,
+      indexstride,
+      addexpr(VECTORWIDTHSYMBOL, index),
+      offset,
+      false,
+    )
+  else
+    addoffset!(
+      ret,
+      indvectorized,
+      vloopstride,
+      indexstride,
+      addexpr(mulexpr(VECTORWIDTHSYMBOL, unrolledsteps), index),
+      offset,
+      false,
+    )
+  end
 end
 # unrolledloopstride is a stride multiple on `unrolledsteps`
 function addvectoroffset!(
-    ret::Expr, mm::Bool, unrolledsteps::Int, unrolledloopstride, vloopstride, indexstride::Integer, index, offset::Integer, calcbypointeroffset::Bool, indvectorized::Bool
+  ret::Expr,
+  mm::Bool,
+  unrolledsteps::Int,
+  unrolledloopstride,
+  vloopstride,
+  indexstride::Integer,
+  index,
+  offset::Integer,
+  calcbypointeroffset::Bool,
+  indvectorized::Bool,
 ) # 10 -> (7 or 8) args
-    if unrolledsteps == 0 # neither unrolledloopstride or indexstride can be 0
-        addoffset!(ret, mm, vloopstride, indexstride, index, offset, calcbypointeroffset) # 7 arg
-    elseif indvectorized
-        unrolledsteps *= indexstride
-        if isknown(unrolledloopstride)
-            addvectoroffset!(ret, mm, gethint(unrolledloopstride)*unrolledsteps, vloopstride, indexstride, index, offset, calcbypointeroffset) # 8 arg
-        elseif unrolledsteps == 1
-            addvectoroffset!(ret, mm, unrolledloopstride, vloopstride, indexstride, index, offset, calcbypointeroffset) # 8 arg
-        else
-            addvectoroffset!(ret, mm, mulexpr(unrolledloopstride,unrolledsteps), vloopstride, indexstride, index, offset, calcbypointeroffset) # 8 arg
-        end
-    elseif _isone(unrolledloopstride)
-        addoffset!(ret, mm, vloopstride, indexstride, index, offset + unrolledsteps, calcbypointeroffset) # 7 arg
+  if unrolledsteps == 0 # neither unrolledloopstride or indexstride can be 0
+    addoffset!(ret, mm, vloopstride, indexstride, index, offset, calcbypointeroffset) # 7 arg
+  elseif indvectorized
+    unrolledsteps *= indexstride
+    if isknown(unrolledloopstride)
+      addvectoroffset!(
+        ret,
+        mm,
+        gethint(unrolledloopstride) * unrolledsteps,
+        vloopstride,
+        indexstride,
+        index,
+        offset,
+        calcbypointeroffset,
+      ) # 8 arg
+    elseif unrolledsteps == 1
+      addvectoroffset!(
+        ret,
+        mm,
+        unrolledloopstride,
+        vloopstride,
+        indexstride,
+        index,
+        offset,
+        calcbypointeroffset,
+      ) # 8 arg
     else
-        addoffset!(ret, mm, vloopstride, mulexpr(unrolledloopstride,indexstride), index, addexpr(offset, lazymulexpr(unrolledloopstride, unrolledsteps)), calcbypointeroffset) # 7 arg
+      addvectoroffset!(
+        ret,
+        mm,
+        mulexpr(unrolledloopstride, unrolledsteps),
+        vloopstride,
+        indexstride,
+        index,
+        offset,
+        calcbypointeroffset,
+      ) # 8 arg
     end
+  elseif _isone(unrolledloopstride)
+    addoffset!(
+      ret,
+      mm,
+      vloopstride,
+      indexstride,
+      index,
+      offset + unrolledsteps,
+      calcbypointeroffset,
+    ) # 7 arg
+  else
+    addoffset!(
+      ret,
+      mm,
+      vloopstride,
+      mulexpr(unrolledloopstride, indexstride),
+      index,
+      addexpr(offset, lazymulexpr(unrolledloopstride, unrolledsteps)),
+      calcbypointeroffset,
+    ) # 7 arg
+  end
 end
 
 """
@@ -137,7 +298,14 @@ unrolled loads are calculated as offsets with respect to an initial gesp. This h
 Therefore, unrolled === true results in inds being ignored.
 _mm means to insert `mm`s.
 """
-function mem_offset(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Vector{Bool}, _mm::Bool, ls::LoopSet, preserve_vecunroll::Bool)
+function mem_offset(
+  op::Operation,
+  td::UnrollArgs,
+  inds_calc_by_ptr_offset::Vector{Bool},
+  _mm::Bool,
+  ls::LoopSet,
+  preserve_vecunroll::Bool,
+)
   # @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
   ret = Expr(:tuple)
   indices = getindicesonly(op)
@@ -146,7 +314,7 @@ function mem_offset(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Vect
   loopedindex = op.ref.loopedindex
   # inds_calc_by_ptr_offset = indices_calculated_by_pointer_offsets(ls, op.ref)
   @unpack vloopsym = td
-  for (n,ind) ∈ enumerate(indices)
+  for (n, ind) ∈ enumerate(indices)
     indvectorized = _mm & (ind === vloopsym)
     offset = offsets[n] % Int
     stride = strides[n] % Int
@@ -162,7 +330,7 @@ function mem_offset(op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Vect
       _mmi = indvectorized && parent !== op && (!isvectorized(parent))
       @assert !_mmi "Please file an issue with an example of how you got this."
       if (isu₁unrolled(parent) & (td.u₁ > 1)) & (!preserve_vecunroll)
-        gf = GlobalRef(Core,:getfield)
+        gf = GlobalRef(Core, :getfield)
         firstnew = Expr(:call, gf, Expr(:call, gf, newname, 1), 1, false)
         if isvectorized(parent) & (!_mm)
           firstnew = Expr(:call, lv(:unmm), firstnew)
@@ -191,7 +359,14 @@ end
 # function unrolled_curly(op::Operation, u₁::Int, u₁loopsym::Symbol, vectorized::Symbol, mask::Bool)
 
 # interleave: `0` means `false`, positive means literal, negative means multiplier
-function unrolled_curly(op::Operation, u₁::Int, u₁loop::Loop, vloop::Loop, mask::Bool, interleave::Int=0)
+function unrolled_curly(
+  op::Operation,
+  u₁::Int,
+  u₁loop::Loop,
+  vloop::Loop,
+  mask::Bool,
+  interleave::Int = 0,
+)
   u₁loopsym = u₁loop.itersymbol
   vloopsym = vloop.itersymbol
   indices = getindicesonly(op)
@@ -200,7 +375,7 @@ function unrolled_curly(op::Operation, u₁::Int, u₁loop::Loop, vloop::Loop, m
   # @assert all(loopedindex)
   # @unpack u₁, u₁loopsym, vloopsym = td
   AV = AU = -1
-  for (n,ind) ∈ enumerate(indices)
+  for (n, ind) ∈ enumerate(indices)
     if li[n]
       if ind === vloopsym
         @assert AV == -1 # FIXME: these asserts should be replaced with checks that prevent using `unrolled_curly` in these cases (also to be reflected in cost modeling, to avoid those)
@@ -221,7 +396,8 @@ function unrolled_curly(op::Operation, u₁::Int, u₁loop::Loop, vloop::Loop, m
       end
       # if (u₁loopsym === CONSTANTZEROINDEX) ? (CONSTANTZEROINDEX ∈ loopdependencies(opp)) : (isu₁unrolled(opp) || (ind === u₁loopsym))
       # can't check isu₁unrolled(opp) because we may be lying.
-      if (u₁loopsym === CONSTANTZEROINDEX) ? (CONSTANTZEROINDEX ∈ loopdependencies(opp)) : (u₁loopsym ∈ loopdependencies(opp) || (ind === u₁loopsym))
+      if (u₁loopsym === CONSTANTZEROINDEX) ? (CONSTANTZEROINDEX ∈ loopdependencies(opp)) :
+         (u₁loopsym ∈ loopdependencies(opp) || (ind === u₁loopsym))
         @assert AU == -1
         AU = n
       end
@@ -273,13 +449,30 @@ function unrolled_curly(op::Operation, u₁::Int, u₁loop::Loop, vloop::Loop, m
       end
     end
   else
-    Expr(:curly, lv(:Unroll), AU, convert(Int, getstrides(op)[AU])*gethint(step(u₁loop)), u₁, 0, 1, M, 1)
+    Expr(
+      :curly,
+      lv(:Unroll),
+      AU,
+      convert(Int, getstrides(op)[AU]) * gethint(step(u₁loop)),
+      u₁,
+      0,
+      1,
+      M,
+      1,
+    )
   end
 end
-function unrolledindex(op::Operation, td::UnrollArgs, mask::Bool, inds_calc_by_ptr_offset::Vector{Bool}, ls::LoopSet)
+function unrolledindex(
+  op::Operation,
+  td::UnrollArgs,
+  mask::Bool,
+  inds_calc_by_ptr_offset::Vector{Bool},
+  ls::LoopSet,
+)
   @unpack u₁, u₁loopsym, u₁loop, vloop = td
   isone(u₁) && return mem_offset_u(op, td, inds_calc_by_ptr_offset, true, 0, ls, false)
-  any(==(u₁loopsym), getindicesonly(op)) || return mem_offset_u(op, td, inds_calc_by_ptr_offset, true, 0, ls, true)
+  any(==(u₁loopsym), getindicesonly(op)) ||
+    return mem_offset_u(op, td, inds_calc_by_ptr_offset, true, 0, ls, true)
 
   unrollcurl = unrolled_curly(op, u₁, u₁loop, vloop, mask)
   ind = mem_offset_u(op, td, inds_calc_by_ptr_offset, false, 0, ls, false)
@@ -287,7 +480,13 @@ function unrolledindex(op::Operation, td::UnrollArgs, mask::Bool, inds_calc_by_p
 end
 
 function mem_offset_u(
-  op::Operation, td::UnrollArgs, inds_calc_by_ptr_offset::Vector{Bool}, _mm::Bool, incr₁::Int, ls::LoopSet, preserve_vecunroll::Bool
+  op::Operation,
+  td::UnrollArgs,
+  inds_calc_by_ptr_offset::Vector{Bool},
+  _mm::Bool,
+  incr₁::Int,
+  ls::LoopSet,
+  preserve_vecunroll::Bool,
 )
   @assert accesses_memory(op) "Computing memory offset only makes sense for operations that access memory."
   @unpack u₁loopsym, u₂loopsym, vloopsym, u₁step, u₂step, vstep, suffix = td
@@ -304,7 +503,7 @@ function mem_offset_u(
     return mem_offset(op, td, inds_calc_by_ptr_offset, _mm, ls, preserve_vecunroll)
     # append_inds!(ret, indices, loopedindex)
   else
-    for (n,ind) ∈ enumerate(indices)
+    for (n, ind) ∈ enumerate(indices)
       ind_by_offset = inds_calc_by_ptr_offset[n] | (ind === CONSTANTZEROINDEX)
       offset = convert(Int, offsets[n])
       stride = convert(Int, strides[n])
@@ -313,9 +512,31 @@ function mem_offset_u(
       indvectorizedmm = _mm & indvectorized
       if ind === u₁loopsym
         # TODO: should it be stride*incr₁ ???
-        addvectoroffset!(ret, indvectorizedmm, incr₁, u₁step, vstep, stride, ind, offset, ind_by_offset, indvectorized) # 9 arg
+        addvectoroffset!(
+          ret,
+          indvectorizedmm,
+          incr₁,
+          u₁step,
+          vstep,
+          stride,
+          ind,
+          offset,
+          ind_by_offset,
+          indvectorized,
+        ) # 9 arg
       elseif ind === u₂loopsym
-        addvectoroffset!(ret, indvectorizedmm, stride * incr₂, u₂step, vstep, stride, ind, offset, ind_by_offset, indvectorized) # 9 arg
+        addvectoroffset!(
+          ret,
+          indvectorizedmm,
+          stride * incr₂,
+          u₂step,
+          vstep,
+          stride,
+          ind,
+          offset,
+          ind_by_offset,
+          indvectorized,
+        ) # 9 arg
       elseif loopedindex[n]
         addoffset!(ret, indvectorizedmm, vstep, stride, ind, offset, ind_by_offset) # 7 arg
       else
@@ -326,26 +547,30 @@ function mem_offset_u(
         @assert !_mmi "Please file an issue with an example of how you got this."
         if isvectorized(parent) & (!_mm)
           if isu₁unrolled(parent) & (td.u₁ > 1)
-            gf = GlobalRef(Core,:getfield)
-            newname_unmm = Expr(:call, lv(:unmm), Expr(:call, gf, Expr(:call, gf, newname, 1), incr₁+1, false))
+            gf = GlobalRef(Core, :getfield)
+            newname_unmm = Expr(
+              :call,
+              lv(:unmm),
+              Expr(:call, gf, Expr(:call, gf, newname, 1), incr₁ + 1, false),
+            )
           else
             newname_unmm = Expr(:call, lv(:unmm), newname)
           end
           if stride ≠ 1
-            newname_unmm = mulexpr(newname_unmm,stride)
+            newname_unmm = mulexpr(newname_unmm, stride)
           end
           addoffset!(ret, 0, newname_unmm, offset, false)
         elseif (isu₁unrolled(parent) & (td.u₁ > 1)) && !preserve_vecunroll
-          gf = GlobalRef(Core,:getfield)
-          firstnew = Expr(:call, gf, Expr(:call, gf, newname, 1), incr₁+1, false)
+          gf = GlobalRef(Core, :getfield)
+          firstnew = Expr(:call, gf, Expr(:call, gf, newname, 1), incr₁ + 1, false)
           if stride ≠ 1
-            firstnew = mulexpr(firstnew,stride)
+            firstnew = mulexpr(firstnew, stride)
           end
           addoffset!(ret, 0, firstnew, offset, false)
         elseif stride == 1
           addoffset!(ret, 0, newname, offset, false)
         else
-          addoffset!(ret, 0, mulexpr(newname,stride), offset, false)
+          addoffset!(ret, 0, mulexpr(newname, stride), offset, false)
         end
       end
     end
@@ -355,25 +580,35 @@ end
 
 @inline and_last(a, b) = a & b
 @generated function and_last(v::VecUnroll{N}, m) where {N}
-    q = Expr(:block, Expr(:meta,:inline), :(vd = data(v)))
-    t = Expr(:call, lv(:promote))
-    gf = GlobalRef(Core, :getfield)
-    for n ∈ 1:N
-        push!(t.args, :($gf(vd, $n, false)))
-    end
-    push!(t.args, :($gf(vd, $(N+1), false) & m))
-    push!(q.args, Expr(:call, lv(:VecUnroll), t))
-    q
+  q = Expr(:block, Expr(:meta, :inline), :(vd = data(v)))
+  t = Expr(:call, lv(:promote))
+  gf = GlobalRef(Core, :getfield)
+  for n ∈ 1:N
+    push!(t.args, :($gf(vd, $n, false)))
+  end
+  push!(t.args, :($gf(vd, $(N + 1), false) & m))
+  push!(q.args, Expr(:call, lv(:VecUnroll), t))
+  q
 end
 
 
-isconditionalmemop(op::Operation) = (instruction(op).instr === :conditionalload) || (instruction(op).instr === :conditionalstore!)
-function add_memory_mask!(memopexpr::Expr, op::Operation, td::UnrollArgs, mask::Bool, ls::LoopSet, u₁ᵢ::Int)
+isconditionalmemop(op::Operation) =
+  (instruction(op).instr === :conditionalload) ||
+  (instruction(op).instr === :conditionalstore!)
+function add_memory_mask!(
+  memopexpr::Expr,
+  op::Operation,
+  td::UnrollArgs,
+  mask::Bool,
+  ls::LoopSet,
+  u₁ᵢ::Int,
+)
   @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, u₂max, suffix = td
   if isconditionalmemop(op)
     condop = last(parents(op))
     opu₂ = (suffix ≠ -1) && isu₂unrolled(op)
-    condvar, condu₁unrolled = condvarname_and_unroll(condop, u₁loopsym, u₂loopsym, vloopsym, suffix, opu₂, ls)
+    condvar, condu₁unrolled =
+      condvarname_and_unroll(condop, u₁loopsym, u₂loopsym, vloopsym, suffix, opu₂, ls)
     # if it isn't unrolled, then `m`
     u = condu₁unrolled ? u₁ : 1
     # u = isu₁unrolled(condop) ? u₁ : 1
@@ -411,9 +646,15 @@ function add_memory_mask!(memopexpr::Expr, op::Operation, td::UnrollArgs, mask::
     elseif u₁ᵢ == 0# !condbroadcast && !vecunrolled
       push!(memopexpr.args, Expr(:call, lv(:and_last), condvar, MASKSYMBOL))
     elseif u₁ᵢ == u₁ # mask
-      push!(memopexpr.args, Expr(:call, lv(:&), :($getfield($getfield(condvar,1),$u₁ᵢ,false)), MASKSYMBOL))
+      push!(
+        memopexpr.args,
+        Expr(:call, lv(:&), :($getfield($getfield(condvar, 1), $u₁ᵢ, false)), MASKSYMBOL),
+      )
     else
-      push!(memopexpr.args, Expr(:call, lv(:&), :($getfield($getfield(condvar,1),$u₁ᵢ,false))))
+      push!(
+        memopexpr.args,
+        Expr(:call, lv(:&), :($getfield($getfield(condvar, 1), $u₁ᵢ, false))),
+      )
     end
   elseif mask && isvectorized(op)
     push!(memopexpr.args, MASKSYMBOL)
@@ -421,7 +662,22 @@ function add_memory_mask!(memopexpr::Expr, op::Operation, td::UnrollArgs, mask::
   nothing
 end
 
-function condvarname_and_unroll(cond::Operation, u₁loop::Symbol, u₂loop::Symbol, vloop::Symbol, suffix::Int, opu₂::Bool, ls::LoopSet)
-    condvar, condu₁, condu₂ = variable_name_and_unrolled(cond, u₁loop, u₂loop, vloop, Core.ifelse(opu₂, suffix, -1), ls)
-    condvar, condu₁
+function condvarname_and_unroll(
+  cond::Operation,
+  u₁loop::Symbol,
+  u₂loop::Symbol,
+  vloop::Symbol,
+  suffix::Int,
+  opu₂::Bool,
+  ls::LoopSet,
+)
+  condvar, condu₁, condu₂ = variable_name_and_unrolled(
+    cond,
+    u₁loop,
+    u₂loop,
+    vloop,
+    Core.ifelse(opu₂, suffix, -1),
+    ls,
+  )
+  condvar, condu₁
 end

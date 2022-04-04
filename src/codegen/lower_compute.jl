@@ -1,64 +1,78 @@
 
 
-function load_constrained(op::Operation, u₁loop::Symbol, u₂loop::Symbol, innermost_loop_or_vloop::Symbol, forprefetch::Bool = false)
-    dependsonu₁ = isu₁unrolled(op)
-    dependsonu₂ = isu₂unrolled(op)
-    if forprefetch
-        (dependsonu₁ & dependsonu₂) || return false
-    end
-    unrolleddeps = Symbol[]
-    if forprefetch # innermost_loop_or_vloop is innermost_loop
-        push!(unrolleddeps, innermost_loop_or_vloop)
-    else# if this is for `sub_fmas` instead of prefetch, then `innermost_loop_or_vloop` is `vloop`, and we only care if it isn't vectorized
-        # if it is vectorized, it can't be broadcasted on AVX512 anyway, so no point trying to enable that optimization
-        dependsonu₁ &= u₁loop !== innermost_loop_or_vloop
-        dependsonu₂ &= u₂loop !== innermost_loop_or_vloop
-    end
-    dependsonu₁ && push!(unrolleddeps, u₁loop)
-    dependsonu₂ && push!(unrolleddeps, u₂loop)
-    length(unrolleddeps) > 0 || return false
-    any(parents(op)) do opp
-        isload(opp) && all(in(loopdependencies(opp)), unrolleddeps)
-    end
+function load_constrained(
+  op::Operation,
+  u₁loop::Symbol,
+  u₂loop::Symbol,
+  innermost_loop_or_vloop::Symbol,
+  forprefetch::Bool = false,
+)
+  dependsonu₁ = isu₁unrolled(op)
+  dependsonu₂ = isu₂unrolled(op)
+  if forprefetch
+    (dependsonu₁ & dependsonu₂) || return false
+  end
+  unrolleddeps = Symbol[]
+  if forprefetch # innermost_loop_or_vloop is innermost_loop
+    push!(unrolleddeps, innermost_loop_or_vloop)
+  else# if this is for `sub_fmas` instead of prefetch, then `innermost_loop_or_vloop` is `vloop`, and we only care if it isn't vectorized
+    # if it is vectorized, it can't be broadcasted on AVX512 anyway, so no point trying to enable that optimization
+    dependsonu₁ &= u₁loop !== innermost_loop_or_vloop
+    dependsonu₂ &= u₂loop !== innermost_loop_or_vloop
+  end
+  dependsonu₁ && push!(unrolleddeps, u₁loop)
+  dependsonu₂ && push!(unrolleddeps, u₂loop)
+  length(unrolleddeps) > 0 || return false
+  any(parents(op)) do opp
+    isload(opp) && all(in(loopdependencies(opp)), unrolleddeps)
+  end
 end
 function check_if_remfirst(ls::LoopSet, ua::UnrollArgs)
-    usorig = ls.unrollspecification
-    @unpack u₁, u₁loopsym, u₂loopsym, u₂max = ua
-    u₁loop = getloop(ls, u₁loopsym)
-    u₂loop = getloop(ls, u₂loopsym)
-    if isstaticloop(u₁loop) && (usorig.u₁ != u₁)
-        return true
-    end
-    if isstaticloop(u₂loop) && (usorig.u₂ != u₂max)
-        return true
-    end
-    false
+  usorig = ls.unrollspecification
+  @unpack u₁, u₁loopsym, u₂loopsym, u₂max = ua
+  u₁loop = getloop(ls, u₁loopsym)
+  u₂loop = getloop(ls, u₂loopsym)
+  if isstaticloop(u₁loop) && (usorig.u₁ != u₁)
+    return true
+  end
+  if isstaticloop(u₂loop) && (usorig.u₂ != u₂max)
+    return true
+  end
+  false
 end
 function sub_fmas(ls::LoopSet, op::Operation, ua::UnrollArgs)
-    @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, u₂max = ua
-    !(load_constrained(op, u₁loopsym, u₂loopsym, vloopsym) || check_if_remfirst(ls, ua))
+  @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, u₂max = ua
+  !(load_constrained(op, u₁loopsym, u₂loopsym, vloopsym) || check_if_remfirst(ls, ua))
 end
 
 function parent_unroll_status(op::Operation, u₁loop::Symbol, us::UnrollSpecification)
-    parentsop = parents(op)
-    u2 = fill(false, length(parentsop))
-    u1 = similar(u2)
-    for i ∈ eachindex(parentsop)
-        u1[i] = isunrolled_sym(parentsop[i], u₁loop, us)
-    end
-    u1, u2
+  parentsop = parents(op)
+  u2 = fill(false, length(parentsop))
+  u1 = similar(u2)
+  for i ∈ eachindex(parentsop)
+    u1[i] = isunrolled_sym(parentsop[i], u₁loop, us)
+  end
+  u1, u2
 end
-function parent_unroll_status(op::Operation, u₁loop::Symbol, u₂loop::Symbol, vloop::Symbol, u₂max::Int, us::UnrollSpecification)
-    u₂max == -1 && return parent_unroll_status(op, u₁loop, us)
-    vparents = parents(op);
-    # parent_names = Vector{Symbol}(undef, length(vparents))
-    parents_u₁syms = Vector{Bool}(undef, length(vparents))
-    parents_u₂syms = Vector{Bool}(undef, length(vparents))
-    for i ∈ eachindex(vparents)
-        parents_u₁syms[i], parents_u₂syms[i] = isunrolled_sym(vparents[i], u₁loop, u₂loop, vloop, us)#, u₂max)
-    end
-    # parent_names, parents_u₁syms, parents_u₂syms
-    parents_u₁syms, parents_u₂syms
+function parent_unroll_status(
+  op::Operation,
+  u₁loop::Symbol,
+  u₂loop::Symbol,
+  vloop::Symbol,
+  u₂max::Int,
+  us::UnrollSpecification,
+)
+  u₂max == -1 && return parent_unroll_status(op, u₁loop, us)
+  vparents = parents(op)
+  # parent_names = Vector{Symbol}(undef, length(vparents))
+  parents_u₁syms = Vector{Bool}(undef, length(vparents))
+  parents_u₂syms = Vector{Bool}(undef, length(vparents))
+  for i ∈ eachindex(vparents)
+    parents_u₁syms[i], parents_u₂syms[i] =
+      isunrolled_sym(vparents[i], u₁loop, u₂loop, vloop, us)#, u₂max)
+  end
+  # parent_names, parents_u₁syms, parents_u₂syms
+  parents_u₁syms, parents_u₂syms
 end
 
 function _add_loopvalue!(ex::Expr, loopval::Symbol, vloop::Loop, u::Int, loop::Loop)
@@ -78,7 +92,7 @@ function _add_loopvalue!(ex::Expr, loopval::Symbol, vloop::Loop, u::Int, loop::L
   elseif u == 0
     push!(ex.args, loopval)
   elseif isknown(step(loop))
-    push!(ex.args, Expr(:call, lv(:vadd_nsw), loopval, staticexpr(u*gethint(step(loop)))))
+    push!(ex.args, Expr(:call, lv(:vadd_nsw), loopval, staticexpr(u * gethint(step(loop)))))
   else
     push!(ex.args, Expr(:call, lv(:vadd_nsw), loopval, mulexpr(step(loop), u)))
   end
@@ -107,178 +121,228 @@ end
 vecunrolllen(::Type{VecUnroll{N,W,T,V}}) where {N,W,T,V} = (N::Int + 1)
 vecunrolllen(_) = -1
 function ifelselastexpr(hasf::Bool, M::Int, vargtypes, K::Int, S::Int, maskearly::Bool)
-    q = Expr(:block, Expr(:meta,:inline))
-    vargs = Vector{Symbol}(undef, K)
-    for k ∈ 1:K
-        vargs[k] = Symbol(:varg_,k)
+  q = Expr(:block, Expr(:meta, :inline))
+  vargs = Vector{Symbol}(undef, K)
+  for k ∈ 1:K
+    vargs[k] = Symbol(:varg_, k)
+  end
+  lengths = Vector{Int}(undef, K)
+  for k ∈ 1:K
+    lengths[k] = l = vecunrolllen(vargtypes[k])
+    if hasf
+      gfvarg = Expr(:call, GlobalRef(Core, :getfield), :vargs, k, false)
+      if l ≠ -1 # VecUnroll
+        gfvarg = Expr(:call, GlobalRef(Core, :getfield), gfvarg, 1, false)
+      end
+      push!(q.args, Expr(:(=), vargs[k], gfvarg))
+    elseif l ≠ -1
+      varg = vargs[k]
+      vargs[k] = dvarg = Symbol(:d, varg)
+      push!(q.args, :($dvarg = data($varg)))
     end
-    lengths = Vector{Int}(undef, K);
-    for k ∈ 1:K
-        lengths[k] = l = vecunrolllen(vargtypes[k])
-        if hasf
-            gfvarg = Expr(:call, GlobalRef(Core, :getfield), :vargs, k, false)
-            if l ≠ -1 # VecUnroll
-                gfvarg = Expr(:call, GlobalRef(Core, :getfield), gfvarg, 1, false)
-            end
-            push!(q.args, Expr(:(=), vargs[k], gfvarg))
-        elseif l ≠ -1
-            varg = vargs[k]
-            vargs[k] = dvarg = Symbol(:d, varg)
-            push!(q.args, :($dvarg = data($varg)))
-        end
-    end
-    N = last(lengths)
-    start = (hasf | maskearly) ? 1 : M
-    Sreduced = (S > 0) && (lengths[S] == -1)
-    if Sreduced
-        maxlen = maximum(lengths)
-        if maxlen == -1
-            Sreduced = false
-            t = Expr(:tuple)
-        else
-            hasf || throw(ArgumentError("Argument reduction only supported for `ifelse(last/partial)(f::Function, args...)`"))
-            M = maxlen
-            t = q
-        end
+  end
+  N = last(lengths)
+  start = (hasf | maskearly) ? 1 : M
+  Sreduced = (S > 0) && (lengths[S] == -1)
+  if Sreduced
+    maxlen = maximum(lengths)
+    if maxlen == -1
+      Sreduced = false
+      t = Expr(:tuple)
     else
-        t = Expr(:tuple)
+      hasf || throw(
+        ArgumentError(
+          "Argument reduction only supported for `ifelse(last/partial)(f::Function, args...)`",
+        ),
+      )
+      M = maxlen
+      t = q
     end
-    for m ∈ 1:start-1
-        push!(t.args, :(getfield($(vargs[1]), $m, false)))
+  else
+    t = Expr(:tuple)
+  end
+  for m ∈ 1:start-1
+    push!(t.args, :(getfield($(vargs[1]), $m, false)))
+  end
+  for m ∈ start:M
+    call = if hasf
+      (maskearly | (m == M)) ? Expr(:call, :ifelse, :f, :m) : Expr(:call, :f)
+    else# m == M because !hasf
+      Expr(:call, :ifelse, :m)
     end
-    for m ∈ start:M
-        call = if hasf
-            (maskearly | (m == M)) ? Expr(:call, :ifelse, :f, :m) : Expr(:call, :f)
-        else# m == M because !hasf
-            Expr(:call, :ifelse, :m)
-        end
-        for k ∈ 1:K
-            if lengths[k] == -1
-                push!(call.args, vargs[k])
-            else
-                # @assert (k == K) || (lengths[k] == M)
-                push!(call.args, :(getfield($(vargs[k]), $m, false)))
-            end
-        end
-        if Sreduced
-            push!(t.args, Expr(:(=), vargs[S], call))
-        elseif N == -1
-            push!(q.args, call)
-            return q
-        else
-            push!(t.args, call)
-        end
+    for k ∈ 1:K
+      if lengths[k] == -1
+        push!(call.args, vargs[k])
+      else
+        # @assert (k == K) || (lengths[k] == M)
+        push!(call.args, :(getfield($(vargs[k]), $m, false)))
+      end
     end
-    Sreduced && return q
-    for m ∈ M+1:N
-        push!(t.args, :(getfield($(vargs[K]), $m, false)))
+    if Sreduced
+      push!(t.args, Expr(:(=), vargs[S], call))
+    elseif N == -1
+      push!(q.args, call)
+      return q
+    else
+      push!(t.args, call)
     end
-    # push!(q.args, :(VecUnroll($t)::VecUnroll{$N,$W,$T,$V}))
-    # push!(q.args, Expr(:call, lv(:VecUnroll), t))
-    push!(q.args, :(VecUnroll($t)))
-    q
+  end
+  Sreduced && return q
+  for m ∈ M+1:N
+    push!(t.args, :(getfield($(vargs[K]), $m, false)))
+  end
+  # push!(q.args, :(VecUnroll($t)::VecUnroll{$N,$W,$T,$V}))
+  # push!(q.args, Expr(:call, lv(:VecUnroll), t))
+  push!(q.args, :(VecUnroll($t)))
+  q
 end
-@generated function ifelselast(f::F, m::AbstractMask{W}, ::StaticInt{M}, ::StaticInt{S}, vargs::Vararg{Any,K}) where {F,W,K,M,S}
-    ifelselastexpr(true, M, vargs, K, S, false)
+@generated function ifelselast(
+  f::F,
+  m::AbstractMask{W},
+  ::StaticInt{M},
+  ::StaticInt{S},
+  vargs::Vararg{Any,K},
+) where {F,W,K,M,S}
+  ifelselastexpr(true, M, vargs, K, S, false)
 end
-@generated function ifelselast(m::AbstractMask{W}, ::StaticInt{M}, ::StaticInt{S}, varg_1::V1, varg_2::V2) where {W,V1,V2,M,S}
-    ifelselastexpr(false, M, (V1,V2), 2, S, false)
+@generated function ifelselast(
+  m::AbstractMask{W},
+  ::StaticInt{M},
+  ::StaticInt{S},
+  varg_1::V1,
+  varg_2::V2,
+) where {W,V1,V2,M,S}
+  ifelselastexpr(false, M, (V1, V2), 2, S, false)
 end
-@generated function ifelsepartial(f::F, m::AbstractMask{W}, ::StaticInt{M}, ::StaticInt{S}, vargs::Vararg{Any,K}) where {F,W,K,M,S}
-    ifelselastexpr(true, M, vargs, K, S, true)
+@generated function ifelsepartial(
+  f::F,
+  m::AbstractMask{W},
+  ::StaticInt{M},
+  ::StaticInt{S},
+  vargs::Vararg{Any,K},
+) where {F,W,K,M,S}
+  ifelselastexpr(true, M, vargs, K, S, true)
 end
-@generated function ifelsepartial(m::AbstractMask{W}, ::StaticInt{M}, ::StaticInt{S}, varg_1::V1, varg_2::V2) where {W,V1,V2,M,S}
-    ifelselastexpr(false, M, (V1,V2), 2, S, true)
+@generated function ifelsepartial(
+  m::AbstractMask{W},
+  ::StaticInt{M},
+  ::StaticInt{S},
+  varg_1::V1,
+  varg_2::V2,
+) where {W,V1,V2,M,S}
+  ifelselastexpr(false, M, (V1, V2), 2, S, true)
 end
 # @inline ifelselast(f::F, m::AbstractMask{W}, ::StaticInt{M}, ::StaticInt{S}, vargs::Vararg{NativeTypes,K}) where {F,W,K,M,S} = f(vargs...)
 # @inline ifelsepartial(f::F, m::AbstractMask{W}, ::StaticInt{M}, ::StaticInt{S}, vargs::Vararg{NativeTypes,K}) where {F,W,K,M,S} = f(vargs...)
 @generated function subset_vec_unroll(vu::VecUnroll{N}, ::StaticInt{S}) where {N,S}
-    (1 ≤ S ≤ N + 1) || throw(ArgumentError("`vu` isa `VecUnroll` of `$(N+1)` elements, but trying to subset $S of them."))
-    t = Expr(:tuple)
-    gf = GlobalRef(Core,:getfield)
-    S == 1 && return Expr(:block, Expr(:meta,:inline), :($gf($gf(vu,1),1,false)))
-    for s ∈ 1:S
-        push!(t.args, Expr(:call, gf, :vud, s, false))
-    end
-    quote
-        $(Expr(:meta,:inline))
-        vud = $gf(vu, 1)
-        VecUnroll($t)
-    end
+  (1 ≤ S ≤ N + 1) || throw(
+    ArgumentError(
+      "`vu` isa `VecUnroll` of `$(N+1)` elements, but trying to subset $S of them.",
+    ),
+  )
+  t = Expr(:tuple)
+  gf = GlobalRef(Core, :getfield)
+  S == 1 && return Expr(:block, Expr(:meta, :inline), :($gf($gf(vu, 1), 1, false)))
+  for s ∈ 1:S
+    push!(t.args, Expr(:call, gf, :vud, s, false))
+  end
+  quote
+    $(Expr(:meta, :inline))
+    vud = $gf(vu, 1)
+    VecUnroll($t)
+  end
 end
 # `S` is the ind to replace with the return value of previous invocation ("S" for "self") if reducing
-@generated function partialmap(f::F, default::D, ::StaticInt{M}, ::StaticInt{S}, vargs::Vararg{Any,K}) where {F,M,K,D,S}
-    lengths = Vector{Int}(undef, K);
-    q = Expr(:block, Expr(:meta,:inline))
-    syms = Vector{Symbol}(undef, K)
-    isnotpartial = true
-    gf = GlobalRef(Core, :getfield)
-    for k ∈ 1:K
-        l = vecunrolllen(vargs[k])
-        # if l
-        kisnotpartial = ((l ≡ -1) & (k ≢ S)) | (l ≡ M)
-        isnotpartial &= kisnotpartial
-        lengths[k] = l
-        @assert (l == -1) || (l ≥ M)
-        syms[k] = symk = Symbol(:vargs_,k)
-        extractq = :($gf(vargs, $k, false))
-        if l != -1
-            extractq = :(data($extractq))
-        end
-        push!(q.args, :($symk = $extractq))
+@generated function partialmap(
+  f::F,
+  default::D,
+  ::StaticInt{M},
+  ::StaticInt{S},
+  vargs::Vararg{Any,K},
+) where {F,M,K,D,S}
+  lengths = Vector{Int}(undef, K)
+  q = Expr(:block, Expr(:meta, :inline))
+  syms = Vector{Symbol}(undef, K)
+  isnotpartial = true
+  gf = GlobalRef(Core, :getfield)
+  for k ∈ 1:K
+    l = vecunrolllen(vargs[k])
+    # if l
+    kisnotpartial = ((l ≡ -1) & (k ≢ S)) | (l ≡ M)
+    isnotpartial &= kisnotpartial
+    lengths[k] = l
+    @assert (l == -1) || (l ≥ M)
+    syms[k] = symk = Symbol(:vargs_, k)
+    extractq = :($gf(vargs, $k, false))
+    if l != -1
+      extractq = :(data($extractq))
     end
-    Dlen = vecunrolllen(D)
-    N = maximum(lengths)
-    Sreduced = (S > 0) && (lengths[S] == -1) && N != -1
-    if isnotpartial & (Sreduced | (Dlen == N))
-        q =  Expr(:call, :f)
-        for k ∈ 1:K
-            push!(q.args, :($gf(vargs, $k, false)))
-        end
-        return Expr(:block, Expr(:meta, :inline), q)
+    push!(q.args, :($symk = $extractq))
+  end
+  Dlen = vecunrolllen(D)
+  N = maximum(lengths)
+  Sreduced = (S > 0) && (lengths[S] == -1) && N != -1
+  if isnotpartial & (Sreduced | (Dlen == N))
+    q = Expr(:call, :f)
+    for k ∈ 1:K
+      push!(q.args, :($gf(vargs, $k, false)))
+    end
+    return Expr(:block, Expr(:meta, :inline), q)
+  end
+  if Sreduced
+    M = N
+    t = q
+  else
+    @assert (N ≤ Dlen)
+    if Dlen == -1
+      @assert (M == 1)
+    else
+      push!(q.args, :(dd = data(default)))
+    end
+    t = Expr(:tuple)
+  end
+  for m ∈ 1:M
+    call = Expr(:call, :f)
+    for k ∈ 1:K
+      if lengths[k] == -1
+        push!(call.args, syms[k])
+      else
+        push!(call.args, Expr(:call, gf, syms[k], m, false))
+      end
+    end
+    # minimal change in behavior to fix case when !Sreduced by N -> Dlen; TODO: what should Dlen be here?
+    if Sreduced ? (N == -1) : (Dlen == -1)
+      push!(q.args, call)
+      return q
     end
     if Sreduced
-        M = N
-        t = q
+      push!(t.args, Expr(:(=), syms[S], call))
     else
-        @assert (N ≤ Dlen)
-        if Dlen == -1
-            @assert (M == 1)
-        else
-            push!(q.args, :(dd = data(default)))
-        end
-        t = Expr(:tuple)
+      push!(t.args, call)
     end
-    for m ∈ 1:M
-        call = Expr(:call, :f)
-        for k ∈ 1:K
-            if lengths[k] == -1
-                push!(call.args, syms[k])
-            else
-                push!(call.args, Expr(:call, gf, syms[k], m, false))
-            end
-        end
-        # minimal change in behavior to fix case when !Sreduced by N -> Dlen; TODO: what should Dlen be here?
-        if Sreduced ? (N == -1) : (Dlen == -1) 
-            push!(q.args, call)
-            return q
-        end
-        if Sreduced
-            push!(t.args, Expr(:(=), syms[S], call))
-        else
-            push!(t.args, call)
-        end
-    end
-    Sreduced && return q
-    for m ∈ M+1:max(N,Dlen)
-        push!(t.args, :($gf(dd, $m, false)))
-    end
-    push!(q.args, :(VecUnroll($t)))
-    q
+  end
+  Sreduced && return q
+  for m ∈ M+1:max(N, Dlen)
+    push!(t.args, :($gf(dd, $m, false)))
+  end
+  push!(q.args, :(VecUnroll($t)))
+  q
 end
 
 function parent_op_name!(
-  q, ls::LoopSet, parents_op::Vector{Operation}, n::Int, modsuffix, suffix, parents_u₁syms, parents_u₂syms, u₁, u₂max, u₂unrolledsym, op, tiledouterreduction
+  q,
+  ls::LoopSet,
+  parents_op::Vector{Operation},
+  n::Int,
+  modsuffix,
+  suffix,
+  parents_u₁syms,
+  parents_u₂syms,
+  u₁,
+  u₂max,
+  u₂unrolledsym,
+  op,
+  tiledouterreduction,
 )
   opp = parents_op[n]
   opisvectorized = isvectorized(op)
@@ -301,10 +365,16 @@ function parent_op_name!(
     end
     if parents_u₂syms[n]
       if isu₂unrolled(op) # u₂unrolledsym ||
-        parent = isouterreduct ? Symbol(parent, suffix) : Symbol(parent, suffix, '_', '_', u)
+        parent =
+          isouterreduct ? Symbol(parent, suffix) : Symbol(parent, suffix, '_', '_', u)
       elseif u₂max > 1
         t = Expr(:tuple)
-        reduction = Expr(:call, GlobalRef(ArrayInterface, :reduce_tup), reduce_to_onevecunroll(opp), t)
+        reduction = Expr(
+          :call,
+          GlobalRef(ArrayInterface, :reduce_tup),
+          reduce_to_onevecunroll(opp),
+          t,
+        )
         for u₂ ∈ 0:u₂max-1
           push!(t.args, Symbol(parent, u₂, '_', '_', u))
         end
@@ -325,47 +395,48 @@ function parent_op_name!(
   parent, u
 end
 function getuouterreduct(ls::LoopSet, op::Operation, suffix)
-    us = ls.unrollspecification
-    if us.vloopnum === us.u₁loopnum # unroll u₂
-        suffix
-    else # unroll u₁
-        us.u₁
-    end
+  us = ls.unrollspecification
+  if us.vloopnum === us.u₁loopnum # unroll u₂
+    suffix
+  else # unroll u₁
+    us.u₁
+  end
 end
 
 function getu₁full(ls::LoopSet, u₁::Int)
   Ureduct = ureduct(ls)
   ufull = ls.unrollspecification.u₁
   ufull = Core.ifelse(Ureduct == -1, ufull, min(ufull, Ureduct))
-    # ufull = if Ureduct == -1 # no reducing
-    #     ls.unrollspecification.u₁
-    # else
-    #     Ureduct
-    # end
-    # max is because we may be in the extended (non-reduct) region
+  # ufull = if Ureduct == -1 # no reducing
+  #     ls.unrollspecification.u₁
+  # else
+  #     Ureduct
+  # end
+  # max is because we may be in the extended (non-reduct) region
   return max(u₁, ufull)
 end
 function getu₁forreduct(ls::LoopSet, op::Operation, u₁::Int)
-    !isu₁unrolled(op) && return 1
-    # if `op` is u₁unrolled, we must then find out if the initialization is `u₁unrolled`
-    # if it is, then op's `u₁` will be the current `u₁`
-    # if it is not, then the opp is initialized once per full u₁
-    while true
-        selfparentid = findfirst(Base.Fix2(===,name(op)) ∘ name, parents(op))
-        selfparentid === nothing && return u₁
-        op = parents(op)[selfparentid]
-        isreduction(op) || break
-    end
-    if isu₁unrolled(op)
-        return u₁
-    elseif (ls.unrollspecification.u₂ != -1) && length(ls.outer_reductions) > 0
-        # then `ureduct` doesn't tell us what we need, so
-        return ls.unrollspecification.u₁
-    else # we need to find u₁-full
-        return getu₁full(ls, u₁)
-    end    
+  !isu₁unrolled(op) && return 1
+  # if `op` is u₁unrolled, we must then find out if the initialization is `u₁unrolled`
+  # if it is, then op's `u₁` will be the current `u₁`
+  # if it is not, then the opp is initialized once per full u₁
+  while true
+    selfparentid = findfirst(Base.Fix2(===, name(op)) ∘ name, parents(op))
+    selfparentid === nothing && return u₁
+    op = parents(op)[selfparentid]
+    isreduction(op) || break
+  end
+  if isu₁unrolled(op)
+    return u₁
+  elseif (ls.unrollspecification.u₂ != -1) && length(ls.outer_reductions) > 0
+    # then `ureduct` doesn't tell us what we need, so
+    return ls.unrollspecification.u₁
+  else # we need to find u₁-full
+    return getu₁full(ls, u₁)
+  end
 end
-isidentityop(op::Operation) = iscompute(op) && (instruction(op).instr === :identity) && (length(parents(op)) == 1)
+isidentityop(op::Operation) =
+  iscompute(op) && (instruction(op).instr === :identity) && (length(parents(op)) == 1)
 function reduce_parent!(q::Expr, ls::LoopSet, op::Operation, opp::Operation, parent::Symbol)
   isvectorized(op) && return parent
   if isvectorized(opp)
@@ -383,18 +454,19 @@ function reduce_parent!(q::Expr, ls::LoopSet, op::Operation, opp::Operation, par
   end
   newp = gensym(parent)
   if instruction(op).instr ≢ :ifelse
-    push!(q.args, Expr(:(=), newp, Expr(:call, lv(reduction_to_scalar(reduct_class)), parent)))#IfElseReducer
+    push!(
+      q.args,
+      Expr(:(=), newp, Expr(:call, lv(reduction_to_scalar(reduct_class)), parent)),
+    )#IfElseReducer
   else
-    reductexpr = ifelse_reduction(:IfElseReducer,op) do opv
+    reductexpr = ifelse_reduction(:IfElseReducer, op) do opv
       throw(LoopError("Does not support storing mirrored ifelse-reductions yet"))
     end
     push!(q.args, Expr(:(=), newp, Expr(:call, reductexpr, parent)))
   end
   newp
 end
-function lower_compute!(
-  q::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs, mask::Bool
-  )
+function lower_compute!(q::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs, mask::Bool)
   @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, u₂max, suffix = ua
   var = name(op)
   instr = instruction(op)
@@ -402,10 +474,12 @@ function lower_compute!(
   nparents = length(parents_op)
   # __u₂max = ls.unrollspecification.u₂
   # TODO: perhaps allos for swithcing unrolled axis again
-  mvar, u₁unrolledsym, u₂unrolledsym = variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, vloopsym, suffix, ls)
+  mvar, u₁unrolledsym, u₂unrolledsym =
+    variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, vloopsym, suffix, ls)
   opunrolled = u₁unrolledsym || isu₁unrolled(op)
   us = ls.unrollspecification
-  parents_u₁syms, parents_u₂syms = parent_unroll_status(op, u₁loopsym, u₂loopsym, vloopsym, u₂max, us)
+  parents_u₁syms, parents_u₂syms =
+    parent_unroll_status(op, u₁loopsym, u₂loopsym, vloopsym, u₂max, us)
   # tiledouterreduction = if num_loops(ls) == 1# (suffix == -1)# || (vloopsym === u₂loopsym)
   tiledouterreduction = if (suffix == -1)# || (vloopsym === u₂loopsym)
     suffix_ = Symbol("")
@@ -422,8 +496,16 @@ function lower_compute!(
       parentop = parents_op[i]
       i == tiledouterreduction && isconstant(parentop) && continue
       newparentop = Operation(
-        parentop.identifier, gensym(parentop.variable), parentop.elementbytes, parentop.instruction, parentop.node_type,
-        parentop.dependencies, parentop.reduced_deps, parentop.parents, parentop.ref, parentop.reduced_children
+        parentop.identifier,
+        gensym(parentop.variable),
+        parentop.elementbytes,
+        parentop.instruction,
+        parentop.node_type,
+        parentop.dependencies,
+        parentop.reduced_deps,
+        parentop.parents,
+        parentop.ref,
+        parentop.reduced_children,
       )
       newparentop.vectorized = false
       newparentop.u₁unrolled = false
@@ -441,7 +523,10 @@ function lower_compute!(
         newpname = Symbol(newparentname, '_', u₁)
         push!(q.args, Expr(:(=), newpname, Symbol(parentname, '_', u₁)))
         reduce_expr!(q, newparentname, newparentop, u₁, -1, true, false)
-        push!(q.args, Expr(:(=), Symbol(newparentname, '_', 1), Symbol(newparentname, "##onevec##")))
+        push!(
+          q.args,
+          Expr(:(=), Symbol(newparentname, '_', 1), Symbol(newparentname, "##onevec##")),
+        )
       end
     end
   end
@@ -456,12 +541,17 @@ function lower_compute!(
   if Base.libllvm_version < v"11.0.0" && (suffix ≠ -1) && isreduct# && (iszero(suffix) || (ls.unrollspecification.u₂ - 1 == suffix))
     # if (length(reduceddependencies(op)) > 0) | (length(reducedchildren(op)) > 0)# && (iszero(suffix) || (ls.unrollspecification.u₂ - 1 == suffix))
     # instrfid = findfirst(isequal(instr.instr), (:vfmadd, :vfnmadd, :vfmsub, :vfnmsub))
-    instrfid = findfirst(Base.Fix2(===,instr.instr), (:vfmadd_fast, :vfnmadd_fast, :vfmsub_fast, :vfnmsub_fast))
+    instrfid = findfirst(
+      Base.Fix2(===, instr.instr),
+      (:vfmadd_fast, :vfnmadd_fast, :vfmsub_fast, :vfnmsub_fast),
+    )
     # instrfid = findfirst(isequal(instr.instr), (:vfnmadd_fast, :vfmsub_fast, :vfnmsub_fast))
     # want to instcombine when parent load's deps are superset
     # also make sure opp is unrolled
     if !(instrfid === nothing) && (opunrolled && u₁ > 1) && sub_fmas(ls, op, ua)
-      specific_fmas = Base.libllvm_version >= v"11.0.0" ? (:vfmadd, :vfnmadd, :vfmsub, :vfnmsub) : (:vfmadd231, :vfnmadd231, :vfmsub231, :vfnmsub231)
+      specific_fmas =
+        Base.libllvm_version >= v"11.0.0" ? (:vfmadd, :vfnmadd, :vfmsub, :vfnmsub) :
+        (:vfmadd231, :vfnmadd231, :vfmsub231, :vfnmsub231)
       # specific_fmas = Base.libllvm_version >= v"11.0.0" ? (:vfnmadd, :vfmsub, :vfnmsub) : (:vfnmadd231, :vfmsub231, :vfnmsub231)
       # specific_fmas = (:vfmadd231, :vfnmadd231, :vfmsub231, :vfnmsub231)
       instr = Instruction(specific_fmas[instrfid])
@@ -521,18 +611,34 @@ function lower_compute!(
     opp = parents_op[n]
     if isloopvalue(opp)
       loopval = first(loopdependencies(opp))
-      add_loopvalue!(instrcall, loopval, ua, u₁, getloop(ls,loopval))
+      add_loopvalue!(instrcall, loopval, ua, u₁, getloop(ls, loopval))
     elseif name(opp) === name(op)
       selfdep = n
       if ((isvectorized(opp) && !isvectorized(op))) ||
-        (parents_u₁syms[n] != u₁unrolledsym) || (parents_u₂syms[n] != u₂unrolledsym)
+         (parents_u₁syms[n] != u₁unrolledsym) ||
+         (parents_u₂syms[n] != u₂unrolledsym)
 
-        selfopname, uₚ = parent_op_name!(q, ls, parents_op, n, modsuffix, suffix, parents_u₁syms, parents_u₂syms, u₁, u₂max, u₂unrolledsym, op, tiledouterreduction)
+        selfopname, uₚ = parent_op_name!(
+          q,
+          ls,
+          parents_op,
+          n,
+          modsuffix,
+          suffix,
+          parents_u₁syms,
+          parents_u₂syms,
+          u₁,
+          u₂max,
+          u₂unrolledsym,
+          op,
+          tiledouterreduction,
+        )
         push!(instrcall.args, selfopname)
       else
         push!(instrcall.args, varsym)
       end
-    elseif ((!isu₂unrolled(op)) & isu₂unrolled(opp)) && (parents_u₂syms[n] & (!u₂unrolledsym))
+    elseif ((!isu₂unrolled(op)) & isu₂unrolled(opp)) &&
+           (parents_u₂syms[n] & (!u₂unrolledsym))
       # elseif parents_u₂syms[n] & (!u₂unrolledsym)
       #&& (isouterreduction(ls, opp) != -1)
       # this checks if the parent is u₂ unrolled but this operation is not, in which case we need to reduce it.
@@ -545,7 +651,21 @@ function lower_compute!(
       push!(instrcall.args, GlobalRef(Base, instruction(opp).instr))
     else
       # 0 for tiledouterreduction, because `name(opp) ≢ name(op)`
-      parent, uₚ = parent_op_name!(q, ls, parents_op, n, modsuffix, suffix, parents_u₁syms, parents_u₂syms, u₁, u₂max, u₂unrolledsym, op, 0)
+      parent, uₚ = parent_op_name!(
+        q,
+        ls,
+        parents_op,
+        n,
+        modsuffix,
+        suffix,
+        parents_u₁syms,
+        parents_u₂syms,
+        u₁,
+        u₂max,
+        u₂unrolledsym,
+        op,
+        0,
+      )
       parent = reduce_parent!(q, ls, op, opp, parent)
       if (selfdep == 0) && search_tree(parents(opp), name(op))
         selfdep = n
@@ -579,23 +699,50 @@ function lower_compute!(
       # That means we still need to adjust the `instrcall` in case we're reducing/accumulating across the unroll
       if ifelsefunc ≡ :ifelse # ifelse means it's unrolled by 1, no need
         # push!(q.args, Expr(:(=), varsym, Expr(:call, lv(ifelsefunc), MASKSYMBOL, instrcall, selfopname)))
-        push!(q.args, Expr(:(=), varsym, Expr(:call, lv(ifelsefunc), MASKSYMBOL, instrcall, selfopname)))
+        push!(
+          q.args,
+          Expr(
+            :(=),
+            varsym,
+            Expr(:call, lv(ifelsefunc), MASKSYMBOL, instrcall, selfopname),
+          ),
+        )
       elseif ((u₁ ≡ 1) | (selfdepreduce ≡ 0))
         # if the current unroll is 1, no need to accumulate. Same if there is no selfdepreduce, but there has to be if we're here?
         # push!(q.args, Expr(:(=), varsym, Expr(:call, lv(ifelsefunc), MASKSYMBOL, staticexpr(u₁), staticexpr(selfdepreduce), instrcall, selfopname)))
-        push!(q.args, Expr(:(=), varsym, Expr(:call, lv(ifelsefunc), MASKSYMBOL, staticexpr(u₁), staticexpr(selfdepreduce), instrcall, selfopname)))
+        push!(
+          q.args,
+          Expr(
+            :(=),
+            varsym,
+            Expr(
+              :call,
+              lv(ifelsefunc),
+              MASKSYMBOL,
+              staticexpr(u₁),
+              staticexpr(selfdepreduce),
+              instrcall,
+              selfopname,
+            ),
+          ),
+        )
       else
         make_partial_map!(instrcall, selfopname, u₁, selfdepreduce)
         # partialmap accumulates
-        push!(q.args, Expr(:(=), varsym, Expr(:call, lv(:ifelse), MASKSYMBOL, instrcall, selfopname)))
+        push!(
+          q.args,
+          Expr(:(=), varsym, Expr(:call, lv(:ifelse), MASKSYMBOL, instrcall, selfopname)),
+        )
       end
       return
       # elseif selfdep != 0
       #   make_partial_map!(instrcall, selfopname, u₁, selfdepreduce)
     end
-  elseif selfdep != 0 && (dopartialmap ||
+  elseif selfdep != 0 && (
+    dopartialmap ||
     (isouterreduct && (opunrolled) && (u₁ < us.u₁)) ||
-    (isreduct & (u₁ > 1) & (!u₁unrolledsym) & isu₁unrolled(op))) # TODO: DRY `selfdepreduce` definition
+    (isreduct & (u₁ > 1) & (!u₁unrolledsym) & isu₁unrolled(op))
+  ) # TODO: DRY `selfdepreduce` definition
     # first possibility (`isouterreduct && opunrolled && (u₁ < ls.unrollspecification.u₁)`):
     # checks if we're in the "reduct" part of an outer reduction
     #
@@ -611,7 +758,10 @@ function lower_compute!(
       push!(q.args, Expr(:(=), varsym, instrcall.args[2]))
     end
   elseif identifier(op) ∉ ls.outer_reductions && should_broadcast_op(op)
-    push!(q.args, Expr(:(=), varsym, Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, instrcall)))
+    push!(
+      q.args,
+      Expr(:(=), varsym, Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, instrcall)),
+    )
   else
     push!(q.args, Expr(:(=), varsym, instrcall))
   end
@@ -624,4 +774,3 @@ function make_partial_map!(instrcall, selfopname, u₁, selfdep)
   insert!(instrcall.args, 5, staticexpr(selfdep))
   nothing
 end
-

@@ -9,7 +9,9 @@ function copy_sp_data_range!(newR, newstrd, newoffsets, ind, R, rg)
   nothing
 end
 @generated function subsetview(
-    ptr::AbstractStridedPointer{T,N,C,B,R,X,O}, ::StaticInt{I}, i::Integer
+  ptr::AbstractStridedPointer{T,N,C,B,R,X,O},
+  ::StaticInt{I},
+  i::Integer,
 ) where {T,N,C,B,R,X,O,I}
   I > N && return :ptr
   @assert B ≤ 0 "Batched dims not currently supported."
@@ -23,20 +25,39 @@ end
   copy_sp_data_range!(newR, newstrd, newoffsets, ind, R, I+1:N)
   gptr = Expr(:call, :gep, :ptr, ind)
   quote
-    $(Expr(:meta,:inline))
+    $(Expr(:meta, :inline))
     strd = strides(ptr)
     offs = offsets(ptr)
-    si = ArrayInterface.StrideIndex{$(N-1),$newR,$newC}($newstrd, $newoffsets)
+    si = ArrayInterface.StrideIndex{$(N - 1),$newR,$newC}($newstrd, $newoffsets)
     stridedpointer($gptr, si, StaticInt{$B}())
   end
 end
 @inline _subsetview(ptr::AbstractStridedPointer, ::StaticInt{I}, J::Tuple{}) where {I} = ptr
-@inline _subsetview(ptr::AbstractStridedPointer, ::StaticInt{I}, J::Tuple{J1}) where {I,J1} = subsetview(ptr, StaticInt{I}(), first(J))
-@inline _subsetview(ptr::AbstractStridedPointer, ::StaticInt{I}, J::Tuple{J1,J2,Vararg}) where {I,J1,J2} = _subsetview(subsetview(ptr, StaticInt{I}(), first(J)), StaticInt{I}(), Base.tail(J))
-@inline subsetview(ptr::AbstractStridedPointer, ::StaticInt{I}, J::CartesianIndex) where {I} = _subsetview(ptr, StaticInt{I}(), Tuple(J))
+@inline _subsetview(
+  ptr::AbstractStridedPointer,
+  ::StaticInt{I},
+  J::Tuple{J1},
+) where {I,J1} = subsetview(ptr, StaticInt{I}(), first(J))
+@inline _subsetview(
+  ptr::AbstractStridedPointer,
+  ::StaticInt{I},
+  J::Tuple{J1,J2,Vararg},
+) where {I,J1,J2} =
+  _subsetview(subsetview(ptr, StaticInt{I}(), first(J)), StaticInt{I}(), Base.tail(J))
+@inline subsetview(
+  ptr::AbstractStridedPointer,
+  ::StaticInt{I},
+  J::CartesianIndex,
+) where {I} = _subsetview(ptr, StaticInt{I}(), Tuple(J))
 
-@inline _gesp(sp::VectorizationBase.FastRange, ::StaticInt{1}, i, ::StaticInt{1}) = gesp(sp, (i,))
-@generated function _gesp(sp::AbstractStridedPointer{T,N}, ::StaticInt{I}, i::Integer, ::StaticInt{D}) where {I,N,T,D}
+@inline _gesp(sp::VectorizationBase.FastRange, ::StaticInt{1}, i, ::StaticInt{1}) =
+  gesp(sp, (i,))
+@generated function _gesp(
+  sp::AbstractStridedPointer{T,N},
+  ::StaticInt{I},
+  i::Integer,
+  ::StaticInt{D},
+) where {I,N,T,D}
   t = Expr(:tuple)
   for j ∈ 1:I-1
     # push!(t.args, staticexpr(0))
@@ -50,9 +71,7 @@ end
     end
   end
   quote
-    $(Expr(:meta,:inline))
+    $(Expr(:meta, :inline))
     gesp(sp, $t)
   end
 end
-
-

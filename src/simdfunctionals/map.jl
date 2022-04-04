@@ -3,68 +3,85 @@
 `alignstores!` will align `y` in preparation for the non-temporal maps.
 """
 function setup_vmap!(
-    f::F, y::AbstractArray{T}, ::Val{true},
-    args::Vararg{AbstractArray,A}
-) where {F, T <: Base.HWReal, A}
-    N = length(y)
-    ptry = VectorizationBase.zstridedpointer(y)
-    ptrargs = map(VectorizationBase.zstridedpointer, args)
-    V = pick_vector_width(T)
-    W = unwrap(V)
-    zero_index = (MM{W}(Static(0)),)
-    uintptry = reinterpret(UInt, pointer(ptry))
-    @assert iszero(uintptry & (sizeof(T) - 1)) "The destination vector (`dest`) must be aligned to `sizeof(eltype(dest)) == $(sizeof(T))` bytes."
-    alignment = uintptry & (register_size() - 1)
-    if alignment > 0
-        i = reinterpret(Int, W - (alignment >>> VectorizationBase.intlog2(sizeof(T))))
-        m = mask(T, i)
-        if N < i
-            m &= mask(T, N & (W - 1))
-        end
-        _vstore!(ptry, f(map1(vload, ptrargs, zero_index, m)...), zero_index, m, False(), True(), False(), register_size())
-        gesp(ptry, (i,)), map1(gesp, ptrargs, (i,)), N - i
-    else
-        ptry, ptrargs, N
+  f::F,
+  y::AbstractArray{T},
+  ::Val{true},
+  args::Vararg{AbstractArray,A},
+) where {F,T<:Base.HWReal,A}
+  N = length(y)
+  ptry = VectorizationBase.zstridedpointer(y)
+  ptrargs = map(VectorizationBase.zstridedpointer, args)
+  V = pick_vector_width(T)
+  W = unwrap(V)
+  zero_index = (MM{W}(Static(0)),)
+  uintptry = reinterpret(UInt, pointer(ptry))
+  @assert iszero(uintptry & (sizeof(T) - 1)) "The destination vector (`dest`) must be aligned to `sizeof(eltype(dest)) == $(sizeof(T))` bytes."
+  alignment = uintptry & (register_size() - 1)
+  if alignment > 0
+    i = reinterpret(Int, W - (alignment >>> VectorizationBase.intlog2(sizeof(T))))
+    m = mask(T, i)
+    if N < i
+      m &= mask(T, N & (W - 1))
     end
+    _vstore!(
+      ptry,
+      f(map1(vload, ptrargs, zero_index, m)...),
+      zero_index,
+      m,
+      False(),
+      True(),
+      False(),
+      register_size(),
+    )
+    gesp(ptry, (i,)), map1(gesp, ptrargs, (i,)), N - i
+  else
+    ptry, ptrargs, N
+  end
 end
 function map1_quote(K::Int, args::Int)
   t = Expr(:tuple)
-  gf = GlobalRef(Core,:getfield)
+  gf = GlobalRef(Core, :getfield)
   for k ∈ 1:K
     c = Expr(:call, :f, Expr(:call, gf, :x_1, k, false))
     for a ∈ 2:args
-      push!(c.args, Symbol(:x_,a))
+      push!(c.args, Symbol(:x_, a))
     end
     push!(t.args, c)
   end
-  Expr(:block, Expr(:meta,:inline), t)
+  Expr(:block, Expr(:meta, :inline), t)
 end
 @generated map1(f::F, x_1::Tuple{Vararg{Any,K}}, x_2) where {F,K} = map1_quote(K, 2)
 @generated map1(f::F, x_1::Tuple{Vararg{Any,K}}, x_2, x_3) where {F,K} = map1_quote(K, 3)
 
 @inline function setup_vmap!(f, y, ::Val{false}, args::Vararg{AbstractArray,A}) where {A}
-    N = length(y)
-    ptry = VectorizationBase.zstridedpointer(y)
-    ptrargs = map(VectorizationBase.zstridedpointer, args)
-    ptry, ptrargs, N
+  N = length(y)
+  ptry = VectorizationBase.zstridedpointer(y)
+  ptrargs = map(VectorizationBase.zstridedpointer, args)
+  ptry, ptrargs, N
 end
 
 function vmap_singlethread!(
-    f::F, y::AbstractArray{T},
-    ::Val{NonTemporal},
-    args::Vararg{AbstractArray,A}
-) where {F,T <: NativeTypes, A, NonTemporal}
+  f::F,
+  y::AbstractArray{T},
+  ::Val{NonTemporal},
+  args::Vararg{AbstractArray,A},
+) where {F,T<:NativeTypes,A,NonTemporal}
   ptry, ptrargs, N = setup_vmap!(f, y, Val{NonTemporal}(), args...)
   _vmap_singlethread!(f, ptry, Zero(), N, Val{NonTemporal}(), ptrargs)
   nothing
 end
 function _vmap_singlethread!(
-  f::F, ptry::AbstractStridedPointer{T},
-  start, N, ::Val{NonTemporal},
-  ptrargs::Tuple{Vararg{Any,A}}
-) where {F, T, NonTemporal, A}
+  f::F,
+  ptry::AbstractStridedPointer{T},
+  start,
+  N,
+  ::Val{NonTemporal},
+  ptrargs::Tuple{Vararg{Any,A}},
+) where {F,T,NonTemporal,A}
   i = convert(Int, start)
-  V = VectorizationBase.pick_vector_width(promote_type(T, reduce(promote_type, map(eltype, ptrargs))))
+  V = VectorizationBase.pick_vector_width(
+    promote_type(T, reduce(promote_type, map(eltype, ptrargs))),
+  )
   W = unwrap(V)
   UNROLL = 4
   LOG2UNROLL = 2
@@ -99,9 +116,9 @@ function _vmap_singlethread!(
     m = mask(StaticInt(W), N & (W - 1))
     vfinal = f(map1(vload, ptrargs, (MM{W}(i),), m)...)
     if NonTemporal
-      _vstore!(ptry, vfinal, (MM{W}(i,),), m, True(), True(), False(), register_size())
+      _vstore!(ptry, vfinal, (MM{W}(i),), m, True(), True(), False(), register_size())
     else
-      _vstore!(ptry, vfinal, (MM{W}(i,),), m, False(), True(), False(), register_size())
+      _vstore!(ptry, vfinal, (MM{W}(i),), m, False(), True(), False(), register_size())
     end
   end
   # end
@@ -111,7 +128,11 @@ end
 abstract type AbstractVmapClosure{NonTemporal,F,D,N,A<:Tuple{Vararg{Any,N}}} <: Function end
 struct VmapClosure{NonTemporal,F,D,N,A} <: AbstractVmapClosure{NonTemporal,F,D,N,A}
   f::F
-  function VmapClosure{NonTemporal}(f::F, ::D, ::A) where {NonTemporal,F,D,N,A<:Tuple{Vararg{Any,N}}}
+  function VmapClosure{NonTemporal}(
+    f::F,
+    ::D,
+    ::A,
+  ) where {NonTemporal,F,D,N,A<:Tuple{Vararg{Any,N}}}
     new{NonTemporal,F,D,N,A}(f)
   end
 end
@@ -121,12 +142,12 @@ end
 #     :(_vmap_thread_call!($(F.instance), p, $D, $A, Val{$NonTemporal}()))
 # end
 function (m::VmapClosure{NonTemporal,F,D,N,A})(p::Ptr{UInt}) where {NonTemporal,F,D,N,A}
-  (offset, dest) = ThreadingUtilities.load(p, D, 2*sizeof(UInt))
+  (offset, dest) = ThreadingUtilities.load(p, D, 2 * sizeof(UInt))
   (offset, args) = ThreadingUtilities.load(p, A, offset)
-  
+
   (offset, start) = ThreadingUtilities.load(p, Int, offset)
-  (offset, stop ) = ThreadingUtilities.load(p, Int, offset)
-  
+  (offset, stop) = ThreadingUtilities.load(p, Int, offset)
+
   _vmap_singlethread!(m.f, dest, start, stop, Val{NonTemporal}(), args)
   ThreadingUtilities._atomic_store!(p, ThreadingUtilities.SPIN)
   NonTemporal && Threads.atomic_fence()
@@ -134,7 +155,7 @@ function (m::VmapClosure{NonTemporal,F,D,N,A})(p::Ptr{UInt}) where {NonTemporal,
 end
 
 @inline function _get_fptr(cfunc::Base.CFunction)
-    Base.unsafe_convert(Ptr{Cvoid}, cfunc)
+  Base.unsafe_convert(Ptr{Cvoid}, cfunc)
 end
 # @generated function _get_fptr(cfunc::F) where {F<:VmapKnownClosure}
 #     precompile(F(), (Ptr{UInt},))
@@ -144,9 +165,7 @@ end
 #     end
 # end
 
-@inline function setup_thread_vmap!(
-    p, cfunc, ptry, ptrargs, start, stop
-)
+@inline function setup_thread_vmap!(p, cfunc, ptry, ptrargs, start, stop)
   fptr = _get_fptr(cfunc)
   offset = ThreadingUtilities.store!(p, fptr, sizeof(UInt))
   offset = ThreadingUtilities.store!(p, ptry, offset)
@@ -156,12 +175,24 @@ end
   nothing
 end
 @inline function launch_thread_vmap!(tid, cfunc, ptry, ptrargs, start, stop)
-  ThreadingUtilities.launch(tid, cfunc, ptry, ptrargs, start, stop) do p, cfunc, ptry, ptrargs, start, stop
+  ThreadingUtilities.launch(
+    tid,
+    cfunc,
+    ptry,
+    ptrargs,
+    start,
+    stop,
+  ) do p, cfunc, ptry, ptrargs, start, stop
     setup_thread_vmap!(p, cfunc, ptry, ptrargs, start, stop)
   end
 end
 
-@inline function vmap_closure(f::F, ptry::D, ptrargs::A, ::Val{NonTemporal}) where {F,D<:StridedPointer,N,A<:Tuple{Vararg{Any,N}},NonTemporal}
+@inline function vmap_closure(
+  f::F,
+  ptry::D,
+  ptrargs::A,
+  ::Val{NonTemporal},
+) where {F,D<:StridedPointer,N,A<:Tuple{Vararg{Any,N}},NonTemporal}
   vmc = VmapClosure{NonTemporal}(f, ptry, ptrargs)
   @cfunction($vmc, Cvoid, (Ptr{UInt},))
 end
@@ -170,7 +201,7 @@ function vmap_multithread!(
   f::F,
   y::AbstractArray{T},
   ::Val{NonTemporal},
-  args::Vararg{AbstractArray,A}
+  args::Vararg{AbstractArray,A},
 ) where {F,T,A,NonTemporal}
   W, Wshift = VectorizationBase.pick_vector_width_shift(T)
   ptry, ptrargs, N = setup_vmap!(f, y, Val{NonTemporal}(), args...)
@@ -184,7 +215,7 @@ function vmap_multithread!(
   end
 
   cfunc = vmap_closure(f, ptry, ptrargs, Val{NonTemporal}())
-  Nveciter = (N + (W-1)) >> Wshift
+  Nveciter = (N + (W - 1)) >> Wshift
   Nd, Nr = divrem(Nveciter, nt)
   NdW = Nd << Wshift
   NdWr = NdW + W
@@ -207,15 +238,15 @@ end
   y::AbstractArray,
   ::Val{NonTemporal},
   ::Val{Threaded},
-  args::Vararg{AbstractArray,A}
+  args::Vararg{AbstractArray,A},
 ) where {F,A,NonTemporal,Threaded}
   m = Threaded ? :vmap_multithread! : :vmap_singlethread!
   call = Expr(:call, m, :f, :y, Expr(:call, Expr(:curly, :Val, NonTemporal)))
   q = Expr(:block, Expr(:meta, :inline))
   gcpres = Expr(:gc_preserve, call)
   for a ∈ 1:A
-    arg = Symbol(:arg_,a)
-    parg = Symbol(:parg_,a)
+    arg = Symbol(:arg_, a)
+    parg = Symbol(:parg_, a)
     push!(q.args, Expr(:(=), arg, :(@inbounds args[$a])))#Expr(:ref, :args, a)))
     push!(q.args, Expr(:(=), parg, Expr(:call, :preserve_buffer, arg)))
     push!(call.args, arg)
@@ -227,13 +258,18 @@ end
 
 
 @inline _all_dense(t::Tuple{ArrayInterface.True}) = true
-@inline _all_dense(t::Tuple{ArrayInterface.True,ArrayInterface.True,Vararg}) = _all_dense(Base.tail(t))
+@inline _all_dense(t::Tuple{ArrayInterface.True,ArrayInterface.True,Vararg}) =
+  _all_dense(Base.tail(t))
 @inline _all_dense(t::Tuple{ArrayInterface.True,ArrayInterface.False,Vararg}) = false
 @inline _all_dense(t::Tuple{ArrayInterface.False,Vararg}) = false
 @inline all_dense() = true
 @inline all_dense(A::Array) = true
 @inline all_dense(A::AbstractArray) = _all_dense(ArrayInterface.dense_dims(A))
-@inline all_dense(A::AbstractArray, B::AbstractArray, C::Vararg{AbstractArray,K}) where {K} = all_dense(A) && all_dense(B, C...)
+@inline all_dense(
+  A::AbstractArray,
+  B::AbstractArray,
+  C::Vararg{AbstractArray,K},
+) where {K} = all_dense(A) && all_dense(B, C...)
 
 """
     vmap!(f, destination, a::AbstractArray)
@@ -254,20 +290,24 @@ f(x) = IfElse.ifelse(x > 0, log(x), inv(x))
 ```
 """
 function vmap!(
-    f::F, y::AbstractArray, arg1::AbstractArray, arg2::AbstractArray, args::Vararg{AbstractArray,A}
+  f::F,
+  y::AbstractArray,
+  arg1::AbstractArray,
+  arg2::AbstractArray,
+  args::Vararg{AbstractArray,A},
 ) where {F,A}
-    if check_args(y, arg1, arg2, args...) && all_dense(y, arg1, arg2, args...)
-        gc_preserve_vmap!(f, y, Val{false}(), Val{false}(), arg1, arg2, args...)
-    else
-        map!(f, y, arg1, arg2, args...)
-    end
+  if check_args(y, arg1, arg2, args...) && all_dense(y, arg1, arg2, args...)
+    gc_preserve_vmap!(f, y, Val{false}(), Val{false}(), arg1, arg2, args...)
+  else
+    map!(f, y, arg1, arg2, args...)
+  end
 end
 function vmap!(f::F, y::AbstractArray, arg::AbstractArray) where {F}
-    if check_args(y, arg) && all_dense(y, arg)
-        gc_preserve_vmap!(f, y, Val{false}(), Val{false}(), arg)
-    else
-        map!(f, y, arg)
-    end
+  if check_args(y, arg) && all_dense(y, arg)
+    gc_preserve_vmap!(f, y, Val{false}(), Val{false}(), arg)
+  else
+    map!(f, y, arg)
+  end
 end
 
 
@@ -275,14 +315,12 @@ end
     vmapt!(::Function, dest, args...)
 A threaded variant of [`vmap!`](@ref).
 """
-function vmapt!(
-    f::F, y::AbstractArray, args::Vararg{AbstractArray,A}
-) where {F,A}
-    if check_args(y, args...) && all_dense(y, args...)
-        gc_preserve_vmap!(f, y, Val{false}(), Val{true}(), args...)
-    else
-        map!(f, y, args...)
-    end
+function vmapt!(f::F, y::AbstractArray, args::Vararg{AbstractArray,A}) where {F,A}
+  if check_args(y, args...) && all_dense(y, args...)
+    gc_preserve_vmap!(f, y, Val{false}(), Val{true}(), args...)
+  else
+    map!(f, y, args...)
+  end
 end
 
 
@@ -333,9 +371,7 @@ BenchmarkTools.Trial:
   evals/sample:     1
 ```
 """
-function vmapnt!(
-    f::F, y::AbstractArray, args::Vararg{AbstractArray,A}
-) where {F,A}
+function vmapnt!(f::F, y::AbstractArray, args::Vararg{AbstractArray,A}) where {F,A}
   if check_args(y, args...) && all_dense(y, args...)
     gc_preserve_vmap!(f, y, Val{true}(), Val{false}(), args...)
   else
@@ -347,9 +383,7 @@ end
     vmapntt!(::Function, dest, args...)
 A threaded variant of [`vmapnt!`](@ref).
 """
-function vmapntt!(
-  f::F, y::AbstractArray, args::Vararg{AbstractArray,A}
-) where {F,A}
+function vmapntt!(f::F, y::AbstractArray, args::Vararg{AbstractArray,A}) where {F,A}
   if check_args(y, args...) && all_dense(y, args...)
     gc_preserve_vmap!(f, y, Val{true}(), Val{true}(), args...)
   else

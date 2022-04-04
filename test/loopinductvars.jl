@@ -1,11 +1,11 @@
 
-function selector!(z,x)
+function selector!(z, x)
   @inbounds for i ∈ eachindex(x)
     z[i] = x[i] > 0.5 ? i : x[i]
   end
   z
 end
-function selector_turbo!(z,x)
+function selector_turbo!(z, x)
   @turbo for i ∈ eachindex(x)
     z[i] = x[i] > 0.5 ? i : x[i]
   end
@@ -38,11 +38,12 @@ end
   v = 1:19
   minref, maxref = extrema(f, v)
   @test maxref ≈ avxmax(v)
-  minavx, maxavx = avxextrema(v);
+  minavx, maxavx = avxextrema(v)
   @test minref ≈ minavx
   @test maxref ≈ maxavx
 
-  x = rand(119); y0 = similar(x); y1 = similar(y0);
+  x = rand(119)
+  y0 = similar(x)
+  y1 = similar(y0)
   @test selector!(y0, x) == selector_turbo!(y1, x)
 end
-

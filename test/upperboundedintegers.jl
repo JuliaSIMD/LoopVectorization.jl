@@ -2,18 +2,22 @@ using OffsetArrays, Test
 @testset "UpperboundedIntegers" begin
   function ubsum(x)
     @assert firstindex(x) == 0
-    r = LoopVectorization.CloseOpen(LoopVectorization.UpperBoundedInteger(length(x), LoopVectorization.StaticInt(15)))
+    r = LoopVectorization.CloseOpen(
+      LoopVectorization.UpperBoundedInteger(length(x), LoopVectorization.StaticInt(15)),
+    )
     s = zero(eltype(x))
     @turbo for i ∈ r
       s += x[i]
     end
     s
   end
-  function ubdouble!(y,x)
+  function ubdouble!(y, x)
     @assert firstindex(x) == 0
-    r = LoopVectorization.CloseOpen(LoopVectorization.UpperBoundedInteger(length(x), LoopVectorization.StaticInt(15)))
+    r = LoopVectorization.CloseOpen(
+      LoopVectorization.UpperBoundedInteger(length(x), LoopVectorization.StaticInt(15)),
+    )
     @turbo for i ∈ r
-      y[i] = 2*x[i]
+      y[i] = 2 * x[i]
     end
     y
   end
@@ -35,7 +39,7 @@ using OffsetArrays, Test
     # and N the actual length.
     # It may evaluate less than the upper bound, depending on the mask's value.
     # We check that the first few match
-    @test @view(ubdouble!(xs, x)[begin:3]) == @view(x[begin:3]) .* 2;
+    @test @view(ubdouble!(xs, x)[begin:3]) == @view(x[begin:3]) .* 2
     LoopVectorization.register_size() > 16 && (@test xs[end] ≠ 2x[end])
   end
 end

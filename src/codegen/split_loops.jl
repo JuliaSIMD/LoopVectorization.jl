@@ -1,6 +1,13 @@
 
 
-function add_operation!(ls_new::LoopSet, included::Vector{Int}, ls::LoopSet, op::Operation, ids::Vector{Int}, issecond::Bool)
+function add_operation!(
+  ls_new::LoopSet,
+  included::Vector{Int},
+  ls::LoopSet,
+  op::Operation,
+  ids::Vector{Int},
+  issecond::Bool,
+)
   newid = included[identifier(op)]
   iszero(newid) || return operations(ls_new)[newid]
   vparents = Operation[]
@@ -16,14 +23,25 @@ function add_operation!(ls_new::LoopSet, included::Vector{Int}, ls::LoopSet, op:
           parentsopc = parents(opc)
           parentsnew = length(parentsopc) > 1 ? Operation[] : NOPARENTS
           opnew = Operation(
-            length(operations(ls_new)), name(opp), opc.elementbytes, instruction(:getindex), memload,
-            loopdependencies(opc), reduceddependencies(opc), parentsnew, opc.ref, reducedchildren(opc)
+            length(operations(ls_new)),
+            name(opp),
+            opc.elementbytes,
+            instruction(:getindex),
+            memload,
+            loopdependencies(opc),
+            reduceddependencies(opc),
+            parentsnew,
+            opc.ref,
+            reducedchildren(opc),
           )
           addsetv!(ls_new.includedactualarrays, vptr(opc.ref))
           push!(operations(ls_new), opnew)
           push!(vparents, opnew)
           for i ∈ 2:length(parentsopc)
-            push!(parentsnew, add_operation!(ls_new, included, ls, parentsopc[i], ids, issecond))
+            push!(
+              parentsnew,
+              add_operation!(ls_new, included, ls, parentsopc[i], ids, issecond),
+            )
           end
           included[identifier(opp)] = identifier(opnew)
           found = true
@@ -35,8 +53,16 @@ function add_operation!(ls_new::LoopSet, included::Vector{Int}, ls::LoopSet, op:
     push!(vparents, add_operation!(ls_new, included, ls, opp, ids, issecond))
   end
   opnew = Operation(
-    length(operations(ls_new)), name(op), op.elementbytes, instruction(op), op.node_type,
-    loopdependencies(op), reduceddependencies(op), vparents, op.ref, reducedchildren(op)
+    length(operations(ls_new)),
+    name(op),
+    op.elementbytes,
+    instruction(op),
+    op.node_type,
+    loopdependencies(op),
+    reduceddependencies(op),
+    vparents,
+    op.ref,
+    reducedchildren(op),
   )
   accesses_memory(op) && addsetv!(ls_new.includedactualarrays, vptr(op.ref))
   push!(operations(ls_new), opnew)
@@ -92,35 +118,47 @@ function split_loopset(ls::LoopSet, ids::Vector{Int}, issecond::Bool)
 end
 
 function returned_ops(ls::LoopSet)
-    ops = operations(ls)
-    retops = Int[]
-    for op ∈ ops
-        isstore(op) && push!(retops, identifier(op))
-    end
-    for i ∈ ls.outer_reductions
-        push!(retops, i)
-    end
-    retops
+  ops = operations(ls)
+  retops = Int[]
+  for op ∈ ops
+    isstore(op) && push!(retops, identifier(op))
+  end
+  for i ∈ ls.outer_reductions
+    push!(retops, i)
+  end
+  retops
 end
 
 function lower_and_split_loops(ls::LoopSet, inline::Int)
   split_candidates = returned_ops(ls)
   length(split_candidates) > 1 || return lower(ls, inline)
-  order_fused, unrolled_fused, tiled_fused, vectorized_fused, U_fused, T_fused, cost_fused, shouldinline_fused = choose_order_cost(ls)
-  remaining_ops = Vector{Int}(undef, length(split_candidates) - 1); split_1 = Int[0];
+  order_fused,
+  unrolled_fused,
+  tiled_fused,
+  vectorized_fused,
+  U_fused,
+  T_fused,
+  cost_fused,
+  shouldinline_fused = choose_order_cost(ls)
+  remaining_ops = Vector{Int}(undef, length(split_candidates) - 1)
+  split_1 = Int[0]
   # for (ind,i) ∈ enumerate(split_candidates)
   looplenpen = 0.05
-  ls_looplen = looplengthprod(ls)*looplenpen
-  for (ind,i) ∈ enumerate(split_candidates)
+  ls_looplen = looplengthprod(ls) * looplenpen
+  for (ind, i) ∈ enumerate(split_candidates)
     split_1[1] = i
     ls_1 = split_loopset(ls, split_1, false)
-    order_1, unrolled_1, tiled_1, vectorized_1, U_1, T_1, cost_1, shouldinline_1 = choose_order_cost(ls_1)
-    remaining_ops[1:ind-1] .= @view(split_candidates[1:ind-1]); remaining_ops[ind:end] .= @view(split_candidates[ind+1:end])
+    order_1, unrolled_1, tiled_1, vectorized_1, U_1, T_1, cost_1, shouldinline_1 =
+      choose_order_cost(ls_1)
+    remaining_ops[1:ind-1] .= @view(split_candidates[1:ind-1])
+    remaining_ops[ind:end] .= @view(split_candidates[ind+1:end])
     ls_2 = split_loopset(ls, remaining_ops, true)
-    order_2, unrolled_2, tiled_2, vectorized_2, U_2, T_2, cost_2, shouldinline_2 = choose_order_cost(ls_2)
+    order_2, unrolled_2, tiled_2, vectorized_2, U_2, T_2, cost_2, shouldinline_2 =
+      choose_order_cost(ls_2)
     # U_1 = T_1 = U_2 = T_2 = 2
     # return ls_1, ls_2
-    if cost_1 + cost_2 + looplenpen*(looplengthprod(ls_1) + looplengthprod(ls_2)) ≤ muladd(0.9, cost_fused, ls_looplen)
+    if cost_1 + cost_2 + looplenpen * (looplengthprod(ls_1) + looplengthprod(ls_2)) ≤
+       muladd(0.9, cost_fused, ls_looplen)
       ls_2_lowered = if length(remaining_ops) > 1
         inline = iszero(inline) ? (shouldinline_1 % Int) : inline
         lower_and_split_loops(ls_2, inline)
@@ -133,15 +171,20 @@ function lower_and_split_loops(ls::LoopSet, inline::Int)
         ls.preamble,
         lower(ls_1, order_1, unrolled_1, tiled_1, vectorized_1, U_1, T_1, false),
         ls_2_lowered,
-        nothing
+        nothing,
       )
     end
     length(split_candidates) == 2 && break
   end
   doinline = inlinedecision(inline, shouldinline_fused)
-  lower(ls, order_fused, unrolled_fused, tiled_fused, vectorized_fused, U_fused, T_fused, doinline)
+  lower(
+    ls,
+    order_fused,
+    unrolled_fused,
+    tiled_fused,
+    vectorized_fused,
+    U_fused,
+    T_fused,
+    doinline,
+  )
 end
-
-
-
-
