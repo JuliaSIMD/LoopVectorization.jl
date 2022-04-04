@@ -25,28 +25,33 @@ function clear_factors_while!(arr::Vector{UInt}, factor_index::Integer, max_inde
 end
 function clear_factors_turbo!(arr::Vector{UInt}, factor_index::Integer, max_index::Integer)
   factor = _map_to_factor(factor_index)
-  factor < _uint_bit_length && error("Factor must be greater than UInt bit length to avoid memory pendencies")
-  @turbo for index in _div2(factor * factor):factor:max_index
-    @inbounds arr[(index + 63) >> _div_uint_size_shift] |= 1 << ((index - 1) & 63)
+  factor < _uint_bit_length &&
+    error("Factor must be greater than UInt bit length to avoid memory pendencies")
+  @turbo for index = _div2(factor * factor):factor:max_index
+    @inbounds arr[(index+63)>>_div_uint_size_shift] |= 1 << ((index - 1) & 63)
   end
   return arr
 end
-function clear_factors_turbo_u4!(arr::Vector{UInt}, factor_index::Integer, max_index::Integer)
+function clear_factors_turbo_u4!(
+  arr::Vector{UInt},
+  factor_index::Integer,
+  max_index::Integer,
+)
   factor = _map_to_factor(factor_index)
-  factor < _uint_bit_length && error("Factor must be greater than UInt bit length to avoid memory pendencies")
-  @turbo unroll=4 for index in _div2(factor * factor):factor:max_index
-    @inbounds arr[(index + 63) >> _div_uint_size_shift] |= 1 << ((index - 1) & 63)
+  factor < _uint_bit_length &&
+    error("Factor must be greater than UInt bit length to avoid memory pendencies")
+  @turbo unroll = 4 for index = _div2(factor * factor):factor:max_index
+    @inbounds arr[(index+63)>>_div_uint_size_shift] |= 1 << ((index - 1) & 63)
   end
   return arr
 end
 
 @testset "steprange" begin
-  x0 = rand(UInt, cld(500_000, sizeof(UInt) * 8));
-  x1 = copy(x0);
-  x2 = copy(x0);
+  x0 = rand(UInt, cld(500_000, sizeof(UInt) * 8))
+  x1 = copy(x0)
+  x2 = copy(x0)
   clear_factors_while!(x0, 202, 500_000)
   clear_factors_turbo!(x1, 202, 500_000)
   clear_factors_turbo_u4!(x2, 202, 500_000)
   @test x0 == x1 == x2
 end
-

@@ -11,7 +11,7 @@ if LOOPVECTORIZATION_TEST == "all"
   processes = Vector{Base.Process}(undef, NUMGROUPS)
   paths = Vector{String}(undef, NUMGROUPS)
   ios = Vector{IOStream}(undef, NUMGROUPS)
-  tmp = tempdir();
+  tmp = tempdir()
   for i ∈ 1:NUMGROUPS
     path, io = mktemp(tmp)
     paths[i] = path
@@ -19,7 +19,14 @@ if LOOPVECTORIZATION_TEST == "all"
     env = copy(ENV)
     env["LOOPVECTORIZATION_TEST"] = "part$i"
     env["JULIA_NUM_THREADS"] = string(Threads.nthreads())
-    processes[i] = run(pipeline(setenv(`$(Base.julia_cmd()) $(@__FILE__) --project=$(Base.active_project())`, env), stderr = io, stdout = io), wait=false)
+    processes[i] = run(
+      pipeline(
+        setenv(`$(Base.julia_cmd()) $(@__FILE__) --project=$(Base.active_project())`, env),
+        stderr = io,
+        stdout = io,
+      ),
+      wait = false,
+    )
   end
   completed = fill(false, NUMGROUPS)
   while true
@@ -36,8 +43,8 @@ if LOOPVECTORIZATION_TEST == "all"
     all(completed) && break
     sleep(5)
   end
-  @testset verbose=true "All" begin
-    for (i,proc) ∈ enumerate(processes)
+  @testset verbose = true "All" begin
+    for (i, proc) ∈ enumerate(processes)
       @testset "part$i" begin
         @test success(proc)
       end
@@ -46,9 +53,3 @@ if LOOPVECTORIZATION_TEST == "all"
 else
   include("grouptests.jl")
 end
-
-
-
-
-
-

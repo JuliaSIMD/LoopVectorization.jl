@@ -25,12 +25,26 @@ end
 function hoist_constant_vload!(ls::LoopSet, op::Operation)
   op.instr = LOOPCONSTANT
   op.node_type = constant
-  add_constant_vload!(ls, op, ArrayReferenceMetaPosition(op.ref, parents(op), loopdependencies(op), reduceddependencies(op), name(op)), elementbytes)
+  add_constant_vload!(
+    ls,
+    op,
+    ArrayReferenceMetaPosition(
+      op.ref,
+      parents(op),
+      loopdependencies(op),
+      reduceddependencies(op),
+      name(op),
+    ),
+    elementbytes,
+  )
 end
 
 function return_empty_reductinit(op::Operation, var::Symbol)
   for opp ∈ parents(op)
-    if (name(opp) === var) && (length(reduceddependencies(opp)) == 0) && (length(loopdependencies(opp)) == 0) && (length(children(opp)) == 1)
+    if (name(opp) === var) &&
+       (length(reduceddependencies(opp)) == 0) &&
+       (length(loopdependencies(opp)) == 0) &&
+       (length(children(opp)) == 1)
       return opp
     end
     opcheck = return_empty_reductinit(opp, var)
@@ -55,7 +69,7 @@ function constant_symbol!(ls::LoopSet, op::Operation)
     # setconstantop!(ls, op,  sym)
     # setconstantop!(ls, op, Expr(:call, lv(:maybeconvert), ls.T, sym))
   end
-  for (id,(intval,intsz,signed)) ∈ ls.preamble_symint
+  for (id, (intval, intsz, signed)) ∈ ls.preamble_symint
     (idcheck ≢ nothing) && ((idcheck == id) && continue)
     if intsz == 1
       pushpreamble!(ls, Expr(:(=), symname, intval % Bool))
@@ -64,12 +78,15 @@ function constant_symbol!(ls::LoopSet, op::Operation)
     end
     return symname
   end
-  for (id,floatval) ∈ ls.preamble_symfloat
+  for (id, floatval) ∈ ls.preamble_symfloat
     (idcheck ≢ nothing) && ((idcheck == id) && continue)
-    pushpreamble!(ls, Expr(:(=), symname, Expr(:call, lv(:sizeequivalentfloat), ELTYPESYMBOL, floatval)))
+    pushpreamble!(
+      ls,
+      Expr(:(=), symname, Expr(:call, lv(:sizeequivalentfloat), ELTYPESYMBOL, floatval)),
+    )
     return symname
   end
-  for (id,typ) ∈ ls.preamble_zeros
+  for (id, typ) ∈ ls.preamble_zeros
     (idcheck ≢ nothing) && ((idcheck == id) && continue)
     instruction(op) === LOOPCONSTANT || continue
     if typ == IntOrFloat
@@ -81,7 +98,7 @@ function constant_symbol!(ls::LoopSet, op::Operation)
     end
     return symname
   end
-  for (id,f) ∈ ls.preamble_funcofeltypes
+  for (id, f) ∈ ls.preamble_funcofeltypes
     (idcheck ≢ nothing) && ((idcheck == id) && continue)
     pushpreamble!(ls, Expr(:(=), symname, Expr(:call, reduction_zero(f), ELTYPESYMBOL)))
     return symname
@@ -100,15 +117,25 @@ function hoist_constant_store!(q::Expr, ls::LoopSet, op::Operation)
     opr = only(parents(opr))
   end
   push!(ls.outer_reductions, identifier(opr))
-  
+
   initop = return_empty_reductinit(opr, name(opr))
   # @show last(ls.preamble.args)
   init = constant_symbol!(ls, initop)
   # @show last(ls.preamble.args)
-  pushpreamble!(ls, Expr(:(=), outer_reduct_init_typename(opr), Expr(:call, lv(:typeof), init)))
+  pushpreamble!(
+    ls,
+    Expr(:(=), outer_reduct_init_typename(opr), Expr(:call, lv(:typeof), init)),
+  )
   qpre = Expr(:block)
-  push!(q.args, Expr(:call, lv(:unsafe_store!), Expr(:call, lv(:pointer), op.ref.ptr), outer_reduction_to_scalar_reduceq!(qpre, opr, init)))
+  push!(
+    q.args,
+    Expr(
+      :call,
+      lv(:unsafe_store!),
+      Expr(:call, lv(:pointer), op.ref.ptr),
+      outer_reduction_to_scalar_reduceq!(qpre, opr, init),
+    ),
+  )
   length(qpre.args) == 0 || pushpreamble!(ls, qpre) # creating `Expr` and pushing because `outer_reduction_to_scalar_reduceq!` uses `pushfirst!(q.args`, and we don't want it at the start of the preamble
   return nothing
 end
-

@@ -74,7 +74,7 @@ const START_TIME = time()
     @time include("tensors.jl")
 
     @time include("staticsize.jl")
-end
+  end
 
   @time if LOOPVECTORIZATION_TEST == "all" || LOOPVECTORIZATION_TEST == "part4"
     @time include("threading.jl")
@@ -96,7 +96,7 @@ end
 
   @time if LOOPVECTORIZATION_TEST == "all" || LOOPVECTORIZATION_TEST == "part5"
     @time include("steprange.jl")
-    
+
     @time include("gemm.jl")
 
     @time include("inner_reductions.jl")
@@ -104,6 +104,6 @@ end
 
 end
 
-const ELAPSED_MINUTES = (time() - START_TIME)/60
+const ELAPSED_MINUTES = (time() - START_TIME) / 60
 # @test ELAPSED_MINUTES < 180
 @test ELAPSED_MINUTES < 300
