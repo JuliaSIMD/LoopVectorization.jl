@@ -327,6 +327,6 @@ using LoopVectorization, OffsetArrays, Test
     @. arr2[rng-ifirst] += 1
     @test arr1 == arr2
 
-    @test collect_turbo(77) == T.(1:77)
+    @test collect_turbo(77, T) == T.(1:77)
   end
 end
