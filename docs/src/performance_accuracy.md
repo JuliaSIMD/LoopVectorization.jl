@@ -1,8 +1,8 @@
-## Performance vs. accuracy and comparison with `@fastmath`
+## Performance-accuracy tradeoff
 
-_From the Julia slack #performance-helpdesk 2022-03-30 03:06 UTC_
+_`@turbo` performs arithmetic transformations and substitutes standard special functions with implementations that lend themselves better to vectorization but sometimes achieve slightly lower accuracy. The following is a discussion from the Julia slack #performance-helpdesk regarding this tradeoff, how it compares to similar transformations by `@fastmath`, and how to preserve full accuracy while vectorizing. It is included here for the benefit of anyone looking for information about this. PRs welcome to turn this page into a self-contained discussion or FAQ section._
 
-**Daniel Wennberg**
+**Daniel Wennberg** _2022-03-30 03:06 UTC_
 
 Does `@turbo` from LoopVectorization, and by extension `@tullio`, have the same accuracy caveats as `@fastmath`, as discussed e.g. here: <https://discourse.julialang.org/t/fastmath-macro-accuracy/38847/7>? Seeing as LoopVectorization's fallback mode is `@inbounds` `@fastmath`
 
