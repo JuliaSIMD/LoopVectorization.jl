@@ -92,7 +92,6 @@ function indices_calculated_by_pointer_offsets(ls::LoopSet, ar::ArrayReferenceMe
   ls.isbroadcast && return fill(false, length(indices))
   looporder = names(ls)
   offset = isdiscontiguous(ar)
-  gespinds = Expr(:tuple)
   out = Vector{Bool}(undef, length(indices))
   strds = getstrides(ar)
   li = ar.loopedindex
@@ -310,7 +309,7 @@ function isloopvalue(
     if (isrooted ≢ nothing)
       isrooted[i] || continue
     end
-    iscompute(op) || continue
+    (iscompute(op) | isstore(op)) || continue
     for opp ∈ parents(op)# this is to confirm `ind` still has children
       # (isloopvalue(opp) && instruction(opp).instr === ind) && return true
       if (isloopvalue(opp) && instruction(opp).instr === ind)
@@ -331,10 +330,8 @@ function cse_constant_offsets!(
   # vptrar = vptr(ar)
   arrayref_to_name_op = arrayref_to_name_op_collection[allarrayrefsind]
   array_refs_with_same_name = name_to_array_map[first(first(arrayref_to_name_op))]
-  us = ls.unrollspecification
   li = ar.loopedindex
   indices = getindices(ar)
-  strides = getstrides(ar)
   offset = first(indices) === DISCONTIGUOUS
   # gespindoffsets = fill(Symbol(""), length(li))
   gespindsummary = Vector{Symbol}(undef, length(li))
@@ -814,7 +811,6 @@ function use_loop_induct_var!(
   q::Expr,
   ar::ArrayReferenceMeta,
   allarrayrefs::Vector{ArrayReferenceMeta},
-  allarrayrefsind::Int,
   includeinlet::Bool,
   # array_refs_with_same_name::Vector{Int}, arrayref_to_name_op_collection::Vector{Vector{Tuple{Int,Int,Int}}}
 )::Vector{Int}
@@ -868,7 +864,7 @@ function use_loop_induct_var!(
       Wisz || pushgespind!(gespinds, ls, Symbol(""), 0, 1, ind, isli, true, false)
     else
       uliv[i] = findfirst(Base.Fix2(===, ind), looporder)::Int
-      loop = getloop(ls, ind)
+      # loop = getloop(ls, ind)
       push!(offsetprecalc_descript.args, max(5, us.u₁ + 1, us.u₂ + 1))
       use_offsetprecalc = true
       Wisz || pushgespind!(gespinds, ls, Symbol(""), 0, 1, ind, isli, false, false)
@@ -904,7 +900,6 @@ end
 # Plan here is that we increment every unique array
 function add_loop_start_stop_manager!(ls::LoopSet)
   q = Expr(:block)
-  us = ls.unrollspecification
   # Presence of an explicit use of a loopinducation var means we should use that, so we look for one
   # TODO: replace first with only once you add Compat as a dep or drop support for older Julia versions
   loopinductvars = Symbol[]
@@ -917,7 +912,7 @@ function add_loop_start_stop_manager!(ls::LoopSet)
   use_livs = Vector{Vector{Int}}(undef, length(arrayrefs))
   # for i ∈ eachindex(name_to_array_map)
   for i ∈ eachindex(arrayrefs)
-    use_livs[i] = use_loop_induct_var!(ls, q, arrayrefs[i], arrayrefs, i, includeinlet[i])
+    use_livs[i] = use_loop_induct_var!(ls, q, arrayrefs[i], arrayrefs, includeinlet[i])
     #name_to_array_map[first(first(unique_to_name_and_op_map[i]))], unique_to_name_and_op_map)
   end
   # loops, sorted from outer-most to inner-most
@@ -934,11 +929,9 @@ function add_loop_start_stop_manager!(ls::LoopSet)
   reached_indices = zeros(Int, length(arrayrefs))
   for (i, loopsym) ∈ enumerate(looporder) # iterates from outer to inner
     loopstartᵢ = ArrayReferenceMeta[]
-    arⱼ = 0
-    minrem = typemax(Int)
     ric = Tuple{Int,Int}[]
     for j ∈ eachindex(use_livs) # j is array ref number
-      for (l, k) ∈ enumerate(use_livs[j])# l is index number, k is loop number
+      for k ∈ use_livs[j]# l is index number, k is loop number
         if k == i
           push!(loopstartᵢ, arrayrefs[j])
           push!(ric, ((reached_indices[j] += 1), length(loopstartᵢ)))
@@ -1006,7 +999,6 @@ function pointermax_index(
   # @unpack u₁loopnum, u₂loopnum, vloopnum, u₁, u₂ = us
   loopsym = names(ls)[n]
   index = Expr(:tuple)
-  found_loop_sym = false
   ind = 0
   for (j, i) ∈ enumerate(getindicesonly(ar))
     if i === loopsym
@@ -1227,7 +1219,6 @@ function startloop(ls::LoopSet, us::UnrollSpecification, n::Int, staticinit::Boo
   termind = lssm.terminators[n]
   ptrdefs = lssm.incrementedptrs[n]
   loopstart = Expr(:block)
-  firstloop = n == num_loops(ls)
   for ar ∈ ptrdefs
     ptr_offset = vptr_offset(ar)
     push!(loopstart.args, Expr(:(=), ptr_offset, ptr_offset))
@@ -1288,7 +1279,7 @@ function incrementloopcounter!(
   if iszero(termind) # increment liv
     push!(q.args, incrementloopcounter(us, n, loopsym, UF, loop))
   end
-  for (j, ar) ∈ enumerate(ptrdefs)
+  for ar ∈ ptrdefs
     offsetinds = indices_calculated_by_pointer_offsets(ls, ar)
     push!(q.args, offset_ptr(ar, us, loopsym, n, UF, offsetinds, loop))
   end

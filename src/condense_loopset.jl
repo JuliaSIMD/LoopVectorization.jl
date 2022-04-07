@@ -781,7 +781,6 @@ function generate_call_types(
   arrayref_descriptions = Expr(:tuple)
   duplicate_ref = fill(false, length(ls.refs_aliasing_syms))
   for (j, ref) ∈ enumerate(ls.refs_aliasing_syms)
-    vpref = vptr(ref)
     # duplicate_ref[j] ≠ 0 && continue
     duplicate_ref[j] && continue
     push!(arrayref_descriptions.args, ArrayRefStruct(ls, ref, arraysymbolinds, ids))

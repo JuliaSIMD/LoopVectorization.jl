@@ -94,8 +94,8 @@ function lower_store_collection!(
   inds_calc_by_ptr_offset::Vector{Bool},
 )
   omop = offsetloadcollection(ls)
-  batchid, bopind = omop.batchedcollectionmap[identifier(op)]
-  collectionid, copind = omop.opidcollectionmap[identifier(op)]
+  batchid, _ = omop.batchedcollectionmap[identifier(op)]
+  collectionid, __ = omop.opidcollectionmap[identifier(op)]
   opidmap = offsetloadcollection(ls).opids[collectionid]
   idsformap = omop.batchedcollections[batchid]
 
@@ -105,15 +105,18 @@ function lower_store_collection!(
   nouter = length(idsformap)
 
   t = Expr(:tuple)
-  for (i, (opid, _)) ∈ enumerate(idsformap)
+  for (opid, _) ∈ idsformap
     opp = first(parents(ops[opidmap[opid]]))
-
+    
     isu₁, isu₂ = isunrolled_sym(opp, u₁loopsym, u₂loopsym, vloopsym, ls)#, __u₂max)
     u = Core.ifelse(isu₁, u₁, 1)
-    mvar = Symbol(variable_name(opp, ifelse(isu₂, suffix, -1)), '_', u)
-    # mvar = Symbol(variable_name(_op, suffix), '_', u)
-    # mvar = Symbol(variable_name(_op, ifelse(isu₂, suffix, -1)), '_', u)
-    push!(t.args, mvar)
+    if isloopvalue(opp)
+      loopval = first(loopdependencies(opp))
+      add_loopvalue!(t, loopval, ua, u₁, getloop(ls, loopval))
+    else
+      mvar = Symbol(variable_name(opp, ifelse(isu₂, suffix, -1)), '_', u)
+      push!(t.args, mvar)
+    end
   end
   offset_dummy_loop = Loop(
     first(getindices(op)),
@@ -149,7 +152,6 @@ function lower_store_collection!(
     false
   end
   uinds = Expr(:call, unrollcurl₂, inds)
-  vp = vptr(op)
   sptrsym = sptr!(q, op)
   storeexpr = Expr(:call, lv(:_vstore!), sptrsym, Expr(:call, lv(:VecUnroll), t), uinds)
   # not using `add_memory_mask!(storeexpr, op, ua, mask, ls)` because we checked `isconditionalmemop` earlier in `lower_load_collection!`
@@ -235,6 +237,12 @@ function lower_store!(
   isu₁, isu₂ = isunrolled_sym(opp, u₁loopsym, u₂loopsym, vloopsym, ls)#, __u₂max)
   u = isu₁ ? u₁ : 1
   mvar = Symbol(variable_name(opp, ifelse(isu₂, suffix, -1)), '_', u)
+  if isloopvalue(opp)
+    def = Expr(:(=), mvar)
+    loopval = first(loopdependencies(opp))
+    add_loopvalue!(def, loopval, ua, u₁, getloop(ls, loopval))
+    push!(q.args, def)
+  end
   if all(op.ref.loopedindex)
     inds = unrolledindex(op, ua, mask, inds_calc_by_ptr_offset, ls)
     storeexpr = if reductfunc === Symbol("")
@@ -312,7 +320,6 @@ end
 function donot_tile_store(
   ls::LoopSet,
   op::Operation,
-  vloop::Loop,
   reductfunc::Symbol,
   u₂::Int,
 )
@@ -323,7 +330,7 @@ function donot_tile_store(
   ) && return true
   rejectcurly(op) && return true
   omop = offsetloadcollection(ls)
-  batchid, opind = omop.batchedcollectionmap[identifier(op)]
+  batchid, _ = omop.batchedcollectionmap[identifier(op)]
   return ((batchid ≠ 0) && isvectorized(op)) && (!rejectinterleave(op))
 end
 
@@ -344,7 +351,7 @@ function lower_tiled_store!(
   reductfunc = storeinstr_preprend(op, vloopsym)
   inds_calc_by_ptr_offset = indices_calculated_by_pointer_offsets(ls, op.ref)
 
-  if donot_tile_store(ls, op, vloop, reductfunc, u₂)
+  if donot_tile_store(ls, op, reductfunc, u₂)
     # If we have a reductfunc, we're using a reducing store instead of a contiuguous or shuffle store anyway
     # so no benefit to being able to handle that case here, vs just calling the default `lower_store!` method
     @unpack u₁, u₂max = ua
@@ -368,6 +375,8 @@ function lower_tiled_store!(
   u = Core.ifelse(isu₁, u₁, 1)
   tup = Expr(:tuple)
   for t ∈ 0:u₂-1
+    # tiled stores cannot be loop values, as they're necessarilly
+    # functions of at least two loops, meaning we do not need to handle them here.
     push!(tup.args, Symbol(variable_name(opp, ifelse(isu₂, t, -1)), '_', u))
   end
   vut = Expr(:call, lv(:VecUnroll), tup) # `VecUnroll` of `VecUnroll`s

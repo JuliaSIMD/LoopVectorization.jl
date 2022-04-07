@@ -183,7 +183,13 @@ using LoopVectorization, OffsetArrays, Test
       dest[i] = src[p, 3*p]
     end
   end
-
+  function collect_turbo(N, ::Type{T}) where {T}
+    l = Vector{T}(undef, N)
+    @turbo for i ∈ 1:length(l)
+      l[i] = i
+    end
+    return l
+  end
   for T ∈ (Float32, Float64, Int32, Int64)
     @show T, @__LINE__
     R = T <: Integer ? (-T(100):T(100)) : T
@@ -320,5 +326,7 @@ using LoopVectorization, OffsetArrays, Test
     end
     @. arr2[rng-ifirst] += 1
     @test arr1 == arr2
+
+    @test collect_turbo(77) == T.(1:77)
   end
 end
