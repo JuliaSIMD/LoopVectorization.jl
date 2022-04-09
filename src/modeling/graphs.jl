@@ -1049,7 +1049,7 @@ end
 @inline canonicalize_range(r::StepRange{T,T}) where {T<:Base.BitInteger} = r
 @inline canonicalize_range(r::CartesianIndices) =
   CartesianIndices(map(canonicalize_range, r.indices))
-@inline canonicalize_range(r::Base.OneTo{U}) where {U<:Unsigned} = One():last(r)
+@inline canonicalize_range(r::Base.OneTo{U}) where {U<:Unsigned} = One():(last(r)%Int)
 
 function canonicalize_range(x)
   throw(
