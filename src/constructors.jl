@@ -156,9 +156,24 @@ function process_args(
   end
   inline, check_empty, u₁, u₂, v, threads, warncheckarg
 end
+# check if the body of loop is a block, if not convert it to a block issue#395
+function check_loopbody!(q)
+  if q isa Expr && q.head == :for
+    if q.args[2].head != :block
+      q.args[2] = Expr(:block, q.args[2])
+    else
+      for arg in q.args[2].args
+        check_loopbody!(arg) # check recursively for inner loop
+      end
+    end
+  end
+  return q
+end
+
 function turbo_macro(mod, src, q, args...)
   q = macroexpand(mod, q)
   if q.head === :for
+    check_loopbody!(q)
     ls = LoopSet(q, mod)
     inline, check_empty, u₁, u₂, v, threads, warncheckarg = process_args(args)
     esc(setup_call(ls, q, src, inline, check_empty, u₁, u₂, v, threads, warncheckarg))
