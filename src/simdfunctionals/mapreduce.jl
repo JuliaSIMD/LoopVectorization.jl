@@ -72,11 +72,11 @@ end
 ) where {F,OP,A,W,T}
   ptrargs = VectorizationBase.zero_offsets.(stridedpointer.(args))
   if N ≥ 4W
-    index = VectorizationBase.Unroll{1,W,4,1,W,0x0000000000000000}((Zero(),))
+    index = VectorizationBase.Unroll{1,W,4,1,W,zero(UInt)}((Zero(),))
     i = 4W
     au = f(vload.(ptrargs, index)...)
     while i < N - ((W << 2) - 1)
-      index = VectorizationBase.Unroll{1,W,4,1,W,0x0000000000000000}((i,))
+      index = VectorizationBase.Unroll{1,W,4,1,W,zero(UInt)}((i,))
       i += 4W
       au = op(au, f(vload.(ptrargs, index)...))
     end
