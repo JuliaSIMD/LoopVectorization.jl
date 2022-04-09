@@ -999,19 +999,15 @@ function range_loop!(
 end
 function range_loop!(ls::LoopSet, r::Expr, itersym::Symbol)::Loop
   lower = r.args[2]
-  sii::Bool = if length(r.args) == 3
+  if length(r.args) == 3
     step = 1
     upper = r.args[3]
-    true
   elseif length(r.args) == 4
     step = r.args[3]
     upper = r.args[4]
-    isa(step, Integer)
   else
     throw("Literal ranges must have either 2 or 3 arguments.")
   end
-  lii::Bool = lower isa Integer
-  uii::Bool = upper isa Integer
   l::MaybeKnown = add_loop_bound!(ls, itersym, lower, false, false)
   u::MaybeKnown = add_loop_bound!(ls, itersym, upper, true, false)
   s::MaybeKnown = add_loop_bound!(ls, itersym, step, false, true)

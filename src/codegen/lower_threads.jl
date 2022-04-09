@@ -87,7 +87,7 @@ end
     # miter decreases in each iteration of factors
     miter, niter = factors[i]
 
-    r = (MoW % miter)
+    r = MoW % miter
     # if ((miter * W * U * 2) ≤ M - (W+W)) & ((r == 0) | (miter == (r+1)))
     mlarge = (miter * (U * 2)) ≤ MoW - 2
     # we want `mlarge` enough, or there to be no remainder (`r == 0`)
@@ -103,19 +103,6 @@ end
   @inbounds factors[(length(factors)+1)>>>1]
 end
 
-# struct ChooseNumBlocks{U,C} <: Function end
-# function (cnb::ChooseNumBlocks{U,C})(M::UInt) where {U,C}
-#     choose_num_blocks(M, StaticInt{U}(), StaticInt{C}())
-# end
-
-# @generated function choose_num_block_table(::StaticInt{U}, ::StaticInt{NC}) where {U,NC}
-#     t = Expr(:tuple)
-#     for n ∈ 1:NC
-#         cnb = :(ChooseNumBlocks{$U,$n}())
-#         push!(t.args, :(@cfunction($cnb, Tuple{UInt,UInt}, (UInt,))))
-#     end
-#     t
-# end
 @generated function choose_num_block_table(::StaticInt{NC}) where {NC}
   t = Expr(:tuple)
   for n ∈ 1:NC
@@ -130,13 +117,6 @@ end
   nt,
   ::StaticInt{NTMAX},
 ) where {U,NTMAX}
-  # valid range for nt: 2 ≤ nt ≤ NTMAX
-  # if NTMAX > 8
-  #     return quote
-  #         $(Expr(:meta,:inline))
-  #         choose_num_blocks_table(M, StaticInt{$U}(), nt, StaticInt{$NTMAX}())
-  #     end
-  # else
   if NTMAX == 2 # `nt` must be `2`
     return quote
       $(Expr(:meta, :inline))
@@ -166,16 +146,6 @@ function add_bisecting_if_branches!(q, lb, ub, U, isfirst::Bool)
   return
 end
 
-# @inline function choose_num_blocks_table(M, ::StaticInt{U}, nt, ::StaticInt{NTMAX}) where {U,NTMAX}
-#     if nt == NTMAX
-#         choose_num_blocks(M % UInt, StaticInt{U}(), StaticInt{NTMAX}())
-#     else
-#         @inbounds fptr = choose_num_block_table(StaticInt{U}(), StaticInt{NTMAX}())[nt]
-#         VectorizationBase.assume(fptr ≠ C_NULL)
-#         ccall(fptr, Tuple{UInt,UInt}, (UInt,), M%UInt)
-#     end
-# end
-
 # if a threaded loop is vectorized, call
 @inline function choose_num_blocks(M, ::StaticInt{U}, nt) where {U}
   _choose_num_blocks(M % UInt, StaticInt{U}(), nt, lv_max_num_threads())
@@ -184,21 +154,6 @@ end
 @inline choose_num_blocks(nt, ::StaticInt{NC} = lv_max_num_threads()) where {NC} =
   @inbounds choose_num_block_table(StaticInt{NC}())[nt]
 
-
-
-# The goal is to minimimize the maximum costs...
-# But maybe 'relatively even sizes' heuristics are more robust than fancy modeling?
-# At least early on, before lots of test cases with different sorts of loops have informed the modeling.
-#
-# goal is to produce `nblocks` roughly even block sizes (bM, bN), such that `bM % fM == bN % fN == 0`.
-# function roughly_even_blocks(M, N, fM, fN, nblocks)
-#     M_N_ratio = M / N
-#     block_per_m = sqrt(nblocks * M_N_ratio) # obv not even
-#     blocks_per_n = block_per_m / M_N_ratio
-#     mi = cld(M, fM)
-#     ni = cld(N, fN)
-#     block_per_m, blocks_per_n
-# end
 if Sys.ARCH === :x86_64
   @inline function choose_num_threads(
     C::T,
@@ -280,7 +235,6 @@ function outer_reduct_combine_expressions(ls::LoopSet, retv)
   # push!(q.args, :(@show var"#load#thread#ret#"))
   for (i, or) ∈ enumerate(ls.outer_reductions)
     op = ls.operations[or]
-    var = name(op)
     mvar = mangledvar(op)
     instr = instruction(op)
     out = Symbol(mvar, "##onevec##")
@@ -328,7 +282,6 @@ function thread_loop_summary!(
 )
   W = ls.vector_width
   @unpack u₁loop, u₂loop, vloop, u₁, u₂max = ua
-  u₂ = u₂max
   threadloopnumtag = Int(issecondthreadloop)
   lensym = Symbol("#len#thread#$threadloopnumtag#")
   define_len = if isstaticloop(threadedloop)
@@ -505,7 +458,7 @@ function thread_one_loops_expr(
     thread_loop_summary!(ls, ua, threadedloop, false)
   loopboundexpr = Expr(:tuple) # for launched threads
   lastboundexpr = Expr(:tuple) # remainder, started on main thread
-  for (i, loop) ∈ enumerate(ls.loops)
+  for loop ∈ ls.loops
     if loop === threadedloop
       push!(loopboundexpr.args, looprange)
       push!(lastboundexpr.args, lastrange)
@@ -546,8 +499,6 @@ function thread_one_loops_expr(
       if var"##do#thread##"
         var"#threads#tuple#", var"#torelease#tuple#" =
           PolyesterWeave.request_threads(var"#nrequest#")
-        # var"#threads#tuple#", var"#torelease#tuple#" = PolyesterWeave.request_threads(Threads.threadid()%UInt32, var"#nrequest#")
-
         var"#thread#factor#0#" = var"#nthreads#"
         $iterdef
         var"#thread#id#" = 0x00000000
@@ -627,7 +578,6 @@ function thread_one_loops_expr(
     end
     $retexpr
   end
-  # Expr(:block, Expr(:meta,:inline), ls.preamble, q)
   Expr(:block, ls.preamble, q)
 end
 function define_vthread_blocks(vloop, u₁loop, u₂loop, u₁, u₂, ntmax, tn)
@@ -710,7 +660,6 @@ function thread_two_loops_expr(
   end
   @unpack u₁loop, u₂loop, vloop, u₁, u₂max = ua
   u₂ = u₂max
-  W = ls.vector_width
   threadedloop1 = getloop(ls, threadedid1)
   threadedloop2 = getloop(ls, threadedid2)
   define_len1, define_num_unrolls1, loopstart1, iterstop1, looprange1, lastrange1 =
@@ -719,7 +668,7 @@ function thread_two_loops_expr(
     thread_loop_summary!(ls, ua, threadedloop2, true)
   loopboundexpr = Expr(:tuple)
   lastboundexpr = Expr(:tuple)
-  for (i, loop) ∈ enumerate(ls.loops)
+  for loop ∈ ls.loops
     if loop === threadedloop1
       push!(loopboundexpr.args, looprange1)
       push!(lastboundexpr.args, lastrange1)
@@ -741,11 +690,9 @@ function thread_two_loops_expr(
     Val(typeof(var"#avx#call#args#")),
     flatten_to_tuple(var"#avx#call#args#")...,
   ))
-  # _turbo_orig_ = :(_turbo_!(Val{$UNROLL}(), $OPS, $ARF, $AM, $LPSYM, var"#lv#tuple#args#"))
   update_return_values = if length(ls.outer_reductions) > 0
     retv = loopset_return_value(ls, Val(false))
     _turbo_call_ = Expr(:(=), retv, _turbo_call_)
-    # _turbo_orig_ = Expr(:(=), retv, _turbo_orig_)
     outer_reduct_combine_expressions(ls, retv)
   else
     nothing
@@ -757,15 +704,10 @@ function thread_two_loops_expr(
   retexpr = length(ls.outer_reductions) > 0 ? :(return $retv) : :(return nothing)
   q = quote
     $choose_nthread # UInt
-    # @show var"#nthreads#"
     $loopstart1
     $loopstart2
     var"##do#thread##" = var"#nthreads#" > one(var"#nthreads#")
     if var"##do#thread##"
-      # if var"#nthreads#" ≤ 1
-      #   $_turbo_orig_
-      #   return $retexpr
-      # end
       $define_len1
       $define_len2
       $define_num_unrolls1
@@ -913,7 +855,6 @@ function thread_two_loops_expr(
     end
     $retexpr
   end
-  # Expr(:block, Expr(:meta,:inline), ls.preamble, q)
   Expr(:block, ls.preamble, q)
 end
 
@@ -957,8 +898,6 @@ function avx_threads_expr(
 )
   valid_thread_loop, ua, c = valid_thread_loops(ls)
   num_candiates = sum(valid_thread_loop)
-  # num_to_thread = min(num_candiates, 2)
-  # candidate_ids =
   if (num_candiates == 0) || (nt ≤ 1) # it was called from `avx_body` but now `nt` was set to `1`
     avx_body(ls, UNROLL)
   elseif (num_candiates == 1) || (nt ≤ 3)
