@@ -159,7 +159,7 @@ end
 # check if the body of loop is a block, if not convert it to a block issue#395
 function check_loopbody!(q)
   if q isa Expr && q.head == :for
-    if q.args[2].head != :block
+    if Meta.isexpr(q.args[2], :block)
       q.args[2] = Expr(:block, q.args[2])
     else
       for arg in q.args[2].args

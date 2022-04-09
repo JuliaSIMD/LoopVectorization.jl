@@ -5,18 +5,18 @@ macro gen_loop_issue395(ex)
   sym, ind = ex.args
   loop_body = :(ret[$ind] = $sym[$ind])
   loop = Expr(:for, :($ind = axes($sym, 1)), loop_body)
-  return esc(:(@avx $loop))
+  return esc(:(@turbo $loop))
 end
 macro gen_single_loop(B, A)
   loop_body = :($B[i] = $A[i])
   loop = Expr(:for, :(i = indices(($B, $A), 1)), loop_body)
-  return esc(:(@avx $loop))
+  return esc(:(@turbo $loop))
 end
 macro gen_nest_loop(C, A, B)
   loop_body = :($C[i, j] = $A[i] * $B[j])
   loop_head = Expr(:block, :(j = indices(($C, $B), (2, 1))), :(i = indices(($C, $A), 1)))
   loop = Expr(:for, loop_head, loop_body)
-  return esc(:(@avx $loop))
+  return esc(:(@turbo $loop))
 end
 macro gen_A_mul_B(C, A, B)
   inner_body = :(Cji += $A[j, k] * $B[k, i])
@@ -28,7 +28,7 @@ macro gen_A_mul_B(C, A, B)
       $C[j, i] = Cji
     end
   )
-  return esc(:(@avx $loop))
+  return esc(:(@turbo $loop))
 end
 
 @testset "check_block, #395" begin
