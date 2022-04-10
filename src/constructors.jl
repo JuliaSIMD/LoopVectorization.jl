@@ -157,23 +157,71 @@ function process_args(
   inline, check_empty, u₁, u₂, v, threads, warncheckarg
 end
 # check if the body of loop is a block, if not convert it to a block issue#395
-function check_loopbody!(q)
-  if q isa Expr && q.head == :for
+# and check if the range of loop is an enumerate, if it is replace it, issue#393
+function check_inputs!(q)
+  if Meta.isexpr(q, :for)
     if !Meta.isexpr(q.args[2], :block)
       q.args[2] = Expr(:block, q.args[2])
-    else
+      replace_enumerate!(q) # must after warp block
+    else # maybe inner loops in block
+      replace_enumerate!(q)
       for arg in q.args[2].args
-        check_loopbody!(arg) # check recursively for inner loop
+        check_inputs!(arg) # check recursively for inner loop
       end
     end
   end
   return q
 end
+function replace_enumerate!(q)
+  looprange = q.args[1]
+  if Meta.isexpr(looprange, :block)
+    for i in 1:length(looprange.args)
+      convert_single_enumerate!(q, i)
+    end
+  else
+    convert_single_enumerate!(q)
+  end
+  return q
+end
+function convert_single_enumerate!(q, i=nothing)
+  if isnothing(i) # not nest loop
+    looprange, body = q.args[1], q.args[2]
+  else # nest loop
+    looprange, body = q.args[1].args[i], q.args[2]
+  end
+  @assert Meta.isexpr(looprange, :(=), 2)
+  itersyms, r = looprange.args
+  if Meta.isexpr(r, :call, 2) && r.args[1] == :enumerate
+    iter = r.args[2]
+    if Meta.isexpr(itersyms, :tuple, 2)
+      indsym, varsym = itersyms.args[1]::Symbol, itersyms.args[2]::Symbol
+      _replace_looprange!(q, i, indsym, iter)
+      pushfirst!(body.args, :($varsym = $iter[$indsym + firstindex($iter) - 1]))
+    elseif Meta.isexpr(itersyms, :tuple, 1) # like `for (i,) in enumerate(...)`
+      indsym = itersyms.args[1]::Symbol
+      _replace_looprange!(q, i, indsym, iter)
+    elseif itersyms isa Symbol # if itersyms are not unbox in loop range
+      # generate new symbols to avoid name conflict
+      indsym = gensym(Symbol(itersyms, :_ind))
+      varsym = gensym(Symbol(itersyms, :_var))
+      _replace_looprange!(q, i, indsym, iter)
+      pushfirst!(body.args,
+        :($varsym = $iter[$indsym + firstindex($iter) - 1]),
+        :($itersyms = ($indsym, $varsym)), # regroud the indsym and varsym for user
+      )
+    else
+      throw(ArgumentError("Don't know how to handle expression `$itersyms`."))
+    end
+  end
+  return q
+end
+_replace_looprange!(q, ::Nothing, indsym, iter) = q.args[1] = :($indsym = Base.OneTo(length($iter)))
+_replace_looprange!(q, i::Int, indsym, iter) = q.args[1].args[i] = :($indsym = Base.OneTo(length($iter)))
 
 function turbo_macro(mod, src, q, args...)
   q = macroexpand(mod, q)
   if q.head === :for
-    check_loopbody!(q)
+    check_inputs!(q)
     ls = LoopSet(q, mod)
     inline, check_empty, u₁, u₂, v, threads, warncheckarg = process_args(args)
     esc(setup_call(ls, q, src, inline, check_empty, u₁, u₂, v, threads, warncheckarg))

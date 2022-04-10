@@ -48,3 +48,22 @@ end
   @test E == A * B'
   @test F == C * E
 end
+
+@testset "enumerate, #393" begin
+  A = zeros(4)
+  B = zeros(4)
+  C = zeros(4)
+  @turbo for (i, x) in enumerate(A)
+    A[i] = i + x
+  end
+  @turbo for (i,) in enumerate(B)
+    B[i] += 1
+  end
+  @turbo for ix in enumerate(C)
+    C[ix[1]] = ix[1] + ix[2]
+  end
+  @test_throws ArgumentError @turbo for () in enumerate(A) end
+  @test A == 1:4
+  @test B == 1:4
+  @test C == 1:4
+end
