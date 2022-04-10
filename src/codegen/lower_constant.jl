@@ -176,7 +176,7 @@ function lower_constant!(q::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs)
         )
       else
         throw(
-          "Reductions of type $(reduction_zero(reinstrclass)) not yet supported; please file an issue as a reminder to take care of this.",
+          "Reductions of type $(reduction_zero(instrclass)) not yet supported; please file an issue as a reminder to take care of this.",
         )
       end
     else
