@@ -1,4 +1,5 @@
 using LoopVectorization, Test, ArrayInterface
+using LoopVectorization: check_inputs!
 
 # macros for generate loops whose body is not a block
 macro gen_loop_issue395(ex)
@@ -52,18 +53,27 @@ end
 @testset "enumerate, #393" begin
   A = zeros(4)
   B = zeros(4)
-  C = zeros(4)
-  @turbo for (i, x) in enumerate(A)
-    A[i] = i + x
+  C = zeros(4, 4)
+  D = zeros(4, 4)
+  @turbo for (i, x) in enumerate(1:4)
+    A[i] = x
   end
   @turbo for (i,) in enumerate(B)
     B[i] += 1
   end
-  @turbo for ix in enumerate(C)
-    C[ix[1]] = ix[1] + ix[2]
+  @turbo for (j, Aj) in enumerate(A), (i, Bi) in enumerate(B)
+    C[i, j] = Aj * Bi
   end
-  @test_throws ArgumentError @turbo for () in enumerate(A) end
+  @turbo for (j, Bj) in enumerate(B)
+    for (i, Ai) in enumerate(A)
+      D[i, j] = Ai * Bj
+    end
+  end
   @test A == 1:4
-  @test B == 1:4
-  @test C == 1:4
+  @test B == ones(4)
+  @test A .* B' == C' == D
+  @test_throws ArgumentError check_inputs!(:(for ix in enumerate(A)
+    A[ix[1]] = ix[1] + ix[2]
+  end), Any[])
+  @test_throws ArgumentError check_inputs!(:(for () in enumerate(A); end), Any[])
 end
