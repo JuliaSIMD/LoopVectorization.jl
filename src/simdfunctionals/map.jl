@@ -86,7 +86,7 @@ function _vmap_singlethread!(
   UNROLL = 4
   LOG2UNROLL = 2
   while i < vsub_nsw(N, ((W << LOG2UNROLL) - 1))
-    index = VectorizationBase.Unroll{1,W,UNROLL,1,W,0x0000000000000000}((i,))
+    index = VectorizationBase.Unroll{1,W,UNROLL,1,W,zero(UInt)}((i,))
     v = f(VectorizationBase.fmap(vload, ptrargs, index)...)
     if NonTemporal
       _vstore!(ptry, v, index, True(), True(), True(), register_size())

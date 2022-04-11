@@ -107,7 +107,7 @@ function lower_store_collection!(
   t = Expr(:tuple)
   for (opid, _) ∈ idsformap
     opp = first(parents(ops[opidmap[opid]]))
-    
+
     isu₁, isu₂ = isunrolled_sym(opp, u₁loopsym, u₂loopsym, vloopsym, ls)#, __u₂max)
     u = Core.ifelse(isu₁, u₁, 1)
     if isloopvalue(opp)
@@ -317,12 +317,7 @@ function lower_tiled_store!(
   end
 end
 
-function donot_tile_store(
-  ls::LoopSet,
-  op::Operation,
-  reductfunc::Symbol,
-  u₂::Int,
-)
+function donot_tile_store(ls::LoopSet, op::Operation, reductfunc::Symbol, u₂::Int)
   (
     (!((reductfunc === Symbol("")) && all(op.ref.loopedindex))) ||
     (u₂ ≤ 1) ||

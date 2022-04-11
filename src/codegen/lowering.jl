@@ -133,13 +133,7 @@ function lower_block(ls::LoopSet, us::UnrollSpecification, n::Int, mask::Bool, U
       push!(blockq.args, lower_unrolled_dynamic(ls, us, n - 1, mask))
     end
   end
-  loopsym = order[n]
-  # if n > 1 || iszero(ls.align_loops[])
   incrementloopcounter!(blockq, ls, us, n, UF)
-  # else
-  #     loopsym = names(ls)[n]
-  #     push!(blockq.args, Expr(:(=), loopsym, Expr(:call, lv(:vadd_nsw), loopsym, Symbol("##ALIGNMENT#STEP##"))))
-  # end
   blockq
 end
 
@@ -154,21 +148,6 @@ function loopiteratesatleastonce!(ls, loop::Loop)
   pushpreamble!(ls, assume(comp))
   return loop
 end
-# @inline step_to_align(x, ::Val{W}) where {W} = step_to_align(pointer(x), Val{W}())
-# @inline step_to_align(x::Ptr{T}, ::Val{W}) where {W,T} = vsub_nsw(W, reinterpret(Int, x) & (W - 1))
-# function align_inner_loop_expr(ls::LoopSet, us::UnrollSpecification, loop::Loop)
-#     alignincr = Symbol("##ALIGNMENT#STEP##")
-#     looplength = gensym(:inner_loop_length)
-#     pushpreamble!(ls, Expr(:(=), looplength, looplengthexpr(loop)))
-#     vp = vptr(operations(ls)[ls.align_loops[]])
-#     align_step = Expr(:call, :min, Expr(:call, lv(:step_to_align), vp, VECTORWIDTHSYMBOL), looplength)
-#     Expr(
-#         :block,
-#         Expr(:(=), alignincr, align_step),
-#         maskexpr(alignincr),
-#         lower_block(ls, us, 1, true, 1)
-#     )
-# end
 
 function check_full_conv_kernel(ls, us, N)
   loop₁ = getloop(ls, us.u₁loopnum)
@@ -198,27 +177,14 @@ function allinteriorunrolled(ls::LoopSet, us::UnrollSpecification, N)
   unroll_total ≤ 16
 end
 
-function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask::Bool)#, initialize::Bool = true, maxiters::Int=-1)
-  usorig = ls.unrollspecification
+function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask::Bool)
   nisvectorized = isvectorized(us, n)
-  loopsym = names(ls)[n]
   loop = getloop(ls, n)
-  # if !nisvectorized && !inclmask && isone(n) && !iszero(ls.lssm.terminators[1]) && !ls.loadelimination && (us.u₁ > 1) && (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && length(loop) > 15
-  #     return lower_unroll_for_throughput(ls, us, loop, loopsym)
-  #     # return lower_llvm_unroll(ls, us, n, loop)
-  # end
   tc = terminatecondition(ls, us, n, inclmask, 1)
   body = lower_block(ls, us, n, inclmask, 1)
-  # align_loop = isone(n) & (ls.align_loops[] > 0)
   loopisstatic = isstaticloop(loop)
-  # if !loopisstatic && (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !inclmask
-  #     tc = expect(tc)
-  # end
   W = nisvectorized ? ls.vector_width : 1
   loopisstatic &= (!iszero(W))
-  # q = if align_loop
-  #     Expr(:block, align_inner_loop_expr(ls, us, loop), Expr(:while, tc, body))
-  # elseif nisvectorized
   completely_unrolled = false
   length_loop = loopisstatic ? length(loop) : 0
   if loopisstatic &&
@@ -234,24 +200,16 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
       push!(q.args, body)
     end
   elseif nisvectorized
-    # Expr(:block, loopiteratesatleastonce(loop, true), Expr(:while, expect(tc), body))
-    # q = Expr(:block, Expr(maxiters == 1 ? :if : :while, tc, body))
     q = Expr(:block, Expr(:while, tc, body))
   else
-    # push!(body.args, Expr(:(||), tc, Expr(:break)))
-    # q = Expr(:block, Expr(:while, true, body))
-    # using the `termcond` variable leads to better code gen.
     termcond = gensym(:maybeterm)
     push!(body.args, Expr(:(=), termcond, tc))
     q = Expr(:block, Expr(:(=), termcond, true), Expr(:while, termcond, body))
   end
   if nisvectorized && !(loopisstatic && iszero(length_loop & (W - 1)))
-    # tc = terminatecondition(loop, us, n, loopsym, true, 1)
     body = lower_block(ls, us, n, true, 1)
     if isone(num_loops(ls))
       pushfirst!(body.args, definemask(loop))
-      # elseif align_loop
-      #     pushfirst!(body.args, definemask_for_alignment_cleanup(loop))
     end
     if loopisstatic
       push!(q.args, body)
@@ -260,11 +218,7 @@ function lower_no_unroll(ls::LoopSet, us::UnrollSpecification, n::Int, inclmask:
       push!(q.args, Expr(:if, tc, body))
     end
   end
-  # if initialize
   Expr(:let, startloop(ls, us, n, completely_unrolled), q)
-  # else
-  #     q
-  # end
 end
 function lower_unrolled_dynamic(
   ls::LoopSet,
@@ -298,9 +252,6 @@ function lower_unrolled_dynamic(
     UF = cld(UFWnew, W)
     UFW = UF * W
     us = nisunrolled ? UnrollSpecification(us, UF, u₂) : UnrollSpecification(us, u₁, UF)
-    #if (!loopisstatic) & (Ureduct ≥ UF)
-    #  ls.ureduct = Ureduct = UF >> 1
-    #end
   end
   remmask = inclmask | nisvectorized
   sl = startloop(ls, us, n, false)
@@ -309,8 +260,6 @@ function lower_unrolled_dynamic(
   remfirst =
     loopisstatic & (!nisvectorized) & (UFt > 0) & !(unsigned(Ureduct) < unsigned(UF))
   tc = terminatecondition(ls, us, n, inclmask, remfirst ? 1 : UF)
-  # usorig = ls.unrollspecification
-  # tc = (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !loopisstatic && !inclmask && !ls.loadelimination ? expect(tc) : tc
   # Don't need to create the body if loop is dynamic and bounded
   dynamicbounded = ((!loopisstatic) & loopisbounded)
   body = dynamicbounded ? tc : lower_block(ls, us, n, inclmask, UF)
@@ -327,16 +276,12 @@ function lower_unrolled_dynamic(
     remblock = Expr(:block)
     (nisvectorized && (UFt > 0) && isone(num_loops(ls))) &&
       push!(remblock.args, definemask(loop))
-    # unroll_cleanup = true
   else
     remblock = init_remblock(loop, ls.lssm, n)#loopsym)
     # unroll_cleanup = Ureduct > 0 || (nisunrolled ? (u₂ > 1) : (u₁ > 1))
-    # remblock = unroll_cleanup ? init_remblock(loop, ls.lssm, n)#loopsym) : Expr(:block)
     q = if loopisbounded
       Expr(:block)
     elseif unsigned(Ureduct) < unsigned(UF)
-      # push!(body.args, Expr(:(||), tc, Expr(:break)))
-      # Expr(:while, true, body)
       termcond = gensym(:maybeterm)
       push!(body.args, Expr(:(=), termcond, tc))
       Expr(:block, Expr(:(=), termcond, true), Expr(:while, termcond, body))
@@ -420,12 +365,6 @@ function lower_unrolled_dynamic(
     UF += 1 - iseven(rem_uf)
     Expr(:block, q, Expr(iseven(rem_uf) ? :while : :if, comparison, newblock), remblock)
   else
-    # if (usorig.u₁ == us.u₁) && (usorig.u₂ == us.u₂) && !isstaticloop(loop) && !inclmask# && !ls.loadelimination
-    #     # Expr(:block, sl, assumeloopiteratesatleastonce(loop), Expr(:while, tc, body))
-    #     Expr(:block, sl, expect(tc), q, remblock)
-    # else
-    #     Expr(:block, sl, q, remblock)
-    # end
     Expr(:block, q, remblock)
   end
   if !iszero(UFt)
@@ -651,9 +590,6 @@ function outer_reduction_zero(
     Expr(:call, reduct_zero, Tsym)
   end
 end
-# function outer_reduction_name(mvar::Symbol, _Umax::Int, u₂::Int, u₁u::Bool)
-#   Symbol(mvar, '_', _Umax)
-# end
 
 # TODO: handle tiled outer reductions; they will require a suffix arg
 function initialize_outer_reductions!(
@@ -679,14 +615,9 @@ function initialize_outer_reductions!(
   if (u₂ == -1)
     push!(q.args, Expr(:(=), Symbol(mvar, '_', _Umax), z))
   elseif u₁u
-    # if isu₂unrolled(op) # is a tiledouter reduction
-    #   push!(q.args, Expr(:(=), Symbol(mvar, 0), z))
-    # else # is not, because if `suffix == 0`, will return -1
     push!(q.args, Expr(:(=), Symbol(mvar, '_', u₁), z))
-    # end
   elseif isu₂unrolled(op) # we unroll u₂
     for u ∈ 0:_Umax-1
-      # push!(q.args, Expr(:(=), Symbol(mvar, u, "__1"), z))
       push!(q.args, Expr(:(=), Symbol(mvar, u), z))
     end
   else
@@ -854,10 +785,6 @@ function reinit_push_preblockpost!(
 )
   push!(letblock.args, Expr(:(=), s, z))
   tempsym = gensym(s) # placeholder
-  # push!(pre.args, Expr(:(=), tempsym, Expr(:call, GlobalRef(Base,:Ref), s)))
-  # getref = Expr(:call, GlobalRef(Base,:getindex), tempsym)
-  # push!(block.args, Expr(:call, GlobalRef(Base,:setindex!), tempsym, Expr(:call, lv(reduct), getref, s)))
-  # push!(post.args, Expr(:(=), s, getref))
   push!(pre.args, Expr(:(=), tempsym, s))
   push!(block.args, Expr(:(=), tempsym, Expr(:call, lv(reduct), tempsym, s)))
   push!(post.args, Expr(:(=), s, tempsym))
@@ -909,17 +836,14 @@ function gc_preserve(ls::LoopSet, q::Expr)
   length(ls.opdict) == 0 && return q
   q2 = Expr(:block)
   gcp = Expr(:gc_preserve, q)
-  # gcp = Expr(:macrocall, Expr(:(.), :GC, QuoteNode(Symbol("@preserve"))), LineNumberNode(@__LINE__, Symbol(@__FILE__)))
   for array ∈ ls.includedactualarrays
     pb = gensym(array)
     push!(q2.args, Expr(:(=), pb, Expr(:call, lv(:preserve_buffer), array)))
     push!(gcp.args, pb)
   end
   q.head === :block && push!(q.args, nothing)
-  # push!(gcp.args, q)
   push!(q2.args, gcp)
   q2
-  # Expr(:block, gcp)
 end
 function push_outer_reduct_types!(pt::Expr, ls::LoopSet, ortypdefined::Bool)
   for j ∈ ls.outer_reductions
@@ -966,15 +890,7 @@ function determine_width(ls::LoopSet, vectorized::Union{Symbol,Nothing})
       push!(vwidth_q.args, Expr(:call, Expr(:curly, :Val, length(vloop))))
     end
   end
-  # push!(vwidth_q.args, ls.T)
-  # if length(ls.includedactualarrays) < 2
   push!(vwidth_q.args, ELTYPESYMBOL)
-  # else
-  # for array ∈ ls.includedactualarrays
-  #     push!(vwidth_q.args, Expr(:call, lv(:_eltype), array))
-  # end
-  # push_outer_reduct_types!(vwidth_q, 
-  # end
   vwidth_q
 end
 function init_remblock(unrolledloop::Loop, lssm::LoopStartStopManager, n::Int)#u₁loop::Symbol = unrolledloop.itersymbol)
@@ -1139,7 +1055,6 @@ ureduct(ls::LoopSet) = ls.ureduct
 function lower_unrollspec(ls::LoopSet)
   us = ls.unrollspecification
   @unpack vloopnum, u₁, u₂ = us
-  order = names(ls)
   init_loop_map!(ls)
   Ureduct = calc_Ureduct!(ls, us)
   setup_preamble!(ls, us, Ureduct)
@@ -1249,7 +1164,6 @@ function isunrolled_sym(
     end
   elseif u₁reduced
     false, true
-    # true, false
   else
     true, true
   end
@@ -1314,8 +1228,7 @@ function variable_name_and_unrolled(
   u₂iter::Int,
   ls::LoopSet,
 )
-  # u₁op, u₂op = isunrolled_sym(op, u₁loop, u₂loop, vloop, Core.ifelse(u₂iter == -1, 1, u₂max))
-  u₁op, u₂op = isunrolled_sym(op, u₁loop, u₂loop, vloop, ls)#, u₂max)
+  u₁op, u₂op = isunrolled_sym(op, u₁loop, u₂loop, vloop, ls)
   mvar = u₂op ? variable_name(op, u₂iter) : mangledvar(op)
   mvar, u₁op, u₂op
 end

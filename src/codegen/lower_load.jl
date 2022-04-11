@@ -197,7 +197,7 @@ function lower_load_no_optranslation!(
     end
     push!(q.args, Expr(:(=), mvar, Expr(:call, lv(:VecUnroll), t)))
   else
-    inds = mem_offset_u(op, td, inds_calc_by_ptr_offset, true, 0, ls, false)#= not unrolled =#
+    inds = mem_offset_u(op, td, inds_calc_by_ptr_offset, true, 0, ls, false) # not unrolled
     loadexpr = Expr(:call, lv(:_vload), sptr(op), inds)
     add_memory_mask!(loadexpr, op, td, mask, ls, 0)
     push!(loadexpr.args, falseexpr, rs)
