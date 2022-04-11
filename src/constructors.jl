@@ -78,8 +78,9 @@ end
 
 
 function LoopSet(q::Expr, mod::Symbol = :Main)
-  contract_pass!(q)
   ls = LoopSet(mod)
+  check_inputs!(q, ls.prepreamble)
+  contract_pass!(q)
   copyto!(ls, q)
   resize!(ls.loop_order, num_loops(ls))
   ls
@@ -157,23 +158,70 @@ function process_args(
   inline, check_empty, u₁, u₂, v, threads, warncheckarg
 end
 # check if the body of loop is a block, if not convert it to a block issue#395
-function check_loopbody!(q)
-  if q isa Expr && q.head == :for
+# and check if the range of loop is an enumerate, if it is replace it, issue#393
+function check_inputs!(q, prepreamble)
+  if Meta.isexpr(q, :for)
     if !Meta.isexpr(q.args[2], :block)
       q.args[2] = Expr(:block, q.args[2])
-    else
+      replace_enumerate!(q, prepreamble) # must after warp block
+    else # maybe inner loops in block
+      replace_enumerate!(q, prepreamble)
       for arg in q.args[2].args
-        check_loopbody!(arg) # check recursively for inner loop
+        check_inputs!(arg, prepreamble) # check recursively for inner loop
       end
     end
   end
   return q
 end
+function replace_enumerate!(q, prepreamble)
+  looprange = q.args[1]
+  if Meta.isexpr(looprange, :block)
+    for i in 1:length(looprange.args)
+      replace_single_enumerate!(q, prepreamble, i)
+    end
+  else
+    replace_single_enumerate!(q, prepreamble)
+  end
+  return q
+end
+function replace_single_enumerate!(q, prepreamble, i=nothing)
+  if isnothing(i) # not nest loop
+    looprange, body = q.args[1], q.args[2]
+  else # nest loop
+    looprange, body = q.args[1].args[i], q.args[2]
+  end
+  @assert Meta.isexpr(looprange, :(=), 2)
+  itersyms, r = looprange.args
+  if Meta.isexpr(r, :call, 2) && r.args[1] == :enumerate
+    _iter = r.args[2]
+    if _iter isa Symbol
+      iter = _iter
+    else # name complex expr
+      iter = gensym(:iter)
+      push!(prepreamble.args, :($iter = $_iter))
+    end
+    if Meta.isexpr(itersyms, :tuple, 2)
+      indsym, varsym = itersyms.args[1]::Symbol, itersyms.args[2]::Symbol
+      _replace_looprange!(q, i, indsym, iter)
+      pushfirst!(body.args, :($varsym = $iter[$indsym + firstindex($iter) - 1]))
+    elseif Meta.isexpr(itersyms, :tuple, 1) # like `for (i,) in enumerate(...)`
+      indsym = itersyms.args[1]::Symbol
+      _replace_looprange!(q, i, indsym, iter)
+    elseif itersyms isa Symbol # if itersyms are not unbox in loop range
+      throw(ArgumentError("`for $itersyms in enumerate($r)` is not supported,
+        please use `for ($(itersyms)_i, $(itersyms)_v) in enumerate($r)` instead."))
+    else
+      throw(ArgumentError("Don't know how to handle expression `$itersyms`."))
+    end
+  end
+  return q
+end
+_replace_looprange!(q, ::Nothing, indsym, iter) = q.args[1] = :($indsym = Base.OneTo(length($iter)))
+_replace_looprange!(q, i::Int, indsym, iter) = q.args[1].args[i] = :($indsym = Base.OneTo(length($iter)))
 
 function turbo_macro(mod, src, q, args...)
   q = macroexpand(mod, q)
   if q.head === :for
-    check_loopbody!(q)
     ls = LoopSet(q, mod)
     inline, check_empty, u₁, u₂, v, threads, warncheckarg = process_args(args)
     esc(setup_call(ls, q, src, inline, check_empty, u₁, u₂, v, threads, warncheckarg))
