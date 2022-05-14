@@ -111,7 +111,7 @@ function cost(
         # cannot shuffle false means reject curly
         # either false means shuffle
         dont_shuffle =
-          rejectinterleave(op) && (cannot_shuffle(op, u₁, u₂, contigind, indices))
+          (Wshift > 3) || (rejectinterleave(op) && (cannot_shuffle(op, u₁, u₂, contigind, indices)))
         if dont_shuffle
           # offset = 0.0 # gather/scatter, alignment doesn't matter
           r = 1 << shifter
@@ -301,7 +301,6 @@ function unroll_no_reductions(ls, order, vloopsym)
   u = if compute_rt ≤ 1
     4
   elseif compute_rt > memory_rt
-    # @show load_rt, store_rt, compute_rt, compute_l, rpc, rpp
     # if compute_rt > 40
     # max(VectorizationBase.nextpow2( min( 4, round(Int, compute_rt / memory_rt) ) ), 1)
     # else
@@ -312,7 +311,6 @@ function unroll_no_reductions(ls, order, vloopsym)
   else
     max(1, min(4, round(Int, 1.75compute_rt / load_rt)))
   end
-  # @show load_rt, store_rt, compute_rt, compute_l, u, rpc, rpp
   # u = min(u, max(1, (reg_count(ls) ÷ max(1,round(Int,rp)))))
   # commented out here is to decide to align loops
   # if memory_rt > compute_rt && isone(u) && (length(order) > 1) && (last(order) === vloopsym) && length(getloop(ls, last(order))) > 8W
@@ -381,7 +379,6 @@ function determine_unroll_factor(
   end
   recip_throughput =
     max(compute_recip_throughput, load_recip_throughput, store_recip_throughput)
-  # @show latency, recip_throughput
   recip_throughput, latency
 end
 function count_reductions(ls::LoopSet)
@@ -992,7 +989,6 @@ function load_elimination_cost_factor!(
     # cost_vec[1] -= rt
     # cost_vec[1] -= 0.5625 * iters
     # cost_vec[1] -= 0.5625 * iters / 2
-    # @show rto, 0.8rt, op
     # reg_pressure[1] += 0.25rp
     reg_pressure[1] += 0.25rp
     cost_vec[2] += rt
@@ -1156,7 +1152,6 @@ function evaluate_cost_tile!(
   @unpack u₁loopsym, u₂loopsym, vloopsym = unrollsyms
   cacheunrolled!(ls, u₁loopsym, u₂loopsym, vloopsym)
   # println("\n")
-  # @show order unrollsyms
   # u₂loopsym = order[1]
   # u₁loopsym = order[2]
   ops = operations(ls)
@@ -1248,9 +1243,6 @@ function evaluate_cost_tile!(
       inner₁ = u₁reached | depends_on_u₂
       inner₂ = u₂reached | depends_on_u₁
       # if isconstantop(op)
-      # if iscompute(op)
-      #   @show inner₁, depends_on_u₁, inner₂, depends_on_u₂, op
-      # end
       reduced_by_unrolling[1, 2, id] = inner₁ & !depends_on_u₁
       reduced_by_unrolling[2, 2, id] = inner₂ & !depends_on_u₂
       # else
@@ -1285,7 +1277,6 @@ function evaluate_cost_tile!(
         size_T,
         opisininnerloop,
       )
-        # println("constoffelim")
         continue
       elseif load_elimination_cost_factor!(
         cost_vec,
@@ -1298,11 +1289,8 @@ function evaluate_cost_tile!(
         Wshift,
         size_T,
       )
-        # println("loadelim")
-        # A[i,j-1], A[i,j]
         continue
       end
-      #elseif isconstant(op)
     end
     rt, lat, rp = cost(ls, op, (u₁loopsym, u₂loopsym), vloopsym, Wshift, size_T)
     if isload(op) & (!prefetch_good_idea)
@@ -1315,9 +1303,8 @@ function evaluate_cost_tile!(
     else #FIXME: hack to not go crazy
       max(zero(rp), rp - one(rp))
     end
-    rto = rt
+    # rto = rt
     rt *= iters[id]
-    # @show (u₁reducesrt, u₂reducesrt), (u₁reducesrp, u₂reducesrp), rto, rt, lat, rp, op
     if isstore(op) & (!u₁reducesrt) & (!u₂reducesrt)
       irreducible_storecosts += rt
     end
@@ -1340,7 +1327,6 @@ function evaluate_cost_tile!(
         end
       end
     end
-    # @show u₁reducesrp, u₂reducesrp, rp, op
     update_reg_pres!(reg_pressure, rp, u₁reducesrp, u₂reducesrp)
     # end
     # update_costs!(reg_pressure, rp, u₁reducesrp, u₂reducesrp)
