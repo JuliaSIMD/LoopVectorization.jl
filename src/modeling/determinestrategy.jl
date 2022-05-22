@@ -111,7 +111,8 @@ function cost(
         # cannot shuffle false means reject curly
         # either false means shuffle
         dont_shuffle =
-          (Wshift > 3) || (rejectinterleave(op) && (cannot_shuffle(op, u₁, u₂, contigind, indices)))
+          (Wshift > 3) ||
+          (rejectinterleave(op) && (cannot_shuffle(op, u₁, u₂, contigind, indices)))
         if dont_shuffle
           # offset = 0.0 # gather/scatter, alignment doesn't matter
           r = 1 << shifter

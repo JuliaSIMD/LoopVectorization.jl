@@ -1,7 +1,8 @@
 module LoopVectorization
 
 using Static: StaticInt, gt, static
-using VectorizationBase, SLEEFPirates, UnPack, OffsetArrays
+using VectorizationBase,
+  SLEEFPirates, UnPack, OffsetArrays, ArrayInterfaceOffsetArrays, ArrayInterfaceStaticArrays
 using VectorizationBase:
   mask,
   MM,
