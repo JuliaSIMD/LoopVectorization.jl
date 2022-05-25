@@ -517,12 +517,20 @@ end
 
 @generated function of_same_size(::Type{T}, ::Type{S}, ::StaticInt{R}) where {T,S,R}
   sizeof_S = sizeof(S)
-  if T <: Integer && sizeof(T) == 8
-    # sizeof(T) == 8 && max(..., 4) to maybe demote Int64 -> Int32
+  sizeof_T = sizeof(T)
+  if T <: Integer
+    # max(..., 4) to maybe demote Int64 -> Int32
     # but otherwise, we're giving up too much with the demotion.
-    sizeof_S *= max(8 ÷ R, 4)
+    if T === Bool || sizeof_S < 8
+      # HACK: T === Bool, makes code work.
+      sizeof_S *= 8
+    else
+      sizeof_S *= max(8 ÷ R, 4)
+    end
+    # multiply by 8 for sake of following `==` comparison
+    sizeof_T *= 8
   end
-  sizeof(T) == sizeof_S && return T
+  sizeof_T == sizeof_S && return T
   # Tfloat = T <: Union{Float32,Float64}
   if T <: Union{Float32,Float64}
     sizeof_S ≥ 8 ? Float64 : Float32
