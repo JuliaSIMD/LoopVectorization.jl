@@ -46,8 +46,8 @@ end
   @gen_A_mul_B F C E
   @test D == A
   @test ret == B
-  @test E == A * B'
-  @test F == C * E
+  @test E ≈ A * B'
+  @test F ≈ C * E
 end
 
 @testset "enumerate, #393" begin
