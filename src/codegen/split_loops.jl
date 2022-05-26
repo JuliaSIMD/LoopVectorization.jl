@@ -156,7 +156,6 @@ function lower_and_split_loops(ls::LoopSet, inline::Int)
     order_2, unrolled_2, tiled_2, vectorized_2, U_2, T_2, cost_2, shouldinline_2 =
       choose_order_cost(ls_2)
     # U_1 = T_1 = U_2 = T_2 = 2
-    # return ls_1, ls_2
     if cost_1 + cost_2 + looplenpen * (looplengthprod(ls_1) + looplengthprod(ls_2)) ≤
        muladd(0.9, cost_fused, ls_looplen)
       ls_2_lowered = if length(remaining_ops) > 1

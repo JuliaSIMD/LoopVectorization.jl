@@ -2292,7 +2292,7 @@ function _precompile_()
       Tuple{StaticInt{1},Int},
     },
   )   # time: 0.001156726
-  Base.precompile(Tuple{typeof(loop_boundary!),Expr,LoopSet,Loop,Bool})   # time: 0.001152516
+  Base.precompile(Tuple{typeof(loop_boundary!),Expr,Loop,Bool})   # time: 0.001152516
   Base.precompile(Tuple{typeof(maybestatic!),Expr})   # time: 0.001151616
   Base.precompile(Tuple{typeof(tuple_expr),typeof(identity),Vector{Tuple{Int,NumberType}}})   # time: 0.001148223
   Base.precompile(

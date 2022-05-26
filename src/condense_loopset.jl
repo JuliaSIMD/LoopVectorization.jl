@@ -218,7 +218,6 @@ function OperationStruct!(
   ls::LoopSet,
   op::Operation,
 )
-  instr = instruction(op)
   ld = loopdeps_uint(ls, op)
   rd = reduceddeps_uint(ls, op)
   cd = childdeps_uint(ls, op)
@@ -241,7 +240,7 @@ end
 @inline zerorangestart(r::ArrayInterface.OptionallyStaticUnitRange{StaticInt{1}}) =
   CloseOpen(maybestaticlast(r))
 
-function loop_boundary!(q::Expr, ls::LoopSet, loop::Loop, shouldindbyind::Bool)
+function loop_boundary!(q::Expr, loop::Loop, shouldindbyind::Bool)
   if isstaticloop(loop) || loop.rangesym === Symbol("")
     call = Expr(:call, :(:))
     f = gethint(first(loop))
@@ -265,7 +264,7 @@ end
 function loop_boundaries(ls::LoopSet, shouldindbyind::Vector{Bool})
   lbd = Expr(:tuple)
   for (ibi, loop) ∈ zip(shouldindbyind, ls.loops)
-    loop_boundary!(lbd, ls, loop, ibi)
+    loop_boundary!(lbd, loop, ibi)
   end
   lbd
 end
@@ -770,8 +769,11 @@ function generate_call_types(
   ops = operations(ls)
   for op ∈ ops
     instr::Instruction = instruction(op)
-    if ((isconstant(op) && (instr == LOOPCONSTANT)) && (!roots[identifier(op)]))
-      instr = op.instruction = DROPPEDCONSTANT
+    if (!roots[identifier(op)])
+      if (isconstant(op) && (instr == LOOPCONSTANT)) || !isconstant(op)
+        instr = op.instruction = DROPPEDCONSTANT
+        op.node_type = constant
+      end
     end
     push!(operation_descriptions.args, QuoteNode(instr.mod))
     push!(operation_descriptions.args, QuoteNode(instr.instr))

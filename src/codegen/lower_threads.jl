@@ -463,8 +463,8 @@ function thread_one_loops_expr(
       push!(loopboundexpr.args, looprange)
       push!(lastboundexpr.args, lastrange)
     else
-      loop_boundary!(loopboundexpr, ls, loop, true)
-      loop_boundary!(lastboundexpr, ls, loop, true)
+      loop_boundary!(loopboundexpr, loop, true)
+      loop_boundary!(lastboundexpr, loop, true)
     end
   end
   avxcall_args = Expr(:tuple, lastboundexpr, Symbol("#vargs#"))
@@ -676,8 +676,8 @@ function thread_two_loops_expr(
       push!(loopboundexpr.args, looprange2)
       push!(lastboundexpr.args, lastrange2)
     else
-      loop_boundary!(loopboundexpr, ls, loop, true)
-      loop_boundary!(lastboundexpr, ls, loop, true)
+      loop_boundary!(loopboundexpr, loop, true)
+      loop_boundary!(lastboundexpr, loop, true)
     end
   end
   avxcall_args = Expr(:tuple, lastboundexpr, Symbol("#vargs#"))
