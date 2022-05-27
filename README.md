@@ -361,5 +361,6 @@ Similar approaches can be taken to make kernels working with a variety of numeri
 * [Trixi.jl](https://github.com/trixi-framework/Trixi.jl)
 * [VectorizedStatistics.jl](https://github.com/JuliaSIMD/VectorizedStatistics.jl)
 * [NaNStatistics.jl](https://github.com/brenhinkeller/NaNStatistics.jl)
+* [VectorizedReduction.jl](https://github.com/andrewjradcliffe/VectorizedReduction.jl)
 
 If you're using LoopVectorization, please feel free to file a PR adding yours to the list!
