@@ -23,6 +23,6 @@ end
   @show @__LINE__
   A = zeros(Complex{Float64}, 10, 10);
   issue407!(A)
-  @test real.(A) == Diagonal(1:10)
+  @test real.(A) == LinearAlgebra.Diagonal(1:10)
   @test all(iszero, imag.(A))
 end
