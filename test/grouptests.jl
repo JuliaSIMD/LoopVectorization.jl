@@ -12,7 +12,7 @@ const START_TIME = time()
   end
 
   @time if LOOPVECTORIZATION_TEST == "all" || LOOPVECTORIZATION_TEST == "part2"
-    if VERSION.prerelease[1] != "DEV"
+    if VERSION <= v"1.8" || VERSION.prerelease[1] != "DEV"
       using Aqua
       @time Aqua.test_all(LoopVectorization, ambiguities = false)
     end
