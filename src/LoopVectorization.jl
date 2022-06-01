@@ -5,7 +5,9 @@ using Static: StaticInt, gt, static, Zero, One, reduce_tup
 using VectorizationBase,
   SLEEFPirates, UnPack, OffsetArrays, ArrayInterfaceOffsetArrays, ArrayInterfaceStaticArrays
 using LayoutPointers:
-  AbstractStridedPointer, StridedPointer, StridedBitPointer, grouped_strided_pointer
+  AbstractStridedPointer, StridedPointer, StridedBitPointer, grouped_strided_pointer,
+  stridedpointer_preserve, GroupedStridedPointers
+import LayoutPointers
 
 using SIMDTypes: NativeTypes
 
@@ -102,7 +104,6 @@ using HostCPUFeatures:
   pick_vector_width, register_size, register_count, has_opmask_registers, unwrap
 using CPUSummary: num_threads, num_cores, cache_linesize, cache_size
 
-using LayoutPointers: stridedpointer_preserve, GroupedStridedPointers
 
 using IfElse: ifelse
 
