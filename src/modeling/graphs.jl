@@ -1528,7 +1528,7 @@ function unpack_tuple!(ls::LoopSet, LHS::Expr, RHS, elementbytes::Int, position:
     end
     return last(operations(ls)) # FIXME: dummy
   end
-  @assert length(LHS.args) ≤ 14 "Functions returning more than 9 values aren't currently supported."
+  @assert length(LHS.args) ≤ length(EXTRACTFUNS) "Functions returning more than $(length(EXTRACTFUNS)) values aren't currently supported."
   lhstemp = gensym!(ls, "lhstuple")
   vparents = Operation[maybe_const_compute!(
     ls,
@@ -1548,22 +1548,7 @@ function unpack_tuple!(
   position::Int,
 )
   for i ∈ eachindex(LHS.args)
-    f = (
-      :first,
-      :second,
-      :third,
-      :fourth,
-      :fifth,
-      :sixth,
-      :seventh,
-      :eighth,
-      :ninth,
-      :tenth,
-      :eleventh,
-      :twelfth,
-      :thirteenth,
-      :last,
-    )[i]
+    f = EXTRACTFUNS[i]
     lhsi = LHS.args[i]
     if lhsi isa Symbol
       add_compute!(ls, lhsi, f, vparents, elementbytes)
