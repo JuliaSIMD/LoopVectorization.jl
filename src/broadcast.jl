@@ -115,6 +115,9 @@ end
   end
   Expr(:block, Expr(:meta, :inline), staticexpr(Cnew))
 end
+function ArrayInterface.contiguous_axis(::Type{LowDimArrayForBroadcast{D,T,N,A}}) where {D,T,N,A}
+  ArrayInterface.contiguous_axis(A)
+end
 @inline function ArrayInterface.stride_rank(
   ::Type{LowDimArrayForBroadcast{D,T,N,A}},
 ) where {D,T,N,A}
