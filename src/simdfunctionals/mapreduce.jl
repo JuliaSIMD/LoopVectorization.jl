@@ -101,9 +101,10 @@ length_one_axis(::Base.OneTo) = Base.OneTo(1)
 length_one_axis(::Any) = 1:1
 
 """
-    vreduce(op, destination, A::DenseArray...)
+    vreduce(op, A::DenseArray; [dims::Int])
 
 Vectorized version of `reduce`. Reduces the array `A` using the operator `op`.
+At most one dimension may be supplied as kwarg.
 """
 @inline vreduce(op, arg) = vmapreduce(identity, op, arg)
 
