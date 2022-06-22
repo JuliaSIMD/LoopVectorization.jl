@@ -238,8 +238,8 @@ function _strides_expr(@nospecialize(s), @nospecialize(x), R::Vector{Int}, D::Ve
   q
 end
 @generated function _strides(
-  s::Tuple{Vararg{Integer,N}},
-  x::Tuple{Vararg{Integer,N}},
+  s::Tuple{Vararg{Union{StaticInt,Integer},N}},
+  x::Tuple{Vararg{Union{StaticInt,Integer},N}},
   ::Val{R},
   ::Val{D},
 ) where {N,R,D}

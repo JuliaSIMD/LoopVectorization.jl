@@ -18,6 +18,10 @@ Base.promote_rule(
   ::Type{UpperBoundedInteger{N,S}},
   ::Type{T},
 ) where {N,T<:Base.BitInteger,S} = promote_rule(S, T)
+Base.promote_rule(
+  ::Type{UpperBoundedInteger{N,T}},
+  ::Type{T},
+) where {N,T<:Base.BitInteger} = T
 Base.convert(::Type{T}, i::UpperBoundedInteger) where {T<:Number} = convert(T, i.i)
 Base.convert(
   ::Type{UpperBoundedInteger{N,T}},
