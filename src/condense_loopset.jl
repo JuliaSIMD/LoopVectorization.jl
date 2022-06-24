@@ -357,14 +357,14 @@ end
 val(x) = Expr(:call, Expr(:curly, :Val, x))
 
 @inline gespf1(x, i) = gesp(x, i)
-@inline gespf1(x::StridedPointer{T,1}, i::Tuple{I}) where {T,I<:Integer} = gesp(x, i)
-@inline gespf1(x::StridedBitPointer{T,1}, i::Tuple{I}) where {T,I<:Integer} = gesp(x, i)
+@inline gespf1(x::StridedPointer{T,1}, i::Tuple{I}) where {T,I<:Union{Integer,StaticInt}} = gesp(x, i)
+@inline gespf1(x::StridedBitPointer{T,1}, i::Tuple{I}) where {T,I<:Union{Integer,StaticInt}} = gesp(x, i)
 @inline gespf1(x::StridedPointer{T,1}, i::Tuple{Zero}) where {T} = x
 @inline gespf1(x::StridedBitPointer{T,1}, i::Tuple{Zero}) where {T} = x
 @generated function gespf1(
   x::AbstractStridedPointer{T,N,C,B,R},
   i::Tuple{I},
-) where {T,N,I<:Integer,C,B,R}
+) where {T,N,I<:Union{Integer,StaticInt},C,B,R}
   ri = argmin(R)
   quote
     $(Expr(:meta, :inline))

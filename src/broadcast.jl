@@ -23,7 +23,7 @@ function LowDimArray{D0}(data::LowDimArray{D1,T,N,A}) where {D0,T,N,D1,A<:Abstra
 end
 Base.@propagate_inbounds Base.getindex(
   A::LowDimArray,
-  i::Vararg{Union{Integer,CartesianIndex},K},
+  i::Vararg{Union{StaticInt,Integer,CartesianIndex},K},
 ) where {K} = getindex(A.data, i...)
 @inline Base.size(A::LowDimArray) = Base.size(A.data)
 @inline Base.size(A::LowDimArray, i) = Base.size(A.data, i)

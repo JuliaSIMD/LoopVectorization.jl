@@ -11,7 +11,7 @@ end
 @generated function subsetview(
   ptr::AbstractStridedPointer{T,N,C,B,R,X,O},
   ::StaticInt{I},
-  i::Integer,
+  i::Union{Integer,StaticInt},
 ) where {T,N,C,B,R,X,O,I}
   I > N && return :ptr
   @assert B ≤ 0 "Batched dims not currently supported."
@@ -55,7 +55,7 @@ end
 @generated function _gesp(
   sp::AbstractStridedPointer{T,N},
   ::StaticInt{I},
-  i::Integer,
+  i::Union{Integer,StaticInt},
   ::StaticInt{D},
 ) where {I,N,T,D}
   t = Expr(:tuple)
