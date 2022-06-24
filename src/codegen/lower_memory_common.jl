@@ -57,7 +57,7 @@ end
 function _addoffset!(
   ret::Expr,
   vloopstride,
-  indexstride::Union{Integer,MaybeKnown},
+  indexstride::Union{Int,MaybeKnown},
   index,
   offset,
   calcbypointeroffset::Bool,
@@ -90,8 +90,8 @@ function __addoffset!(
 end
 function __addoffset!(
   ret::Expr,
-  vloopstride::Union{Integer,MaybeKnown},
-  indexstride::Union{Integer,MaybeKnown},
+  vloopstride::Union{Int,MaybeKnown},
+  indexstride::Union{Int,MaybeKnown},
   index,
   offset,
   calcbypointeroffset::Bool,
