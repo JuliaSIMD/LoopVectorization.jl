@@ -1,6 +1,8 @@
 
 using LoopVectorization, SnoopCompile
-tinf = @snoopi_deep include(joinpath(pkgdir(LoopVectorization), "test", "runtests.jl"))
+LOOPVECTORIZATION_TEST = "all"
+tinf = @snoopi_deep include(joinpath(pkgdir(LoopVectorization), "test", "testsetup.jl"))
+tinf = @snoopi_deep include(joinpath(pkgdir(LoopVectorization), "test", "grouptests.jl"))
 
 ttot, pcs = SnoopCompile.parcel(tinf);
 

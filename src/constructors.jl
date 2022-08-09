@@ -176,7 +176,7 @@ end
 function replace_enumerate!(q, prepreamble)
   looprange = q.args[1]
   if Meta.isexpr(looprange, :block)
-    for i in 1:length(looprange.args)
+    for i = 1:length(looprange.args)
       replace_single_enumerate!(q, prepreamble, i)
     end
   else
@@ -184,7 +184,7 @@ function replace_enumerate!(q, prepreamble)
   end
   return q
 end
-function replace_single_enumerate!(q, prepreamble, i=nothing)
+function replace_single_enumerate!(q, prepreamble, i = nothing)
   if isnothing(i) # not nest loop
     looprange, body = q.args[1], q.args[2]
   else # nest loop
@@ -203,7 +203,7 @@ function replace_single_enumerate!(q, prepreamble, i=nothing)
     if Meta.isexpr(itersyms, :tuple, 2)
       indsym, varsym = itersyms.args[1]::Symbol, itersyms.args[2]::Symbol
       _replace_looprange!(q, i, indsym, iter)
-      pushfirst!(body.args, :($varsym = $iter[$indsym + firstindex($iter) - 1]))
+      pushfirst!(body.args, :($varsym = $iter[$indsym+firstindex($iter)-1]))
     elseif Meta.isexpr(itersyms, :tuple, 1) # like `for (i,) in enumerate(...)`
       indsym = itersyms.args[1]::Symbol
       _replace_looprange!(q, i, indsym, iter)
@@ -216,8 +216,10 @@ function replace_single_enumerate!(q, prepreamble, i=nothing)
   end
   return q
 end
-_replace_looprange!(q, ::Nothing, indsym, iter) = q.args[1] = :($indsym = Base.OneTo(length($iter)))
-_replace_looprange!(q, i::Int, indsym, iter) = q.args[1].args[i] = :($indsym = Base.OneTo(length($iter)))
+_replace_looprange!(q, ::Nothing, indsym, iter) =
+  q.args[1] = :($indsym = Base.OneTo(length($iter)))
+_replace_looprange!(q, i::Int, indsym, iter) =
+  q.args[1].args[i] = :($indsym = Base.OneTo(length($iter)))
 
 function turbo_macro(mod, src, q, args...)
   q = macroexpand(mod, q)

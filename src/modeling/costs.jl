@@ -161,6 +161,7 @@ const COST = Dict{Symbol,InstructionCost}(
   :abs => InstructionCost(1, 0.5),
   :abs2 => InstructionCost(4, 0.5),
   :abs2_fast => InstructionCost(4, 0.5),
+  :round => InstructionCost(4, 0.5),
   :(==) => InstructionCost(1, 0.5),
   :(!=) => InstructionCost(1, 0.5),
   :(≠) => InstructionCost(1, 0.5),
@@ -252,20 +253,6 @@ const COST = Dict{Symbol,InstructionCost}(
   :adjoint => InstructionCost(0, 0.0, 0.0, 0),
   :conj => InstructionCost(0, 0.0, 0.0, 0),
   :transpose => InstructionCost(0, 0.0, 0.0, 0),
-  :first => InstructionCost(0, 0.0, 0.0, 0),
-  :second => InstructionCost(0, 0.0, 0.0, 0),
-  :third => InstructionCost(0, 0.0, 0.0, 0),
-  :fourth => InstructionCost(0, 0.0, 0.0, 0),
-  :fifth => InstructionCost(0, 0.0, 0.0, 0),
-  :sixth => InstructionCost(0, 0.0, 0.0, 0),
-  :seventh => InstructionCost(0, 0.0, 0.0, 0),
-  :eighth => InstructionCost(0, 0.0, 0.0, 0),
-  :ninth => InstructionCost(0, 0.0, 0.0, 0),
-  :tenth => InstructionCost(0, 0.0, 0.0, 0),
-  :eleventh => InstructionCost(0, 0.0, 0.0, 0),
-  :twelfth => InstructionCost(0, 0.0, 0.0, 0),
-  :thirteenth => InstructionCost(0, 0.0, 0.0, 0),
-  :last => InstructionCost(0, 0.0, 0.0, 0),
   :prefetch => InstructionCost(0, 0.0, 0.0, 0),
   :prefetch0 => InstructionCost(0, 0.0, 0.0, 0),
   :prefetch1 => InstructionCost(0, 0.0, 0.0, 0),
@@ -278,6 +265,10 @@ const COST = Dict{Symbol,InstructionCost}(
   :exponent => InstructionCost(8, 1.0),
   :significand => InstructionCost(8, 1.0),
 )
+
+for f = EXTRACTFUNS
+  COST[f] = InstructionCost(0, 0.0, 0.0, 0)
+end
 
 # # @inline prefetch0(x::Ptr, i) = VectorizationBase.prefetch(x, Val{3}(), Val{0}())
 # @inline prefetch0(x, i) = VectorizationBase.prefetch(gep(stridedpointer(x), (data(i),)), Val{3}(), Val{0}())

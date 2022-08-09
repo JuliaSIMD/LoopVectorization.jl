@@ -515,19 +515,35 @@ function pointerremcomparison(
   end
 end
 
-@generated function of_same_size(::Type{T}, ::Type{S}) where {T,S}
+@generated function of_same_size(::Type{T}, ::Type{S}, ::StaticInt{R}) where {T,S,R}
   sizeof_S = sizeof(S)
-  sizeof(T) == sizeof_S && return T
+  sizeof_T = sizeof(T)
+  if T <: Integer
+    # max(..., 4) to maybe demote Int64 -> Int32
+    # but otherwise, we're giving up too much with the demotion.
+    if T === Bool || sizeof_S < 8
+      # HACK: T === Bool, makes code work.
+      sizeof_S *= 8
+    else
+      sizeof_S *= max(8 ÷ R, 4)
+    end
+    # multiply by 8 for sake of following `==` comparison
+    sizeof_T *= 8
+  end
+  sizeof_T == sizeof_S && return T
   # Tfloat = T <: Union{Float32,Float64}
   if T <: Union{Float32,Float64}
     sizeof_S ≥ 8 ? Float64 : Float32
   elseif T <: Signed
-    Symbol(:Int, 8sizeof_S)
+    Symbol(:Int, sizeof_S)
   elseif (T <: Unsigned) | (T === Bool)
-    Symbol(:UInt, 8sizeof_S)
+    Symbol(:UInt, sizeof_S)
   else
     S
   end
+end
+@inline function of_same_size(::Type{T}, ::Type{S}) where {T,S}
+  of_same_size(T, S, VectorizationBase.register_size() ÷ VectorizationBase.simd_integer_register_size())
 end
 function outer_reduction_zero(
   op::Operation,

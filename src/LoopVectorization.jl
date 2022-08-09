@@ -1,13 +1,21 @@
 module LoopVectorization
 
-using Static: StaticInt, gt, static
-using VectorizationBase, SLEEFPirates, UnPack, OffsetArrays
+using ArrayInterfaceCore: UpTri, LoTri
+using Static: StaticInt, gt, static, Zero, One, reduce_tup
+using VectorizationBase,
+  SLEEFPirates, UnPack, OffsetArrays, ArrayInterfaceOffsetArrays, ArrayInterfaceStaticArrays
+using LayoutPointers:
+  AbstractStridedPointer, StridedPointer, StridedBitPointer, grouped_strided_pointer,
+  stridedpointer_preserve, GroupedStridedPointers
+import LayoutPointers
+
+using SIMDTypes: NativeTypes
+
 using VectorizationBase:
   mask,
   MM,
   AbstractMask,
   data,
-  grouped_strided_pointer,
   AbstractSIMD,
   vzero,
   offsetprecalc,
@@ -30,7 +38,6 @@ using VectorizationBase:
   maybestaticlast,
   gep,
   gesp,
-  NativeTypes, #llvmptr,
   vfmadd,
   vfmsub,
   vfnmadd,
@@ -51,9 +58,6 @@ using VectorizationBase:
   vmul_fast,
   relu,
   stridedpointer,
-  StridedPointer,
-  StridedBitPointer,
-  AbstractStridedPointer,
   _vload,
   _vstore!,
   reduced_add,
@@ -74,7 +78,6 @@ using VectorizationBase:
   vminimum,
   vany,
   vall,
-  unwrap,
   Unroll,
   VecUnroll,
   preserve_buffer,
@@ -98,10 +101,9 @@ using VectorizationBase:
   maybestaticsize#,zero_mask
 
 using HostCPUFeatures:
-  pick_vector_width, register_size, register_count, has_opmask_registers
+  pick_vector_width, register_size, register_count, has_opmask_registers, unwrap
 using CPUSummary: num_threads, num_cores, cache_linesize, cache_size
 
-using LayoutPointers: stridedpointer_preserve, GroupedStridedPointers
 
 using IfElse: ifelse
 
@@ -131,15 +133,10 @@ using ArrayInterface
 using ArrayInterface:
   OptionallyStaticUnitRange,
   OptionallyStaticRange,
-  Zero,
-  One,
   StaticBool,
   True,
   False,
-  reduce_tup,
   indices,
-  UpTri,
-  LoTri,
   strides,
   offsets,
   size,
@@ -234,9 +231,9 @@ loop-reordering so as to improve performance:
 LoopVectorization
 
 include("precompile.jl")
-_precompile_()
+# _precompile_()
 
-_vreduce(+, Float64[1.0])
+# _vreduce(+, Float64[1.0])
 # matmul_params(64, 32, 64)
 
 # import ChainRulesCore, ForwardDiff

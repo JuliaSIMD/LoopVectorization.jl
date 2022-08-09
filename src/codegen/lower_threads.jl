@@ -154,22 +154,14 @@ end
 @inline choose_num_blocks(nt, ::StaticInt{NC} = lv_max_num_threads()) where {NC} =
   @inbounds choose_num_block_table(StaticInt{NC}())[nt]
 
-if Sys.ARCH === :x86_64
-  @inline function choose_num_threads(
+scale_cost(c) = @fastmath c * (Sys.ARCH === :x86_64 ? 0.0225 : 0.005625)
+scale_cost(c, looplen) = scale_cost(@fastmath c / looplen)
+@inline function choose_num_threads(
     C::T,
     NT::UInt,
     x::Base.BitInteger,
   ) where {T<:Union{Float32,Float64}}
-    _choose_num_threads(Base.mul_float_fast(T(C), T(0.0225)), NT, x)
-  end
-else
-  @inline function choose_num_threads(
-    C::T,
-    NT::UInt,
-    x::Base.BitInteger,
-  ) where {T<:Union{Float32,Float64}}
-    _choose_num_threads(Base.mul_float_fast(C, T(0.0225) * T(0.25)), NT, x)
-  end
+  _choose_num_threads(scale_cost(T(C)), NT, x)
 end
 @inline function _choose_num_threads(
   C::T,
@@ -422,13 +414,6 @@ function define_block_size(threadedloop, vloop, tn, W)
     end
   end
 end
-function scale_cost(c, looplen)
-  c = 0.05 * c / looplen
-  if Sys.ARCH !== :x86_64
-    c *= 0.25
-  end
-  c
-end
 function thread_one_loops_expr(
   ls::LoopSet,
   ua::UnrollArgs,
@@ -463,8 +448,8 @@ function thread_one_loops_expr(
       push!(loopboundexpr.args, looprange)
       push!(lastboundexpr.args, lastrange)
     else
-      loop_boundary!(loopboundexpr, ls, loop, true)
-      loop_boundary!(lastboundexpr, ls, loop, true)
+      loop_boundary!(loopboundexpr, loop, true)
+      loop_boundary!(lastboundexpr, loop, true)
     end
   end
   avxcall_args = Expr(:tuple, lastboundexpr, Symbol("#vargs#"))
@@ -676,8 +661,8 @@ function thread_two_loops_expr(
       push!(loopboundexpr.args, looprange2)
       push!(lastboundexpr.args, lastrange2)
     else
-      loop_boundary!(loopboundexpr, ls, loop, true)
-      loop_boundary!(lastboundexpr, ls, loop, true)
+      loop_boundary!(loopboundexpr, loop, true)
+      loop_boundary!(lastboundexpr, loop, true)
     end
   end
   avxcall_args = Expr(:tuple, lastboundexpr, Symbol("#vargs#"))
@@ -868,17 +853,20 @@ function valid_thread_loops(ls::LoopSet)
   u₂loop = _u₂loop === nothing ? u₁loop : getloop_from_id(ls, _u₂loop)
   ua = UnrollArgs(u₁loop, u₂loop, getloop(ls, vectorized), u₁, u₂, u₂)
   valid_thread_loop = fill(true, length(order))
+  has_reduced_deps = false
   for op ∈ operations(ls)
     if isstore(op) && (length(reduceddependencies(op)) > 0)
       for reduceddep ∈ reduceddependencies(op)
         for (i, o) ∈ enumerate(order)
           if o === reduceddep
+            has_reduced_deps = true
             valid_thread_loop[i] = false
           end
         end
       end
     end
   end
+  c *= (1.0 + 0.5has_reduced_deps)
   for (i, o) ∈ enumerate(order)
     loop = getloop(ls, o)
     if isstaticloop(loop) & (length(loop) ≤ 1)

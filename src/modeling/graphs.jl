@@ -68,6 +68,7 @@ function pushexpr!(ex::Expr, mk::MaybeKnown)
 end
 pushexpr!(ex::Expr, x::Union{Symbol,Expr}) = (push!(ex.args, x); nothing)
 pushexpr!(ex::Expr, x::Integer) = (push!(ex.args, staticexpr(convert(Int, x))); nothing)
+pushexpr!(ex::Expr, @nospecialize(x::StaticInt)) = (push!(ex.args, x); nothing)
 MaybeKnown(x::Integer) = MaybeKnown(convert(Int, x), Symbol("##UNDEFINED##"), true)
 MaybeKnown(x::Integer, default::Int) = MaybeKnown(x)
 MaybeKnown(x::Symbol, default::Int) = MaybeKnown(default, x, false)
@@ -926,19 +927,20 @@ function add_block!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
     push!(ls, x, elementbytes, position)
   end
 end
-function maybestatic!(expr::Expr)
-  if expr.head === :call
-    f = first(expr.args)
-    if f === :length
-      expr.args[1] = GlobalRef(ArrayInterface, :static_length)
-    elseif f === :size && length(expr.args) == 3
-      i = expr.args[3]
-      if i isa Integer
-        expr.args[1] = GlobalRef(ArrayInterface, :size)
-        expr.args[3] = staticexpr(convert(Int, i)::Int)
+function makestatic!(expr)
+  expr isa Expr || return expr
+  for i = eachindex(expr.args)
+    ex = expr.args[i]
+    if ex isa Int
+      expr.args[i] = staticexpr(ex)
+    elseif ex isa Symbol
+      if ex === :length
+        expr.args[i] = GlobalRef(ArrayInterface, :static_length)
+      elseif Base.sym_in(ex, (:axes, :size))
+        expr.args[i] = GlobalRef(ArrayInterface, ex)
       end
-    else
-      static_literals!(expr)
+    elseif ex isa Expr
+      makestatic!(ex)
     end
   end
   expr
@@ -957,7 +959,7 @@ function add_loop_bound!(
   upper::Bool,
   step::Bool,
 )::MaybeKnown
-  maybestatic!(bound)
+  makestatic!(bound)
   N = gensym!(
     ls,
     string(itersym) *
@@ -965,17 +967,6 @@ function add_loop_bound!(
   )
   pushprepreamble!(ls, Expr(:(=), N, bound))
   MaybeKnown(N, upper ? 1024 : 1)
-end
-static_literals!(s::Symbol) = s
-function static_literals!(q::Expr)
-  for (i, ex) ∈ enumerate(q.args)
-    if ex isa Number
-      q.args[i] = staticexpr(ex)
-    elseif ex isa Expr
-      static_literals!(ex)
-    end
-  end
-  q
 end
 function range_loop!(
   ls::LoopSet,
@@ -1021,7 +1012,7 @@ function oneto_loop!(ls::LoopSet, r::Expr, itersym::Symbol)::Loop
     rangename = lensym = Symbol("")
     MaybeKnown(convert(Int, otN)::Int, 0)
   else
-    otN isa Expr && maybestatic!(otN)
+    otN isa Expr && makestatic!(otN)
     lensym = N = gensym!(ls, "loop" * string(itersym))
     rangename = gensym!(ls, "range")
     pushprepreamble!(ls, Expr(:(=), N, otN))
@@ -1084,7 +1075,7 @@ function misc_loop!(
     Expr(
       :(=),
       rangename,
-      Expr(:call, lv(:canonicalize_range), :(@inbounds $(static_literals!(r)))),
+      Expr(:call, lv(:canonicalize_range), :(@inbounds $(makestatic!(r)))),
     ),
   )
   pushprepreamble!(
@@ -1528,7 +1519,7 @@ function unpack_tuple!(ls::LoopSet, LHS::Expr, RHS, elementbytes::Int, position:
     end
     return last(operations(ls)) # FIXME: dummy
   end
-  @assert length(LHS.args) ≤ 14 "Functions returning more than 9 values aren't currently supported."
+  @assert length(LHS.args) ≤ length(EXTRACTFUNS) "Functions returning more than $(length(EXTRACTFUNS)) values aren't currently supported."
   lhstemp = gensym!(ls, "lhstuple")
   vparents = Operation[maybe_const_compute!(
     ls,
@@ -1548,22 +1539,7 @@ function unpack_tuple!(
   position::Int,
 )
   for i ∈ eachindex(LHS.args)
-    f = (
-      :first,
-      :second,
-      :third,
-      :fourth,
-      :fifth,
-      :sixth,
-      :seventh,
-      :eighth,
-      :ninth,
-      :tenth,
-      :eleventh,
-      :twelfth,
-      :thirteenth,
-      :last,
-    )[i]
+    f = EXTRACTFUNS[i]
     lhsi = LHS.args[i]
     if lhsi isa Symbol
       add_compute!(ls, lhsi, f, vparents, elementbytes)

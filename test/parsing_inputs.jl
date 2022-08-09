@@ -46,8 +46,8 @@ end
   @gen_A_mul_B F C E
   @test D == A
   @test ret == B
-  @test E == A * B'
-  @test F == C * E
+  @test E ≈ A * B'
+  @test F ≈ C * E
 end
 
 @testset "enumerate, #393" begin
@@ -72,8 +72,13 @@ end
   @test A == 1:4
   @test B == ones(4)
   @test A .* B' == C' == D
-  @test_throws ArgumentError check_inputs!(:(for ix in enumerate(A)
-    A[ix[1]] = ix[1] + ix[2]
-  end), Any[])
-  @test_throws ArgumentError check_inputs!(:(for () in enumerate(A); end), Any[])
+  @test_throws ArgumentError check_inputs!(:(
+    for ix in enumerate(A)
+      A[ix[1]] = ix[1] + ix[2]
+    end
+  ), Any[])
+  @test_throws ArgumentError check_inputs!(:(
+    for () in enumerate(A)
+    end
+  ), Any[])
 end
