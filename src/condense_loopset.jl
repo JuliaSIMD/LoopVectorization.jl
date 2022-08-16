@@ -145,6 +145,8 @@ struct OperationStruct <: AbstractLoopOperation
   childdeps::UInt128
   parents₀::UInt128
   parents₁::UInt128
+  parents₂::UInt128
+  parents₃::UInt128
   node_type::OperationType
   symid::UInt16
   array::UInt8
@@ -183,10 +185,12 @@ end
 function parents_uint(op::Operation)
   opv = parents(op)
   N = length(opv)
-  @assert N ≤ 16
+  @assert N ≤ 32
   p0 = parents_uint(view(opv, 1:min(8, N)))
-  p1 = N > 8 ? parents_uint(view(opv, 9:N)) : zero(p0)
-  p0, p1
+  p1 = N > 8 ? parents_uint(view(opv, 9:min(16,N))) : zero(p0)
+  p2 = N > 16 ? parents_uint(view(opv, 17:min(24,N))) : zero(p0)
+  p3 = N > 24 ? parents_uint(view(opv, 25:N)) : zero(p0)
+  p0, p1, p2, p3
 end
 function recursively_set_parents_true!(x::Vector{Bool}, op::Operation)
   x[identifier(op)] && return nothing # don't redescend
@@ -221,10 +225,10 @@ function OperationStruct!(
   ld = loopdeps_uint(ls, op)
   rd = reduceddeps_uint(ls, op)
   cd = childdeps_uint(ls, op)
-  p0, p1 = parents_uint(op)
+  p0, p1, p2, p3 = parents_uint(op)
   array = accesses_memory(op) ? findmatchingarray(ls, op.ref) : 0x00
   ids[identifier(op)] = id = findindoradd!(varnames, name(op))
-  OperationStruct(ld, rd, cd, p0, p1, op.node_type, id, array)
+  OperationStruct(ld, rd, cd, p0, p1, p2, p3, op.node_type, id, array)
 end
 ## turn a LoopSet into a type object which can be used to reconstruct the LoopSet.
 

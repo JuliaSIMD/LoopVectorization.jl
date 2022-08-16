@@ -557,13 +557,15 @@ childdependencies(ls::LoopSet, os::OperationStruct, expand = false, offset = 0) 
   parents_symvec(ls, os.childdeps, expand, offset)
 
 # parents(ls::LoopSet, u::UInt128) = loopindexoffset(ls, u, false)
-function parents(ls::LoopSet, u₀::UInt128, u₁::UInt128)
+function parents(ls::LoopSet, u₀::UInt128, u₁::UInt128, u₂::UInt128, u₃::UInt128)
   idxs = Int[]
+  u₃ == zero(u₃) || loopindex!(idxs, ls, u₃, 0x0010)
+  u₂ == zero(u₂) || loopindex!(idxs, ls, u₂, 0x0010)
   u₁ == zero(u₁) || loopindex!(idxs, ls, u₁, 0x0010)
   loopindex!(idxs, ls, u₀, 0x0010)
   reverse!(idxs)
 end
-parents(ls::LoopSet, os::OperationStruct) = parents(ls, os.parents₀, os.parents₁)
+parents(ls::LoopSet, os::OperationStruct) = parents(ls, os.parents₀, os.parents₁, os.parents₂, os.parents₃)
 
 expandedopname(opsymbol::Symbol, offset::Integer) =
   Symbol(String(opsymbol) * '#' * string(offset + 1) * '#')
@@ -669,6 +671,8 @@ function add_parents_to_op!(
   op::Operation,
   up₀::UInt128,
   up₁::UInt128,
+  up₂::UInt128,
+  up₃::UInt128,
   k::Int,
   Δ::Int,
 )
@@ -677,7 +681,7 @@ function add_parents_to_op!(
   offsets = ls.operation_offsets
   if isone(Δ) # not expanded
     @assert isone(k)
-    for i ∈ parents(ls, up₀, up₁)
+    for i ∈ parents(ls, up₀, up₁, up₂, up₃)
       # FIXME; children also filled in cacheunrolled
       for j ∈ offsets[i]+1:offsets[i+1] # if parents are expanded, add them all
         opp = ops[j]
@@ -689,7 +693,7 @@ function add_parents_to_op!(
     # Do we want to require that all Δidxs are equal?
     # Because `CartesianIndex((2,3)) - 1` results in a methoderorr, I think this is reasonable for now
     # FIXME; children also filled in cacheunrolled
-    for i ∈ parents(ls, up₀, up₁)
+    for i ∈ parents(ls, up₀, up₁, up₂, up₃)
       opp = ops[offsets[i]+k]
       pushfirst!(vparents, opp)
       push!(children(opp), op)
@@ -710,7 +714,7 @@ function add_parents_to_ops!(ls::LoopSet, ops::Vector{OperationStruct}, constoff
           pushpreamble!(ls, Expr(:(=), instr.instr, extract_varg(constoffset)))
         end
       elseif !isloopvalue(op)
-        add_parents_to_op!(ls, op, ops[i].parents₀, ops[i].parents₁, k, Δ)
+        add_parents_to_op!(ls, op, ops[i].parents₀, ops[i].parents₁, ops[i].parents₂, ops[i].parents₃, k, Δ)
       end
     end
   end
