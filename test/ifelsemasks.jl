@@ -319,7 +319,7 @@ T = Float32
   end
 
   function twoifelses!(res, half, m, keep = nothing, final = true)
-    𝒶𝓍j = axes(half, 1)
+    local 𝒶𝓍j = axes(half, 1)
     for j in 𝒶𝓍j
       𝓇𝒽𝓈 = if isnothing(keep)
         log(half[j]) + m[j]
@@ -331,7 +331,7 @@ T = Float32
     res
   end
   function twoifelses_avx!(res, half, m, keep = nothing, final = true)
-    𝒶𝓍j = axes(half, 1)
+    local 𝒶𝓍j = axes(half, 1)
     @turbo for j in 𝒶𝓍j
       𝓇𝒽𝓈 = if isnothing(keep)
         log(half[j]) + m[j]
@@ -363,9 +363,9 @@ T = Float32
 
   chebpts(m) = (n = m - 1; [cos(k * pi / n) for k = 0:n])
   function barycentric_weight0(X)
-    T = eltype(X)
-    n = length(X) - 1
-    w = zero(X)
+    local T = eltype(X)
+    local n = length(X) - 1
+    local w = zero(X)
     @inbounds @fastmath for j = 0:n
       tmp = one(T)
       for k = 0:n
@@ -376,9 +376,9 @@ T = Float32
     return w
   end
   function barycentric_weight1(X)
-    T = eltype(X)
-    n = length(X) - 1
-    w = zero(X)
+    local T = eltype(X)
+    local n = length(X) - 1
+    local w = zero(X)
     @turbo for j = 0:n
       tmp = one(T)
       for k = 0:n
@@ -389,9 +389,9 @@ T = Float32
     return w
   end
   function barycentric_weight2(X)
-    T = eltype(X)
-    n = length(X) - 1
-    w = zero(X)
+    local T = eltype(X)
+    local n = length(X) - 1
+    local w = zero(X)
     @turbo inline = true for j = 0:n
       tmp = one(T)
       for k = 0:n
@@ -402,9 +402,9 @@ T = Float32
     return w
   end
   function barycentric_weight3(X)
-    T = eltype(X)
-    n = length(X) - 1
-    w = zero(X)
+    local T = eltype(X)
+    local n = length(X) - 1
+    local w = zero(X)
     @turbo inline = true for j = 0:n
       tmp = one(T)
       for k = 0:n
@@ -415,9 +415,9 @@ T = Float32
     return w
   end
   function barycentric_weight4(X)
-    T = eltype(X)
-    n = length(X) - 1
-    w = zero(X)
+    local T = eltype(X)
+    local n = length(X) - 1
+    local w = zero(X)
     @turbo for j = 0:n
       tmp = one(T)
       for k = 0:n
@@ -469,7 +469,7 @@ T = Float32
   end
 
   function absmax_tturbo(a) # LV threaded
-    result = zero(eltype(a))
+    local result = zero(eltype(a))
     @tturbo for i = 1:length(a)
       abs(a[i]) > result && (result = abs(a[i]))
     end
@@ -477,8 +477,8 @@ T = Float32
   end
 
   function findminturbo(x)
-    indmin = 0
-    minval = typemax(eltype(x))
+    local indmin = 0
+    local minval = typemax(eltype(x))
     @turbo for i ∈ eachindex(x)
       newmin = x[i] < minval
       minval = newmin ? x[i] : minval
@@ -487,8 +487,8 @@ T = Float32
     minval, indmin
   end
   function findmintturbo(x)
-    indmin = 0
-    minval = typemax(eltype(x))
+    local indmin = 0
+    local minval = typemax(eltype(x))
     @tturbo for i ∈ eachindex(x)
       newmin = x[i] < minval
       minval = newmin ? x[i] : minval
@@ -497,8 +497,8 @@ T = Float32
     minval, indmin
   end
   function findminturbo_u4(x)
-    indmin = 0
-    minval = typemax(eltype(x))
+    local indmin = 0
+    local minval = typemax(eltype(x))
     @turbo unroll = 4 for i ∈ eachindex(x)
       newmin = x[i] < minval
       minval = newmin ? x[i] : minval
@@ -507,7 +507,8 @@ T = Float32
     minval, indmin
   end
   function extrema_turbo(x)
-    a = b = first(x)
+    local a = first(x)
+    local b = a;
     @turbo for i in eachindex(x)
       local e = x[i]
       b = max(b, e)
