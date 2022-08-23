@@ -506,6 +506,15 @@ T = Float32
     end
     minval, indmin
   end
+  function extrema_turbo(x)
+    a = b = first(x)
+    @turbo for i in eachindex(x)
+      local e = x[i]
+      b = max(b, e)
+      a = min(a, e)
+    end
+    a, b
+  end
 
   N = 117
   for T ∈ (Float32, Float64, Int32, Int64)
@@ -536,6 +545,7 @@ T = Float32
     c1 = similar(a)
     c2 = similar(a)
 
+    @test extrema(a) == extrema_turbo(a)
     promote_bool_store!(c1, a, b)
     promote_bool_storeavx!(c2, a, b)
     @test c1 == c2

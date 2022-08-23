@@ -1646,12 +1646,17 @@ function Base.push!(
     @assert length(localbody.args) == 2
     LHS = (localbody.args[1])::Symbol
     RHS_1 = localbody.args[2]
-    RHS_1 isa Symbol && return push!(ls, localbody, elementbytes, position, mpref)
-    RHS = push!(ls, RHS_1, elementbytes, position, mpref)
-    if isstore(RHS)
-      RHS
+    if RHS_1 isa Symbol
+      return push!(ls, localbody, elementbytes, position, mpref)
+    elseif Meta.isexpr(RHS_1, :(=), 2)
+      RHS = push!(ls, RHS_1, elementbytes, position, mpref)
+      if isstore(RHS)
+        RHS
+      else
+        add_compute!(ls, LHS, :identity, [RHS], elementbytes)
+      end
     else
-      add_compute!(ls, LHS, :identity, [RHS], elementbytes)
+      push!(ls, localbody, elementbytes, position, mpref)
     end
   else
     throw(LoopError("Don't know how to handle expression.", ex))
