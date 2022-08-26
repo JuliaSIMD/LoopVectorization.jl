@@ -1,4 +1,4 @@
-<img src="https://github.com/JuliaSIMD/LoopVectorization.jl/blob/master/docs/src/assets/logo.svg" width="300">
+<img src="https://github.com/JuliaSIMD/LoopVectorization.jl/blob/main/docs/src/assets/logo.svg" width="300">
 
 ---
 
