@@ -550,14 +550,6 @@ function add_grouped_strided_pointer!(extra_args::Expr, ls::LoopSet)
   preserve, shouldindbyind, roots
 end
 
-# first_cache() = ifelse(gt(num_cache_levels(), StaticInt{2}()), StaticInt{2}(), StaticInt{1}())
-# function _first_cache_size(::StaticInt{FCS}) where {FCS}
-#     L1inclusive = StaticInt{FCS}() - VectorizationBase.cache_size(One())
-#     ifelse(eq(first_cache(), StaticInt(2)) & VectorizationBase.cache_inclusive(StaticInt(2)), L1inclusive, StaticInt{FCS}())
-# end
-# _first_cache_size(::Nothing) = StaticInt(262144)
-# first_cache_size() = _first_cache_size(cache_size(first_cache()))
-
 @generated function _turbo_config_val(
   ::Val{CNFARG},
   ::StaticInt{W},
@@ -565,13 +557,10 @@ end
   ::StaticInt{AR},
   ::StaticInt{NT},
   ::StaticInt{CLS},
-  ::StaticInt{L1},
-  ::StaticInt{L2},
-  ::StaticInt{L3},
-) where {CNFARG,W,RS,AR,CLS,L1,L2,L3,NT}
+) where {CNFARG,W,RS,AR,CLS,NT}
   inline, u₁, u₂, v, BROADCAST, thread = CNFARG
   nt = min(thread % UInt, NT % UInt)
-  t = Expr(:tuple, inline, u₁, u₂, v, BROADCAST, W, RS, AR, CLS, L1, L2, L3, nt)
+  t = Expr(:tuple, inline, u₁, u₂, v, BROADCAST, W, RS, AR, CLS, nt)
   length(CNFARG) == 7 && push!(t.args, CNFARG[7])
   Expr(:call, Expr(:curly, :Val, t))
 end
@@ -582,10 +571,7 @@ end
     register_size(),
     available_registers(),
     lv_max_num_threads(),
-    cache_linesize(),
-    cache_size(StaticInt(1)),
-    cache_size(StaticInt(2)),
-    cache_size(StaticInt(3)),
+    cache_linesize()
   )
 end
 function find_samename_constparent(op::Operation, opname::Symbol)

@@ -874,9 +874,9 @@ function avx_loopset!(
 end
 function avx_body(
   ls::LoopSet,
-  UNROLL::Tuple{Bool,Int8,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt},
+  UNROLL::Tuple{Bool,Int8,Int8,Int8,Bool,Int,Int,Int,Int,UInt},
 )
-  inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, l1, l2, l3, nt = UNROLL
+  inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, nt = UNROLL
   q =
     (iszero(u₁) & iszero(v)) ? lower_and_split_loops(ls, inline % Int) :
     lower(ls, u₁ % Int, u₂ % Int, v % Int, inline % Int)
@@ -916,14 +916,14 @@ function _turbo_loopset(
   @nospecialize(LPSYMsv),
   LBsv::Core.SimpleVector,
   vargs::Core.SimpleVector,
-  UNROLL::Tuple{Bool,Int8,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt},
+  UNROLL::Tuple{Bool,Int8,Int8,Int8,Bool,Int,Int,Int,Int,UInt},
 )
   nops = length(OPSsv) ÷ 3
   instr = Instruction[Instruction(OPSsv[3i+1], OPSsv[3i+2]) for i ∈ 0:nops-1]
   ops = OperationStruct[OPSsv[3i] for i ∈ 1:nops]
   ls = LoopSet(:LoopVectorization)
-  inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, l1, l2, l3, nt = UNROLL
-  set_hw!(ls, rs, rc, cls, l1, l2, l3)
+  inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, nt = UNROLL
+  set_hw!(ls, rs, rc, cls)
   ls.vector_width = W
   ls.isbroadcast = isbroadcast
   arsv = Vector{ArrayRefStruct}(undef, length(ARFsv))
@@ -990,11 +990,11 @@ Execute an `@turbo` block. The block's code is represented via the arguments:
   post = hoist_constant_memory_accesses!(ls)
   # q = @show(avx_body(ls, var"#UNROLL#")); post === ls.preamble ? q : Expr(:block, q, post)
   q = if (last(var"#UNROLL#") > 1) && length(var"#LPSYM#") == length(ls.loops)
-    inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, l1, l2, l3, nt = var"#UNROLL#"
+    inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, nt = var"#UNROLL#"
     # wrap in `var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#"` in `Expr` to homogenize types
     avx_threads_expr(
       ls,
-      (inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, l1, l2, l3, one(UInt)),
+      (inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, one(UInt)),
       nt,
       :(Val{$(var"#OPS#")}()),
       :(Val{$(var"#ARF#")}()),

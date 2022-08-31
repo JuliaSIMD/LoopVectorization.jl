@@ -31,9 +31,6 @@ function matmul_params(
     rs,
     rc,
     cls,
-    Int(cache_size(StaticInt(1))),
-    Int(cache_size(StaticInt(2))),
-    Int(cache_size(StaticInt(3))),
   )
   if N ≢ nothing
     nloop = GEMMLOOPSET.loops[1]

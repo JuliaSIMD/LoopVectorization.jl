@@ -420,7 +420,7 @@ function thread_one_loops_expr(
   valid_thread_loop::Vector{Bool},
   ntmax::UInt,
   c::Float64,
-  UNROLL::Tuple{Bool,Int8,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt},
+  UNROLL::Tuple{Bool,Int8,Int8,Int8,Bool,Int,Int,Int,Int,UInt},
   OPS::Expr,
   ARF::Expr,
   AM::Expr,
@@ -615,7 +615,7 @@ function thread_two_loops_expr(
   valid_thread_loop::Vector{Bool},
   ntmax::UInt,
   c::Float64,
-  UNROLL::Tuple{Bool,Int8,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt},
+  UNROLL::Tuple{Bool,Int8,Int8,Int8,Bool,Int,Int,Int,Int,UInt},
   OPS::Expr,
   ARF::Expr,
   AM::Expr,
@@ -877,7 +877,7 @@ function valid_thread_loops(ls::LoopSet)
 end
 function avx_threads_expr(
   ls::LoopSet,
-  UNROLL::Tuple{Bool,Int8,Int8,Int8,Bool,Int,Int,Int,Int,Int,Int,Int,UInt},
+  UNROLL::Tuple{Bool,Int8,Int8,Int8,Bool,Int,Int,Int,Int,UInt},
   nt::UInt,
   OPS::Expr,
   ARF::Expr,

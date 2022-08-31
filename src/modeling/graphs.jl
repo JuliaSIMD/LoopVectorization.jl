@@ -451,7 +451,6 @@ mutable struct LoopSet
   register_size::Int
   register_count::Int
   cache_linesize::Int
-  cache_size::Tuple{Int,Int,Int}
   ureduct::Int
   equalarraydims::Vector{Tuple{Vector{Symbol},Vector{Int}}}
   omop::OffsetLoadCollection
@@ -499,11 +498,11 @@ function save_tilecost!(ls::LoopSet)
   end
   # ls.reg_pres[5,1] = ls.reg_pres[5,2]
 end
-function set_hw!(ls::LoopSet, rs::Int, rc::Int, cls::Int, l1::Int, l2::Int, l3::Int)
+function set_hw!(ls::LoopSet, rs::Int, rc::Int, cls::Int)
   ls.register_size = rs
   ls.register_count = rc
   ls.cache_linesize = cls
-  ls.cache_size = (l1, l2, l3)
+  # ls.cache_size = (l1, l2, l3)
   # ls.opmask_register[] = omr
   nothing
 end
@@ -514,16 +513,12 @@ function set_hw!(ls::LoopSet)
     ls,
     Int(register_size()),
     Int(available_registers()),
-    Int(cache_linesize()),
-    Int(cache_size(StaticInt(1))),
-    Int(cache_size(StaticInt(2))),
-    Int(cache_size(StaticInt(3))),
+    Int(cache_linesize())
   )
 end
 reg_size(ls::LoopSet) = ls.register_size
 reg_count(ls::LoopSet) = ls.register_count
 cache_lnsze(ls::LoopSet) = ls.cache_linesize
-cache_sze(ls::LoopSet) = ls.cache_size
 
 pushprepreamble!(ls::LoopSet, ex) = push!(ls.prepreamble.args, ex)
 function pushpreamble!(ls::LoopSet, op::Operation, v::Symbol)
@@ -608,7 +603,6 @@ function LoopSet(mod::Symbol)
   ls.register_size = 0
   ls.register_count = 0
   ls.cache_linesize = 0
-  ls.cache_size = (0, 0, 0)
   ls.ureduct = -1
   ls.equalarraydims = Tuple{Vector{Symbol},Vector{Int}}[]
   ls.omop = OffsetLoadCollection()
