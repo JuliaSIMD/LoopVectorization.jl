@@ -1,4 +1,5 @@
 using Test
+using Pkg
 using LoopVectorization
 
 const var"@_avx" = LoopVectorization.var"@_turbo"
