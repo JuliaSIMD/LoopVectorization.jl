@@ -38,6 +38,7 @@ jobs:
           - part3
           - part4
           - part5
+          - part6
     steps:
       - uses: actions/checkout@v2
       - uses: julia-actions/setup-julia@v1
