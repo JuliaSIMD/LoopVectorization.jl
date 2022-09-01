@@ -9,7 +9,7 @@ function filter2davx!(out::AbstractMatrix, A::AbstractMatrix, kern::AbstractMatr
     @turbo for J in CartesianIndices(out)
         tmp = zero(eltype(out))
         for I ∈ CartesianIndices(kern)
-            tmp += A[I + J] * kern[I]
+            tmp += A[I + J - 1] * kern[I]
         end
         out[J] = tmp
     end
