@@ -108,7 +108,7 @@ const START_TIME = time()
   @time if LOOPVECTORIZATION_TEST == "all" || LOOPVECTORIZATION_TEST == "part6"
     cproj = Base.active_project()
     precompiledir = joinpath(@__DIR__, "precompile")
-    Pkg.activate(precompiledir)
+    Pkg.activate(joinpath(precompiledir, "LVUser"))
     @time include(joinpath(precompiledir, "precompile.jl"))
     Pkg.activate(cproj)
   end
