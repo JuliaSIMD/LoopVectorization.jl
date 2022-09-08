@@ -528,10 +528,10 @@ function thread_one_loops_expr(
           var"#nrem#thread#0#" -= var"#nrequest#"
         end
       else# eliminate undef var errors that the compiler should be able to figure out are unreachable, but doesn't
-        var"#torelease#tuple#" = (zero(PolyesterWeave.worker_type()),)
+        var"#torelease#tuple#" = (zero(UInt),)
         var"#threads#tuple#" = (
           PolyesterWeave.UnsignedIteratorEarlyStop(
-            zero(PolyesterWeave.worker_type()),
+            zero(UInt),
             0x00000000,
           ),
         )
@@ -807,9 +807,9 @@ function thread_two_loops_expr(
           end
         end
       else# eliminate undef var errors that the compiler should be able to figure out are unreachable, but doesn't
-        var"#torelease#tuple#" = (zero(PolyesterWeave.worker_type()),)
+        var"#torelease#tuple#" = (zero(UInt),)
         var"#threads#tuple#" = PolyesterWeave.UnsignedIteratorEarlyStop(
-          zero(PolyesterWeave.worker_type()),
+          zero(UInt),
           0x00000000,
         )
       end
