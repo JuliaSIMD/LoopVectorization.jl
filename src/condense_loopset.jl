@@ -1006,7 +1006,12 @@ function setup_call(
     warncheckarg > 0 && push!(warning.args, :(maxlog = $warncheckarg))
     argfailure = Expr(:block, warning, argfailure)
   end
-  pushprepreamble!(ls, Expr(:if, Expr(:&&, check_args_call(ls), Expr(:||, !safe, check_avx_safe(ls))), call, argfailure))
+  call_check = if safe
+    Expr(:&&, check_args_call(ls), check_avx_safe(ls))
+  else
+    check_args_call(ls)
+  end
+  pushprepreamble!(ls, Expr(:if, call_check, call, argfailure))
   prepend_lnns!(ls.prepreamble, lnns)
   return ls.prepreamble
 end
