@@ -886,17 +886,30 @@ function check_args_call(ls::LoopSet)
 end
 
 """
-    check_avx_safe(ls::LoopSet)
+  can_turbo(f::Function, ::Val{NARGS})
 
-Returns an expression of the form `true && can_avx(op1) && can_avx(op2) && ...`
+Check whether a given function with a specified number of arguments
+can be used inside a `@turbo` loop.
 """
-function check_avx_safe(ls::LoopSet)
+function can_turbo(f::F, ::Val{NARGS})::Bool where {F,NARGS}
+  promoted_op = Base.promote_op(f, ntuple(Returns(Vec{2,Int}), Val(NARGS))...)
+  return promoted_op !== Union{}
+end
+
+"""
+    check_turbo_safe(ls::LoopSet)
+
+Returns an expression of the form `true && can_turbo(op1) && can_turbo(op2) && ...`
+"""
+function check_turbo_safe(ls::LoopSet)
   q = Expr(:&&, true)
   last = q
   for op in operations(ls)
     iscompute(op) || continue
     c = callexpr(op.instruction)
-    pushfirst!(c.args, ArrayInterface.can_avx)
+    nargs = length(op.dependencies)
+    push!(c.args, Val(nargs))
+    pushfirst!(c.args, can_turbo)
     new_last = Expr(:&&, c)
     push!(last.args, new_last)
     last = new_last
@@ -1007,7 +1020,7 @@ function setup_call(
     argfailure = Expr(:block, warning, argfailure)
   end
   call_check = if safe
-    Expr(:&&, check_args_call(ls), check_avx_safe(ls))
+    Expr(:&&, check_args_call(ls), check_turbo_safe(ls))
   else
     check_args_call(ls)
   end
