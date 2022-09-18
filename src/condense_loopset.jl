@@ -605,6 +605,8 @@ function split_ifelse!(
   k::Int,
   inlineu₁u₂::Tuple{Bool,Int8,Int8,Int8},
   thread::UInt,
+  warncheckarg::Int,
+  safe::Bool,
   debug::Bool,
 )
   roots[k] = false
@@ -662,6 +664,8 @@ function split_ifelse!(
         copy(extra_args),
         inlineu₁u₂,
         thread,
+        warncheckarg,
+        safe,
         debug,
       ))
     else
@@ -673,6 +677,8 @@ function split_ifelse!(
         extra_args,
         inlineu₁u₂,
         thread,
+        warncheckarg,
+        safe,
         debug,
       ))
     end
@@ -685,6 +691,8 @@ function generate_call(
   ls::LoopSet,
   inlineu₁u₂::Tuple{Bool,Int8,Int8,Int8},
   thread::UInt,
+  warncheckarg::Int,
+  safe::Bool,
   debug::Bool,
 )
   extra_args = Expr(:tuple)
@@ -698,6 +706,8 @@ function generate_call(
     extra_args,
     inlineu₁u₂,
     thread,
+    warncheckarg,
+    safe,
     debug,
   )
 end
@@ -709,6 +719,8 @@ function generate_call_split(
   extra_args::Expr,
   inlineu₁u₂::Tuple{Bool,Int8,Int8,Int8},
   thread::UInt,
+  warncheckarg::Int,
+  safe::Bool,
   debug::Bool,
 )
   for (k, op) ∈ enumerate(operations(ls))
@@ -725,6 +737,8 @@ function generate_call_split(
         k,
         inlineu₁u₂,
         thread,
+        warncheckarg,
+        safe,
         debug,
       )
     end
@@ -737,6 +751,8 @@ function generate_call_split(
     extra_args,
     inlineu₁u₂,
     thread,
+    warncheckarg,
+    safe,
     debug,
   )
 end
@@ -750,6 +766,8 @@ function generate_call_types(
   extra_args::Expr,
   (inline, u₁, u₂, v)::Tuple{Bool,Int8,Int8,Int8},
   thread::UInt,
+  warncheckarg::Int,
+  safe::Bool,
   debug::Bool,
 )
   # good place to check for split  
@@ -782,7 +800,7 @@ function generate_call_types(
   loop_syms = tuple_expr(QuoteNode, ls.loopsymbols)
   func = debug ? lv(:_turbo_loopset_debug) : lv(:_turbo_!)
   lbarg = debug ? Expr(:call, :typeof, loop_bounds) : loop_bounds
-  configarg = (inline, u₁, u₂, v, ls.isbroadcast, thread)
+  configarg = (inline, u₁, u₂, v, ls.isbroadcast, thread, warncheckarg, safe)
   unroll_param_tup =
     Expr(:call, lv(:avx_config_val), :(Val{$configarg}()), VECTORWIDTHSYMBOL)
   q = Expr(
@@ -988,7 +1006,7 @@ function setup_call_final(ls::LoopSet, q::Expr)
   return ls.preamble
 end
 function setup_call_debug(ls::LoopSet)
-  generate_call(ls, (false, zero(Int8), zero(Int8), zero(Int8)), zero(UInt), true)
+  generate_call(ls, (false, zero(Int8), zero(Int8), zero(Int8)), zero(UInt), 1, true, true)
 end
 function setup_call(
   ls::LoopSet,
@@ -1010,7 +1028,7 @@ function setup_call(
   # inlining the generated function into the loop preamble.
   lnns = extract_all_lnns(q)
   pushfirst!(lnns, source)
-  call = generate_call(ls, (inline, u₁, u₂, v), thread % UInt, false)
+  call = generate_call(ls, (inline, u₁, u₂, v), thread % UInt, 1, true, false)
   call = check_empty ? check_if_empty(ls, call) : call
   argfailure = make_crashy(make_fast(q))
   if warncheckarg ≠ 0
