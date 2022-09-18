@@ -558,9 +558,9 @@ end
   ::StaticInt{NT},
   ::StaticInt{CLS},
 ) where {CNFARG,W,RS,AR,CLS,NT}
-  inline, u₁, u₂, v, BROADCAST, thread = CNFARG
+  inline, u₁, u₂, v, BROADCAST, thread, warncheckarg, safe = CNFARG
   nt = min(thread % UInt, NT % UInt)
-  t = Expr(:tuple, inline, u₁, u₂, v, BROADCAST, W, RS, AR, CLS, nt)
+  t = Expr(:tuple, inline, u₁, u₂, v, BROADCAST, W, RS, AR, CLS, nt, warncheckarg, safe)
   length(CNFARG) == 7 && push!(t.args, CNFARG[7])
   Expr(:call, Expr(:curly, :Val, t))
 end

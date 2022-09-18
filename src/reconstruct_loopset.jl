@@ -874,7 +874,7 @@ function avx_loopset!(
 end
 function avx_body(
   ls::LoopSet,
-  UNROLL::Tuple{Bool,Int8,Int8,Int8,Bool,Int,Int,Int,Int,UInt},
+  UNROLL::Tuple{Bool,Int8,Int8,Int8,Bool,Int,Int,Int,Int,UInt,Int,Bool},
 )
   inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, nt = UNROLL
   q =
@@ -916,7 +916,7 @@ function _turbo_loopset(
   @nospecialize(LPSYMsv),
   LBsv::Core.SimpleVector,
   vargs::Core.SimpleVector,
-  UNROLL::Tuple{Bool,Int8,Int8,Int8,Bool,Int,Int,Int,Int,UInt},
+  UNROLL::Tuple{Bool,Int8,Int8,Int8,Bool,Int,Int,Int,Int,UInt,Int,Bool},
 )
   nops = length(OPSsv) ÷ 3
   instr = Instruction[Instruction(OPSsv[3i+1], OPSsv[3i+2]) for i ∈ 0:nops-1]
