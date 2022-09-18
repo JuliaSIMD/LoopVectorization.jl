@@ -22,6 +22,8 @@ const START_TIME = time()
 
     @time include("can_avx.jl")
 
+    @time include("safe_turbo.jl")
+
     @time include("fallback.jl")
 
     @time include("utils.jl")
