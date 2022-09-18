@@ -876,11 +876,30 @@ Returns true if the element type is supported.
 @inline check_device(::ArrayInterface.CPUTuple) = true
 @inline check_device(x) = false
 
-function check_args_call(ls::LoopSet, safe::Bool)
+function check_args_call(ls::LoopSet)
   q = Expr(:call, lv(:check_args))
   append!(q.args, ls.includedactualarrays)
   for r ∈ ls.outer_reductions
     push!(q.args, Expr(:call, :typeof, name(ls.operations[r])))
+  end
+  q
+end
+
+"""
+    check_avx_safe(ls::LoopSet)
+
+Returns an expression of the form `true && can_avx(op1) && can_avx(op2) && ...`
+"""
+function check_avx_safe(ls::LoopSet)
+  q = Expr(:&&, true)
+  last = q
+  for op in operations(ls)
+    iscompute(op) || continue
+    c = callexpr(op.instruction)
+    pushfirst!(c.args, ArrayInterface.can_avx)
+    new_last = Expr(:&&, c)
+    push!(last.args, new_last)
+    last = new_last
   end
   q
 end
@@ -987,7 +1006,8 @@ function setup_call(
     warncheckarg > 0 && push!(warning.args, :(maxlog = $warncheckarg))
     argfailure = Expr(:block, warning, argfailure)
   end
-  pushprepreamble!(ls, Expr(:if, check_args_call(ls, safe), call, argfailure))
+  println(check_avx_safe(ls))
+  pushprepreamble!(ls, Expr(:if, Expr(:&&, check_args_call(ls), Expr(:||, !safe, check_avx_safe(ls))), call, argfailure))
   prepend_lnns!(ls.prepreamble, lnns)
   return ls.prepreamble
 end
