@@ -876,7 +876,7 @@ Returns true if the element type is supported.
 @inline check_device(::ArrayInterface.CPUTuple) = true
 @inline check_device(x) = false
 
-function check_args_call(ls::LoopSet)
+function check_args_call(ls::LoopSet, safe::Bool)
   q = Expr(:call, lv(:check_args))
   append!(q.args, ls.includedactualarrays)
   for r ∈ ls.outer_reductions
@@ -969,6 +969,7 @@ function setup_call(
   v::Int8,
   thread::Int,
   warncheckarg::Int,
+  safe::Bool,
 )
   # We outline/inline at the macro level by creating/not creating an anonymous function.
   # The old API instead was based on inlining or not inline the generated function, but
@@ -986,7 +987,7 @@ function setup_call(
     warncheckarg > 0 && push!(warning.args, :(maxlog = $warncheckarg))
     argfailure = Expr(:block, warning, argfailure)
   end
-  pushprepreamble!(ls, Expr(:if, check_args_call(ls), call, argfailure))
+  pushprepreamble!(ls, Expr(:if, check_args_call(ls, safe), call, argfailure))
   prepend_lnns!(ls.prepreamble, lnns)
   return ls.prepreamble
 end
