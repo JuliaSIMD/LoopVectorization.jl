@@ -548,7 +548,7 @@ end
   # we have an N dimensional loop.
   # need to construct the LoopSet
   ls = LoopSet(Mod)
-  inline, u₁, u₂, v, isbroadcast, _, rs, rc, cls, threads, warncheckarg = UNROLL
+  inline, u₁, u₂, v, isbroadcast, _, rs, rc, cls, threads, warncheckarg, safe = UNROLL
   set_hw!(ls, rs, rc, cls)
   ls.isbroadcast = isbroadcast # maybe set `false` in a DiffEq-like `@..` macro
   loopsyms = [gensym!(ls, "n") for _ ∈ 1:N]
@@ -571,6 +571,7 @@ end
     v,
     threads % Int,
     warncheckarg,
+    safe,
   )
   Expr(:block, Expr(:meta, :inline), sc, :dest)
 end
@@ -584,7 +585,7 @@ end
   # we have an N dimensional loop.
   # need to construct the LoopSet
   ls = LoopSet(Mod)
-  inline, u₁, u₂, v, isbroadcast, _, rs, rc, cls, threads, warncheckarg = UNROLL
+  inline, u₁, u₂, v, isbroadcast, _, rs, rc, cls, threads, warncheckarg, safe = UNROLL
   set_hw!(ls, rs, rc, cls)
   ls.isbroadcast = isbroadcast # maybe set `false` in a DiffEq-like `@..` macro
   loopsyms = [gensym!(ls, "n") for _ ∈ 1:N]
@@ -614,6 +615,7 @@ end
       v,
       threads % Int,
       warncheckarg,
+      safe,
     ),
     :dest′,
   )
