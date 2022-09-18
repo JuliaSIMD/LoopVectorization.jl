@@ -628,7 +628,7 @@ end
   ::Val{UNROLL},
   ::Val{dontbc}
 ) where {T<:NativeTypes,N,T2<:Number,Mod,UNROLL,dontbc}
-  inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, threads = UNROLL
+  inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, threads, warncheckarg, safe = UNROLL
   quote
     $(Expr(:meta, :inline))
     arg = T(first(bc.args))
@@ -648,7 +648,7 @@ end
   ::Val{UNROLL},
   ::Val{dontbc}
 ) where {T<:NativeTypes,N,A<:AbstractArray{T,N},T2<:Number,Mod,UNROLL,dontbc}
-  inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, threads = UNROLL
+  inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, threads, warncheckarg, safe = UNROLL
   quote
     $(Expr(:meta, :inline))
     arg = T(first(bc.args))
