@@ -907,7 +907,7 @@ function check_turbo_safe(ls::LoopSet)
   for op in operations(ls)
     iscompute(op) || continue
     c = callexpr(op.instruction)
-    nargs = length(op.dependencies)
+    nargs = length(parents(op))
     push!(c.args, Val(nargs))
     pushfirst!(c.args, can_turbo)
     new_last = Expr(:&&, c)
