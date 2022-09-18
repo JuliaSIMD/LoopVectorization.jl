@@ -154,7 +154,7 @@ function process_args(
   v::Int8 = zero(Int8),
   threads::Int = 1,
   warncheckarg::Int = 1,
-  safe::Bool = true,
+  safe::Bool = false,
 )
   for arg ∈ args
     inline, check_empty, u₁, u₂, v, threads, warncheckarg, safe =
