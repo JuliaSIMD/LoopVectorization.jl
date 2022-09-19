@@ -16,6 +16,7 @@
   # `gamma` can be AVX'd, but `can_turbo` can:
   f(x) = exp(x)
 
+  @test LoopVectorization.ArrayInterface.can_avx(exp)
   @test !LoopVectorization.ArrayInterface.can_avx(f)
   @test LoopVectorization.can_turbo(exp, Val(1))
   @test LoopVectorization.can_turbo(f, Val(1))
