@@ -902,7 +902,8 @@ function check_args_call(ls::LoopSet)
   end
   q
 end
-
+struct RetVec2Int end
+(::RetVec2Int)(_) = Vec{2,Int}
 """
   can_turbo(f::Function, ::Val{NARGS})
 
