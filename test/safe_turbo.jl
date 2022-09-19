@@ -3,6 +3,7 @@
 
   @testset "Test `can_turbo`" begin
     import SpecialFunctions
+    using LoopVectorization
 
     # All methods, both `can_avx` and `can_turbo`, should recognize that
     # `gamma` is not AVX-able
@@ -29,6 +30,7 @@
 
   @testset "Test `@turbo` with `safe=true`" begin
     import SpecialFunctions
+    using LoopVectorization
 
     x = Float32.(1.05:0.1:10)
     y = Float32.(0.55:0.1:10.5)
