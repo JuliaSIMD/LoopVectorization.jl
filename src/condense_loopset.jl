@@ -911,7 +911,7 @@ Check whether a given function with a specified number of arguments
 can be used inside a `@turbo` loop.
 """
 function can_turbo(f::F, ::Val{NARGS})::Bool where {F,NARGS}
-  promoted_op = Base.promote_op(f, ntuple(Returns(Vec{2,Int}), Val(NARGS))...)
+  promoted_op = Base.promote_op(f, ntuple(RetVec2Int(), Val(NARGS))...)
   return promoted_op !== Union{}
 end
 
