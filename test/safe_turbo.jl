@@ -9,7 +9,7 @@
     # `gamma` is not AVX-able
     f(x) = SpecialFunctions.gamma(x)
 
-    @test !LoopVectorization.can_avx(SpecialFunctions.gamma)
+    @test !LoopVectorization.ArrayInterface.can_avx(SpecialFunctions.gamma)
     @test !LoopVectorization.can_turbo(SpecialFunctions.gamma, Val(1))
     @test !LoopVectorization.can_turbo(f, Val(1))
 
@@ -17,7 +17,7 @@
     # `gamma` can be AVX'd, but `can_turbo` can:
     f(x) = exp(x)
 
-    @test !LoopVectorization.can_avx(f)
+    @test !LoopVectorization.ArrayInterface.can_avx(f)
     @test LoopVectorization.can_turbo(exp, Val(1))
     @test LoopVectorization.can_turbo(f, Val(1))
 
