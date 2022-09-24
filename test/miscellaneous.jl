@@ -887,7 +887,13 @@ end
     end
     x
   end
-
+function powfastmath!(x::Vector{T}) where T
+  @turbo for i = 1:length(x)
+    xv = x[i]
+    @fastmath x[i] = 1/(xv^2) 
+  end
+  x
+end
   @inline ninereturns(x) = (0.25x, 0.5x, 0.75, 1.0x, 1.25x, 1.5x, 1.75x, 2.0x, 2.25x)
   function manyreturntest(x)
     s = zero(eltype(x))
@@ -1215,7 +1221,11 @@ end
 
     @test all(isequal(81), powcseliteral!(E0))
     @test all(isequal(81), powcsesymbol!(E3))
-
+    let
+      x = rand(T,10) .+ T(0.5);
+      r = @. inv(x^2)
+      @test r ≈ powfastmath!(x)
+    end
 
     @test isapprox(
       maybe_const_issue144!(
