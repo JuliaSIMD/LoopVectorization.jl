@@ -460,7 +460,12 @@ function add_compute!(
   args = @view(ex.args[2:end])
   if (instr.instr === :pow_fast || instr.instr === :(^)) && length(args) == 2
     arg2 = args[2]
-    arg2 isa Number && return add_pow!(ls, var, args[1], arg2, elementbytes, position)
+    if arg2 isa Number
+      return add_pow!(ls, var, args[1], arg2, elementbytes, position)
+    elseif arg2 isa Val
+      arg2num = Int(static(ex.args[3]))::Int
+      return add_pow!(ls, var, args[1], arg2num, elementbytes, position)
+    end
   end
   vparents = Operation[]
   deps = Symbol[]
