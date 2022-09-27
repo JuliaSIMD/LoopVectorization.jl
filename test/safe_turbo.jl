@@ -1,3 +1,7 @@
+using LoopVectorization
+using Test
+import SpecialFunctions
+
 _f1(a) = SpecialFunctions.gamma(a)
 _f2(a) = exp(a)
 _f3(a, b) = a + SpecialFunctions.gamma(b)
@@ -7,9 +11,6 @@ _f6(a, b) = a + SpecialFunctions.gamma(b)
 
 @testset "Safe @turbo" begin
 
-  using LoopVectorization
-  using Test
-  import SpecialFunctions
 
   # All methods, both `can_avx` and `can_turbo`, should recognize that
   # `gamma` is not AVX-able
