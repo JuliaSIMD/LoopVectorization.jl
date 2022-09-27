@@ -52,12 +52,13 @@ function substitute_broadcast(
   v::Int8,
   threads::Int,
   warncheckarg::Int,
+  safe::Bool,
 )
   ci = first(Meta.lower(LoopVectorization, q).args).code
   nargs = length(ci) - 1
   ex = Expr(:block)
   syms = [gensym() for _ ∈ 1:nargs]
-  configarg = (inline, u₁, u₂, v, true, threads, warncheckarg)
+  configarg = (inline, u₁, u₂, v, true, threads, warncheckarg, safe)
   unroll_param_tup = Expr(:call, lv(:avx_config_val), :(Val{$configarg}()), staticexpr(0))
   for n ∈ 1:nargs
     ciₙ = ci[n]
@@ -102,6 +103,7 @@ function check_macro_kwarg(
   v::Int8,
   threads::Int,
   warncheckarg::Int,
+  safe::Bool,
 )
   ((arg.head === :(=)) && (length(arg.args) == 2)) ||
     throw(ArgumentError("macro kwarg should be of the form `argname = value`."))
@@ -132,6 +134,8 @@ function check_macro_kwarg(
     end
   elseif kw === :warn_check_args
     warncheckarg = convert(Int, value)::Int
+  elseif kw === :safe
+    safe = convert(Bool, value)
   else
     throw(
       ArgumentError(
@@ -139,7 +143,7 @@ function check_macro_kwarg(
       ),
     )
   end
-  inline, check_empty, u₁, u₂, v, threads, warncheckarg
+  inline, check_empty, u₁, u₂, v, threads, warncheckarg, safe
 end
 function process_args(
   args;
@@ -150,12 +154,13 @@ function process_args(
   v::Int8 = zero(Int8),
   threads::Int = 1,
   warncheckarg::Int = 1,
+  safe::Bool = false,
 )
   for arg ∈ args
-    inline, check_empty, u₁, u₂, v, threads, warncheckarg =
-      check_macro_kwarg(arg, inline, check_empty, u₁, u₂, v, threads, warncheckarg)
+    inline, check_empty, u₁, u₂, v, threads, warncheckarg, safe =
+      check_macro_kwarg(arg, inline, check_empty, u₁, u₂, v, threads, warncheckarg, safe)
   end
-  inline, check_empty, u₁, u₂, v, threads, warncheckarg
+  inline, check_empty, u₁, u₂, v, threads, warncheckarg, safe
 end
 # check if the body of loop is a block, if not convert it to a block issue#395
 # and check if the range of loop is an enumerate, if it is replace it, issue#393
@@ -225,12 +230,12 @@ function turbo_macro(mod, src, q, args...)
   q = macroexpand(mod, q)
   if q.head === :for
     ls = LoopSet(q, mod)
-    inline, check_empty, u₁, u₂, v, threads, warncheckarg = process_args(args)
-    esc(setup_call(ls, q, src, inline, check_empty, u₁, u₂, v, threads, warncheckarg))
+    inline, check_empty, u₁, u₂, v, threads, warncheckarg, safe = process_args(args)
+    esc(setup_call(ls, q, src, inline, check_empty, u₁, u₂, v, threads, warncheckarg, safe))
   else
-    inline, check_empty, u₁, u₂, v, threads, warncheckarg =
+    inline, check_empty, u₁, u₂, v, threads, warncheckarg, safe =
       process_args(args, inline = true)
-    substitute_broadcast(q, Symbol(mod), inline, u₁, u₂, v, threads, warncheckarg)
+    substitute_broadcast(q, Symbol(mod), inline, u₁, u₂, v, threads, warncheckarg, safe)
   end
 end
 """
@@ -367,7 +372,7 @@ macro _turbo(arg, q)
   @assert q.head === :for
   q = macroexpand(__module__, q)
   inline, check_empty, u₁, u₂, v =
-    check_macro_kwarg(arg, false, false, zero(Int8), zero(Int8), zero(Int8), 1, 0)
+    check_macro_kwarg(arg, false, false, zero(Int8), zero(Int8), zero(Int8), 1, 0, true)
   ls = LoopSet(q, __module__)
   set_hw!(ls)
   def_outer_reduct_types!(ls)

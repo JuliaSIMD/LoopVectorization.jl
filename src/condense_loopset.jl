@@ -558,9 +558,9 @@ end
   ::StaticInt{NT},
   ::StaticInt{CLS},
 ) where {CNFARG,W,RS,AR,CLS,NT}
-  inline, u₁, u₂, v, BROADCAST, thread = CNFARG
+  inline, u₁, u₂, v, BROADCAST, thread, warncheckarg, safe = CNFARG
   nt = min(thread % UInt, NT % UInt)
-  t = Expr(:tuple, inline, u₁, u₂, v, BROADCAST, W, RS, AR, CLS, nt)
+  t = Expr(:tuple, inline, u₁, u₂, v, BROADCAST, W, RS, AR, CLS, nt, warncheckarg, safe)
   length(CNFARG) == 7 && push!(t.args, CNFARG[7])
   Expr(:call, Expr(:curly, :Val, t))
 end
@@ -605,6 +605,8 @@ function split_ifelse!(
   k::Int,
   inlineu₁u₂::Tuple{Bool,Int8,Int8,Int8},
   thread::UInt,
+  warncheckarg::Int,
+  safe::Bool,
   debug::Bool,
 )
   roots[k] = false
@@ -662,6 +664,8 @@ function split_ifelse!(
         copy(extra_args),
         inlineu₁u₂,
         thread,
+        warncheckarg,
+        safe,
         debug,
       ))
     else
@@ -673,6 +677,8 @@ function split_ifelse!(
         extra_args,
         inlineu₁u₂,
         thread,
+        warncheckarg,
+        safe,
         debug,
       ))
     end
@@ -685,6 +691,8 @@ function generate_call(
   ls::LoopSet,
   inlineu₁u₂::Tuple{Bool,Int8,Int8,Int8},
   thread::UInt,
+  warncheckarg::Int,
+  safe::Bool,
   debug::Bool,
 )
   extra_args = Expr(:tuple)
@@ -698,6 +706,8 @@ function generate_call(
     extra_args,
     inlineu₁u₂,
     thread,
+    warncheckarg,
+    safe,
     debug,
   )
 end
@@ -709,6 +719,8 @@ function generate_call_split(
   extra_args::Expr,
   inlineu₁u₂::Tuple{Bool,Int8,Int8,Int8},
   thread::UInt,
+  warncheckarg::Int,
+  safe::Bool,
   debug::Bool,
 )
   for (k, op) ∈ enumerate(operations(ls))
@@ -725,6 +737,8 @@ function generate_call_split(
         k,
         inlineu₁u₂,
         thread,
+        warncheckarg,
+        safe,
         debug,
       )
     end
@@ -737,6 +751,8 @@ function generate_call_split(
     extra_args,
     inlineu₁u₂,
     thread,
+    warncheckarg,
+    safe,
     debug,
   )
 end
@@ -750,6 +766,8 @@ function generate_call_types(
   extra_args::Expr,
   (inline, u₁, u₂, v)::Tuple{Bool,Int8,Int8,Int8},
   thread::UInt,
+  warncheckarg::Int,
+  safe::Bool,
   debug::Bool,
 )
   # good place to check for split  
@@ -782,7 +800,7 @@ function generate_call_types(
   loop_syms = tuple_expr(QuoteNode, ls.loopsymbols)
   func = debug ? lv(:_turbo_loopset_debug) : lv(:_turbo_!)
   lbarg = debug ? Expr(:call, :typeof, loop_bounds) : loop_bounds
-  configarg = (inline, u₁, u₂, v, ls.isbroadcast, thread)
+  configarg = (inline, u₁, u₂, v, ls.isbroadcast, thread, warncheckarg, safe)
   unroll_param_tup =
     Expr(:call, lv(:avx_config_val), :(Val{$configarg}()), VECTORWIDTHSYMBOL)
   q = Expr(
@@ -884,6 +902,39 @@ function check_args_call(ls::LoopSet)
   end
   q
 end
+struct RetVec2Int end
+(::RetVec2Int)(_) = Vec{2,Int}
+"""
+  can_turbo(f::Function, ::Val{NARGS})
+
+Check whether a given function with a specified number of arguments
+can be used inside a `@turbo` loop.
+"""
+function can_turbo(f::F, ::Val{NARGS})::Bool where {F,NARGS}
+  promoted_op = Base.promote_op(f, ntuple(RetVec2Int(), Val(NARGS))...)
+  return promoted_op !== Union{}
+end
+
+"""
+    check_turbo_safe(ls::LoopSet)
+
+Returns an expression of the form `true && can_turbo(op1) && can_turbo(op2) && ...`
+"""
+function check_turbo_safe(ls::LoopSet)
+  q = Expr(:&&, true)
+  last = q
+  for op in operations(ls)
+    iscompute(op) || continue
+    c = callexpr(op.instruction)
+    nargs = length(parents(op))
+    push!(c.args, Val(nargs))
+    pushfirst!(c.args, can_turbo)
+    new_last = Expr(:&&, c)
+    push!(last.args, new_last)
+    last = new_last
+  end
+  q
+end
 
 make_fast(q) =
   Expr(:macrocall, Symbol("@fastmath"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), q)
@@ -956,7 +1007,7 @@ function setup_call_final(ls::LoopSet, q::Expr)
   return ls.preamble
 end
 function setup_call_debug(ls::LoopSet)
-  generate_call(ls, (false, zero(Int8), zero(Int8), zero(Int8)), zero(UInt), true)
+  generate_call(ls, (false, zero(Int8), zero(Int8), zero(Int8)), zero(UInt), 1, true, true)
 end
 function setup_call(
   ls::LoopSet,
@@ -969,6 +1020,7 @@ function setup_call(
   v::Int8,
   thread::Int,
   warncheckarg::Int,
+  safe::Bool,
 )
   # We outline/inline at the macro level by creating/not creating an anonymous function.
   # The old API instead was based on inlining or not inline the generated function, but
@@ -977,7 +1029,7 @@ function setup_call(
   # inlining the generated function into the loop preamble.
   lnns = extract_all_lnns(q)
   pushfirst!(lnns, source)
-  call = generate_call(ls, (inline, u₁, u₂, v), thread % UInt, false)
+  call = generate_call(ls, (inline, u₁, u₂, v), thread % UInt, 1, true, false)
   call = check_empty ? check_if_empty(ls, call) : call
   argfailure = make_crashy(make_fast(q))
   if warncheckarg ≠ 0
@@ -986,7 +1038,12 @@ function setup_call(
     warncheckarg > 0 && push!(warning.args, :(maxlog = $warncheckarg))
     argfailure = Expr(:block, warning, argfailure)
   end
-  pushprepreamble!(ls, Expr(:if, check_args_call(ls), call, argfailure))
+  call_check = if safe
+    Expr(:&&, check_args_call(ls), check_turbo_safe(ls))
+  else
+    check_args_call(ls)
+  end
+  pushprepreamble!(ls, Expr(:if, call_check, call, argfailure))
   prepend_lnns!(ls.prepreamble, lnns)
   return ls.prepreamble
 end

@@ -548,7 +548,7 @@ end
   # we have an N dimensional loop.
   # need to construct the LoopSet
   ls = LoopSet(Mod)
-  inline, u₁, u₂, v, isbroadcast, _, rs, rc, cls, threads, warncheckarg = UNROLL
+  inline, u₁, u₂, v, isbroadcast, _, rs, rc, cls, threads, warncheckarg, safe = UNROLL
   set_hw!(ls, rs, rc, cls)
   ls.isbroadcast = isbroadcast # maybe set `false` in a DiffEq-like `@..` macro
   loopsyms = [gensym!(ls, "n") for _ ∈ 1:N]
@@ -571,6 +571,7 @@ end
     v,
     threads % Int,
     warncheckarg,
+    safe,
   )
   Expr(:block, Expr(:meta, :inline), sc, :dest)
 end
@@ -584,7 +585,7 @@ end
   # we have an N dimensional loop.
   # need to construct the LoopSet
   ls = LoopSet(Mod)
-  inline, u₁, u₂, v, isbroadcast, _, rs, rc, cls, threads, warncheckarg = UNROLL
+  inline, u₁, u₂, v, isbroadcast, _, rs, rc, cls, threads, warncheckarg, safe = UNROLL
   set_hw!(ls, rs, rc, cls)
   ls.isbroadcast = isbroadcast # maybe set `false` in a DiffEq-like `@..` macro
   loopsyms = [gensym!(ls, "n") for _ ∈ 1:N]
@@ -614,6 +615,7 @@ end
       v,
       threads % Int,
       warncheckarg,
+      safe,
     ),
     :dest′,
   )
@@ -626,7 +628,7 @@ end
   ::Val{UNROLL},
   ::Val{dontbc}
 ) where {T<:NativeTypes,N,T2<:Number,Mod,UNROLL,dontbc}
-  inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, threads = UNROLL
+  inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, threads, warncheckarg, safe = UNROLL
   quote
     $(Expr(:meta, :inline))
     arg = T(first(bc.args))
@@ -646,7 +648,7 @@ end
   ::Val{UNROLL},
   ::Val{dontbc}
 ) where {T<:NativeTypes,N,A<:AbstractArray{T,N},T2<:Number,Mod,UNROLL,dontbc}
-  inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, threads = UNROLL
+  inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, threads, warncheckarg, safe = UNROLL
   quote
     $(Expr(:meta, :inline))
     arg = T(first(bc.args))
@@ -660,8 +662,8 @@ end
     dest′
   end
 end
-@inline function vmaterialize!(dest, bc, ::Val{Mod}, ::Val{Unroll}) where {Mod,Unroll}
-  vmaterialize!(dest, bc, Val{Mod}(), Val{Unroll}(), Val(_dontbc(bc)))
+@inline function vmaterialize!(dest, bc, ::Val{Mod}, ::Val{UNROLL}) where {Mod,UNROLL}
+  vmaterialize!(dest, bc, Val{Mod}(), Val{UNROLL}(), Val(_dontbc(bc)))
 end
 
 @inline function vmaterialize(

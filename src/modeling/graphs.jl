@@ -1283,7 +1283,7 @@ function instruction!(ls::LoopSet, x::Expr)
   instr ∈ keys(COST) && return Instruction(:LoopVectorization, instr)
   # end
   instr = gensym!(ls, "f")
-  pushpreamble!(ls, Expr(:(=), instr, x))
+  pushprepreamble!(ls, Expr(:(=), instr, x))
   Instruction(Symbol(""), instr)
 end
 instruction!(ls::LoopSet, x::Symbol) = instruction(x)
@@ -1481,7 +1481,7 @@ function add_operation!(
     add_comparison!(ls, LHS_sym, RHS, elementbytes, position)
   else
     throw(LoopError("Expression not recognized.", RHS))
-  end
+  end  
 end
 
 function prepare_rhs_for_storage!(
