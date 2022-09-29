@@ -914,6 +914,8 @@ function can_turbo(f::F, ::Val{NARGS})::Bool where {F,NARGS}
   promoted_op = Base.promote_op(f, ntuple(RetVec2Int(), Val(NARGS))...)
   return promoted_op !== Union{}
 end
+can_turbo(::typeof(vfmaddsub), ::Val{3}) = true
+can_turbo(::typeof(vfmsubadd), ::Val{3}) = true
 
 """
     check_turbo_safe(ls::LoopSet)
