@@ -1,4 +1,5 @@
 using LoopVectorization, ArrayInterface, OffsetArrays, Test
+using LoopVectorization: StaticInt
 # T = Float64; r = -1:1;
 # T = Float32; r = -1:1;
 

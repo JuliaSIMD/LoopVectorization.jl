@@ -154,7 +154,7 @@ function process_args(
   v::Int8 = zero(Int8),
   threads::Int = 1,
   warncheckarg::Int = 1,
-  safe::Bool = false,
+  safe::Bool = true,
 )
   for arg ∈ args
     inline, check_empty, u₁, u₂, v, threads, warncheckarg, safe =
@@ -295,6 +295,14 @@ The integer's value indicates the number of threads to use.
 It is clamped to be between `1` and `min(Threads.nthreads(),LoopVectorization.num_cores())`.
 `false` is equivalent to `1`, and `true` is equivalent to `min(Threads.nthreads(),LoopVectorization.num_cores())`.
 
+`safe` (defaults to `true`) will cause `@turbo` to fall back to `@inbounds @fastmath` if `can_turbo` returns false for any of the functions called in the loop. You can disable the associated warning with `warn_check_args=false`.
+
+Setting the keyword argument `warn_check_args=true` (e.g. `@turbo warn_check_args=true for ...`) in a loop or
+broadcast statement will cause it to warn once if `LoopVectorization.check_args` fails and the fallback
+loop is executed instead of the LoopVectorization-optimized loop.
+Setting it to an integer > 0 will warn that many times, while setting it to a negative integer will warn
+an unlimited amount of times. The default is `warn_check_args = 1`. Failure means that there may have been an array with unsupported type, unsupported element types, or (if `safe=true`) a function for which `can_turbo` returned `false`.
+
 `inline` is a Boolean. When `true`, `body` will be directly inlined
 into the function (via a forced-inlining call to `_turbo_!`).
 When `false`, it wont force inlining of the call to `_turbo_!` instead, letting Julia's own inlining engine
@@ -324,12 +332,6 @@ and `@fastmath` is generated. Note that `VectorizationBase` provides functions s
 ignore `@fastmath`, preserving IEEE semantics both within `@turbo` and `@fastmath`.
 `check_args` currently returns false for some wrapper types like `LinearAlgebra.UpperTriangular`, requiring you to
 use their `parent`. Triangular loops aren't yet supported.
-
-Setting the keyword argument `warn_check_args=true` (e.g. `@turbo warn_check_args=true for ...`) in a loop or
-broadcast statement will cause it to warn once if `LoopVectorization.check_args` fails and the fallback
-loop is executed instead of the LoopVectorization-optimized loop.
-Setting it to an integer > 0 will warn that many times, while setting it to a negative integer will warn
-an unlimited amount of times. The default is `warn_check_args = 0`.
 """
 macro turbo(args...)
   turbo_macro(__module__, __source__, last(args), Base.front(args)...)

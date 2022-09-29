@@ -1,3 +1,4 @@
+using LoopVectorization: vpermilps177, vmovshdup, vfmsubadd, vfmaddsub, vmovsldup
 function dot_simd(a::AbstractVector, b::AbstractVector)
   s = zero(eltype(a))
   @fastmath @inbounds @simd for i ∈ eachindex(a)
