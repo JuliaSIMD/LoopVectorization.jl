@@ -1494,7 +1494,7 @@ end
       dest2r = reinterpret(reshape, fT, dest2)
       for d = 1:ndims(src)
         Rpre = CartesianIndices((
-          LoopVectorization.Static(1):LoopVectorization.Static(3),
+          LoopVectorization.StaticInt(1):LoopVectorization.StaticInt(3),
           axes(dest1)[1:d-1]...,
         ))
         Rpost = CartesianIndices(axes(dest1)[d+1:end])

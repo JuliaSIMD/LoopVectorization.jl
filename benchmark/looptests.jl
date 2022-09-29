@@ -13,17 +13,17 @@ end
 Base.size(::SizedOffsetMatrix{<:Any,LR,UR,LC,UC}) where {LR,UR,LC,UC} =
   (UR - LR + 1, UC - LC + 1)
 Base.axes(::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} =
-  (Static{LR}():Static{UR}(), Static{LC}():Static{UC}())
+  (StaticInt{LR}():StaticInt{UR}(), StaticInt{LC}():StaticInt{UC}())
 Base.parent(A::SizedOffsetMatrix) = A.data
 Base.unsafe_convert(::Type{Ptr{T}}, A::SizedOffsetMatrix{T}) where {T} = pointer(A.data)
-ArrayInterface.contiguous_axis(::Type{<:SizedOffsetMatrix}) = Static(1)
-ArrayInterface.contiguous_batch_size(::Type{<:SizedOffsetMatrix}) = Static(0)
-ArrayInterface.stride_rank(::Type{<:SizedOffsetMatrix}) = (Static(1), Static(2))
+ArrayInterface.contiguous_axis(::Type{<:SizedOffsetMatrix}) = StaticInt(1)
+ArrayInterface.contiguous_batch_size(::Type{<:SizedOffsetMatrix}) = StaticInt(0)
+ArrayInterface.stride_rank(::Type{<:SizedOffsetMatrix}) = (StaticInt(1), StaticInt(2))
 function ArrayInterface.strides(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC}
-  (Static{1}(), (Static{UR}() - Static{LR}() + Static{1}()))
+  (StaticInt{1}(), (StaticInt{UR}() - StaticInt{LR}() + StaticInt{1}()))
 end
 ArrayInterface.offsets(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} =
-  (Static{LR}(), Static{LC}())
+  (StaticInt{LR}(), StaticInt{LC}())
 ArrayInterface.parent_type(::Type{<:SizedOffsetMatrix{T}}) where {T} = Matrix{T}
 Base.getindex(A::SizedOffsetMatrix, i, j) =
   LoopVectorization.vload(LoopVectorization.stridedpointer(A), (i, j))

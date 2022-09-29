@@ -331,7 +331,7 @@ end
   ifelse(ier.f(r, y), r, y)
 end
 @inline (ier::IfElseReduced)(x::VecUnroll, y::VecUnroll) =
-  VecUnroll(fmap(ier, getfield(x, :data), getfield(y, :data)))
+  VecUnroll(VectorizationBase.fmap(ier, getfield(x, :data), getfield(y, :data)))
 @inline function (ier::IfElseReduced)(x::AbstractSIMD, y::NativeTypes)
   f = ier.f
   r = VectorizationBase.ifelse_reduce(f, x)
@@ -351,7 +351,7 @@ end
   VectorizationBase.fmap(ier, VectorizationBase.data(a), VectorizationBase.data(b)),
 )
 
-@inline (iec::IfElseCollapser)(a) = VectorizationBase.collapse(IfElseOp(iec.f), a)
+@inline (iec::IfElseCollapser)(a) = VectorizationBase.contract(IfElseOp(iec.f), a, StaticInt{1}())
 @inline (iec::IfElseCollapser)(a, ::StaticInt{C}) where {C} =
   VectorizationBase.contract(IfElseOp(iec.f), a, StaticInt{C}())
 
@@ -381,8 +381,8 @@ end
 @inline (ieo::IfElseOpMirror)(a, b) = ifelse(ieo.f(ieo.a, ieo.b), a, b)
 
 @inline _first_ifelse_reduce_mirror(f::F, a, b) where {F} =
-  getfield(VectorizationBase.ifelse_reduce_mirror(f, a, b), 1, false)
-@inline (ier::IfElseReducerMirror)(a) = _ifelse_reduce_mirror(ier.f, a, ier.a)
+  getfield(VectorizationBase.ifelse_reduce_mirror(f, a, b), 1)
+@inline (ier::IfElseReducerMirror)(a) = _first_ifelse_reduce_mirror(ier.f, a, ier.a)
 @inline function _ifelse_reduce_mirror(f::F, a, b, c, d) where {F}
   r, rm = VectorizationBase.ifelse_reduce_mirror(f, b, d)
   ifelse(f(c, rm), a, r)
@@ -416,13 +416,13 @@ end
 @inline (ier::IfElseReducedMirror)(x::AbstractSIMD{W}, y::AbstractSIMD{W}) where {W} =
   ifelse(ier.f(ier.a, ier.b), x, y)
 @inline function _reduce_mirror(f::F, x, y, a, b) where {F}
-  r, rm = IfElseReduceToMirror(f, a, b)(x, y)
+  r, _ = IfElseReducedMirror(f, a, b)(x, y)
   ifelse(f(r, y), r, y)
 end
 @inline (ier::IfElseReducedMirror)(x::AbstractSIMD, y::AbstractSIMD) =
   _reduce_mirror(ier.f, x, y, ier.a, ier.b)
 @inline (ier::IfElseReducedMirror)(x::VecUnroll, y::VecUnroll) = VecUnroll(
-  fmap(
+  VectorizationBase.fmap(
     _reduce_mirror,
     ier.f,
     getfield(x, :data),

@@ -99,7 +99,7 @@ function Loop(
   ::LoopSet,
   ::Expr,
   sym::Symbol,
-  ::Type{OptionallyStaticUnitRange{Static{L},Static{U}}},
+  ::Type{OptionallyStaticUnitRange{StaticInt{L},StaticInt{U}}},
 ) where {L,U}
   static_loop(sym, L, 1, U)
 end
@@ -116,7 +116,7 @@ function Loop(
   ::Expr,
   sym::Symbol,
   ::Type{CO},
-) where {L,U,CO<:AbstractCloseOpen{Static{L},Static{U}}}
+) where {L,U,CO<:AbstractCloseOpen{StaticInt{L},StaticInt{U}}}
   static_loop(sym, L, 1, U - 1)
 end
 
@@ -259,7 +259,7 @@ end
 
 
 extract_varg(i) = :(getfield(var"#vargs#", $i, false))
-# _extract(::Type{Static{N}}) where {N} = N
+# _extract(::Type{StaticInt{N}}) where {N} = N
 extract_gsp!(sptrs::Expr, name::Symbol) = (push!(sptrs.args, name); nothing)
 tupleranks(R::NTuple{8,Int}) = ntuple(n -> sum(R[n] .≥ R), Val{8}())
 function rank_to_sortperm((R, N)::Tuple{NTuple{8,Int},Int})::Vector{Int}

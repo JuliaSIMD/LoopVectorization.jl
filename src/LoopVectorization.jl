@@ -150,7 +150,6 @@ using CloseOpenIntervals: AbstractCloseOpen, CloseOpen#, SafeCloseOpen
 @inline static_step(x::CartesianIndices) =
   VectorizationBase.CartesianVIndex(map(static_step, x.indices))
 # end
-const Static = StaticInt
 
 export LowDimArray,
   stridedpointer,

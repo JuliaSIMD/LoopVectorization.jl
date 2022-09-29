@@ -125,7 +125,7 @@ end
 #     end
 # end
 # set_first_stride(x) = x # cross fingers that this works
-# @inline onetozeroindexgephack(sptr::AbstractStridedPointer) = gesp(set_first_stride(sptr), (Static{-1}(),)) # go backwords
+# @inline onetozeroindexgephack(sptr::AbstractStridedPointer) = gesp(set_first_stride(sptr), (StaticInt{-1}(),)) # go backwords
 # @inline onetozeroindexgephack(sptr::AbstractStridedPointer{T,1}) where {T} = sptr
 # @inline onetozeroindexgephack(sptr::StridedPointer{T,1}) where {T} = sptr
 # @inline onetozeroindexgephack(x) = x
@@ -678,7 +678,7 @@ function pushgespind!(
             nostep = if fromgsp | (!index_by_index)
               GlobalRef(VectorizationBase, :NullStep)
             else
-              GlobalRef(ArrayInterface.Static, :Zero)
+              GlobalRef(LoopVectorization, :Zero)
             end
             ns = Expr(:call, nostep)
             if fromgsp

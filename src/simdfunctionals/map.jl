@@ -13,7 +13,7 @@ function setup_vmap!(
   ptrargs = map(VectorizationBase.zstridedpointer, args)
   V = pick_vector_width(T)
   W = unwrap(V)
-  zero_index = (MM{W}(Static(0)),)
+  zero_index = (MM{W}(StaticInt(0)),)
   uintptry = reinterpret(UInt, pointer(ptry))
   @assert iszero(uintptry & (sizeof(T) - 1)) "The destination vector (`dest`) must be aligned to `sizeof(eltype(dest)) == $(sizeof(T))` bytes."
   alignment = uintptry & (register_size() - 1)
@@ -233,18 +233,12 @@ function vmap_multithread!(
   end
   nothing
 end
-@generated function gc_preserve_vmap!(
-  f::F,
-  y::AbstractArray,
-  ::Val{NonTemporal},
-  ::Val{Threaded},
-  args::Vararg{AbstractArray,A},
-) where {F,A,NonTemporal,Threaded}
+function gc_preserve_vmap_quote(NonTemporal::Bool, Threaded::Bool, A::Int)
   m = Threaded ? :vmap_multithread! : :vmap_singlethread!
   call = Expr(:call, m, :f, :y, Expr(:call, Expr(:curly, :Val, NonTemporal)))
   q = Expr(:block, Expr(:meta, :inline))
   gcpres = Expr(:gc_preserve, call)
-  for a ∈ 1:A
+  for a ∈ 1:Int(A)::Int
     arg = Symbol(:arg_, a)
     parg = Symbol(:parg_, a)
     push!(q.args, Expr(:(=), arg, :(@inbounds args[$a])))#Expr(:ref, :args, a)))
@@ -254,6 +248,15 @@ end
   end
   push!(q.args, gcpres, :y)
   q
+end
+@generated function gc_preserve_vmap!(
+  f::F,
+  y::AbstractArray,
+  ::Val{NonTemporal},
+  ::Val{Threaded},
+  args::Vararg{AbstractArray,A},
+) where {F,A,NonTemporal,Threaded}
+  gc_preserve_vmap_quote(NonTemporal,Threaded,A)
 end
 
 

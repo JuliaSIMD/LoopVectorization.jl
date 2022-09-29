@@ -191,11 +191,11 @@ function _strides_expr(@nospecialize(s), @nospecialize(x), R::Vector{Int}, D::Ve
   for n ∈ Nrange
     xₙ_type = x[n]
     # xₙ_type = typeof(x).parameters[n]
-    xₙ_static = xₙ_type <: Static
+    xₙ_static = xₙ_type <: StaticInt
     xₙ_value::Int = xₙ_static ? (xₙ_type.parameters[1])::Int : 0
     s_type = s[n]
     # s_type = typeof(s).parameters[n]
-    sₙ_static = s_type <: Static
+    sₙ_static = s_type <: StaticInt
     if sₙ_static
       sₙ_value = s_type.parameters[1]
       if s_type === One

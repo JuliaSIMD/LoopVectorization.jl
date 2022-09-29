@@ -1202,7 +1202,6 @@ function indices_loop!(ls::LoopSet, r::Expr, itersym::Symbol)::Loop
           end
         end
         push!(ls.equalarraydims, (vptrs, mdims))
-        # push!(ls.equalarraydims, ids)
       end
     end
   end
@@ -1601,13 +1600,13 @@ function add_assignment!(ls::LoopSet, LHS, RHS, elementbytes::Int, position::Int
   end
 end
 
-function Base.push!(
+function push_op!(
   ls::LoopSet,
   ex::Expr,
   elementbytes::Int,
   position::Int,
   mpref::Union{Nothing,ArrayReferenceMetaPosition} = nothing,
-)
+)::Operation
   if ex.head === :call
     finex = first(ex.args)::Symbol
     if finex === :setindex!
@@ -1621,14 +1620,10 @@ function Base.push!(
         position,
       )
     else
-      error("Function $finex not recognized.")
+      throw(LoopError("Don't know how to handle expression.", finex))
     end
   elseif ex.head === :(=)
     add_assignment!(ls, ex.args[1], ex.args[2], elementbytes, position)
-  elseif ex.head === :block
-    add_block!(ls, ex, elementbytes, position)
-  elseif ex.head === :for
-    add_loop!(ls, ex, elementbytes)
   elseif ex.head === :&&
     add_andblock!(ls, ex, elementbytes, position)
   elseif ex.head === :||
@@ -1641,9 +1636,9 @@ function Base.push!(
     LHS = (localbody.args[1])::Symbol
     RHS_1 = localbody.args[2]
     if RHS_1 isa Symbol
-      return push!(ls, localbody, elementbytes, position, mpref)
+      return push_op!(ls, localbody, elementbytes, position, mpref)
     elseif Meta.isexpr(RHS_1, :(=), 2)
-      RHS = push!(ls, RHS_1, elementbytes, position, mpref)
+      RHS = push_op!(ls, RHS_1, elementbytes, position, mpref)
       if isstore(RHS)
         RHS
       else
@@ -1654,6 +1649,22 @@ function Base.push!(
     end
   else
     throw(LoopError("Don't know how to handle expression.", ex))
+  end
+end
+
+function Base.push!(
+  ls::LoopSet,
+  ex::Expr,
+  elementbytes::Int,
+  position::Int,
+  mpref::Union{Nothing,ArrayReferenceMetaPosition} = nothing,
+)
+  if ex.head === :block
+    add_block!(ls, ex, elementbytes, position)
+  elseif ex.head === :for
+    add_loop!(ls, ex, elementbytes)
+  else
+    push_op!(ls, ex, elementbytes, position, mpref)
   end
 end
 
