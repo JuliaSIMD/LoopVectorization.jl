@@ -916,6 +916,8 @@ function can_turbo(f::F, ::Val{NARGS})::Bool where {F,NARGS}
 end
 can_turbo(::typeof(vfmaddsub), ::Val{3}) = true
 can_turbo(::typeof(vfmsubadd), ::Val{3}) = true
+can_turbo(::typeof(ifelse), ::Val{3}) = true
+can_turbo(::typeof(!), ::Val{1}) = true
 
 """
     check_turbo_safe(ls::LoopSet)
