@@ -989,12 +989,12 @@ Execute an `@turbo` block. The block's code is represented via the arguments:
   )
   post = hoist_constant_memory_accesses!(ls)
   # q = @show(avx_body(ls, var"#UNROLL#")); post === ls.preamble ? q : Expr(:block, q, post)
-  q = if (last(var"#UNROLL#") > 1) && length(var"#LPSYM#") == length(ls.loops)
-    inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, nt = var"#UNROLL#"
+  q = if (var"#UNROLL#"[10] > 1) && length(var"#LPSYM#") == length(ls.loops)
+    inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, nt, wca, safe = var"#UNROLL#"
     # wrap in `var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#"` in `Expr` to homogenize types
     avx_threads_expr(
       ls,
-      (inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, one(UInt)),
+      (inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, one(UInt), wca, safe),
       nt,
       :(Val{$(var"#OPS#")}()),
       :(Val{$(var"#ARF#")}()),
