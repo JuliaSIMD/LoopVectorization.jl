@@ -819,7 +819,7 @@ function thread_two_loops_expr(
     $_turbo_call_
     var"##do#thread##" || $retexpr
     var"#thread#id#" = 0x00000000
-    for var"#i#" ∈ eachindex(var"#threads#tuple#")
+    for var"#i#" ∈ 1:length(var"#threads#tuple#")
       var"#threads#" = var"#threads#tuple#"[var"#i#"]
       var"#thread#mask#" = PolyesterWeave.mask(var"#threads#")
       var"#threads#remain#" =
