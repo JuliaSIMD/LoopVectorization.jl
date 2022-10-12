@@ -921,6 +921,7 @@ can_turbo(::typeof(!), ::Val{1}) = true
 can_turbo(::typeof(^), ::Val{2}) = true
 can_turbo(::typeof(Base.FastMath.pow_fast), ::Val{2}) = true
 can_turbo(::typeof(Base.literal_pow), ::Val{3}) = true
+can_turbo(::typeof(Base.FastMath.pow_fast), ::Val{2}) = true
 
 """
     check_turbo_safe(ls::LoopSet)
