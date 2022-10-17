@@ -922,6 +922,10 @@ can_turbo(::typeof(^), ::Val{2}) = true
 can_turbo(::typeof(Base.literal_pow), ::Val{3}) = true
 can_turbo(::typeof(Base.FastMath.pow_fast), ::Val{2}) = true
 
+for f ∈ (convert, reinterpret, trunc, unsafe_trunc, round, ceil, floor)
+    @eval can_turbo(::typeof($f), ::Val{2}) = true
+end
+
 """
     check_turbo_safe(ls::LoopSet)
 
