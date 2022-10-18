@@ -882,6 +882,7 @@ end
 @inline check_args(::LoTri) = false
 @inline check_args(::Diagonal) = false
 @inline check_args(::Type{T}) where {T} = check_type(T)
+@inline check_args(::Tuple{T,Vararg{T,K}}) where {T,K} = check_type(T)
 """
     check_type(::Type{T}) where {T}
 

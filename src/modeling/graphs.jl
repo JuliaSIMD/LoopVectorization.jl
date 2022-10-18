@@ -623,6 +623,7 @@ function fill_children!(ls::LoopSet)
   for op ∈ operations(ls)
     empty!(children(op))
     for opp ∈ parents(op)
+      @assert children(opp) !== NOPARENTS
       push!(children(opp), op)
     end
   end

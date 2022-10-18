@@ -30,7 +30,11 @@ function add_if!(
        all(ld -> ld ∈ loopdependencies(trueop), loopdependencies(condop)) &&
        !search_tree(parents(condop), trueop)
       trueop.instruction = Instruction(:conditionalload)
-      push!(parents(trueop), condop)
+      if parents(trueop) !== NOPARENTS
+        push!(parents(trueop), condop)
+      else
+        trueop.parents = [condop]
+      end
     end
   else
     trueop = getop(ls, iftrue, elementbytes)
@@ -50,7 +54,12 @@ function add_if!(
        all(ld -> ld ∈ loopdependencies(falseop), loopdependencies(condop)) &&
        !search_tree(parents(condop), falseop)
       falseop.instruction = Instruction(:conditionalload)
-      push!(parents(falseop), negateop!(ls, condop, elementbytes))
+      negop = negateop!(ls, condop, elementbytes)
+      if parents(falseop) !== NOPARENTS
+        push!(parents(falseop), negop)
+      else
+        falseop.parents = [negop]
+      end
       if (any(==(identifier(trueop)), Iterators.map(first, ls.preamble_zeros)))
         falseop.variable = LHS
         ls.opdict[LHS] = falseop

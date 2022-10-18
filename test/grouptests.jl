@@ -9,6 +9,7 @@ const START_TIME = time()
   @time if LOOPVECTORIZATION_TEST == "all" || LOOPVECTORIZATION_TEST == "part1"
     @time include("broadcast.jl")
     @time include("parsing_inputs.jl")
+    @time include("misc2.jl")
   end
 
   @time if LOOPVECTORIZATION_TEST == "all" || LOOPVECTORIZATION_TEST == "part2"

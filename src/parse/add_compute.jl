@@ -55,6 +55,7 @@ function pushparent!(
   reduceddeps::Vector{Symbol},
   parent::Operation,
 )
+  @assert parents !== NOPARENTS
   push!(parents, parent)
   update_deps!(deps, reduceddeps, parent)
 end
@@ -299,7 +300,10 @@ function add_reduction_update_parent!(
   # create child op, which is the reduction combination
   childrdeps = Symbol[]
   childparents = Operation[op]#, parent ]
-  add_reduct_instruct && push!(childparents, parent)
+  if add_reduct_instruct
+    @assert childparents !== NOPARENTS
+    push!(childparents, parent)
+  end
   childdeps = loopdependencies(reductinit)
   setdiffv!(childrdeps, loopdependencies(op), childdeps)
   child = Operation(
