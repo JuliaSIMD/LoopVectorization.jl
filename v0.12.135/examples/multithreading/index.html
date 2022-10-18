@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Multithreading · LoopVectorization.jl</title><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.045/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.13.24/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img src="../../assets/logo.svg" alt="LoopVectorization.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">LoopVectorization.jl</a></span></div><form class="docs-search" action="../../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../getting_started/">Getting Started</a></li><li><span class="tocitem">Examples</span><ul><li class="is-active"><a class="tocitem" href>Multithreading</a><ul class="internal"><li><a class="tocitem" href="#FAQ"><span>FAQ</span></a></li></ul></li><li><a class="tocitem" href="../matrix_multiplication/">Matrix Multiplication</a></li><li><a class="tocitem" href="../array_interface/">Array Interface</a></li><li><a class="tocitem" href="../matrix_vector_ops/">Matrix-Vector Operations</a></li><li><a class="tocitem" href="../dot_product/">Dot Products</a></li><li><a class="tocitem" href="../datetime_arrays/">Composite Types: DateTime Arrays</a></li><li><a class="tocitem" href="../special_functions/">Special Functions</a></li><li><a class="tocitem" href="../sum_of_squared_error/">Sum of squared error</a></li><li><a class="tocitem" href="../filtering/">Image Filtering</a></li></ul></li><li><a class="tocitem" href="../../vectorized_convenience_functions/">Vectorized Convenience Functions</a></li><li><a class="tocitem" href="../../future_work/">Future Work</a></li><li><a class="tocitem" href="../../api/">API reference</a></li><li><span class="tocitem">Developer Documentation</span><ul><li><a class="tocitem" href="../../devdocs/overview/">Developer Overview</a></li><li><a class="tocitem" href="../../devdocs/loopset_structure/">LoopSet Structure</a></li><li><a class="tocitem" href="../../devdocs/constructing_loopsets/">Constructing LoopSets</a></li><li><a class="tocitem" href="../../devdocs/evaluating_loops/">Determining the strategy for evaluating loops</a></li><li><a class="tocitem" href="../../devdocs/lowering/">Lowering</a></li><li><a class="tocitem" href="../../devdocs/reference/">Internals reference</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>Multithreading</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Multithreading</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/JuliaSIMD/LoopVectorization.jl/blob/main/docs/src/examples/multithreading.md" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="Multithreading"><a class="docs-heading-anchor" href="#Multithreading">Multithreading</a><a id="Multithreading-1"></a><a class="docs-heading-anchor-permalink" href="#Multithreading" title="Permalink"></a></h1><p>LoopVectorization can multithread loops if you pass the argument <code>@turbo thread=true for ... end</code> or equivalently use <code>@tturbo</code>. By default, <code>thread = false</code>, which runs only a single thread. You can also supply a numerical argument to set an upper bound on the number of threads, e.g. <code>@turbo thread=8 for ... end</code> will use up to <code>min(8,Threads.nthreads(),VectorizationBase.num_cores())</code> threads. <code>VectorizationBase.num_cores()</code> uses <a href="https://github.com/JuliaParallel/Hwloc.jl">Hwloc.jl</a> to get the number of physical cores. Currently, this only works for <code>for</code> loops, but support for broadcasting will come.</p><p>Lets look at a few benchmarks.</p><p>Taking the <a href="https://github.com/tkf/ThreadsX.jl/blob/3ff8264f1c4b92318e836a1994a38ffde0433553/README.md">first example from the ThreadsX.jl README</a>:</p><pre><code class="language-julia hljs">function relative_prime_count(x, N)
+    c = 0
+    @tturbo for i ∈ 1:N
+        c += gcd(x, i) == 1
+    end
+    c
+end</code></pre><p>Benchmarking them:</p><pre><code class="language-julia hljs">julia&gt; @btime ThreadsX.sum(gcd(42, i) == 1 for i in 1:10_000)
+  130.928 μs (3097 allocations: 240.39 KiB)
+2857
+
+julia&gt; @btime relative_prime_count(42, 10_000)
+  3.376 μs (0 allocations: 0 bytes)
+2857</code></pre><p>Note that much of the performance difference here is thanks to SIMD, which requires AVX512 for good performance (<code>trailing_zeros</code>, required by <code>gcd</code>, needs AVX512 for a SIMD version). LoopVectorization is a good choice for loops (a) amenable to SIMD (b) where all arrays are dense and (c) a static schedule would work well. Generally, this means loops built up of relatively primitive arithmetic operations (e.g. <code>+</code>, <code>/</code>, or <code>log</code>), and not, for example, solving differential equations.</p><p>I&#39;ll make comparisons with OpenMP through the rest of this, starting with a simple dot product to focus on threading overhead:</p><pre><code class="language-julia hljs">function dot_tturbo(a::AbstractArray{T}, b::AbstractArray{T}) where {T &lt;: Real}
+    s = zero(T)
+    @tturbo for i ∈ eachindex(a,b)
+        s += a[i] * b[i]
+    end
+    s
+end
+function dotbaseline(a::AbstractArray{T}, b::AbstractArray{T}) where {T}
+    s = zero(T)
+    @fastmath @inbounds @simd for i ∈ eachindex(a,b)
+        s += a[i]&#39; * b[i]
+    end
+    s
+end</code></pre><p>In <code>C</code>:</p><pre><code class="language-C hljs">#include&lt;omp.h&gt;
+//  gcc -Ofast -march=native -mprefer-vector-width=512 -fopenmp -shared -fPIC openmp.c -o libomptest.so
+double dot(double* a, double* b, long N){
+  double s = 0.0;
+  #pragma omp parallel for reduction(+: s)
+  for(long n = 0; n &lt; N; n++){
+    s += a[n]*b[n];
+  }
+  return s;
+}</code></pre><p>Wrapping it in Julia is straightforward, after compiling:</p><pre><code class="language-julia hljs">using Libdl; const OPENMPTEST = joinpath(pkgdir(LoopVectorization), &quot;benchmark&quot;, &quot;libomptest.$(Libdl.dlext)&quot;);
+cdot(a::AbstractVector{Float64},b::AbstractVector{Float64}) = @ccall OPENMPTEST.dot(a::Ref{Float64}, b::Ref{Float64}, length(a)::Clong)::Float64</code></pre><p>Trying out one size to give a perspective on scale:</p><pre><code class="language-julia hljs">julia&gt; N = 10_000; x = rand(N); y = rand(N);
+
+julia&gt; @btime dot($x, $y) # LinearAlgebra
+  1.114 μs (0 allocations: 0 bytes)
+2480.296446711209
+
+julia&gt; @btime dot_turbo($x, $y)
+  761.621 ns (0 allocations: 0 bytes)
+2480.296446711209
+
+julia&gt; @btime dot_tturbo($x, $y)
+  622.723 ns (0 allocations: 0 bytes)
+2480.296446711209
+
+julia&gt; @btime dot_baseline($x, $y)
+  1.294 μs (0 allocations: 0 bytes)
+2480.2964467112097
+
+julia&gt; @btime cdot($x, $y)
+  6.109 μs (0 allocations: 0 bytes)
+2480.2964467112092</code></pre><p>All these times are fairly fast; <code>wait(Threads.@spawn 1+1)</code> will typically take much longer than even <code>@cdot</code> did here. <img src="https://github.com/JuliaSIMD/LoopVectorization.jl/raw/docsassets/docs/src/assets/threadeddotproduct.svg" alt="realdot"/></p><p>Now let&#39;s look at a more complex example:</p><pre><code class="language-julia hljs">function dot_tturbo(ca::AbstractVector{Complex{T}}, cb::AbstractVector{Complex{T}}) where {T}
+    a = reinterpret(reshape, T, ca)
+    b = reinterpret(reshape, T, cb)
+    re = zero(T); im = zero(T)
+    @tturbo for i ∈ axes(a,2) # adjoint(a[i]) * b[i]
+        re += a[1,i] * b[1,i] + a[2,i] * b[2,i]
+        im += a[1,i] * b[2,i] - a[2,i] * b[1,i]
+    end
+    Complex(re, im)
+end</code></pre><p>LoopVectorization currently only supports arrays of type <code>T &lt;: Union{Bool,Base.HWReal}</code>. So to support <code>Complex{T}</code>, we reinterpret the arrays and then write out the corresponding operations. The plan is to eventually have LoopVectorization do this automatically, but for now we require this workaround. Corresponding <code>C</code>:</p><pre><code class="language-C hljs">void cdot(double* c, double* a, double* b, long N){
+  double r = 0.0, i = 0.0;
+  #pragma omp parallel for reduction(+: r, i)
+  for(long n = 0; n &lt; N; n++){
+    r += a[2*n] * b[2*n  ] + a[2*n+1] * b[2*n+1];
+    i += a[2*n] * b[2*n+1] - a[2*n+1] * b[2*n  ];
+  }
+  c[0] = r;
+  c[1] = i;
+  return;
+}</code></pre><p>The Julia wrapper:</p><pre><code class="language-julia hljs">function cdot(x::AbstractVector{Complex{Float64}}, y::AbstractVector{Complex{Float64}})
+    c = Ref{Complex{Float64}}()
+    @ccall OPENMPTEST.cdot(c::Ref{Complex{Float64}}, x::Ref{Complex{Float64}}, y::Ref{Complex{Float64}}, length(x)::Clong)::Cvoid
+    c[]
+end</code></pre><p>The complex dot product is more compute bound. Given the same number of elements, we require <code>2x</code> the memory for complex numbers, <code>4x</code> the floating point arithmetic, and as we have an array of structs rather than structs of arrays, we need additional instructions to shuffle the data. <img src="https://github.com/JuliaSIMD/LoopVectorization.jl/raw/docsassets/docs/src/assets/threadedcomplexdotproduct.svg" alt="complexdot"/></p><p>If we take this further to the three-argument dot product, which isn&#39;t implemented in BLAS, <code>@tturbo</code> now holds a substantial advantage over the competition:</p><pre><code class="language-julia hljs">function dot3(x::AbstractVector{Complex{T}}, A::AbstractMatrix{Complex{T}}, y::AbstractVector{Complex{T}}) where {T}
+    xr = reinterpret(reshape, T, x);
+    yr = reinterpret(reshape, T, y);
+    Ar = reinterpret(reshape, T, A);
+    sre = zero(T)
+    sim = zero(T)
+    @tturbo for n in axes(Ar,3)
+        tre = zero(T)
+        tim = zero(T)
+        for m in axes(Ar,2)
+            tre += xr[1,m] * Ar[1,m,n] + xr[2,m] * Ar[2,m,n]
+            tim += xr[1,m] * Ar[2,m,n] - xr[2,m] * Ar[1,m,n]
+        end
+        sre += tre * yr[1,n] - tim * yr[2,n]
+        sim += tre * yr[2,n] + tim * yr[1,n]
+    end
+    Complex(sre, sim)
+end</code></pre><pre><code class="language-C hljs">void cdot3(double* c, double* x, double* A, double* y, long M, long N){
+  double sr = 0.0, si = 0.0;
+#pragma omp parallel for reduction(+: sr, si)
+  for (long n = 0; n &lt; N; n++){
+    double tr = 0.0, ti = 0.0;
+    for(long m = 0; m &lt; M; m++){
+      tr += x[2*m] * A[2*m   + 2*n*N] + x[2*m+1] * A[2*m+1 + 2*n*N];
+      ti += x[2*m] * A[2*m+1 + 2*n*N] - x[2*m+1] * A[2*m   + 2*n*N];
+    }
+    sr += tr * y[2*n  ] - ti * y[2*n+1];
+    si += tr * y[2*n+1] + ti * y[2*n  ];
+  }
+  c[0] = sr;
+  c[1] = si;
+  return;
+}</code></pre><p>The wrapper is more or less the same as before:</p><pre><code class="language-julia hljs">function cdot(x::AbstractVector{Complex{Float64}}, A::AbstractMatrix{Complex{Float64}}, y::AbstractVector{Complex{Float64}})
+    c = Ref{Complex{Float64}}()
+    M, N = size(A)
+    @ccall OPENMPTEST.cdot3(c::Ref{Complex{Float64}}, x::Ref{Complex{Float64}}, A::Ref{Complex{Float64}}, y::Ref{Complex{Float64}}, M::Clong, N::Clong)::Cvoid
+    c[]
+end</code></pre><p><img src="https://github.com/JuliaSIMD/LoopVectorization.jl/raw/docsassets/docs/src/assets/threadedcomplexdot3product.svg" alt="complexdot3"/></p><p>When testing on my laptop, the <code>C</code> implentation ultimately won, but I will need to investigate further to tell whether this benchmark benefits from hyperthreading, or if it&#39;s because LoopVectorization&#39;s memory access patterns are less friendly. I plan to work on cache-level blocking to increase memory friendliness eventually, and will likely also allow it to take advantage of hyperthreading/simultaneous multithreading, although I&#39;d prefer a few motivating test problems to look at first. Note that a single core of this CPU is capable of exceeding 100 GFLOPS of double precision compute. The execution units are spending most of their time idle. So the question of whether hypthreading helps may be one of whether or not we are memory-limited.</p><p>For a more compute-limited operation, lets look at matrix multiplication, which requires <code>O(N³)</code> compute for <code>O(N²)</code> memory. Note that it&#39;s still easy to be memory-starved in matrix multiplication, especially for larger matrices. While the total memory required may be <code>O(N²)</code>, if the memory doesn&#39;t fit in the high cache levels, it will have to churn through it. The memory bandwidth requirements are thus <code>O(N³)</code>, but cache-level blocking can give it a small enough coefficient that you can make the most of your CPU&#39;s theoretical compute. Unlike all the dot product cases (including the 3-argument dot product), which force you to stream most of the memory through the cores. There is no reuse on <code>x</code> and <code>y</code> for the 2-arg dot products, or on memory from <code>A</code> in the the 3-arg dot product.</p><p>Here, I compare against other libraries: Intel MKL, OpenBLAS (Julia&#39;s default), and two Julia libraries: <a href="https://github.com/mcabbott/Tullio.jl">Tullio.jl</a> and <a href="https://github.com/JuliaLinearAlgebra/Octavian.jl">Octavian.jl</a>.</p><pre><code class="language-julia hljs">function A_mul_B!(C, A, B)
+    @tturbo for n ∈ indices((C,B), 2), m ∈ indices((C,A), 1)
+        Cmn = zero(eltype(C))
+        for k ∈ indices((A,B), (2,1))
+            Cmn += C[m,k] * B[k,n]
+        end
+        C[m,n] = Cmn
+    end
+end</code></pre><p>Benchmarks over the size range <code>10:5:300</code>: <img src="https://raw.githubusercontent.com/JuliaSIMD/LoopVectorization.jl/docsassets/docs/src/assets/gemm_Float64_10_500_cascadelake_AVX512__multithreaded.svg" alt="matmul"/></p><p>Because LoopVectorization doesn&#39;t do cache optimizations yet, MKL, OpenBLAS, and Octavian will all pull ahead for larger matrices. This CPU has a 1 MiB L2 cache per core and 18 cores:</p><pre><code class="language-julia hljs">julia&gt; doubles_per_l2 = (2 ^ 20) ÷ 8
+131072
+
+julia&gt; total_doubles_in_l2 = doubles_per_l2 * (Sys.CPU_THREADS ÷ 2) # doubles_per_l2 * 18
+2359296
+
+julia&gt; doubles_per_mat = total_doubles_in_l2 ÷ 3 # divide up amoung 3 matrices
+786432
+
+julia&gt; sqrt(ans)
+886.8100134752651</code></pre><p>Meaning we could fit three 886x886 matrices in our L2 cache by splitting them up among the cores. The largest matrices benchmarked above, at 300x300, fit comfortably.</p><p>Aside from the fact that LoopVectorization did much better than OpenBLAS–Julia&#39;s default library–over this size range, LoopVectorization&#39;s major advantage that it should perform similarly well for a wide variety of comparable operations and not just GEMM (GEneral Matrix-Matrix multiplication) specifically. GEMM has long been a motivating benchmark, as it&#39;s one of the best optimized routines available to compare against and get a sense of how well you&#39;re doing vs hand-tuned limits optimized in assembly.</p><p>Because it is so well optimized, a standard trick for implementing more general optimized routines is to convert them into GEMM calls. For example, this is commonly done for temsor operations (see, e.g., <a href="https://github.com/Jutho/TensorOperations.jl">TensorOperations.jl</a>) as well as for convolutions, e.g. in <a href="https://github.com/FluxML/NNlib.jl/blob/ca82fb23928c7ee7d08afb722718cf93be13f81c/src/impl/conv_im2col.jl#L25">NNlib</a>&#39;s <code>conv_im2col!</code>, their default optimized convolution function.</p><p>Lets take a look at convolutions as our next example. We create a batch of a hundred 256x256 images with 3 input channels, and convolve them with a 5x5 kernel producing 6 output channels.</p><pre><code class="language-julia hljs">using NNlib, LoopVectorization, Static
+
+img = rand(Float32, 260, 260, 3, 100);
+kern = rand(Float32, 5, 5, 3, 6);
+out1 = Array{Float32}(undef, size(img,1)+1-size(kern,1), size(img,2)+1-size(kern,2), size(kern,4), size(img,4));
+out2 = similar(out1);
+
+dcd = NNlib.DenseConvDims(img, kern, flipkernel = true);
+
+function kernaxes(::DenseConvDims{2,K,C_in, C_out}) where {K,C_in, C_out} # LoopVectorization can take advantage of static size information
+    K₁ =  StaticInt(1):StaticInt(K[1])
+    K₂ =  StaticInt(1):StaticInt(K[2])
+    Cᵢₙ =  StaticInt(1):StaticInt(C_in)
+    Cₒᵤₜ = StaticInt(1):StaticInt(C_out)
+    (K₁, K₂, Cᵢₙ, Cₒᵤₜ)
+end
+
+function convlayer!(out::AbstractArray{&lt;:Any,4}, img, kern, dcd::DenseConvDims)
+    (K₁, K₂, Cᵢₙ, Cₒᵤₜ) = kernaxes(dcd)
+    @tturbo for j₁ ∈ axes(out,1), j₂ ∈ axes(out,2), d ∈ axes(out,4), o ∈ Cₒᵤₜ
+        s = zero(eltype(out))
+        for k₁ ∈ K₁, k₂ ∈ K₂, i ∈ Cᵢₙ
+            s += img[j₁ + k₁ - 1, j₂ + k₂ - 1, i, d] * kern[k₁, k₂, i, o]
+        end
+        out[j₁, j₂, o, d] = s
+    end
+    out
+end</code></pre><p>LoopVectorization likes to take advantage of any static size information when available, so we write <code>kernaxes</code> to extract them from the <code>DenseConvDims</code> object and produce statically sized axes. Otherwise, this code is simply writing the convolutions as a bunch of loops.</p><p>This yields:</p><pre><code class="language-julia hljs">julia&gt; NNlib.conv!(out2, img, kern, dcd);
+
+julia&gt; convlayer!(out1, img, kern, dcd);
+
+julia&gt; out1 ≈ out2
+true
+
+julia&gt; @benchmark convlayer!($out1, $img, $kern, $dcd)
+BenchmarkTools.Trial:
+  memory estimate:  0 bytes
+  allocs estimate:  0
+  --------------
+  minimum time:     5.377 ms (0.00% GC)
+  median time:      5.432 ms (0.00% GC)
+  mean time:        5.433 ms (0.00% GC)
+  maximum time:     5.682 ms (0.00% GC)
+  --------------
+  samples:          920
+  evals/sample:     1
+
+julia&gt; @benchmark NNlib.conv!($out2, $img, $kern, $dcd)
+BenchmarkTools.Trial:
+  memory estimate:  675.02 MiB
+  allocs estimate:  195
+  --------------
+  minimum time:     182.749 ms (0.00% GC)
+  median time:      190.472 ms (0.60% GC)
+  mean time:        197.527 ms (4.98% GC)
+  maximum time:     300.536 ms (35.82% GC)
+  --------------
+  samples:          26
+  evals/sample:     1</code></pre><p>By default, the BLAS library called uses multiple threads, but <code>NNlib</code> also threads over the batches using <code>Threads.@threads</code>. This oversubscribes the threads. We thus improve performance by forcing <code>BLAS</code> to use just a single thread, favoring the more granular threading across batches:</p><pre><code class="language-julia hljs">julia&gt; using LinearAlgebra
+
+julia&gt; BLAS.set_num_threads(1)
+
+julia&gt; @benchmark NNlib.conv!($out2, $img, $kern, $dcd)
+BenchmarkTools.Trial:
+  memory estimate:  675.02 MiB
+  allocs estimate:  195
+  --------------
+  minimum time:     124.177 ms (0.00% GC)
+  median time:      128.609 ms (0.93% GC)
+  mean time:        133.574 ms (5.36% GC)
+  maximum time:     235.760 ms (45.17% GC)
+  --------------
+  samples:          38
+  evals/sample:     1</code></pre><p>This still nets <code>@tturbo</code> a 23x advantage on this machine!</p><h2 id="FAQ"><a class="docs-heading-anchor" href="#FAQ">FAQ</a><a id="FAQ-1"></a><a class="docs-heading-anchor-permalink" href="#FAQ" title="Permalink"></a></h2><h4 id="If-I-do-@turbo-threadtrue-for-...-end,-how-many-threads-will-it-use?-Or-if-I-do-@turbo-thread4-for-...-end,-what-then?"><a class="docs-heading-anchor" href="#If-I-do-@turbo-threadtrue-for-...-end,-how-many-threads-will-it-use?-Or-if-I-do-@turbo-thread4-for-...-end,-what-then?">If I do <code>@turbo thread=true for ... end</code>, how many threads will it use? Or if I do <code>@turbo thread=4 for ... end</code>, what then?</a><a id="If-I-do-@turbo-threadtrue-for-...-end,-how-many-threads-will-it-use?-Or-if-I-do-@turbo-thread4-for-...-end,-what-then?-1"></a><a class="docs-heading-anchor-permalink" href="#If-I-do-@turbo-threadtrue-for-...-end,-how-many-threads-will-it-use?-Or-if-I-do-@turbo-thread4-for-...-end,-what-then?" title="Permalink"></a></h4><p>LoopVectorization will choose how many threads to use based on the length of the loop ranges and how expensive it estimates evaluating the loop to be. It will at most use one thread per physical core of the system.</p><h4 id="How-do-I-get-answers-to-my-questions?"><a class="docs-heading-anchor" href="#How-do-I-get-answers-to-my-questions?">How do I get answers to my questions?</a><a id="How-do-I-get-answers-to-my-questions?-1"></a><a class="docs-heading-anchor-permalink" href="#How-do-I-get-answers-to-my-questions?" title="Permalink"></a></h4><p>Feel free to ask on <a href="https://discourse.julialang.org/">Discourse</a>, <a href="https://julialang.zulipchat.com/#narrow/stream/225542-helpdesk">Zulip</a>, <a href="https://julialang.slack.com/">Slack</a>, or <a href="https://github.com/JuliaSIMD/LoopVectorization.jl/discussions">GitHub Discussions</a>! I can also add it to the FAQ here, or one in an appropriate section.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../getting_started/">« Getting Started</a><a class="docs-footer-nextpage" href="../matrix_multiplication/">Matrix Multiplication »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.23 on <span class="colophon-date" title="Tuesday 18 October 2022 11:22">Tuesday 18 October 2022</span>. Using Julia version 1.8.2.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
