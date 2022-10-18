@@ -184,7 +184,28 @@ end
   # @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, Symbol("##undefined##"), :j, 8, -1)
   #     @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, 2, 6)
   # end
+  function piestsimd(rounds)
+    pi = 1.0
 
+    @simd for i in 2:(rounds + 2)
+      x = (-1)^iseven(i)
+      pi += x / (2 * i - 1)
+    end
+
+    return pi*4
+  end
+  function piestturbo(rounds)
+    pi = 1.0
+
+    @turbo for i in 2:(rounds + 2)
+      x = (-1)^iseven(i)
+      pi += x / (2 * i - 1)
+    end
+
+    return pi*4
+  end
+  @test piestturbo(4096) ≈ π rtol = 1e-4
+  @test piestturbo(2000) ≈ piestsimd(2000)
   function myvar!(s², A, x̄)
     @. s² = 0
     @inbounds for i ∈ 1:size(A, 2)

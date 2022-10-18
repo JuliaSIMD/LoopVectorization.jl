@@ -1,7 +1,7 @@
 name = "LoopVectorization"
 uuid = "bdcacae8-1622-11e9-2a5c-532679323890"
 authors = ["Chris Elrod <elrodc@gmail.com>"]
-version = "0.12.134"
+version = "0.12.135"
 
 [deps]
 ArrayInterface = "4fba245c-0d91-5ea0-9b3e-6abc04ee57a9"
@@ -52,5 +52,5 @@ SpecialFunctions = "1, 2"
 Static = "0.7"
 ThreadingUtilities = "0.5"
 UnPack = "1"
-VectorizationBase = "0.21.21"
+VectorizationBase = "0.21.53"
 julia = "1.6"
