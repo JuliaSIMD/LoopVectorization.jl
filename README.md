@@ -362,5 +362,7 @@ Similar approaches can be taken to make kernels working with a variety of numeri
 * [VectorizedStatistics.jl](https://github.com/JuliaSIMD/VectorizedStatistics.jl)
 * [NaNStatistics.jl](https://github.com/brenhinkeller/NaNStatistics.jl)
 * [VectorizedReduction.jl](https://github.com/andrewjradcliffe/VectorizedReduction.jl)
+* [DynamicExpressions.jl](https://github.com/SymbolicML/SymbolicRegression.jl)
+* [PySR](https://github.com/MilesCranmer/PySR) and [SymbolicRegression.jl](https://github.com/MilesCranmer/SymbolicRegression.jl)
 
 If you're using LoopVectorization, please feel free to file a PR adding yours to the list!
