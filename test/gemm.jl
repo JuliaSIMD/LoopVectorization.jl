@@ -711,56 +711,56 @@
     @test LoopVectorization.choose_order(lsAtmulBt8) == ([:n, :m, :k], :m, :n, :m, 1, 4)
   end
 
-  struct SizedMatrix{M,N,T} <: DenseMatrix{T}
+  struct TestSizedMatrix{M,N,T} <: DenseMatrix{T}
     data::Matrix{T}
-    function SizedMatrix{M,N}(data::Matrix{T}) where {M,N,T}
+    function TestSizedMatrix{M,N}(data::Matrix{T}) where {M,N,T}
       @assert (M, N) === size(data)
       new{M,N,T}(data)
     end
   end
-  Base.parent(A::SizedMatrix) = A.data
-  Base.IndexStyle(::Type{<:SizedMatrix}) = Base.IndexLinear()
-  Base.@propagate_inbounds Base.getindex(A::SizedMatrix, i::Int) = getindex(parent(A), i)
-  Base.@propagate_inbounds Base.setindex!(A::SizedMatrix, v, i::Int) =
+  Base.parent(A::TestSizedMatrix) = A.data
+  Base.IndexStyle(::Type{<:TestSizedMatrix}) = Base.IndexLinear()
+  Base.@propagate_inbounds Base.getindex(A::TestSizedMatrix, i::Int) = getindex(parent(A), i)
+  Base.@propagate_inbounds Base.setindex!(A::TestSizedMatrix, v, i::Int) =
     setindex!(parent(A), v, i)
-  Base.@propagate_inbounds Base.getindex(A::SizedMatrix, i::CartesianIndex) =
+  Base.@propagate_inbounds Base.getindex(A::TestSizedMatrix, i::CartesianIndex) =
     getindex(parent(A), i + oneunit(i))
-  Base.@propagate_inbounds Base.setindex!(A::SizedMatrix, v, i::CartesianIndex) =
+  Base.@propagate_inbounds Base.setindex!(A::TestSizedMatrix, v, i::CartesianIndex) =
     setindex!(parent(A), v, i + oneunit(i))
-  Base.@propagate_inbounds Base.getindex(A::SizedMatrix, i::Int, j::Int) =
+  Base.@propagate_inbounds Base.getindex(A::TestSizedMatrix, i::Int, j::Int) =
     getindex(parent(A), i + 1, j + 1)
-  Base.@propagate_inbounds Base.setindex!(A::SizedMatrix, v, i::Int, j::Int) =
+  Base.@propagate_inbounds Base.setindex!(A::TestSizedMatrix, v, i::Int, j::Int) =
     setindex!(parent(A), v, i + 1, j + 1)
-  Base.size(::SizedMatrix{M,N}) where {M,N} = (M, N)
-  LoopVectorization.ArrayInterface.size(::SizedMatrix{M,N}) where {M,N} =
+  Base.size(::TestSizedMatrix{M,N}) where {M,N} = (M, N)
+  LoopVectorization.ArrayInterface.size(::TestSizedMatrix{M,N}) where {M,N} =
     (LoopVectorization.StaticInt{M}(), LoopVectorization.StaticInt{N}())
-  function Base.axes(::SizedMatrix{M,N}) where {M,N}
+  function Base.axes(::TestSizedMatrix{M,N}) where {M,N}
     (
       LoopVectorization.CloseOpen(LoopVectorization.StaticInt{M}()),
       LoopVectorization.CloseOpen(LoopVectorization.StaticInt{N}()),
     )
   end
   function LoopVectorization.ArrayInterface.axes_types(
-    ::Type{SizedMatrix{M,N,T}},
+    ::Type{TestSizedMatrix{M,N,T}},
   ) where {M,N,T}
     Tuple{
       LoopVectorization.CloseOpen{LoopVectorization.StaticInt{0},LoopVectorization.StaticInt{M}},
       LoopVectorization.CloseOpen{LoopVectorization.StaticInt{0},LoopVectorization.StaticInt{N}},
     }
   end
-  Base.unsafe_convert(::Type{Ptr{T}}, A::SizedMatrix{M,N,T}) where {M,N,T} = pointer(A.data)
-  LoopVectorization.ArrayInterface.strides(::SizedMatrix{M}) where {M} =
+  Base.unsafe_convert(::Type{Ptr{T}}, A::TestSizedMatrix{M,N,T}) where {M,N,T} = pointer(A.data)
+  LoopVectorization.ArrayInterface.strides(::TestSizedMatrix{M}) where {M} =
     (LoopVectorization.StaticInt{1}(), LoopVectorization.StaticInt{M}())
-  LoopVectorization.ArrayInterface.contiguous_axis(::Type{<:SizedMatrix}) =
+  LoopVectorization.ArrayInterface.contiguous_axis(::Type{<:TestSizedMatrix}) =
     LoopVectorization.One()
-  LoopVectorization.ArrayInterface.contiguous_batch_size(::Type{<:SizedMatrix}) =
+  LoopVectorization.ArrayInterface.contiguous_batch_size(::Type{<:TestSizedMatrix}) =
     LoopVectorization.Zero()
-  LoopVectorization.ArrayInterface.stride_rank(::Type{<:SizedMatrix}) =
+  LoopVectorization.ArrayInterface.stride_rank(::Type{<:TestSizedMatrix}) =
     (LoopVectorization.StaticInt(1), LoopVectorization.StaticInt(2))
-  # LoopVectorization.ArrayInterface.offsets(::Type{SizedMatrix{M,N,T}}) where {M,N,T}  = (LoopVectorization.StaticInt{0}(), LoopVectorization.StaticInt{0}())
-  LoopVectorization.ArrayInterface.offsets(::SizedMatrix) =
+  # LoopVectorization.ArrayInterface.offsets(::Type{TestSizedMatrix{M,N,T}}) where {M,N,T}  = (LoopVectorization.StaticInt{0}(), LoopVectorization.StaticInt{0}())
+  LoopVectorization.ArrayInterface.offsets(::TestSizedMatrix) =
     (LoopVectorization.StaticInt{0}(), LoopVectorization.StaticInt{0}())
-  LoopVectorization.ArrayInterface.dense_dims(::Type{SizedMatrix{M,N,T}}) where {M,N,T} =
+  LoopVectorization.ArrayInterface.dense_dims(::Type{TestSizedMatrix{M,N,T}}) where {M,N,T} =
     LoopVectorization.ArrayInterface.dense_dims(Matrix{T})
   # struct ZeroInitializedArray{T,N,A<:DenseArray{T,N}} <: DenseArray{T,N}
   #     data::A
@@ -971,11 +971,11 @@
         end
         # exceeds_time_limit() && break
         if (M, K) === (73, 77) # pick a random size, we only want to compile once
-          As = SizedMatrix{M,K}(A)
-          Ats = SizedMatrix{K,M}(At)
-          Bs = SizedMatrix{K,N}(B)
-          Bts = SizedMatrix{N,K}(Bt)
-          Cs = SizedMatrix{M,N}(C)
+          As = TestSizedMatrix{M,K}(A)
+          Ats = TestSizedMatrix{K,M}(At)
+          Bs = TestSizedMatrix{K,N}(B)
+          Bts = TestSizedMatrix{N,K}(Bt)
+          Cs = TestSizedMatrix{M,N}(C)
           C2z = LoopVectorization.OffsetArray(C2, -1, -1)
           @testset "avx $T static gemm" begin
             # AmulBavx1!(Cs, As, Bs)
