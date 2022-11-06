@@ -466,7 +466,7 @@ function add_compute!(
     arg1 = args[1]
     arg2 = args[2]
     if arg1 isa Number && convert(Float64, arg1) === -1.0
-      return add_compute!(ls, var, :(2iseven($arg2)-1), elementbytes, position, mpref)
+      return add_compute!(ls, var, :(2iseven($arg2) - 1), elementbytes, position, mpref)
     end
     if arg2 isa Number
       return add_pow!(ls, var, args[1], arg2, elementbytes, position)

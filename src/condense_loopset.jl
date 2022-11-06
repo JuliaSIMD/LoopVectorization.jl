@@ -187,8 +187,8 @@ function parents_uint(op::Operation)
   N = length(opv)
   @assert N ≤ 32
   p0 = parents_uint(view(opv, 1:min(8, N)))
-  p1 = N > 8 ? parents_uint(view(opv, 9:min(16,N))) : zero(p0)
-  p2 = N > 16 ? parents_uint(view(opv, 17:min(24,N))) : zero(p0)
+  p1 = N > 8 ? parents_uint(view(opv, 9:min(16, N))) : zero(p0)
+  p2 = N > 16 ? parents_uint(view(opv, 17:min(24, N))) : zero(p0)
   p3 = N > 24 ? parents_uint(view(opv, 25:N)) : zero(p0)
   p0, p1, p2, p3
 end
@@ -361,8 +361,12 @@ end
 val(x) = Expr(:call, Expr(:curly, :Val, x))
 
 @inline gespf1(x, i) = gesp(x, i)
-@inline gespf1(x::StridedPointer{T,1}, i::Tuple{I}) where {T,I<:Union{Integer,StaticInt}} = gesp(x, i)
-@inline gespf1(x::StridedBitPointer{T,1}, i::Tuple{I}) where {T,I<:Union{Integer,StaticInt}} = gesp(x, i)
+@inline gespf1(x::StridedPointer{T,1}, i::Tuple{I}) where {T,I<:Union{Integer,StaticInt}} =
+  gesp(x, i)
+@inline gespf1(
+  x::StridedBitPointer{T,1},
+  i::Tuple{I},
+) where {T,I<:Union{Integer,StaticInt}} = gesp(x, i)
 @inline gespf1(x::StridedPointer{T,1}, i::Tuple{Zero}) where {T} = x
 @inline gespf1(x::StridedBitPointer{T,1}, i::Tuple{Zero}) where {T} = x
 @generated function gespf1(
@@ -571,7 +575,7 @@ end
     register_size(),
     available_registers(),
     lv_max_num_threads(),
-    cache_linesize()
+    cache_linesize(),
   )
 end
 function find_samename_constparent(op::Operation, opname::Symbol)
@@ -924,7 +928,7 @@ can_turbo(::typeof(Base.literal_pow), ::Val{3}) = true
 can_turbo(::typeof(Base.FastMath.pow_fast), ::Val{2}) = true
 
 for f ∈ (convert, reinterpret, trunc, unsafe_trunc, round, ceil, floor)
-    @eval can_turbo(::typeof($f), ::Val{2}) = true
+  @eval can_turbo(::typeof($f), ::Val{2}) = true
 end
 
 """

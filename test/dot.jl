@@ -297,7 +297,7 @@ using Test
     @test myselfdot_avx(a) ≈ s
     @test myselfdotavx(a) ≈ s
 
-    A = OffsetArray(rand(T, 37, 61), -5, 10);
+    A = OffsetArray(rand(T, 37, 61), -5, 10)
     s = myselfdot(A)
     @test myselfdotavx(A) ≈ myselfdotavx(A') ≈ s
     @test myselfdotavx_v2(A) ≈ myselfdotavx_v2(A') ≈ s

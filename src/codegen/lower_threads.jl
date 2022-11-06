@@ -157,10 +157,10 @@ end
 scale_cost(c) = @fastmath c * (Sys.ARCH === :x86_64 ? 0.0225 : 0.005625)
 scale_cost(c, looplen) = scale_cost(@fastmath c / looplen)
 @inline function choose_num_threads(
-    C::T,
-    NT::UInt,
-    x::Base.BitInteger,
-  ) where {T<:Union{Float32,Float64}}
+  C::T,
+  NT::UInt,
+  x::Base.BitInteger,
+) where {T<:Union{Float32,Float64}}
   _choose_num_threads(scale_cost(T(C)), NT, x)
 end
 @inline function _choose_num_threads(
@@ -529,12 +529,8 @@ function thread_one_loops_expr(
         end
       else# eliminate undef var errors that the compiler should be able to figure out are unreachable, but doesn't
         var"#torelease#tuple#" = (zero(UInt),)
-        var"#threads#tuple#" = (
-          PolyesterWeave.UnsignedIteratorEarlyStop(
-            zero(UInt),
-            0x00000000,
-          ),
-        )
+        var"#threads#tuple#" =
+          (PolyesterWeave.UnsignedIteratorEarlyStop(zero(UInt), 0x00000000),)
       end
     end
     var"#avx#call#args#" = $avxcall_args
@@ -808,10 +804,8 @@ function thread_two_loops_expr(
         end
       else# eliminate undef var errors that the compiler should be able to figure out are unreachable, but doesn't
         var"#torelease#tuple#" = (zero(UInt),)
-        var"#threads#tuple#" = PolyesterWeave.UnsignedIteratorEarlyStop(
-          zero(UInt),
-          0x00000000,
-        )
+        var"#threads#tuple#" =
+          PolyesterWeave.UnsignedIteratorEarlyStop(zero(UInt), 0x00000000)
       end
     end
     # @show $lastboundexpr

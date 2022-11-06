@@ -26,12 +26,7 @@ function matmul_params(
   N = nothing,
   W = 0,
 )
-  set_hw!(
-    GEMMLOOPSET,
-    rs,
-    rc,
-    cls,
-  )
+  set_hw!(GEMMLOOPSET, rs, rc, cls)
   if N ≢ nothing
     nloop = GEMMLOOPSET.loops[1]
     GEMMLOOPSET.loops[1] =

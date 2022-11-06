@@ -5,8 +5,12 @@ using Static: StaticInt, gt, static, Zero, One, reduce_tup
 using VectorizationBase,
   SLEEFPirates, UnPack, OffsetArrays, ArrayInterfaceOffsetArrays, ArrayInterfaceStaticArrays
 using LayoutPointers:
-  AbstractStridedPointer, StridedPointer, StridedBitPointer, grouped_strided_pointer,
-  stridedpointer_preserve, GroupedStridedPointers
+  AbstractStridedPointer,
+  StridedPointer,
+  StridedBitPointer,
+  grouped_strided_pointer,
+  stridedpointer_preserve,
+  GroupedStridedPointers
 import LayoutPointers
 
 using SIMDTypes: NativeTypes
@@ -114,8 +118,7 @@ using Base.Meta: isexpr
 using DocStringExtensions
 import LinearAlgebra # for check_args
 
-using Base:
-  unsafe_trunc
+using Base: unsafe_trunc
 
 using Base.FastMath:
   add_fast,

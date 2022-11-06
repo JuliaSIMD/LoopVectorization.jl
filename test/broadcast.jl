@@ -9,50 +9,50 @@ function test_broadcast(::Type{T}) where {T}
   M, N = 37, 47
   @show T, @__LINE__
   R = T <: Integer ? (T(-100):T(100)) : T
-  a = rand(R, 99, 99, 99);
-  b = rand(R, 99, 99, 1);
-  bl = LowDimArray{(true, true, false)}(b);
+  a = rand(R, 99, 99, 99)
+  b = rand(R, 99, 99, 1)
+  bl = LowDimArray{(true, true, false)}(b)
   @test size(bl) == size(b)
   @test LoopVectorization.ArrayInterface.size(bl) ===
         (size(b, 1), size(b, 2), LoopVectorization.StaticInt(1))
 
-  br = reshape(b, (99, 99));
-  c1 = a .+ b;
-  c2 = @turbo inline = false a .+ bl;
+  br = reshape(b, (99, 99))
+  c1 = a .+ b
+  c2 = @turbo inline = false a .+ bl
   @test c1 ≈ c2
-  fill!(c2, 99999);
-  @turbo inline = false c2 .= a .+ br;
+  fill!(c2, 99999)
+  @turbo inline = false c2 .= a .+ br
   @test c1 ≈ c2
-  fill!(c2, 99999);
-  @turbo inline = false c2 .= a .+ b;
+  fill!(c2, 99999)
+  @turbo inline = false c2 .= a .+ b
   @test c1 ≈ c2
-  br = reshape(b, (99, 1, 99));
-  bl = LowDimArray{(true, false, true)}(br);
+  br = reshape(b, (99, 1, 99))
+  bl = LowDimArray{(true, false, true)}(br)
   @test size(bl) == size(br)
   @test LoopVectorization.ArrayInterface.size(bl) ===
         (size(br, 1), LoopVectorization.StaticInt(1), size(br, 3))
-  @. c1 = a + br;
-  fill!(c2, 99999);
-  @turbo inline = false @. c2 = a + bl;
+  @. c1 = a + br
+  fill!(c2, 99999)
+  @turbo inline = false @. c2 = a + bl
   @test c1 ≈ c2
-  fill!(c2, 99999);
-  @turbo inline = false @. c2 = a + br;
+  fill!(c2, 99999)
+  @turbo inline = false @. c2 = a + br
   @test c1 ≈ c2
-  br = reshape(b, (1, 99, 99));
-  bl = LowDimArray{(false,)}(br);
+  br = reshape(b, (1, 99, 99))
+  bl = LowDimArray{(false,)}(br)
   @test size(bl) == size(br)
   @test LoopVectorization.ArrayInterface.size(bl) ===
         (LoopVectorization.StaticInt(1), size(br, 2), size(br, 3))
-  @. c1 = a + br;
-  fill!(c2, 99999);
+  @. c1 = a + br
+  fill!(c2, 99999)
   @test c1 ≈ @turbo inline = false @. c2 = a + bl
   # @test c1 ≈ c2
-  br = reshape(rand(R, 99), (1, 99, 1));
-  bl = LowDimArray{(false,)}(br);
+  br = reshape(rand(R, 99), (1, 99, 1))
+  bl = LowDimArray{(false,)}(br)
   @test size(bl) == size(br)
-  @. c1 = a + br;
+  @. c1 = a + br
   fill!(c2, 99999)
-  @turbo inline = false @. c2 = a + bl;
+  @turbo inline = false @. c2 = a + bl
   @test c1 ≈ c2
 
   if T <: Integer

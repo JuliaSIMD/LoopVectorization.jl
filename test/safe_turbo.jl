@@ -36,21 +36,20 @@ _f6(a, b) = a + SpecialFunctions.gamma(b)
   z = similar(x)
   truth = similar(x)
 
-  LoopVectorization.@turbo safe=true for i in indices(x)
-      z[i] = SpecialFunctions.gamma(x[i])
+  LoopVectorization.@turbo safe = true for i in indices(x)
+    z[i] = SpecialFunctions.gamma(x[i])
   end
   for i in indices(x)
-      truth[i] = SpecialFunctions.gamma(x[i])
+    truth[i] = SpecialFunctions.gamma(x[i])
   end
   @test z ≈ truth
-  
-  LoopVectorization.@turbo safe=true for i in indices(x)
-      z[i] = _f5(x[i], y[i])
+
+  LoopVectorization.@turbo safe = true for i in indices(x)
+    z[i] = _f5(x[i], y[i])
   end
   for i in indices(x)
-      truth[i] = _f6(x[i], y[i])
+    truth[i] = _f6(x[i], y[i])
   end
   @test z ≈ truth
 
 end
-

@@ -508,7 +508,7 @@ T = Float32
   end
   function extrema_turbo(x)
     local a = first(x)
-    local b = a;
+    local b = a
     @turbo for i in eachindex(x)
       local e = x[i]
       b = max(b, e)

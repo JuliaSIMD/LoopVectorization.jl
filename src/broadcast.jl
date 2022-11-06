@@ -1,7 +1,7 @@
-@generated function append_true(::Val{D},::Val{N}) where {D,N}
+@generated function append_true(::Val{D}, ::Val{N}) where {D,N}
   length(D) == N && return D
   t = Expr(:tuple)
-  for d = D
+  for d in D
     push!(t.args, d)
   end
   for n = length(D)+1:N
@@ -12,14 +12,16 @@ end
 struct LowDimArray{D,T,N,A<:AbstractArray{T,N}} <: AbstractArray{T,N}
   data::A
   function LowDimArray{D}(data::A) where {D,T,N,A<:AbstractArray{T,N}}
-    new{append_true(Val{D}(),Val{N}()),T,N,A}(data)
+    new{append_true(Val{D}(), Val{N}()),T,N,A}(data)
   end
   function LowDimArray{D,T,N,A}(data::A) where {D,T,N,A<:AbstractArray{T,N}}
-    new{append_true(Val{D}(),Val{N}()),T,N,A}(data)
+    new{append_true(Val{D}(), Val{N}()),T,N,A}(data)
   end
 end
-function LowDimArray{D0}(data::LowDimArray{D1,T,N,A}) where {D0,T,N,D1,A<:AbstractArray{T,N}}
-  LowDimArray{map(|,D0,D1),T,N,A}(parent(data))
+function LowDimArray{D0}(
+  data::LowDimArray{D1,T,N,A},
+) where {D0,T,N,D1,A<:AbstractArray{T,N}}
+  LowDimArray{map(|, D0, D1),T,N,A}(parent(data))
 end
 Base.@propagate_inbounds Base.getindex(
   A::LowDimArray,
@@ -115,7 +117,9 @@ end
   end
   Expr(:block, Expr(:meta, :inline), staticexpr(Cnew))
 end
-function ArrayInterface.contiguous_axis(::Type{LowDimArrayForBroadcast{D,T,N,A}}) where {D,T,N,A}
+function ArrayInterface.contiguous_axis(
+  ::Type{LowDimArrayForBroadcast{D,T,N,A}},
+) where {D,T,N,A}
   ArrayInterface.contiguous_axis(A)
 end
 @inline function ArrayInterface.stride_rank(
@@ -180,8 +184,8 @@ function _strides_expr(@nospecialize(s), @nospecialize(x), R::Vector{Int}, D::Ve
   use_stride_acc = true
   stride_acc::Int = 1
   if is_column_major(R)
-  # elseif is_row_major(R)
-  #   Nrange = reverse(Nrange)
+    # elseif is_row_major(R)
+    #   Nrange = reverse(Nrange)
   else # not worth my time optimizing this case at the moment...
     # will write something generic stride-rank agnostic eventually
     use_stride_acc = false
@@ -323,14 +327,8 @@ function add_broadcast!(
   mA = gensym!(ls, "Aₘₖ")
   mB = gensym!(ls, "Bₖₙ")
   gf = GlobalRef(Core, :getfield)
-  pushprepreamble!(
-    ls,
-    Expr(:(=), mA, Expr(:(.), bcname, QuoteNode(:a))),
-  )
-  pushprepreamble!(
-    ls,
-    Expr(:(=), mB, Expr(:(.), bcname, QuoteNode(:b))),
-  )
+  pushprepreamble!(ls, Expr(:(=), mA, Expr(:(.), bcname, QuoteNode(:a))))
+  pushprepreamble!(ls, Expr(:(=), mB, Expr(:(.), bcname, QuoteNode(:b))))
   pushprepreamble!(ls, Expr(:(=), Klen, Expr(:call, gf, Expr(:call, :size, mB), 1, false)))
   pushpreamble!(ls, Expr(:(=), Krange, Expr(:call, :(:), staticexpr(1), Klen)))
   k = gensym!(ls, "k")
@@ -432,7 +430,7 @@ function add_broadcast!(
     pushprepreamble!(ls, Expr(:(=), bcname2, Expr(:call, forbroadcast, lda)))
     ArrayReference(bcname2, fulldims)
   end
-  
+
   loadop = add_simple_load!(ls, destname, ref, elementbytes, true)::Operation
   doaddref!(ls, loadop)
 end
@@ -486,10 +484,7 @@ function add_broadcast!(
   gf = GlobalRef(Core, :getfield)
   for (i, arg) ∈ enumerate(args)
     argname = gensym!(ls, "arg")
-    pushprepreamble!(
-      ls,
-      Expr(:(=), argname, Expr(:call, gf, bcargs, i, false)),
-    )
+    pushprepreamble!(ls, Expr(:(=), argname, Expr(:call, gf, bcargs, i, false)))
     # dynamic dispatch
     parent = add_broadcast!(
       ls,
@@ -542,7 +537,7 @@ end
   bc::BC,
   ::Val{Mod},
   ::Val{UNROLL},
-  ::Val{dontbc}
+  ::Val{dontbc},
 ) where {T<:NativeTypes,N,BC<:Union{Broadcasted,Product},Mod,UNROLL,dontbc}
   # 2 + 1
   # we have an N dimensional loop.
@@ -580,8 +575,16 @@ end
   bc::BC,
   ::Val{Mod},
   ::Val{UNROLL},
-  ::Val{dontbc}
-) where {T<:NativeTypes,N,A<:AbstractArray{T,N},BC<:Union{Broadcasted,Product},Mod,UNROLL,dontbc}
+  ::Val{dontbc},
+) where {
+  T<:NativeTypes,
+  N,
+  A<:AbstractArray{T,N},
+  BC<:Union{Broadcasted,Product},
+  Mod,
+  UNROLL,
+  dontbc,
+}
   # we have an N dimensional loop.
   # need to construct the LoopSet
   ls = LoopSet(Mod)
@@ -626,14 +629,14 @@ end
   bc::Broadcasted{Base.Broadcast.DefaultArrayStyle{0},Nothing,typeof(identity),Tuple{T2}},
   ::Val{Mod},
   ::Val{UNROLL},
-  ::Val{dontbc}
+  ::Val{dontbc},
 ) where {T<:NativeTypes,N,T2<:Number,Mod,UNROLL,dontbc}
   inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, threads, warncheckarg, safe = UNROLL
   quote
     $(Expr(:meta, :inline))
     arg = T(first(bc.args))
     @turbo inline = $inline unroll = ($u₁, $u₂) thread = $threads vectorize = $v for i ∈
-      eachindex(
+                                                                                     eachindex(
       dest,
     )
       dest[i] = arg
@@ -646,7 +649,7 @@ end
   bc::Broadcasted{Base.Broadcast.DefaultArrayStyle{0},Nothing,typeof(identity),Tuple{T2}},
   ::Val{Mod},
   ::Val{UNROLL},
-  ::Val{dontbc}
+  ::Val{dontbc},
 ) where {T<:NativeTypes,N,A<:AbstractArray{T,N},T2<:Number,Mod,UNROLL,dontbc}
   inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, threads, warncheckarg, safe = UNROLL
   quote
@@ -680,4 +683,4 @@ end
 end
 
 # vmaterialize!(dest, bc, ::Val, ::Val, ::StaticInt, ::StaticInt, ::StaticInt) =
-  # Base.Broadcast.materialize!(dest, bc)
+# Base.Broadcast.materialize!(dest, bc)

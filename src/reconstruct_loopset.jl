@@ -565,7 +565,8 @@ function parents(ls::LoopSet, u₀::UInt128, u₁::UInt128, u₂::UInt128, u₃:
   loopindex!(idxs, ls, u₀, 0x0010)
   reverse!(idxs)
 end
-parents(ls::LoopSet, os::OperationStruct) = parents(ls, os.parents₀, os.parents₁, os.parents₂, os.parents₃)
+parents(ls::LoopSet, os::OperationStruct) =
+  parents(ls, os.parents₀, os.parents₁, os.parents₂, os.parents₃)
 
 expandedopname(opsymbol::Symbol, offset::Integer) =
   Symbol(String(opsymbol) * '#' * string(offset + 1) * '#')
@@ -714,7 +715,16 @@ function add_parents_to_ops!(ls::LoopSet, ops::Vector{OperationStruct}, constoff
           pushpreamble!(ls, Expr(:(=), instr.instr, extract_varg(constoffset)))
         end
       elseif !isloopvalue(op)
-        add_parents_to_op!(ls, op, ops[i].parents₀, ops[i].parents₁, ops[i].parents₂, ops[i].parents₃, k, Δ)
+        add_parents_to_op!(
+          ls,
+          op,
+          ops[i].parents₀,
+          ops[i].parents₁,
+          ops[i].parents₂,
+          ops[i].parents₃,
+          k,
+          Δ,
+        )
       end
     end
   end

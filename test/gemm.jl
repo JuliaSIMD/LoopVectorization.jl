@@ -720,7 +720,8 @@
   end
   Base.parent(A::TestSizedMatrix) = A.data
   Base.IndexStyle(::Type{<:TestSizedMatrix}) = Base.IndexLinear()
-  Base.@propagate_inbounds Base.getindex(A::TestSizedMatrix, i::Int) = getindex(parent(A), i)
+  Base.@propagate_inbounds Base.getindex(A::TestSizedMatrix, i::Int) =
+    getindex(parent(A), i)
   Base.@propagate_inbounds Base.setindex!(A::TestSizedMatrix, v, i::Int) =
     setindex!(parent(A), v, i)
   Base.@propagate_inbounds Base.getindex(A::TestSizedMatrix, i::CartesianIndex) =
@@ -744,11 +745,18 @@
     ::Type{TestSizedMatrix{M,N,T}},
   ) where {M,N,T}
     Tuple{
-      LoopVectorization.CloseOpen{LoopVectorization.StaticInt{0},LoopVectorization.StaticInt{M}},
-      LoopVectorization.CloseOpen{LoopVectorization.StaticInt{0},LoopVectorization.StaticInt{N}},
+      LoopVectorization.CloseOpen{
+        LoopVectorization.StaticInt{0},
+        LoopVectorization.StaticInt{M},
+      },
+      LoopVectorization.CloseOpen{
+        LoopVectorization.StaticInt{0},
+        LoopVectorization.StaticInt{N},
+      },
     }
   end
-  Base.unsafe_convert(::Type{Ptr{T}}, A::TestSizedMatrix{M,N,T}) where {M,N,T} = pointer(A.data)
+  Base.unsafe_convert(::Type{Ptr{T}}, A::TestSizedMatrix{M,N,T}) where {M,N,T} =
+    pointer(A.data)
   LoopVectorization.ArrayInterface.strides(::TestSizedMatrix{M}) where {M} =
     (LoopVectorization.StaticInt{1}(), LoopVectorization.StaticInt{M}())
   LoopVectorization.ArrayInterface.contiguous_axis(::Type{<:TestSizedMatrix}) =
@@ -760,8 +768,9 @@
   # LoopVectorization.ArrayInterface.offsets(::Type{TestSizedMatrix{M,N,T}}) where {M,N,T}  = (LoopVectorization.StaticInt{0}(), LoopVectorization.StaticInt{0}())
   LoopVectorization.ArrayInterface.offsets(::TestSizedMatrix) =
     (LoopVectorization.StaticInt{0}(), LoopVectorization.StaticInt{0}())
-  LoopVectorization.ArrayInterface.dense_dims(::Type{TestSizedMatrix{M,N,T}}) where {M,N,T} =
-    LoopVectorization.ArrayInterface.dense_dims(Matrix{T})
+  LoopVectorization.ArrayInterface.dense_dims(
+    ::Type{TestSizedMatrix{M,N,T}},
+  ) where {M,N,T} = LoopVectorization.ArrayInterface.dense_dims(Matrix{T})
   # struct ZeroInitializedArray{T,N,A<:DenseArray{T,N}} <: DenseArray{T,N}
   #     data::A
   # end

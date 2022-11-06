@@ -56,7 +56,7 @@ function substitute_broadcast(
 )
   ci = first(Meta.lower(LoopVectorization, q).args).code
   nargs = length(ci) - 1
-  ex = Expr(:block)
+  lb = Expr(:block)
   syms = Vector{Symbol}(undef, nargs)
   configarg = (inline, u₁, u₂, v, true, threads, warncheckarg, safe)
   unroll_param_tup = Expr(:call, lv(:avx_config_val), :(Val{$configarg}()), staticexpr(0))
@@ -70,17 +70,21 @@ function substitute_broadcast(
       ciₙargs = ciₙ.args
       f = first(ciₙargs)
       if ciₙ.head === :(=)
-        push!(ex.args, Expr(:(=), f, syms[((ciₙargs[2])::Core.SSAValue).id]))
+        push!(lb.args, Expr(:(=), f, syms[((ciₙargs[2])::Core.SSAValue).id]))
       elseif isglobalref(f, Base, :materialize!)
-        add_ci_call!(ex, lv(:vmaterialize!), ciₙargs, syms, n, unroll_param_tup, mod)
+        add_ci_call!(lb, lv(:vmaterialize!), ciₙargs, syms, n, unroll_param_tup, mod)
       elseif isglobalref(f, Base, :materialize)
-        add_ci_call!(ex, lv(:vmaterialize), ciₙargs, syms, n, unroll_param_tup, mod)
+        add_ci_call!(lb, lv(:vmaterialize), ciₙargs, syms, n, unroll_param_tup, mod)
       else
-        add_ci_call!(ex, f, ciₙargs, syms, n)
+        add_ci_call!(lb, f, ciₙargs, syms, n)
       end
     end
   end
-  esc(ex)
+  ret::Expr = pop!(lb.args)
+  if Meta.isexpr(ret, :(=), 2)
+    ret = ret.args[2]
+  end
+  esc(Expr(:let, lb, Expr(:block, ret)))
 end
 
 

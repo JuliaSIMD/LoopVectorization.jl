@@ -509,12 +509,7 @@ end
 available_registers() =
   ifelse(has_opmask_registers(), register_count(), register_count() - One())
 function set_hw!(ls::LoopSet)
-  set_hw!(
-    ls,
-    Int(register_size()),
-    Int(available_registers()),
-    Int(cache_linesize())
-  )
+  set_hw!(ls, Int(register_size()), Int(available_registers()), Int(cache_linesize()))
 end
 reg_size(ls::LoopSet) = ls.register_size
 reg_count(ls::LoopSet) = ls.register_count
@@ -924,7 +919,7 @@ function add_block!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
 end
 function makestatic!(expr)
   expr isa Expr || return expr
-  for i = eachindex(expr.args)
+  for i in eachindex(expr.args)
     ex = expr.args[i]
     if ex isa Int
       expr.args[i] = staticexpr(ex)
@@ -1481,7 +1476,7 @@ function add_operation!(
     add_comparison!(ls, LHS_sym, RHS, elementbytes, position)
   else
     throw(LoopError("Expression not recognized.", RHS))
-  end  
+  end
 end
 
 function prepare_rhs_for_storage!(

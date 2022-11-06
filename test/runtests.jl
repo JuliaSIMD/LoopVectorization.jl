@@ -53,5 +53,3 @@ if LOOPVECTORIZATION_TEST == "all"
 else
   include("grouptests.jl")
 end
-
-

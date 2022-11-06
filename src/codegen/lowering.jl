@@ -543,7 +543,11 @@ end
   end
 end
 @inline function of_same_size(::Type{T}, ::Type{S}) where {T,S}
-  of_same_size(T, S, VectorizationBase.register_size() ÷ VectorizationBase.simd_integer_register_size())
+  of_same_size(
+    T,
+    S,
+    VectorizationBase.register_size() ÷ VectorizationBase.simd_integer_register_size(),
+  )
 end
 function outer_reduction_zero(
   op::Operation,

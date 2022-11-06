@@ -5,7 +5,19 @@
 
   using LoopVectorization
 
-  good_operators = [log, log1p, exp, +, -, Base.FastMath.add_fast, /, sqrt, tanh_fast, sigmoid_fast, LoopVectorization.relu]
+  good_operators = [
+    log,
+    log1p,
+    exp,
+    +,
+    -,
+    Base.FastMath.add_fast,
+    /,
+    sqrt,
+    tanh_fast,
+    sigmoid_fast,
+    LoopVectorization.relu,
+  ]
   bad_operators = [clenshaw, println]
 
   for op in good_operators

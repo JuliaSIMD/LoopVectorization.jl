@@ -897,7 +897,10 @@ function array_reference_meta!(
           if length(loopdependencies) == length(indices)
             move_to_last!(loopdependencies, ind_prev_index)
           else
-            move_to_last!(loopdependencies, findfirst(Base.Fix2(===, ind), loopdependencies)::Int)
+            move_to_last!(
+              loopdependencies,
+              findfirst(Base.Fix2(===, ind), loopdependencies)::Int,
+            )
           end
           vptrarray = repeated_index!(
             ls,

@@ -266,7 +266,7 @@ const COST = Dict{Symbol,InstructionCost}(
   :significand => InstructionCost(8, 1.0),
 )
 
-for f = EXTRACTFUNS
+for f in EXTRACTFUNS
   COST[f] = InstructionCost(0, 0.0, 0.0, 0)
 end
 
@@ -351,7 +351,8 @@ end
   VectorizationBase.fmap(ier, VectorizationBase.data(a), VectorizationBase.data(b)),
 )
 
-@inline (iec::IfElseCollapser)(a) = VectorizationBase.contract(IfElseOp(iec.f), a, StaticInt{1}())
+@inline (iec::IfElseCollapser)(a) =
+  VectorizationBase.contract(IfElseOp(iec.f), a, StaticInt{1}())
 @inline (iec::IfElseCollapser)(a, ::StaticInt{C}) where {C} =
   VectorizationBase.contract(IfElseOp(iec.f), a, StaticInt{C}())
 

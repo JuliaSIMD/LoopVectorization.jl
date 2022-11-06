@@ -256,7 +256,7 @@ end
   ::Val{Threaded},
   args::Vararg{AbstractArray,A},
 ) where {F,A,NonTemporal,Threaded}
-  gc_preserve_vmap_quote(NonTemporal,Threaded,A)
+  gc_preserve_vmap_quote(NonTemporal, Threaded, A)
 end
 
 
