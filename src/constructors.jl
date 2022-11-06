@@ -80,9 +80,9 @@ function substitute_broadcast(
       end
     end
   end
-  ret::Expr = pop!(lb.args)
+  ret::Expr = pop!(lb.args)::Expr
   if Meta.isexpr(ret, :(=), 2)
-    ret = ret.args[2]
+    ret = (ret.args[2])::Expr
   end
   esc(Expr(:let, lb, Expr(:block, ret)))
 end
