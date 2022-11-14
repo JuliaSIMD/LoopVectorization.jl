@@ -1,7 +1,7 @@
 name = "LoopVectorization"
 uuid = "bdcacae8-1622-11e9-2a5c-532679323890"
 authors = ["Chris Elrod <elrodc@gmail.com>"]
-version = "0.12.138"
+version = "0.12.139"
 
 [deps]
 ArrayInterface = "4fba245c-0d91-5ea0-9b3e-6abc04ee57a9"
@@ -39,7 +39,7 @@ ChainRulesCore = "1"
 CloseOpenIntervals = "0.1.10"
 DocStringExtensions = "0.8, 0.9"
 ForwardDiff = "0.9, 0.10"
-HostCPUFeatures = "0.1.3"
+HostCPUFeatures = "0.1.10"
 IfElse = "0.1"
 LayoutPointers = "0.1.11"
 OffsetArrays = "1.4.1"

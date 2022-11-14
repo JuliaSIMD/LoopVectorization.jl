@@ -1039,7 +1039,7 @@ function calc_Ureduct!(ls::LoopSet, us::UnrollSpecification)
         # rem = length(u₁loop) - 
         # max(1, cld(rem, u₁))
       else
-        Core.ifelse(Sys.CPU_NAME === "znver1", 1, Core.ifelse(u₁ ≥ 4, 2, 1))
+        Core.ifelse(get_cpu_name() === "znver1", 1, Core.ifelse(u₁ ≥ 4, 2, 1))
       end
     else
       -1
