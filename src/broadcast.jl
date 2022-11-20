@@ -44,10 +44,9 @@ end
 @inline ArrayInterface.device(::LowDimArray) = ArrayInterface.CPUPointer()
 @generated function ArrayInterface.size(A::LowDimArray{D,T,N}) where {D,T,N}
   t = Expr(:tuple)
-  gf = GlobalRef(Core, :getfield)
   for n ∈ 1:N
     if n > length(D) || D[n]
-      push!(t.args, Expr(:call, gf, :s, n, false))
+      push!(t.args, Expr(:call, getfield, :s, n))
     else
       push!(t.args, Expr(:call, Expr(:curly, lv(:StaticInt), 1)))
     end
@@ -64,10 +63,9 @@ ArrayInterface.offsets(A::LowDimArray) = ArrayInterface.offsets(parent(A))
 
 @generated function _lowdimfilter(::Val{D}, tup::Tuple{Vararg{Any,N}}) where {D,N}
   t = Expr(:tuple)
-  gf = GlobalRef(Core, :getfield)
   for n ∈ 1:N
     if n > length(D) || D[n]
-      push!(t.args, Expr(:call, gf, :tup, n, false))
+      push!(t.args, Expr(:call, getfield, :tup, n))
     end
   end
   Expr(:block, Expr(:meta, :inline), t)
@@ -178,7 +176,6 @@ function _strides_expr(@nospecialize(s), @nospecialize(x), R::Vector{Int}, D::Ve
   N = length(R)
   q = Expr(:block, Expr(:meta, :inline))
   strd_tup = Expr(:tuple)
-  gf = GlobalRef(Core, :getfield)
   ifel = GlobalRef(Core, :ifelse)
   Nrange = 1:1:N # type stability w/ respect to reverse
   use_stride_acc = true
@@ -207,7 +204,7 @@ function _strides_expr(@nospecialize(s), @nospecialize(x), R::Vector{Int}, D::Ve
       elseif stride_acc ≠ 0
         push!(strd_tup.args, staticexpr(stride_acc))
       else
-        push!(strd_tup.args, :($gf(x, $n, false)))
+        push!(strd_tup.args, :($getfield(x, $n)))
       end
     else
       if xₙ_static
@@ -217,7 +214,7 @@ function _strides_expr(@nospecialize(s), @nospecialize(x), R::Vector{Int}, D::Ve
       else
         push!(
           strd_tup.args,
-          :($ifel(isone($gf(s, $n, false)), zero($xₙ_type), $gf(x, $n, false))),
+          :($ifel(isone($getfield(s, $n)), zero($xₙ_type), $getfield(x, $n))),
         )
       end
     end
@@ -326,10 +323,9 @@ function add_broadcast!(
   Klen = gensym!(ls, "K")
   mA = gensym!(ls, "Aₘₖ")
   mB = gensym!(ls, "Bₖₙ")
-  gf = GlobalRef(Core, :getfield)
   pushprepreamble!(ls, Expr(:(=), mA, Expr(:(.), bcname, QuoteNode(:a))))
   pushprepreamble!(ls, Expr(:(=), mB, Expr(:(.), bcname, QuoteNode(:b))))
-  pushprepreamble!(ls, Expr(:(=), Klen, Expr(:call, gf, Expr(:call, :size, mB), 1, false)))
+  pushprepreamble!(ls, Expr(:(=), Klen, Expr(:call, getfield, Expr(:call, :size, mB), 1)))
   pushpreamble!(ls, Expr(:(=), Krange, Expr(:call, :(:), staticexpr(1), Klen)))
   k = gensym!(ls, "k")
   add_loop!(ls, Loop(k, 1, Klen, 1, Krange, Klen), k)
@@ -481,10 +477,9 @@ function add_broadcast!(
   parents = Operation[]
   deps = Symbol[]
   # reduceddeps = Symbol[]
-  gf = GlobalRef(Core, :getfield)
   for (i, arg) ∈ enumerate(args)
     argname = gensym!(ls, "arg")
-    pushprepreamble!(ls, Expr(:(=), argname, Expr(:call, gf, bcargs, i, false)))
+    pushprepreamble!(ls, Expr(:(=), argname, Expr(:call, getfield, bcargs, i)))
     # dynamic dispatch
     parent = add_broadcast!(
       ls,
@@ -539,7 +534,7 @@ end
   ::Val{UNROLL},
   ::Val{dontbc},
 ) where {T<:NativeTypes,N,BC<:Union{Broadcasted,Product},Mod,UNROLL,dontbc}
-  # 2 + 1
+  2 + 1
   # we have an N dimensional loop.
   # need to construct the LoopSet
   ls = LoopSet(Mod)

@@ -121,7 +121,7 @@ function Loop(
 end
 
 
-extract_loop(l) = Expr(:call, GlobalRef(Core, :getfield), Symbol("#loop#bounds#"), l, false)
+extract_loop(l) = Expr(:call, getfield, Symbol("#loop#bounds#"), l)
 
 function add_loops!(ls::LoopSet, LPSYM, LB)
   n = max(length(LPSYM), length(LB))
@@ -145,7 +145,7 @@ function add_loops!(
   ssym = String(sym)
   for k = N:-1:1
     axisexpr =
-      :(getfield(getfield(getfield(var"#loop#bounds#", $i, false), :indices), $k, false))
+      :($getfield($getfield($getfield(var"#loop#bounds#", $i), :indices), $k))
     add_loop!(
       ls,
       Loop(ls, axisexpr, Symbol(ssym * '#' * string(k) * '#'), T.parameters[k])::Loop,
@@ -258,7 +258,7 @@ function ArrayReferenceMeta(
 end
 
 
-extract_varg(i) = :(getfield(var"#vargs#", $i, false))
+extract_varg(i) = :($getfield(var"#vargs#", $i))
 # _extract(::Type{StaticInt{N}}) where {N} = N
 extract_gsp!(sptrs::Expr, name::Symbol) = (push!(sptrs.args, name); nothing)
 tupleranks(R::NTuple{8,Int}) = ntuple(n -> sum(R[n] .≥ R), Val{8}())
@@ -319,7 +319,7 @@ function _add_mref!(
   extract_gsp!(sptrs, tmpsp)
   strd_tup = Expr(:tuple)
   offsets_tup = Expr(:tuple)
-  gf = GlobalRef(Core, :getfield)
+  gf = getfield
   offsets = gensym(:offsets)
   strides = gensym(:strides)
   pushpreamble!(ls, Expr(:(=), offsets, Expr(:call, lv(:offsets), tmpsp)))
@@ -981,6 +981,63 @@ Execute an `@turbo` block. The block's code is represented via the arguments:
   var"#num#vargs#",
 }
   # 1 + 1 # Irrelevant line you can comment out/in to force recompilation...
+  ls = _turbo_loopset(
+    var"#OPS#",
+    var"#ARF#",
+    var"#AM#",
+    var"#LPSYM#",
+    var"#LB#".parameters,
+    var"#V#".parameters,
+    var"#UNROLL#",
+  )
+  pushfirst!(
+    ls.preamble.args,
+    :(
+      var"#lv#tuple#args#" =
+        reassemble_tuple(Tuple{var"#LB#",var"#V#"}, var"#flattened#var#arguments#")
+    ),
+  )
+  post = hoist_constant_memory_accesses!(ls)
+  # q = @show(avx_body(ls, var"#UNROLL#")); post === ls.preamble ? q : Expr(:block, q, post)
+  q = if (var"#UNROLL#"[10] > 1) && length(var"#LPSYM#") == length(ls.loops)
+    inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, nt, wca, safe = var"#UNROLL#"
+    # wrap in `var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#"` in `Expr` to homogenize types
+    avx_threads_expr(
+      ls,
+      (inline, u₁, u₂, v, isbroadcast, W, rs, rc, cls, one(UInt), wca, safe),
+      nt,
+      :(Val{$(var"#OPS#")}()),
+      :(Val{$(var"#ARF#")}()),
+      :(Val{$(var"#AM#")}()),
+      :(Val{$(var"#LPSYM#")}()),
+    )
+  else
+    # Main.BODY[] = avx_body(ls, var"#UNROLL#")
+    # return @show avx_body(ls, var"#UNROLL#")
+    avx_body(ls, var"#UNROLL#")
+  end
+  post === ls.preamble ? q : Expr(:block, q, post)
+  # @show var"#UNROLL#", var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#"
+end
+@generated function _turbo_manyarg!(
+  ::Val{var"#UNROLL#"},
+  ::Val{var"#OPS#"},
+  ::Val{var"#ARF#"},
+  ::Val{var"#AM#"},
+  ::Val{var"#LPSYM#"},
+  ::Val{Tuple{var"#LB#",var"#V#"}},
+  var"#flattened#var#arguments#"::Tuple{Vararg{Any,var"#num#vargs#"}},
+) where {
+  var"#UNROLL#",
+  var"#OPS#",
+  var"#ARF#",
+  var"#AM#",
+  var"#LPSYM#",
+  var"#LB#",
+  var"#V#",
+  var"#num#vargs#",
+}
+  1 + 1 # Irrelevant line you can comment out/in to force recompilation...
   ls = _turbo_loopset(
     var"#OPS#",
     var"#ARF#",

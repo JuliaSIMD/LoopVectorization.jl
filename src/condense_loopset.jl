@@ -4,11 +4,10 @@ Base.:|(u::Unsigned, it::IndexType) = u | UInt8(it)
 Base.:(==)(u::Unsigned, it::IndexType) = (u % UInt8) == UInt8(it)
 
 function _append_fields!(t::Expr, body::Expr, sym::Symbol, ::Type{T}) where {T}
-  gf = GlobalRef(Core, :getfield)
   for f ∈ 1:fieldcount(T)
     TF = fieldtype(T, f)
     Base.issingletontype(TF) && continue
-    gfcall = Expr(:call, gf, sym, f)
+    gfcall = Expr(:call, getfield, sym, f)
     if fieldcount(TF) ≡ 0
       push!(t.args, gfcall)
     elseif TF <: DataType
@@ -37,16 +36,15 @@ end
   body
 end
 function rebuild_fields(offset::Int, ::Type{T}) where {T}
-  gf = GlobalRef(Core, :getfield)
   call = (T <: Tuple) ? Expr(:tuple) : Expr(:new, T)
   for f ∈ 1:fieldcount(T)
     TF = fieldtype(T, f)
     if Base.issingletontype(TF)
       push!(call.args, TF.instance)
     elseif fieldcount(TF) ≡ 0
-      push!(call.args, Expr(:call, gf, :t, (offset += 1), false))
+      push!(call.args, Expr(:call, getfield, :t, (offset += 1)))
     elseif TF <: DataType
-      push!(call.args, Expr(:call, lv(:gettype), Expr(:call, gf, :t, (offset += 1), false)))
+      push!(call.args, Expr(:call, lv(:gettype), Expr(:call, getfield, :t, (offset += 1))))
     else
       arg, offset = rebuild_fields(offset, TF)
       push!(call.args, arg)
@@ -58,9 +56,9 @@ end
   if Base.issingletontype(T)
     return T.instance
   elseif fieldcount(T) ≡ 0
-    call = Expr(:call, GlobalRef(Core, :getfield), :t, 1, false)
+    call = Expr(:call, getfield, :t, 1)
   elseif T <: DataType
-    call = Expr(:call, lv(:gettype), Expr(:call, GlobalRef(Core, :getfield), :t, 1, false))
+    call = Expr(:call, lv(:gettype), Expr(:call, getfield, :t, 1))
   else
     call, _ = rebuild_fields(0, T)
   end
@@ -377,10 +375,10 @@ val(x) = Expr(:call, Expr(:curly, :Val, x))
   quote
     $(Expr(:meta, :inline))
     p, li =
-      VectorizationBase.tdot(x, (vsub_nsw(getfield(i, 1, false), one($I)),), strides(x))
+      VectorizationBase.tdot(x, (vsub_nsw(getfield(i, 1), one($I)),), strides(x))
     ptr = gep(p, li)
     si = ArrayInterface.StrideIndex{1,$(R[ri],),$(C === 1 ? 1 : 0)}(
-      (getfield(strides(x), $ri, false),),
+      (getfield(strides(x), $ri),),
       (Zero(),),
     )
     stridedpointer(ptr, si, StaticInt{$(B === 1 ? 1 : 0)}())
@@ -394,8 +392,8 @@ end
   quote
     $(Expr(:meta, :inline))
     si = ArrayInterface.StrideIndex{1,$(R[ri],),$(C === 1 ? 1 : 0)}(
-      (getfield(strides(x), $ri, false),),
-      (getfield(offsets(x), $ri, false),),
+      (getfield(strides(x), $ri),),
+      (getfield(offsets(x), $ri),),
     )
     stridedpointer(pointer(x), si, StaticInt{$(B == 1 ? 1 : 0)}())
   end
@@ -550,7 +548,7 @@ function add_grouped_strided_pointer!(extra_args::Expr, ls::LoopSet)
   push!(gsp.args, val(matcheddims))
   gsps = gensym!(ls, "#grouped#strided#pointer#")
   push!(extra_args.args, gsps)
-  pushpreamble!(ls, Expr(:(=), gsps, Expr(:call, GlobalRef(Core, :getfield), gsp, 1)))
+  pushpreamble!(ls, Expr(:(=), gsps, Expr(:call, getfield, gsp, 1)))
   preserve, shouldindbyind, roots
 end
 
@@ -802,21 +800,10 @@ function generate_call_types(
   argmeta = argmeta_and_consts_description(ls, arraysymbolinds)
   loop_bounds = loop_boundaries(ls, shouldindbyind)
   loop_syms = tuple_expr(QuoteNode, ls.loopsymbols)
-  func = debug ? lv(:_turbo_loopset_debug) : lv(:_turbo_!)
   lbarg = debug ? Expr(:call, :typeof, loop_bounds) : loop_bounds
   configarg = (inline, u₁, u₂, v, ls.isbroadcast, thread, warncheckarg, safe)
   unroll_param_tup =
     Expr(:call, lv(:avx_config_val), :(Val{$configarg}()), VECTORWIDTHSYMBOL)
-  q = Expr(
-    :call,
-    func,
-    unroll_param_tup,
-    val(operation_descriptions),
-    val(arrayref_descriptions),
-    val(argmeta),
-    val(loop_syms),
-  )
-
   add_reassigned_syms!(extra_args, ls) # counterpart to `add_ops!` constants
   for (opid, sym) ∈ ls.preamble_symsym # counterpart to process_metadata! symsym extraction
     if instruction(ops[opid]) ≠ DROPPEDCONSTANT
@@ -826,17 +813,42 @@ function generate_call_types(
   append!(extra_args.args, arraysymbolinds) # add_array_symbols!
   add_external_functions!(extra_args, ls) # extract_external_functions!
   add_outerreduct_types!(extra_args, ls) # extract_outerreduct_types!
-  if debug
-    vecwidthdefq = Expr(:block)
+  argcestimate = length(extra_args.args) - 1
+  for ref = ls.refs_aliasing_syms
+    argcestimate += length(ref.loopedindex)
+  end
+  manyarg = !debug && (argcestimate > 16)
+  func = debug ? lv(:_turbo_loopset_debug) : (manyarg ? lv(:_turbo_manyarg!) : lv(:_turbo_!))
+  q = Expr(
+    :call,
+    func,
+    unroll_param_tup,
+    val(operation_descriptions),
+    val(arrayref_descriptions),
+    val(argmeta),
+    val(loop_syms),
+  )
+  vecwidthdefq = if debug
     push!(q.args, Expr(:tuple, lbarg, extra_args))
+    Expr(:block)
   else
     vargsym = gensym(:vargsym)
-    vecwidthdefq = Expr(:block, Expr(:(=), vargsym, Expr(:tuple, lbarg, extra_args)))
     push!(
       q.args,
-      Expr(:call, GlobalRef(Base, :Val), Expr(:call, GlobalRef(Base, :typeof), vargsym)),
-      Expr(:(...), Expr(:call, lv(:flatten_to_tuple), vargsym)),
+      Expr(:call, GlobalRef(Base, :Val), Expr(:call, GlobalRef(Base, :typeof), vargsym))
     )
+    if manyarg
+      push!(
+        q.args,
+        Expr(:call, lv(:flatten_to_tuple), vargsym),
+      )
+    else
+      push!(
+        q.args,
+        Expr(:(...), Expr(:call, lv(:flatten_to_tuple), vargsym)),
+      )
+    end
+    Expr(:block, Expr(:(=), vargsym, Expr(:tuple, lbarg, extra_args)))
   end
   define_eltype_vec_width!(vecwidthdefq, ls, nothing, true)
   push!(vecwidthdefq.args, q)
