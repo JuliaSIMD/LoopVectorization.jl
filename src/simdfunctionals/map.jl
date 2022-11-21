@@ -266,7 +266,7 @@ end
 @inline _all_dense(t::Tuple{ArrayInterface.True,ArrayInterface.False,Vararg}) = false
 @inline _all_dense(t::Tuple{ArrayInterface.False,Vararg}) = false
 @inline all_dense() = true
-@inline all_dense(t::NTuple{N,T}) where {N,T} = true
+@inline all_dense(t::NTuple{N}) where {N} = true
 @inline all_dense(A::Array) = true
 @inline all_dense(A::AbstractArray) = _all_dense(ArrayInterface.dense_dims(A))
 @inline all_dense(
