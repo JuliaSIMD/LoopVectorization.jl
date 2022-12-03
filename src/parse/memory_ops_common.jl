@@ -859,7 +859,8 @@ function array_reference_meta!(
         addconstindex!(indices, offsets, strides, loopedindex, ind)
         ninds += 1
       else
-        vptrarray = subset_vptr!(ls, vptrarray, ninds, ind, indices, loopedindex, 0)
+        # convert ind to reduce invalidations
+        vptrarray = subset_vptr!(ls, vptrarray, ninds, convert(Int, ind), indices, loopedindex, 0)
         length(indices) == 0 && push!(indices, DISCONTIGUOUS)
       end
     elseif ind isa Expr
