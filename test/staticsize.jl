@@ -38,7 +38,7 @@ function n2testloop(output1, output2, output3, output_nonstatic0, output_nonstat
     # @show n1, n2, n3
     input = randn(n1, n2)
     matrix = randn(n3, n2)
-    smatrix = StrideArray(matrix, (StaticInt(n1), StaticInt(n2)))
+    smatrix = StrideArray(matrix, (StaticInt(n3), StaticInt(n2)))
     issue238_noavx!(output_nonstatic0, matrix, input)
     fill!(output_nonstatic1, 0)
     issue238!(output_nonstatic1, matrix, input)
