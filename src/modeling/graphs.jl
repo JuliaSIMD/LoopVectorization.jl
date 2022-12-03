@@ -834,7 +834,8 @@ function add_constant_compute!(ls::LoopSet, op::Operation, var::Symbol)::Operati
     if !getconstfailed
       f = instr.instr
       if f === :add_fast
-        return add_constant!(ls, sum(vals), 8)::Operation
+        # use init explicitly to prevent invalidations
+        return add_constant!(ls, sum(vals; init = false), 8)::Operation
       elseif f === :mul_fast
         return add_constant!(ls, prod(vals), 8)::Operation
       elseif f === :sub_fast
@@ -848,7 +849,8 @@ function add_constant_compute!(ls::LoopSet, op::Operation, var::Symbol)::Operati
           return add_constant!(ls, vals[1] / vals[2], 8)::Operation
         end
       elseif length(opparents) == 3
-        T = typeof(sum(vals))
+        # use init explicitly to prevent invalidations
+        T = typeof(sum(vals; init = false))
         if f === :vfmadd_fast
           return add_constant!(
             ls,
