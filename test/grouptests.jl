@@ -51,6 +51,8 @@ const START_TIME = time()
 
     @time include("reduction_untangling.jl")
 
+    @time include("manyarrayrefs.jl")
+
     @time include("manyloopreductions.jl")
 
     @time include("simplemisc.jl")
