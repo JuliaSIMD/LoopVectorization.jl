@@ -147,17 +147,17 @@ struct OperationStruct <: AbstractLoopOperation
   parents₃::UInt128
   node_type::OperationType
   symid::UInt16
-  array::UInt8
+  array::UInt16
 end
 optype(os) = os.node_type
 
 function findmatchingarray(ls::LoopSet, mref::ArrayReferenceMeta)
-  id = 0x01
+  id = 0x0001
   for r ∈ ls.refs_aliasing_syms
     r == mref && return id
-    id += 0x01
+    id += 0x0001
   end
-  0x00
+  0x0000
 end
 filled_8byte_chunks(u::T) where {T<:Unsigned} = sizeof(T) - (leading_zeros(u) >>> 3)
 
@@ -224,7 +224,7 @@ function OperationStruct!(
   rd = reduceddeps_uint(ls, op)
   cd = childdeps_uint(ls, op)
   p0, p1, p2, p3 = parents_uint(op)
-  array = accesses_memory(op) ? findmatchingarray(ls, op.ref) : 0x00
+  array = accesses_memory(op) ? findmatchingarray(ls, op.ref) : 0x0000
   ids[identifier(op)] = id = findindoradd!(varnames, name(op))
   OperationStruct(ld, rd, cd, p0, p1, p2, p3, op.node_type, id, array)
 end
