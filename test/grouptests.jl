@@ -115,8 +115,9 @@ const START_TIME = time()
     precompiledir = joinpath(@__DIR__, "precompile")
     Pkg.activate(joinpath(precompiledir, "LVUser"))
     @time include(joinpath(precompiledir, "precompile.jl"))
-    pkg.activate(cproj)
+    Pkg.activate(cproj)
   end
+
 end
 
 const ELAPSED_MINUTES = (time() - START_TIME) / 60
