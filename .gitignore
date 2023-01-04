@@ -17,5 +17,5 @@ test/Manifest.toml
 test/*#*
 *#*
 test/testresults
-
+test/precompile/LVUser/Manifest.toml
 
