@@ -105,8 +105,13 @@ using VectorizationBase:
   maybestaticsize#,zero_mask
 
 using HostCPUFeatures:
-  pick_vector_width, register_size, register_count, has_opmask_registers, unwrap, get_cpu_name
-using CPUSummary: num_threads, num_cores, cache_linesize, cache_size
+  pick_vector_width,
+  register_size,
+  register_count,
+  has_opmask_registers,
+  unwrap,
+  get_cpu_name
+using CPUSummary: num_cores, cache_linesize, cache_size
 
 
 using IfElse: ifelse
