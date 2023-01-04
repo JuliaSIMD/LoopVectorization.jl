@@ -534,7 +534,7 @@ end
   ::Val{UNROLL},
   ::Val{dontbc},
 ) where {T<:NativeTypes,N,BC<:Union{Broadcasted,Product},Mod,UNROLL,dontbc}
-  2 + 1
+  # 2 + 1
   # we have an N dimensional loop.
   # need to construct the LoopSet
   ls = LoopSet(Mod)

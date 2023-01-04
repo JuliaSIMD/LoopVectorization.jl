@@ -374,8 +374,7 @@ val(x) = Expr(:call, Expr(:curly, :Val, x))
   ri = argmin(R)
   quote
     $(Expr(:meta, :inline))
-    p, li =
-      VectorizationBase.tdot(x, (vsub_nsw(getfield(i, 1), one($I)),), strides(x))
+    p, li = VectorizationBase.tdot(x, (vsub_nsw(getfield(i, 1), one($I)),), strides(x))
     ptr = gep(p, li)
     si = ArrayInterface.StrideIndex{1,$(R[ri],),$(C === 1 ? 1 : 0)}(
       (getfield(strides(x), $ri),),
@@ -572,7 +571,7 @@ end
     StaticInt{W}(),
     register_size(),
     available_registers(),
-    lv_max_num_threads(),
+    num_cores(), #FIXME
     cache_linesize(),
   )
 end
@@ -814,11 +813,12 @@ function generate_call_types(
   add_external_functions!(extra_args, ls) # extract_external_functions!
   add_outerreduct_types!(extra_args, ls) # extract_outerreduct_types!
   argcestimate = length(extra_args.args) - 1
-  for ref = ls.refs_aliasing_syms
+  for ref in ls.refs_aliasing_syms
     argcestimate += length(ref.loopedindex)
   end
   manyarg = !debug && (argcestimate > 16)
-  func = debug ? lv(:_turbo_loopset_debug) : (manyarg ? lv(:_turbo_manyarg!) : lv(:_turbo_!))
+  func =
+    debug ? lv(:_turbo_loopset_debug) : (manyarg ? lv(:_turbo_manyarg!) : lv(:_turbo_!))
   q = Expr(
     :call,
     func,
@@ -835,18 +835,12 @@ function generate_call_types(
     vargsym = gensym(:vargsym)
     push!(
       q.args,
-      Expr(:call, GlobalRef(Base, :Val), Expr(:call, GlobalRef(Base, :typeof), vargsym))
+      Expr(:call, GlobalRef(Base, :Val), Expr(:call, GlobalRef(Base, :typeof), vargsym)),
     )
     if manyarg
-      push!(
-        q.args,
-        Expr(:call, lv(:flatten_to_tuple), vargsym),
-      )
+      push!(q.args, Expr(:call, lv(:flatten_to_tuple), vargsym))
     else
-      push!(
-        q.args,
-        Expr(:(...), Expr(:call, lv(:flatten_to_tuple), vargsym)),
-      )
+      push!(q.args, Expr(:(...), Expr(:call, lv(:flatten_to_tuple), vargsym)))
     end
     Expr(:block, Expr(:(=), vargsym, Expr(:tuple, lbarg, extra_args)))
   end
@@ -942,6 +936,10 @@ can_turbo(::typeof(Base.FastMath.pow_fast), ::Val{2}) = true
 for f ∈ (convert, reinterpret, trunc, unsafe_trunc, round, ceil, floor)
   @eval can_turbo(::typeof($f), ::Val{2}) = true
 end
+
+# @inline function _can_turbo(f::F, t::Vararg{Any,K}) where {F,K}
+#   Base.promote_op(f, t...) !== Union{}
+# end
 
 """
     check_turbo_safe(ls::LoopSet)

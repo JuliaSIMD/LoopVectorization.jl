@@ -64,14 +64,6 @@ struct StaticType{T} end
   )
 end
 
-# function approx_cbrt(x)
-#     s = significand(x)
-#     e = exponent(x)
-
-#     # 40 + 0.00020833333333333335*(x-64000)  -2.1701388888888896e-9*(x-64000)^2*0.5 + 5.6514033564814844e-14 * (x-64000)^3/6
-# end
-lv_max_num_threads() = ifelse(gt(num_threads(), num_cores()), num_cores(), num_threads())
-
 @generated function calc_factors(::StaticInt{nc}) where {nc}
   t = Expr(:tuple)
   for i ∈ nc:-1:1
@@ -148,10 +140,10 @@ end
 
 # if a threaded loop is vectorized, call
 @inline function choose_num_blocks(M, ::StaticInt{U}, nt) where {U}
-  _choose_num_blocks(M % UInt, StaticInt{U}(), nt, lv_max_num_threads())
+  _choose_num_blocks(M % UInt, StaticInt{U}(), nt, num_cores())
 end
 # otherwise, call
-@inline choose_num_blocks(nt, ::StaticInt{NC} = lv_max_num_threads()) where {NC} =
+@inline choose_num_blocks(nt, ::StaticInt{NC} = num_cores()) where {NC} =
   @inbounds choose_num_block_table(StaticInt{NC}())[nt]
 
 scale_cost(c) = @fastmath c * (Sys.ARCH === :x86_64 ? 0.0225 : 0.005625)
@@ -168,12 +160,15 @@ end
   NT::UInt,
   x::Base.BitInteger,
 ) where {T<:Union{Float32,Float64}}
-  min(
-    Base.fptoui(
-      UInt,
-      Base.ceil_llvm(Base.mul_float_fast(C, Base.sqrt_llvm_fast(Base.uitofp(T, x)))),
+  max(
+    min(
+      Base.fptoui(
+        UInt,
+        Base.ceil_llvm(Base.mul_float_fast(C, Base.sqrt_llvm_fast(Base.uitofp(T, x)))),
+      ),
+      NT,
     ),
-    NT,
+    one(UInt),
   )
 end
 function push_loop_length_expr!(q::Expr, ls::LoopSet)
@@ -431,9 +426,12 @@ function thread_one_loops_expr(
   if all(isstaticloop, ls.loops)
     _num_threads = _choose_num_threads(c, ntmax, Int64(looplen))::UInt
     _num_threads > 1 || return avx_body(ls, UNROLL)
-    choose_nthread = Expr(:(=), Symbol("#nthreads#"), _num_threads)
+    ntcallexpr = Expr(:call, %, Expr(:call, Threads.nthreads), UInt)
+    choose_nthread =
+      Expr(:(=), Symbol("#nthreads#"), Expr(:call, min, ntcallexpr, _num_threads))
   else
-    choose_nthread = :(_choose_num_threads($(Float32(c)), $ntmax))
+    choose_nthread =
+      :(_choose_num_threads($(Float32(c)), min(Threads.nthreads() % UInt, $ntmax)))
     push_loop_length_expr!(choose_nthread, ls)
     choose_nthread = Expr(:(=), Symbol("#nthreads#"), choose_nthread)
   end
@@ -623,9 +621,12 @@ function thread_two_loops_expr(
   if all(isstaticloop, ls.loops)
     _num_threads = _choose_num_threads(c, ntmax, Int64(looplen))::UInt
     _num_threads > 1 || return avx_body(ls, UNROLL)
-    choose_nthread = Expr(:(=), Symbol("#nthreads#"), _num_threads)
+    ntcallexpr = Expr(:call, %, Expr(:call, Threads.nthreads), UInt)
+    choose_nthread =
+      Expr(:(=), Symbol("#nthreads#"), Expr(:call, min, ntcallexpr, _num_threads))
   else
-    choose_nthread = :(_choose_num_threads($(Float32(c)), $ntmax))
+    choose_nthread =
+      :(_choose_num_threads($(Float32(c)), min(Threads.nthreads() % UInt, $ntmax)))
     push_loop_length_expr!(choose_nthread, ls)
     choose_nthread = Expr(:(=), Symbol("#nthreads#"), choose_nthread)
   end
