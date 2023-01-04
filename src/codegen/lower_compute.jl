@@ -166,7 +166,8 @@ function ifelselastexpr(hasf::Bool, M::Int, vargtypes, K::Int, S::Int, maskearly
   end
   for m ∈ start:M
     call = if hasf
-      (maskearly | (m == M)) ? Expr(:call, :ifelse, :f, :m) : Expr(:call, :f)
+      (maskearly | (m == M)) ? Expr(:call, VectorizationBase.vifelse, :f, :m) :
+      Expr(:call, :f)
     else# m == M because !hasf
       Expr(:call, :ifelse, :m)
     end
