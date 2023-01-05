@@ -1277,7 +1277,7 @@ function instruction!(ls::LoopSet, x::Expr)
   end
   # if x.head ≢ :(->)
   instr = last(x.args).value
-  instr ∈ keys(COST) && return Instruction(:LoopVectorization, instr)
+  isa(instr, Symbol) && instr ∈ keys(COST) && return Instruction(:LoopVectorization, instr)
   # end
   instr = gensym!(ls, "f")
   pushprepreamble!(ls, Expr(:(=), instr, x))
