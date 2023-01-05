@@ -525,15 +525,15 @@ function add_broadcast_loops!(ls::LoopSet, loopsyms::Vector{Symbol}, destsym::Sy
   end
 end
 
-# size of dest determines loops
-# function vmaterialize!(
-@generated function vmaterialize!(
-  dest::AbstractArray{T,N},
-  bc::BC,
-  ::Val{Mod},
-  ::Val{UNROLL},
-  ::Val{dontbc},
-) where {T<:NativeTypes,N,BC<:Union{Broadcasted,Product},Mod,UNROLL,dontbc}
+function vmaterialize_fun(
+  sizeofT::Int,
+  N,
+  @nospecialize(_::Type{BC}),
+  Mod,
+  UNROLL,
+  dontbc::Bool,
+  transpose::Bool,
+) where {BC}
   # 2 + 1
   # we have an N dimensional loop.
   # need to construct the LoopSet
@@ -542,9 +542,12 @@ end
   set_hw!(ls, rs, rc, cls)
   ls.isbroadcast = isbroadcast # maybe set `false` in a DiffEq-like `@..` macro
   loopsyms = [gensym!(ls, "n") for _ ∈ 1:N]
-  add_broadcast_loops!(ls, loopsyms, :dest)
-  elementbytes = sizeof(T)
+  transpose && pushprepreamble!(ls, Expr(:(=), :dest, Expr(:call, :parent, :dest′)))
+  ret = transpose ? :dest′ : :dest
+  add_broadcast_loops!(ls, loopsyms, ret)
+  elementbytes = sizeofT
   add_broadcast!(ls, :destination, :bc, loopsyms, BC, dontbc, elementbytes)
+  transpose && reverse!(loopsyms)
   storeop =
     add_simple_store!(ls, :destination, ArrayReference(:dest, loopsyms), elementbytes)
   doaddref!(ls, storeop)
@@ -552,7 +555,7 @@ end
   # return ls
   sc = setup_call(
     ls,
-    :(Base.Broadcast.materialize!(dest, bc)),
+    :(Base.Broadcast.materialize!($ret, bc)),
     LineNumberNode(0),
     inline,
     false,
@@ -563,7 +566,19 @@ end
     warncheckarg,
     safe,
   )
-  Expr(:block, Expr(:meta, :inline), sc, :dest)
+  Expr(:block, Expr(:meta, :inline), sc, ret)
+end
+
+# size of dest determines loops
+# function vmaterialize!(
+@generated function vmaterialize!(
+  dest::AbstractArray{T,N},
+  bc::BC,
+  ::Val{Mod},
+  ::Val{UNROLL},
+  ::Val{dontbc},
+) where {T<:NativeTypes,N,BC<:Union{Broadcasted,Product},Mod,UNROLL,dontbc}
+  vmaterialize_fun(sizeof(T), N, BC, Mod, UNROLL, dontbc, false)
 end
 @generated function vmaterialize!(
   dest′::Union{Adjoint{T,A},Transpose{T,A}},
@@ -580,43 +595,7 @@ end
   UNROLL,
   dontbc,
 }
-  # we have an N dimensional loop.
-  # need to construct the LoopSet
-  ls = LoopSet(Mod)
-  inline, u₁, u₂, v, isbroadcast, _, rs, rc, cls, threads, warncheckarg, safe = UNROLL
-  set_hw!(ls, rs, rc, cls)
-  ls.isbroadcast = isbroadcast # maybe set `false` in a DiffEq-like `@..` macro
-  loopsyms = [gensym!(ls, "n") for _ ∈ 1:N]
-  pushprepreamble!(ls, Expr(:(=), :dest, Expr(:call, :parent, :dest′)))
-  add_broadcast_loops!(ls, loopsyms, :dest′)
-  elementbytes = sizeof(T)
-  add_broadcast!(ls, :destination, :bc, loopsyms, BC, dontbc, elementbytes)
-  storeop = add_simple_store!(
-    ls,
-    :destination,
-    ArrayReference(:dest, reverse(loopsyms)),
-    elementbytes,
-  )
-  doaddref!(ls, storeop)
-  resize!(ls.loop_order, num_loops(ls)) # num_loops may be greater than N, eg Product
-  Expr(
-    :block,
-    Expr(:meta, :inline),
-    setup_call(
-      ls,
-      :(Base.Broadcast.materialize!(dest′, bc)),
-      LineNumberNode(0),
-      inline,
-      false,
-      u₁,
-      u₂,
-      v,
-      threads % Int,
-      warncheckarg,
-      safe,
-    ),
-    :dest′,
-  )
+  vmaterialize_fun(sizeof(T), N, BC, Mod, UNROLL, dontbc, true)
 end
 # these are marked `@inline` so the `@turbo` itself can choose whether or not to inline.
 @generated function vmaterialize!(
