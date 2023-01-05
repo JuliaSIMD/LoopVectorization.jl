@@ -870,7 +870,7 @@ function valid_thread_loops(ls::LoopSet)
   end
   valid_thread_loop, ua, c
 end
-function avx_threads_expr(
+function _avx_threads_expr(
   ls::LoopSet,
   UNROLL::Tuple{Bool,Int8,Int8,Int8,Bool,Int,Int,Int,Int,UInt,Int,Bool},
   nt::UInt,

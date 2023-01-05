@@ -88,7 +88,7 @@ function substitute_broadcast(
 end
 
 
-function LoopSet(q::Expr, mod::Symbol = :Main)
+function _loopset(q::Expr, mod::Symbol)
   ls = LoopSet(mod)
   check_inputs!(q, ls.prepreamble)
   contract_pass!(q)

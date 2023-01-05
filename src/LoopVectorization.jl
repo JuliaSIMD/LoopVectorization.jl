@@ -222,8 +222,6 @@ include("condense_loopset.jl")
 include("transforms.jl")
 include("reconstruct_loopset.jl")
 include("constructors.jl")
-include("user_api_conveniences.jl")
-include("simdfunctionals/mapreduce.jl")
 include("broadcast.jl")
 
 """
@@ -240,6 +238,71 @@ loop-reordering so as to improve performance:
 """
 LoopVectorization
 
+worldage::UInt = Base.get_world_counter()
+@eval function LoopSet(q::Expr, mod::Symbol = :Main)
+  Base.invoke_in_world($worldage, _loopset, q, mod)
+end
+include("user_api_conveniences.jl")
+@eval function setup_call(
+  ls::LoopSet,
+  q::Expr,
+  source::LineNumberNode,
+  inline::Bool,
+  check_empty::Bool,
+  u₁::Int8,
+  u₂::Int8,
+  v::Int8,
+  thread::Int,
+  warncheckarg::Int,
+  safe::Bool,
+)
+  Base.invoke_in_world(
+    $worldage,
+    _setup_call,
+    ls,
+    q,
+    source,
+    inline,
+    check_empty,
+    u₁,
+    u₂,
+    v,
+    thread,
+    warncheckarg,
+    safe,
+  )
+end
+include("simdfunctionals/mapreduce.jl")
+@eval function avx_threads_expr(
+  ls::LoopSet,
+  UNROLL::Tuple{Bool,Int8,Int8,Int8,Bool,Int,Int,Int,Int,UInt,Int,Bool},
+  nt::UInt,
+  OPS::Expr,
+  ARF::Expr,
+  AM::Expr,
+  LPSYM::Expr,
+)
+  Base.invoke_in_world($worldage, _avx_threads_expr, ls, UNROLL, nt, OPS, ARF, AM, LPSYM)
+end
+@eval function hoist_constant_memory_accesses!(ls::LoopSet)
+  Base.invoke_in_world($worldage, _hoist_constant_memory_accesses!, ls)
+end
+@eval function _turbo_loopset(
+  @nospecialize(OPSsv),
+  @nospecialize(ARFsv),
+  @nospecialize(AMsv),
+  @nospecialize(LPSYMsv),
+  LBsv::Core.SimpleVector,
+  vargs::Core.SimpleVector,
+  UNROLL::Tuple{Bool,Int8,Int8,Int8,Bool,Int,Int,Int,Int,UInt,Int,Bool},
+)
+  Base.invoke_in_world(
+    $worldage,
+    __turbo_loopset,
+    (OPSsv, ARFsv, AMsv, LPSYMsv, LBsv, vargs, UNROLL),
+  )
+end
+
 include("precompile.jl")
 # _precompile_()
 
@@ -252,5 +315,7 @@ using ChainRulesCore, ForwardDiff, SpecialFunctions
 include("simdfunctionals/vmap_grad_rrule.jl")
 include("simdfunctionals/vmap_grad_forwarddiff.jl")
 @inline SpecialFunctions.erf(x::AbstractSIMD) = VectorizationBase.verf(float(x))
+
+
 
 end # module

@@ -1035,7 +1035,7 @@ end
 function setup_call_debug(ls::LoopSet)
   generate_call(ls, (false, zero(Int8), zero(Int8), zero(Int8)), zero(UInt), 1, true, true)
 end
-function setup_call(
+function _setup_call(
   ls::LoopSet,
   q::Expr,
   source::LineNumberNode,
@@ -1073,3 +1073,4 @@ function setup_call(
   prepend_lnns!(ls.prepreamble, lnns)
   return ls.prepreamble
 end
+

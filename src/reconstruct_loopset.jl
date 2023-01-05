@@ -144,8 +144,7 @@ function add_loops!(
   N, T = l.parameters
   ssym = String(sym)
   for k = N:-1:1
-    axisexpr =
-      :($getfield($getfield($getfield(var"#loop#bounds#", $i), :indices), $k))
+    axisexpr = :($getfield($getfield($getfield(var"#loop#bounds#", $i), :indices), $k))
     add_loop!(
       ls,
       Loop(ls, axisexpr, Symbol(ssym * '#' * string(k) * '#'), T.parameters[k])::Loop,
@@ -919,7 +918,7 @@ function tovector(@nospecialize(t))
   end
   v
 end
-function _turbo_loopset(
+function __turbo_loopset(
   @nospecialize(OPSsv),
   @nospecialize(ARFsv),
   @nospecialize(AMsv),
@@ -942,7 +941,6 @@ function _turbo_loopset(
   end
   avx_loopset!(ls, instr, ops, arsv, tovector(AMsv), tovector(LPSYMsv), LBsv, vargs)
 end
-
 """
     _turbo_!(unroll, ops, arf, am, lpsym, lb, vargs...)
 

@@ -1,6 +1,6 @@
 # file for misc loopset transforms
 
-function hoist_constant_memory_accesses!(ls::LoopSet)
+function _hoist_constant_memory_accesses!(ls::LoopSet)
   hoist_stores = false
   for op ∈ operations(ls)
     if isload(op)
