@@ -94,9 +94,14 @@ end
   end
 end
 
+
 function ChainRulesCore.rrule(::typeof(vmap), f::F, args::Vararg{Any,K}) where {F,K}
   out = similar(first(args))
   jacs = map(similar, args)
   ∂vmap_singlethread!(f, jacs, out, args...)
   out, SIMDMapBack(jacs)
+end
+for f ∈ (vmapt, vmapnt, vmapntt)
+  @eval ChainRulesCore.rrule(::typeof($f), f::F, args::Vararg{Any,K}) where {F,K} =
+    ChainRulesCore.rrule(vmap, f, args...)
 end

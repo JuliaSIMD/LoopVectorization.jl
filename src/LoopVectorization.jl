@@ -1,5 +1,9 @@
 module LoopVectorization
 
+if isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@max_methods"))
+  @eval Base.Experimental.@max_methods 1
+end
+
 using ArrayInterfaceCore: UpTri, LoTri
 using Static: StaticInt, gt, static, Zero, One, reduce_tup
 using VectorizationBase,
@@ -190,13 +194,10 @@ export LowDimArray,
 const VECTORWIDTHSYMBOL, ELTYPESYMBOL, MASKSYMBOL =
   Symbol("##Wvecwidth##"), Symbol("##Tloopeltype##"), Symbol("##mask##")
 
-
 include("vectorizationbase_compat/contract_pass.jl")
 include("vectorizationbase_compat/subsetview.jl")
 include("getconstindexes.jl")
 include("predicates.jl")
-include("simdfunctionals/map.jl")
-include("simdfunctionals/filter.jl")
 include("modeling/costs.jl")
 include("modeling/operations.jl")
 include("modeling/graphs.jl")
@@ -222,10 +223,34 @@ include("condense_loopset.jl")
 include("transforms.jl")
 include("reconstruct_loopset.jl")
 include("constructors.jl")
+include("broadcast.jl")
+module MiscModule
+if isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@max_methods"))
+  @eval Base.Experimental.@max_methods 3
+end
+include("simdfunctionals/map.jl")
+include("simdfunctionals/filter.jl")
 include("user_api_conveniences.jl")
 include("simdfunctionals/mapreduce.jl")
-include("broadcast.jl")
-
+using ChainRulesCore, ForwardDiff, SpecialFunctions
+include("simdfunctionals/vmap_grad_rrule.jl")
+include("simdfunctionals/vmap_grad_forwarddiff.jl")
+@inline SpecialFunctions.erf(x::AbstractSIMD) = VectorizationBase.verf(float(x))
+end
+using .MiscModule:
+  matmul_params,
+  vmapreduce,
+  vreduce,
+  vmap,
+  vmapt,
+  vmapnt,
+  vmapntt,
+  vmap!,
+  vmapt!,
+  vmapnt!,
+  vmapntt!,
+  vfilter,
+  vfilter!
 """
 LoopVectorization provides macros and functions that combine SIMD vectorization and
 loop-reordering so as to improve performance:
@@ -248,9 +273,5 @@ include("precompile.jl")
 
 # import ChainRulesCore, ForwardDiff
 # include("vmap_grad.jl")
-using ChainRulesCore, ForwardDiff, SpecialFunctions
-include("simdfunctionals/vmap_grad_rrule.jl")
-include("simdfunctionals/vmap_grad_forwarddiff.jl")
-@inline SpecialFunctions.erf(x::AbstractSIMD) = VectorizationBase.verf(float(x))
 
 end # module

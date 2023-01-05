@@ -144,8 +144,7 @@ function add_loops!(
   N, T = l.parameters
   ssym = String(sym)
   for k = N:-1:1
-    axisexpr =
-      :($getfield($getfield($getfield(var"#loop#bounds#", $i), :indices), $k))
+    axisexpr = :($getfield($getfield($getfield(var"#loop#bounds#", $i), :indices), $k))
     add_loop!(
       ls,
       Loop(ls, axisexpr, Symbol(ssym * '#' * string(k) * '#'), T.parameters[k])::Loop,
@@ -943,6 +942,11 @@ function _turbo_loopset(
   avx_loopset!(ls, instr, ops, arsv, tovector(AMsv), tovector(LPSYMsv), LBsv, vargs)
 end
 
+module Turbo
+if isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@max_methods"))
+  @eval Base.Experimental.@max_methods 3
+end
+using _turbo_loopset
 """
     _turbo_!(unroll, ops, arf, am, lpsym, lb, vargs...)
 
@@ -1076,3 +1080,6 @@ end
   post === ls.preamble ? q : Expr(:block, q, post)
   # @show var"#UNROLL#", var"#OPS#", var"#ARF#", var"#AM#", var"#LPSYM#", var"#LB#"
 end
+end
+using .Turbo: _turbo_!, _turbo_manyarg!
+
