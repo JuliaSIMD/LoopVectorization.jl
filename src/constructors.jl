@@ -201,13 +201,13 @@ function replace_enumerate!(q, prepreamble)
 end
 function replace_single_enumerate!(q, prepreamble, i = nothing)
   if isnothing(i) # not nest loop
-    looprange, body = q.args[1], q.args[2]
+    looprange, body = q.args[1]::Expr, q.args[2]
   else # nest loop
-    looprange, body = q.args[1].args[i], q.args[2]
+    looprange, body = q.args[1].args[i]::Expr, q.args[2]
   end
   @assert Meta.isexpr(looprange, :(=), 2)
   itersyms, r = looprange.args
-  if Meta.isexpr(r, :call, 2) && r.args[1] == :enumerate
+  if Meta.isexpr(r, :call, 2) && r.args[1] === :enumerate
     _iter = r.args[2]
     if _iter isa Symbol
       iter = _iter
