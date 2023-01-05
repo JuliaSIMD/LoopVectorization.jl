@@ -100,3 +100,8 @@ function ChainRulesCore.rrule(::typeof(vmap), f::F, args::Vararg{Any,K}) where {
   ∂vmap_singlethread!(f, jacs, out, args...)
   out, SIMDMapBack(jacs)
 end
+for f in (:vmapt, :vmapnt, :vmapntt)
+  @eval function ChainRulesCore.rrule(::typeof($f), f::F, args::Vararg{Any,K}) where {F,K}
+    ChainRulesCore.rrule(typeof(vmap), f, args...)
+  end
+end

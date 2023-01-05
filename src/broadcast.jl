@@ -531,7 +531,7 @@ function vmaterialize_fun(
   @nospecialize(_::Type{BC}),
   Mod,
   UNROLL,
-  dontbc::Bool,
+  dontbc,
   transpose::Bool,
 ) where {BC}
   # 2 + 1
