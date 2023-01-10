@@ -1,12 +1,11 @@
 
-
 function add_operation!(
   ls_new::LoopSet,
   included::Vector{Int},
   ls::LoopSet,
   op::Operation,
   ids::Vector{Int},
-  issecond::Bool,
+  issecond::Bool
 )
   newid = included[identifier(op)]
   iszero(newid) || return operations(ls_new)[newid]
@@ -32,7 +31,7 @@ function add_operation!(
             reduceddependencies(opc),
             parentsnew,
             opc.ref,
-            reducedchildren(opc),
+            reducedchildren(opc)
           )
           addsetv!(ls_new.includedactualarrays, vptr(opc.ref))
           push!(operations(ls_new), opnew)
@@ -40,7 +39,14 @@ function add_operation!(
           for i ∈ 2:length(parentsopc)
             push!(
               parentsnew,
-              add_operation!(ls_new, included, ls, parentsopc[i], ids, issecond),
+              add_operation!(
+                ls_new,
+                included,
+                ls,
+                parentsopc[i],
+                ids,
+                issecond
+              )
             )
           end
           included[identifier(opp)] = identifier(opnew)
@@ -62,7 +68,7 @@ function add_operation!(
     reduceddependencies(op),
     vparents,
     op.ref,
-    reducedchildren(op),
+    reducedchildren(op)
   )
   accesses_memory(op) && addsetv!(ls_new.includedactualarrays, vptr(op.ref))
   push!(operations(ls_new), opnew)
@@ -70,12 +76,10 @@ function add_operation!(
   opnew
 end
 
-function append_if_included!(vnew, vold, included)
-  for (i, v) ∈ vold
+append_if_included!(vnew, vold, included) = for (i, v) ∈ vold
     id = included[i]
     iszero(id) || push!(vnew, (id, v))
   end
-end
 
 function split_loopset(ls::LoopSet, ids::Vector{Int}, issecond::Bool)
   ls_new = LoopSet(:LoopVectorization)
@@ -95,7 +99,11 @@ function split_loopset(ls::LoopSet, ids::Vector{Int}, issecond::Bool)
   append_if_included!(ls_new.preamble_symint, ls.preamble_symint, included)
   append_if_included!(ls_new.preamble_symfloat, ls.preamble_symfloat, included)
   append_if_included!(ls_new.preamble_zeros, ls.preamble_zeros, included)
-  append_if_included!(ls_new.preamble_funcofeltypes, ls.preamble_funcofeltypes, included)
+  append_if_included!(
+    ls_new.preamble_funcofeltypes,
+    ls.preamble_funcofeltypes,
+    included
+  )
   for i ∈ ls.outer_reductions
     id = included[i]
     iszero(id) || push!(ls_new.outer_reductions, id)
@@ -147,29 +155,61 @@ function lower_and_split_loops(ls::LoopSet, inline::Int)
   for (ind, i) ∈ enumerate(split_candidates)
     split_1[1] = i
     ls_1 = split_loopset(ls, split_1, false)
-    order_1, unrolled_1, tiled_1, vectorized_1, U_1, T_1, cost_1, shouldinline_1 =
-      choose_order_cost(ls_1)
+    order_1,
+    unrolled_1,
+    tiled_1,
+    vectorized_1,
+    U_1,
+    T_1,
+    cost_1,
+    shouldinline_1 = choose_order_cost(ls_1)
     remaining_ops[1:ind-1] .= @view(split_candidates[1:ind-1])
     remaining_ops[ind:end] .= @view(split_candidates[ind+1:end])
     ls_2 = split_loopset(ls, remaining_ops, true)
-    order_2, unrolled_2, tiled_2, vectorized_2, U_2, T_2, cost_2, shouldinline_2 =
-      choose_order_cost(ls_2)
+    order_2,
+    unrolled_2,
+    tiled_2,
+    vectorized_2,
+    U_2,
+    T_2,
+    cost_2,
+    shouldinline_2 = choose_order_cost(ls_2)
     # U_1 = T_1 = U_2 = T_2 = 2
-    if cost_1 + cost_2 + looplenpen * (looplengthprod(ls_1) + looplengthprod(ls_2)) ≤
+    if cost_1 +
+       cost_2 +
+       looplenpen * (looplengthprod(ls_1) + looplengthprod(ls_2)) ≤
        muladd(0.9, cost_fused, ls_looplen)
       ls_2_lowered = if length(remaining_ops) > 1
         inline = iszero(inline) ? (shouldinline_1 % Int) : inline
         lower_and_split_loops(ls_2, inline)
       else
         doinline = inlinedecision(inline, shouldinline_1 | shouldinline_2)
-        lower(ls_2, order_2, unrolled_2, tiled_2, vectorized_2, U_2, T_2, doinline)
+        lower(
+          ls_2,
+          order_2,
+          unrolled_2,
+          tiled_2,
+          vectorized_2,
+          U_2,
+          T_2,
+          doinline
+        )
       end
       return Expr(
         :block,
         ls.preamble,
-        lower(ls_1, order_1, unrolled_1, tiled_1, vectorized_1, U_1, T_1, false),
+        lower(
+          ls_1,
+          order_1,
+          unrolled_1,
+          tiled_1,
+          vectorized_1,
+          U_1,
+          T_1,
+          false
+        ),
         ls_2_lowered,
-        nothing,
+        nothing
       )
     end
     length(split_candidates) == 2 && break
@@ -183,6 +223,6 @@ function lower_and_split_loops(ls::LoopSet, inline::Int)
     vectorized_fused,
     U_fused,
     T_fused,
-    doinline,
+    doinline
   )
 end

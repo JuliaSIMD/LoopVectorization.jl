@@ -3,7 +3,11 @@ module LoopVectorization
 using ArrayInterfaceCore: UpTri, LoTri
 using Static: StaticInt, gt, static, Zero, One, reduce_tup
 using VectorizationBase,
-  SLEEFPirates, UnPack, OffsetArrays, ArrayInterfaceOffsetArrays, ArrayInterfaceStaticArrays
+  SLEEFPirates,
+  UnPack,
+  OffsetArrays,
+  ArrayInterfaceOffsetArrays,
+  ArrayInterfaceStaticArrays
 using LayoutPointers:
   AbstractStridedPointer,
   StridedPointer,
@@ -113,7 +117,6 @@ using HostCPUFeatures:
   get_cpu_name
 using CPUSummary: num_cores, cache_linesize, cache_size
 
-
 using IfElse: ifelse
 
 using ThreadingUtilities, PolyesterWeave
@@ -138,7 +141,14 @@ using Base.FastMath:
   pow_fast,
   sqrt_fast
 using SLEEFPirates:
-  log_fast, log2_fast, log10_fast, pow, sin_fast, cos_fast, sincos_fast, tan_fast
+  log_fast,
+  log2_fast,
+  log10_fast,
+  pow,
+  sin_fast,
+  cos_fast,
+  sincos_fast,
+  tan_fast
 
 using ArrayInterface
 using ArrayInterface:
@@ -190,7 +200,6 @@ export LowDimArray,
 const VECTORWIDTHSYMBOL, ELTYPESYMBOL, MASKSYMBOL =
   Symbol("##Wvecwidth##"), Symbol("##Tloopeltype##"), Symbol("##mask##")
 
-
 include("vectorizationbase_compat/contract_pass.jl")
 include("vectorizationbase_compat/subsetview.jl")
 include("getconstindexes.jl")
@@ -230,13 +239,13 @@ include("broadcast.jl")
 LoopVectorization provides macros and functions that combine SIMD vectorization and
 loop-reordering so as to improve performance:
 
-- [`@turbo`](@ref): transform `for`-loops and broadcasting
-- [`vmapreduce`](@ref): vectorized version of `mapreduce`
-- [`vreduce`](@ref): vectorized version of `reduce`
-- [`vmap`](@ref) and `vmap!`: vectorized version of `map` and `map!`
-- [`vmapnt`](@ref) and `vmapnt!`: non-temporal variants of `vmap` and `vmap!`
-- [`vmapntt`](@ref) and `vmapntt!`: threaded variants of `vmapnt` and `vmapnt!`
-- [`vfilter`](@ref) and `vfilter!`: vectorized versions of `filter` and `filter!`
+  - [`@turbo`](@ref): transform `for`-loops and broadcasting
+  - [`vmapreduce`](@ref): vectorized version of `mapreduce`
+  - [`vreduce`](@ref): vectorized version of `reduce`
+  - [`vmap`](@ref) and `vmap!`: vectorized version of `map` and `map!`
+  - [`vmapnt`](@ref) and `vmapnt!`: non-temporal variants of `vmap` and `vmap!`
+  - [`vmapntt`](@ref) and `vmapntt!`: threaded variants of `vmapnt` and `vmapnt!`
+  - [`vfilter`](@ref) and `vfilter!`: vectorized versions of `filter` and `filter!`
 """
 LoopVectorization
 

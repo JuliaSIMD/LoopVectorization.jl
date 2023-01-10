@@ -1,20 +1,31 @@
 
 @inline vreduce(::typeof(+), v::VectorizationBase.AbstractSIMDVector) = vsum(v)
 @inline vreduce(::typeof(*), v::VectorizationBase.AbstractSIMDVector) = vprod(v)
-@inline vreduce(::typeof(max), v::VectorizationBase.AbstractSIMDVector) = vmaximum(v)
-@inline vreduce(::typeof(min), v::VectorizationBase.AbstractSIMDVector) = vminimum(v)
-@inline vreduce(op, v::VectorizationBase.AbstractSIMDVector) = vec_vreduce(op, v)
-@inline vec_reduce(op, v::VectorizationBase.AbstractSIMDVector) = vec_reduce(op, Vec(v))
+@inline vreduce(::typeof(max), v::VectorizationBase.AbstractSIMDVector) =
+  vmaximum(v)
+@inline vreduce(::typeof(min), v::VectorizationBase.AbstractSIMDVector) =
+  vminimum(v)
+@inline vreduce(op, v::VectorizationBase.AbstractSIMDVector) =
+  vec_vreduce(op, v)
+@inline vec_reduce(op, v::VectorizationBase.AbstractSIMDVector) =
+  vec_reduce(op, Vec(v))
 vec_vreduce(op, v::Vec{1}) = VectorizationBase.extractelement(v, 0)
 @inline function vec_vreduce(op, v::Vec{W}) where {W}
-  a = op(VectorizationBase.extractelement(v, 0), VectorizationBase.extractelement(v, 1))
+  a = op(
+    VectorizationBase.extractelement(v, 0),
+    VectorizationBase.extractelement(v, 1)
+  )
   for i ∈ 2:W-1
     a = op(a, VectorizationBase.extractelement(v, i))
   end
   a
 end
 
-function mapreduce_simple(f::F, op::OP, args::Vararg{AbstractArray,A}) where {F,OP,A}
+function mapreduce_simple(
+  f::F,
+  op::OP,
+  args::Vararg{AbstractArray,A}
+) where {F,OP,A}
   ptrargs = ntuple(a -> pointer(args[a]), Val(A))
   N = length(first(args))
   iszero(N) && throw("Length of vector is 0!")
@@ -29,15 +40,14 @@ function mapreduce_simple(f::F, op::OP, args::Vararg{AbstractArray,A}) where {F,
           ptrargs,
           VectorizationBase.lazymul.(st, i),
           False(),
-          register_size(),
-        )...,
-      ),
+          register_size()
+        )...
+      )
     )
     i += 1
   end
   a_0
 end
-
 
 """
     vmapreduce(f, op, A::DenseArray...)
@@ -48,7 +58,7 @@ Vectorized version of `mapreduce`. Applies `f` to each element of the arrays `A`
   f::F,
   op::OP,
   arg1::AbstractArray{T},
-  args::Vararg{AbstractArray{T},A},
+  args::Vararg{AbstractArray{T},A}
 ) where {F,OP,T<:NativeTypes,A}
   if !(check_args(arg1, args...) && all_dense(arg1, args...))
     return mapreduce(f, op, arg1, args...)
@@ -68,7 +78,7 @@ end
   ::StaticInt{W},
   N,
   ::Type{T},
-  args::Vararg{AbstractArray{<:NativeTypes},A},
+  args::Vararg{AbstractArray{<:NativeTypes},A}
 ) where {F,OP,A,W,T}
   ptrargs = VectorizationBase.zero_offsets.(stridedpointer.(args))
   if N ≥ 4W
@@ -111,7 +121,7 @@ At most one dimension may be supplied as kwarg.
 for (op, init) in zip((:+, :max, :min), (:zero, :typemin, :typemax))
   @eval @inline function vreduce(::typeof($op), arg; dims = nothing)
     if !(check_args(arg) && all_dense(arg))
-      return reduce($op, arg, dims = dims)
+      return reduce($op, arg; dims = dims)
     end
     dims === nothing && return _vreduce($op, arg)
     isone(ndims(arg)) && return [_vreduce($op, arg)]
@@ -132,7 +142,14 @@ for (op, init) in zip((:+, :max, :min), (:zero, :typemin, :typemax))
     end
   end
 
-  @eval @inline function _vreduce_dims!(out, ::typeof($op), Rpre, is, Rpost, arg)
+  @eval @inline function _vreduce_dims!(
+    out,
+    ::typeof($op),
+    Rpre,
+    is,
+    Rpost,
+    arg
+  )
     s = $init(first(arg))
     @turbo for Ipost in Rpost, Ipre in Rpre
       accum = s

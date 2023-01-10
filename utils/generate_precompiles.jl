@@ -1,8 +1,12 @@
 
 using LoopVectorization, SnoopCompile
 LOOPVECTORIZATION_TEST = "all"
-tinf = @snoopi_deep include(joinpath(pkgdir(LoopVectorization), "test", "testsetup.jl"))
-tinf = @snoopi_deep include(joinpath(pkgdir(LoopVectorization), "test", "grouptests.jl"))
+tinf = @snoopi_deep include(
+  joinpath(pkgdir(LoopVectorization), "test", "testsetup.jl")
+)
+tinf = @snoopi_deep include(
+  joinpath(pkgdir(LoopVectorization), "test", "grouptests.jl")
+)
 
 ttot, pcs = SnoopCompile.parcel(tinf);
 
@@ -31,16 +35,16 @@ blacklist = (
   :tanh_fast,
   :check_args,
   :relu,
-  :init_dual,
+  :init_dual
 )
-filteredmethods = filter(m -> !Base.sym_in(m[2].def.name, blacklist), last(pcslv));
+filteredmethods =
+  filter(m -> !Base.sym_in(m[2].def.name, blacklist), last(pcslv));
 length(filteredmethods);
 
 SnoopCompile.write(
   "/tmp/precompile_loopvec",
-  [LoopVectorization => (sum(first, filteredmethods), filteredmethods)],
+  [LoopVectorization => (sum(first, filteredmethods), filteredmethods)]
 )
-
 
 # pc = SnoopCompile.parcel(tinf; blacklist=["vmaterialize", "vmaterialize!", "vreduce", "Base.Broadcast.materialize", "_vreduce_dims!", "vmapreduce"])
 # pcs = pc[:LoopVectorization]

@@ -20,7 +20,7 @@ end
   ∂p::Tuple{Vararg{AbstractStridedPointer,A}},
   p::AbstractStridedPointer,
   ∂v,
-  im::Vararg{Any,N},
+  im::Vararg{Any,N}
 ) where {A,N}
   quote
     $(Expr(:meta, :inline))

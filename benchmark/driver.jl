@@ -7,21 +7,26 @@ const LOOPVECBENCHDIR = joinpath(pkgdir(LoopVectorization), "benchmark")
 include(joinpath(LOOPVECBENCHDIR, "benchmarkflops.jl"))
 include(joinpath(LOOPVECBENCHDIR, "plotbenchmarks.jl"))
 
-
 nprocs_to_add() = ((Sys.CPU_THREADS)::Int >> 1)
 # nprocs_to_add() = ((Sys.CPU_THREADS)::Int >> 1) - 1
-start_worker(wid) = remotecall(include, wid, joinpath(LOOPVECBENCHDIR, "setup_worker.jl"))
+start_worker(wid) =
+  remotecall(include, wid, joinpath(LOOPVECBENCHDIR, "setup_worker.jl"))
 function start_workers(nprocs = nprocs_to_add())
-  addprocs(nprocs, exeflags = "--project=$(Base.active_project())")
+  addprocs(nprocs; exeflags = "--project=$(Base.active_project())")
   foreach(wait, map(start_worker, workers()))
 end
 stop_workers() = rmprocs(workers())
 
-
 function blastests()
   tests = ["LoopVectorization", "Julia", "Clang", "GFortran"]
   INTEL_BENCH && push!(tests, "icc", "ifort")
-  push!(tests, "g++ & Eigen-3", "clang++ & Eigen-3", "GFortran-builtin", "OpenBLAS")
+  push!(
+    tests,
+    "g++ & Eigen-3",
+    "clang++ & Eigen-3",
+    "GFortran-builtin",
+    "OpenBLAS"
+  )
   INTEL_BENCH && push!(tests, "ifort-builtin")
   MKL_BENCH && push!(tests, "MKL")
   tests
@@ -166,7 +171,10 @@ function benchmark_random_access(sizes)
   INTEL_BENCH && push!(tests, "icc", "ifort")
   start_workers()
   sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
-  @showprogress pmap(is -> randomaccess_bench!(sm, is[2], is[1]), enumerate(sizes))
+  @showprogress pmap(
+    is -> randomaccess_bench!(sm, is[2], is[1]),
+    enumerate(sizes)
+  )
   br = BenchmarkResult(Matrix(sm), tests, sizes)
   stop_workers()
   br
@@ -178,7 +186,10 @@ function benchmark_logdettriangle(sizes)
   push!(tests, "LinearAlgebra")
   start_workers()
   sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
-  @showprogress pmap(is -> logdettriangle_bench!(sm, is[2], is[1]), enumerate(sizes))
+  @showprogress pmap(
+    is -> logdettriangle_bench!(sm, is[2], is[1]),
+    enumerate(sizes)
+  )
   br = BenchmarkResult(Matrix(sm), tests, sizes)
   stop_workers()
   br
@@ -188,7 +199,10 @@ function benchmark_filter2d(sizes, K)
   INTEL_BENCH && push!(tests, "icc", "ifort")
   start_workers()
   sm = SharedMatrix(Matrix{Float64}(undef, length(tests), length(sizes)))
-  @showprogress pmap(is -> filter2d_bench_run!(sm, is[2], is[1], K), enumerate(sizes))
+  @showprogress pmap(
+    is -> filter2d_bench_run!(sm, is[2], is[1], K),
+    enumerate(sizes)
+  )
   br = BenchmarkResult(Matrix(sm), tests, sizes)
   stop_workers()
   br
@@ -209,14 +223,12 @@ function benchmark_filter2dunrolled(sizes)
   K = SizedOffsetMatrix{Float64,-1,1,-1,1}(rand(3, 3))
   @showprogress pmap(
     is -> filter2dunrolled_bench_run!(sm, is[2], is[1], K),
-    enumerate(sizes),
+    enumerate(sizes)
   )
   br = BenchmarkResult(Matrix(sm), tests, sizes)
   stop_workers()
   br
 end
-
-
 
 # sizes = 23:23
 sizes = 256:-1:2
@@ -287,7 +299,8 @@ const v = 2
 # using Cairo, Fontconfig
 const PICTURES = joinpath(pkgdir(LoopVectorization), "docs", "src", "assets")
 # saveplot(f, br) = draw(PNG(joinpath(PICTURES, f * "$v.png"), 12inch, 8inch), plot(br))
-saveplot(f, br) = draw(SVG(joinpath(PICTURES, f * "$v.svg"), 12inch, 8inch), plot(br))
+saveplot(f, br) =
+  draw(SVG(joinpath(PICTURES, f * "$v.svg"), 12inch, 8inch), plot(br))
 
 # If only rerunning a few, remove them from load.
 # @load "benchmarkresults.jld2" logdettriangle_bench filter2d_dynamic_bench filter2d_3x3_bench filter2d_unrolled_bench dot_bench selfdot_bench dot3_bench sse_bench aplusBc_bench AplusAt_bench vexp_bench randomaccess_bench AmulB_bench AmulBt_bench AtmulB_bench AtmulBt_bench Amulvb_bench Atmulvb_bench
@@ -304,7 +317,6 @@ saveplot("bench_AtmulB_v", AtmulB_bench);
 saveplot("bench_AtmulBt_v", AtmulBt_bench);
 saveplot("bench_Amulvb_v", Amulvb_bench);
 saveplot("bench_Atmulvb_v", Atmulvb_bench);
-
 
 saveplot("bench_logdettriangle_v", logdettriangle_bench);
 saveplot("bench_filter2d_dynamic_v", filter2d_dynamic_bench);

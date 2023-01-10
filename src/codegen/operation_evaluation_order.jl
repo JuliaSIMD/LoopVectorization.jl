@@ -29,7 +29,7 @@ function isnopidentity(
   u₁loop::Symbol,
   u₂loop::Symbol,
   vectorized::Symbol,
-  u₂max::Int,
+  u₂max::Int
 )
   parents_op = parents(op)
   if iscompute(op) && instruction(op).instr === :identity
@@ -42,7 +42,8 @@ function isnopidentity(
     Base.iterate(parents_op, state) === nothing || return false
     name(opp) === name(op) || return false
     # @show op opp isu₁unrolled(op), isu₁unrolled(opp), isu₂unrolled(op), isu₂unrolled(opp)
-    (isu₁unrolled(op) == isu₁unrolled(opp)) & (isu₂unrolled(op) == isu₂unrolled(opp))
+    (isu₁unrolled(op) == isu₁unrolled(opp)) &
+    (isu₂unrolled(op) == isu₂unrolled(opp))
   else
     false
   end
@@ -53,7 +54,7 @@ function set_upstream_family!(
   op::Operation,
   val::T,
   ld::Vector{Symbol},
-  id::Int,
+  id::Int
 ) where {T}
   adal[identifier(op)] == val && return # must already have been set
   if ld != loopdependencies(op) || id == identifier(op)
@@ -68,7 +69,7 @@ function search_for_reductinit!(
   op::Operation,
   opswap::Operation,
   var::Symbol,
-  loopdeps::Vector{Symbol},
+  loopdeps::Vector{Symbol}
 )
   for (i, opp) ∈ enumerate(parents(op))
     if (name(opp) === var) &&
@@ -95,7 +96,7 @@ function addoptoorder!(
   u₁loop::Symbol,
   u₂loop::Symbol,
   vectorized::Symbol,
-  u₂max::Int,
+  u₂max::Int
 )
   lo = ls.loop_order
   id = identifier(op)
@@ -112,7 +113,7 @@ function addoptoorder!(
       u₁loop,
       u₂loop,
       vectorized,
-      u₂max,
+      u₂max
     )
   end
   included_vars[id] || return nothing
@@ -133,14 +134,20 @@ function addoptoorder!(
   # @show op, after_loop
   # isloopvalue(op) || push!(lo[isunrolled,istiled,after_loop,_n], op)
   # all(opp -> iszero(length(reduceddependencies(opp))), parents(op)) &&
-  set_upstream_family!(place_after_loop, op, false, loopdependencies(op), identifier(op)) # parents that have already been included are not moved, so no need to check included_vars to filter
+  set_upstream_family!(
+    place_after_loop,
+    op,
+    false,
+    loopdependencies(op),
+    identifier(op)
+  ) # parents that have already been included are not moved, so no need to check included_vars to filter
   nothing
 end
 function replace_reduct_init!(
   ls::LoopSet,
   op::Operation,
   opsub::Operation,
-  opcheck::Operation,
+  opcheck::Operation
 )
   deleteat!(parents(op), 2)
   op.variable = opcheck.variable
@@ -154,7 +161,7 @@ function nounrollreduction(
   op::Operation,
   u₁loop::Symbol,
   u₂loop::Symbol,
-  vectorized::Symbol,
+  vectorized::Symbol
 )
   reduceddeps = reduceddependencies(op)
   (vectorized ∉ reduceddeps) && (u₁loop ∉ reduceddeps) && (u₂loop ∉ reduceddeps)
@@ -163,7 +170,7 @@ function load_short_static_reduction_first!(
   ls::LoopSet,
   u₁loop::Symbol,
   u₂loop::Symbol,
-  vectorized::Symbol,
+  vectorized::Symbol
 )
   for op ∈ operations(ls)
     iscompute(op) || continue
@@ -188,8 +195,12 @@ function load_short_static_reduction_first!(
         opsub = parents(op)[2]
         length(children(opsub)) == 1 || continue
         opsearch = parents(op)[1]
-        opcheck =
-          search_for_reductinit!(opsearch, opsub, name(opsearch), loopdependencies(op))
+        opcheck = search_for_reductinit!(
+          opsearch,
+          opsub,
+          name(opsearch),
+          loopdependencies(op)
+        )
         opcheck === opsearch || replace_reduct_init!(ls, op, opsub, opcheck)
       end
     elseif (instruction(op).instr === :add_fast) &&
@@ -199,11 +210,17 @@ function load_short_static_reduction_first!(
          (length(vecloop) ≤ 16) &&
          nounrollreduction(op, u₁loop, u₂loop, vectorized)
         opsub = parents(op)[2]
-        ((length(reduceddependencies(opsub)) == 0) & (length(children(opsub)) == 1)) ||
-          continue
+        (
+          (length(reduceddependencies(opsub)) == 0) &
+          (length(children(opsub)) == 1)
+        ) || continue
         opsearch = parents(op)[1]
-        opcheck =
-          search_for_reductinit!(opsearch, opsub, name(opsearch), loopdependencies(op))
+        opcheck = search_for_reductinit!(
+          opsearch,
+          opsub,
+          name(opsearch),
+          loopdependencies(op)
+        )
         opcheck === opsearch || replace_reduct_init!(ls, op, opsub, opcheck)
       end
     end
@@ -216,7 +233,7 @@ function fillorder!(
   u₁loop::Symbol,
   u₂loop::Symbol,
   u₂max::Int,
-  vectorized::Symbol,
+  vectorized::Symbol
 )
   load_short_static_reduction_first!(ls, u₁loop, u₂loop, vectorized)
   lo = ls.loop_order
@@ -248,7 +265,7 @@ function fillorder!(
         u₁loop,
         u₂loop,
         vectorized,
-        u₂max,
+        u₂max
       )
     end
   end

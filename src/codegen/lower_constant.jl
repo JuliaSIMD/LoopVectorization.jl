@@ -6,8 +6,9 @@ function should_broadcast_op(op::Operation)
   true
 end
 
-
-@inline sizeequivalentfloat(::Type{T}) where {T<:Union{Float16,Float32,Float64}} = T
+@inline sizeequivalentfloat(
+  ::Type{T}
+) where {T<:Union{Float16,Float32,Float64}} = T
 @inline sizeequivalentfloat(::Type{T}) where {T<:Union{Int8,UInt8}} = Float32
 @inline sizeequivalentfloat(::Type{T}) where {T<:Union{Int16,UInt16}} = Float16
 @inline sizeequivalentfloat(::Type{T}) where {T<:Union{Int32,UInt32}} = Float32
@@ -19,8 +20,9 @@ end
 if (Sys.ARCH === :x86_64) || (Sys.ARCH === :i686)
   @inline widest_supported_integer(::True) = Int64
   @inline widest_supported_integer(::False) = Int32
-  @inline sizeequivalentint(::Type{Float64}) =
-    widest_supported_integer(VectorizationBase.has_feature(Val(:x86_64_avx512dq)))
+  @inline sizeequivalentint(::Type{Float64}) = widest_supported_integer(
+    VectorizationBase.has_feature(Val(:x86_64_avx512dq))
+  )
 else
   @inline sizeequivalentint(::Type{Float64}) = Int
 end
@@ -35,14 +37,14 @@ function typeof_sym(ls::LoopSet, op::Operation, zerotyp::NumberType)
     newtypeT = gensym(:IntType)
     pushpreamble!(
       ls,
-      Expr(:(=), newtypeT, Expr(:call, lv(:sizeequivalentint), ELTYPESYMBOL)),
+      Expr(:(=), newtypeT, Expr(:call, lv(:sizeequivalentint), ELTYPESYMBOL))
     )
     newtypeT
   elseif zerotyp == HardFloat
     newtypeT = gensym(:FloatType)
     pushpreamble!(
       ls,
-      Expr(:(=), newtypeT, Expr(:call, lv(:sizeequivalentfloat), ELTYPESYMBOL)),
+      Expr(:(=), newtypeT, Expr(:call, lv(:sizeequivalentfloat), ELTYPESYMBOL))
     )
     newtypeT
   else
@@ -55,7 +57,7 @@ function lower_zero!(
   op::Operation,
   ls::LoopSet,
   ua::UnrollArgs,
-  zerotyp::NumberType = zerotype(ls, op),
+  zerotyp::NumberType = zerotype(ls, op)
 )
   @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, vloop, u₂max, suffix = ua
   mvar, opu₁, opu₂ =
@@ -79,10 +81,16 @@ function lower_zero!(
         staticexpr(u₁),
         VECTORWIDTHSYMBOL,
         typeT,
-        staticexpr(reg_size(ls)),
+        staticexpr(reg_size(ls))
       )
     else
-      call = Expr(:call, lv(:_vzero), VECTORWIDTHSYMBOL, typeT, staticexpr(reg_size(ls)))
+      call = Expr(
+        :call,
+        lv(:_vzero),
+        VECTORWIDTHSYMBOL,
+        typeT,
+        staticexpr(reg_size(ls))
+      )
     end
   else
     call = Expr(:call, :zero, typeT)
@@ -96,7 +104,10 @@ function lower_zero!(
   end
   if (suffix == -1) && opu₂
     for u ∈ 0:u₂max-1
-      push!(q.args, Expr(:(=), Symbol(mvar, u, "__", Core.ifelse(opu₁, u₁, 1)), call))
+      push!(
+        q.args,
+        Expr(:(=), Symbol(mvar, u, "__", Core.ifelse(opu₁, u₁, 1)), call)
+      )
     end
   else
     mvar = Symbol(mvar, '_', Core.ifelse(opu₁, u₁, 1))
@@ -118,8 +129,11 @@ function getparentsreductzero(ls::LoopSet, op::Operation)::Float64
   end
   throw("Reduct zero not found for operation $(name(op)).")
 end
-vecbasefunc(f) =
-  Expr(:(.), Expr(:(.), :LoopVectorization, QuoteNode(:VectorizationBase)), QuoteNode(f))
+vecbasefunc(f) = Expr(
+  :(.),
+  Expr(:(.), :LoopVectorization, QuoteNode(:VectorizationBase)),
+  QuoteNode(f)
+)
 function lower_constant!(q::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs)
   @unpack u₁, u₁loopsym, u₂loopsym, vloopsym, u₂max, suffix = ua
   mvar, opu₁, opu₂ =
@@ -141,14 +155,19 @@ function lower_constant!(q::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs)
           :call,
           vecbasefunc(:addscalar),
           Expr(:call, lv(:vzero), VECTORWIDTHSYMBOL, ELTYPESYMBOL),
-          constsym,
+          constsym
         )
       elseif instrclass == MULTIPLICATIVE_IN_REDUCTIONS
         Expr(
           :call,
           vecbasefunc(:mulscalar),
-          Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, Expr(:call, :one, ELTYPESYMBOL)),
-          constsym,
+          Expr(
+            :call,
+            lv(:vbroadcast),
+            VECTORWIDTHSYMBOL,
+            Expr(:call, :one, ELTYPESYMBOL)
+          ),
+          constsym
         )
       elseif instrclass == MAX
         Expr(
@@ -158,9 +177,9 @@ function lower_constant!(q::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs)
             :call,
             lv(:vbroadcast),
             VECTORWIDTHSYMBOL,
-            Expr(:call, :typemin, ELTYPESYMBOL),
+            Expr(:call, :typemin, ELTYPESYMBOL)
           ),
-          constsym,
+          constsym
         )
       elseif instrclass == MIN
         Expr(
@@ -170,13 +189,13 @@ function lower_constant!(q::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs)
             :call,
             lv(:vbroadcast),
             VECTORWIDTHSYMBOL,
-            Expr(:call, :typemax, ELTYPESYMBOL),
+            Expr(:call, :typemax, ELTYPESYMBOL)
           ),
-          constsym,
+          constsym
         )
       else
         throw(
-          "Reductions of type $(reduction_zero(instrclass)) not yet supported; please file an issue as a reminder to take care of this.",
+          "Reductions of type $(reduction_zero(instrclass)) not yet supported; please file an issue as a reminder to take care of this."
         )
       end
     else
@@ -219,7 +238,8 @@ function lower_constant!(q::Expr, op::Operation, ls::LoopSet, ua::UnrollArgs)
 end
 
 isconstantop(op::Operation) =
-  (instruction(op) == LOOPCONSTANT) || (isconstant(op) && length(loopdependencies(op)) == 0)
+  (instruction(op) == LOOPCONSTANT) ||
+  (isconstant(op) && length(loopdependencies(op)) == 0)
 function isinitializedconst(op::Operation)
   if isconstant(op)
     return true
@@ -281,7 +301,11 @@ function lower_licm_constants!(ls::LoopSet)
     end
   end
   for (id, floatval) ∈ ls.preamble_symfloat
-    setop!(ls, ops[id], Expr(:call, lv(:sizeequivalentfloat), ELTYPESYMBOL, floatval))
+    setop!(
+      ls,
+      ops[id],
+      Expr(:call, lv(:sizeequivalentfloat), ELTYPESYMBOL, floatval)
+    )
   end
   for (id, typ) ∈ ls.preamble_zeros
     instruction(ops[id]) === LOOPCONSTANT || continue

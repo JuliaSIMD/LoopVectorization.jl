@@ -1,4 +1,5 @@
-@enum IndexType::UInt8 NotAnIndex = 0 LoopIndex = 1 ComputedIndex = 2 SymbolicIndex = 3
+@enum IndexType::UInt8 NotAnIndex = 0 LoopIndex = 1 ComputedIndex = 2 SymbolicIndex =
+  3
 
 Base.:|(u::Unsigned, it::IndexType) = u | UInt8(it)
 Base.:(==)(u::Unsigned, it::IndexType) = (u % UInt8) == UInt8(it)
@@ -44,7 +45,10 @@ function rebuild_fields(offset::Int, ::Type{T}) where {T}
     elseif fieldcount(TF) ≡ 0
       push!(call.args, Expr(:call, getfield, :t, (offset += 1)))
     elseif TF <: DataType
-      push!(call.args, Expr(:call, lv(:gettype), Expr(:call, getfield, :t, (offset += 1))))
+      push!(
+        call.args,
+        Expr(:call, lv(:gettype), Expr(:call, getfield, :t, (offset += 1)))
+      )
     else
       arg, offset = rebuild_fields(offset, TF)
       push!(call.args, arg)
@@ -78,7 +82,8 @@ struct ArrayRefStruct{array,ptr}
   offsets::UInt128
   strides::UInt128
 end
-array_and_ptr(@nospecialize(ar::ArrayRefStruct{a,p})) where {a,p} = (a::Symbol, p::Symbol)
+array_and_ptr(@nospecialize(ar::ArrayRefStruct{a,p})) where {a,p} =
+  (a::Symbol, p::Symbol)
 # array(@nospecialize(ar::ArrayRefStruct{a,p})) where {a,p} = a::Symbol
 # ptr(@nospecialize(ar::ArrayRefStruct{a,p})) where {a,p}   = p::Symbol
 
@@ -92,7 +97,7 @@ function ArrayRefStruct(
   ls::LoopSet,
   mref::ArrayReferenceMeta,
   arraysymbolinds::Vector{Symbol},
-  ids::Vector{Int},
+  ids::Vector{Int}
 )
   index_types = zero(UInt128)
   indices = zero(UInt128)
@@ -128,7 +133,12 @@ function ArrayRefStruct(
       # end
     end
   end
-  ArrayRefStruct{mref.ref.array,mref.ptr}(index_types, indices, offsets, strides)
+  ArrayRefStruct{mref.ref.array,mref.ptr}(
+    index_types,
+    indices,
+    offsets,
+    strides
+  )
 end
 
 """
@@ -159,7 +169,8 @@ function findmatchingarray(ls::LoopSet, mref::ArrayReferenceMeta)
   end
   0x0000
 end
-filled_8byte_chunks(u::T) where {T<:Unsigned} = sizeof(T) - (leading_zeros(u) >>> 3)
+filled_8byte_chunks(u::T) where {T<:Unsigned} =
+  sizeof(T) - (leading_zeros(u) >>> 3)
 
 function shifted_loopset(ls::LoopSet, loopsyms::Vector{Symbol})
   ld = zero(UInt128) # leading_zeros(ld) >> 2 yields the number of loopdeps
@@ -169,9 +180,12 @@ function shifted_loopset(ls::LoopSet, loopsyms::Vector{Symbol})
   end
   ld
 end
-loopdeps_uint(ls::LoopSet, op::Operation) = shifted_loopset(ls, loopdependencies(op))
-reduceddeps_uint(ls::LoopSet, op::Operation) = shifted_loopset(ls, reduceddependencies(op))
-childdeps_uint(ls::LoopSet, op::Operation) = shifted_loopset(ls, reducedchildren(op))
+loopdeps_uint(ls::LoopSet, op::Operation) =
+  shifted_loopset(ls, loopdependencies(op))
+reduceddeps_uint(ls::LoopSet, op::Operation) =
+  shifted_loopset(ls, reduceddependencies(op))
+childdeps_uint(ls::LoopSet, op::Operation) =
+  shifted_loopset(ls, reducedchildren(op))
 function parents_uint(oppv::AbstractVector{Operation})
   p = zero(UInt128)
   for parent ∈ oppv
@@ -218,7 +232,7 @@ function OperationStruct!(
   varnames::Vector{Symbol},
   ids::Vector{Int},
   ls::LoopSet,
-  op::Operation,
+  op::Operation
 )
   ld = loopdeps_uint(ls, op)
   rd = reduceddeps_uint(ls, op)
@@ -239,8 +253,9 @@ end
   Zero():static_step(r):(maybestaticlast(r)-maybestaticfirst(r))
 @inline zerorangestart(r::CartesianIndices) =
   CartesianIndices(map(zerorangestart, r.indices))
-@inline zerorangestart(r::ArrayInterface.OptionallyStaticUnitRange{StaticInt{1}}) =
-  CloseOpen(maybestaticlast(r))
+@inline zerorangestart(
+  r::ArrayInterface.OptionallyStaticUnitRange{StaticInt{1}}
+) = CloseOpen(maybestaticlast(r))
 
 function loop_boundary!(q::Expr, loop::Loop, shouldindbyind::Bool)
   if isstaticloop(loop) || loop.rangesym === Symbol("")
@@ -289,7 +304,7 @@ function argmeta_and_consts_description(ls::LoopSet, arraysymbolinds)
     tuple_expr(ls.preamble_symint),
     tuple_expr(ls.preamble_symfloat),
     tuple_expr(ls.preamble_zeros),
-    tuple_expr(ls.preamble_funcofeltypes),
+    tuple_expr(ls.preamble_funcofeltypes)
   )
 end
 @inline vdata(v::Vec) = getfield(v, :data)
@@ -315,7 +330,10 @@ function loopset_return_value(ls::LoopSet, ::Val{extract}) where {extract}
     for or ∈ ls.outer_reductions
       op = ops[or]
       if extract
-        push!(ret.args, Expr(:call, :vdata, Symbol(mangledvar(op), "##onevec##")))
+        push!(
+          ret.args,
+          Expr(:call, :vdata, Symbol(mangledvar(op), "##onevec##"))
+        )
       else
         push!(ret.args, Symbol(mangledvar(ops[or]), "##onevec##"))
       end
@@ -359,40 +377,46 @@ end
 val(x) = Expr(:call, Expr(:curly, :Val, x))
 
 @inline gespf1(x, i) = gesp(x, i)
-@inline gespf1(x::StridedPointer{T,1}, i::Tuple{I}) where {T,I<:Union{Integer,StaticInt}} =
-  gesp(x, i)
+@inline gespf1(
+  x::StridedPointer{T,1},
+  i::Tuple{I}
+) where {T,I<:Union{Integer,StaticInt}} = gesp(x, i)
 @inline gespf1(
   x::StridedBitPointer{T,1},
-  i::Tuple{I},
+  i::Tuple{I}
 ) where {T,I<:Union{Integer,StaticInt}} = gesp(x, i)
 @inline gespf1(x::StridedPointer{T,1}, i::Tuple{Zero}) where {T} = x
 @inline gespf1(x::StridedBitPointer{T,1}, i::Tuple{Zero}) where {T} = x
 @generated function gespf1(
   x::AbstractStridedPointer{T,N,C,B,R},
-  i::Tuple{I},
+  i::Tuple{I}
 ) where {T,N,I<:Union{Integer,StaticInt},C,B,R}
   ri = argmin(R)
   quote
     $(Expr(:meta, :inline))
-    p, li = VectorizationBase.tdot(x, (vsub_nsw(getfield(i, 1), one($I)),), strides(x))
+    p, li = VectorizationBase.tdot(
+      x,
+      (vsub_nsw(getfield(i, 1), one($I)),),
+      strides(x)
+    )
     ptr = gep(p, li)
     si = ArrayInterface.StrideIndex{1,$(R[ri],),$(C === 1 ? 1 : 0)}(
       (getfield(strides(x), $ri),),
-      (Zero(),),
+      (Zero(),)
     )
     stridedpointer(ptr, si, StaticInt{$(B === 1 ? 1 : 0)}())
   end
 end
 @generated function gespf1(
   x::AbstractStridedPointer{T,N,C,B,R},
-  ::Tuple{VectorizationBase.NullStep},
+  ::Tuple{VectorizationBase.NullStep}
 ) where {T,N,C,B,R}
   ri = argmin(R)
   quote
     $(Expr(:meta, :inline))
     si = ArrayInterface.StrideIndex{1,$(R[ri],),$(C === 1 ? 1 : 0)}(
       (getfield(strides(x), $ri),),
-      (getfield(offsets(x), $ri),),
+      (getfield(offsets(x), $ri),)
     )
     stridedpointer(pointer(x), si, StaticInt{$(B == 1 ? 1 : 0)}())
   end
@@ -407,7 +431,7 @@ function should_zerorangestart(
   ls::LoopSet,
   allarrayrefs::Vector{ArrayReferenceMeta},
   name_to_array_map::Vector{Vector{Int}},
-  isrooted::Vector{Bool},
+  isrooted::Vector{Bool}
 )
   loops = ls.loops
   shouldindbyind = fill(false, length(loops))
@@ -423,7 +447,8 @@ function should_zerorangestart(
       baseref = allarrayrefs[first(namev)]
       # firstcontainsind relies on stripping of duplicate inds in parsing
       firstcontainsind = findfirstcontaining(baseref, ind)
-      basestride = firstcontainsind == 0 ? 0 : getstrides(baseref)[firstcontainsind]
+      basestride =
+        firstcontainsind == 0 ? 0 : getstrides(baseref)[firstcontainsind]
       allsame = true
       # The idea here is that if any ref to the same array doesn't have `ind`,
       # we can't offset that dimension because different inds will clash.
@@ -431,8 +456,10 @@ function should_zerorangestart(
       # to be consistent, and check that all arrays are valid first.
       for j ∈ @view(namev[2:end])
         ref = allarrayrefs[j]
-        if (firstcontainsind ≠ findfirstcontaining(ref, ind)) ||
-           ((firstcontainsind ≠ 0) && (basestride ≠ getstrides(ref)[firstcontainsind]))
+        if (firstcontainsind ≠ findfirstcontaining(ref, ind)) || (
+          (firstcontainsind ≠ 0) &&
+          (basestride ≠ getstrides(ref)[firstcontainsind])
+        )
           allsame = false
           break
         end
@@ -445,17 +472,22 @@ function should_zerorangestart(
   end
   return shouldindbyind
 end
-function check_shouldindbyind(ls::LoopSet, ind::Symbol, shouldindbyind::Vector{Bool})
+function check_shouldindbyind(
+  ls::LoopSet,
+  ind::Symbol,
+  shouldindbyind::Vector{Bool}
+)
   for (i, loop) ∈ enumerate(ls.loops)
     loop.itersymbol === ind && return shouldindbyind[i]
   end
   true
 end
 
-
 @inline densewrapper(sp, A) = sp
-@inline densewrapper(sp::AbstractStridedPointer{T,N}, A::AbstractArray{T,N}) where {T,N} =
-  _densewrapper(sp, VectorizationBase.val_dense_dims(A))
+@inline densewrapper(
+  sp::AbstractStridedPointer{T,N},
+  A::AbstractArray{T,N}
+) where {T,N} = _densewrapper(sp, VectorizationBase.val_dense_dims(A))
 @inline _densewrapper(sp, ::Nothing) = sp
 @inline _densewrapper(sp::AbstractStridedPointer, ::Val{D}) where {D} =
   VectorizationBase.DensePointerWrapper{D}(sp)
@@ -501,7 +533,7 @@ function add_grouped_strided_pointer!(extra_args::Expr, ls::LoopSet)
           allarrayrefs,
           k,
           name_to_array_map,
-          unique_to_name_and_op_map,
+          unique_to_name_and_op_map
         )
         push!(gespsummaries, (k, gespindsummary))
         found = true
@@ -512,7 +544,8 @@ function add_grouped_strided_pointer!(extra_args::Expr, ls::LoopSet)
     push!(preserve, presbufsym(ref.ref.array))
   end
   roots = getroots(ls)
-  shouldindbyind = should_zerorangestart(ls, allarrayrefs, name_to_array_map, roots)
+  shouldindbyind =
+    should_zerorangestart(ls, allarrayrefs, name_to_array_map, roots)
   for (k, gespindsummary) ∈ gespsummaries
     ref = allarrayrefs[k]
     gespinds = calcgespinds(
@@ -521,7 +554,7 @@ function add_grouped_strided_pointer!(extra_args::Expr, ls::LoopSet)
       gespindsummary,
       shouldindbyind,
       name_to_array_map[first(first(unique_to_name_and_op_map[k]))],
-      unique_to_name_and_op_map,
+      unique_to_name_and_op_map
     )
     push!(
       tgarrays.args,
@@ -529,8 +562,8 @@ function add_grouped_strided_pointer!(extra_args::Expr, ls::LoopSet)
         :call,
         lv(:densewrapper),
         Expr(:call, lv(:gespf1), vptr(ref), gespinds),
-        name(ref),
-      ),
+        name(ref)
+      )
     )
   end
   push!(gsp.args, tgarrays)
@@ -557,11 +590,25 @@ end
   ::StaticInt{RS},
   ::StaticInt{AR},
   ::StaticInt{NT},
-  ::StaticInt{CLS},
+  ::StaticInt{CLS}
 ) where {CNFARG,W,RS,AR,CLS,NT}
   inline, u₁, u₂, v, BROADCAST, thread, warncheckarg, safe = CNFARG
   nt = min(thread % UInt, NT % UInt)
-  t = Expr(:tuple, inline, u₁, u₂, v, BROADCAST, W, RS, AR, CLS, nt, warncheckarg, safe)
+  t = Expr(
+    :tuple,
+    inline,
+    u₁,
+    u₂,
+    v,
+    BROADCAST,
+    W,
+    RS,
+    AR,
+    CLS,
+    nt,
+    warncheckarg,
+    safe
+  )
   length(CNFARG) == 7 && push!(t.args, CNFARG[7])
   Expr(:call, Expr(:curly, :Val, t))
 end
@@ -572,13 +619,15 @@ end
     register_size(),
     available_registers(),
     num_cores(), #FIXME
-    cache_linesize(),
+    cache_linesize()
   )
 end
 function find_samename_constparent(op::Operation, opname::Symbol)
   for opp ∈ parents(op)
-    (((isconstant(opp) && instruction(opp) == LOOPCONSTANT) && (name(opp) === opname))) &&
-      return opp
+    ((
+      (isconstant(opp) && instruction(opp) == LOOPCONSTANT) &&
+      (name(opp) === opname)
+    )) && return opp
     opptemp = find_samename_constparent(opp, opname)
     opptemp === opp || return opptemp
   end
@@ -595,8 +644,6 @@ function remove_outer_reducts!(roots::Vector{Bool}, ls::LoopSet)
   end
 end
 
-
-
 function split_ifelse!(
   ls::LoopSet,
   preserve::Vector{Symbol},
@@ -608,7 +655,7 @@ function split_ifelse!(
   thread::UInt,
   warncheckarg::Int,
   safe::Bool,
-  debug::Bool,
+  debug::Bool
 )
   roots[k] = false
   op = operations(ls)[k]
@@ -667,7 +714,7 @@ function split_ifelse!(
         thread,
         warncheckarg,
         safe,
-        debug,
+        debug
       ))
     else
       $(generate_call_split(
@@ -680,7 +727,7 @@ function split_ifelse!(
         thread,
         warncheckarg,
         safe,
-        debug,
+        debug
       ))
     end
   )
@@ -694,7 +741,7 @@ function generate_call(
   thread::UInt,
   warncheckarg::Int,
   safe::Bool,
-  debug::Bool,
+  debug::Bool
 )
   extra_args = Expr(:tuple)
   fill_children!(ls)
@@ -709,7 +756,7 @@ function generate_call(
     thread,
     warncheckarg,
     safe,
-    debug,
+    debug
   )
 end
 function generate_call_split(
@@ -722,7 +769,7 @@ function generate_call_split(
   thread::UInt,
   warncheckarg::Int,
   safe::Bool,
-  debug::Bool,
+  debug::Bool
 )
   for (k, op) ∈ enumerate(operations(ls))
     parents_op = parents(op)
@@ -740,7 +787,7 @@ function generate_call_split(
         thread,
         warncheckarg,
         safe,
-        debug,
+        debug
       )
     end
   end
@@ -754,7 +801,7 @@ function generate_call_split(
     thread,
     warncheckarg,
     safe,
-    debug,
+    debug
   )
 end
 
@@ -769,7 +816,7 @@ function generate_call_types(
   thread::UInt,
   warncheckarg::Int,
   safe::Bool,
-  debug::Bool,
+  debug::Bool
 )
   # good place to check for split  
   operation_descriptions = Expr(:tuple)
@@ -794,7 +841,10 @@ function generate_call_types(
   for (j, ref) ∈ enumerate(ls.refs_aliasing_syms)
     # duplicate_ref[j] ≠ 0 && continue
     duplicate_ref[j] && continue
-    push!(arrayref_descriptions.args, ArrayRefStruct(ls, ref, arraysymbolinds, ids))
+    push!(
+      arrayref_descriptions.args,
+      ArrayRefStruct(ls, ref, arraysymbolinds, ids)
+    )
   end
   argmeta = argmeta_and_consts_description(ls, arraysymbolinds)
   loop_bounds = loop_boundaries(ls, shouldindbyind)
@@ -818,7 +868,8 @@ function generate_call_types(
   end
   manyarg = !debug && (argcestimate > 16)
   func =
-    debug ? lv(:_turbo_loopset_debug) : (manyarg ? lv(:_turbo_manyarg!) : lv(:_turbo_!))
+    debug ? lv(:_turbo_loopset_debug) :
+    (manyarg ? lv(:_turbo_manyarg!) : lv(:_turbo_!))
   q = Expr(
     :call,
     func,
@@ -826,7 +877,7 @@ function generate_call_types(
     val(operation_descriptions),
     val(arrayref_descriptions),
     val(argmeta),
-    val(loop_syms),
+    val(loop_syms)
   )
   vecwidthdefq = if debug
     push!(q.args, Expr(:tuple, lbarg, extra_args))
@@ -835,7 +886,11 @@ function generate_call_types(
     vargsym = gensym(:vargsym)
     push!(
       q.args,
-      Expr(:call, GlobalRef(Base, :Val), Expr(:call, GlobalRef(Base, :typeof), vargsym)),
+      Expr(
+        :call,
+        GlobalRef(Base, :Val),
+        Expr(:call, GlobalRef(Base, :typeof), vargsym)
+      )
     )
     if manyarg
       push!(q.args, Expr(:call, lv(:flatten_to_tuple), vargsym))
@@ -869,7 +924,6 @@ end
 """
     check_args(::Vararg{AbstractArray})
 
-
 LoopVectorization will optimize an `@turbo` loop if `check_args` on each on the indexed abstract arrays returns true.
 It returns true for `AbstractArray{T}`s when `check_type(T) == true` and the array or its parent is a `StridedArray` or `AbstractRange`.
 
@@ -886,7 +940,8 @@ end
   # @info "`LoopVectorization.check_args(::$(typeof(x))) == false`, therefore compiling a probably slow `@inbounds @fastmath` fallback loop." maxlog=1
   false
 end
-@inline check_args(A, B, C::Vararg{Any,K}) where {K} = check_args(A) && check_args(B, C...)
+@inline check_args(A, B, C::Vararg{Any,K}) where {K} =
+  check_args(A) && check_args(B, C...)
 @inline check_args(::AbstractRange{T}) where {T} = check_type(T)
 @inline check_args(::UpTri) = false
 @inline check_args(::LoTri) = false
@@ -916,7 +971,7 @@ end
 struct RetVec2Int end
 (::RetVec2Int)(_) = Vec{2,Int}
 """
-  can_turbo(f::Function, ::Val{NARGS})
+can_turbo(f::Function, ::Val{NARGS})
 
 Check whether a given function with a specified number of arguments
 can be used inside a `@turbo` loop.
@@ -962,10 +1017,18 @@ function check_turbo_safe(ls::LoopSet)
   q
 end
 
-make_fast(q) =
-  Expr(:macrocall, Symbol("@fastmath"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), q)
-make_crashy(q) =
-  Expr(:macrocall, Symbol("@inbounds"), LineNumberNode(@__LINE__, Symbol(@__FILE__)), q)
+make_fast(q) = Expr(
+  :macrocall,
+  Symbol("@fastmath"),
+  LineNumberNode(@__LINE__, Symbol(@__FILE__)),
+  q
+)
+make_crashy(q) = Expr(
+  :macrocall,
+  Symbol("@inbounds"),
+  LineNumberNode(@__LINE__, Symbol(@__FILE__)),
+  q
+)
 
 @inline vecmemaybe(x::NativeTypes) = x
 @inline vecmemaybe(x::VectorizationBase._Vec) = Vec(x)
@@ -998,24 +1061,39 @@ end
 #   call, preserve = generate_call_split(ls, (inline,u₁,u₂), thread % UInt, false)
 #   setup_call_ret!(ls, call, preserve)
 # end
-setup_outerreduct_preserve_mangler(op::Operation) = Symbol(mangledvar(op), "##onevec##")
+setup_outerreduct_preserve_mangler(op::Operation) =
+  Symbol(mangledvar(op), "##onevec##")
 
-function outer_reduction_to_scalar_reduceq!(q::Expr, op::Operation, var = name(op))
+function outer_reduction_to_scalar_reduceq!(
+  q::Expr,
+  op::Operation,
+  var = name(op)
+)
   instr = instruction(op)
   out = setup_outerreduct_preserve_mangler(op)
   if instr.instr ≢ :ifelse
-    Expr(:call, reduction_scalar_combine(op), Expr(:call, lv(:vecmemaybe), out), var)
+    Expr(
+      :call,
+      reduction_scalar_combine(op),
+      Expr(:call, lv(:vecmemaybe), out),
+      var
+    )
   else
     opinstr = ifelse_reduction(:IfElseReduced, op) do opv
       opvname = name(opv)
       oporig = gensym(opvname)
       pushfirst!(q.args, Expr(:(=), oporig, opvname))
-      Expr(:call, lv(:vecmemaybe), setup_outerreduct_preserve_mangler(opv)), (oporig,)
+      Expr(:call, lv(:vecmemaybe), setup_outerreduct_preserve_mangler(opv)),
+      (oporig,)
     end
     Expr(:call, opinstr, Expr(:call, lv(:vecmemaybe), out), var)
   end
 end
-function setup_outerreduct_preserve(ls::LoopSet, call::Expr, preserve::Vector{Symbol})
+function setup_outerreduct_preserve(
+  ls::LoopSet,
+  call::Expr,
+  preserve::Vector{Symbol}
+)
   iszero(length(ls.outer_reductions)) && return gc_preserve(call, preserve)
   retv = loopset_return_value(ls, Val(false))
   q = Expr(:block, gc_preserve(Expr(:(=), retv, call), preserve))
@@ -1033,7 +1111,14 @@ function setup_call_final(ls::LoopSet, q::Expr)
   return ls.preamble
 end
 function setup_call_debug(ls::LoopSet)
-  generate_call(ls, (false, zero(Int8), zero(Int8), zero(Int8)), zero(UInt), 1, true, true)
+  generate_call(
+    ls,
+    (false, zero(Int8), zero(Int8), zero(Int8)),
+    zero(UInt),
+    1,
+    true,
+    true
+  )
 end
 function setup_call(
   ls::LoopSet,
@@ -1046,7 +1131,7 @@ function setup_call(
   v::Int8,
   thread::Int,
   warncheckarg::Int,
-  safe::Bool,
+  safe::Bool
 )
   # We outline/inline at the macro level by creating/not creating an anonymous function.
   # The old API instead was based on inlining or not inline the generated function, but

@@ -12,7 +12,7 @@ using VectorizationBase: data
     :(Tuple{}),
     "i64",
     String[],
-    Symbol[],
+    Symbol[]
   )
 end
 
@@ -30,12 +30,13 @@ end
         $sideeffect_str,
         NTuple{$W,Core.VecElement{$T}},
         Tuple{NTuple{$W,Core.VecElement{$T}}},
-        VectorizationBase.data(x),
-      ),
+        VectorizationBase.data(x)
+      )
     )
   end
 end
-@inline volatile(x::VecUnroll) = VecUnroll(VectorizationBase.fmap(volatile, data(x)))
+@inline volatile(x::VecUnroll) =
+  VecUnroll(VectorizationBase.fmap(volatile, data(x)))
 @inline volatile(x::Tuple) = map(volatile, x)
 # @generated function volatile(x::Vec{W,T}, x::Vec{W,T}) where {W,T}
 #     typ = VectorizationBase.LLVM_TYPES[T]
@@ -89,7 +90,6 @@ end
 #     end
 # end
 
-
 # @generated function unrolltest!(f::F, y::AbstractVector{T}, x::AbstractVector{T}, ::Val{U}) where {F,U,T}
 #     quote
 #         cc = readcyclecounter()
@@ -106,13 +106,22 @@ end
 let
   vx = Vec(ntuple(_ -> 10randn(), pick_vector_width(Float64))...)
   vu2 = VectorizationBase.VecUnroll(
-    ntuple(_ -> Vec(ntuple(_ -> 10randn(), pick_vector_width(Float64))...), Val(2)),
+    ntuple(
+      _ -> Vec(ntuple(_ -> 10randn(), pick_vector_width(Float64))...),
+      Val(2)
+    )
   )
   vu4 = VectorizationBase.VecUnroll(
-    ntuple(_ -> Vec(ntuple(_ -> 10randn(), pick_vector_width(Float64))...), Val(4)),
+    ntuple(
+      _ -> Vec(ntuple(_ -> 10randn(), pick_vector_width(Float64))...),
+      Val(4)
+    )
   )
   vu8 = VectorizationBase.VecUnroll(
-    ntuple(_ -> Vec(ntuple(_ -> 10randn(), pick_vector_width(Float64))...), Val(8)),
+    ntuple(
+      _ -> Vec(ntuple(_ -> 10randn(), pick_vector_width(Float64))...),
+      Val(8)
+    )
   )
   for unaryf ∈ [log, log2, log10, log1p, exp, exp2, exp10, expm1, sin, cos]
     rt1 = unrolltest(f, vx)
@@ -131,7 +140,14 @@ end
 let
   f, io = mktemp()
   W = Int(VectorizationBase.pick_vector_width(Float64))
-  code_native(io, exp, (VecUnroll{1,W,Float64,Vec{W,Float64}},); debuginfo = :none)
+  code_native(
+    io,
+    exp,
+    (VecUnroll{1,W,Float64,Vec{W,Float64}},);
+    debuginfo = :none
+  )
   close(io)
-  run(`llvm-mca -mcpu=$(Sys.CPU_NAME) -output-asm-variant=1 -bottleneck-analysis $f`)
+  run(
+    `llvm-mca -mcpu=$(Sys.CPU_NAME) -output-asm-variant=1 -bottleneck-analysis $f`
+  )
 end

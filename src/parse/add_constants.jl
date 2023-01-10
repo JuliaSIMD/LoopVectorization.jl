@@ -9,7 +9,7 @@ const CONSTANT_SYMBOLS = (
   :Int32,
   :UInt32,
   :Int64,
-  :UInt64,
+  :UInt64
 )
 function add_constant!(ls::LoopSet, var::Symbol, elementbytes::Int)
   var ∈ ls.loopsymbols && return add_loopvalue!(ls, var, elementbytes)
@@ -23,7 +23,7 @@ function add_constant!(ls::LoopSet, var::Symbol, elementbytes::Int)
     constant,
     NODEPENDENCY,
     Symbol[],
-    NOPARENTS,
+    NOPARENTS
   )
   rop = pushop!(ls, op, var)
   (!globalconst && (rop === op)) && pushpreamble!(ls, op, var)
@@ -38,7 +38,7 @@ function add_constant!(
   ls::LoopSet,
   var::Number,
   elementbytes::Int = 8,
-  varname = gensym!(ls, "loopconstnumber"),
+  varname = gensym!(ls, "loopconstnumber")
 )
   op = Operation(
     length(operations(ls)),
@@ -48,7 +48,7 @@ function add_constant!(
     constant,
     NODEPENDENCY,
     Symbol[],
-    NOPARENTS,
+    NOPARENTS
   )
   ops = operations(ls)
   typ = var isa Integer ? HardInt : HardFloat
@@ -109,7 +109,6 @@ function ensure_constant_lowered!(ls::LoopSet, op::Operation)
         pushpreamble!(ls, Expr(:(=), name(op), floatval))
         return
       end
-
     end
     for (id, typ) ∈ ls.preamble_zeros
       if id == opid
@@ -119,7 +118,10 @@ function ensure_constant_lowered!(ls::LoopSet, op::Operation)
     end
     for (id, f) ∈ ls.preamble_funcofeltypes
       if id == opid
-        pushpreamble!(ls, Expr(:(=), name(op), Expr(:call, reduction_zero(f), Float64)))
+        pushpreamble!(
+          ls,
+          Expr(:(=), name(op), Expr(:call, reduction_zero(f), Float64))
+        )
         return
       end
     end
@@ -128,7 +130,7 @@ end
 function ensure_constant_lowered!(
   ls::LoopSet,
   mpref::ArrayReferenceMetaPosition,
-  ind::Symbol,
+  ind::Symbol
 )
   length(loopdependencies(mpref)) == 0 && return
   for (id, opp) ∈ enumerate(parents(mpref))
@@ -142,7 +144,7 @@ function add_constant_vload!(
   ls::LoopSet,
   op::Operation,
   mpref::ArrayReferenceMetaPosition,
-  elementbytes::Int,
+  elementbytes::Int
 )
   temp = gensym!(ls, "intermediateconstref")
   use_getindex = vptr(name(mpref)) === mpref.mref.ptr
@@ -165,8 +167,8 @@ function add_constant_vload!(
           fill(false, nindices),
           true,
           ls,
-          false,
-        ).args,
+          false
+        ).args
       )
     else
       push!(
@@ -177,8 +179,8 @@ function add_constant_vload!(
           fill(false, nindices),
           true,
           ls,
-          false,
-        ),
+          false
+        )
       )
     end
   end
@@ -192,7 +194,11 @@ function add_constant_vload!(
   pushpreamble!(ls, op, temp)
   return temp
 end
-function add_constant!(ls::LoopSet, mpref::ArrayReferenceMetaPosition, elementbytes::Int)
+function add_constant!(
+  ls::LoopSet,
+  mpref::ArrayReferenceMetaPosition,
+  elementbytes::Int
+)
   op = Operation(
     length(operations(ls)),
     varname(mpref),
@@ -202,7 +208,7 @@ function add_constant!(ls::LoopSet, mpref::ArrayReferenceMetaPosition, elementby
     NODEPENDENCY,
     Symbol[],
     NOPARENTS,
-    mpref.mref,
+    mpref.mref
   )
   add_vptr!(ls, op)
   temp = add_constant_vload!(ls, op, mpref, elementbytes)
@@ -217,7 +223,7 @@ function add_constant!(
   deps::Vector{Symbol},
   assignedsym::Symbol,
   elementbytes::Int,
-  f::Symbol = Symbol(""),
+  f::Symbol = Symbol("")
 )
   value ∈ ls.loopsymbols && return add_loopvalue!(ls, value, elementbytes)
   retop = get(ls.opdict, value, nothing)
@@ -230,7 +236,7 @@ function add_constant!(
       constant,
       deps,
       NODEPENDENCY,
-      NOPARENTS,
+      NOPARENTS
     )
   else
     op = Operation(
@@ -241,7 +247,7 @@ function add_constant!(
       compute,
       deps,
       reduceddependencies(retop),
-      [retop],
+      [retop]
     )
   end
   pushop!(ls, op, assignedsym)
@@ -258,7 +264,7 @@ function add_constant!(
   value::Number,
   deps::Vector{Symbol},
   assignedsym::Symbol,
-  elementbytes::Int,
+  elementbytes::Int
 )
   op = add_constant!(
     ls,
@@ -266,7 +272,7 @@ function add_constant!(
     deps,
     assignedsym,
     elementbytes,
-    :numericconstant,
+    :numericconstant
   )
   pushpreamble!(ls, op, value)
   op

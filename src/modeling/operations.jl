@@ -1,9 +1,8 @@
 const DISCONTIGUOUS = Symbol("##DISCONTIGUOUSSUBARRAY##")
 const CONSTANTZEROINDEX = Symbol("##CONSTANTZEROINDEX##")
-const LOOPCONSTANT = Instruction(:LoopVectorization, Symbol("LOOPCONSTANTINSTRUCTION"))
+const LOOPCONSTANT =
+  Instruction(:LoopVectorization, Symbol("LOOPCONSTANTINSTRUCTION"))
 const GLOBALCONSTANT = Symbol("##GLOBAL##CONSTANT##")
-
-
 
 """
     ArrayReference
@@ -75,15 +74,27 @@ struct OffsetLoadCollection
   # offsets::Vector{Vector{Vector{Int8}}}
   opidcollectionmap::Vector{Tuple{Int,Int}}
   batchedcollections::Vector{
-    SubArray{Tuple{Int,Int},1,Vector{Tuple{Int,Int}},Tuple{UnitRange{Int}},true},
+    SubArray{
+      Tuple{Int,Int},
+      1,
+      Vector{Tuple{Int,Int}},
+      Tuple{UnitRange{Int}},
+      true
+    }
   }
   batchedcollectionmap::Vector{Tuple{Int,Int}}
   function OffsetLoadCollection()
     new(
       Vector{Int}[],
       Tuple{Int,Int}[],
-      SubArray{Tuple{Int,Int},1,Vector{Tuple{Int,Int}},Tuple{UnitRange{Int}},true}[],
-      Tuple{Int,Int}[],
+      SubArray{
+        Tuple{Int,Int},
+        1,
+        Vector{Tuple{Int,Int}},
+        Tuple{UnitRange{Int}},
+        true
+      }[],
+      Tuple{Int,Int}[]
     )
   end
 end
@@ -126,13 +137,21 @@ abstract type AbstractLoopOperation end
   memstore
   loopvalue
 end
-"An operation setting a variable to a constant value (e.g., `a = 0.0`)"
+"""
+An operation setting a variable to a constant value (e.g., `a = 0.0`)
+"""
 constant
-"An operation setting a variable from a memory location (e.g., `a = A[i,j]`)"
+"""
+An operation setting a variable from a memory location (e.g., `a = A[i,j]`)
+"""
 memload
-"An operation computing a new value from one or more variables (e.g., `a = b + c`)"
+"""
+An operation computing a new value from one or more variables (e.g., `a = b + c`)
+"""
 compute
-"An operation storing a value to a memory location (e.g., `A[i,j] = a`)"
+"""
+An operation storing a value to a memory location (e.g., `A[i,j] = a`)
+"""
 memstore
 """
 `loopvalue` indicates an loop variable (`i` in `for i in ...`). These are the "parents" of `compute`
@@ -223,7 +242,7 @@ mutable struct Operation <: AbstractLoopOperation
     reduced_deps::Vector{Symbol} = Symbol[],
     parents::Vector{Operation} = Operation[],
     ref::ArrayReferenceMeta = NOTAREFERENCE,
-    reduced_children::Vector{Symbol} = Symbol[],
+    reduced_children::Vector{Symbol} = Symbol[]
   )
     new(
       identifier,
@@ -237,7 +256,7 @@ mutable struct Operation <: AbstractLoopOperation
       Operation[],
       ref,
       Symbol("##", variable, :_),
-      reduced_children,
+      reduced_children
     )
   end
 end
@@ -310,7 +329,10 @@ function Base.show(io::IO, op::Operation)
   elseif isload(op)
     print(io, Expr(:(=), op.variable, ref_for_print(op)))
   elseif iscompute(op)
-    print(io, Expr(:(=), op.variable, callexpr(op.instruction, map(name, parents(op)))))
+    print(
+      io,
+      Expr(:(=), op.variable, callexpr(op.instruction, map(name, parents(op))))
+    )
   elseif isstore(op)
     print(io, Expr(:(=), ref_for_print(op), name(first(parents(op)))))
   elseif isloopvalue(op)
@@ -349,7 +371,8 @@ name(x::ArrayReference) = x.array
 name(x::ArrayReferenceMeta) = x.ref.array
 name(op::Operation) = op.variable
 instruction(op::Operation) = op.instruction
-isreductcombineinstr(op::Operation) = iscompute(op) && isreductcombineinstr(instruction(op))
+isreductcombineinstr(op::Operation) =
+  iscompute(op) && isreductcombineinstr(instruction(op))
 """
     mvar = mangledvar(op)
 
@@ -357,12 +380,12 @@ Returns the mangled variable name, for use in the produced expressions.
 These names will be further processed if op is tiled and/or unrolled.
 
 ```julia
-    if tiled ∈ loopdependencies(op) # `suffix` is tilenumber
-        mvar = Symbol(op, suffix, :_)
-    end
-    if unrolled ∈ loopdependencies(op) # `u` is unroll number
-        mvar = Symbol(op, u)
-    end
+if tiled ∈ loopdependencies(op) # `suffix` is tilenumber
+  mvar = Symbol(op, suffix, :_)
+end
+if unrolled ∈ loopdependencies(op) # `u` is unroll number
+  mvar = Symbol(op, u)
+end
 ```
 """
 mangledvar(op::Operation) = op.mangledvariable
@@ -383,7 +406,7 @@ function Operation(
   elementbytes::Int,
   instr,
   optype::OperationType,
-  mpref::ArrayReferenceMetaPosition,
+  mpref::ArrayReferenceMetaPosition
 )
   Operation(
     id,
@@ -394,16 +417,22 @@ function Operation(
     mpref.loopdependencies,
     mpref.reduceddeps,
     mpref.parents,
-    mpref.mref,
+    mpref.mref
   )
 end
-Base.:(==)(x::ArrayReferenceMetaPosition, y::ArrayReferenceMetaPosition) = x.mref == y.mref
+Base.:(==)(x::ArrayReferenceMetaPosition, y::ArrayReferenceMetaPosition) =
+  x.mref == y.mref
 parents(op::ArrayReferenceMetaPosition) = op.parents
 # Avoid memory allocations by using this for ops that aren't references
 const NOTAREFERENCE =
   ArrayReferenceMeta(ArrayReference(Symbol(""), Symbol[]), Bool[], Symbol(""))
-const NOTAREFERENCEMP =
-  ArrayReferenceMetaPosition(NOTAREFERENCE, NOPARENTS, Symbol[], Symbol[], Symbol(""))
+const NOTAREFERENCEMP = ArrayReferenceMetaPosition(
+  NOTAREFERENCE,
+  NOPARENTS,
+  Symbol[],
+  Symbol[],
+  Symbol("")
+)
 varname(::Nothing) = nothing
 varname(mpref::ArrayReferenceMetaPosition) = mpref.varname
 name(mpref::ArrayReferenceMetaPosition) = name(mpref.mref.ref)
@@ -480,7 +509,8 @@ function ifelse_reduce_fun_expr(f::Symbol, op::Operation)
   lvcmp_instr = lv(instruction(cmp).instr)
   if success
     lvf = lv(f)
-    return not ? Expr(:call, lvf, :($(!) ∘ $lvcmp_instr)) : Expr(:call, lvf, lvcmp_instr)
+    return not ? Expr(:call, lvf, :($(!) ∘ $lvcmp_instr)) :
+           Expr(:call, lvf, lvcmp_instr)
   end
   options = children(cmp)
   for oop ∈ options
@@ -488,7 +518,9 @@ function ifelse_reduce_fun_expr(f::Symbol, op::Operation)
     _cmp, _cmpa, _cmpb, _not, _success = find_cmp_args_from_ifelse(oop)
     _success || continue
     lvf = lv(Symbol(f, :Mirror))
-    expr = not ? Expr(:call, lvf, :($(!) ∘ $lvcmp_instr)) : Expr(:call, lvf, lvcmp_instr)
+    expr =
+      not ? Expr(:call, lvf, :($(!) ∘ $lvcmp_instr)) :
+      Expr(:call, lvf, lvcmp_instr)
     push!(expr.args, name(_cmpa), name(_cmpb))
     return expr
   end
@@ -500,7 +532,8 @@ function ifelse_reduction(f::F, rsym::Symbol, op::Operation) where {F}
   lvcmp_instr = lv(instruction(cmp).instr)
   if success
     lvf = lv(rsym)
-    return not ? Expr(:call, lvf, :($(!) ∘ $lvcmp_instr)) : Expr(:call, lvf, lvcmp_instr)
+    return not ? Expr(:call, lvf, :($(!) ∘ $lvcmp_instr)) :
+           Expr(:call, lvf, lvcmp_instr)
   end
   options = children(cmp)
   for oop ∈ options
@@ -523,17 +556,22 @@ end
 #   end
 # end
 # No `@eval` to make the language server happy
-reduction_scalar_combine(x) = reduction_scalar_combine(reduction_instruction_class(x))
+reduction_scalar_combine(x) =
+  reduction_scalar_combine(reduction_instruction_class(x))
 reduction_scalar_combine(op::Operation)::GlobalRef =
   lv(reduction_scalar_combine(instruction(op)))
 reduction_to_scalar(x) = reduction_to_scalar(reduction_instruction_class(x))
-reduction_to_scalar(op::Operation)::GlobalRef = lv(reduction_to_scalar(instruction(op)))
-reduce_number_of_vectors(x) = reduce_number_of_vectors(reduction_instruction_class(x))
+reduction_to_scalar(op::Operation)::GlobalRef =
+  lv(reduction_to_scalar(instruction(op)))
+reduce_number_of_vectors(x) =
+  reduce_number_of_vectors(reduction_instruction_class(x))
 reduce_number_of_vectors(op::Operation)::GlobalRef =
   lv(reduce_number_of_vectors(instruction(op)))
-reduce_to_onevecunroll(x) = reduce_to_onevecunroll(reduction_instruction_class(x))
+reduce_to_onevecunroll(x) =
+  reduce_to_onevecunroll(reduction_instruction_class(x))
 reduce_to_onevecunroll(op::Operation)::GlobalRef =
   lv(reduce_to_onevecunroll(instruction(op)))
-reduction_to_single_vector(x) = reduction_to_single_vector(reduction_instruction_class(x))
+reduction_to_single_vector(x) =
+  reduction_to_single_vector(reduction_instruction_class(x))
 reduction_to_single_vector(op::Operation)::GlobalRef =
   lv(reduction_to_single_vector(instruction(op)))
