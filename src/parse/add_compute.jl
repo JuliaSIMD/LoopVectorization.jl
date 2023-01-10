@@ -14,7 +14,7 @@ end
 function mergesetdiffv!(
   s1::AbstractVector{T},
   s2::AbstractVector{T},
-  s3::AbstractVector{T},
+  s3::AbstractVector{T}
 ) where {T}
   for s ∈ s2
     s ∉ s3 && addsetv!(s1, s)
@@ -25,7 +25,7 @@ end
 function setdiffv!(
   s3::AbstractVector{T},
   s1::AbstractVector{T},
-  s2::AbstractVector{T},
+  s2::AbstractVector{T}
 ) where {T}
   for s ∈ s1
     (s ∈ s2) || (s ∉ s3 && push!(s3, s))
@@ -35,13 +35,17 @@ function setdiffv!(
   s4::AbstractVector{T},
   s3::AbstractVector{T},
   s1::AbstractVector{T},
-  s2::AbstractVector{T},
+  s2::AbstractVector{T}
 ) where {T}
   for s ∈ s1
     (s ∈ s2) ? (s ∉ s4 && push!(s4, s)) : (s ∉ s3 && push!(s3, s))
   end
 end
-function update_deps!(deps::Vector{Symbol}, reduceddeps::Vector{Symbol}, parent::Operation)
+function update_deps!(
+  deps::Vector{Symbol},
+  reduceddeps::Vector{Symbol},
+  parent::Operation
+)
   mergesetv!(deps, loopdependencies(parent))#, reduceddependencies(parent))
   if !(isload(parent) || isconstant(parent)) #&& !isreductcombineinstr(parent)
     mergesetv!(reduceddeps, reduceddependencies(parent))
@@ -53,7 +57,7 @@ function pushparent!(
   parents::Vector{Operation},
   deps::Vector{Symbol},
   reduceddeps::Vector{Symbol},
-  parent::Operation,
+  parent::Operation
 )
   @assert parents !== NOPARENTS
   push!(parents, parent)
@@ -69,7 +73,7 @@ function add_parent!(
   ls::LoopSet,
   var,
   elementbytes::Int,
-  position::Int,
+  position::Int
 )
   parent = if var isa Symbol
     # if var === :kern_1_1
@@ -112,13 +116,17 @@ function search_tree(opv::Vector{Operation}, var::Symbol) # relies on cycles bei
   false
 end
 
-search_tree_for_ref(ls::LoopSet, opv::Vector{Operation}, ::Nothing, var::Symbol) =
-  var, false
+search_tree_for_ref(
+  ls::LoopSet,
+  opv::Vector{Operation},
+  ::Nothing,
+  var::Symbol
+) = var, false
 function search_tree_for_ref(
   ls::LoopSet,
   opv::Vector{Operation},
   mpref::ArrayReferenceMetaPosition,
-  var::Symbol,
+  var::Symbol
 ) # relies on cycles being forbidden
   for opp ∈ opv
     if opp.ref == mpref.mref
@@ -143,7 +151,7 @@ end
 function update_reduction_status!(
   parentvec::Vector{Operation},
   deps::Vector{Symbol},
-  parent::Symbol,
+  parent::Symbol
 )
   for opp ∈ parentvec
     if name(opp) === parent
@@ -193,7 +201,7 @@ function substitute_op_in_parents!(
   replacer::Operation,
   replacee::Operation,
   reduceddeps::Vector{Symbol},
-  reductsym::Symbol,
+  reductsym::Symbol
 )
   found = false
   for i ∈ eachindex(vparents)
@@ -202,8 +210,13 @@ function substitute_op_in_parents!(
       vparents[i] = replacer
       found = true
     else
-      fopp =
-        substitute_op_in_parents!(parents(opp), replacer, replacee, reduceddeps, reductsym)
+      fopp = substitute_op_in_parents!(
+        parents(opp),
+        replacer,
+        replacee,
+        reduceddeps,
+        reductsym
+      )
       if fopp
         add_reduced_deps!(opp, reduceddeps)
         # FIXME: https://github.com/JuliaSIMD/LoopVectorization.jl/issues/259
@@ -217,7 +230,6 @@ function substitute_op_in_parents!(
   found
 end
 
-
 function add_reduction_update_parent!(
   vparents::Vector{Operation},
   deps::Vector{Symbol},
@@ -226,7 +238,7 @@ function add_reduction_update_parent!(
   parent::Operation,
   instr::Instruction,
   reduction_ind::Int,
-  elementbytes::Int,
+  elementbytes::Int
 )
   var = name(parent)
   # isouterreduction = iszero(length(loopdependencies(parent))) && (parent.instruction === LOOPCONSTANT)
@@ -257,7 +269,7 @@ function add_reduction_update_parent!(
       loopdependencies(parent),
       reductsym,
       elementbytes,
-      :numericconstant,
+      :numericconstant
     )
     if reduct_zero === :zero
       push!(ls.preamble_zeros, (identifier(reductinit), IntOrFloat))
@@ -278,7 +290,13 @@ function add_reduction_update_parent!(
       update_deps!(deps, reduceddeps, reductinit)#parent) # deps and reduced deps will not be disjoint
     end
   elseif !isouterreduction && reductinit !== parent
-    substitute_op_in_parents!(vparents, reductinit, parent, reduceddeps, reductsym)
+    substitute_op_in_parents!(
+      vparents,
+      reductinit,
+      parent,
+      reduceddeps,
+      reductsym
+    )
   end
   update_reduction_status!(vparents, reduceddeps, name(reductinit))
   # this is the op added by add_compute
@@ -290,7 +308,7 @@ function add_reduction_update_parent!(
     compute,
     deps,
     reduceddeps,
-    vparents,
+    vparents
   )
   isouterreduction && push!(ls.outer_reductions, identifier(op))
   opout = pushop!(ls, op, var) # note this overwrites the entry in the operations dict, but not the vector
@@ -314,7 +332,7 @@ function add_reduction_update_parent!(
     compute,
     childdeps,
     childrdeps,
-    childparents,
+    childparents
   )
   # child = Operation(
   #     length(operations(ls)), name(parent), elementbytes, Instruction(reductcombine,:identity), compute, childdeps, childrdeps, childparents
@@ -332,7 +350,13 @@ function substitute!(ex::Expr, d::Dict{Symbol,Symbol})
     end
   end
 end
-function argsymbol(ls::LoopSet, arg, mpref, elementbytes::Int, position::Int)::Symbol
+function argsymbol(
+  ls::LoopSet,
+  arg,
+  mpref,
+  elementbytes::Int,
+  position::Int
+)::Symbol
   argsym = gensym!(ls, "anonarg")
   if mpref === nothing
     add_operation!(ls, argsym, arg, elementbytes, position)
@@ -348,7 +372,7 @@ function add_anon_func!(
   ex::Expr,
   position::Int,
   mpref::Union{Nothing,ArrayReferenceMetaPosition},
-  elementbytes::Int,
+  elementbytes::Int
 )::Operation
   d = Dict{Symbol,Symbol}()
   anonargs = f.args[1]
@@ -387,7 +411,7 @@ function add_anon_func!(
       LHS,
       instruction(:identity),
       Operation[getop(ls, lastline)],
-      elementbytes,
+      elementbytes
     )
   elseif Meta.isexpr(lastline, :call)
     add_compute!(ls, LHS, lastline, elementbytes, position, mpref)
@@ -414,7 +438,7 @@ function maybe_fix_reduced_deps!(
   reduceddeps::Vector{Symbol},
   parent::Operation,
   mpref::ArrayReferenceMetaPosition,
-  position::Int,
+  position::Int
 )
   loopdeps_parent = loopdependencies(parent)
   reduceddeps_parent = reduceddependencies(parent)
@@ -453,7 +477,7 @@ function add_compute!(
   ex::Expr,
   elementbytes::Int,
   position::Int,
-  mpref::Union{Nothing,ArrayReferenceMetaPosition} = nothing,
+  mpref::Union{Nothing,ArrayReferenceMetaPosition} = nothing
 )::Operation
   @assert ex.head === :call
   fexpr = first(ex.args)
@@ -466,7 +490,14 @@ function add_compute!(
     arg1 = args[1]
     arg2 = args[2]
     if arg1 isa Number && convert(Float64, arg1) === -1.0
-      return add_compute!(ls, var, :(2iseven($arg2) - 1), elementbytes, position, mpref)
+      return add_compute!(
+        ls,
+        var,
+        :(2iseven($arg2) - 1),
+        elementbytes,
+        position,
+        mpref
+      )
     end
     if arg2 isa Number
       return add_pow!(ls, var, args[1], arg2, elementbytes, position)
@@ -491,18 +522,40 @@ function add_compute!(
         if mpref == argref
           if varname(mpref) === var
             id = findfirst(==(mpref.mref), ls.refs_aliasing_syms)
-            mpref.varname = var = id === nothing ? var : ls.syms_aliasing_refs[id]
+            mpref.varname =
+              var = id === nothing ? var : ls.syms_aliasing_refs[id]
             reduction_ind = ind
-            mergesetv!(deps, loopdependencies(add_load!(ls, argref, elementbytes)))
+            mergesetv!(
+              deps,
+              loopdependencies(add_load!(ls, argref, elementbytes))
+            )
           else
-            pushparent!(vparents, deps, reduceddeps, add_load!(ls, argref, elementbytes))
+            pushparent!(
+              vparents,
+              deps,
+              reduceddeps,
+              add_load!(ls, argref, elementbytes)
+            )
           end
         else
           argref.varname = gensym!(ls, "tempload")
-          pushparent!(vparents, deps, reduceddeps, add_load!(ls, argref, elementbytes))
+          pushparent!(
+            vparents,
+            deps,
+            reduceddeps,
+            add_load!(ls, argref, elementbytes)
+          )
         end
       else
-        add_parent!(vparents, deps, reduceddeps, ls, arg, elementbytes, position)
+        add_parent!(
+          vparents,
+          deps,
+          reduceddeps,
+          ls,
+          arg,
+          elementbytes,
+          position
+        )
       end
     elseif arg ∈ ls.loopsymbols
       loopsymop = add_loopvalue!(ls, arg, elementbytes)
@@ -533,8 +586,14 @@ function add_compute!(
      ) &&
      isone(length(vparents)) &&
      (position == length(loopdependencies(only(vparents))))
-    deps, reduceddeps =
-      maybe_fix_reduced_deps!(ls, deps, reduceddeps, only(vparents), mpref, position)
+    deps, reduceddeps = maybe_fix_reduced_deps!(
+      ls,
+      deps,
+      reduceddeps,
+      only(vparents),
+      mpref,
+      position
+    )
   end
   # @show reduction, search_tree(vparents, var) ex var vparents mpref get(ls.opdict, var, nothing) search_tree_for_ref(ls, vparents, mpref, var) # relies on cycles being forbidden
   if reduction || search_tree(vparents, var)
@@ -546,7 +605,7 @@ function add_compute!(
       vparents,
       reduction_ind,
       elementbytes,
-      instr,
+      instr
     )
   else
     if mpref ≢ nothing && (
@@ -562,7 +621,7 @@ function add_compute!(
         vparents,
         reduction_ind,
         elementbytes,
-        instr,
+        instr
       )
     end
     op = Operation(
@@ -573,7 +632,7 @@ function add_compute!(
       compute,
       deps,
       reduceddeps,
-      vparents,
+      vparents
     )
     return pushop!(ls, op, var)
   end
@@ -587,7 +646,7 @@ function add_reduction!(
   vparents,
   reduction_ind,
   elementbytes,
-  instr,
+  instr
 )
   parent = ls.opdict[var]
   setdiffv!(reduceddeps, deps, loopdependencies(parent))
@@ -606,7 +665,7 @@ function add_reduction!(
       compute,
       deps,
       reduceddeps,
-      vparents,
+      vparents
     )
     pushop!(ls, op, var)
   else
@@ -618,7 +677,7 @@ function add_reduction!(
       parent,
       instr,
       reduction_ind,
-      elementbytes,
+      elementbytes
     )
   end
 end
@@ -628,7 +687,7 @@ function add_compute!(
   LHS::Symbol,
   instr,
   vparents::Vector{Operation},
-  elementbytes::Int,
+  elementbytes::Int
 )
   deps = Symbol[]
   reduceddeps = Symbol[]
@@ -643,7 +702,7 @@ function add_compute!(
     compute,
     deps,
     reduceddeps,
-    vparents,
+    vparents
   )
   pushop!(ls, op, LHS)
 end
@@ -654,7 +713,7 @@ function add_compute_ifelse!(
   cond::Operation,
   iftrue::Operation,
   iffalse::Operation,
-  elementbytes::Int,
+  elementbytes::Int
 )
   deps = Symbol[]
   reduceddeps = Symbol[]
@@ -676,7 +735,7 @@ function add_compute_ifelse!(
         iftrue,
         Instruction(:LoopVectorization, :ifelse),
         2,
-        elementbytes,
+        elementbytes
       )
     end
   elseif name(iffalse) === LHS
@@ -691,7 +750,7 @@ function add_compute_ifelse!(
         iffalse,
         Instruction(:LoopVectorization, :ifelse),
         3,
-        elementbytes,
+        elementbytes
       )
     end
   end
@@ -704,10 +763,9 @@ function add_compute_ifelse!(
     compute,
     deps,
     reduceddeps,
-    vparents,
+    vparents
   )
   pushop!(ls, op, LHS)
-
 end
 
 # adds x ^ (p::Real)
@@ -717,7 +775,7 @@ function add_pow!(
   @nospecialize(x),
   p::Real,
   elementbytes::Int,
-  position::Int,
+  position::Int
 )
   xop::Operation = if x isa Expr
     add_operation!(
@@ -725,7 +783,7 @@ function add_pow!(
       Symbol("###xpow###$(length(operations(ls)))###"),
       x,
       elementbytes,
-      position,
+      position
     )
   elseif x isa Symbol
     if x ∈ ls.loopsymbols
@@ -796,9 +854,12 @@ function add_pow!(
       constant,
       NODEPENDENCY,
       Symbol[],
-      NOPARENTS,
+      NOPARENTS
     )
-    push!(ls.preamble_funcofeltypes, (identifier(op), MULTIPLICATIVE_IN_REDUCTIONS))
+    push!(
+      ls.preamble_funcofeltypes,
+      (identifier(op), MULTIPLICATIVE_IN_REDUCTIONS)
+    )
     return pushop!(ls, op)
   elseif pint == 1#requires `pden ≠ 1`.
     return add_compute!(ls, var, :identity, [xop], elementbytes)
@@ -817,14 +878,15 @@ function add_pow!(
     t = trailing_zeros(pint) + 1
     pint >>= t
     while (t -= 1) >= 0
-      xop = add_compute!(ls, gensym!(ls, "pbs"), :abs2_fast, [xop], elementbytes)
+      xop =
+        add_compute!(ls, gensym!(ls, "pbs"), :abs2_fast, [xop], elementbytes)
     end
     yop = add_compute!(
       ls,
       iszero(pint) ? var : gensym!(ls, "pbs"),
       :mul_fast,
       [xop, yop],
-      elementbytes,
+      elementbytes
     )
   end
   yop

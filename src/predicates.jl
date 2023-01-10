@@ -23,4 +23,5 @@ hasscope(modex, modpath::Tuple{Vararg{Symbol}}) =
 
 Return true if `g` is equal to `GlobalRef(mod, name)`.
 """
-isglobalref(g, mod, name) = isa(g, GlobalRef) && g.mod === mod && g.name === name
+isglobalref(g, mod, name) =
+  isa(g, GlobalRef) && g.mod === mod && g.name === name

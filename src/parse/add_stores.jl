@@ -11,7 +11,7 @@ end
 function add_store!(
   ls::LoopSet,
   op::Operation,
-  add_pvar::Bool = !any(r -> r == op.ref, ls.refs_aliasing_syms),
+  add_pvar::Bool = !any(r -> r == op.ref, ls.refs_aliasing_syms)
 )
   @assert isstore(op)
   if add_pvar
@@ -25,19 +25,19 @@ function add_copystore!(
   ls::LoopSet,
   parent::Operation,
   mpref::ArrayReferenceMetaPosition,
-  elementbytes::Int,
+  elementbytes::Int
 )
-  op = add_compute!(ls, gensym!(ls, "identity"), :identity, [parent], elementbytes)
+  op =
+    add_compute!(ls, gensym!(ls, "identity"), :identity, [parent], elementbytes)
   # pushfirst!(mpref.parents, parent)
   add_store!(ls, mpref, elementbytes, op)
 end
-
 
 function add_store!(
   ls::LoopSet,
   mpref::ArrayReferenceMetaPosition,
   elementbytes::Int,
-  parent = getop(ls, varname(mpref), mpref.loopdependencies, elementbytes),
+  parent = getop(ls, varname(mpref), mpref.loopdependencies, elementbytes)
 )
   isload(parent) && return add_copystore!(ls, parent, mpref, elementbytes)
   vparents = mpref.parents
@@ -62,7 +62,13 @@ function add_store!(
   add_store!(ls, op, add_pvar)
 end
 
-function add_store!(ls::LoopSet, var::Symbol, array::Symbol, rawindices, elementbytes::Int)
+function add_store!(
+  ls::LoopSet,
+  var::Symbol,
+  array::Symbol,
+  rawindices,
+  elementbytes::Int
+)
   mpref = array_reference_meta!(ls, array, rawindices, elementbytes, var)
   add_store!(ls, mpref, elementbytes)
 end
@@ -70,7 +76,7 @@ function add_simple_store!(
   ls::LoopSet,
   parent::Operation,
   mref::ArrayReferenceMeta,
-  elementbytes::Int,
+  elementbytes::Int
 )
   op = Operation(
     ls,
@@ -81,7 +87,7 @@ function add_simple_store!(
     getindices(mref.ref),
     NODEPENDENCY,
     [parent],
-    mref,
+    mref
   )
   add_unique_store!(ls, op)
 end
@@ -89,7 +95,7 @@ function add_simple_store!(
   ls::LoopSet,
   var::Union{Symbol,Operation},
   ref::Union{ArrayReference,ArrayReferenceMeta},
-  elementbytes::Int,
+  elementbytes::Int
 )
   parent = isa(var, Symbol) ? getop(ls, var, elementbytes) : var
   mref =
@@ -104,7 +110,13 @@ end
 function add_store_ref!(ls::LoopSet, var, ex::Expr, elementbytes::Int)
   array, raw_indices = ref_from_ref!(ls, ex)
   mpref = array_reference_meta!(ls, array, raw_indices, elementbytes)
-  c = add_constant!(ls, var, loopdependencies(mpref), gensym(:storeconst), elementbytes)
+  c = add_constant!(
+    ls,
+    var,
+    loopdependencies(mpref),
+    gensym(:storeconst),
+    elementbytes
+  )
   add_store!(ls, mpref, elementbytes, c)
 end
 
@@ -115,7 +127,7 @@ function add_conditional_store!(
   LHS,
   condop::Operation,
   storeop::Operation,
-  elementbytes::Int,
+  elementbytes::Int
 )
   array, rawindices = ref_from_ref!(ls, LHS)
   mpref = array_reference_meta!(ls, array, rawindices, elementbytes)
@@ -169,7 +181,7 @@ function add_conditional_store!(
     ldref,
     reduceddependencies(storeop),
     storeparents,
-    mref,
+    mref
   )
   add_unique_store!(ls, op)
 end

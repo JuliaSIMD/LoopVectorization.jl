@@ -75,7 +75,13 @@ function muladd_arguments!(argv, mod, f = first(argv))
   end
 end
 
-function recursive_muladd_search!(call, argv, mod, cnmul::Bool = false, csub::Bool = false)
+function recursive_muladd_search!(
+  call,
+  argv,
+  mod,
+  cnmul::Bool = false,
+  csub::Bool = false
+)
   if length(argv) < 3
     muladd_arguments!(argv, mod)
     return length(call.args) == 4, cnmul, csub
@@ -121,7 +127,10 @@ function recursive_muladd_search!(call, argv, mod, cnmul::Bool = false, csub::Bo
         if length(exargs) == 2
           push!(call.args, exargs[3-i])
         else
-          push!(call.args, append_args_skip!(Expr(:call, :add_fast), exargs, i, mod))
+          push!(
+            call.args,
+            append_args_skip!(Expr(:call, :add_fast), exargs, i, mod)
+          )
         end
         if issub
           csub = i == 1
@@ -139,12 +148,16 @@ function recursive_muladd_search!(call, argv, mod, cnmul::Bool = false, csub::Bo
                 :call,
                 :sub_fast,
                 append_args_skip!(Expr(:call, :add_fast), exargs, i, mod),
-                call.args[4],
+                call.args[4]
               )
             end
           else
-            call.args[4] =
-              append_args_skip!(Expr(:call, :add_fast, call.args[4]), exargs, i, mod)
+            call.args[4] = append_args_skip!(
+              Expr(:call, :add_fast, call.args[4]),
+              exargs,
+              i,
+              mod
+            )
           end
           return true, cnmul, false
         end
@@ -209,8 +222,7 @@ function capture_a_muladd(ex::Expr, mod)
   end
   true, call
 end
-function capture_muladd(ex::Expr, mod)
-  while true
+capture_muladd(ex::Expr, mod) = while true
     ex.head === :ref && return ex
     if Meta.isexpr(ex, :call, 2)
       if (ex.args[1] === :(-))
@@ -224,7 +236,6 @@ function capture_muladd(ex::Expr, mod)
     found, ex = capture_a_muladd(ex, mod)
     found || return ex
   end
-end
 function append_update_args(f::Symbol, ex::Expr)
   call = Expr(:call, f)
   for i ∈ 2:length(ex.args)
@@ -250,11 +261,34 @@ function contract!(expr::Expr, ex::Expr, i::Int, mod)
   else
     j = findfirst(
       Base.Fix2(===, ex.head),
-      (:(-=), :(/=), :(÷=), :(%=), :(^=), :(&=), :(|=), :(⊻=), :(>>>=), :(>>=), :(<<=)),
+      (
+        :(-=),
+        :(/=),
+        :(÷=),
+        :(%=),
+        :(^=),
+        :(&=),
+        :(|=),
+        :(⊻=),
+        :(>>>=),
+        :(>>=),
+        :(<<=)
+      )
     )
     if j ≢ nothing
-      f =
-        (:sub_fast, :div_fast, :(÷), :(%), :(^), :(&), :(|), :(⊻), :(>>>), :(>>), :(<<))[j::Int]
+      f = (
+        :sub_fast,
+        :div_fast,
+        :(÷),
+        :(%),
+        :(^),
+        :(&),
+        :(|),
+        :(⊻),
+        :(>>>),
+        :(>>),
+        :(<<)
+      )[j::Int]
       call = Expr(:call, f)
       append!(call.args, ex.args)
       expr.args[i] = ex = Expr(:(=), first(ex.args), call)

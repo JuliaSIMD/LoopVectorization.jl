@@ -2,17 +2,22 @@ using PrettyTables
 
 function Base.show(io::IO, br::BenchmarkResult)
   hb = Highlighter(
-    (br, i, j) -> (j > 1 && maximum(@view(br.results[:, i])) == br.results[j-1, i]),
-    foreground = :green,
+    (br, i, j) ->
+      (j > 1 && maximum(@view(br.results[:, i])) == br.results[j-1, i]);
+    foreground = :green
   )
-  pretty_table(io, br.sizedresults, br.tests, crop = :none, highlighters = (hb,))
+  pretty_table(
+    io,
+    br.sizedresults,
+    br.tests;
+    crop = :none,
+    highlighters = (hb,)
+  )
 end
-
 
 if (Sys.ARCH === :aarch64) && Sys.isapple()
   nothing
 else
-
   using Colors, ColorSchemes, Gadfly
   const COLORS = [RGB(0.0, 0.0, 0.0), RGB(1.0, 0.0, 0.0)]
   # const COLORS = [RGB(0.0,0.0,0.0),RGB(0.0,1.0,0.0)]
@@ -24,11 +29,9 @@ else
   # const COLOR_MAP = Dict{String,RGB{Float64}}()
   # const COLOR_MAP = Dict{String,RGB{Colors.N0f8}}()
   const COLOR_MAP64 = Dict{String,RGB{Float64}}()
-  function getcolor(s::String)
-    get!(COLOR_MAP64, s) do
+  getcolor(s::String) = get!(COLOR_MAP64, s) do
       COLORS[length(COLOR_MAP64)+1]
     end
-  end
   replace_and(str) = replace(str, '&' => "with")
 
   function Gadfly.plot(br::BenchmarkResult)
@@ -46,7 +49,7 @@ else
     maxtick = 10round(Int, 0.1maxres)
     yt = if iszero(maxtick)
       maxtick = 10round(0.1maxres)
-      range(0, maxres, length = 20)
+      range(0, maxres; length = 20)
     elseif maxtick < 10
       0:1:maxtick
     elseif maxtick < 20
@@ -60,24 +63,31 @@ else
       Gadfly.Guide.manual_color_key("Methods", tests, colors),
       Guide.xlabel("Size"),
       Guide.ylabel("GFLOPS"),
-      Guide.xticks(ticks = collect(xt)),
-      Guide.yticks(ticks = collect(yt)),
+      Guide.xticks(; ticks = collect(xt)),
+      Guide.yticks(; ticks = collect(yt))
     )
     for i ∈ eachindex(tests)
-      push!(p, layer(x = sizes, y = res[i, :], Geom.line, Theme(default_color = colors[i])))
+      push!(
+        p,
+        layer(;
+          x = sizes,
+          y = res[i, :],
+          Geom.line,
+          Theme(; default_color = colors[i])
+        )
+      )
     end
     addlabel && push!(
       p,
-      layer(
+      layer(;
         x = fill(maxxtick - 10, length(tests)),
         y = res[:, maxxind],
         label = tests,
-        Geom.label(position = :centered),
-      ),
+        Geom.label(; position = :centered)
+      )
     )
     p
   end
-
 end
 # using VegaLite, IndexedTables
 # function plot(br::BenchmarkResult)

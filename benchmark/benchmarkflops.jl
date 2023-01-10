@@ -28,8 +28,8 @@ function Base.vcat(br1::BenchmarkResult, br2::BenchmarkResult)
     br1.tests,
     SizedResults(
       hcat(br1.sizedresults.results, br2.sizedresults.results),
-      vcat(br1.sizedresults.sizes, br2.sizedresults.sizes),
-    ),
+      vcat(br1.sizedresults.sizes, br2.sizedresults.sizes)
+    )
   )
 end
 
@@ -118,7 +118,6 @@ function At_mul_Bt_bench!(br, s, i)
   B = rand(N, K)'
   matmul_bench!(br, C, A, B, i)
 end
-
 
 function dot_bench!(br, s, i)
   a = rand(s)
@@ -440,7 +439,6 @@ function logdettriangle_bench!(br, s, i)
   br[5+2INTEL_BENCH, i] = n_gflop / @belapsed logdet($U)
 end
 
-
 function filter2d_bench_run!(br, s, i, K)
   A = rand(s + 2, s + 2)
   B = OffsetArray(similar(A, (s, s)), 1, 1)
@@ -462,7 +460,6 @@ function filter2d_bench_run!(br, s, i, K)
     @assert B ≈ Bcopy "ifort wrong?"
   end
 end
-
 
 function filter2dunrolled_bench_run!(br, s, i, K)
   A = rand(s + 2, s + 2)

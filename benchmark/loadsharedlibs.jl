@@ -12,17 +12,16 @@ const LIBIFTEST = joinpath(LOOPVECBENCHDIR, "libiftests.so")
 const LIBEIGENTEST = joinpath(LOOPVECBENCHDIR, "libetest.so")
 const LIBIEIGENTEST = joinpath(LOOPVECBENCHDIR, "libietest.so")
 
-
 # requires Clang with polly to build
 cfile = joinpath(LOOPVECBENCHDIR, "looptests.c")
 if !isfile(LIBCTEST) || mtime(cfile) > mtime(LIBCTEST)
   if (Sys.ARCH === :aarch64) && Sys.isapple() # assume no `-march=native` support
     run(
-      `clang -Ofast -mprefer-vector-width=$(8REGISTER_SIZE) -lm -shared -fPIC $cfile -o $LIBCTEST`,
+      `clang -Ofast -mprefer-vector-width=$(8REGISTER_SIZE) -lm -shared -fPIC $cfile -o $LIBCTEST`
     )
   else
     run(
-      `clang -Ofast -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -lm -shared -fPIC $cfile -o $LIBCTEST`,
+      `clang -Ofast -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -lm -shared -fPIC $cfile -o $LIBCTEST`
     )
   end
 
@@ -33,11 +32,11 @@ if !isfile(LIBFTEST) || mtime(ffile) > mtime(LIBFTEST)
   # --param max-unroll-times defaults to ≥8, which is generally excessive
   if (Sys.ARCH === :x86_64)
     run(
-      `gfortran -Ofast -march=native -funroll-loops -mprefer-vector-width=$(8REGISTER_SIZE) -fvariable-expansion-in-unroller --param max-variable-expansions-in-unroller=4 -shared -fPIC $ffile -o $LIBFTEST`,
+      `gfortran -Ofast -march=native -funroll-loops -mprefer-vector-width=$(8REGISTER_SIZE) -fvariable-expansion-in-unroller --param max-variable-expansions-in-unroller=4 -shared -fPIC $ffile -o $LIBFTEST`
     )
   else
     run(
-      `gfortran -Ofast -march=native -funroll-loops -fvariable-expansion-in-unroller --param max-variable-expansions-in-unroller=4 -shared -fPIC $ffile -o $LIBFTEST`,
+      `gfortran -Ofast -march=native -funroll-loops -fvariable-expansion-in-unroller --param max-variable-expansions-in-unroller=4 -shared -fPIC $ffile -o $LIBFTEST`
     )
   end
   # run(`gfortran -Ofast -march=native -funroll-loops -floop-nest-optimize -mprefer-vector-width=$(8REGISTER_SIZE) -shared -fPIC $ffile -o $LIBFTEST`)
@@ -46,12 +45,12 @@ end
 const INTEL_BENCH = try
   if !isfile(LIBIFTEST) || mtime(ffile) > mtime(LIBIFTEST)
     run(
-      `ifort -fast -qopt-zmm-usage=high -qoverride-limits -shared -fPIC $ffile -o $LIBIFTEST`,
+      `ifort -fast -qopt-zmm-usage=high -qoverride-limits -shared -fPIC $ffile -o $LIBIFTEST`
     )
   end
   if !isfile(LIBICTEST) || mtime(cfile) > mtime(LIBICTEST)
     run(
-      `icc -fast -qopt-zmm-usage=high -fargument-noalias-global -qoverride-limits -shared -fPIC $cfile -o $LIBICTEST`,
+      `icc -fast -qopt-zmm-usage=high -fargument-noalias-global -qoverride-limits -shared -fPIC $cfile -o $LIBICTEST`
     )
   end
   true
@@ -65,15 +64,15 @@ if !isfile(LIBEIGENTEST) || mtime(eigenfile) > mtime(LIBEIGENTEST)
   # Clang seems to have trouble finding includes
   if Bool(LoopVectorization.VectorizationBase.has_feature(Val(:x86_64_avx512f)))
     run(
-      `g++ -O3 -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -DEIGEN_VECTORIZE_AVX512 -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBEIGENTEST`,
+      `g++ -O3 -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -DEIGEN_VECTORIZE_AVX512 -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBEIGENTEST`
     )
   elseif (Sys.ARCH === :aarch64) && Sys.isapple() # assume homebrew
     run(
-      `g++-10 -O3 -march=native -I/opt/homebrew/Cellar/eigen/3.3.9/include/eigen3 -shared -fPIC $eigenfile -o $LIBEIGENTEST`,
+      `g++-10 -O3 -march=native -I/opt/homebrew/Cellar/eigen/3.3.9/include/eigen3 -shared -fPIC $eigenfile -o $LIBEIGENTEST`
     )
   else
     run(
-      `g++ -O3 -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBEIGENTEST`,
+      `g++ -O3 -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBEIGENTEST`
     )
   end
 end
@@ -81,15 +80,15 @@ if !isfile(LIBIEIGENTEST) || mtime(eigenfile) > mtime(LIBIEIGENTEST)
   # run(`/usr/bin/clang++ -Ofast -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -DEIGEN_VECTORIZE_AVX512 -I/usr/include/c++/9 -I/usr/include/c++/9/x86_64-generic-linux -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBEIGENTEST`)
   if Bool(LoopVectorization.VectorizationBase.has_feature(Val(:x86_64_avx512f)))
     run(
-      `clang++ -Ofast -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -DEIGEN_VECTORIZE_AVX512 -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBIEIGENTEST`,
+      `clang++ -Ofast -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -DEIGEN_VECTORIZE_AVX512 -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBIEIGENTEST`
     )
   elseif (Sys.ARCH === :aarch64) && Sys.isapple() # assume homebrew and no `-march=native`
     run(
-      `clang++ -Ofast -I/opt/homebrew/Cellar/eigen/3.3.9/include/eigen3 -shared -fPIC $eigenfile -o $LIBIEIGENTEST`,
+      `clang++ -Ofast -I/opt/homebrew/Cellar/eigen/3.3.9/include/eigen3 -shared -fPIC $eigenfile -o $LIBIEIGENTEST`
     )
   else
     run(
-      `clang++ -Ofast -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBIEIGENTEST`,
+      `clang++ -Ofast -march=native -mprefer-vector-width=$(8REGISTER_SIZE) -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBIEIGENTEST`
     )
   end
   # run(`icpc -fast -qopt-zmm-usage=high -fargument-noalias-global -qoverride-limits -I/usr/include/eigen3 -shared -fPIC $eigenfile -o $LIBIEIGENTEST`)
@@ -103,7 +102,6 @@ end
 
 #     # run(`gfortran -Ofast -march=native -DMKL_DIRECT_CALL_SEQ_JIT -cpp -mprefer-vector-width=$(8REGISTER_SIZE) -shared -fPIC $directcalljitfile -o $LIBDIRECTCALLJIT`)
 # end
-
 
 randa(::Type{T}, dim...) where {T} = rand(T, dim...)
 randa(::Type{T}, dim...) where {T<:Signed} = rand(T(-100):T(200), dim...)
@@ -127,7 +125,8 @@ const libOpenBLAS = Libdl.dlopen(OpenBLAS_jll.libopenblas)
 const DGEMM_OpenBLAS = Libdl.dlsym(libOpenBLAS, :dgemm_64_)
 const SGEMM_OpenBLAS = Libdl.dlsym(libOpenBLAS, :sgemm_64_)
 const DGEMV_OpenBLAS = Libdl.dlsym(libOpenBLAS, :dgemv_64_)
-const OPENBLAS_SET_NUM_THREADS = Libdl.dlsym(libOpenBLAS, :openblas_set_num_threads64_)
+const OPENBLAS_SET_NUM_THREADS =
+  Libdl.dlsym(libOpenBLAS, :openblas_set_num_threads64_)
 
 istransposed(x) = 'N'
 istransposed(x::Adjoint{<:Real}) = 'T'
@@ -137,7 +136,11 @@ for (lib, f) ∈ [(:GEMM_MKL, :gemmmkl!), (:GEMM_OpenBLAS, :gemmopenblas!)]
   for (T, prefix) ∈ [(Float32, :S), (Float64, :D)]
     fm = Symbol(prefix, lib)
     @eval begin
-      function $f(C::AbstractMatrix{$T}, A::AbstractMatrix{$T}, B::AbstractMatrix{$T})
+      function $f(
+        C::AbstractMatrix{$T},
+        A::AbstractMatrix{$T},
+        B::AbstractMatrix{$T}
+      )
         transA = istransposed(A)
         transB = istransposed(B)
         M, N = size(C)
@@ -165,7 +168,7 @@ for (lib, f) ∈ [(:GEMM_MKL, :gemmmkl!), (:GEMM_OpenBLAS, :gemmopenblas!)]
             Ref{Int64},
             Ref{$T},
             Ref{$T},
-            Ref{Int64},
+            Ref{Int64}
           ),
           transA,
           transB,
@@ -179,17 +182,19 @@ for (lib, f) ∈ [(:GEMM_MKL, :gemmmkl!), (:GEMM_OpenBLAS, :gemmopenblas!)]
           ldB,
           β,
           C,
-          ldC,
+          ldC
         )
       end
     end
   end
 end
 if MKL_BENCH
-  mkl_set_num_threads(N::Integer) = ccall(MKL_SET_NUM_THREADS, Cvoid, (Int32,), N % Int32)
+  mkl_set_num_threads(N::Integer) =
+    ccall(MKL_SET_NUM_THREADS, Cvoid, (Int32,), N % Int32)
   mkl_set_num_threads(1)
 end
-openblas_set_num_threads(N::Integer) = ccall(OPENBLAS_SET_NUM_THREADS, Cvoid, (Int64,), N)
+openblas_set_num_threads(N::Integer) =
+  ccall(OPENBLAS_SET_NUM_THREADS, Cvoid, (Int64,), N)
 openblas_set_num_threads(1)
 
 function dgemvmkl!(
@@ -197,7 +202,7 @@ function dgemvmkl!(
   A::AbstractMatrix{Float64},
   x::AbstractVector{Float64},
   α = 1.0,
-  β = 0.0,
+  β = 0.0
 )
   transA = istransposed(A)
   pA = parent(A)
@@ -219,7 +224,7 @@ function dgemvmkl!(
       Ref{Int64},
       Ref{Float64},
       Ref{Float64},
-      Ref{Int64},
+      Ref{Int64}
     ),
     transA,
     M,
@@ -231,13 +236,13 @@ function dgemvmkl!(
     incx,
     β,
     y,
-    incy,
+    incy
   )
 end
 function dgemvopenblas!(
   y::AbstractVector{Float64},
   A::AbstractMatrix{Float64},
-  x::AbstractVector{Float64},
+  x::AbstractVector{Float64}
 )
   transA = istransposed(A)
   pA = parent(A)
@@ -261,7 +266,7 @@ function dgemvopenblas!(
       Ref{Int64},
       Ref{Float64},
       Ref{Float64},
-      Ref{Int64},
+      Ref{Int64}
     ),
     transA,
     M,
@@ -273,10 +278,9 @@ function dgemvopenblas!(
     incx,
     β,
     y,
-    incy,
+    incy
   )
 end
-
 
 for (prefix, Eshared) ∈ ((Symbol(""), LIBEIGENTEST), (:i, LIBIEIGENTEST))
   @eval function $(Symbol(prefix, :egemm!))(C, A, B)
@@ -291,7 +295,7 @@ for (prefix, Eshared) ∈ ((Symbol(""), LIBEIGENTEST), (:i, LIBIEIGENTEST))
       B,
       M,
       K,
-      N,
+      N
     )
   end
   let (p, s) = (:e, Eshared)
@@ -307,7 +311,7 @@ for (prefix, Eshared) ∈ ((Symbol(""), LIBEIGENTEST), (:i, LIBIEIGENTEST))
         B,
         M,
         K,
-        N,
+        N
       )
     end
     @eval function $(Symbol(prefix, p, :gemm!))(C, A, B::Adjoint)
@@ -322,7 +326,7 @@ for (prefix, Eshared) ∈ ((Symbol(""), LIBEIGENTEST), (:i, LIBIEIGENTEST))
         parent(B),
         M,
         K,
-        N,
+        N
       )
     end
     @eval function $(Symbol(prefix, p, :gemm!))(C, A::Adjoint, B::Adjoint)
@@ -337,7 +341,7 @@ for (prefix, Eshared) ∈ ((Symbol(""), LIBEIGENTEST), (:i, LIBIEIGENTEST))
         parent(B),
         M,
         K,
-        N,
+        N
       )
     end
     @eval function $(Symbol(prefix, p, :dot))(a, b)
@@ -354,7 +358,7 @@ for (prefix, Eshared) ∈ ((Symbol(""), LIBEIGENTEST), (:i, LIBIEIGENTEST))
         A,
         x,
         M,
-        K,
+        K
       )
     end
     @eval function $(Symbol(prefix, p, :selfdot))(a)
@@ -371,7 +375,7 @@ for (prefix, Eshared) ∈ ((Symbol(""), LIBEIGENTEST), (:i, LIBIEIGENTEST))
         A,
         y,
         M,
-        N,
+        N
       )
     end
     @eval function $(Symbol(prefix, p, :gemv!))(y, A::Adjoint, x)
@@ -384,7 +388,7 @@ for (prefix, Eshared) ∈ ((Symbol(""), LIBEIGENTEST), (:i, LIBIEIGENTEST))
         parent(A),
         x,
         M,
-        K,
+        K
       )
     end
     @eval function $(Symbol(prefix, p, :aplusBc!))(D, a, B, c)
@@ -398,7 +402,7 @@ for (prefix, Eshared) ∈ ((Symbol(""), LIBEIGENTEST), (:i, LIBIEIGENTEST))
         B,
         c,
         M,
-        K,
+        K
       )
     end
     @eval function $(Symbol(prefix, p, :OLSlp))(y, X, β)
@@ -411,7 +415,7 @@ for (prefix, Eshared) ∈ ((Symbol(""), LIBEIGENTEST), (:i, LIBIEIGENTEST))
         X,
         β,
         N,
-        P,
+        P
       )
     end
     @eval function $(Symbol(prefix, p, :AplusAt!))(B, A)
@@ -419,7 +423,7 @@ for (prefix, Eshared) ∈ ((Symbol(""), LIBEIGENTEST), (:i, LIBIEIGENTEST))
       ccall((:AplusAt, $s), Cvoid, (Ptr{Float64}, Ptr{Float64}, Clong), B, A, N)
     end
     @eval function $(Symbol(prefix, p, :logdettriangle))(
-      T::Union{LowerTriangular,UpperTriangular},
+      T::Union{LowerTriangular,UpperTriangular}
     )
       N = size(T, 1)
       Tp = parent(T)
@@ -447,7 +451,7 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
         B,
         M,
         K,
-        N,
+        N
       )
     end
     @eval function $(Symbol(prefix, :f, gemm, :!))(C, A, B)
@@ -456,31 +460,47 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
       ccall(
         ($(QuoteNode(gemm)), $Fshared),
         Cvoid,
-        (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}, Ref{Clong}, Ref{Clong}),
+        (
+          Ptr{Float64},
+          Ptr{Float64},
+          Ptr{Float64},
+          Ref{Clong},
+          Ref{Clong},
+          Ref{Clong}
+        ),
         C,
         A,
         B,
         Ref(M),
         Ref(K),
-        Ref(N),
+        Ref(N)
       )
     end
   end
-  @eval $(Symbol(prefix, :cgemm!))(C, A, B) = $(Symbol(prefix, :cgemm_nkm!))(C, A, B)
-  @eval $(Symbol(prefix, :fgemm!))(C, A, B) = $(Symbol(prefix, :fgemm_nkm!))(C, A, B)
+  @eval $(Symbol(prefix, :cgemm!))(C, A, B) =
+    $(Symbol(prefix, :cgemm_nkm!))(C, A, B)
+  @eval $(Symbol(prefix, :fgemm!))(C, A, B) =
+    $(Symbol(prefix, :fgemm_nkm!))(C, A, B)
   @eval function $(Symbol(prefix, :fgemm_builtin!))(C, A, B)
     M, N = size(C)
     K = size(B, 1)
     ccall(
       (:gemmbuiltin, $Fshared),
       Cvoid,
-      (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}, Ref{Clong}, Ref{Clong}),
+      (
+        Ptr{Float64},
+        Ptr{Float64},
+        Ptr{Float64},
+        Ref{Clong},
+        Ref{Clong},
+        Ref{Clong}
+      ),
       C,
       A,
       B,
       Ref(M),
       Ref(K),
-      Ref(N),
+      Ref(N)
     )
   end
   let (p, s) = (:c, Cshared)
@@ -496,7 +516,7 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
         B,
         M,
         K,
-        N,
+        N
       )
     end
   end
@@ -506,13 +526,20 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
     ccall(
       (:AtmulB, $Fshared),
       Cvoid,
-      (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}, Ref{Clong}, Ref{Clong}),
+      (
+        Ptr{Float64},
+        Ptr{Float64},
+        Ptr{Float64},
+        Ref{Clong},
+        Ref{Clong},
+        Ref{Clong}
+      ),
       C,
       parent(A),
       B,
       Ref(M),
       Ref(K),
-      Ref(N),
+      Ref(N)
     )
   end
   @eval function $(Symbol(prefix, :fgemm_builtin!))(C, A::Adjoint, B)
@@ -521,13 +548,20 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
     ccall(
       (:AtmulBbuiltin, $Fshared),
       Cvoid,
-      (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}, Ref{Clong}, Ref{Clong}),
+      (
+        Ptr{Float64},
+        Ptr{Float64},
+        Ptr{Float64},
+        Ref{Clong},
+        Ref{Clong},
+        Ref{Clong}
+      ),
       C,
       parent(A),
       B,
       Ref(M),
       Ref(K),
-      Ref(N),
+      Ref(N)
     )
   end
   let (p, s) = (:c, Cshared)# (:e,Eshared)]
@@ -543,7 +577,7 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
         parent(B),
         M,
         K,
-        N,
+        N
       )
     end
   end
@@ -553,13 +587,20 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
     ccall(
       (:AmulBt, $Fshared),
       Cvoid,
-      (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}, Ref{Clong}, Ref{Clong}),
+      (
+        Ptr{Float64},
+        Ptr{Float64},
+        Ptr{Float64},
+        Ref{Clong},
+        Ref{Clong},
+        Ref{Clong}
+      ),
       C,
       A,
       parent(B),
       Ref(M),
       Ref(K),
-      Ref(N),
+      Ref(N)
     )
   end
   @eval function $(Symbol(prefix, :fgemm_builtin!))(C, A, B::Adjoint)
@@ -568,13 +609,20 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
     ccall(
       (:AmulBtbuiltin, $Fshared),
       Cvoid,
-      (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}, Ref{Clong}, Ref{Clong}),
+      (
+        Ptr{Float64},
+        Ptr{Float64},
+        Ptr{Float64},
+        Ref{Clong},
+        Ref{Clong},
+        Ref{Clong}
+      ),
       C,
       A,
       parent(B),
       Ref(M),
       Ref(K),
-      Ref(N),
+      Ref(N)
     )
   end
   @eval function $(Symbol(prefix, :fgemm!))(C, A::Adjoint, B::Adjoint)
@@ -583,13 +631,20 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
     ccall(
       (:AtmulBt, $Fshared),
       Cvoid,
-      (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}, Ref{Clong}, Ref{Clong}),
+      (
+        Ptr{Float64},
+        Ptr{Float64},
+        Ptr{Float64},
+        Ref{Clong},
+        Ref{Clong},
+        Ref{Clong}
+      ),
       C,
       parent(A),
       parent(B),
       Ref(M),
       Ref(K),
-      Ref(N),
+      Ref(N)
     )
   end
   @eval function $(Symbol(prefix, :fgemm_builtin!))(C, A::Adjoint, B::Adjoint)
@@ -598,18 +653,32 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
     ccall(
       (:AtmulBtbuiltin, $Fshared),
       Cvoid,
-      (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}, Ref{Clong}, Ref{Clong}),
+      (
+        Ptr{Float64},
+        Ptr{Float64},
+        Ptr{Float64},
+        Ref{Clong},
+        Ref{Clong},
+        Ref{Clong}
+      ),
       C,
       parent(A),
       parent(B),
       Ref(M),
       Ref(K),
-      Ref(N),
+      Ref(N)
     )
   end
   @eval function $(Symbol(prefix, :fdot))(a, b)
     N = length(a)
-    ccall((:dot, $Fshared), Float64, (Ptr{Float64}, Ptr{Float64}, Ref{Clong}), a, b, Ref(N))
+    ccall(
+      (:dot, $Fshared),
+      Float64,
+      (Ptr{Float64}, Ptr{Float64}, Ref{Clong}),
+      a,
+      b,
+      Ref(N)
+    )
   end
 
   @eval function $(Symbol(prefix, :fselfdot))(a)
@@ -626,7 +695,7 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
       A,
       y,
       Ref(M),
-      Ref(N),
+      Ref(N)
     )
   end
   @eval function $(Symbol(prefix, :fgemv!))(y, A, x)
@@ -639,7 +708,7 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
       A,
       x,
       Ref(M),
-      Ref(K),
+      Ref(K)
     )
   end
   @eval function $(Symbol(prefix, :fgemv_builtin!))(y, A, x)
@@ -652,7 +721,7 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
       A,
       x,
       Ref(M),
-      Ref(K),
+      Ref(K)
     )
   end
   @eval function $(Symbol(prefix, :fgemv!))(y, A::Adjoint, x)
@@ -665,7 +734,7 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
       parent(A),
       x,
       Ref(M),
-      Ref(K),
+      Ref(K)
     )
   end
   @eval function $(Symbol(prefix, :fgemv_builtin!))(y, A::Adjoint, x)
@@ -678,7 +747,7 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
       parent(A),
       x,
       Ref(M),
-      Ref(K),
+      Ref(K)
     )
   end
   let (p, s) = (:c, Cshared)# (:e,Eshared)]
@@ -694,7 +763,7 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
         parent(B),
         M,
         K,
-        N,
+        N
       )
     end
     @eval function $(Symbol(prefix, p, :dot))(a, b)
@@ -711,7 +780,7 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
         A,
         x,
         M,
-        K,
+        K
       )
     end
     @eval function $(Symbol(prefix, p, :selfdot))(a)
@@ -728,7 +797,7 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
         A,
         y,
         M,
-        N,
+        N
       )
     end
     @eval function $(Symbol(prefix, p, :gemv!))(y, A::Adjoint, x)
@@ -741,7 +810,7 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
         parent(A),
         x,
         M,
-        K,
+        K
       )
     end
     @eval function $(Symbol(prefix, p, :aplusBc!))(D, a, B, c)
@@ -755,7 +824,7 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
         B,
         c,
         M,
-        K,
+        K
       )
     end
     @eval function $(Symbol(prefix, p, :OLSlp))(y, X, β)
@@ -768,7 +837,7 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
         X,
         β,
         N,
-        P,
+        P
       )
     end
     @eval function $(Symbol(prefix, p, :AplusAt!))(B, A)
@@ -776,7 +845,7 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
       ccall((:AplusAt, $s), Cvoid, (Ptr{Float64}, Ptr{Float64}, Clong), B, A, N)
     end
     @eval function $(Symbol(prefix, p, :logdettriangle))(
-      T::Union{LowerTriangular,UpperTriangular},
+      T::Union{LowerTriangular,UpperTriangular}
     )
       N = size(T, 1)
       Tp = parent(T)
@@ -788,13 +857,20 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
     ccall(
       (:aplusBc, $Fshared),
       Cvoid,
-      (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}, Ref{Clong}),
+      (
+        Ptr{Float64},
+        Ptr{Float64},
+        Ptr{Float64},
+        Ptr{Float64},
+        Ref{Clong},
+        Ref{Clong}
+      ),
       D,
       a,
       B,
       c,
       Ref(M),
-      Ref(K),
+      Ref(K)
     )
   end
   @eval function $(Symbol(prefix, :fOLSlp))(y, X, β)
@@ -807,21 +883,42 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
       X,
       β,
       Ref(N),
-      Ref(P),
+      Ref(P)
     )
   end
   @eval function $(Symbol(prefix, :cvexp!))(b, a)
     N = length(b)
-    ccall((:vexp, $Cshared), Cvoid, (Ptr{Float64}, Ptr{Float64}, Clong), b, a, N)
+    ccall(
+      (:vexp, $Cshared),
+      Cvoid,
+      (Ptr{Float64}, Ptr{Float64}, Clong),
+      b,
+      a,
+      N
+    )
   end
   @eval function $(Symbol(prefix, :fvexp!))(b, a)
     N = length(b)
-    ccall((:vexp, $Fshared), Cvoid, (Ptr{Float64}, Ptr{Float64}, Ref{Clong}), b, a, Ref(N))
+    ccall(
+      (:vexp, $Fshared),
+      Cvoid,
+      (Ptr{Float64}, Ptr{Float64}, Ref{Clong}),
+      b,
+      a,
+      Ref(N)
+    )
   end
   @eval function $(Symbol(prefix, :fvexpsum))(a)
     N = length(a)
     s = Ref{Float64}()
-    ccall((:svexp, $Fshared), Cvoid, (Ref{Float64}, Ptr{Float64}, Ref{Clong}), s, a, Ref(N))
+    ccall(
+      (:svexp, $Fshared),
+      Cvoid,
+      (Ref{Float64}, Ptr{Float64}, Ref{Clong}),
+      s,
+      a,
+      Ref(N)
+    )
     s[]
   end
   @eval function $(Symbol(prefix, :fAplusAt!))(B, A)
@@ -832,7 +929,7 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
       (Ptr{Float64}, Ptr{Float64}, Ref{Clong}),
       B,
       A,
-      Ref(N),
+      Ref(N)
     )
   end
   @eval function $(Symbol(prefix, :fAplusAt_builtin!))(B, A)
@@ -843,7 +940,7 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
       (Ptr{Float64}, Ptr{Float64}, Ref{Clong}),
       B,
       A,
-      Ref(N),
+      Ref(N)
     )
   end
 
@@ -857,7 +954,7 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
       basis,
       coefs,
       A,
-      C,
+      C
     )
   end
   @eval function $(Symbol(prefix, :frandomaccess))(P, basis, coefs)
@@ -870,20 +967,26 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
       basis,
       coefs,
       Ref(A),
-      Ref(C),
+      Ref(C)
     )
   end
   @eval function $(Symbol(prefix, :flogdettriangle))(
-    T::Union{LowerTriangular,UpperTriangular},
+    T::Union{LowerTriangular,UpperTriangular}
   )
     N = size(T, 1)
     Tp = parent(T)
-    ccall((:logdettriangle, $Fshared), Float64, (Ptr{Float64}, Ref{Clong}), Tp, Ref(N))
+    ccall(
+      (:logdettriangle, $Fshared),
+      Float64,
+      (Ptr{Float64}, Ref{Clong}),
+      Tp,
+      Ref(N)
+    )
   end
   @eval function $(Symbol(prefix, :cfilter2d!))(
     B::OffsetArray,
     A::AbstractArray,
-    K::OffsetArray,
+    K::OffsetArray
   )
     Ma, Na = size(A)
     offset = first(B.offsets)
@@ -896,32 +999,39 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
       parent(K),
       Ma,
       Na,
-      offset,
+      offset
     )
   end
   @eval function $(Symbol(prefix, :ffilter2d!))(
     B::OffsetArray,
     A::AbstractArray,
-    K::OffsetArray,
+    K::OffsetArray
   )
     Ma, Na = size(A)
     offset = first(B.offsets)
     ccall(
       (:filter2d, $Fshared),
       Cvoid,
-      (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ref{Clong}, Ref{Clong}, Ref{Clong}),
+      (
+        Ptr{Float64},
+        Ptr{Float64},
+        Ptr{Float64},
+        Ref{Clong},
+        Ref{Clong},
+        Ref{Clong}
+      ),
       parent(B),
       A,
       parent(K),
       Ref(Ma),
       Ref(Na),
-      Ref(offset),
+      Ref(offset)
     )
   end
   @eval function $(Symbol(prefix, :cfilter2d!))(
     B::OffsetArray,
     A::AbstractArray,
-    K::SizedOffsetMatrix{Float64,-1,1,-1,1},
+    K::SizedOffsetMatrix{Float64,-1,1,-1,1}
   )
     Ma, Na = size(A)
     ccall(
@@ -932,13 +1042,13 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
       A,
       K,
       Ma,
-      Na,
+      Na
     )
   end
   @eval function $(Symbol(prefix, :ffilter2d!))(
     B::OffsetArray,
     A::AbstractArray,
-    K::SizedOffsetMatrix{Float64,-1,1,-1,1},
+    K::SizedOffsetMatrix{Float64,-1,1,-1,1}
   )
     Ma, Na = size(A)
     ccall(
@@ -949,13 +1059,13 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
       A,
       K,
       Ref(Ma),
-      Ref(Na),
+      Ref(Na)
     )
   end
   @eval function $(Symbol(prefix, :cfilter2dunrolled!))(
     B::OffsetArray,
     A::AbstractArray,
-    K::SizedOffsetMatrix{Float64,-1,1,-1,1},
+    K::SizedOffsetMatrix{Float64,-1,1,-1,1}
   )
     Ma, Na = size(A)
     ccall(
@@ -966,13 +1076,13 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
       A,
       K,
       Ma,
-      Na,
+      Na
     )
   end
   @eval function $(Symbol(prefix, :ffilter2dunrolled!))(
     B::OffsetArray,
     A::AbstractArray,
-    K::SizedOffsetMatrix{Float64,-1,1,-1,1},
+    K::SizedOffsetMatrix{Float64,-1,1,-1,1}
   )
     Ma, Na = size(A)
     ccall(
@@ -983,8 +1093,7 @@ for (prefix, Cshared, Fshared) ∈ funcs_to_define
       A,
       K,
       Ref(Ma),
-      Ref(Na),
+      Ref(Na)
     )
   end
-
 end

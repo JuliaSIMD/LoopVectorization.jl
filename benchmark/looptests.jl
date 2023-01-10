@@ -1,7 +1,6 @@
 using LoopVectorization, LinearAlgebra, OffsetArrays, ArrayInterface
 BLAS.set_num_threads(1)
 
-
 using LoopVectorization: Static
 # TODO: remove this once this PR merges: https://github.com/JuliaArrays/OffsetArrays.jl/pull/170
 @inline Base.unsafe_convert(::Type{Ptr{T}}, A::OffsetArray{T}) where {T} =
@@ -15,19 +14,23 @@ Base.size(::SizedOffsetMatrix{<:Any,LR,UR,LC,UC}) where {LR,UR,LC,UC} =
 Base.axes(::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} =
   (StaticInt{LR}():StaticInt{UR}(), StaticInt{LC}():StaticInt{UC}())
 Base.parent(A::SizedOffsetMatrix) = A.data
-Base.unsafe_convert(::Type{Ptr{T}}, A::SizedOffsetMatrix{T}) where {T} = pointer(A.data)
+Base.unsafe_convert(::Type{Ptr{T}}, A::SizedOffsetMatrix{T}) where {T} =
+  pointer(A.data)
 ArrayInterface.contiguous_axis(::Type{<:SizedOffsetMatrix}) = StaticInt(1)
 ArrayInterface.contiguous_batch_size(::Type{<:SizedOffsetMatrix}) = StaticInt(0)
-ArrayInterface.stride_rank(::Type{<:SizedOffsetMatrix}) = (StaticInt(1), StaticInt(2))
-function ArrayInterface.strides(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC}
+ArrayInterface.stride_rank(::Type{<:SizedOffsetMatrix}) =
+  (StaticInt(1), StaticInt(2))
+function ArrayInterface.strides(
+  A::SizedOffsetMatrix{T,LR,UR,LC,UC}
+) where {T,LR,UR,LC,UC}
   (StaticInt{1}(), (StaticInt{UR}() - StaticInt{LR}() + StaticInt{1}()))
 end
-ArrayInterface.offsets(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} =
-  (StaticInt{LR}(), StaticInt{LC}())
+ArrayInterface.offsets(
+  A::SizedOffsetMatrix{T,LR,UR,LC,UC}
+) where {T,LR,UR,LC,UC} = (StaticInt{LR}(), StaticInt{LC}())
 ArrayInterface.parent_type(::Type{<:SizedOffsetMatrix{T}}) where {T} = Matrix{T}
 Base.getindex(A::SizedOffsetMatrix, i, j) =
   LoopVectorization.vload(LoopVectorization.stridedpointer(A), (i, j))
-
 
 function jgemm!(𝐂, 𝐀, 𝐁)
   𝐂 .= 0
@@ -72,19 +75,17 @@ function jgemm!(𝐂, 𝐀ᵀ::Adjoint, 𝐁ᵀ::Adjoint)
     end
   end
 end
-function gemmavx!(𝐂, 𝐀, 𝐁)
-  @turbo for m ∈ indices((𝐀, 𝐂), 1), n ∈ indices((𝐁, 𝐂), 2)
+gemmavx!(𝐂, 𝐀, 𝐁) = @turbo for m ∈ indices((𝐀, 𝐂), 1), n ∈ indices((𝐁, 𝐂), 2)
     𝐂ₘₙ = zero(eltype(𝐂))
     for k ∈ indices((𝐀, 𝐁), (2, 1))
       𝐂ₘₙ += 𝐀[m, k] * 𝐁[k, n]
     end
     𝐂[m, n] = 𝐂ₘₙ
   end
-end
 function gemmavx!(
   Cc::AbstractMatrix{Complex{T}},
   Ac::AbstractMatrix{Complex{T}},
-  Bc::AbstractMatrix{Complex{T}},
+  Bc::AbstractMatrix{Complex{T}}
 ) where {T}
   A = reinterpret(reshape, T, Ac)
   B = reinterpret(reshape, T, Bc)
@@ -100,19 +101,17 @@ function gemmavx!(
     C[2, m, n] = Cim
   end
 end
-function gemmavxt!(𝐂, 𝐀, 𝐁)
-  @tturbo for m ∈ indices((𝐀, 𝐂), 1), n ∈ indices((𝐁, 𝐂), 2)
+gemmavxt!(𝐂, 𝐀, 𝐁) = @tturbo for m ∈ indices((𝐀, 𝐂), 1), n ∈ indices((𝐁, 𝐂), 2)
     𝐂ₘₙ = zero(eltype(𝐂))
     for k ∈ indices((𝐀, 𝐁), (2, 1))
       𝐂ₘₙ += 𝐀[m, k] * 𝐁[k, n]
     end
     𝐂[m, n] = 𝐂ₘₙ
   end
-end
 function gemmavxt!(
   Cc::AbstractMatrix{Complex{T}},
   Ac::AbstractMatrix{Complex{T}},
-  Bc::AbstractMatrix{Complex{T}},
+  Bc::AbstractMatrix{Complex{T}}
 ) where {T}
   A = reinterpret(reshape, T, Ac)
   B = reinterpret(reshape, T, Bc)
@@ -204,16 +203,12 @@ function jdot3avx(x, A, y)
   end
   s
 end
-function jvexp!(b, a)
-  @inbounds for i ∈ eachindex(a)
+jvexp!(b, a) = @inbounds for i ∈ eachindex(a)
     b[i] = exp(a[i])
   end
-end
-function jvexpavx!(b, a)
-  @turbo for i ∈ eachindex(a)
+jvexpavx!(b, a) = @turbo for i ∈ eachindex(a)
     b[i] = exp(a[i])
   end
-end
 function jsvexp(a)
   s = zero(eltype(a))
   @inbounds for i ∈ eachindex(a)
@@ -246,15 +241,13 @@ function jgemv!(𝐲, 𝐀ᵀ::Adjoint, 𝐱)
     𝐲[i] = 𝐲ᵢ
   end
 end
-function jgemvavx!(𝐲, 𝐀, 𝐱)
-  @turbo for i ∈ eachindex(𝐲)
+jgemvavx!(𝐲, 𝐀, 𝐱) = @turbo for i ∈ eachindex(𝐲)
     𝐲ᵢ = zero(eltype(𝐲))
     for j ∈ eachindex(𝐱)
       𝐲ᵢ += 𝐀[i, j] * 𝐱[j]
     end
     𝐲[i] = 𝐲ᵢ
   end
-end
 function jvar!(𝐬², 𝐀, x̄)
   @. s² = zero(eltype(𝐬²))
   @inbounds @fastmath for i ∈ 1:size(𝐀, 2)
@@ -264,8 +257,7 @@ function jvar!(𝐬², 𝐀, x̄)
     end
   end
 end
-function jvaravx!(𝐬², 𝐀, x̄)
-  @turbo for j ∈ eachindex(𝐬²)
+jvaravx!(𝐬², 𝐀, x̄) = @turbo for j ∈ eachindex(𝐬²)
     𝐬²ⱼ = zero(eltype(𝐬²))
     x̄ⱼ = x̄[j]
     for i ∈ 1:size(𝐀, 2)
@@ -274,7 +266,6 @@ function jvaravx!(𝐬², 𝐀, x̄)
     end
     𝐬²[j] = 𝐬²ⱼ
   end
-end
 japlucBc!(D, a, B, c) = @. D = a + B * c';
 japlucBcavx!(D, a, B, c) = @turbo @. D = a + B * c';
 
@@ -342,9 +333,6 @@ function jlogdettriangleavx(B::Union{LowerTriangular,UpperTriangular})
   ld
 end
 
-
-
-
 function filter2d!(out::AbstractMatrix, A::AbstractMatrix, kern)
   @inbounds @fastmath for J in CartesianIndices(out)
     tmp = zero(eltype(out))
@@ -369,7 +357,7 @@ end
 function filter2dunrolled!(
   out::AbstractMatrix,
   A::AbstractMatrix,
-  kern::SizedOffsetMatrix{T,-1,1,-1,1},
+  kern::SizedOffsetMatrix{T,-1,1,-1,1}
 ) where {T}
   rng1, rng2 = axes(out)
   Base.Cartesian.@nexprs 3 jk ->
@@ -380,7 +368,7 @@ function filter2dunrolled!(
       Base.Cartesian.@nexprs 3 jk -> Base.Cartesian.@nexprs 3 ik ->
         tmp_{ik + (jk - 1) * 3} = Base.FastMath.add_fast(
           Base.FastMath.mul_fast(A[i+(ik-2), j+(jk-2)], kern_ik_jk),
-          tmp_{ik + (jk - 1) * 3 - 1},
+          tmp_{ik + (jk - 1) * 3 - 1}
         )
       out[i, j] = tmp_9
     end
@@ -390,7 +378,7 @@ end
 function filter2dunrolledavx!(
   out::AbstractMatrix,
   A::AbstractMatrix,
-  kern::SizedOffsetMatrix{T,-1,1,-1,1},
+  kern::SizedOffsetMatrix{T,-1,1,-1,1}
 ) where {T}
   rng1, rng2 = axes(out)
   Base.Cartesian.@nexprs 3 jk ->
@@ -404,7 +392,6 @@ function filter2dunrolledavx!(
   end
   out
 end
-
 
 # function smooth_line!(sl,nrm1,j,i1,rl,ih2,denom)
 #     @fastmath @inbounds @simd ivdep for i=i1:2:nrm1

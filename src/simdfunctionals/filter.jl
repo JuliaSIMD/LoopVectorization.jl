@@ -1,5 +1,9 @@
 
-function vfilter!(f::F, x::Vector{T}, y::AbstractArray{T}) where {F,T<:NativeTypes}
+function vfilter!(
+  f::F,
+  x::Vector{T},
+  y::AbstractArray{T}
+) where {F,T<:NativeTypes}
   W, Wshift = VectorizationBase.pick_vector_width_shift(T)
   N = length(y)
   Nrep = N >>> Wshift
@@ -13,20 +17,31 @@ function vfilter!(f::F, x::Vector{T}, y::AbstractArray{T}) where {F,T<:NativeTyp
     ptr_x = pointer(x)
     ptr_y = pointer(y)
     for _ ∈ 1:Nrep
-      vy = VectorizationBase.__vload(ptr_y, zero_index, False(), register_size())
+      vy =
+        VectorizationBase.__vload(ptr_y, zero_index, False(), register_size())
       mask = f(vy)
       VectorizationBase.compressstore!(
         gep(ptr_x, VectorizationBase.lazymul(st, j)),
         vy,
-        mask,
+        mask
       )
       ptr_y = gep(ptr_y, incr)
       j = vadd_nw(j, count_ones(mask))
     end
     rem_mask = VectorizationBase.mask(T, Nrem)
-    vy = VectorizationBase.__vload(ptr_y, zero_index, rem_mask, False(), register_size())
+    vy = VectorizationBase.__vload(
+      ptr_y,
+      zero_index,
+      rem_mask,
+      False(),
+      register_size()
+    )
     mask = rem_mask & f(vy)
-    VectorizationBase.compressstore!(gep(ptr_x, VectorizationBase.lazymul(st, j)), vy, mask)
+    VectorizationBase.compressstore!(
+      gep(ptr_x, VectorizationBase.lazymul(st, j)),
+      vy,
+      mask
+    )
     j = vadd_nw(j, count_ones(mask))
     Base._deleteend!(x, N - j) # resize!(x, j)
   end

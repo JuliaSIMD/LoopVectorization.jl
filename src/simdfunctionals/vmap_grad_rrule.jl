@@ -35,7 +35,7 @@ function ∂vmap_singlethread!(
   f::F,
   ∂y::Tuple{Vararg{DenseArray{T},A}},
   y::DenseArray{T},
-  args::Vararg{DenseArray{<:Base.HWReal},A},
+  args::Vararg{DenseArray{<:Base.HWReal},A}
 ) where {F,T<:Base.HWReal,A}
   N = length(y)
   ptry = VectorizationBase.zero_offsets(stridedpointer(y))
@@ -65,12 +65,11 @@ function ∂vmap_singlethread!(
       ptry,
       f(init_dual(vload.(ptrargs, ((MM{W}(i),),), m))...),
       (MM{W}(i),),
-      m,
+      m
     )
   end
   nothing
 end
-
 
 struct SIMDMapBack{K,T<:Tuple{Vararg{Any,K}}}
   jacs::T
@@ -94,14 +93,22 @@ end
   end
 end
 
-function ChainRulesCore.rrule(::typeof(vmap), f::F, args::Vararg{Any,K}) where {F,K}
+function ChainRulesCore.rrule(
+  ::typeof(vmap),
+  f::F,
+  args::Vararg{Any,K}
+) where {F,K}
   out = similar(first(args))
   jacs = map(similar, args)
   ∂vmap_singlethread!(f, jacs, out, args...)
   out, SIMDMapBack(jacs)
 end
 for f in (:vmapt, :vmapnt, :vmapntt)
-  @eval function ChainRulesCore.rrule(::typeof($f), f::F, args::Vararg{Any,K}) where {F,K}
+  @eval function ChainRulesCore.rrule(
+    ::typeof($f),
+    f::F,
+    args::Vararg{Any,K}
+  ) where {F,K}
     ChainRulesCore.rrule(typeof(vmap), f, args...)
   end
 end

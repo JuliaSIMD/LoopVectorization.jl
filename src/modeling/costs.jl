@@ -1,7 +1,6 @@
 
 lv(x) = GlobalRef(LoopVectorization, x)
 
-
 """
     Instruction
 
@@ -14,13 +13,11 @@ struct Instruction
 end
 # lower(instr::Instruction) = Expr(:(.), instr.mod, QuoteNode(instr.instr))
 # Base.convert(::Type{Expr}, instr::Instruction) = Expr(:(.), instr.mod, QuoteNode(instr.instr))
-function callexpr(instr::Instruction)
-  if instr.mod === :LoopVectorization
+callexpr(instr::Instruction) = if instr.mod === :LoopVectorization
     Expr(:call, lv(instr.instr))
   else#if instr.mod === :Main
     Expr(:call, instr.instr)
   end
-end
 function callexpr(instr::Instruction, arg)
   ce = callexpr(instr)
   append!(ce.args, arg)
@@ -93,8 +90,10 @@ end
 const OPAQUE_INSTRUCTION = InstructionCost(-1.0, 20, 20.0, 16)
 
 instruction_cost(instruction::Instruction) =
-  instruction.mod === :LoopVectorization ? COST[instruction.instr] : OPAQUE_INSTRUCTION
-instruction_cost(instruction::Symbol) = get(COST, instruction, OPAQUE_INSTRUCTION)
+  instruction.mod === :LoopVectorization ? COST[instruction.instr] :
+  OPAQUE_INSTRUCTION
+instruction_cost(instruction::Symbol) =
+  get(COST, instruction, OPAQUE_INSTRUCTION)
 scalar_cost(instr::Instruction) = scalar_cost(instruction_cost(instr))
 vector_cost(instr::Instruction, Wshift, sizeof_T) =
   vector_cost(instruction_cost(instr), Wshift, sizeof_T)
@@ -106,9 +105,7 @@ vector_cost(instr::Instruction, Wshift, sizeof_T) =
 #     cost( instruction_cost(instruction), Wshift, sizeof_T )
 # end
 
-
 # Just a semi-reasonable assumption; should not be that sensitive to anything other than loads
-
 
 # Comments on setindex!
 # 1. Not a part of dependency chains, so not really twice as expensive as getindex?
@@ -263,7 +260,7 @@ const COST = Dict{Symbol,InstructionCost}(
   :vmovsldup => InstructionCost(1, 1.0),
   :vmovshdup => InstructionCost(1, 1.0),
   :exponent => InstructionCost(8, 1.0),
-  :significand => InstructionCost(8, 1.0),
+  :significand => InstructionCost(8, 1.0)
 )
 
 for f in EXTRACTFUNS
@@ -288,7 +285,8 @@ Base.convert(::Type{Instruction}, instr::Symbol) = Instruction(instr)
 function instruction(f::Symbol)
   # f === :ifelse && return Instruction(:LoopVectorization, :ifelse)
   # @assert f ∈ keys(COST)
-  f ∈ keys(COST) ? Instruction(:LoopVectorization, f) : Instruction(Symbol(""), f)
+  f ∈ keys(COST) ? Instruction(:LoopVectorization, f) :
+  Instruction(Symbol(""), f)
 end
 # instruction(f::Symbol, m::Symbol) = f ∈ keys(COST) ? Instruction(:LoopVectorization, f) : Instruction(m, f)
 Instruction(instr::Symbol) = instruction(instr)
@@ -319,11 +317,15 @@ end
 @inline (ier::IfElseReducer)(a::VecUnroll) =
   VecUnroll(VectorizationBase.fmap(ier, VectorizationBase.data(a)))
 @inline (ier::IfElseReducer)(a::VecUnroll, b::VecUnroll) = VecUnroll(
-  VectorizationBase.fmap(ier, VectorizationBase.data(a), VectorizationBase.data(b)),
+  VectorizationBase.fmap(
+    ier,
+    VectorizationBase.data(a),
+    VectorizationBase.data(b)
+  )
 )
 
-
-@inline (ier::IfElseReduced)(x::NativeTypes, y::NativeTypes) = ifelse(ier.f(x, y), x, y)
+@inline (ier::IfElseReduced)(x::NativeTypes, y::NativeTypes) =
+  ifelse(ier.f(x, y), x, y)
 @inline (ier::IfElseReduced)(x::AbstractSIMD{W}, y::AbstractSIMD{W}) where {W} =
   ifelse(ier.f(x, y), x, y)
 @inline function (ier::IfElseReduced)(x::AbstractSIMD, y::AbstractSIMD)
@@ -338,17 +340,21 @@ end
   ifelse(f(r, y), r, y)
 end
 
-
 @inline (ier::IfElseReduceTo)(a::NativeTypes, ::NativeTypes) = a
 @inline (ier::IfElseReduceTo)(a::AbstractSIMD, ::NativeTypes) =
   VectorizationBase.ifelse_reduce(ier.f, a)
-@inline (ier::IfElseReduceTo)(a::AbstractSIMD{W}, ::AbstractSIMD{W}) where {W} = a
+@inline (ier::IfElseReduceTo)(a::AbstractSIMD{W}, ::AbstractSIMD{W}) where {W} =
+  a
 @inline function (ier::IfElseReduceTo)(a::AbstractSIMD, b::AbstractSIMD)
   x, y = VectorizationBase.splitvector(a) # halve recursively
   ier(ifelse(ier.f(x, y), x, y), b)
 end
 @inline (ier::IfElseReduceTo)(a::VecUnroll, b::VecUnroll) = VecUnroll(
-  VectorizationBase.fmap(ier, VectorizationBase.data(a), VectorizationBase.data(b)),
+  VectorizationBase.fmap(
+    ier,
+    VectorizationBase.data(a),
+    VectorizationBase.data(b)
+  )
 )
 
 @inline (iec::IfElseCollapser)(a) =
@@ -383,19 +389,21 @@ end
 
 @inline _first_ifelse_reduce_mirror(f::F, a, b) where {F} =
   getfield(VectorizationBase.ifelse_reduce_mirror(f, a, b), 1)
-@inline (ier::IfElseReducerMirror)(a) = _first_ifelse_reduce_mirror(ier.f, a, ier.a)
+@inline (ier::IfElseReducerMirror)(a) =
+  _first_ifelse_reduce_mirror(ier.f, a, ier.a)
 @inline function _ifelse_reduce_mirror(f::F, a, b, c, d) where {F}
   r, rm = VectorizationBase.ifelse_reduce_mirror(f, b, d)
   ifelse(f(c, rm), a, r)
 end
-@inline (ier::IfElseReducerMirror)(a, b) = _ifelse_reduce_mirror(ier.f, a, b, ier.a, ier.b)
+@inline (ier::IfElseReducerMirror)(a, b) =
+  _ifelse_reduce_mirror(ier.f, a, b, ier.a, ier.b)
 @inline (ier::IfElseReducerMirror)(a::VecUnroll) = VecUnroll(
   VectorizationBase.fmap(
     _first_ifelse_reduce_mirror,
     ier.f,
     VectorizationBase.data(a),
-    VectorizationBase.data(ier.a),
-  ),
+    VectorizationBase.data(ier.a)
+  )
 )
 @inline function (ier::IfElseReducerMirror)(a::VecUnroll, b::VecUnroll)
   VecUnroll(
@@ -405,8 +413,8 @@ end
       VectorizationBase.data(a),
       VectorizationBase.data(b),
       VectorizationBase.data(ier.a),
-      VectorizationBase.data(ier.b),
-    ),
+      VectorizationBase.data(ier.b)
+    )
   )
 end
 
@@ -414,8 +422,10 @@ end
   IfElseReducedMirror{F,A,Nothing}(f, a, nothing)
 @inline (ier::IfElseReducedMirror)(x::NativeTypes, y::NativeTypes) =
   ifelse(ier.f(ier.a, ier.b), x, y)
-@inline (ier::IfElseReducedMirror)(x::AbstractSIMD{W}, y::AbstractSIMD{W}) where {W} =
-  ifelse(ier.f(ier.a, ier.b), x, y)
+@inline (ier::IfElseReducedMirror)(
+  x::AbstractSIMD{W},
+  y::AbstractSIMD{W}
+) where {W} = ifelse(ier.f(ier.a, ier.b), x, y)
 @inline function _reduce_mirror(f::F, x, y, a, b) where {F}
   r, _ = IfElseReducedMirror(f, a, b)(x, y)
   ifelse(f(r, y), r, y)
@@ -429,8 +439,8 @@ end
     getfield(x, :data),
     getfield(y, :data),
     getfield(ier.a, :data),
-    getfield(ier.b, :data),
-  ),
+    getfield(ier.b, :data)
+  )
 )
 @inline function (ier::IfElseReducedMirror)(x::AbstractSIMD, y::NativeTypes)
   f = ier.f
@@ -439,11 +449,13 @@ end
   ifelse(f(rm, ier.b), r, y)
 end
 
-
 @inline (ier::IfElseReduceToMirror)(a::NativeTypes, ::NativeTypes) = a
 @inline (ier::IfElseReduceToMirror)(a::AbstractSIMD, ::NativeTypes) =
   VectorizationBase.ifelse_reduce_mirror(ier.f, a, ier.a)
-@inline (ier::IfElseReduceToMirror)(a::AbstractSIMD{W}, ::AbstractSIMD{W}) where {W} = a
+@inline (ier::IfElseReduceToMirror)(
+  a::AbstractSIMD{W},
+  ::AbstractSIMD{W}
+) where {W} = a
 @inline function (ier::IfElseReduceToMirror)(a::AbstractSIMD, b::AbstractSIMD)
   x, y = VectorizationBase.splitvector(a) # halve recursively
   w, z = VectorizationBase.splitvector(ier.a) # halve recursively
@@ -452,7 +464,11 @@ end
   IfElseReduceToMirror(f, ifelse(fwz, w, z))(ifelse(fwz, x, y), b)
 end
 @inline (ier::IfElseReduceToMirror)(a::VecUnroll, b::VecUnroll) = VecUnroll(
-  VectorizationBase.fmap(ier, VectorizationBase.data(a), VectorizationBase.data(b)),
+  VectorizationBase.fmap(
+    ier,
+    VectorizationBase.data(a),
+    VectorizationBase.data(b)
+  )
 )
 
 # @inline (iec::IfElseCollapserMirror)(a) = getfield(VectorizationBase.ifelse_collapse_mirror(iec.f, a, iec.a), 1, false)
@@ -525,10 +541,11 @@ const REDUCTION_CLASS = Dict{Symbol,Float64}(
   :max_fast => MAX,
   :min_fast => MIN,
   :vfmaddsub => ADDITIVE_IN_REDUCTIONS,
-  :vfmsubadd => ADDITIVE_IN_REDUCTIONS,
+  :vfmsubadd => ADDITIVE_IN_REDUCTIONS
 )
 reduction_instruction_class(instr::Symbol) = get(REDUCTION_CLASS, instr, NaN)
-reduction_instruction_class(instr::Instruction) = reduction_instruction_class(instr.instr)
+reduction_instruction_class(instr::Instruction) =
+  reduction_instruction_class(instr.instr)
 function reduction_to_single_vector(x::Float64)
   if x == ADDITIVE_IN_REDUCTIONS
     :collapse_add
@@ -546,8 +563,7 @@ function reduction_to_single_vector(x::Float64)
     throw("Reduction not found.")
   end
 end
-function reduce_to_onevecunroll(x::Float64)
-  if x == ADDITIVE_IN_REDUCTIONS
+reduce_to_onevecunroll(x::Float64) = if x == ADDITIVE_IN_REDUCTIONS
     :+
   elseif x == MULTIPLICATIVE_IN_REDUCTIONS
     :*
@@ -562,9 +578,7 @@ function reduce_to_onevecunroll(x::Float64)
   else
     throw("Reduction not found.")
   end
-end
-function reduce_number_of_vectors(x::Float64)
-  if x == ADDITIVE_IN_REDUCTIONS
+reduce_number_of_vectors(x::Float64) = if x == ADDITIVE_IN_REDUCTIONS
     :contract_add
   elseif x == MULTIPLICATIVE_IN_REDUCTIONS
     :contract_mul
@@ -579,9 +593,7 @@ function reduce_number_of_vectors(x::Float64)
   else
     throw("Reduction not found.")
   end
-end
-function reduction_to_scalar(x::Float64)
-  if x == ADDITIVE_IN_REDUCTIONS
+reduction_to_scalar(x::Float64) = if x == ADDITIVE_IN_REDUCTIONS
     :vsum
   elseif x == MULTIPLICATIVE_IN_REDUCTIONS
     :vprod
@@ -596,7 +608,6 @@ function reduction_to_scalar(x::Float64)
   else
     throw("Reduction not found.")
   end
-end
 function reduction_scalar_combine(x::Float64)
   # x == 1.0 ? :reduced_add : x == 2.0 ? :reduced_prod : x == 3.0 ? :reduced_any : x == 4.0 ? :reduced_all : x == 5.0 ? :reduced_max : x == 6.0 ? :reduced_min : throw("Reduction not found.")
   if x == ADDITIVE_IN_REDUCTIONS
@@ -653,7 +664,6 @@ function reduction_zero_class(x::Symbol)::Float64
 end
 reduction_zero(x) = reduction_zero(reduction_instruction_class(x))
 
-
 function isreductcombineinstr(instr::Symbol)
   instr ∈ (
     :reduced_add,
@@ -663,7 +673,7 @@ function isreductcombineinstr(instr::Symbol)
     :reduced_max,
     :reduced_min,
     :reduce_to_max,
-    :reduce_to_min,
+    :reduce_to_min
   )
 end
 isreductcombineinstr(instr::Instruction) = isreductcombineinstr(instr.instr)
@@ -765,7 +775,7 @@ const FUNCTIONSYMBOLS = IdDict{Type{<:Function},Instruction}(
   typeof(ifelse) => :ifelse,
   typeof(identity) => :identity,
   typeof(conj) => :identity,#conj,
-  typeof(÷) => :vdiv_fast,
+  typeof(÷) => :vdiv_fast
   # typeof(zero) => :zero,
   # typeof(one) => :one,
   # typeof(axes) => :axes,

@@ -23,7 +23,7 @@ function add_ci_call!(
   syms::Vector{Symbol},
   i::Int,
   @nospecialize(valarg) = nothing,
-  @nospecialize(mod) = nothing,
+  @nospecialize(mod) = nothing
 )
   call = if f isa Core.SSAValue
     Expr(:call, syms[f.id])
@@ -52,14 +52,15 @@ function substitute_broadcast(
   v::Int8,
   threads::Int,
   warncheckarg::Int,
-  safe::Bool,
+  safe::Bool
 )
   ci = first(Meta.lower(LoopVectorization, q).args).code
   nargs = length(ci) - 1
   lb = Expr(:block)
   syms = Vector{Symbol}(undef, nargs)
   configarg = (inline, u₁, u₂, v, true, threads, warncheckarg, safe)
-  unroll_param_tup = Expr(:call, lv(:avx_config_val), :(Val{$configarg}()), staticexpr(0))
+  unroll_param_tup =
+    Expr(:call, lv(:avx_config_val), :(Val{$configarg}()), staticexpr(0))
   for n ∈ 1:nargs
     _ciₙ = ci[n]
     if _ciₙ isa Symbol
@@ -72,9 +73,25 @@ function substitute_broadcast(
       if ciₙ.head === :(=)
         push!(lb.args, Expr(:(=), f, syms[((ciₙargs[2])::Core.SSAValue).id]))
       elseif isglobalref(f, Base, :materialize!)
-        add_ci_call!(lb, lv(:vmaterialize!), ciₙargs, syms, n, unroll_param_tup, mod)
+        add_ci_call!(
+          lb,
+          lv(:vmaterialize!),
+          ciₙargs,
+          syms,
+          n,
+          unroll_param_tup,
+          mod
+        )
       elseif isglobalref(f, Base, :materialize)
-        add_ci_call!(lb, lv(:vmaterialize), ciₙargs, syms, n, unroll_param_tup, mod)
+        add_ci_call!(
+          lb,
+          lv(:vmaterialize),
+          ciₙargs,
+          syms,
+          n,
+          unroll_param_tup,
+          mod
+        )
       else
         add_ci_call!(lb, f, ciₙargs, syms, n)
       end
@@ -86,7 +103,6 @@ function substitute_broadcast(
   end
   esc(Expr(:let, lb, Expr(:block, ret)))
 end
-
 
 function LoopSet(q::Expr, mod::Symbol = :Main)
   ls = LoopSet(mod)
@@ -113,7 +129,7 @@ function check_macro_kwarg(
   v::Int8,
   threads::Int,
   warncheckarg::Int,
-  safe::Bool,
+  safe::Bool
 )
   ((arg.head === :(=)) && (length(arg.args) == 2)) ||
     throw(ArgumentError("macro kwarg should be of the form `argname = value`."))
@@ -128,7 +144,9 @@ function check_macro_kwarg(
       u₁ = convert(Int8, value.args[1])::Int8
       u₂ = convert(Int8, value.args[2])::Int8
     else
-      throw(ArgumentError("Don't know how to process argument in `unroll=$value`."))
+      throw(
+        ArgumentError("Don't know how to process argument in `unroll=$value`.")
+      )
     end
   elseif kw === :vectorize
     v = convert(Int8, value)
@@ -140,7 +158,9 @@ function check_macro_kwarg(
     elseif value isa Integer
       threads = max(1, convert(Int, value)::Int)
     else
-      throw(ArgumentError("Don't know how to process argument in `thread=$value`."))
+      throw(
+        ArgumentError("Don't know how to process argument in `thread=$value`.")
+      )
     end
   elseif kw === :warn_check_args
     warncheckarg = convert(Int, value)::Int
@@ -149,8 +169,8 @@ function check_macro_kwarg(
   else
     throw(
       ArgumentError(
-        "Received unrecognized keyword argument $kw. Recognized arguments include:\n`inline`, `unroll`, `check_empty`, and `thread`.",
-      ),
+        "Received unrecognized keyword argument $kw. Recognized arguments include:\n`inline`, `unroll`, `check_empty`, and `thread`."
+      )
     )
   end
   inline, check_empty, u₁, u₂, v, threads, warncheckarg, safe
@@ -164,11 +184,21 @@ function process_args(
   v::Int8 = zero(Int8),
   threads::Int = 1,
   warncheckarg::Int = 1,
-  safe::Bool = true,
+  safe::Bool = true
 )
   for arg ∈ args
     inline, check_empty, u₁, u₂, v, threads, warncheckarg, safe =
-      check_macro_kwarg(arg, inline, check_empty, u₁, u₂, v, threads, warncheckarg, safe)
+      check_macro_kwarg(
+        arg,
+        inline,
+        check_empty,
+        u₁,
+        u₂,
+        v,
+        threads,
+        warncheckarg,
+        safe
+      )
   end
   inline, check_empty, u₁, u₂, v, threads, warncheckarg, safe
 end
@@ -223,8 +253,10 @@ function replace_single_enumerate!(q, prepreamble, i = nothing)
       indsym = itersyms.args[1]::Symbol
       _replace_looprange!(q, i, indsym, iter)
     elseif itersyms isa Symbol # if itersyms are not unbox in loop range
-      throw(ArgumentError("`for $itersyms in enumerate($r)` is not supported,
-        please use `for ($(itersyms)_i, $(itersyms)_v) in enumerate($r)` instead."))
+      throw(
+        ArgumentError("`for $itersyms in enumerate($r)` is not supported,
+    please use `for ($(itersyms)_i, $(itersyms)_v) in enumerate($r)` instead.")
+      )
     else
       throw(ArgumentError("Don't know how to handle expression `$itersyms`."))
     end
@@ -240,12 +272,37 @@ function turbo_macro(mod, src, q, args...)
   q = macroexpand(mod, q)
   if q.head === :for
     ls = LoopSet(q, mod)
-    inline, check_empty, u₁, u₂, v, threads, warncheckarg, safe = process_args(args)
-    esc(setup_call(ls, q, src, inline, check_empty, u₁, u₂, v, threads, warncheckarg, safe))
+    inline, check_empty, u₁, u₂, v, threads, warncheckarg, safe =
+      process_args(args)
+    esc(
+      setup_call(
+        ls,
+        q,
+        src,
+        inline,
+        check_empty,
+        u₁,
+        u₂,
+        v,
+        threads,
+        warncheckarg,
+        safe
+      )
+    )
   else
     inline, check_empty, u₁, u₂, v, threads, warncheckarg, safe =
-      process_args(args, inline = true)
-    substitute_broadcast(q, Symbol(mod), inline, u₁, u₂, v, threads, warncheckarg, safe)
+      process_args(args; inline = true)
+    substitute_broadcast(
+      q,
+      Symbol(mod),
+      inline,
+      u₁,
+      u₂,
+      v,
+      threads,
+      warncheckarg,
+      safe
+    )
   end
 end
 """
@@ -267,10 +324,10 @@ The macro models the set of nested loops, and chooses an ordering of the three l
 
 Current limitations:
 
-1. It assumes that loop iterations are independent.
-2. It does not perform bounds checks.
-3. It assumes that each loop iterates at least once. (Use `@turbo check_empty=true` to lift this assumption.)
-4. That there is only one loop at each level of the nest.
+ 1. It assumes that loop iterations are independent.
+ 2. It does not perform bounds checks.
+ 3. It assumes that each loop iterates at least once. (Use `@turbo check_empty=true` to lift this assumption.)
+ 4. That there is only one loop at each level of the nest.
 
 It may also apply to broadcasts:
 
@@ -295,7 +352,7 @@ Advanced users can customize the implementation of the `@turbo`-annotated block
 using keyword arguments:
 
 ```julia
-@turbo inline=false unroll=2 thread=4 body
+@turbo inline = false unroll = 2 thread = 4 body
 ```
 
 where `body` is the code of the block (e.g., `for ... end`).
@@ -355,13 +412,22 @@ Note that later arguments take precendence.
 Meant for convenience, as `@tturbo` is shorter than `@turbo thread=true`.
 """
 macro tturbo(args...)
-  turbo_macro(__module__, __source__, last(args), :(thread = true), Base.front(args)...)
+  turbo_macro(
+    __module__,
+    __source__,
+    last(args),
+    :(thread = true),
+    Base.front(args)...
+  )
 end
 
 function def_outer_reduct_types!(ls::LoopSet)
   for or ∈ ls.outer_reductions
     op = operations(ls)[or]
-    pushpreamble!(ls, Expr(:(=), outer_reduct_init_typename(op), typeof_expr(op)))
+    pushpreamble!(
+      ls,
+      Expr(:(=), outer_reduct_init_typename(op), typeof_expr(op))
+    )
   end
 end
 """
@@ -383,8 +449,17 @@ end
 macro _turbo(arg, q)
   @assert q.head === :for
   q = macroexpand(__module__, q)
-  inline, check_empty, u₁, u₂, v =
-    check_macro_kwarg(arg, false, false, zero(Int8), zero(Int8), zero(Int8), 1, 0, true)
+  inline, check_empty, u₁, u₂, v = check_macro_kwarg(
+    arg,
+    false,
+    false,
+    zero(Int8),
+    zero(Int8),
+    zero(Int8),
+    1,
+    0,
+    true
+  )
   ls = LoopSet(q, __module__)
   set_hw!(ls)
   def_outer_reduct_types!(ls)

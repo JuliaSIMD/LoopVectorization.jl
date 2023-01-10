@@ -1,1 +1,7 @@
 indent = 2
+margin = 80
+remove_extra_newlines = true
+long_to_short_function_def = true
+format_docstrings = true
+trailing_comma = false
+separate_kwargs_with_semicolon = true

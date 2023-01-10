@@ -3,7 +3,10 @@ function extract_all_lnns(x)
   return extract_all_lnns!(lnns, x)
 end
 
-function extract_all_lnns!(lnns::AbstractVector{<:LineNumberNode}, lnn::LineNumberNode)
+function extract_all_lnns!(
+  lnns::AbstractVector{<:LineNumberNode},
+  lnn::LineNumberNode
+)
   push!(lnns, lnn)
   return lnns
 end
@@ -13,14 +16,16 @@ function extract_all_lnns!(lnns::AbstractVector{<:LineNumberNode}, ex::Expr)
   end
   return lnns
 end
-function extract_all_lnns!(lnns::AbstractVector{<:LineNumberNode}, ::Any)
-  return lnns
-end
+extract_all_lnns!(lnns::AbstractVector{<:LineNumberNode}, ::Any) = lnns
 
 function prepend_lnns!(ex::Expr, lnns::AbstractVector{<:LineNumberNode})
   return prepend_lnns!(ex, lnns, Val(ex.head))
 end
-function prepend_lnns!(ex::Expr, lnns::AbstractVector{<:LineNumberNode}, ::Val{:block})
+function prepend_lnns!(
+  ex::Expr,
+  lnns::AbstractVector{<:LineNumberNode},
+  ::Val{:block}
+)
   for lnn in lnns
     pushfirst!(ex.args, Expr(:block, lnn, :(nothing)))
   end

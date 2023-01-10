@@ -11,7 +11,6 @@ const GEMMLOOPSET = loopset(:(
   end
 ));
 
-
 # function matmul_params(rs::Int, rc::Int, cls::Int)
 #     set_hw!(GEMMLOOPSET, rs, rc, cls, Int(cache_size(StaticInt(1))), Int(cache_size(StaticInt(2))), Int(cache_size(StaticInt(3))))
 #     order = choose_order(GEMMLOOPSET)
@@ -24,23 +23,41 @@ function matmul_params(
   M = nothing,
   K = nothing,
   N = nothing,
-  W = 0,
+  W = 0
 )
   set_hw!(GEMMLOOPSET, rs, rc, cls)
   if N ≢ nothing
     nloop = GEMMLOOPSET.loops[1]
-    GEMMLOOPSET.loops[1] =
-      Loop(:n, MaybeKnown(1), MaybeKnown(N), MaybeKnown(1), nloop.rangesym, nloop.lensym)
+    GEMMLOOPSET.loops[1] = Loop(
+      :n,
+      MaybeKnown(1),
+      MaybeKnown(N),
+      MaybeKnown(1),
+      nloop.rangesym,
+      nloop.lensym
+    )
   end
   if M ≢ nothing
     mloop = GEMMLOOPSET.loops[2]
-    GEMMLOOPSET.loops[2] =
-      Loop(:m, MaybeKnown(1), MaybeKnown(M), MaybeKnown(1), mloop.rangesym, mloop.lensym)
+    GEMMLOOPSET.loops[2] = Loop(
+      :m,
+      MaybeKnown(1),
+      MaybeKnown(M),
+      MaybeKnown(1),
+      mloop.rangesym,
+      mloop.lensym
+    )
   end
   if K ≢ nothing
     kloop = GEMMLOOPSET.loops[3]
-    GEMMLOOPSET.loops[3] =
-      Loop(:k, MaybeKnown(1), MaybeKnown(K), MaybeKnown(1), kloop.rangesym, kloop.lensym)
+    GEMMLOOPSET.loops[3] = Loop(
+      :k,
+      MaybeKnown(1),
+      MaybeKnown(K),
+      MaybeKnown(1),
+      kloop.rangesym,
+      kloop.lensym
+    )
   end
   GEMMLOOPSET.vector_width = W
   order = choose_order(GEMMLOOPSET)
@@ -52,16 +69,17 @@ end
 @generated function matmul_params(
   ::StaticInt{RS},
   ::StaticInt{RC},
-  ::StaticInt{CLS},
+  ::StaticInt{CLS}
 ) where {RS,RC,CLS}
   mᵣ, nᵣ = matmul_params(RS, RC, CLS)
   Expr(
     :tuple,
     Expr(:call, Expr(:curly, :StaticInt, mᵣ)),
-    Expr(:call, Expr(:curly, :StaticInt, nᵣ)),
+    Expr(:call, Expr(:curly, :StaticInt, nᵣ))
   )
 end
-matmul_params() = matmul_params(register_size(), register_count(), cache_linesize())
+matmul_params() =
+  matmul_params(register_size(), register_count(), cache_linesize())
 
 # function dotturbo(x,y)
 #   s = zero(promote_type(eltype(x),eltype(y)))

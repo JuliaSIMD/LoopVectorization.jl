@@ -33,9 +33,9 @@ function hoist_constant_vload!(ls::LoopSet, op::Operation)
       parents(op),
       loopdependencies(op),
       reduceddependencies(op),
-      name(op),
+      name(op)
     ),
-    elementbytes,
+    elementbytes
   )
 end
 
@@ -52,8 +52,6 @@ function return_empty_reductinit(op::Operation, var::Symbol)
   end
   return op
 end
-
-
 
 function constant_symbol!(ls::LoopSet, op::Operation)
   # hack
@@ -74,7 +72,10 @@ function constant_symbol!(ls::LoopSet, op::Operation)
     if intsz == 1
       pushpreamble!(ls, Expr(:(=), symname, intval % Bool))
     else
-      pushpreamble!(ls, Expr(:(=), symname, sizeequivalent_symint_expr(intval, signed)))
+      pushpreamble!(
+        ls,
+        Expr(:(=), symname, sizeequivalent_symint_expr(intval, signed))
+      )
     end
     return symname
   end
@@ -82,7 +83,11 @@ function constant_symbol!(ls::LoopSet, op::Operation)
     (idcheck ≢ nothing) && ((idcheck == id) && continue)
     pushpreamble!(
       ls,
-      Expr(:(=), symname, Expr(:call, lv(:sizeequivalentfloat), ELTYPESYMBOL, floatval)),
+      Expr(
+        :(=),
+        symname,
+        Expr(:call, lv(:sizeequivalentfloat), ELTYPESYMBOL, floatval)
+      )
     )
     return symname
   end
@@ -92,15 +97,24 @@ function constant_symbol!(ls::LoopSet, op::Operation)
     if typ == IntOrFloat
       pushpreamble!(ls, Expr(:(=), symname, Expr(:call, :zero, ELTYPESYMBOL)))
     elseif typ == HardInt
-      pushpreamble!(ls, Expr(:(=), symname, Expr(:call, lv(:zerointeger), ELTYPESYMBOL)))
+      pushpreamble!(
+        ls,
+        Expr(:(=), symname, Expr(:call, lv(:zerointeger), ELTYPESYMBOL))
+      )
     else#if typ == HardFloat
-      pushpreamble!(ls, Expr(:(=), symname, Expr(:call, lv(:zerofloat), ELTYPESYMBOL)))
+      pushpreamble!(
+        ls,
+        Expr(:(=), symname, Expr(:call, lv(:zerofloat), ELTYPESYMBOL))
+      )
     end
     return symname
   end
   for (id, f) ∈ ls.preamble_funcofeltypes
     (idcheck ≢ nothing) && ((idcheck == id) && continue)
-    pushpreamble!(ls, Expr(:(=), symname, Expr(:call, reduction_zero(f), ELTYPESYMBOL)))
+    pushpreamble!(
+      ls,
+      Expr(:(=), symname, Expr(:call, reduction_zero(f), ELTYPESYMBOL))
+    )
     return symname
   end
   throw("Constant operation symbol not found.")
@@ -124,7 +138,7 @@ function hoist_constant_store!(q::Expr, ls::LoopSet, op::Operation)
   # @show last(ls.preamble.args)
   pushpreamble!(
     ls,
-    Expr(:(=), outer_reduct_init_typename(opr), Expr(:call, lv(:typeof), init)),
+    Expr(:(=), outer_reduct_init_typename(opr), Expr(:call, lv(:typeof), init))
   )
   qpre = Expr(:block)
   push!(
@@ -133,8 +147,8 @@ function hoist_constant_store!(q::Expr, ls::LoopSet, op::Operation)
       :call,
       lv(:unsafe_store!),
       Expr(:call, lv(:pointer), op.ref.ptr),
-      outer_reduction_to_scalar_reduceq!(qpre, opr, init),
-    ),
+      outer_reduction_to_scalar_reduceq!(qpre, opr, init)
+    )
   )
   length(qpre.args) == 0 || pushpreamble!(ls, qpre) # creating `Expr` and pushing because `outer_reduction_to_scalar_reduceq!` uses `pushfirst!(q.args`, and we don't want it at the start of the preamble
   return nothing

@@ -37,7 +37,7 @@ const EXTRACTFUNS = (
   :thirtysixth,
   :thirtyseventh,
   :thirtyeighth,
-  :last,
+  :last
 )
 
 for (i, f) ∈ enumerate(EXTRACTFUNS)
