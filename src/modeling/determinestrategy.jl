@@ -859,7 +859,7 @@ function stride_penalty(ls::LoopSet, order::Vector{Symbol})
   if iszero(length(values(stridepenaltydict)))
     0.0
   else # 1 / 1024 = 0.0009765625
-    10.0sum(maximum, values(stridepenaltydict)) *
+    50.0sum(maximum, values(stridepenaltydict)) *
     Base.power_by_squaring(0.0009765625, length(order))
   end
 end
