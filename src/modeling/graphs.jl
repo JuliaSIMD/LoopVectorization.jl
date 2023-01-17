@@ -664,7 +664,8 @@ This is used so that identical loops will create identical `_turbo_!` calls in t
 """
 gensym!(ls::LoopSet, s) = Symbol("###$(s)###$(ls.symcounter += 1)###")
 
-fill_children!(ls::LoopSet) = for op ∈ operations(ls)
+fill_children!(ls::LoopSet) =
+  for op ∈ operations(ls)
     empty!(children(op))
     for opp ∈ parents(op)
       @assert children(opp) !== NOPARENTS
@@ -984,7 +985,7 @@ function add_block!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
   for x ∈ ex.args
     x isa Expr || continue # be that general?
     x.head === :inbounds && continue
-    push!(ls, x, elementbytes, position)
+    _push!(ls, x, elementbytes, position)
   end
 end
 function makestatic!(expr)
@@ -1378,7 +1379,7 @@ function add_loop!(ls::LoopSet, q::Expr, elementbytes::Int)
   if body.head === :block
     add_block!(ls, body, elementbytes, position)
   else
-    push!(ls, q, elementbytes, position)
+    _push!(ls, q, elementbytes, position)
   end
 end
 function add_loop!(ls::LoopSet, loop::Loop, itersym::Symbol = loop.itersymbol)
@@ -1819,14 +1820,14 @@ function push_op!(
         add_compute!(ls, LHS, :identity, [RHS], elementbytes)
       end
     else
-      push!(ls, localbody, elementbytes, position, mpref)
+      _push!(ls, localbody, elementbytes, position, mpref)
     end
   else
     throw(LoopError("Don't know how to handle expression.", ex))
   end
 end
 
-function Base.push!(
+function _push!(
   ls::LoopSet,
   ex::Expr,
   elementbytes::Int,

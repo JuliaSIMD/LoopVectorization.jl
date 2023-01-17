@@ -10,7 +10,7 @@
 #     ls
 # end
 
-function Base.copyto!(ls::LoopSet, q::Expr)
+function _copyto!(ls::LoopSet, q::Expr)
   q.head === :for || throw("Expression must be a for loop.")
   add_loop!(ls, q, 8)
   # strip_unneeded_const_deps!(ls)
@@ -108,7 +108,7 @@ function LoopSet(q::Expr, mod::Symbol = :Main)
   ls = LoopSet(mod)
   check_inputs!(q, ls.prepreamble)
   contract_pass!(q)
-  copyto!(ls, q)
+  _copyto!(ls, q)
   resize!(ls.loop_order, num_loops(ls))
   ls
 end

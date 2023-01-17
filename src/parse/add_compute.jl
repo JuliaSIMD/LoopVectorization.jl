@@ -402,7 +402,7 @@ function add_anon_func!(
   substitute!(anonbody, d)
   for i ∈ 1:length(anonbody.args)-1
     exᵢ = anonbody.args[i]
-    exᵢ isa Expr && push!(ls, exᵢ, elementbytes, position, mpref)
+    exᵢ isa Expr && _push!(ls, exᵢ, elementbytes, position, mpref)
   end
   lastline = last(anonbody.args)
   retop = if lastline isa Symbol
