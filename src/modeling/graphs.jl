@@ -76,7 +76,7 @@ pushexpr!(ex::Expr, x::Integer) =
 pushexpr!(ex::Expr, @nospecialize(x::StaticInt)) = (push!(ex.args, x); nothing)
 MaybeKnown(x::Integer) =
   MaybeKnown(convert(Int, x), Symbol("##UNDEFINED##"), true)
-MaybeKnown(x::Integer, default::Int) = MaybeKnown(x)
+MaybeKnown(x::Integer, ::Int) = MaybeKnown(x)
 MaybeKnown(x::Symbol, default::Int) = MaybeKnown(default, x, false)
 
 isknown(mk::MaybeKnown) = getfield(mk, :known)
@@ -158,7 +158,7 @@ function arithmeticexpr(
     return _arithmeticexpr(f, a, b)
   end
 end
-arithmeticexpr(op, f, a, b) = _arithmeticexpr(f, a, b)
+arithmeticexpr(_, f, a, b) = _arithmeticexpr(f, a, b)
 function _arithmeticexpr(f, a, b)
   ex = Expr(:call, lv(f))
   pushexpr!(ex, a)
@@ -689,7 +689,7 @@ function rejectinterleave!(
       op.rejectinterleave = true
     else
       omop = ls.omop
-      batchid, opind = omop.batchedcollectionmap[identifier(op)]
+      batchid, _ = omop.batchedcollectionmap[identifier(op)]
       op.rejectinterleave =
         ((batchid == 0) || (!isvectorized(op))) ||
         rejectinterleave(ls, op, vloop, omop.batchedcollections[batchid])
@@ -1007,7 +1007,7 @@ function makestatic!(expr)
   expr
 end
 add_loop_bound!(
-  ls::LoopSet,
+  ::LoopSet,
   itersym::Symbol,
   bound::Union{Integer,Symbol},
   upper::Bool,
@@ -1097,7 +1097,7 @@ end
   r::OptionallyStaticRange,
   ::StaticInt{S}
 ) where {S}
-  ifelse(ArrayInterface.gt(StaticInt{S}(), Zero()), r, _reverse(r))
+  S > 0 ? r : _reverse(r)
 end
 @inline canonicalize_range(r::OptionallyStaticRange, s::Integer) =
   s > 0 ? r : _reverse(r)
@@ -1410,7 +1410,7 @@ function instruction!(ls::LoopSet, x::Expr)
   pushprepreamble!(ls, Expr(:(=), instr, x))
   Instruction(Symbol(""), instr)
 end
-instruction!(ls::LoopSet, x::Symbol) = instruction(x)
+instruction!(::LoopSet, x::Symbol) = instruction(x)
 function instruction!(ls::LoopSet, f::F) where {F<:Function}
   get(FUNCTIONSYMBOLS, F) do
     instr = gensym!(ls, "f")
