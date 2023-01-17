@@ -116,12 +116,8 @@ function search_tree(opv::Vector{Operation}, var::Symbol) # relies on cycles bei
   false
 end
 
-search_tree_for_ref(
-  ls::LoopSet,
-  opv::Vector{Operation},
-  ::Nothing,
-  var::Symbol
-) = var, false
+search_tree_for_ref(::LoopSet, ::Vector{Operation}, ::Nothing, var::Symbol) =
+  var, false
 function search_tree_for_ref(
   ls::LoopSet,
   opv::Vector{Operation},
@@ -433,35 +429,29 @@ function find_inner_reduct_parent(op::Operation, opname::Symbol)
 end
 
 function maybe_fix_reduced_deps!(
-  ls::LoopSet,
+  ::LoopSet,
   deps::Vector{Symbol},
   reduceddeps::Vector{Symbol},
   parent::Operation,
   mpref::ArrayReferenceMetaPosition,
-  position::Int
+  ::Int
 )
   loopdeps_parent = loopdependencies(parent)
   reduceddeps_parent = reduceddependencies(parent)
   loopdeps_mpref = loopdependencies(mpref)
   loopdeps_new = Symbol[]
-  # pushv = Vector{Symbol}[loopdeps_new, reduceddeps_parent]
-  instr = instruction(parent).instr
   pparent_id = findfirst(Base.Fix2(===, name(parent)) ∘ name, parents(parent))
   pparent_id === nothing && return deps, reduceddeps
   pparent = parents(parent)[pparent_id]
   @assert length(loopdependencies(pparent)) ==
           length(loopdeps_parent) + length(reduceddeps_parent)
   reduceddeps_pparent = reduceddependencies(pparent)
-  # if instr === :identity
-  #   push!(pushv, 
-  # if Base.sym_in(instr, :ident
   for ld ∈ loopdeps_parent
     if ld ∈ loopdeps_mpref
       push!(loopdeps_new, ld)
     else
       push!(reduceddeps_parent, ld)
       push!(reduceddeps_pparent, ld)
-      # foreach(Base.Fix2(push!, ld), pushv)
     end
   end
   parent.dependencies = loopdeps_new
@@ -803,7 +793,6 @@ function add_pow!(
   elseif x isa Number
     return add_constant!(ls, x^p, elementbytes, var)::Operation
   end
-  local pnum::Int, pden::Int
   if p isa Integer
     pnum = Int(p)::Int
     pden = 1

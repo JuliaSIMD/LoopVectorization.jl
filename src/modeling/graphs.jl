@@ -76,7 +76,7 @@ pushexpr!(ex::Expr, x::Integer) =
 pushexpr!(ex::Expr, @nospecialize(x::StaticInt)) = (push!(ex.args, x); nothing)
 MaybeKnown(x::Integer) =
   MaybeKnown(convert(Int, x), Symbol("##UNDEFINED##"), true)
-MaybeKnown(x::Integer, default::Int) = MaybeKnown(x)
+MaybeKnown(x::Integer, ::Int) = MaybeKnown(x)
 MaybeKnown(x::Symbol, default::Int) = MaybeKnown(default, x, false)
 
 isknown(mk::MaybeKnown) = getfield(mk, :known)
@@ -158,7 +158,7 @@ function arithmeticexpr(
     return _arithmeticexpr(f, a, b)
   end
 end
-arithmeticexpr(op, f, a, b) = _arithmeticexpr(f, a, b)
+arithmeticexpr(_, f, a, b) = _arithmeticexpr(f, a, b)
 function _arithmeticexpr(f, a, b)
   ex = Expr(:call, lv(f))
   pushexpr!(ex, a)
@@ -664,7 +664,8 @@ This is used so that identical loops will create identical `_turbo_!` calls in t
 """
 gensym!(ls::LoopSet, s) = Symbol("###$(s)###$(ls.symcounter += 1)###")
 
-fill_children!(ls::LoopSet) = for op ∈ operations(ls)
+fill_children!(ls::LoopSet) =
+  for op ∈ operations(ls)
     empty!(children(op))
     for opp ∈ parents(op)
       @assert children(opp) !== NOPARENTS
@@ -688,7 +689,7 @@ function rejectinterleave!(
       op.rejectinterleave = true
     else
       omop = ls.omop
-      batchid, opind = omop.batchedcollectionmap[identifier(op)]
+      batchid, _ = omop.batchedcollectionmap[identifier(op)]
       op.rejectinterleave =
         ((batchid == 0) || (!isvectorized(op))) ||
         rejectinterleave(ls, op, vloop, omop.batchedcollections[batchid])
@@ -984,7 +985,7 @@ function add_block!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
   for x ∈ ex.args
     x isa Expr || continue # be that general?
     x.head === :inbounds && continue
-    push!(ls, x, elementbytes, position)
+    _push!(ls, x, elementbytes, position)
   end
 end
 function makestatic!(expr)
@@ -1006,7 +1007,7 @@ function makestatic!(expr)
   expr
 end
 add_loop_bound!(
-  ls::LoopSet,
+  ::LoopSet,
   itersym::Symbol,
   bound::Union{Integer,Symbol},
   upper::Bool,
@@ -1096,7 +1097,7 @@ end
   r::OptionallyStaticRange,
   ::StaticInt{S}
 ) where {S}
-  ifelse(ArrayInterface.gt(StaticInt{S}(), Zero()), r, _reverse(r))
+  S > 0 ? r : _reverse(r)
 end
 @inline canonicalize_range(r::OptionallyStaticRange, s::Integer) =
   s > 0 ? r : _reverse(r)
@@ -1378,7 +1379,7 @@ function add_loop!(ls::LoopSet, q::Expr, elementbytes::Int)
   if body.head === :block
     add_block!(ls, body, elementbytes, position)
   else
-    push!(ls, q, elementbytes, position)
+    _push!(ls, q, elementbytes, position)
   end
 end
 function add_loop!(ls::LoopSet, loop::Loop, itersym::Symbol = loop.itersymbol)
@@ -1409,7 +1410,7 @@ function instruction!(ls::LoopSet, x::Expr)
   pushprepreamble!(ls, Expr(:(=), instr, x))
   Instruction(Symbol(""), instr)
 end
-instruction!(ls::LoopSet, x::Symbol) = instruction(x)
+instruction!(::LoopSet, x::Symbol) = instruction(x)
 function instruction!(ls::LoopSet, f::F) where {F<:Function}
   get(FUNCTIONSYMBOLS, F) do
     instr = gensym!(ls, "f")
@@ -1819,14 +1820,14 @@ function push_op!(
         add_compute!(ls, LHS, :identity, [RHS], elementbytes)
       end
     else
-      push!(ls, localbody, elementbytes, position, mpref)
+      _push!(ls, localbody, elementbytes, position, mpref)
     end
   else
     throw(LoopError("Don't know how to handle expression.", ex))
   end
 end
 
-function Base.push!(
+function _push!(
   ls::LoopSet,
   ex::Expr,
   elementbytes::Int,
