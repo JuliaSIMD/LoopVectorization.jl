@@ -1,5 +1,10 @@
 module LoopVectorization
 
+if isdefined(Base, :Experimental) &&
+   isdefined(Base.Experimental, Symbol("@max_methods"))
+  @eval Base.Experimental.@max_methods 1
+end
+
 using ArrayInterfaceCore: UpTri, LoTri
 using Static: StaticInt, gt, static, Zero, One, reduce_tup
 using VectorizationBase,
