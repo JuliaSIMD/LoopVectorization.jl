@@ -1,7 +1,16 @@
 name = "LoopVectorization"
 uuid = "bdcacae8-1622-11e9-2a5c-532679323890"
 authors = ["Chris Elrod <elrodc@gmail.com>"]
-version = "0.12.148"
+version = "0.12.149"
+
+[weakdeps]
+ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
+
+[extensions]
+ForwardDiffExt = "ChainRulesCore, ForwardDiff"
+SpecialFunctionsExt = "SpecialFunctions"
 
 [deps]
 ArrayInterface = "4fba245c-0d91-5ea0-9b3e-6abc04ee57a9"

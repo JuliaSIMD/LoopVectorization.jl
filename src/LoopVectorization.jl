@@ -131,7 +131,7 @@ using Base.Meta: isexpr
 using DocStringExtensions
 import LinearAlgebra # for check_args
 
-using Base: unsafe_trunc
+using Base: unsafe_trunc, get_extension
 
 using Base.FastMath:
   add_fast,
@@ -263,8 +263,9 @@ include("precompile.jl")
 # import ChainRulesCore, ForwardDiff
 # include("vmap_grad.jl")
 using ChainRulesCore, ForwardDiff, SpecialFunctions
-include("simdfunctionals/vmap_grad_rrule.jl")
-include("simdfunctionals/vmap_grad_forwarddiff.jl")
-@inline SpecialFunctions.erf(x::AbstractSIMD) = VectorizationBase.verf(float(x))
+if !isdefined(Base, :get_extension)
+  include("../ext/ForwardDiffExt.jl")
+  include("../ext/SpecialFunctionsExt.jl")
+end
 
 end # module
