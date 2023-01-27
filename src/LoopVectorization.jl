@@ -131,7 +131,7 @@ using Base.Meta: isexpr
 using DocStringExtensions
 import LinearAlgebra # for check_args
 
-using Base: unsafe_trunc, get_extension
+using Base: unsafe_trunc
 
 using Base.FastMath:
   add_fast,
