@@ -1,5 +1,7 @@
+module ForwardDiffExt
 import ForwardDiff, ChainRulesCore
 using SIMDDualNumbers, LoopVectorization
+using LoopVectorization: AbstractSIMD, AbstractStridedPointer, relu
 
 @generated function init_dual(v::Tuple{Vararg{AbstractSIMD,A}}) where {A}
   res = Expr(:tuple)
@@ -147,4 +149,5 @@ for f in (:vmapt, :vmapnt, :vmapntt)
   ) where {F,K}
     ChainRulesCore.rrule(typeof(vmap), f, args...)
   end
+end
 end
