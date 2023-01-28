@@ -262,7 +262,6 @@ include("precompile.jl")
 
 # import ChainRulesCore, ForwardDiff
 # include("vmap_grad.jl")
-using ChainRulesCore, ForwardDiff, SpecialFunctions
 if !isdefined(Base, :get_extension)
   include("../ext/ForwardDiffExt.jl")
   include("../ext/SpecialFunctionsExt.jl")

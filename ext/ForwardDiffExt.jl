@@ -1,5 +1,5 @@
 import ForwardDiff, ChainRulesCore
-using SIMDDualNumbers
+using SIMDDualNumbers, LoopVectorization
 
 @generated function init_dual(v::Tuple{Vararg{AbstractSIMD,A}}) where {A}
   res = Expr(:tuple)
