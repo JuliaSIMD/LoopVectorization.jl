@@ -8,7 +8,7 @@ struct Loop
   start::MaybeKnown
   stop::MaybeKnown
   step::MaybeKnown
-  rangesym::Symbol# === Symbol("") means loop is static
+  rangesym::Symbol # === Symbol("") means loop is static
   lensym::Symbol
 end
 
@@ -664,7 +664,8 @@ This is used so that identical loops will create identical `_turbo_!` calls in t
 """
 gensym!(ls::LoopSet, s) = Symbol("###$(s)###$(ls.symcounter += 1)###")
 
-fill_children!(ls::LoopSet) = for op ∈ operations(ls)
+fill_children!(ls::LoopSet) =
+  for op ∈ operations(ls)
     empty!(children(op))
     for opp ∈ parents(op)
       @assert children(opp) !== NOPARENTS
