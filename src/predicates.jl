@@ -11,7 +11,7 @@ isscopedname(:(Base.Checked.checked_add), (:Base, :Checked), :checked_add)
 function isscopedname(ex, modpath, name::Symbol)
   isexpr(ex, :(.), 2) &&
     (a = ex.args[2]; isa(a, QuoteNode) && a.value === name) &&
-    hasscope(ex.args[1], modpath)
+            hasscope(ex.args[1], modpath)
 end
 hasscope(modex, mod::Symbol) = modex === mod
 hasscope(modex, mod::Tuple{Symbol}) = hasscope(modex, mod[1])
