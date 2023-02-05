@@ -4,6 +4,7 @@ using LoopVectorization, VectorizationBase, SLEEFPirates, ForwardDiff
 
 import IfElse: ifelse
 using VectorizationBase: AbstractSIMD, AbstractMask, zero_offsets
+
 using LoopVectorization:
   AbstractSIMD,
   AbstractStridedPointer,
