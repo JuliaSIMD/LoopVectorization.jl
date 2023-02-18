@@ -733,7 +733,7 @@
   Base.@propagate_inbounds Base.setindex!(A::TestSizedMatrix, v, i::Int, j::Int) =
     setindex!(parent(A), v, i + 1, j + 1)
   Base.size(::TestSizedMatrix{M,N}) where {M,N} = (M, N)
-  LoopVectorization.ArrayInterface.size(::TestSizedMatrix{M,N}) where {M,N} =
+  LoopVectorization.StaticArrayInterface.size(::TestSizedMatrix{M,N}) where {M,N} =
     (LoopVectorization.StaticInt{M}(), LoopVectorization.StaticInt{N}())
   function Base.axes(::TestSizedMatrix{M,N}) where {M,N}
     (
@@ -741,7 +741,7 @@
       LoopVectorization.CloseOpen(LoopVectorization.StaticInt{N}()),
     )
   end
-  function LoopVectorization.ArrayInterface.axes_types(
+  function LoopVectorization.StaticArrayInterface.axes_types(
     ::Type{TestSizedMatrix{M,N,T}},
   ) where {M,N,T}
     Tuple{
@@ -757,20 +757,20 @@
   end
   Base.unsafe_convert(::Type{Ptr{T}}, A::TestSizedMatrix{M,N,T}) where {M,N,T} =
     pointer(A.data)
-  LoopVectorization.ArrayInterface.strides(::TestSizedMatrix{M}) where {M} =
+  LoopVectorization.StaticArrayInterface.strides(::TestSizedMatrix{M}) where {M} =
     (LoopVectorization.StaticInt{1}(), LoopVectorization.StaticInt{M}())
-  LoopVectorization.ArrayInterface.contiguous_axis(::Type{<:TestSizedMatrix}) =
+  LoopVectorization.StaticArrayInterface.contiguous_axis(::Type{<:TestSizedMatrix}) =
     LoopVectorization.One()
-  LoopVectorization.ArrayInterface.contiguous_batch_size(::Type{<:TestSizedMatrix}) =
+  LoopVectorization.StaticArrayInterface.contiguous_batch_size(::Type{<:TestSizedMatrix}) =
     LoopVectorization.Zero()
-  LoopVectorization.ArrayInterface.stride_rank(::Type{<:TestSizedMatrix}) =
+  LoopVectorization.StaticArrayInterface.stride_rank(::Type{<:TestSizedMatrix}) =
     (LoopVectorization.StaticInt(1), LoopVectorization.StaticInt(2))
-  # LoopVectorization.ArrayInterface.offsets(::Type{TestSizedMatrix{M,N,T}}) where {M,N,T}  = (LoopVectorization.StaticInt{0}(), LoopVectorization.StaticInt{0}())
-  LoopVectorization.ArrayInterface.offsets(::TestSizedMatrix) =
+  # LoopVectorization.StaticArrayInterface.offsets(::Type{TestSizedMatrix{M,N,T}}) where {M,N,T}  = (LoopVectorization.StaticInt{0}(), LoopVectorization.StaticInt{0}())
+  LoopVectorization.StaticArrayInterface.offsets(::TestSizedMatrix) =
     (LoopVectorization.StaticInt{0}(), LoopVectorization.StaticInt{0}())
-  LoopVectorization.ArrayInterface.dense_dims(
+  LoopVectorization.StaticArrayInterface.dense_dims(
     ::Type{TestSizedMatrix{M,N,T}},
-  ) where {M,N,T} = LoopVectorization.ArrayInterface.dense_dims(Matrix{T})
+  ) where {M,N,T} = LoopVectorization.StaticArrayInterface.dense_dims(Matrix{T})
   # struct ZeroInitializedArray{T,N,A<:DenseArray{T,N}} <: DenseArray{T,N}
   #     data::A
   # end

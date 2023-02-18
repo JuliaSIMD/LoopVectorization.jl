@@ -28,7 +28,7 @@ using Test
     end
     s
   end
-  @test LoopVectorization.ArrayInterface.static_step(
+  @test LoopVectorization.StaticArrayInterface.static_step(
     LoopVectorization.CloseOpen(-5, 10),
   ) === LoopVectorization.One()
   function mydot(a, b)

@@ -36,17 +36,17 @@ Base.@propagate_inbounds Base.getindex(
   l = _pick_lowdim_known(Base.tail(b), Base.tail(x))
   (f, l...)
 end
-@inline function ArrayInterface.known_size(
+@inline function StaticArrayInterface.known_size(
   ::Type{LowDimArray{D,T,N,A}}
 ) where {D,T,N,A}
-  _pick_lowdim_known(D, ArrayInterface.known_size(A))
+  _pick_lowdim_known(D, StaticArrayInterface.known_size(A))
 end
-@inline ArrayInterface.parent_type(
+@inline StaticArrayInterface.parent_type(
   ::Type{LowDimArray{D,T,N,A}}
 ) where {T,D,N,A} = A
 @inline Base.strides(A::LowDimArray) = map(Int, strides(A))
-@inline ArrayInterface.device(::LowDimArray) = ArrayInterface.CPUPointer()
-@generated function ArrayInterface.size(A::LowDimArray{D,T,N}) where {D,T,N}
+@inline StaticArrayInterface.device(::LowDimArray) = StaticArrayInterface.CPUPointer()
+@generated function StaticArrayInterface.static_size(A::LowDimArray{D,T,N}) where {D,T,N}
   t = Expr(:tuple)
   for n ∈ 1:N
     if n > length(D) || D[n]
@@ -55,18 +55,18 @@ end
       push!(t.args, Expr(:call, Expr(:curly, lv(:StaticInt), 1)))
     end
   end
-  Expr(:block, Expr(:meta, :inline), :(s = ArrayInterface.size(parent(A))), t)
+  Expr(:block, Expr(:meta, :inline), :(s = StaticArrayInterface.static_size(parent(A))), t)
 end
 Base.parent(A::LowDimArray) = getfield(A, :data)
 Base.unsafe_convert(::Type{Ptr{T}}, A::LowDimArray{D,T}) where {D,T} =
   pointer(parent(A))
-ArrayInterface.contiguous_axis(A::LowDimArray) =
-  ArrayInterface.contiguous_axis(parent(A))
-ArrayInterface.contiguous_batch_size(A::LowDimArray) =
-  ArrayInterface.contiguous_batch_size(parent(A))
-ArrayInterface.stride_rank(A::LowDimArray) =
-  ArrayInterface.stride_rank(parent(A))
-ArrayInterface.offsets(A::LowDimArray) = ArrayInterface.offsets(parent(A))
+StaticArrayInterface.contiguous_axis(A::LowDimArray) =
+  StaticArrayInterface.contiguous_axis(parent(A))
+StaticArrayInterface.contiguous_batch_size(A::LowDimArray) =
+  StaticArrayInterface.contiguous_batch_size(parent(A))
+StaticArrayInterface.stride_rank(A::LowDimArray) =
+  StaticArrayInterface.stride_rank(parent(A))
+StaticArrayInterface.offsets(A::LowDimArray) = StaticArrayInterface.offsets(parent(A))
 
 @generated function _lowdimfilter(
   ::Val{D},
@@ -85,7 +85,7 @@ struct ForBroadcast{T,N,A<:AbstractArray{T,N}} <: AbstractArray{T,N}
   data::A
 end
 @inline Base.parent(fb::ForBroadcast) = getfield(fb, :data)
-@inline ArrayInterface.parent_type(::Type{ForBroadcast{T,N,A}}) where {T,N,A} =
+@inline StaticArrayInterface.parent_type(::Type{ForBroadcast{T,N,A}}) where {T,N,A} =
   A
 Base.@propagate_inbounds Base.getindex(
   A::ForBroadcast,
@@ -105,7 +105,7 @@ end
 @inline forbroadcast(A) = A
 # @inline forbroadcast(A::Adjoint) = forbroadcast(parent(A))
 # @inline forbroadcast(A::Transpose) = forbroadcast(parent(A))
-@inline function ArrayInterface.strides(A::Union{LowDimArray,ForBroadcast})
+@inline function StaticArrayInterface.strides(A::Union{LowDimArray,ForBroadcast})
   B = parent(A)
   _strides(
     size(A),
@@ -130,37 +130,37 @@ end
   end
   Expr(:block, Expr(:meta, :inline), staticexpr(Cnew))
 end
-function ArrayInterface.contiguous_axis(
+function StaticArrayInterface.contiguous_axis(
   ::Type{LowDimArrayForBroadcast{D,T,N,A}}
 ) where {D,T,N,A}
-  ArrayInterface.contiguous_axis(A)
+  StaticArrayInterface.contiguous_axis(A)
 end
-@inline function ArrayInterface.stride_rank(
+@inline function StaticArrayInterface.stride_rank(
   ::Type{LowDimArrayForBroadcast{D,T,N,A}}
 ) where {D,T,N,A}
-  _lowdimfilter(Val(D), ArrayInterface.stride_rank(A))
+  _lowdimfilter(Val(D), StaticArrayInterface.stride_rank(A))
 end
-@inline function ArrayInterface.dense_dims(
+@inline function StaticArrayInterface.dense_dims(
   ::Type{LowDimArrayForBroadcast{D,T,N,A}}
 ) where {D,T,N,A}
-  _lowdimfilter(Val(D), ArrayInterface.dense_dims(A))
+  _lowdimfilter(Val(D), StaticArrayInterface.dense_dims(A))
 end
-@inline function ArrayInterface.strides(
+@inline function StaticArrayInterface.strides(
   fb::LowDimArrayForBroadcast{D}
 ) where {D}
   _lowdimfilter(Val(D), strides(parent(fb)))
 end
-@inline function ArrayInterface.offsets(
+@inline function StaticArrayInterface.offsets(
   fb::LowDimArrayForBroadcast{D}
 ) where {D}
-  _lowdimfilter(Val(D), ArrayInterface.offsets(parent(parent(fb))))
+  _lowdimfilter(Val(D), StaticArrayInterface.offsets(parent(parent(fb))))
 end
-@inline function ArrayInterface.StrideIndex(
+@inline function StaticArrayInterface.StrideIndex(
   a::A
 ) where {A<:LowDimArrayForBroadcast}
   _stride_index(
-    ArrayInterface.stride_rank(A),
-    ArrayInterface.contiguous_axis(A),
+    StaticArrayInterface.stride_rank(A),
+    StaticArrayInterface.contiguous_axis(A),
     a
   )
 end
@@ -169,26 +169,26 @@ end
   ::StaticInt{C},
   A
 ) where {N,C}
-  StrideIndex{N,ArrayInterface.known(r),C}(A)
+  StrideIndex{N,StaticArrayInterface.known(r),C}(A)
 end
 
 for f ∈ [ # groupedstridedpointer support
-  :(ArrayInterface.contiguous_axis),
-  :(ArrayInterface.contiguous_batch_size),
-  :(ArrayInterface.device),
-  :(ArrayInterface.stride_rank)
+  :(StaticArrayInterface.contiguous_axis),
+  :(StaticArrayInterface.contiguous_batch_size),
+  :(StaticArrayInterface.device),
+  :(StaticArrayInterface.stride_rank)
 ]
   @eval @inline $f(::Type{ForBroadcast{T,N,A}}) where {T,N,A} = $f(A)
 end
 for f ∈ [ # groupedstridedpointer support
   :(LayoutPointers.memory_reference),
-  :(ArrayInterface.contiguous_axis),
-  :(ArrayInterface.contiguous_batch_size),
-  :(ArrayInterface.device),
-  :(ArrayInterface.stride_rank),
+  :(StaticArrayInterface.contiguous_axis),
+  :(StaticArrayInterface.contiguous_batch_size),
+  :(StaticArrayInterface.device),
+  :(StaticArrayInterface.stride_rank),
   :(VectorizationBase.val_dense_dims),
-  :(ArrayInterface.offsets),
-  :(Base.size)#, :(ArrayInterface.strides)
+  :(StaticArrayInterface.offsets),
+  :(Base.size)#, :(StaticArrayInterface.strides)
 ]
   @eval @inline $f(fb::ForBroadcast) = $f(getfield(fb, :data))
 end
@@ -324,7 +324,7 @@ function Base.Broadcast._broadcast_getindex_eltype(p::Product)
 end
 
 _is_one(x) = x !== 1
-@inline _dontbc(x) = map(_is_one, ArrayInterface.known_size(x))
+@inline _dontbc(x) = map(_is_one, StaticArrayInterface.known_size(x))
 @inline _dontbc(x::Product) = _dontbc(x.a), _dontbc(x.b)
 @inline _dontbc(bc::Base.Broadcast.Broadcasted) = map(_dontbc, bc.args)
 
@@ -608,7 +608,7 @@ function add_broadcast_loops!(
       Expr(
         :(=),
         Nlen,
-        Expr(:call, GlobalRef(ArrayInterface, :static_length), Nrange)
+        Expr(:call, GlobalRef(StaticArrayInterface, :static_length), Nrange)
       )
     )
   end

@@ -15,15 +15,15 @@ _f6(a, b) = a + SpecialFunctions.gamma(b)
   # All methods, both `can_avx` and `can_turbo`, should recognize that
   # `gamma` is not AVX-able
 
-  @test !LoopVectorization.ArrayInterface.can_avx(SpecialFunctions.gamma)
+  @test !LoopVectorization.StaticArrayInterface.can_avx(SpecialFunctions.gamma)
   @test !LoopVectorization.can_turbo(SpecialFunctions.gamma, Val(1))
   @test !LoopVectorization.can_turbo(_f1, Val(1))
 
   # `can_avx` is not able to detect that a function `f` which is just
   # `gamma` can be AVX'd, but `can_turbo` can:
 
-  @test LoopVectorization.ArrayInterface.can_avx(exp)
-  @test !LoopVectorization.ArrayInterface.can_avx(_f2)
+  @test LoopVectorization.StaticArrayInterface.can_avx(exp)
+  @test !LoopVectorization.StaticArrayInterface.can_avx(_f2)
   @test LoopVectorization.can_turbo(exp, Val(1))
   @test LoopVectorization.can_turbo(_f2, Val(1))
 

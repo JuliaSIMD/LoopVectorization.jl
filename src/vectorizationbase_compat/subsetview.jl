@@ -28,7 +28,7 @@ end
     $(Expr(:meta, :inline))
     strd = strides(ptr)
     offs = offsets(ptr)
-    si = ArrayInterface.StrideIndex{$(N - 1),$newR,$newC}($newstrd, $newoffsets)
+    si = StaticArrayInterface.StrideIndex{$(N - 1),$newR,$newC}($newstrd, $newoffsets)
     stridedpointer($gptr, si, StaticInt{$B}())
   end
 end

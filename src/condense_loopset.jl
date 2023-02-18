@@ -254,7 +254,7 @@ end
 @inline zerorangestart(r::CartesianIndices) =
   CartesianIndices(map(zerorangestart, r.indices))
 @inline zerorangestart(
-  r::ArrayInterface.OptionallyStaticUnitRange{StaticInt{1}}
+  r::StaticArrayInterface.OptionallyStaticUnitRange{StaticInt{1}}
 ) = CloseOpen(maybestaticlast(r))
 
 function loop_boundary!(q::Expr, loop::Loop, shouldindbyind::Bool)
@@ -400,7 +400,7 @@ val(x) = Expr(:call, Expr(:curly, :Val, x))
       strides(x)
     )
     ptr = gep(p, li)
-    si = ArrayInterface.StrideIndex{1,$(R[ri],),$(C === 1 ? 1 : 0)}(
+    si = StaticArrayInterface.StrideIndex{1,$(R[ri],),$(C === 1 ? 1 : 0)}(
       (getfield(strides(x), $ri),),
       (Zero(),)
     )
@@ -414,7 +414,7 @@ end
   ri = argmin(R)
   quote
     $(Expr(:meta, :inline))
-    si = ArrayInterface.StrideIndex{1,$(R[ri],),$(C === 1 ? 1 : 0)}(
+    si = StaticArrayInterface.StrideIndex{1,$(R[ri],),$(C === 1 ? 1 : 0)}(
       (getfield(strides(x), $ri),),
       (getfield(offsets(x), $ri),)
     )
@@ -931,7 +931,7 @@ To provide support for a custom array type, ensure that `check_args` returns tru
 Additionally, define `pointer` and `stride` methods.
 """
 @inline function check_args(A::AbstractArray{T}) where {T}
-  check_type(T) && check_device(ArrayInterface.device(A))
+  check_type(T) && check_device(StaticArrayInterface.device(A))
 end
 @inline check_args(A::BitVector) = true
 @inline check_args(A::BitArray) = iszero(size(A, 1) & 7)
@@ -956,8 +956,8 @@ Returns true if the element type is supported.
 @inline check_type(::Type{T}) where {T<:NativeTypes} = true
 @inline check_type(::Type{T}) where {T} = false
 @inline check_type(::Type{T}) where {T<:AbstractSIMD} = true
-@inline check_device(::ArrayInterface.CPUPointer) = true
-@inline check_device(::ArrayInterface.CPUTuple) = true
+@inline check_device(::StaticArrayInterface.CPUPointer) = true
+@inline check_device(::StaticArrayInterface.CPUTuple) = true
 @inline check_device(x) = false
 
 function check_args_call(ls::LoopSet)

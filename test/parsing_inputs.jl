@@ -1,4 +1,4 @@
-using LoopVectorization, Test, ArrayInterface
+using LoopVectorization, Test, StaticArrayInterface
 using LoopVectorization: check_inputs!
 
 # macros for generate loops whose body is not a block

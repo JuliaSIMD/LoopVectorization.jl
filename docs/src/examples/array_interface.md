@@ -2,7 +2,7 @@
 
 # Array Interface
 
-LoopVectorization uses [ArrayInterface.jl](https://github.com/SciML/ArrayInterface.jl) to describe the memory layout of arrays. By supporting the interface, `LoopVectorization` will be able to support compatible `AbstractArray` types.
+LoopVectorization uses [StaticArrayInterface.jl](https://github.com/SciML/StaticArrayInterface.jl) to describe the memory layout of arrays. By supporting the interface, `LoopVectorization` will be able to support compatible `AbstractArray` types.
 [StaticArrays.jl](https://github.com/JuliaArrays/StaticArrays.jl) and [HybridArrays.jl](https://github.com/mateuszbaran/HybridArrays.jl) are two example libraries providing array types supporting the interface.
 
 `StaticArrays.SArray` itself is not compatible, because `LoopVectorization` needs access to a pointer. However,`StaticArrays.MArray`s are compatible. Loops featuring `StaticArrays.StaticArray` will result in a fall-back loop being executed

@@ -21,10 +21,10 @@
   bad_operators = [clenshaw, println]
 
   for op in good_operators
-    @test LoopVectorization.ArrayInterface.can_avx(op)
+    @test LoopVectorization.StaticArrayInterface.can_avx(op)
   end
   for op in bad_operators
-    @test !LoopVectorization.ArrayInterface.can_avx(op)
+    @test !LoopVectorization.StaticArrayInterface.can_avx(op)
   end
 
 end

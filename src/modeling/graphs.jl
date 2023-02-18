@@ -996,9 +996,9 @@ function makestatic!(expr)
       expr.args[i] = staticexpr(ex)
     elseif ex isa Symbol
       if ex === :length
-        expr.args[i] = GlobalRef(ArrayInterface, :static_length)
+        expr.args[i] = GlobalRef(StaticArrayInterface, :static_length)
       elseif Base.sym_in(ex, (:axes, :size))
-        expr.args[i] = GlobalRef(ArrayInterface, ex)
+        expr.args[i] = GlobalRef(StaticArrayInterface, ex)
       end
     elseif ex isa Expr
       makestatic!(ex)
@@ -1049,7 +1049,7 @@ function range_loop!(
     Expr(
       :(=),
       lenname,
-      Expr(:call, GlobalRef(ArrayInterface, :static_length), rangename)
+      Expr(:call, GlobalRef(StaticArrayInterface, :static_length), rangename)
     )
   )
   Loop(itersym, l, u, s, rangename, lenname)
@@ -1159,7 +1159,7 @@ function misc_loop!(
     Expr(
       :(=),
       lenname,
-      Expr(:call, GlobalRef(ArrayInterface, :static_length), rangename)
+      Expr(:call, GlobalRef(StaticArrayInterface, :static_length), rangename)
     )
   )
   L = add_loop_bound!(
@@ -1215,7 +1215,7 @@ function indices_loop!(ls::LoopSet, r::Expr, itersym::Symbol)::Loop
               axsym,
               Expr(
                 :call,
-                GlobalRef(ArrayInterface, :axes),
+                GlobalRef(StaticArrayInterface, :axes),
                 a_s,
                 staticexpr(dims::Int)
               )
@@ -1231,10 +1231,10 @@ function indices_loop!(ls::LoopSet, r::Expr, itersym::Symbol)::Loop
                 Expr(
                   :call,
                   GlobalRef(Base, :(==)),
-                  Expr(:call, GlobalRef(ArrayInterface, :static_first), axsym),
+                  Expr(:call, GlobalRef(StaticArrayInterface, :static_first), axsym),
                   Expr(
                     :call,
-                    GlobalRef(ArrayInterface, :static_first),
+                    GlobalRef(StaticArrayInterface, :static_first),
                     axsym_prev
                   )
                 )
@@ -1248,10 +1248,10 @@ function indices_loop!(ls::LoopSet, r::Expr, itersym::Symbol)::Loop
                 Expr(
                   :call,
                   GlobalRef(Base, :(==)),
-                  Expr(:call, GlobalRef(ArrayInterface, :static_last), axsym),
+                  Expr(:call, GlobalRef(StaticArrayInterface, :static_last), axsym),
                   Expr(
                     :call,
-                    GlobalRef(ArrayInterface, :static_last),
+                    GlobalRef(StaticArrayInterface, :static_last),
                     axsym_prev
                   )
                 )
@@ -1280,7 +1280,7 @@ function indices_loop!(ls::LoopSet, r::Expr, itersym::Symbol)::Loop
               axsym,
               Expr(
                 :call,
-                GlobalRef(ArrayInterface, :axes),
+                GlobalRef(StaticArrayInterface, :axes),
                 a_s,
                 staticexpr(mdim)
               )
@@ -1296,10 +1296,10 @@ function indices_loop!(ls::LoopSet, r::Expr, itersym::Symbol)::Loop
                 Expr(
                   :call,
                   GlobalRef(Base, :(==)),
-                  Expr(:call, GlobalRef(ArrayInterface, :static_first), axsym),
+                  Expr(:call, GlobalRef(StaticArrayInterface, :static_first), axsym),
                   Expr(
                     :call,
-                    GlobalRef(ArrayInterface, :static_first),
+                    GlobalRef(StaticArrayInterface, :static_first),
                     axsym_prev
                   )
                 )
@@ -1313,10 +1313,10 @@ function indices_loop!(ls::LoopSet, r::Expr, itersym::Symbol)::Loop
                 Expr(
                   :call,
                   GlobalRef(Base, :(==)),
-                  Expr(:call, GlobalRef(ArrayInterface, :static_last), axsym),
+                  Expr(:call, GlobalRef(StaticArrayInterface, :static_last), axsym),
                   Expr(
                     :call,
-                    GlobalRef(ArrayInterface, :static_last),
+                    GlobalRef(StaticArrayInterface, :static_last),
                     axsym_prev
                   )
                 )
@@ -1347,7 +1347,7 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
     elseif f === :indices || (
       isexpr(f, :(.), 2) &&
       (f.args[2] === QuoteNode(:indices)) &&
-      ((f.args[1] === :ArrayInterface) || (f.args[1] === :LoopVectorization))
+      ((f.args[1] === :StaticArrayInterface) || (f.args[1] === :LoopVectorization))
     )
       indices_loop!(ls, r, itersym)
     else

@@ -1,4 +1,4 @@
-using LoopVectorization, ArrayInterface, OffsetArrays, Test
+using LoopVectorization, StaticArrayInterface, OffsetArrays, Test
 using LoopVectorization: StaticInt
 # T = Float64; r = -1:1;
 # T = Float32; r = -1:1;
@@ -105,17 +105,17 @@ using LoopVectorization: StaticInt
     (StaticInt{LR}():StaticInt{UR}(), StaticInt{LC}():StaticInt{UC}())
   Base.parent(A::SizedOffsetMatrix) = A.data
   Base.unsafe_convert(::Type{Ptr{T}}, A::SizedOffsetMatrix{T}) where {T} = pointer(A.data)
-  ArrayInterface.contiguous_axis(::Type{<:SizedOffsetMatrix}) = ArrayInterface.One()
-  ArrayInterface.contiguous_batch_size(::Type{<:SizedOffsetMatrix}) = ArrayInterface.Zero()
-  ArrayInterface.stride_rank(::Type{<:SizedOffsetMatrix}) =
-    (ArrayInterface.StaticInt(1), ArrayInterface.StaticInt(2))
-  function ArrayInterface.strides(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC}
+  StaticArrayInterface.contiguous_axis(::Type{<:SizedOffsetMatrix}) = StaticArrayInterface.One()
+  StaticArrayInterface.contiguous_batch_size(::Type{<:SizedOffsetMatrix}) = StaticArrayInterface.Zero()
+  StaticArrayInterface.stride_rank(::Type{<:SizedOffsetMatrix}) =
+    (StaticArrayInterface.StaticInt(1), StaticArrayInterface.StaticInt(2))
+  function StaticArrayInterface.strides(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC}
     (StaticInt{1}(), (StaticInt{UR}() - StaticInt{LR}() + StaticInt{1}()))
   end
-  ArrayInterface.offsets(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} =
+  StaticArrayInterface.offsets(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} =
     (StaticInt{LR}(), StaticInt{LC}())
-  ArrayInterface.dense_dims(::Type{<:SizedOffsetMatrix{T}}) where {T} =
-    ArrayInterface.dense_dims(Matrix{T})
+  StaticArrayInterface.dense_dims(::Type{<:SizedOffsetMatrix{T}}) where {T} =
+    StaticArrayInterface.dense_dims(Matrix{T})
   Base.getindex(A::SizedOffsetMatrix, i, j) =
     LoopVectorization.vload(LoopVectorization.stridedpointer(A), (i, j))
   function avx2dunrolled!(

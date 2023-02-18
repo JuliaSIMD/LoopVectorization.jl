@@ -408,7 +408,7 @@ function parent_op_name!(
         t = Expr(:tuple)
         reduction = Expr(
           :call,
-          GlobalRef(ArrayInterface, :reduce_tup),
+          GlobalRef(StaticArrayInterface, :reduce_tup),
           reduce_to_onevecunroll(opp),
           t
         )

@@ -40,7 +40,7 @@ upper_bound(
 
 @inline Base.last(r::AbstractCloseOpen{<:Integer,<:UpperBoundedInteger}) =
   getfield(getfield(r, :upper), :i) - One()
-@inline ArrayInterface.static_last(
+@inline StaticArrayInterface.static_last(
   r::CloseOpen{<:Integer,<:UpperBoundedInteger}
 ) = getfield(getfield(r, :upper), :i) - One()
 @inline Base.length(r::AbstractCloseOpen{<:Integer,<:UpperBoundedInteger}) =
@@ -61,7 +61,7 @@ function Loop(ls::LoopSet, ex::Expr, sym::Symbol, f, s, l, ub::Int)
     Expr(
       :(=),
       lensym,
-      Expr(:call, GlobalRef(ArrayInterface, :static_length), rangesym)
+      Expr(:call, GlobalRef(StaticArrayInterface, :static_length), rangesym)
     )
   )
   F = if f === nothing
@@ -102,9 +102,9 @@ function Loop(
   sym::Symbol,
   ::Type{R}
 ) where {R<:AbstractRange}
-  f = ArrayInterface.known_first(R)
-  s = ArrayInterface.known_step(R)
-  l = ArrayInterface.known_last(R)
+  f = StaticArrayInterface.known_first(R)
+  s = StaticArrayInterface.known_step(R)
+  l = StaticArrayInterface.known_last(R)
   ub = upper_bound(R)
   Loop(ls, ex, sym, f, s, l, ub)
 end
@@ -132,7 +132,7 @@ function Loop(
   ::Expr,
   sym::Symbol,
   ::Type{
-    ArrayInterface.OptionallyStaticStepRange{
+    StaticArrayInterface.OptionallyStaticStepRange{
       StaticInt{L},
       StaticInt{S},
       StaticInt{U}

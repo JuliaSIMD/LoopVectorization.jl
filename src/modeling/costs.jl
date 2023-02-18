@@ -784,5 +784,5 @@ const FUNCTIONSYMBOLS = IdDict{Type{<:Function},Instruction}(
 
 # implement whitelist for avx_support that package authors may use to conservatively guard `@turbo` application
 for f ∈ keys(FUNCTIONSYMBOLS)
-  @eval ArrayInterface.can_avx(::$f) = true
+  @eval StaticArrayInterface.can_avx(::$f) = true
 end

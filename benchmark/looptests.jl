@@ -1,4 +1,4 @@
-using LoopVectorization, LinearAlgebra, OffsetArrays, ArrayInterface
+using LoopVectorization, LinearAlgebra, OffsetArrays, StaticArrayInterface
 BLAS.set_num_threads(1)
 
 using LoopVectorization: Static
@@ -16,19 +16,19 @@ Base.axes(::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} =
 Base.parent(A::SizedOffsetMatrix) = A.data
 Base.unsafe_convert(::Type{Ptr{T}}, A::SizedOffsetMatrix{T}) where {T} =
   pointer(A.data)
-ArrayInterface.contiguous_axis(::Type{<:SizedOffsetMatrix}) = StaticInt(1)
-ArrayInterface.contiguous_batch_size(::Type{<:SizedOffsetMatrix}) = StaticInt(0)
-ArrayInterface.stride_rank(::Type{<:SizedOffsetMatrix}) =
+StaticArrayInterface.contiguous_axis(::Type{<:SizedOffsetMatrix}) = StaticInt(1)
+StaticArrayInterface.contiguous_batch_size(::Type{<:SizedOffsetMatrix}) = StaticInt(0)
+StaticArrayInterface.stride_rank(::Type{<:SizedOffsetMatrix}) =
   (StaticInt(1), StaticInt(2))
-function ArrayInterface.strides(
+function StaticArrayInterface.strides(
   A::SizedOffsetMatrix{T,LR,UR,LC,UC}
 ) where {T,LR,UR,LC,UC}
   (StaticInt{1}(), (StaticInt{UR}() - StaticInt{LR}() + StaticInt{1}()))
 end
-ArrayInterface.offsets(
+StaticArrayInterface.offsets(
   A::SizedOffsetMatrix{T,LR,UR,LC,UC}
 ) where {T,LR,UR,LC,UC} = (StaticInt{LR}(), StaticInt{LC}())
-ArrayInterface.parent_type(::Type{<:SizedOffsetMatrix{T}}) where {T} = Matrix{T}
+StaticArrayInterface.parent_type(::Type{<:SizedOffsetMatrix{T}}) where {T} = Matrix{T}
 Base.getindex(A::SizedOffsetMatrix, i, j) =
   LoopVectorization.vload(LoopVectorization.stridedpointer(A), (i, j))
 

@@ -5,7 +5,7 @@ if isdefined(Base, :Experimental) &&
   @eval Base.Experimental.@max_methods 1
 end
 
-using ArrayInterfaceCore: UpTri, LoTri
+using ArrayInterface: UpTri, LoTri
 using Static: StaticInt, gt, static, Zero, One, reduce_tup
 using VectorizationBase,
   SLEEFPirates,
@@ -155,8 +155,8 @@ using SLEEFPirates:
   sincos_fast,
   tan_fast
 
-using ArrayInterface
-using ArrayInterface:
+using StaticArrayInterface
+using StaticArrayInterface:
   OptionallyStaticUnitRange,
   OptionallyStaticRange,
   StaticBool,
@@ -170,9 +170,9 @@ using ArrayInterface:
   StrideIndex
 using CloseOpenIntervals: AbstractCloseOpen, CloseOpen#, SafeCloseOpen
 # @static if VERSION ≥ v"1.6.0-rc1" #TODO: delete `else` when dropping 1.5 support
-# using ArrayInterface: static_step
+# using StaticArrayInterface: static_step
 # else # Julia 1.5 did not define `step` on CartesianIndices
-@inline static_step(x) = ArrayInterface.static_step(x)
+@inline static_step(x) = StaticArrayInterface.static_step(x)
 @inline static_step(x::CartesianIndices) =
   VectorizationBase.CartesianVIndex(map(static_step, x.indices))
 # end
