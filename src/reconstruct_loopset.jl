@@ -359,7 +359,10 @@ function _add_mref!(
   offsets = gensym(:offsets)
   strides = gensym(:strides)
   pushpreamble!(ls, Expr(:(=), offsets, Expr(:call, lv(:offsets), tmpsp)))
-  pushpreamble!(ls, Expr(:(=), strides, Expr(:call, lv(:strides), tmpsp)))
+  pushpreamble!(
+    ls,
+    Expr(:(=), strides, Expr(:call, lv(:static_strides), tmpsp))
+  )
   for (i, p) ∈ enumerate(sp)
     push!(strd_tup.args, Expr(:call, gf, strides, p, false))
     push!(offsets_tup.args, Expr(:call, gf, offsets, p, false))

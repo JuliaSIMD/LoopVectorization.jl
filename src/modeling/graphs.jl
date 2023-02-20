@@ -995,10 +995,12 @@ function makestatic!(expr)
     if ex isa Int
       expr.args[i] = staticexpr(ex)
     elseif ex isa Symbol
-      if ex === :length
-        expr.args[i] = GlobalRef(ArrayInterface, :static_length)
-      elseif Base.sym_in(ex, (:axes, :size))
-        expr.args[i] = GlobalRef(ArrayInterface, ex)
+      j = findfirst(==(ex), (:axes, :size, :length))
+      if j !== nothing
+        expr.args[i] = GlobalRef(
+          ArrayInterface,
+          (:static_axes, :static_size, :static_length)[j]
+        )
       end
     elseif ex isa Expr
       makestatic!(ex)
@@ -1215,7 +1217,7 @@ function indices_loop!(ls::LoopSet, r::Expr, itersym::Symbol)::Loop
               axsym,
               Expr(
                 :call,
-                GlobalRef(ArrayInterface, :axes),
+                GlobalRef(ArrayInterface, :static_axes),
                 a_s,
                 staticexpr(dims::Int)
               )
@@ -1280,7 +1282,7 @@ function indices_loop!(ls::LoopSet, r::Expr, itersym::Symbol)::Loop
               axsym,
               Expr(
                 :call,
-                GlobalRef(ArrayInterface, :axes),
+                GlobalRef(ArrayInterface, :static_axes),
                 a_s,
                 staticexpr(mdim)
               )
@@ -1351,7 +1353,7 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
     )
       indices_loop!(ls, r, itersym)
     else
-      (f === :axes) && (r.args[1] = lv(:axes))
+      (f === :axes) && (r.args[1] = lv(:static_axes))
       misc_loop!(ls, r, itersym, (f === :eachindex) | (f === :axes))
     end
   elseif isa(r, Symbol)
