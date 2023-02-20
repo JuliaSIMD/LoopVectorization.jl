@@ -44,9 +44,11 @@ end
 @inline ArrayInterface.parent_type(
   ::Type{LowDimArray{D,T,N,A}}
 ) where {T,D,N,A} = A
-@inline Base.strides(A::LowDimArray) = map(Int, strides(A))
+@inline Base.strides(A::LowDimArray) = map(Int, static_strides(A))
 @inline ArrayInterface.device(::LowDimArray) = ArrayInterface.CPUPointer()
-@generated function ArrayInterface.size(A::LowDimArray{D,T,N}) where {D,T,N}
+@generated function ArrayInterface.static_size(
+  A::LowDimArray{D,T,N}
+) where {D,T,N}
   t = Expr(:tuple)
   for n ∈ 1:N
     if n > length(D) || D[n]
@@ -105,11 +107,13 @@ end
 @inline forbroadcast(A) = A
 # @inline forbroadcast(A::Adjoint) = forbroadcast(parent(A))
 # @inline forbroadcast(A::Transpose) = forbroadcast(parent(A))
-@inline function ArrayInterface.strides(A::Union{LowDimArray,ForBroadcast})
+@inline function ArrayInterface.static_strides(
+  A::Union{LowDimArray,ForBroadcast}
+)
   B = parent(A)
   _strides(
-    size(A),
-    strides(B),
+    static_size(A),
+    static_strides(B),
     VectorizationBase.val_stride_rank(B),
     VectorizationBase.val_dense_dims(B)
   )
@@ -145,10 +149,10 @@ end
 ) where {D,T,N,A}
   _lowdimfilter(Val(D), ArrayInterface.dense_dims(A))
 end
-@inline function ArrayInterface.strides(
+@inline function ArrayInterface.static_strides(
   fb::LowDimArrayForBroadcast{D}
 ) where {D}
-  _lowdimfilter(Val(D), strides(parent(fb)))
+  _lowdimfilter(Val(D), static_strides(parent(fb)))
 end
 @inline function ArrayInterface.offsets(
   fb::LowDimArrayForBroadcast{D}
@@ -225,11 +229,9 @@ function _strides_expr(
   sₙ_value::Int = 0
   for n ∈ Nrange
     xₙ_type = x[n]
-    # xₙ_type = typeof(x).parameters[n]
     xₙ_static = xₙ_type <: StaticInt
     xₙ_value::Int = xₙ_static ? (xₙ_type.parameters[1])::Int : 0
     s_type = s[n]
-    # s_type = typeof(s).parameters[n]
     sₙ_static = s_type <: StaticInt
     if sₙ_static
       sₙ_value = s_type.parameters[1]
@@ -365,7 +367,7 @@ function add_broadcast!(
   pushprepreamble!(ls, Expr(:(=), mB, Expr(:(.), bcname, QuoteNode(:b))))
   pushprepreamble!(
     ls,
-    Expr(:(=), Klen, Expr(:call, getfield, Expr(:call, :size, mB), 1))
+    Expr(:(=), Klen, Expr(:call, getfield, Expr(:call, :static_size, mB), 1))
   )
   pushpreamble!(ls, Expr(:(=), Krange, Expr(:call, :(:), staticexpr(1), Klen)))
   k = gensym!(ls, "k")
@@ -587,7 +589,7 @@ function add_broadcast_loops!(
   destsym::Symbol
 )
   axes_tuple = Expr(:tuple)
-  pushpreamble!(ls, Expr(:(=), axes_tuple, Expr(:call, :axes, destsym)))
+  pushpreamble!(ls, Expr(:(=), axes_tuple, Expr(:call, :static_axes, destsym)))
   for itersym ∈ loopsyms
     Nrange = gensym!(ls, "N")
     Nlower = gensym!(ls, "N")

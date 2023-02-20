@@ -1,4 +1,5 @@
-using LoopVectorization, ArrayInterface, OffsetArrays, Test
+using LoopVectorization, OffsetArrays, Test
+using LoopVectorization: ArrayInterface
 using LoopVectorization: StaticInt
 # T = Float64; r = -1:1;
 # T = Float32; r = -1:1;
@@ -109,10 +110,12 @@ using LoopVectorization: StaticInt
   ArrayInterface.contiguous_batch_size(::Type{<:SizedOffsetMatrix}) = ArrayInterface.Zero()
   ArrayInterface.stride_rank(::Type{<:SizedOffsetMatrix}) =
     (ArrayInterface.StaticInt(1), ArrayInterface.StaticInt(2))
-  function ArrayInterface.strides(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC}
+  function LoopVectorization.static_strides(
+    ::SizedOffsetMatrix{T,LR,UR,LC,UC},
+  ) where {T,LR,UR,LC,UC}
     (StaticInt{1}(), (StaticInt{UR}() - StaticInt{LR}() + StaticInt{1}()))
   end
-  ArrayInterface.offsets(A::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} =
+  ArrayInterface.offsets(::SizedOffsetMatrix{T,LR,UR,LC,UC}) where {T,LR,UR,LC,UC} =
     (StaticInt{LR}(), StaticInt{LC}())
   ArrayInterface.dense_dims(::Type{<:SizedOffsetMatrix{T}}) where {T} =
     ArrayInterface.dense_dims(Matrix{T})

@@ -13,7 +13,7 @@ function test_broadcast(::Type{T}) where {T}
   b = rand(R, 99, 99, 1)
   bl = LowDimArray{(true, true, false)}(b)
   @test size(bl) == size(b)
-  @test LoopVectorization.ArrayInterface.size(bl) ===
+  @test LoopVectorization.static_size(bl) ===
         (size(b, 1), size(b, 2), LoopVectorization.StaticInt(1))
 
   br = reshape(b, (99, 99))
@@ -29,7 +29,7 @@ function test_broadcast(::Type{T}) where {T}
   br = reshape(b, (99, 1, 99))
   bl = LowDimArray{(true, false, true)}(br)
   @test size(bl) == size(br)
-  @test LoopVectorization.ArrayInterface.size(bl) ===
+  @test LoopVectorization.static_size(bl) ===
         (size(br, 1), LoopVectorization.StaticInt(1), size(br, 3))
   @. c1 = a + br
   fill!(c2, 99999)
@@ -41,7 +41,7 @@ function test_broadcast(::Type{T}) where {T}
   br = reshape(b, (1, 99, 99))
   bl = LowDimArray{(false,)}(br)
   @test size(bl) == size(br)
-  @test LoopVectorization.ArrayInterface.size(bl) ===
+  @test LoopVectorization.static_size(bl) ===
         (LoopVectorization.StaticInt(1), size(br, 2), size(br, 3))
   @. c1 = a + br
   fill!(c2, 99999)

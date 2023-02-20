@@ -609,7 +609,7 @@
     return C
   end
   function dense!(f::F, C, A, B) where {F}
-    Kp1 = LoopVectorization.size(A, LoopVectorization.StaticInt(2))
+    Kp1 = LoopVectorization.static_size(A, LoopVectorization.StaticInt(2))
     K = Kp1 - LoopVectorization.StaticInt(1)
     @turbo for n ∈ indices((B, C), 2), m ∈ indices((A, C), 1)
       Cmn = zero(eltype(C))
@@ -733,7 +733,7 @@
   Base.@propagate_inbounds Base.setindex!(A::TestSizedMatrix, v, i::Int, j::Int) =
     setindex!(parent(A), v, i + 1, j + 1)
   Base.size(::TestSizedMatrix{M,N}) where {M,N} = (M, N)
-  LoopVectorization.ArrayInterface.size(::TestSizedMatrix{M,N}) where {M,N} =
+  LoopVectorization.static_size(::TestSizedMatrix{M,N}) where {M,N} =
     (LoopVectorization.StaticInt{M}(), LoopVectorization.StaticInt{N}())
   function Base.axes(::TestSizedMatrix{M,N}) where {M,N}
     (
@@ -757,7 +757,7 @@
   end
   Base.unsafe_convert(::Type{Ptr{T}}, A::TestSizedMatrix{M,N,T}) where {M,N,T} =
     pointer(A.data)
-  LoopVectorization.ArrayInterface.strides(::TestSizedMatrix{M}) where {M} =
+  LoopVectorization.static_strides(::TestSizedMatrix{M}) where {M} =
     (LoopVectorization.StaticInt{1}(), LoopVectorization.StaticInt{M}())
   LoopVectorization.ArrayInterface.contiguous_axis(::Type{<:TestSizedMatrix}) =
     LoopVectorization.One()
@@ -771,17 +771,7 @@
   LoopVectorization.ArrayInterface.dense_dims(
     ::Type{TestSizedMatrix{M,N,T}},
   ) where {M,N,T} = LoopVectorization.ArrayInterface.dense_dims(Matrix{T})
-  # struct ZeroInitializedArray{T,N,A<:DenseArray{T,N}} <: DenseArray{T,N}
-  #     data::A
-  # end
-  # Base.size(A::ZeroInitializedArray) = size(A.data)
-  # Base.length(A::ZeroInitializedArray) = length(A.data)
-  # Base.axes(A::ZeroInitializedArray, i) = axes(A.data, i)
-  # @inline Base.getindex(A::ZeroInitializedArray{T}) where {T} = zero(T)
-  # Base.@propagate_inbounds Base.setindex!(A::ZeroInitializedArray, v, i...) = setindex!(A.data, v, i...)
-  # function LoopVectorization.VectorizationBase.stridedpointer(A::ZeroInitializedArray)
-  #     LoopVectorization.VectorizationBase.ZeroInitializedStridedPointer(LoopVectorization.VectorizationBase.stridedpointer(A.data))
-  # end
+
 
   @testset "Matmuls" begin
     for T ∈ (Float32, Float64, Int32, Int64)

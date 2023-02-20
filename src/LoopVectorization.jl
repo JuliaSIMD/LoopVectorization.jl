@@ -8,11 +8,8 @@ end
 using ArrayInterfaceCore: UpTri, LoTri
 using Static: StaticInt, gt, static, Zero, One, reduce_tup
 using VectorizationBase,
-  SLEEFPirates,
-  UnPack,
-  OffsetArrays,
-  ArrayInterfaceOffsetArrays,
-  ArrayInterfaceStaticArrays
+  SLEEFPirates, UnPack, OffsetArrays, StaticArrayInterface
+const ArrayInterface = StaticArrayInterface
 using LayoutPointers:
   AbstractStridedPointer,
   StridedPointer,
@@ -155,18 +152,17 @@ using SLEEFPirates:
   sincos_fast,
   tan_fast
 
-using ArrayInterface
-using ArrayInterface:
+using StaticArrayInterface:
   OptionallyStaticUnitRange,
   OptionallyStaticRange,
   StaticBool,
   True,
   False,
   indices,
-  strides,
+  static_strides,
   offsets,
-  size,
-  axes,
+  static_size,
+  static_axes,
   StrideIndex
 using CloseOpenIntervals: AbstractCloseOpen, CloseOpen#, SafeCloseOpen
 # @static if VERSION ≥ v"1.6.0-rc1" #TODO: delete `else` when dropping 1.5 support
