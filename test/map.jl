@@ -38,7 +38,9 @@
   @test vmapt(abs2, 1:3:10000) == map(abs2, 1:3:10000)
   @test vmapt(abs2, 1.0:3.0:10000.0) ≈ map(abs2, 1.0:3.0:10000.0)
 
-  let x = rand(UInt8, 1 << 14)
-    @test count(==(UInt8('\n')), x) == vcount(==(UInt8('\n')), x)
+  for n = -64:64
+    let x = rand(UInt8, (1 << 14) + n)
+      @test count(==(UInt8('\n')), x) == vcount(==(UInt8('\n')), x)
+    end
   end
 end
