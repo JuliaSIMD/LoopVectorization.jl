@@ -74,8 +74,11 @@ function vmap_singlethread!(
   ::Val{NonTemporal},
   args::Vararg{AbstractArray,A}
 ) where {F,T<:NativeTypes,A,NonTemporal}
-  ptry, ptrargs, N = setup_vmap!(f, y, Val{NonTemporal}(), args...)
-  _vmap_singlethread!(f, ptry, Zero(), N, Val{NonTemporal}(), ptrargs)
+  presy = preserve_buffer(y)
+  GC.@preserve presy begin
+    ptry, ptrargs, N = setup_vmap!(f, y, Val{NonTemporal}(), args...)
+    _vmap_singlethread!(f, ptry, Zero(), N, Val{NonTemporal}(), ptrargs)
+  end
   nothing
 end
 function _vmap_singlethread!(
@@ -263,20 +266,25 @@ function vmap_multithread!(
   end
   nothing
 end
-function gc_preserve_vmap_quote(NonTemporal::Bool, Threaded::Bool, A::Int)
-  m = Threaded ? :vmap_multithread! : :vmap_singlethread!
-  call = Expr(:call, m, :f, :y, Expr(:call, Expr(:curly, :Val, NonTemporal)))
+function gc_preserve_call_quote(call, A::Int)
   q = Expr(:block, Expr(:meta, :inline))
   gcpres = Expr(:gc_preserve, call)
-  for a ∈ 1:Int(A)::Int
+  for a ∈ 1:A
     arg = Symbol(:arg_, a)
     parg = Symbol(:parg_, a)
-    push!(q.args, Expr(:(=), arg, :(@inbounds args[$a])))#Expr(:ref, :args, a)))
+    push!(q.args, Expr(:(=), arg, :($getfield(args, $a))))
     push!(q.args, Expr(:(=), parg, Expr(:call, :preserve_buffer, arg)))
     push!(call.args, arg)
     push!(gcpres.args, parg)
   end
-  push!(q.args, gcpres, :y)
+  push!(q.args, gcpres)
+  q
+end
+function gc_preserve_vmap_quote(NonTemporal::Bool, Threaded::Bool, A::Int)
+  m = Threaded ? :vmap_multithread! : :vmap_singlethread!
+  call = Expr(:call, m, :f, :y, Expr(:call, Expr(:curly, :Val, NonTemporal)))
+  q = gc_preserve_call_quote(call, A)
+  push!(q.args, :y)
   q
 end
 @generated function gc_preserve_vmap!(

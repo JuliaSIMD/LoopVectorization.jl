@@ -196,7 +196,8 @@ export LowDimArray,
   vfilter,
   vfilter!,
   vmapreduce,
-  vreduce
+  vreduce,
+  vcount
 
 const VECTORWIDTHSYMBOL, ELTYPESYMBOL, MASKSYMBOL =
   Symbol("##Wvecwidth##"), Symbol("##Tloopeltype##"), Symbol("##mask##")
@@ -234,6 +235,7 @@ include("reconstruct_loopset.jl")
 include("constructors.jl")
 include("user_api_conveniences.jl")
 include("simdfunctionals/mapreduce.jl")
+include("simdfunctionals/count.jl")
 include("broadcast.jl")
 
 """
