@@ -1,8 +1,5 @@
 _vcount(f) = 0
-function _vcount(
-  f::F,
-  args::Vararg{DenseArray{T,D},M}
-) where {F,T<:NativeTypes,D,M}
+function _vcount(f::F, args::Vararg{DenseArray,M}) where {F,M}
   x = first(args)
   y = Base.tail(args)
   foreach(a -> @assert(size(a) == size(x)), y)
@@ -10,7 +7,7 @@ function _vcount(
   ptrargs = map(VectorizationBase.zstridedpointer, args)
   i = 0
   V = VectorizationBase.pick_vector_width(
-    promote_type(T, reduce(promote_type, map(eltype, ptrargs)))
+    reduce(promote_type, map(eltype, ptrargs))
   )
   W = unwrap(V)
   UNROLL = 4
@@ -34,10 +31,7 @@ function _vcount(
   count
 end
 
-@generated function vcount(
-  f::F,
-  args::Vararg{DenseArray{T,D},M}
-) where {F,T<:NativeTypes,D,M}
+@generated function vcount(f::F, args::Vararg{DenseArray,M}) where {F,M}
   call = Expr(:call, :_vcount, :f)
   gc_preserve_call_quote(call, M::Int)
 end
