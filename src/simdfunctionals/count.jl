@@ -12,7 +12,11 @@ function _vcount(f::F, args::Vararg{DenseArray,M}) where {F,M}
   W = unwrap(V)
   UNROLL = 4
   LOG2UNROLL = 2
-  counts = VecUnroll(ntuple(Returns(0), Val(UNROLL)))
+  counts = if VERSION >= v"1.7"
+    VecUnroll(ntuple(Returns(0), Val(UNROLL)))
+  else
+    VecUnroll(ntuple(_ -> (0), Val(UNROLL)))
+  end
   while i < vsub_nsw(N, ((W << LOG2UNROLL) - 1))
     index = VectorizationBase.Unroll{1,W,UNROLL,1,W,zero(UInt)}((i,))
     counts += count_ones(f(VectorizationBase.fmap(vload, ptrargs, index)...))
