@@ -76,7 +76,7 @@ pushexpr!(ex::Expr, x::Integer) =
 pushexpr!(ex::Expr, @nospecialize(x::StaticInt)) = (push!(ex.args, x); nothing)
 MaybeKnown(x::Integer) =
   MaybeKnown(convert(Int, x), Symbol("##UNDEFINED##"), true)
-MaybeKnown(x::Integer, default::Int) = MaybeKnown(x)
+MaybeKnown(x::Integer, ::Int) = MaybeKnown(x)
 MaybeKnown(x::Symbol, default::Int) = MaybeKnown(default, x, false)
 
 isknown(mk::MaybeKnown) = getfield(mk, :known)
@@ -158,7 +158,7 @@ function arithmeticexpr(
     return _arithmeticexpr(f, a, b)
   end
 end
-arithmeticexpr(op, f, a, b) = _arithmeticexpr(f, a, b)
+arithmeticexpr(_, f, a, b) = _arithmeticexpr(f, a, b)
 function _arithmeticexpr(f, a, b)
   ex = Expr(:call, lv(f))
   pushexpr!(ex, a)
@@ -689,7 +689,7 @@ function rejectinterleave!(
       op.rejectinterleave = true
     else
       omop = ls.omop
-      batchid, opind = omop.batchedcollectionmap[identifier(op)]
+      batchid, _ = omop.batchedcollectionmap[identifier(op)]
       op.rejectinterleave =
         ((batchid == 0) || (!isvectorized(op))) ||
         rejectinterleave(ls, op, vloop, omop.batchedcollections[batchid])
@@ -985,7 +985,7 @@ function add_block!(ls::LoopSet, ex::Expr, elementbytes::Int, position::Int)
   for x ∈ ex.args
     x isa Expr || continue # be that general?
     x.head === :inbounds && continue
-    push!(ls, x, elementbytes, position)
+    _push!(ls, x, elementbytes, position)
   end
 end
 function makestatic!(expr)
@@ -995,10 +995,12 @@ function makestatic!(expr)
     if ex isa Int
       expr.args[i] = staticexpr(ex)
     elseif ex isa Symbol
-      if ex === :length
-        expr.args[i] = GlobalRef(ArrayInterface, :static_length)
-      elseif Base.sym_in(ex, (:axes, :size))
-        expr.args[i] = GlobalRef(ArrayInterface, ex)
+      j = findfirst(==(ex), (:axes, :size, :length))
+      if j !== nothing
+        expr.args[i] = GlobalRef(
+          ArrayInterface,
+          (:static_axes, :static_size, :static_length)[j]
+        )
       end
     elseif ex isa Expr
       makestatic!(ex)
@@ -1007,7 +1009,7 @@ function makestatic!(expr)
   expr
 end
 add_loop_bound!(
-  ls::LoopSet,
+  ::LoopSet,
   itersym::Symbol,
   bound::Union{Integer,Symbol},
   upper::Bool,
@@ -1097,7 +1099,7 @@ end
   r::OptionallyStaticRange,
   ::StaticInt{S}
 ) where {S}
-  ifelse(ArrayInterface.gt(StaticInt{S}(), Zero()), r, _reverse(r))
+  S > 0 ? r : _reverse(r)
 end
 @inline canonicalize_range(r::OptionallyStaticRange, s::Integer) =
   s > 0 ? r : _reverse(r)
@@ -1215,7 +1217,7 @@ function indices_loop!(ls::LoopSet, r::Expr, itersym::Symbol)::Loop
               axsym,
               Expr(
                 :call,
-                GlobalRef(ArrayInterface, :axes),
+                GlobalRef(ArrayInterface, :static_axes),
                 a_s,
                 staticexpr(dims::Int)
               )
@@ -1280,7 +1282,7 @@ function indices_loop!(ls::LoopSet, r::Expr, itersym::Symbol)::Loop
               axsym,
               Expr(
                 :call,
-                GlobalRef(ArrayInterface, :axes),
+                GlobalRef(ArrayInterface, :static_axes),
                 a_s,
                 staticexpr(mdim)
               )
@@ -1351,7 +1353,7 @@ function register_single_loop!(ls::LoopSet, looprange::Expr)
     )
       indices_loop!(ls, r, itersym)
     else
-      (f === :axes) && (r.args[1] = lv(:axes))
+      (f === :axes) && (r.args[1] = lv(:static_axes))
       misc_loop!(ls, r, itersym, (f === :eachindex) | (f === :axes))
     end
   elseif isa(r, Symbol)
@@ -1379,7 +1381,7 @@ function add_loop!(ls::LoopSet, q::Expr, elementbytes::Int)
   if body.head === :block
     add_block!(ls, body, elementbytes, position)
   else
-    push!(ls, q, elementbytes, position)
+    _push!(ls, q, elementbytes, position)
   end
 end
 function add_loop!(ls::LoopSet, loop::Loop, itersym::Symbol = loop.itersymbol)
@@ -1410,7 +1412,7 @@ function instruction!(ls::LoopSet, x::Expr)
   pushprepreamble!(ls, Expr(:(=), instr, x))
   Instruction(Symbol(""), instr)
 end
-instruction!(ls::LoopSet, x::Symbol) = instruction(x)
+instruction!(::LoopSet, x::Symbol) = instruction(x)
 function instruction!(ls::LoopSet, f::F) where {F<:Function}
   get(FUNCTIONSYMBOLS, F) do
     instr = gensym!(ls, "f")
@@ -1820,14 +1822,14 @@ function push_op!(
         add_compute!(ls, LHS, :identity, [RHS], elementbytes)
       end
     else
-      push!(ls, localbody, elementbytes, position, mpref)
+      _push!(ls, localbody, elementbytes, position, mpref)
     end
   else
     throw(LoopError("Don't know how to handle expression.", ex))
   end
 end
 
-function Base.push!(
+function _push!(
   ls::LoopSet,
   ex::Expr,
   elementbytes::Int,

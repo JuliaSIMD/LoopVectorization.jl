@@ -397,11 +397,11 @@ val(x) = Expr(:call, Expr(:curly, :Val, x))
     p, li = VectorizationBase.tdot(
       x,
       (vsub_nsw(getfield(i, 1), one($I)),),
-      strides(x)
+      static_strides(x)
     )
     ptr = gep(p, li)
     si = ArrayInterface.StrideIndex{1,$(R[ri],),$(C === 1 ? 1 : 0)}(
-      (getfield(strides(x), $ri),),
+      (getfield(static_strides(x), $ri),),
       (Zero(),)
     )
     stridedpointer(ptr, si, StaticInt{$(B === 1 ? 1 : 0)}())
@@ -415,7 +415,7 @@ end
   quote
     $(Expr(:meta, :inline))
     si = ArrayInterface.StrideIndex{1,$(R[ri],),$(C === 1 ? 1 : 0)}(
-      (getfield(strides(x), $ri),),
+      (getfield(static_strides(x), $ri),),
       (getfield(offsets(x), $ri),)
     )
     stridedpointer(pointer(x), si, StaticInt{$(B == 1 ? 1 : 0)}())

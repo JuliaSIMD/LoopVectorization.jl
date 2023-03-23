@@ -1,13 +1,15 @@
 module LoopVectorization
 
+if isdefined(Base, :Experimental) &&
+   isdefined(Base.Experimental, Symbol("@max_methods"))
+  @eval Base.Experimental.@max_methods 1
+end
+
 using ArrayInterfaceCore: UpTri, LoTri
 using Static: StaticInt, gt, static, Zero, One, reduce_tup
 using VectorizationBase,
-  SLEEFPirates,
-  UnPack,
-  OffsetArrays,
-  ArrayInterfaceOffsetArrays,
-  ArrayInterfaceStaticArrays
+  SLEEFPirates, UnPack, OffsetArrays, StaticArrayInterface
+const ArrayInterface = StaticArrayInterface
 using LayoutPointers:
   AbstractStridedPointer,
   StridedPointer,
@@ -150,18 +152,17 @@ using SLEEFPirates:
   sincos_fast,
   tan_fast
 
-using ArrayInterface
-using ArrayInterface:
+using StaticArrayInterface:
   OptionallyStaticUnitRange,
   OptionallyStaticRange,
   StaticBool,
   True,
   False,
   indices,
-  strides,
+  static_strides,
   offsets,
-  size,
-  axes,
+  static_size,
+  static_axes,
   StrideIndex
 using CloseOpenIntervals: AbstractCloseOpen, CloseOpen#, SafeCloseOpen
 # @static if VERSION ≥ v"1.6.0-rc1" #TODO: delete `else` when dropping 1.5 support
@@ -195,7 +196,8 @@ export LowDimArray,
   vfilter,
   vfilter!,
   vmapreduce,
-  vreduce
+  vreduce,
+  vcount
 
 const VECTORWIDTHSYMBOL, ELTYPESYMBOL, MASKSYMBOL =
   Symbol("##Wvecwidth##"), Symbol("##Tloopeltype##"), Symbol("##mask##")
@@ -233,6 +235,7 @@ include("reconstruct_loopset.jl")
 include("constructors.jl")
 include("user_api_conveniences.jl")
 include("simdfunctionals/mapreduce.jl")
+include("simdfunctionals/count.jl")
 include("broadcast.jl")
 
 """
@@ -257,9 +260,9 @@ include("precompile.jl")
 
 # import ChainRulesCore, ForwardDiff
 # include("vmap_grad.jl")
-using ChainRulesCore, ForwardDiff, SpecialFunctions
-include("simdfunctionals/vmap_grad_rrule.jl")
-include("simdfunctionals/vmap_grad_forwarddiff.jl")
-@inline SpecialFunctions.erf(x::AbstractSIMD) = VectorizationBase.verf(float(x))
+if !isdefined(Base, :get_extension)
+  include("../ext/ForwardDiffExt.jl")
+  include("../ext/SpecialFunctionsExt.jl")
+end
 
 end # module

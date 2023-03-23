@@ -134,11 +134,11 @@ for (op, init) in zip((:+, :max, :min), (:zero, :typemin, :typemax))
     Base.Cartesian.@nif 5 d -> (d <= ndims(arg) && dims == d) d -> begin
       Rpre = CartesianIndices(ntuple(i -> axes_arg[i], d - 1))
       Rpost = CartesianIndices(ntuple(i -> axes_arg[i+d], ndims(arg) - d))
-      _vreduce_dims!(out, $op, Rpre, 1:size(arg, dims), Rpost, arg)
+      _vreduce_dims!(out, $op, Rpre, static_axes(arg, dims), Rpost, arg)
     end d -> begin
       Rpre = CartesianIndices(axes_arg[1:dims-1])
       Rpost = CartesianIndices(axes_arg[dims+1:end])
-      _vreduce_dims!(out, $op, Rpre, 1:size(arg, dims), Rpost, arg)
+      _vreduce_dims!(out, $op, Rpre, static_axes(arg, dims), Rpost, arg)
     end
   end
 
