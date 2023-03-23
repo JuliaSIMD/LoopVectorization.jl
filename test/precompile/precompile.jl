@@ -4,7 +4,8 @@ using SnoopCompileCore
 @testset "Invalidation and precompilation" begin
   invs = @snoopr using LVUser
   m = only(methods(LVUser.filter2davx))
-  mi = m.specializations[1]
+  specs = m.specializations
+  mi = isa(specs, Core.MethodInstance) ? specs : specs[1]
   @test mi ∉ invs
   A = rand(Float64, 512, 512)
   kern = [
