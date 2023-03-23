@@ -8,7 +8,7 @@ struct Loop
   start::MaybeKnown
   stop::MaybeKnown
   step::MaybeKnown
-  rangesym::Symbol# === Symbol("") means loop is static
+  rangesym::Symbol # === Symbol("") means loop is static
   lensym::Symbol
 end
 
