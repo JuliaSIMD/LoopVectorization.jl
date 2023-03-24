@@ -42,5 +42,8 @@
     let x = rand(UInt8, (1 << 14) + n)
       @test count(==(UInt8('\n')), x) == vcount(==(UInt8('\n')), x)
     end
+    let y = rand(Bool, (1 << 14) + n)
+      @test vcount(y) == vcount(identity, y) == count(y)
+    end
   end
 end
