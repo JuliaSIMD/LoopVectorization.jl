@@ -26,3 +26,21 @@ end
   @test real.(A) == LinearAlgebra.Diagonal(1:10)
   @test all(iszero, imag.(A))
 end
+function issue480(x, y)
+  z = false
+  @turbo for i in eachindex(x)
+    z |= x[i] > y[i]
+  end
+  z
+end
+@testset "issue 480" begin
+  using LoopVectorization
+  x = zeros(33)
+  y = zeros(33)
+  @test !issue480(x, y)
+  for i in eachindex(x)
+    x[i] = 1.0
+    @test issue480(x, y)
+    x[i] = 0.0
+  end
+end
