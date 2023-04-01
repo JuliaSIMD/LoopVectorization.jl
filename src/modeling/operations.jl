@@ -163,7 +163,7 @@ loopvalue
 """
     Operation
 
-A structure to encode a particular action occuring inside an `@turbo` block.
+A structure to encode a particular action occurring inside an `@turbo` block.
 
 # Fields
 
@@ -196,7 +196,7 @@ Each one of these lines is a pretty-printed `Operation`.
 """
 mutable struct Operation <: AbstractLoopOperation
   """A unique identifier for this operation.
-  `identifer(op::Operation)` returns the index of this operation within `operations(ls::LoopSet)`."""
+  `identifier(op::Operation)` returns the index of this operation within `operations(ls::LoopSet)`."""
   identifier::Int
   """The name of the variable storing the result of this operation.
   For `a = val` this would be `:a`. For array assignments `A[i,j] = val` this would be `:A`."""

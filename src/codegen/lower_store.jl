@@ -377,7 +377,7 @@ function lower_tiled_store!(
   inds_calc_by_ptr_offset = indices_calculated_by_pointer_offsets(ls, op.ref)
 
   if donot_tile_store(ls, op, reductfunc, u₂)
-    # If we have a reductfunc, we're using a reducing store instead of a contiuguous or shuffle store anyway
+    # If we have a reductfunc, we're using a reducing store instead of a contiguous or shuffle store anyway
     # so no benefit to being able to handle that case here, vs just calling the default `lower_store!` method
     @unpack u₁, u₂max = ua
     for t ∈ 0:u₂-1
@@ -408,7 +408,7 @@ function lower_tiled_store!(
   u = Core.ifelse(isu₁, u₁, 1)
   tup = Expr(:tuple)
   for t ∈ 0:u₂-1
-    # tiled stores cannot be loop values, as they're necessarilly
+    # tiled stores cannot be loop values, as they're necessarily
     # functions of at least two loops, meaning we do not need to handle them here.
     push!(tup.args, Symbol(variable_name(opp, ifelse(isu₂, t, -1)), '_', u))
   end

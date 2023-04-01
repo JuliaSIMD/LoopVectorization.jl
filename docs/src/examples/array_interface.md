@@ -9,7 +9,7 @@ LoopVectorization uses [ArrayInterface.jl](https://github.com/SciML/ArrayInterfa
 that wasn't optimized by `LoopVectorization`, but instead simply had `@inbounds @fastmath` applied to the loop. This can often still yield reasonable to good performance, saving you from having to write more than one version of the loop
 to get good performance and correct behavior just because the array types happen to be different.
 
-By supporting the interface, using `LoopVectorization` can simplify implementing many operations like matrix multiply while still getting good performance. For example, instead of [a few hundred lines of code](https://github.com/JuliaArrays/StaticArrays.jl/blob/0e431022954f0207eeb2c4f661b9f76936105c8a/src/matrix_multiply.jl#L4) to define matix multiplication in `StaticArrays`, one could simply write:
+By supporting the interface, using `LoopVectorization` can simplify implementing many operations like matrix multiply while still getting good performance. For example, instead of [a few hundred lines of code](https://github.com/JuliaArrays/StaticArrays.jl/blob/0e431022954f0207eeb2c4f661b9f76936105c8a/src/matrix_multiply.jl#L4) to define matrix multiplication in `StaticArrays`, one could simply write:
 ```julia
 using StaticArrays, LoopVectorization
 

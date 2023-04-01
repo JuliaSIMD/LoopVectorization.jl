@@ -1805,7 +1805,7 @@ function push_op!(
     add_andblock!(ls, ex, elementbytes, position)
   elseif ex.head === :||
     add_orblock!(ls, ex, elementbytes, position)
-  elseif ex.head === :local # Handle locals introduced by `@inbounds`; using `local` with `@turbo` is not recomended (nor is `@inbounds`; which applies automatically regardless)
+  elseif ex.head === :local # Handle locals introduced by `@inbounds`; using `local` with `@turbo` is not recommended (nor is `@inbounds`; which applies automatically regardless)
     @assert length(ex.args) == 1 # TODO replace assert + first with "only" once support for Julia < 1.4 is dropped
     localbody = first(ex.args)
     @assert localbody.head === :(=)
@@ -2117,7 +2117,7 @@ end
 
 """
 Returns `0` if the op is the declaration of the constant outerreduction variable.
-Returns `n`, where `n` is the constant declarations's index among parents(op), if op is an outter reduction.
+Returns `n`, where `n` is the constant declarations's index among parents(op), if op is an outer reduction.
 Returns `-1` if not an outerreduction.
 """
 function isouterreduction(ls::LoopSet, op::Operation)

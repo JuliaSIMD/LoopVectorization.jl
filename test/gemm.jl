@@ -804,7 +804,7 @@
         dense!(LoopVectorization.relu, C, A2, B)
         @test C ≈
               LoopVectorization.relu.(@view(A2[:, begin:end-1]) * B .+ @view(A2[:, end]))
-        @testset "avx $T dynamc gemm" begin
+        @testset "avx $T dynamic gemm" begin
           AmulB!(C2, A, B)
           AmulBavx1!(C, A, B)
           @test C ≈ C2

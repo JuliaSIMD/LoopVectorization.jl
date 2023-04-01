@@ -188,7 +188,7 @@ end
 ```
 ![complexdot3](https://github.com/JuliaSIMD/LoopVectorization.jl/raw/docsassets/docs/src/assets/threadedcomplexdot3product.svg)
 
-When testing on my laptop, the `C` implentation ultimately won, but I will need to investigate further to tell whether this benchmark benefits from hyperthreading,
+When testing on my laptop, the `C` implementation ultimately won, but I will need to investigate further to tell whether this benchmark benefits from hyperthreading,
 or if it's because LoopVectorization's memory access patterns are less friendly.
 I plan to work on cache-level blocking to increase memory friendliness eventually, and will likely also allow it to take advantage of hyperthreading/simultaneous multithreading, although I'd prefer a few motivating test problems to look at first. Note that a single core of this CPU is capable of exceeding 100 GFLOPS of double precision compute. The execution units are spending most of their time idle. So the question of whether hypthreading helps may be one of whether or not we are memory-limited.
 
@@ -218,7 +218,7 @@ julia> doubles_per_l2 = (2 ^ 20) ÷ 8
 julia> total_doubles_in_l2 = doubles_per_l2 * (Sys.CPU_THREADS ÷ 2) # doubles_per_l2 * 18
 2359296
 
-julia> doubles_per_mat = total_doubles_in_l2 ÷ 3 # divide up amoung 3 matrices
+julia> doubles_per_mat = total_doubles_in_l2 ÷ 3 # divide up among 3 matrices
 786432
 
 julia> sqrt(ans)

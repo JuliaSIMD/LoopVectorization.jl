@@ -452,7 +452,7 @@ function should_zerorangestart(
       allsame = true
       # The idea here is that if any ref to the same array doesn't have `ind`,
       # we can't offset that dimension because different inds will clash.
-      # Because offseting the array means counter-offseting the range, we need
+      # Because offsetting the array means counter-offsetting the range, we need
       # to be consistent, and check that all arrays are valid first.
       for j ∈ @view(namev[2:end])
         ref = allarrayrefs[j]
