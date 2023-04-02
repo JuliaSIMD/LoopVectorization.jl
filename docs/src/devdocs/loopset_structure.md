@@ -56,7 +56,7 @@ References to arrays are represented with an `ArrayReferenceMeta` data structure
 julia> LoopVectorization.operations(lsAmulB)[3].ref
 LoopVectorization.ArrayReferenceMeta(LoopVectorization.ArrayReference(:A, [:m, :k], Int8[0, 0]), Bool[1, 1], Symbol("##vptr##_A"))
 ```
-It contains the name of the parent array (`:A`), the indicies `[:m,:k]`, and a boolean vector (`Bool[1, 1]`) indicating whether these indices are loop iterables. Note that the optimizer assumes arrays are column-major, and thus that it is efficient to read contiguous elements from the first index. In lower level terms, it means that [high-throughput vmov](https://www.felixcloutier.com/x86/movupd) instructions can be used rather than [low-throughput](https://www.felixcloutier.com/x86/vgatherdpd:vgatherqpd) [gathers](https://www.felixcloutier.com/x86/vgatherqps:vgatherqpd). Similar story for storing elements.
+It contains the name of the parent array (`:A`), the indices `[:m,:k]`, and a boolean vector (`Bool[1, 1]`) indicating whether these indices are loop iterables. Note that the optimizer assumes arrays are column-major, and thus that it is efficient to read contiguous elements from the first index. In lower level terms, it means that [high-throughput vmov](https://www.felixcloutier.com/x86/movupd) instructions can be used rather than [low-throughput](https://www.felixcloutier.com/x86/vgatherdpd:vgatherqpd) [gathers](https://www.felixcloutier.com/x86/vgatherqps:vgatherqpd). Similar story for storing elements.
 When no axis has unit stride, the first given index will be the dummy `Symbol("##DISCONTIGUOUSSUBARRAY##")`.
 
 !!! warning

@@ -977,10 +977,10 @@ function avx_threads_expr(
   LPSYM::Expr
 )
   valid_thread_loop, ua, c = valid_thread_loops(ls)
-  num_candiates = sum(valid_thread_loop)
-  if (num_candiates == 0) || (nt ≤ 1) # it was called from `avx_body` but now `nt` was set to `1`
+  num_candidates = sum(valid_thread_loop)
+  if (num_candidates == 0) || (nt ≤ 1) # it was called from `avx_body` but now `nt` was set to `1`
     avx_body(ls, UNROLL)
-  elseif (num_candiates == 1) || (nt ≤ 3)
+  elseif (num_candidates == 1) || (nt ≤ 3)
     thread_one_loops_expr(
       ls,
       ua,

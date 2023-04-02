@@ -407,7 +407,7 @@ end
     @tturbo
 
 Equivalent to `@turbo`, except it adds `thread=true` as the first keyword argument.
-Note that later arguments take precendence.
+Note that later arguments take precedence.
 
 Meant for convenience, as `@tturbo` is shorter than `@turbo thread=true`.
 """

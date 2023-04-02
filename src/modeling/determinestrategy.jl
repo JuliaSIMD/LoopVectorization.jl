@@ -201,7 +201,7 @@ function evaluate_cost_unroll(
   # Need to check if fusion is possible
   for itersym ∈ order
     cacheunrolled!(ls, itersym, Symbol(""), vloopsym)
-    # Add to set of defined symbles
+    # Add to set of defined symbols
     push!(nested_loop_syms, itersym)
     looplength = length(ls, itersym)
     liter = itersym === vloopsym ? num_iterations(looplength, W) : looplength
@@ -1257,7 +1257,7 @@ function evaluate_cost_tile!(
     elseif itersym == u₂loopsym
       u₂reached = true
     end
-    # Add to set of defined symbles
+    # Add to set of defined symbols
     push!(nested_loop_syms, itersym)
     looplength = length(ls, itersym)
     iter *= itersym === vloopsym ? num_iterations(looplength, W) : looplength

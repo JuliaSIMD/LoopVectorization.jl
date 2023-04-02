@@ -585,7 +585,7 @@ function checkforoffset!(
     if length(mult_syms) == 1
       mlt, sym = only(mult_syms)
       if !byterepresentable(mlt)
-        # this is so we don't unnecessarilly add a separate offset
+        # this is so we don't unnecessarily add a separate offset
         muladd_index!(
           ls,
           opparents,

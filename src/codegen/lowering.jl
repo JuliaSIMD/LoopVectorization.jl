@@ -1234,7 +1234,7 @@ function calc_Ureduct!(ls::LoopSet, us::UnrollSpecification)
       elseif !((u₁ui == Int(u₁u)) & (u₂ui == Int(u₁u)))
         throw(
           ArgumentError(
-            "Doesn't currenly handle differently unrolled reductions yet, please file an issue with an example."
+            "Doesn't currently handle differently unrolled reductions yet, please file an issue with an example."
           )
         )
       end

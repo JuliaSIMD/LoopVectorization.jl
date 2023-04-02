@@ -529,7 +529,7 @@ function lower_compute!(
   parents_op = parents(op)
   nparents = length(parents_op)
   # __u₂max = ls.unrollspecification.u₂
-  # TODO: perhaps allos for swithcing unrolled axis again
+  # TODO: perhaps allow for switching unrolled axis again
   mvar, u₁unrolledsym, u₂unrolledsym =
     variable_name_and_unrolled(op, u₁loopsym, u₂loopsym, vloopsym, suffix, ls)
   opunrolled = u₁unrolledsym || isu₁unrolled(op)

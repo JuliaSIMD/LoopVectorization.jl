@@ -157,7 +157,7 @@ function pushbroadcast!(q::Expr, mvar::Symbol)
   )
 end
 
-function child_cost_untill_vectorized(op::Operation)
+function child_cost_until_vectorized(op::Operation)
   isvectorized(op) && return 0.0
   c = 0.0
   for child ∈ children(op)
@@ -165,7 +165,7 @@ function child_cost_untill_vectorized(op::Operation)
       # FIXME: can double count
       c +=
         instruction_cost(instruction(child)).scalar_reciprocal_throughput +
-        child_cost_untill_vectorized(child)
+        child_cost_until_vectorized(child)
     end
   end
   c
@@ -174,7 +174,7 @@ function vectorization_profitable(op::Operation)
   # if op is vectorized itself, return true
   isvectorized(op) && return true
   # otherwise, check if descendents until hitting a vectorized portion are expensive enough
-  child_cost_untill_vectorized(op) ≥ 5
+  child_cost_until_vectorized(op) ≥ 5
 end
 
 function lower_load_no_optranslation!(

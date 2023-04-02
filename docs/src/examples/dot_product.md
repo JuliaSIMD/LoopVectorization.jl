@@ -25,7 +25,7 @@ Thus, in 4 clock cycles, we can do up to 8 loads. But each `fma` requires 2 load
 
 Double precision benchmarks pitting Julia's builtin dot product, and code compiled with a variety of compilers:
 ![dot](https://raw.githubusercontent.com/JuliaSIMD/LoopVectorization.jl/docsassets/docs/src/assets/bench_dot_v2.svg)
-What we just described is the core of the approach used by all these compilers. The variation in results is explained mostly by how they handle vectors with lengths that are not an integer multiple of `W`. I ran these on a computer with AVX512 so that `W = 8`. LLVM, the backend compiler of both Julia and Clang, shows rapid performance degredation as `N % 4W` increases, where `N` is the length of the vectors.
+What we just described is the core of the approach used by all these compilers. The variation in results is explained mostly by how they handle vectors with lengths that are not an integer multiple of `W`. I ran these on a computer with AVX512 so that `W = 8`. LLVM, the backend compiler of both Julia and Clang, shows rapid performance degradation as `N % 4W` increases, where `N` is the length of the vectors.
 This is because, to handle the remainder, it uses a scalar loop that runs as written: multiply and add single elements, one after the other. 
 
 Initially, GCC (gfortran) stumbled in throughput, because it does not use separate accumulation vectors by default except on Power, even with `-funroll-loops`.
@@ -36,7 +36,7 @@ LoopVectorization uses `if/ifelse` checks to determine how many extra vectors ar
 
 Neither GCC nor LLVM use masks (without LoopVectorization's assitance).
 
-I am not certain, but I believe Intel and GCC check for the vector's alignment, and align them if neccessary. Julia guarantees that the start of arrays beyond a certain size are aligned, so this is not an optimization I have implemented. But it may be worthwhile for handling large matrices with a number of rows that isn't an integer multiple of `W`. For such matrices, the first column may be aligned, but the next will not be.
+I am not certain, but I believe Intel and GCC check for the vector's alignment, and align them if necessary. Julia guarantees that the start of arrays beyond a certain size are aligned, so this is not an optimization I have implemented. But it may be worthwhile for handling large matrices with a number of rows that isn't an integer multiple of `W`. For such matrices, the first column may be aligned, but the next will not be.
 
 ## Dot-Self
 

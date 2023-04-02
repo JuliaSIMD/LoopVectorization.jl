@@ -1,7 +1,7 @@
 
 
 
-# Auxillary functions
+# Auxiliary functions
 const _uint_bit_length = sizeof(UInt) * 8
 const _div_uint_size_shift = Int(log2(_uint_bit_length))
 @inline _mul2(i::Integer) = i << 1
