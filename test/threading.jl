@@ -172,4 +172,13 @@ end
   thread_cartesian_indices!(dst, src)
   dst ≈ src
 
+  let a = zeros(3, 2), N = 2
+    @turbo thread = true for i = 1:1, j = 1:N
+      a[i, j] += 1.0
+    end
+    @test all(isone, @view(a[1, :]))
+    @test all(iszero, @view(a[2:end, :]))
+  end
+
+
 end

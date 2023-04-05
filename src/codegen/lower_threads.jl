@@ -196,7 +196,13 @@ function push_loop_length_expr!(q::Expr, ls::LoopSet)
   if length(ls.loops) == 1
     ndynamic == 0 && push!(q.args, l)
   elseif l == 1
-    push!(q.args, mulexpr)
+    if ndynamic == 1
+      push!(q.args, last(mulexpr.args))
+    elseif ndynamic == 0
+      push!(q.args, l)
+    else
+      push!(q.args, mulexpr)
+    end
   elseif ndynamic == 0
     push!(q.args, l)
   elseif ndynamic == 1
