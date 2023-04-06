@@ -156,4 +156,13 @@ using LoopVectorization, Test
   dadada!(EV, Fu, V)
   dadada_noavx!(EV2, Fu, V)
   @test EV ≈ EV2
+
+
+  let A = ones(2, 2, 2, 2)
+    𝒜𝒸𝒸 = 0.0
+    LoopVectorization.@turbo unroll = 0 for b in axes(A, 2), a in axes(A, 1)
+      𝒜𝒸𝒸 = 𝒜𝒸𝒸 + A[a, b, a, b]
+    end
+    @test 𝒜𝒸𝒸 == 4.0
+  end
 end
