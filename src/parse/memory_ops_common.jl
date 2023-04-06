@@ -1012,7 +1012,7 @@ function array_reference_meta!(
             indices,
             vptrarray,
             ninds,
-            ind_prev_index + (first(indices) === DISCONTIGUOUS)
+            ind_prev_index - (first(indices) === DISCONTIGUOUS)
           )
           makediscontiguous!(indices)
         end
