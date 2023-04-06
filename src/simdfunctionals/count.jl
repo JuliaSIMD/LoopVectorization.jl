@@ -1,5 +1,5 @@
 _vcount(f) = 0
-function _vcount(f::F, args::Vararg{DenseArray,M}) where {F,M}
+function _vcount(f::F, args::Vararg{StridedArray,M}) where {F,M}
   x = first(args)
   y = Base.tail(args)
   foreach(a -> @assert(size(a) == size(x)), y)
@@ -36,10 +36,10 @@ function _vcount(f::F, args::Vararg{DenseArray,M}) where {F,M}
   count
 end
 
-@generated function vcount(f::F, args::Vararg{DenseArray,M}) where {F,M}
+@generated function vcount(f::F, args::Vararg{StridedArray,M}) where {F,M}
   call = Expr(:call, :_vcount, :f)
   gc_preserve_call_quote(call, M::Int)
 end
-vcount(::typeof(identity), x::AbstractArray{Bool}) =
+vcount(::typeof(identity), x::StridedArray{Bool}) =
   vcount(VectorizationBase.tomask, x)
-vcount(x::AbstractArray{Bool}) = vcount(VectorizationBase.tomask, x)
+vcount(x::StridedArray{Bool}) = vcount(VectorizationBase.tomask, x)
