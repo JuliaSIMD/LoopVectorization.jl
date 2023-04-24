@@ -1,9 +1,9 @@
 
-using SnoopPrecompile
+using PrecompileTools
 
-@precompile_setup begin
+@setup_workload begin
   x = rand(10)
-  @precompile_all_calls begin
+  @compile_workload begin
     _vreduce(+, x)
   end
 end
