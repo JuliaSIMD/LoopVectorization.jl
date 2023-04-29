@@ -402,11 +402,7 @@ function rthroughput_latency(
       if isouterreduction(ls, op) ≠ -1 || unrolled ∉ reduceddependencies(op)
         latency = max(sl, latency)
       end
-      # if unrolled ∈ loopdependencies(op)
-      #     compute_recip_throughput_u += rt
-      # else
       compute_recip_throughput += rt
-      # end
     elseif isload(op)
       lrt, _, _, shufflert =
         cost(ls, op, (unrolled, Symbol("")), vloopsym, Wshift, size_T)
@@ -502,7 +498,6 @@ function determine_unroll_factor(
   end
   # min(8, roundpow2(max(1, round(Int, latency / (rt * num_reductions) ) ))), best_unrolled
   lrtratio = latency / rt
-  @show latency, rt
   if lrtratio ≥ 7.0
     UF = 8
   else
