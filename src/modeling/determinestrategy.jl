@@ -77,6 +77,7 @@ function cannot_shuffle(
     )
   ))
 end
+const DOUBLE_THROUGHPUT = occursin("apple-m", LoopVectorization.get_cpu_name())
 function cost(
   ls::LoopSet,
   op::Operation,
@@ -104,6 +105,7 @@ function cost(
     # all(opp -> (isloopvalue(opp) | isconstant(opp)), parents(op))
     return 0.0, 0, 0.0
   end
+  shuffle_rt = 0
   opisvectorized = isvectorized(op)
   srt, sl, srp =
     opisvectorized ? vector_cost(instr, Wshift, size_T) : scalar_cost(instr)
@@ -131,6 +133,7 @@ function cost(
           if isload(op) & (length(loopdependencies(op)) > 1)# vmov(a/u)pd
             srt += 0.5reg_size(ls) / cache_lnsze(ls)
           end
+          shuffle_rt += shifter
           srt += shifter # shifter == number of shuffles
           sl += shifter
         end
@@ -150,7 +153,11 @@ function cost(
       sl *= 3
     end
   end
-  srt, sl, Float64(srp + 1)
+  if DOUBLE_THROUGHPUT
+    srt *= 0.5
+    shuffle_rt >>= 1
+  end
+  srt, sl, Float64(srp + 1), shuffle_rt
 end
 
 # Base._return_type()
@@ -252,6 +259,11 @@ function depchain_cost!(
     rtᵢ, slᵢ = cost(ls, op, (unrolled, Symbol("")), vloopsym, Wshift, size_T)
     rt += rtᵢ
     sl += slᵢ
+  elseif isload(op)
+    _, _, _, shufflecost =
+      cost(ls, op, (unrolled, Symbol("")), vloopsym, Wshift, size_T)
+    rt += shufflecost
+    sl += shufflecost
   end
   rt, sl
 end
@@ -357,7 +369,7 @@ function unroll_no_reductions(ls, order, vloopsym)
   # # (iszero(rt) ? 4 : max(1, roundpow2( min( 4, round(Int, 16 / rt) ) ))), unrolled
   # (iszero(rt) ? 4 : max(1, VectorizationBase.nextpow2( min( 4, round(Int, 8 / rt) ) ))), unrolled
 end
-function determine_unroll_factor(
+function rthroughput_latency(
   ls::LoopSet,
   order::Vector{Symbol},
   unrolled::Symbol,
@@ -396,11 +408,15 @@ function determine_unroll_factor(
       compute_recip_throughput += rt
       # end
     elseif isload(op)
-      load_recip_throughput +=
-        first(cost(ls, op, (unrolled, Symbol("")), vloopsym, Wshift, size_T))
+      lrt, _, _, shufflert =
+        cost(ls, op, (unrolled, Symbol("")), vloopsym, Wshift, size_T)
+      load_recip_throughput += lrt - shufflert
+      # shufflert considered as part of depchain_cost!
     elseif isstore(op)
-      store_recip_throughput +=
-        first(cost(ls, op, (unrolled, Symbol("")), vloopsym, Wshift, size_T))
+      srt, _, _, shufflert =
+        cost(ls, op, (unrolled, Symbol("")), vloopsym, Wshift, size_T)
+      store_recip_throughput += srt - shufflert
+      compute_recip_throughput += shufflert
     end
   end
   recip_throughput =
@@ -447,7 +463,7 @@ function determine_unroll_factor(
   elseif iszero(num_reductions) # handle `BitArray` loops w/out reductions
     return 8 ÷ ls.vector_width, vloopsym
   else # handle `BitArray` loops with reductions
-    rttemp, ltemp = determine_unroll_factor(ls, order, vloopsym, vloopsym)
+    rttemp, ltemp = rthroughput_latency(ls, order, vloopsym, vloopsym)
     UF =
       min(8, VectorizationBase.nextpow2(max(1, round(Int, ltemp / (rttemp)))))
     UFfactor = 8 ÷ ls.vector_width
@@ -471,7 +487,7 @@ function determine_unroll_factor(
   best_unrolled = Symbol("")
   for unrolled ∈ order
     reject_reorder(ls, unrolled, false) && continue
-    rttemp, ltemp = determine_unroll_factor(ls, order, unrolled, vloopsym)
+    rttemp, ltemp = rthroughput_latency(ls, order, unrolled, vloopsym)
     rtcomptemp =
       rttemp + (
         0.01 *
@@ -486,6 +502,7 @@ function determine_unroll_factor(
   end
   # min(8, roundpow2(max(1, round(Int, latency / (rt * num_reductions) ) ))), best_unrolled
   lrtratio = latency / rt
+  @show latency, rt
   if lrtratio ≥ 7.0
     UF = 8
   else
@@ -1156,23 +1173,23 @@ end
 
 update_cost_vec!(costs, cost, u₁reduces, u₂reduces) = @inbounds if u₁reduces &
                                                                    u₂reduces
-    costs[4] += cost
-  elseif u₂reduces # cost decreased by unrolling u₂loop
-    costs[2] += cost
-  elseif u₁reduces # cost decreased by unrolling u₁loop
-    costs[3] += cost
-  else # no cost decrease; cost must be repeated
-    costs[1] += cost
-  end
+  costs[4] += cost
+elseif u₂reduces # cost decreased by unrolling u₂loop
+  costs[2] += cost
+elseif u₁reduces # cost decreased by unrolling u₁loop
+  costs[3] += cost
+else # no cost decrease; cost must be repeated
+  costs[1] += cost
+end
 update_reg_pres!(rp, cost, u₁reduces, u₂reduces) = @inbounds if u₁reduces# & u₂reduces
-    rp[4] -= cost
-  elseif u₂reduces # cost decreased by unrolling u₂loop
-    rp[2] += cost
-    # elseif u₁reduces # cost decreased by unrolling u₁loop
-    # rp[4] -= cost
-  else # no cost decrease; cost must be repeated
-    rp[1] += cost
-  end
+  rp[4] -= cost
+elseif u₂reduces # cost decreased by unrolling u₂loop
+  rp[2] += cost
+  # elseif u₁reduces # cost decreased by unrolling u₁loop
+  # rp[4] -= cost
+else # no cost decrease; cost must be repeated
+  rp[1] += cost
+end
 function child_dependent_u₁u₂(op::Operation)
   u₁ = u₂ = false
   for opc ∈ children(op)
