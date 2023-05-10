@@ -394,7 +394,9 @@ function lower_unrolled_dynamic(
       if length(loop) < UF * W
         Expr(:block)
       else
-        UFt -= Ureduct
+        if add_cleanup
+          UFt -= Ureduct
+        end
         Expr(
           :block,
           add_upper_outer_reductions(ls, q, Ureduct, UF, loop, nisvectorized)
