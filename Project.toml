@@ -3,15 +3,6 @@ uuid = "bdcacae8-1622-11e9-2a5c-532679323890"
 authors = ["Chris Elrod <elrodc@gmail.com>"]
 version = "0.12.159"
 
-[weakdeps]
-ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
-ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
-SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
-
-[extensions]
-ForwardDiffExt = ["ChainRulesCore", "ForwardDiff"]
-SpecialFunctionsExt = "SpecialFunctions"
-
 [deps]
 ArrayInterface = "4fba245c-0d91-5ea0-9b3e-6abc04ee57a9"
 ArrayInterfaceCore = "30b0a656-2188-435a-8636-2ec0e6a096e2"
@@ -49,9 +40,9 @@ IfElse = "0.1"
 LayoutPointers = "0.1.11"
 OffsetArrays = "1.4.1"
 PolyesterWeave = "0.1.10, 0.2"
+PrecompileTools = "1"
 SIMDTypes = "0.1"
 SLEEFPirates = "0.6.23"
-PrecompileTools = "1"
 SpecialFunctions = "1, 2"
 Static = "0.8.4"
 StaticArrayInterface = "1"
@@ -59,3 +50,12 @@ ThreadingUtilities = "0.5"
 UnPack = "1"
 VectorizationBase = "0.21.63"
 julia = "1.6"
+
+[extensions]
+ForwardDiffExt = ["ChainRulesCore", "ForwardDiff"]
+SpecialFunctionsExt = "SpecialFunctions"
+
+[weakdeps]
+ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
