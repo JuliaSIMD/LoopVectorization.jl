@@ -323,7 +323,11 @@ end
     for k ∈ 1:K
       push!(q.args, :($gf(vargs, $k, false)))
     end
-    return Expr(:block, Expr(:meta, :inline), q)
+    if VERSION >= v"1.8"
+      return Expr(:block, Expr(:meta, :inline), :(@inline $q))
+    else
+      return Expr(:block, Expr(:meta, :inline), q)
+    end
   end
   if Sreduced
     M = N
@@ -345,6 +349,9 @@ end
       else
         push!(call.args, Expr(:call, gf, syms[k], m, false))
       end
+    end
+    if VERSION >= v"1.8"
+      call = :(@inline $call)
     end
     # minimal change in behavior to fix case when !Sreduced by N -> Dlen; TODO: what should Dlen be here?
     if Sreduced ? (N == -1) : (Dlen == -1)
@@ -515,6 +522,14 @@ function reduce_parent!(
     push!(q.args, Expr(:(=), newp, Expr(:call, reductexpr, parent)))
   end
   newp
+end
+if VERSION >= v"1.8"
+  function inlinecall(x)
+    Meta.isexpr(x, :call) || return x
+    :(@inline $x)
+  end
+else
+  const inlinecall = identity
 end
 function lower_compute!(
   q::Expr,
@@ -769,7 +784,13 @@ function lower_compute!(
           Expr(
             :(=),
             varsym,
-            Expr(:call, lv(ifelsefunc), MASKSYMBOL, instrcall, selfopname)
+            Expr(
+              :call,
+              lv(ifelsefunc),
+              MASKSYMBOL,
+              inlinecall(instrcall),
+              selfopname
+            )
           )
         )
       elseif ((u₁ ≡ 1) | (selfdepreduce ≡ 0))
@@ -786,7 +807,7 @@ function lower_compute!(
               MASKSYMBOL,
               staticexpr(u₁),
               staticexpr(selfdepreduce),
-              instrcall,
+              inlinecall(instrcall),
               selfopname
             )
           )
@@ -799,7 +820,13 @@ function lower_compute!(
           Expr(
             :(=),
             varsym,
-            Expr(:call, lv(:ifelse), MASKSYMBOL, instrcall, selfopname)
+            Expr(
+              :call,
+              lv(:ifelse),
+              MASKSYMBOL,
+              inlinecall(instrcall),
+              selfopname
+            )
           )
         )
       end
@@ -832,11 +859,11 @@ function lower_compute!(
       Expr(
         :(=),
         varsym,
-        Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, instrcall)
+        Expr(:call, lv(:vbroadcast), VECTORWIDTHSYMBOL, inlinecall(instrcall))
       )
     )
   else
-    push!(q.args, Expr(:(=), varsym, instrcall))
+    push!(q.args, Expr(:(=), varsym, inlinecall(instrcall)))
   end
   # end
 end

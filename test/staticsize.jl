@@ -96,6 +96,13 @@ function sum_turbo(x)
   end
   s
 end
+function sum2_10turbo(x)
+  s = zero(eltype(x))
+  for i = 1:10, j = 1:2
+    s += x[j, i]
+  end
+  s
+end
 
 @testset "Statically Sized Arrays" begin
   @show @__LINE__
@@ -123,5 +130,8 @@ end
     x .= randn.()
     @test maxabs(x) == maximum(abs, x)
     @test sum_turbo(x) ≈ sum(x)
+  end
+  let A = rand(2, 10)
+    @test sum2_10turbo(A) ≈ sum(A)
   end
 end

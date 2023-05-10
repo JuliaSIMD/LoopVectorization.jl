@@ -311,7 +311,7 @@ function lower_unrolled_dynamic(
     loopisstatic = false
     loopisbounded = false
   end
-  Ureduct = (n == num_loops(ls) && (u₂ == -1)) ? ureduct(ls) : -1
+  Ureduct = ((n == num_loops(ls) && (u₂ == -1))) ? ureduct(ls) : -1
   # for now, require loopisstatic or !Ureduct-ing for reducing UF
   if loopisbounded & (loopisstatic | (Ureduct < 0))
     UFWnew = cld(looplength, cld(looplength, UFW))
@@ -390,9 +390,11 @@ function lower_unrolled_dynamic(
       initialize_outer_reductions!(q, ls, Ureduct)
       q
     elseif loopisstatic
+      blockhead = :block
       if length(loop) < UF * W
         Expr(:block)
       else
+        UFt -= Ureduct
         Expr(
           :block,
           add_upper_outer_reductions(ls, q, Ureduct, UF, loop, nisvectorized)
