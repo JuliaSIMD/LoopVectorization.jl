@@ -40,9 +40,9 @@ Aside from loops, `LoopVectorization.jl` also supports broadcasting.
 
 Note: `@turbo` does not support passing of kwargs to function calls to which it is applied, e.g:
 ```julia
-julia> @turbo round.(rand(10))
+julia> @turbo round.(rand(10));
 
-julia> @turbo round.(rand(10); digits = 3)
+julia> @turbo round.(rand(10); digits = 3);
 ERROR: TypeError: in typeassert, expected Expr, got a value of type GlobalRef
 ```
 
@@ -58,14 +58,7 @@ f = KwargCall(round, (digits = 3,));
 @turbo f.(rand(10))
 10-element Vector{Float64}:
  0.763
- 0.409
- 0.87
- 0.882
- 0.966
- 0.998
- 0.055
- 0.215
- 0.733
+ ⋮
  0.851
 ```
 
