@@ -245,6 +245,7 @@ loop-reordering so as to improve performance:
   - [`@turbo`](@ref): transform `for`-loops and broadcasting
   - [`vmapreduce`](@ref): vectorized version of `mapreduce`
   - [`vreduce`](@ref): vectorized version of `reduce`
+  - [`vsum`](@ref): vectorized version of `sum`
   - [`vmap`](@ref) and `vmap!`: vectorized version of `map` and `map!`
   - [`vmapnt`](@ref) and `vmapnt!`: non-temporal variants of `vmap` and `vmap!`
   - [`vmapntt`](@ref) and `vmapntt!`: threaded variants of `vmapnt` and `vmapnt!`
