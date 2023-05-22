@@ -196,6 +196,7 @@ export LowDimArray,
   vfilter,
   vfilter!,
   vmapreduce,
+  vsum,
   vreduce,
   vcount
 
