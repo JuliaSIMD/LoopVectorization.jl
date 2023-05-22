@@ -22,7 +22,21 @@ basis = rand(r, (dim, nbasis));
 coeffs = rand(T, nbasis);
 P = rand(T, dim, maxdeg+1);
 
-mvp(P, basis, coeffs)</code></pre><p>Aside from loops, <code>LoopVectorization.jl</code> also supports broadcasting.</p><div class="admonition is-danger"><header class="admonition-header">Danger</header><div class="admonition-body"><p>Broadcasting an <code>Array</code> <code>A</code> when <code>size(A,1) == 1</code> is NOT SUPPORTED, unless this is known at compile time (e.g., broadcasting a transposed vector is fine). Otherwise, you will probably crash Julia.</p></div></div><pre><code class="language-julia hljs">julia&gt; using LoopVectorization, BenchmarkTools
+mvp(P, basis, coeffs)</code></pre><p>Aside from loops, <code>LoopVectorization.jl</code> also supports broadcasting.</p><div class="admonition is-danger"><header class="admonition-header">Danger</header><div class="admonition-body"><p>Broadcasting an <code>Array</code> <code>A</code> when <code>size(A,1) == 1</code> is NOT SUPPORTED, unless this is known at compile time (e.g., broadcasting a transposed vector is fine). Otherwise, you will probably crash Julia.</p></div></div><p>Note: <code>@turbo</code> does not support passing of kwargs to function calls to which it is applied, e.g:</p><pre><code class="language-julia hljs">julia&gt; @turbo round.(rand(10));
+
+julia&gt; @turbo round.(rand(10); digits = 3);
+ERROR: TypeError: in typeassert, expected Expr, got a value of type GlobalRef</code></pre><p>You can work around this by creating a anonymous function before applying <code>@turbo</code> as follows:</p><pre><code class="language-julia hljs">struct KwargCall{F,T}
+    f::F
+    x::T
+end
+@inline (f::KwargCall)(args...) = f.f(args...; f.x...)
+
+f = KwargCall(round, (digits = 3,));
+@turbo f.(rand(10))
+10-element Vector{Float64}:
+ 0.763
+ ⋮
+ 0.851</code></pre><pre><code class="language-julia hljs">julia&gt; using LoopVectorization, BenchmarkTools
 
 julia&gt; M, K, N = 47, 73, 7;
 
@@ -68,4 +82,4 @@ BenchmarkTools.Trial:
   evals/sample:     1
 
 julia&gt; E1 ≈ E2
-true</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Home</a><a class="docs-footer-nextpage" href="../examples/multithreading/">Multithreading »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.24 on <span class="colophon-date" title="Wednesday 10 May 2023 11:50">Wednesday 10 May 2023</span>. Using Julia version 1.9.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+true</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Home</a><a class="docs-footer-nextpage" href="../examples/multithreading/">Multithreading »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.24 on <span class="colophon-date" title="Monday 22 May 2023 01:48">Monday 22 May 2023</span>. Using Julia version 1.9.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
