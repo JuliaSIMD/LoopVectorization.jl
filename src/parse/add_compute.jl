@@ -475,6 +475,7 @@ function add_compute!(
     return add_anon_func!(ls, var, fexpr, ex, position, mpref, elementbytes)
   # instr = instruction(first(ex.args))::Symbol
   instr = instruction!(ls, first(ex.args))::Instruction
+
   args = @view(ex.args[2:end])
   if (instr.instr === :pow_fast || instr.instr === :(^)) && length(args) == 2
     arg1 = args[1]
@@ -495,6 +496,8 @@ function add_compute!(
       arg2num = Int(static(ex.args[3]))::Int
       return add_pow!(ls, var, args[1], arg2num, elementbytes, position)
     end
+  elseif instr.instr === :oftype && length(args) == 2
+    return getop(ls, args[2], elementbytes)
   end
   vparents = Operation[]
   deps = Symbol[]
