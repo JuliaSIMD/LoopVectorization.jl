@@ -1,3 +1,4 @@
+import VectorizationBase: vsum
 
 @inline vreduce(::typeof(+), v::VectorizationBase.AbstractSIMDVector) = vsum(v)
 @inline vreduce(::typeof(*), v::VectorizationBase.AbstractSIMDVector) = vprod(v)
@@ -106,6 +107,16 @@ end
   vreduce(op, a_0)
 end
 @inline vmapreduce(f, op, args...) = mapreduce(f, op, args...)
+
+"""
+    vsum(A::DenseArray)
+    vsum(f, A::DenseArray)
+
+Vectorized version of `sum`. Providing a function as the first argument
+will apply the function to each element of `A` before summing.
+"""
+@inline vsum(f::F, A::AbstractArray{T}) where {F,T<:NativeTypes} = vmapreduce(f, +, A)
+@inline vsum(A::AbstractArray{T}) where {T<:NativeTypes} = vsum(identity, A)
 
 length_one_axis(::Base.OneTo) = Base.OneTo(1)
 length_one_axis(::Any) = 1:1

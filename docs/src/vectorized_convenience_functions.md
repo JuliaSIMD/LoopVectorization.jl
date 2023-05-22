@@ -132,4 +132,22 @@ julia> @btime mapreduce(hypot, +, $x, $y)
 96.75538300513509
 ```
 
+## vsum
+
+Vectorized version of `sum`. `vsum(f, a)` applies `f(a[i])` for `i in eachindex(a)`, then sums the results.
+
+```julia
+julia> using LoopVectorization, BenchmarkTools
+
+julia> x = rand(127);
+
+julia> @btime vsum(hypot, $x)
+  12.095 ns (0 allocations: 0 bytes)
+66.65246070098374
+
+julia> @btime sum(hypot, $x)
+  16.992 ns (0 allocations: 0 bytes)
+66.65246070098372
+```
+
 

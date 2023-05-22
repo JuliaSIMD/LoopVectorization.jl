@@ -60,6 +60,9 @@
     end
     @test vmapreduce(log, +, x) ≈ sum(log, x)
     @test vmapreduce(abs2, +, x) ≈ sum(abs2, x)
+    @test vsum(log, x) ≈ sum(log, x)
+    @test vsum(abs2, x) ≈ sum(abs2, x)
+    @test vsum(x) ≈ sum(x)
     @test maximum(x) == vreduce(max, x) == maximum_avx(x)
     @test minimum(x) == vreduce(min, x) == minimum_avx(x)
 
