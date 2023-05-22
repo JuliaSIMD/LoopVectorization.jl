@@ -475,6 +475,7 @@ function add_compute!(
     return add_anon_func!(ls, var, fexpr, ex, position, mpref, elementbytes)
   # instr = instruction(first(ex.args))::Symbol
   instr = instruction!(ls, first(ex.args))::Instruction
+
   args = @view(ex.args[2:end])
   if (instr.instr === :pow_fast || instr.instr === :(^)) && length(args) == 2
     arg1 = args[1]
@@ -495,6 +496,8 @@ function add_compute!(
       arg2num = Int(static(ex.args[3]))::Int
       return add_pow!(ls, var, args[1], arg2num, elementbytes, position)
     end
+  elseif instr.instr === :oftype && length(args) == 2
+    return get_arg!(ls, args[2], elementbytes, position)
   end
   vparents = Operation[]
   deps = Symbol[]
@@ -756,6 +759,34 @@ function add_compute_ifelse!(
     vparents
   )
   pushop!(ls, op, LHS)
+end
+function get_arg!(
+  ls::LoopSet,
+  @nospecialize(x),
+  elementbytes::Int,
+  position::Int
+)::Operation
+  if x isa Expr
+    add_operation!(
+      ls,
+      Symbol("###xpow###$(length(operations(ls)))###"),
+      x,
+      elementbytes,
+      position
+    )::Operation
+  elseif x isa Symbol
+    if x ∈ ls.loopsymbols
+      add_loopvalue!(ls, x, elementbytes)
+    else
+      xo = get(ls.opdict, x, nothing)
+      xo === nothing && return add_constant!(ls, x, elementbytes)::Operation
+      return xo
+    end
+  elseif x isa Number
+    return add_constant!(ls, x^p, elementbytes, var)::Operation
+  else
+    throw("objects of type $x not supported as arg")
+  end
 end
 
 # adds x ^ (p::Real)
