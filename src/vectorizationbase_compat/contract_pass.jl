@@ -1,25 +1,31 @@
 
-mulexprcost(::Number) = 0
-mulexprcost(::Symbol) = 1
-function mulexprcost(ex::Expr)
-  base = ex.head === :call ? 10 : 1
-  base + length(ex.args)
+const ProdArg = Union{Symbol,Expr,Number}
+function mulexprcost(@nospecialize(x::ProdArg))::Int
+  if x isa Number
+    return 0
+  elseif x isa Symbol
+    return 1
+  else
+    ex = x::Expr
+    base = ex.head === :call ? 10 : 1
+    return base + length(ex.args)
+  end
 end
-function mul_fast_expr(args)
+function mul_fast_expr(args::SubArray{Any, 1, Vector{Any}, Tuple{UnitRange{Int64}}, true})::Expr
   b = Expr(:call, :mul_fast)
   for i ∈ 2:length(args)
     push!(b.args, args[i])
   end
   b
 end
-function mulexpr(mulexargs)
-  a = (mulexargs[1])::Union{Symbol,Expr,Number}
+function mulexpr(mulexargs::SubArray{Any, 1, Vector{Any}, Tuple{UnitRange{Int64}}, true})::Tuple{ProdArg,ProdArg}
+  a = (mulexargs[1])::ProdArg
   if length(mulexargs) == 2
-    return (a, mulexargs[2]::Union{Symbol,Expr,Number})
+    return (a, mulexargs[2]::ProdArg)
   elseif length(mulexargs) == 3
     # We'll calc the product between the guesstimated cheaper two args first, for better out of order execution
-    b = (mulexargs[2])::Union{Symbol,Expr,Number}
-    c = (mulexargs[3])::Union{Symbol,Expr,Number}
+    b = (mulexargs[2])::ProdArg
+    c = (mulexargs[3])::ProdArg
     ac = mulexprcost(a)
     bc = mulexprcost(b)
     cc = mulexprcost(c)
