@@ -25,8 +25,8 @@ function mulexpr(
 )::Tuple{ProdArg,ProdArg}
   a = (mulexargs[1])::ProdArg
   Nexpr = length(mulexargs)
-  Nexpr == 2 && (a, mulexargs[2]::ProdArg)
-  Nexpr != 3 && (a, mul_fast_expr(mulexargs))
+  Nexpr == 2 && return (a, mulexargs[2]::ProdArg)
+  Nexpr != 3 && return (a, mul_fast_expr(mulexargs))
   # We'll calc the product between the guesstimated cheaper two args first, for better out of order execution
   b = (mulexargs[2])::ProdArg
   c = (mulexargs[3])::ProdArg
