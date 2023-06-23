@@ -12,7 +12,7 @@ function mulexprcost(@nospecialize(x::ProdArg))::Int
   end
 end
 function mul_fast_expr(
-  args::SubArray{Any,1,Vector{Any},Tuple{UnitRange{Int64}},true}
+  args::SubArray{Any,1,Vector{Any},Tuple{UnitRange{Int}},true}
 )::Expr
   b = Expr(:call, :mul_fast)
   for i ∈ 2:length(args)
@@ -21,7 +21,7 @@ function mul_fast_expr(
   b
 end
 function mulexpr(
-  mulexargs::SubArray{Any,1,Vector{Any},Tuple{UnitRange{Int64}},true}
+  mulexargs::SubArray{Any,1,Vector{Any},Tuple{UnitRange{Int}},true}
 )::Tuple{ProdArg,ProdArg}
   a = (mulexargs[1])::ProdArg
   Nexpr = length(mulexargs)
