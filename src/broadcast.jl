@@ -223,7 +223,6 @@ function _strides_expr(
   use_stride_acc = true
   stride_acc::Int = 1
   next, n = _find_arg_least_greater(R, 0)
-  n = findfirst(==(1), R)
   if !D[n]
     use_stride_acc = false
     stride_acc = 0
@@ -256,7 +255,7 @@ function _strides_expr(
         )
       end
     end
-    if (n ≠ N)
+    if (_n ≠ N)
       next, n = _find_arg_least_greater(R, next)
       if use_stride_acc
         if D[n]
