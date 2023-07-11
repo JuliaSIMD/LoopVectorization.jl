@@ -678,7 +678,6 @@ end
   ::Val{UNROLL},
   ::Val{dontbc}
 ) where {T<:NativeTypes,N,BC<:Union{Broadcasted,Product},Mod,UNROLL,dontbc}
-  @show (dest) (BC)
   vmaterialize_fun(sizeof(T), N, BC, Mod, UNROLL, dontbc, false)
 end
 @generated function vmaterialize!(
