@@ -189,6 +189,7 @@ for f ∈ [ # groupedstridedpointer support
   :(ArrayInterface.contiguous_axis),
   :(ArrayInterface.contiguous_batch_size),
   :(ArrayInterface.device),
+  :(ArrayInterface.dense_dims),
   :(ArrayInterface.stride_rank),
   :(VectorizationBase.val_dense_dims),
   :(ArrayInterface.offsets),
@@ -204,7 +205,9 @@ function is_column_major(x)
   true
 end
 is_row_major(x) = is_column_major(reverse(x))
-# @inline _bytestrides(s,paren) = VectorizationBase.bytestrides(paren)
+_find_arg_least_greater(r::Vector{Int}, i) =
+  findmin(x -> x > i ? x : typemax(Int), r)
+
 function _strides_expr(
   @nospecialize(s),
   @nospecialize(x),
@@ -214,20 +217,19 @@ function _strides_expr(
   N = length(R)
   q = Expr(:block, Expr(:meta, :inline))
   strd_tup = Expr(:tuple)
+  resize!(strd_tup.args, N)
   ifel = GlobalRef(Core, :ifelse)
-  Nrange = 1:1:N # type stability w/ respect to reverse
+  Nrange = 1:N # type stability w/ respect to reverse
+  # Nrange = 1:1:N # type stability w/ respect to reverse
   use_stride_acc = true
   stride_acc::Int = 1
-  if is_column_major(R)
-    # elseif is_row_major(R)
-    #   Nrange = reverse(Nrange)
-  else # not worth my time optimizing this case at the moment...
-    # will write something generic stride-rank agnostic eventually
+  next, n = _find_arg_least_greater(R, 0)
+  if !D[n]
     use_stride_acc = false
     stride_acc = 0
   end
   sₙ_value::Int = 0
-  for n ∈ Nrange
+  for _n ∈ Nrange
     xₙ_type = x[n]
     xₙ_static = xₙ_type <: StaticInt
     xₙ_value::Int = xₙ_static ? (xₙ_type.parameters[1])::Int : 0
@@ -236,38 +238,38 @@ function _strides_expr(
     if sₙ_static
       sₙ_value = s_type.parameters[1]
       if s_type === One
-        push!(strd_tup.args, Expr(:call, lv(:Zero)))
+        strd_tup.args[n] = Expr(:call, lv(:Zero))
       elseif stride_acc ≠ 0
-        push!(strd_tup.args, staticexpr(stride_acc))
+        strd_tup.args[n] = staticexpr(stride_acc)
       else
-        push!(strd_tup.args, :($getfield(x, $n)))
+        strd_tup.args[n] = :($getfield(x, $n))
       end
     else
       if xₙ_static
-        push!(strd_tup.args, staticexpr(xₙ_value))
+        strd_tup.args[n] = staticexpr(xₙ_value)
       elseif stride_acc ≠ 0
-        push!(strd_tup.args, staticexpr(stride_acc))
+        strd_tup.args[n] = staticexpr(stride_acc)
       else
-        push!(
-          strd_tup.args,
+        strd_tup.args[n] =
           :($ifel(isone($getfield(s, $n)), zero($xₙ_type), $getfield(x, $n)))
-        )
       end
     end
-    if (n ≠ last(Nrange)) && use_stride_acc
-      nnext = n + step(Nrange)
-      if D[nnext]
-        if xₙ_static & sₙ_static
-          stride_acc = xₙ_value * sₙ_value
-        elseif sₙ_static
-          if stride_acc ≠ 0
-            stride_acc *= sₙ_value
+    if (_n ≠ N)
+      next, n = _find_arg_least_greater(R, next)
+      if use_stride_acc
+        if D[n]
+          if xₙ_static & sₙ_static
+            stride_acc = xₙ_value * sₙ_value
+          elseif sₙ_static
+            if stride_acc ≠ 0
+              stride_acc *= sₙ_value
+            end
+          else
+            stride_acc = 0
           end
         else
           stride_acc = 0
         end
-      else
-        stride_acc = 0
       end
     end
   end
