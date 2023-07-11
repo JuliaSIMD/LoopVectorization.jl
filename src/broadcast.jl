@@ -207,7 +207,7 @@ end
 is_row_major(x) = is_column_major(reverse(x))
 _find_arg_least_greater(r::Vector{Int}, i) =
   findmin(x -> x > i ? x : typemax(Int), r)
-# @inline _bytestrides(s,paren) = VectorizationBase.bytestrides(paren)
+
 function _strides_expr(
   @nospecialize(s),
   @nospecialize(x),
@@ -217,6 +217,7 @@ function _strides_expr(
   N = length(R)
   q = Expr(:block, Expr(:meta, :inline))
   strd_tup = Expr(:tuple)
+  resize!(strd_tup.args, N)
   ifel = GlobalRef(Core, :ifelse)
   Nrange = 1:N # type stability w/ respect to reverse
   # Nrange = 1:1:N # type stability w/ respect to reverse
@@ -237,22 +238,20 @@ function _strides_expr(
     if sₙ_static
       sₙ_value = s_type.parameters[1]
       if s_type === One
-        push!(strd_tup.args, Expr(:call, lv(:Zero)))
+        strd_tup.args[n] = Expr(:call, lv(:Zero))
       elseif stride_acc ≠ 0
-        push!(strd_tup.args, staticexpr(stride_acc))
+        strd_tup.args[n] = staticexpr(stride_acc)
       else
-        push!(strd_tup.args, :($getfield(x, $n)))
+        strd_tup.args[n] = :($getfield(x, $n))
       end
     else
       if xₙ_static
-        push!(strd_tup.args, staticexpr(xₙ_value))
+        strd_tup.args[n] = staticexpr(xₙ_value)
       elseif stride_acc ≠ 0
-        push!(strd_tup.args, staticexpr(stride_acc))
+        strd_tup.args[n] = staticexpr(stride_acc)
       else
-        push!(
-          strd_tup.args,
+        strd_tup.args[n] =
           :($ifel(isone($getfield(s, $n)), zero($xₙ_type), $getfield(x, $n)))
-        )
       end
     end
     if (_n ≠ N)
