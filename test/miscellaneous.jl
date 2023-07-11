@@ -1378,8 +1378,8 @@ end
     axkernel = axes(kernel, 1)
     zout = convert(eltype(out), z)
     for Ipost in Rpost
-      for i in axout_tile
-        @turbo for Ipre in Rpre
+      @turbo for i in axout_tile
+        for Ipre in Rpre
           tmp = zout
           # tmp = convert(eltype(out), z)    # failing to hoist this leads to an "UndefVarError: tmp not defined"
           for j in axkernel
@@ -1402,8 +1402,8 @@ end
   )
     axkernel = axes(kernel, 1)
     for Ipost in Rpost
-      for i in axout_tile
-        @turbo for Ipre in Rpre
+      @turbo for i in axout_tile
+        for Ipre in Rpre
           tmp = zero(eltype(out))
           # tmp = convert(eltype(out), z)    # failing to hoist this leads to an "UndefVarError: tmp not defined"
           for j in axkernel

@@ -38,6 +38,31 @@ Aside from loops, `LoopVectorization.jl` also supports broadcasting.
 !!! danger
     Broadcasting an `Array` `A` when `size(A,1) == 1` is NOT SUPPORTED, unless this is known at compile time (e.g., broadcasting a transposed vector is fine). Otherwise, you will probably crash Julia.
 
+Note: `@turbo` does not support passing of kwargs to function calls to which it is applied, e.g:
+```julia
+julia> @turbo round.(rand(10));
+
+julia> @turbo round.(rand(10); digits = 3);
+ERROR: TypeError: in typeassert, expected Expr, got a value of type GlobalRef
+```
+
+You can work around this by creating a anonymous function before applying `@turbo` as follows:
+```julia
+struct KwargCall{F,T}
+    f::F
+    x::T
+end
+@inline (f::KwargCall)(args...) = f.f(args...; f.x...)
+
+f = KwargCall(round, (digits = 3,));
+@turbo f.(rand(10))
+10-element Vector{Float64}:
+ 0.763
+ ⋮
+ 0.851
+```
+
+
 ```julia
 julia> using LoopVectorization, BenchmarkTools
 
