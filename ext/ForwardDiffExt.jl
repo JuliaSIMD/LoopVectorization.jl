@@ -197,13 +197,28 @@ end
     ForwardDiff.Dual{$TAG}(z, ForwardDiff.Partials(p))
   end
 end
-@inline ifelse(m::AbstractMask, x::ForwardDiff.Dual, y::Number) = _ifelse(m, x, y)
-@inline ifelse(m::AbstractMask, x::ForwardDiff.Dual, y::ForwardDiff.Dual) = _ifelse(m, x, y)
-@inline ifelse(m::AbstractMask, y::Number, x::ForwardDiff.Dual) = _ifelse(m, y, x)
+@inline ifelse(m::AbstractMask, x::ForwardDiff.Dual, y::Number) =
+  _ifelse(m, x, y)
+@inline ifelse(m::AbstractMask, x::ForwardDiff.Dual, y::ForwardDiff.Dual) =
+  _ifelse(m, x, y)
+@inline ifelse(m::AbstractMask, y::Number, x::ForwardDiff.Dual) =
+  _ifelse(m, y, x)
 
-@inline ifelse(m::VecUnroll{<:Any,<:Any,Bit,<:AbstractMask}, x::ForwardDiff.Dual, y::Number) = _ifelse(m, x, y)
-@inline ifelse(m::VecUnroll{<:Any,<:Any,Bit,<:AbstractMask}, x::ForwardDiff.Dual, y::ForwardDiff.Dual) = _ifelse(m, x, y)
-@inline ifelse(m::VecUnroll{<:Any,<:Any,Bit,<:AbstractMask}, y::Number, x::ForwardDiff.Dual) = _ifelse(m, y, x)
+@inline ifelse(
+  m::VecUnroll{<:Any,<:Any,Bit,<:AbstractMask},
+  x::ForwardDiff.Dual,
+  y::Number
+) = _ifelse(m, x, y)
+@inline ifelse(
+  m::VecUnroll{<:Any,<:Any,Bit,<:AbstractMask},
+  x::ForwardDiff.Dual,
+  y::ForwardDiff.Dual
+) = _ifelse(m, x, y)
+@inline ifelse(
+  m::VecUnroll{<:Any,<:Any,Bit,<:AbstractMask},
+  y::Number,
+  x::ForwardDiff.Dual
+) = _ifelse(m, y, x)
 
 @inline function SLEEFPirates.softplus(x::ForwardDiff.Dual{TAG}) where {TAG}
   val = ForwardDiff.value(x)

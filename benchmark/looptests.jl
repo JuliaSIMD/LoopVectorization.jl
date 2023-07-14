@@ -76,12 +76,12 @@ function jgemm!(𝐂, 𝐀ᵀ::Adjoint, 𝐁ᵀ::Adjoint)
   end
 end
 gemmavx!(𝐂, 𝐀, 𝐁) = @turbo for m ∈ indices((𝐀, 𝐂), 1), n ∈ indices((𝐁, 𝐂), 2)
-    𝐂ₘₙ = zero(eltype(𝐂))
-    for k ∈ indices((𝐀, 𝐁), (2, 1))
-      𝐂ₘₙ += 𝐀[m, k] * 𝐁[k, n]
-    end
-    𝐂[m, n] = 𝐂ₘₙ
+  𝐂ₘₙ = zero(eltype(𝐂))
+  for k ∈ indices((𝐀, 𝐁), (2, 1))
+    𝐂ₘₙ += 𝐀[m, k] * 𝐁[k, n]
   end
+  𝐂[m, n] = 𝐂ₘₙ
+end
 function gemmavx!(
   Cc::AbstractMatrix{Complex{T}},
   Ac::AbstractMatrix{Complex{T}},
@@ -102,12 +102,12 @@ function gemmavx!(
   end
 end
 gemmavxt!(𝐂, 𝐀, 𝐁) = @tturbo for m ∈ indices((𝐀, 𝐂), 1), n ∈ indices((𝐁, 𝐂), 2)
-    𝐂ₘₙ = zero(eltype(𝐂))
-    for k ∈ indices((𝐀, 𝐁), (2, 1))
-      𝐂ₘₙ += 𝐀[m, k] * 𝐁[k, n]
-    end
-    𝐂[m, n] = 𝐂ₘₙ
+  𝐂ₘₙ = zero(eltype(𝐂))
+  for k ∈ indices((𝐀, 𝐁), (2, 1))
+    𝐂ₘₙ += 𝐀[m, k] * 𝐁[k, n]
   end
+  𝐂[m, n] = 𝐂ₘₙ
+end
 function gemmavxt!(
   Cc::AbstractMatrix{Complex{T}},
   Ac::AbstractMatrix{Complex{T}},
@@ -204,11 +204,11 @@ function jdot3avx(x, A, y)
   s
 end
 jvexp!(b, a) = @inbounds for i ∈ eachindex(a)
-    b[i] = exp(a[i])
-  end
+  b[i] = exp(a[i])
+end
 jvexpavx!(b, a) = @turbo for i ∈ eachindex(a)
-    b[i] = exp(a[i])
-  end
+  b[i] = exp(a[i])
+end
 function jsvexp(a)
   s = zero(eltype(a))
   @inbounds for i ∈ eachindex(a)
@@ -242,12 +242,12 @@ function jgemv!(𝐲, 𝐀ᵀ::Adjoint, 𝐱)
   end
 end
 jgemvavx!(𝐲, 𝐀, 𝐱) = @turbo for i ∈ eachindex(𝐲)
-    𝐲ᵢ = zero(eltype(𝐲))
-    for j ∈ eachindex(𝐱)
-      𝐲ᵢ += 𝐀[i, j] * 𝐱[j]
-    end
-    𝐲[i] = 𝐲ᵢ
+  𝐲ᵢ = zero(eltype(𝐲))
+  for j ∈ eachindex(𝐱)
+    𝐲ᵢ += 𝐀[i, j] * 𝐱[j]
   end
+  𝐲[i] = 𝐲ᵢ
+end
 function jvar!(𝐬², 𝐀, x̄)
   @. s² = zero(eltype(𝐬²))
   @inbounds @fastmath for i ∈ 1:size(𝐀, 2)
@@ -258,14 +258,14 @@ function jvar!(𝐬², 𝐀, x̄)
   end
 end
 jvaravx!(𝐬², 𝐀, x̄) = @turbo for j ∈ eachindex(𝐬²)
-    𝐬²ⱼ = zero(eltype(𝐬²))
-    x̄ⱼ = x̄[j]
-    for i ∈ 1:size(𝐀, 2)
-      δ = 𝐀[j, i] - x̄ⱼ
-      𝐬²ⱼ += δ * δ
-    end
-    𝐬²[j] = 𝐬²ⱼ
+  𝐬²ⱼ = zero(eltype(𝐬²))
+  x̄ⱼ = x̄[j]
+  for i ∈ 1:size(𝐀, 2)
+    δ = 𝐀[j, i] - x̄ⱼ
+    𝐬²ⱼ += δ * δ
   end
+  𝐬²[j] = 𝐬²ⱼ
+end
 japlucBc!(D, a, B, c) = @. D = a + B * c';
 japlucBcavx!(D, a, B, c) = @turbo @. D = a + B * c';
 

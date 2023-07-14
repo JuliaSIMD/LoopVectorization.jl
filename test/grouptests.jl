@@ -116,6 +116,7 @@ const START_TIME = time()
     Pkg.activate(joinpath(precompiledir, "LVUser"))
     @time include(joinpath(precompiledir, "precompile.jl"))
     Pkg.activate(cproj)
+    @time include("forwarddiffext.jl")
   end
 
 end

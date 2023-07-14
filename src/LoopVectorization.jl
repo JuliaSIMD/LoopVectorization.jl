@@ -108,7 +108,8 @@ using VectorizationBase:
   contract_or,
   collapse_or,
   max_mask,
-  maybestaticsize,zero_mask
+  maybestaticsize,
+  zero_mask
 
 using HostCPUFeatures:
   pick_vector_width,
