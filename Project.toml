@@ -1,8 +1,7 @@
 name = "LoopVectorization"
 uuid = "bdcacae8-1622-11e9-2a5c-532679323890"
 authors = ["Chris Elrod <elrodc@gmail.com>"]
-version = "0.12.164"
-
+version = "0.12.165"
 
 [deps]
 ArrayInterface = "4fba245c-0d91-5ea0-9b3e-6abc04ee57a9"
@@ -18,15 +17,24 @@ LayoutPointers = "10f19ff3-798f-405d-979b-55457f8fc047"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
 PolyesterWeave = "1d0040c9-8b98-4ee7-8388-3f51789ca0ad"
+PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
 SIMDTypes = "94e857df-77ce-4151-89e5-788b33177be4"
 SLEEFPirates = "476501e8-09a2-5ece-8869-fb82de89a1fa"
-PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 Static = "aedffcd0-7271-4cad-89d0-dc628f76c6d3"
 StaticArrayInterface = "0d7ed370-da01-4f52-bd93-41d350b8b718"
 ThreadingUtilities = "8290d209-cae3-49c0-8002-c8c24d57dab5"
 UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 VectorizationBase = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
+
+[weakdeps]
+ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
+
+[extensions]
+ForwardDiffExt = ["ChainRulesCore", "ForwardDiff"]
+SpecialFunctionsExt = "SpecialFunctions"
 
 [compat]
 ArrayInterface = "7"
@@ -51,12 +59,3 @@ ThreadingUtilities = "0.5"
 UnPack = "1"
 VectorizationBase = "0.21.63"
 julia = "1.6"
-
-[extensions]
-ForwardDiffExt = ["ChainRulesCore", "ForwardDiff"]
-SpecialFunctionsExt = "SpecialFunctions"
-
-[weakdeps]
-ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
-ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
-SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
