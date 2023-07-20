@@ -29,7 +29,8 @@ else
   # const COLOR_MAP = Dict{String,RGB{Float64}}()
   # const COLOR_MAP = Dict{String,RGB{Colors.N0f8}}()
   const COLOR_MAP64 = Dict{String,RGB{Float64}}()
-  getcolor(s::String) = get!(COLOR_MAP64, s) do
+  getcolor(s::String) =
+    get!(COLOR_MAP64, s) do
       COLORS[length(COLOR_MAP64)+1]
     end
   replace_and(str) = replace(str, '&' => "with")

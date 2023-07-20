@@ -13,7 +13,8 @@ struct Instruction
 end
 # lower(instr::Instruction) = Expr(:(.), instr.mod, QuoteNode(instr.instr))
 # Base.convert(::Type{Expr}, instr::Instruction) = Expr(:(.), instr.mod, QuoteNode(instr.instr))
-callexpr(instr::Instruction) = if instr.mod === :LoopVectorization
+callexpr(instr::Instruction) =
+  if instr.mod === :LoopVectorization
     Expr(:call, lv(instr.instr))
   else#if instr.mod === :Main
     Expr(:call, instr.instr)
@@ -563,7 +564,8 @@ function reduction_to_single_vector(x::Float64)
     throw("Reduction not found.")
   end
 end
-reduce_to_onevecunroll(x::Float64) = if x == ADDITIVE_IN_REDUCTIONS
+reduce_to_onevecunroll(x::Float64) =
+  if x == ADDITIVE_IN_REDUCTIONS
     :+
   elseif x == MULTIPLICATIVE_IN_REDUCTIONS
     :*
@@ -578,7 +580,8 @@ reduce_to_onevecunroll(x::Float64) = if x == ADDITIVE_IN_REDUCTIONS
   else
     throw("Reduction not found.")
   end
-reduce_number_of_vectors(x::Float64) = if x == ADDITIVE_IN_REDUCTIONS
+reduce_number_of_vectors(x::Float64) =
+  if x == ADDITIVE_IN_REDUCTIONS
     :contract_add
   elseif x == MULTIPLICATIVE_IN_REDUCTIONS
     :contract_mul
@@ -593,7 +596,8 @@ reduce_number_of_vectors(x::Float64) = if x == ADDITIVE_IN_REDUCTIONS
   else
     throw("Reduction not found.")
   end
-reduction_to_scalar(x::Float64) = if x == ADDITIVE_IN_REDUCTIONS
+reduction_to_scalar(x::Float64) =
+  if x == ADDITIVE_IN_REDUCTIONS
     :vsum
   elseif x == MULTIPLICATIVE_IN_REDUCTIONS
     :vprod

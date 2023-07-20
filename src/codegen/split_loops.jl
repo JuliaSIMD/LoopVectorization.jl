@@ -76,7 +76,8 @@ function add_operation!(
   opnew
 end
 
-append_if_included!(vnew, vold, included) = for (i, v) ∈ vold
+append_if_included!(vnew, vold, included) =
+  for (i, v) ∈ vold
     id = included[i]
     iszero(id) || push!(vnew, (id, v))
   end
