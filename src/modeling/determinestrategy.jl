@@ -1501,6 +1501,7 @@ struct LoopOrders
   syms_nr::Vector{Symbol}
   syms_r::Vector{Symbol}
   buff::Vector{Symbol}
+  state::Vector{Int}
 end
 
 function outer_reduct_loopordersplit(ls::LoopSet)
@@ -1549,18 +1550,20 @@ function LoopOrders(ls::LoopSet)
   LoopOrders(
     nonreductsyms,
     reductsyms,
-    Vector{Symbol}(undef, length(ls.loopsymbols))
+    Vector{Symbol}(undef, length(ls.loopsymbols)),
+    Vector{Int}(undef, length(ls.loopsymbols))
   )
 end
 
-nonreductview(lo::LoopOrders) = view(lo.buff, 1:length(lo.syms_nr))
-reductview(lo::LoopOrders) = view(lo.buff, 1+length(lo.syms_nr):length(lo.buff))
+nonreductview(lo::LoopOrders) = @inbounds view(lo.buff, 1:length(lo.syms_nr))
+reductview(lo::LoopOrders) = @inbounds view(lo.buff, 1+length(lo.syms_nr):length(lo.buff))
 function Base.iterate(lo::LoopOrders)
-  copyto!(nonreductview(lo), lo.syms_nr)
-  copyto!(reductview(lo), lo.syms_r)
+  _copyto!(nonreductview(lo), lo.syms_nr)
+  _copyto!(reductview(lo), lo.syms_r)
   nr = length(lo.syms_nr)
   r = length(lo.syms_r)
-  state = zeros(Int, nr + r)
+  state = lo.state
+  _fill!(state,0)
   lo.buff, (view(state, 1:nr), view(state, 1+nr:nr+r))
 end
 
@@ -1582,10 +1585,20 @@ function advance_state!(state)
   end
   true
 end
-function advance_state!(state, Nr)
+function _copyto!(x,y)
+  @inbounds for i = eachindex(x,y)
+    x[i]=y[i]
+  end
+end
+function _fill!(x,y)
+  @inbounds for i = eachindex(x)
+    x[i]=y
+  end
+end
+function advance_state!(state, Nr)::Bool
   state_nr = view(state, 1:Nr)
   advance_state!(state_nr) && return true
-  fill!(state_nr, 0)
+  _fill!(state_nr, 0)
   advance_state!(view(state, 1+Nr:length(state)))
 end
 swap!(x::AbstractVector, i::Int, j::Int) = (x[j], x[i]) = (x[i], x[j])
@@ -1594,20 +1607,21 @@ function swap!(
   src::AbstractVector{Symbol},
   offs::AbstractVector{Int}
 )
-  copyto!(dest, src)
+  _copyto!(dest, src)
   for i ∈ eachindex(offs)
     sᵢ = offs[i]
     sᵢ == 0 || swap!(dest, i, i + sᵢ)
   end
 end
 # This is not a good algorithm
-function Base.iterate(lo::LoopOrders, (state_nr, state_r))
+@inline function Base.iterate(lo::LoopOrders, states)
+ (state_nr, state_r) = states
   if advance_state!(state_nr)
     swap!(nonreductview(lo), lo.syms_nr, state_nr)
   else
     advance_state!(state_r) || return nothing
-    fill!(state_nr, 0)
-    copyto!(nonreductview(lo), lo.syms_nr)
+    _fill!(state_nr, 0)
+    _copyto!(nonreductview(lo), lo.syms_nr)
     swap!(reductview(lo), lo.syms_r, state_r)
   end
   lo.buff, (state_nr, state_r)
@@ -1644,7 +1658,7 @@ function choose_unroll_order(
       cost_temp = evaluate_cost_unroll(ls, new_order, new_vec, lowest_cost, sld)
       if cost_temp < lowest_cost
         lowest_cost = cost_temp
-        copyto!(best_order, new_order)
+        _copyto!(best_order, new_order)
         best_vec = new_vec
       end
     end
@@ -1769,7 +1783,7 @@ function choose_tile(
             bestu₂ = newu₂
             bestu₁ = newu₁
             loadelim = loadelim_temp
-            copyto!(best_order, new_order)
+            _copyto!(best_order, new_order)
             save_tilecost!(ls)
           end
         end
@@ -1822,7 +1836,7 @@ function choose_order_cost(ls::LoopSet, v::Int = 0)
   mismatched = mismatchedstorereductions(ls)
   if num_loops(ls) > 1 && tc ≤ uc
     @assert ls.loop_order.bestorder === torder
-    # copyto!(ls.loop_order.bestorder, torder)
+    # _copyto!(ls.loop_order.bestorder, torder)
     return torder,
     tunroll,
     ttile,
@@ -1833,7 +1847,7 @@ function choose_order_cost(ls::LoopSet, v::Int = 0)
     shouldinline
     # return torder, tvec, 4, 4#5, 5
   else
-    copyto!(ls.loop_order.bestorder, uorder)
+    _copyto!(ls.loop_order.bestorder, uorder)
     UF, uunroll = determine_unroll_factor(ls, uorder, uvec)
     return uorder,
     uunroll,
