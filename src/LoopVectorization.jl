@@ -82,7 +82,6 @@ using VectorizationBase:
   reduced_any,
   reduce_to_all,
   reduce_to_any,
-  vsum,
   vprod,
   vmaximum,
   vminimum,
