@@ -598,7 +598,7 @@ reduce_number_of_vectors(x::Float64) =
   end
 reduction_to_scalar(x::Float64) =
   if x == ADDITIVE_IN_REDUCTIONS
-    :vsum
+    :(VectorizationBase.vsum)
   elseif x == MULTIPLICATIVE_IN_REDUCTIONS
     :vprod
   elseif x == MAX
