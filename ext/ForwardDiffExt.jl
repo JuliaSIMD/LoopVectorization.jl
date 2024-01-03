@@ -1,4 +1,5 @@
 module ForwardDiffExt
+if VERSION < v"1.11-DEV"
 import ForwardDiff, ChainRulesCore
 using LoopVectorization, VectorizationBase, SLEEFPirates, ForwardDiff
 
@@ -375,5 +376,6 @@ for f in (:vmapt, :vmapnt, :vmapntt)
   ) where {F,K}
     ChainRulesCore.rrule(typeof($vmap), f, args...)
   end
+end
 end
 end
