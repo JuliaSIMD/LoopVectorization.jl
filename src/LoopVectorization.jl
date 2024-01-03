@@ -24,7 +24,7 @@ if VERSION >= v"1.11-DEV"
   macro turbo(args...)
     quote
       @inbounds @fastmath begin
-        $(last(args))
+        $(esc(last(args)))
       end
     end
   end
