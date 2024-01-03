@@ -12,6 +12,10 @@
 
 [![LoopVectorization Downloads](https://shields.io/endpoint?url=https://pkgs.genieframework.com/api/v1/badge/LoopVectorization)](https://pkgs.genieframework.com?packages=LoopVectorization)
 
+# NOTE: Deprecated for Julia v1.11 and above!
+
+LoopVectorization only works for Julia 1.3 through 1.10. For 1.11 and newer, it simply uses `@inbounds @fastmath` instead, so it should still get roughly the same answer, but both runtime and compile time performance may change dramatically.
+
 ## Installation
 
 ```julia
