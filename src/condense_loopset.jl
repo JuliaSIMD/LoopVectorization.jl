@@ -938,7 +938,7 @@ end
 @inline check_args(::VectorizationBase.AbstractStridedPointer) = true
 @inline function check_args(x)
   # @info "`LoopVectorization.check_args(::$(typeof(x))) == false`, therefore compiling a probably slow `@inbounds @fastmath` fallback loop." maxlog=1
-  @show @__LINE__, typeof(x)
+  # DEBUG: @show @__LINE__, typeof(x)
   false
 end
 @inline check_args(A, B, C::Vararg{Any,K}) where {K} =
@@ -956,15 +956,15 @@ Returns true if the element type is supported.
 """
 @inline check_type(::Type{T}) where {T<:NativeTypes} = true
 @inline function check_type(::Type{T}) where {T}
-@show @__LINE__, T
-false
+  # DEBUG: @show @__LINE__, T
+  false
 end
 @inline check_type(::Type{T}) where {T<:AbstractSIMD} = true
 @inline check_device(::ArrayInterface.CPUPointer) = true
 @inline check_device(::ArrayInterface.CPUTuple) = true
 @inline function check_device(x)
-@show @__LINE__, typeof(x)
-false
+  # DEBUG: @show @__LINE__, typeof(x)
+  false
 end
 
 function check_args_call(ls::LoopSet)
@@ -985,7 +985,7 @@ can be used inside a `@turbo` loop.
 """
 function can_turbo(f::F, ::Val{NARGS})::Bool where {F,NARGS}
   promoted_op = Base.promote_op(f, ntuple(RetVec2Int(), Val(NARGS))...)
-  promoted_op === Union{} && @show f, NARGS
+  # DEBUG: promoted_op === Union{} && @show f, NARGS
   return promoted_op !== Union{}
 end
 can_turbo(::typeof(vfmaddsub), ::Val{3}) = true
