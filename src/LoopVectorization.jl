@@ -20,7 +20,7 @@ export indices,
   vreduce,
   vcount
 
-@static if VERSION >= v"1.11-DEV"
+if VERSION >= v"1.11-DEV"
   macro turbo(args...)
     quote
       @inbounds @fastmath begin
