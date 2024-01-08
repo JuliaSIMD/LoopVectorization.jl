@@ -495,7 +495,7 @@ function thread_one_loops_expr(
     $AM,
     $LPSYM,
     Val(typeof(var"#avx#call#args#")),
-    flatten_to_tuple(var"#avx#call#args#")...
+    var"#avx#call#args#"...
   ))
   update_return_values = if length(ls.outer_reductions) > 0
     retv = loopset_return_value(ls, Val(false))
@@ -555,7 +555,7 @@ function thread_one_loops_expr(
               $AM,
               $LPSYM,
               StaticType{typeof(var"##lbvargs#to_launch##")}(),
-              flatten_to_tuple(var"##lbvargs#to_launch##"),
+              var"##lbvargs#to_launch##",
               var"#thread#id#"
             )
 
@@ -744,7 +744,7 @@ function thread_two_loops_expr(
     $AM,
     $LPSYM,
     Val(typeof(var"#avx#call#args#")),
-    flatten_to_tuple(var"#avx#call#args#")...
+    var"#avx#call#args#"...
   ))
   update_return_values = if length(ls.outer_reductions) > 0
     retv = loopset_return_value(ls, Val(false))
@@ -867,7 +867,7 @@ function thread_two_loops_expr(
               $AM,
               $LPSYM,
               StaticType{typeof(var"##lbvargs#to_launch##")}(),
-              flatten_to_tuple(var"##lbvargs#to_launch##"),
+              var"##lbvargs#to_launch##",
               var"#thread#id#"
             )
             var"#thread#mask#" >>>= var"#trailzing#zeros#"
