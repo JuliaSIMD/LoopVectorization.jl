@@ -20,6 +20,7 @@ https://github.com/JuliaSIMD/LoopVectorization.jl/issues/526
 
 Without new maintainers for the JuliaSIMD ecosystem, `LoopVectorization.jl` and [JuliaSIMD](https://github.com/JuliaSIMD) will be deprecated for Julia v1.11 and above!
 Make a few quality PRs fixing problems, and I will hand over the reigns.
+You may also be entitled to [$200](https://discourse.julialang.org/t/why-is-loopvectorization-deprecated/109547/29). Depending on your local cost of living, that could be anywhere from a day's rent to several weeks or more!
 
 ## Installation
 
