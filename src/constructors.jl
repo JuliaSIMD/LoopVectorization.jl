@@ -401,7 +401,15 @@ ignore `@fastmath`, preserving IEEE semantics both within `@turbo` and `@fastmat
 use their `parent`. Triangular loops aren't yet supported.
 """
 macro turbo(args...)
-  turbo_macro(__module__, __source__, last(args), Base.front(args)...)
+  if VERSION >= v"1.11-"
+    quote
+      @inbounds @fastmath begin
+        $(esc(last(args)))
+      end
+    end
+  else
+    turbo_macro(__module__, __source__, last(args), Base.front(args)...)
+  end
 end
 """
     @tturbo
@@ -412,13 +420,21 @@ Note that later arguments take precedence.
 Meant for convenience, as `@tturbo` is shorter than `@turbo thread=true`.
 """
 macro tturbo(args...)
-  turbo_macro(
-    __module__,
-    __source__,
-    last(args),
-    :(thread = true),
-    Base.front(args)...
-  )
+  if VERSION >= v"1.11-"
+    quote
+      @inbounds @fastmath begin
+        $(esc(last(args)))
+      end
+    end
+  else
+    turbo_macro(
+      __module__,
+      __source__,
+      last(args),
+      :(thread = true),
+      Base.front(args)...
+    )
+  end
 end
 
 function def_outer_reduct_types!(ls::LoopSet)
