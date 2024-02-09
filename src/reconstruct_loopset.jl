@@ -1111,7 +1111,7 @@ Execute an `@turbo` block. The block's code is represented via the arguments:
   ::Val{var"#AM#"},
   ::Val{var"#LPSYM#"},
   ::Val{Tuple{var"#LB#",var"#V#"}},
-  var"#flattened#var#arguments#"::Vararg{Any,var"#num#vargs#"}
+  var"#lv#tuple#args#"::Vararg{Any,var"#num#vargs#"}
 ) where {
   var"#UNROLL#",
   var"#OPS#",
@@ -1131,15 +1131,6 @@ Execute an `@turbo` block. The block's code is represented via the arguments:
     var"#LB#".parameters,
     var"#V#".parameters,
     var"#UNROLL#"
-  )
-  pushfirst!(
-    ls.preamble.args,
-    :(
-      var"#lv#tuple#args#" = reassemble_tuple(
-        Tuple{var"#LB#",var"#V#"},
-        var"#flattened#var#arguments#"
-      )
-    )
   )
   post = hoist_constant_memory_accesses!(ls)
   # q = @show(avx_body(ls, var"#UNROLL#")); post === ls.preamble ? q : Expr(:block, q, post)
@@ -1171,7 +1162,7 @@ end
   ::Val{var"#AM#"},
   ::Val{var"#LPSYM#"},
   ::Val{Tuple{var"#LB#",var"#V#"}},
-  var"#flattened#var#arguments#"::Tuple{Vararg{Any,var"#num#vargs#"}}
+  var"#lv#tuple#args#"::Tuple{Vararg{Any,var"#num#vargs#"}}
 ) where {
   var"#UNROLL#",
   var"#OPS#",
@@ -1191,15 +1182,6 @@ end
     var"#LB#".parameters,
     var"#V#".parameters,
     var"#UNROLL#"
-  )
-  pushfirst!(
-    ls.preamble.args,
-    :(
-      var"#lv#tuple#args#" = reassemble_tuple(
-        Tuple{var"#LB#",var"#V#"},
-        var"#flattened#var#arguments#"
-      )
-    )
   )
   post = hoist_constant_memory_accesses!(ls)
   # q = @show(avx_body(ls, var"#UNROLL#")); post === ls.preamble ? q : Expr(:block, q, post)
