@@ -369,9 +369,19 @@ function add_external_functions!(q::Expr, ls::LoopSet)
   end
 end
 
+# _any(f, x::Tuple{}) = false
+# _any(f, x::Tuple{T}) where {T} = f(@inbounds x[1])::Bool
+# _any(f, x::Tuple{T0,T1,Vararg}) where {T0,T1} = f(@inbounds x[1])::Bool || _any(f,Base.tail(x))::Bool
+
+_any_empty(x::Tuple{}) = false
+_any_empty(x::Tuple{T}) where {T} = isempty(@inbounds x[1])::Bool
+_any_empty(x::Tuple{T0,T1,Vararg}) where {T0,T1} =
+  isempty(@inbounds x[1])::Bool || _any_empty(Base.tail(x))::Bool
+
 function check_if_empty(ls::LoopSet, q::Expr)
   lb = loop_boundaries(ls, fill(false, length(ls.loops)))
-  Expr(:if, Expr(:call, :!, Expr(:call, :any, :isempty, lb)), q)
+  # Expr(:if, Expr(:call, :!, Expr(:call, _any, :isempty, lb)), q)
+  Expr(:if, Expr(:call, :!, Expr(:call, _any_empty, lb)), q)
 end
 
 val(x) = Expr(:call, Expr(:curly, :Val, x))
@@ -1164,5 +1174,9 @@ function setup_call(
   end
   pushprepreamble!(ls, Expr(:if, call_check, call, argfailure))
   prepend_lnns!(ls.prepreamble, lnns)
-  return ls.prepreamble
+  return quote
+    let
+      $(ls.prepreamble)
+    end
+  end
 end

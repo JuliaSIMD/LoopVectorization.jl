@@ -2,12 +2,7 @@ using Test
 using Pkg
 using LoopVectorization
 
-if VERSION >= v"1.11-DEV"
-const var"@_avx" = LoopVectorization.var"@turbo"
-else
 const var"@_avx" = LoopVectorization.var"@_turbo"
-end
-
 
 using LinearAlgebra
 function clenshaw(x, coeff)
