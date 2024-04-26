@@ -1001,6 +1001,13 @@ function makestatic!(expr)
           ArrayInterface,
           (:static_axes, :static_size, :static_length)[j]
         )
+      elseif i == 1 && ex === :indices && length(expr.args) == 3
+        for k = 2:3
+          arg2 = expr.args[k]
+          if Meta.isexpr(arg2, :tuple)
+            expr.args[k] = arg2.args[1]
+          end
+        end
       end
     elseif ex isa Expr
       makestatic!(ex)

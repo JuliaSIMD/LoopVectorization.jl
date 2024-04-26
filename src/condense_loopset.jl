@@ -4,12 +4,16 @@
 Base.:|(u::Unsigned, it::IndexType) = u | UInt8(it)
 Base.:(==)(u::Unsigned, it::IndexType) = (u % UInt8) == UInt8(it)
 
+const LPtr{T} = Core.LLVMPtr{T,0}
+
 function _append_fields!(t::Expr, body::Expr, sym::Symbol, ::Type{T}) where {T}
   for f ∈ 1:fieldcount(T)
     TF = fieldtype(T, f)
     Base.issingletontype(TF) && continue
     gfcall = Expr(:call, getfield, sym, f)
-    if fieldcount(TF) ≡ 0
+    if TF <: Ptr
+      push!(t.args, Expr(:call, Base.bitcast, LPtr{TF.parameters[1]}, gfcall))
+    elseif fieldcount(TF) ≡ 0
       push!(t.args, gfcall)
     elseif TF <: DataType
       push!(t.args, Expr(:call, Expr(:curly, lv(:StaticType), gfcall)))
@@ -42,6 +46,8 @@ function rebuild_fields(offset::Int, ::Type{T}) where {T}
     TF = fieldtype(T, f)
     if Base.issingletontype(TF)
       push!(call.args, TF.instance)
+    elseif TF <: Ptr
+      push!(call.args, Expr(:call, Base.bitcast, Ptr{TF.parameters[1]}, Expr(:call, getfield, :t, (offset += 1))))
     elseif fieldcount(TF) ≡ 0
       push!(call.args, Expr(:call, getfield, :t, (offset += 1)))
     elseif TF <: DataType
