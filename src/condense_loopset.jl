@@ -9,7 +9,7 @@ function _append_fields!(t::Expr, body::Expr, sym::Symbol, ::Type{T}) where {T}
     TF = fieldtype(T, f)
     Base.issingletontype(TF) && continue
     gfcall = Expr(:call, getfield, sym, f)
-    if fieldcount(TF) ≡ 0
+    if fieldcount(TF) ≡ 0 || TF <: Array
       push!(t.args, gfcall)
     elseif TF <: DataType
       push!(t.args, Expr(:call, Expr(:curly, lv(:StaticType), gfcall)))
@@ -26,7 +26,7 @@ end
   t = Expr(:tuple)
   if Base.issingletontype(T)
     nothing
-  elseif fieldcount(T) ≡ 0
+  elseif fieldcount(T) ≡ 0 || T <: Array
     push!(t.args, :r)
   elseif T <: DataType
     push!(t.args, Expr(:call, Expr(:curly, lv(:StaticType), :r)))
@@ -42,7 +42,7 @@ function rebuild_fields(offset::Int, ::Type{T}) where {T}
     TF = fieldtype(T, f)
     if Base.issingletontype(TF)
       push!(call.args, TF.instance)
-    elseif fieldcount(TF) ≡ 0
+    elseif fieldcount(TF) ≡ 0 || TF <: Array
       push!(call.args, Expr(:call, getfield, :t, (offset += 1)))
     elseif TF <: DataType
       push!(
@@ -59,7 +59,7 @@ end
 @generated function reassemble_tuple(::Type{T}, t::Tuple) where {T}
   if Base.issingletontype(T)
     return T.instance
-  elseif fieldcount(T) ≡ 0
+  elseif fieldcount(T) ≡ 0 || T <: Array
     call = Expr(:call, getfield, :t, 1)
   elseif T <: DataType
     call = Expr(:call, lv(:gettype), Expr(:call, getfield, :t, 1))

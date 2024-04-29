@@ -5,4 +5,5 @@ version = "0.1.0"
 
 [deps]
 LoopVectorization = "bdcacae8-1622-11e9-2a5c-532679323890"
+SnoopCompileCore = "e2b509da-e806-4183-be48-004708413034"
 SnoopPrecompile = "66db9d55-30c0-4569-8b51-7e840670fc0c"

@@ -1,3 +1,6 @@
+[compat]
+Aqua = "0.8.7"
+
 [deps]
 Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 ArrayInterface = "4fba245c-0d91-5ea0-9b3e-6abc04ee57a9"
