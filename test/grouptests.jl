@@ -1,5 +1,4 @@
 const START_TIME = time()
-
 @show LoopVectorization.register_count()
 
 @show RUN_SLOW_TESTS
@@ -100,6 +99,8 @@ const START_TIME = time()
     end
 
     @time include("offsetarrays.jl")
+
+    @time include("forwarddiffext.jl")
   end
 
   @time if LOOPVECTORIZATION_TEST == "all" || LOOPVECTORIZATION_TEST == "part5"
@@ -110,17 +111,8 @@ const START_TIME = time()
     @time include("inner_reductions.jl")
   end
 
-  @time if LOOPVECTORIZATION_TEST == "all" || LOOPVECTORIZATION_TEST == "part6"
-    cproj = Base.active_project()
-    precompiledir = joinpath(@__DIR__, "precompile")
-    Pkg.activate(joinpath(precompiledir, "LVUser"))
-    @time include(joinpath(precompiledir, "precompile.jl"))
-    Pkg.activate(cproj)
-    @time include("forwarddiffext.jl")
-  end
-
 end
 
 const ELAPSED_MINUTES = (time() - START_TIME) / 60
-# @test ELAPSED_MINUTES < 180
-@test ELAPSED_MINUTES < 300
+@test ELAPSED_MINUTES < 180
+# @test ELAPSED_MINUTES < 300

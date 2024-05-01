@@ -27,6 +27,7 @@ jobs:
         version:
           - '1.6'
           - '1' # automatically expands to the latest stable 1.x release of Julia.
+          - '1.11.0-beta1'
         os:
           - ubuntu-latest
           - macOS-latest
