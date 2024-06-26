@@ -137,8 +137,13 @@ end
   #     # @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, :i, :j, Unum, Tnum)
   #     @test LoopVectorization.choose_order(lscolsum) == (Symbol[:j,:i], :j, :i, :j, 1, 1)
   # end
-  @test LoopVectorization.choose_order(lscolsum) ==
-        (Symbol[:j, :i], :j, Symbol("##undefined##"), :j, 4, -1)
+  if Sys.ARCH === :aarch64
+    @test LoopVectorization.choose_order(lscolsum) ==
+          (Symbol[:j, :i], :j, Symbol("##undefined##"), :j, 8, -1)
+  else
+    @test LoopVectorization.choose_order(lscolsum) ==
+          (Symbol[:j, :i], :j, Symbol("##undefined##"), :j, 4, -1)
+  end
   # my colsum is wrong (by 0.25), but slightly more interesting
   function mycolsum!(x, A)
     @. x = 0
@@ -177,8 +182,13 @@ end
   # LoopVectorization.choose_order(lsvar)
   # @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, Unum, Tnum)
   # if LoopVectorization.register_count() == 32
-  @test LoopVectorization.choose_order(lsvar) ==
-        (Symbol[:j, :i], :j, Symbol("##undefined##"), :j, 4, -1)
+  if Sys.ARCH === :aarch64
+    @test LoopVectorization.choose_order(lsvar) ==
+          (Symbol[:j, :i], :j, Symbol("##undefined##"), :j, 8, -1)
+  else
+    @test LoopVectorization.choose_order(lsvar) ==
+          (Symbol[:j, :i], :j, Symbol("##undefined##"), :j, 4, -1)
+  end
   #     @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, :i, :j, 2, 10)
   # else#if LoopVectorization.register_count() == 16
   # @test LoopVectorization.choose_order(lsvar) == (Symbol[:j,:i], :j, Symbol("##undefined##"), :j, 8, -1)

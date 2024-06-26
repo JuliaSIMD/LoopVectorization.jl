@@ -5,8 +5,14 @@
     end
   )
   lsvexp = LoopVectorization.loopset(vexpq)
-  @test LoopVectorization.choose_order(lsvexp) ==
-        (Symbol[:i], :i, Symbol("##undefined##"), :i, 2, -1)
+  if Sys.ARCH === :aarch64
+    # returned `4` on an M1...
+    @test LoopVectorization.choose_order(lsvexp) ==
+          (Symbol[:i], :i, Symbol("##undefined##"), :i, 4, -1)
+  else
+    @test LoopVectorization.choose_order(lsvexp) ==
+          (Symbol[:i], :i, Symbol("##undefined##"), :i, 2, -1)
+  end
 
   function myvexp!(b, a)
     @inbounds for i ∈ eachindex(a)
