@@ -12,15 +12,13 @@
 
 [![LoopVectorization Downloads](https://shields.io/endpoint?url=https://pkgs.genieframework.com/api/v1/badge/LoopVectorization)](https://pkgs.genieframework.com?packages=LoopVectorization)
 
-# Note: Often generates type unstable code in Julia 1.10
+## Maintanence
+The plan is for `LoopVectorization.jl` to be maintained through the [SciML Small Grants](https://sciml.ai/small_grants/#update_loopvectorization_to_support_changes_in_julia_v112_200) program.
+If you would like to see an issue fixed, or support extended to another Julia patch release, please consider:
+1. Donating to the SciML Small Grants program, with a note on the purpose of your donation.
+2. Create (a) PR(s) fixing the issue yourself. Apply for the small grant program first to claim the grant. Note that the small grants program is not a mentorship program; you would be expected to complete the tasks without guidance from maintainers, past or present.
 
-https://github.com/JuliaSIMD/LoopVectorization.jl/issues/526
-
-# NOTE: Looking for new maintainers, otherwise deprecated in Julia 1.11
-
-Without new maintainers for the JuliaSIMD ecosystem, `LoopVectorization.jl` and [JuliaSIMD](https://github.com/JuliaSIMD) will be deprecated for Julia v1.11 and above!
-Make a few quality PRs fixing problems, and I will hand over the reigns.
-You may also be entitled to [$200](https://discourse.julialang.org/t/why-is-loopvectorization-deprecated/109547/29). Depending on your local cost of living, that could be anywhere from a day's rent to several weeks or more!
+Note that `LoopVectorization.jl` currently has deprecation warnings on Julia's 1.12 branch, causing test failures whenever `dep-warn=error`.
 
 ## Installation
 
@@ -398,5 +396,6 @@ Similar approaches can be taken to make kernels working with a variety of numeri
 * [VectorizedReduction.jl](https://github.com/andrewjradcliffe/VectorizedReduction.jl)
 * [DynamicExpressions.jl](https://github.com/SymbolicML/SymbolicRegression.jl)
 * [PySR](https://github.com/MilesCranmer/PySR) and [SymbolicRegression.jl](https://github.com/MilesCranmer/SymbolicRegression.jl)
+* [Lux.jl](https://github.com/LuxDL/Lux.jl) and [LuxLib.jl](https://github.com/LuxDL/LuxLib.jl)
 
 If you're using LoopVectorization, please feel free to file a PR adding yours to the list!

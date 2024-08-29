@@ -1,3 +1,4 @@
+using Base: Forward
 
 using NNlib, LoopVectorization, VectorizationBase, ForwardDiff, Test
 randnvec() = Vec(ntuple(_ -> randn(), pick_vector_width(Float64))...)
@@ -15,6 +16,20 @@ function tovec(x::ForwardDiff.Dual{T,V,N}) where {T,V,N}
   return ret
 end
 
+if LoopVectorization.ifelse !== Base.ifelse
+  @inline function NNlib.leakyrelu(
+    x::LoopVectorization.AbstractSIMD,
+    a = NNlib.oftf(x, NNlib.leakyrelu_a),
+  )
+    LoopVectorization.ifelse(x > zero(x), float(x), NNlib.oftf(x, a * x))  # max(a*x, x) is 3x slower
+  end
+  @inline function NNlib.leakyrelu(
+    x::ForwardDiff.Dual{<:Any,<:LoopVectorization.AbstractSIMD},
+    a = NNlib.oftf(x, NNlib.leakyrelu_a),
+  )
+    LoopVectorization.ifelse(x > zero(x), float(x), NNlib.oftf(x, a * x))  # max(a*x, x) is 3x slower
+  end
+end
 
 vx0 = randnvec()
 vx1 = randnvec()

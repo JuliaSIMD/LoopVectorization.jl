@@ -182,8 +182,8 @@ function (m::VmapClosure{NonTemporal,F,D,N,A})(
   (offset, stop) = ThreadingUtilities.load(p, Int, offset)
 
   _vmap_singlethread!(m.f, dest, start, stop, Val{NonTemporal}(), args)
-  ThreadingUtilities._atomic_store!(p, ThreadingUtilities.SPIN)
   NonTemporal && Threads.atomic_fence()
+  ThreadingUtilities._atomic_store!(p, ThreadingUtilities.SPIN)
   nothing
 end
 
