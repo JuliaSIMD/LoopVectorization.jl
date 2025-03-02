@@ -67,7 +67,14 @@ function substitute_broadcast(
       syms[n] = _ciₙ::Symbol
     else
       syms[n] = Symbol('%', n)
-      ciₙ::Expr = _ciₙ::Expr
+      #ciₙ::Expr = _ciₙ::Expr
+      if _ciₙ isa Expr
+          ciₙ = _ciₙ
+      elseif _ciₙ isa GlobalRef
+          ciₙ = Expr(:globalref, _ciₙ.mod, _ciₙ.name)
+      else
+        error("Unexpected type in ci: $(typeof(_ciₙ))")
+      end
       ciₙargs = ciₙ.args
       f = first(ciₙargs)
       if ciₙ.head === :(=)
