@@ -12,6 +12,7 @@
 
 [![LoopVectorization Downloads](https://shields.io/endpoint?url=https://pkgs.genieframework.com/api/v1/badge/LoopVectorization)](https://pkgs.genieframework.com?packages=LoopVectorization)
 
+
 ## Maintanence
 The plan is for `LoopVectorization.jl` to be maintained through the [SciML Small Grants](https://sciml.ai/small_grants/#update_loopvectorization_to_support_changes_in_julia_v112_200) program.
 If you would like to see an issue fixed, or support extended to another Julia patch release, please consider:
