@@ -1,5 +1,4 @@
 using Base: Forward
-using InteractiveUtils
 
 using NNlib, LoopVectorization, VectorizationBase, ForwardDiff, Test
 randnvec() = Vec(ntuple(_ -> randn(), pick_vector_width(Float64))...)
