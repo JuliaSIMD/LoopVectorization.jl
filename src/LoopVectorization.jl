@@ -89,6 +89,7 @@ using VectorizationBase:
   vsub_fast,
   vmul_fast,
   relu,
+  leakyrelu,
   stridedpointer,
   _vload,
   _vstore!,
