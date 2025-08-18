@@ -398,5 +398,6 @@ Similar approaches can be taken to make kernels working with a variety of numeri
 * [DynamicExpressions.jl](https://github.com/SymbolicML/SymbolicRegression.jl)
 * [PySR](https://github.com/MilesCranmer/PySR) and [SymbolicRegression.jl](https://github.com/MilesCranmer/SymbolicRegression.jl)
 * [Lux.jl](https://github.com/LuxDL/Lux.jl) and [LuxLib.jl](https://github.com/LuxDL/LuxLib.jl)
+* [JetReconstruction.jl](https://github.com/JuliaHEP/JetReconstruction.jl)
 
 If you're using LoopVectorization, please feel free to file a PR adding yours to the list!
