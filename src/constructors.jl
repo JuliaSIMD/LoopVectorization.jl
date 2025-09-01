@@ -86,6 +86,7 @@ function substitute_broadcast(
       else
         add_ci_call!(lb, f, _ciₙ.args, syms, n)
       end
+      continue
     else
       rhs = _ciₙ
     end
