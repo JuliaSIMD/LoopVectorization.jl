@@ -61,48 +61,35 @@ function substitute_broadcast(
   configarg = (inline, u₁, u₂, v, true, threads, warncheckarg, safe)
   unroll_param_tup =
     Expr(:call, lv(:avx_config_val), :(Val{$configarg}()), staticexpr(0))
+
   for n ∈ 1:nargs
     _ciₙ = ci[n]
-    if _ciₙ isa Symbol
-      syms[n] = _ciₙ::Symbol
-    else
-      syms[n] = Symbol('%', n)
-      #ciₙ::Expr = _ciₙ::Expr
-      if _ciₙ isa Expr
-          ciₙ = _ciₙ
-      elseif _ciₙ isa GlobalRef
-          ciₙ = Expr(:globalref, _ciₙ.mod, _ciₙ.name)
+    syms[n] = Symbol('%', n)
+
+    local rhs
+    if _ciₙ isa Core.SSAValue
+      rhs = syms[_ciₙ.id]
+
+    elseif _ciₙ isa GlobalRef
+      if _ciₙ.mod === Base || _ciₙ.mod === Core
+        rhs = lv(_ciₙ.name)
       else
-        error("Unexpected type in ci: $(typeof(_ciₙ))")
+        rhs = _ciₙ.name
       end
-      ciₙargs = ciₙ.args
-      f = first(ciₙargs)
-      if ciₙ.head === :(=)
-        push!(lb.args, Expr(:(=), f, syms[((ciₙargs[2])::Core.SSAValue).id]))
-      elseif isglobalref(f, Base, :materialize!)
-        add_ci_call!(
-          lb,
-          lv(:vmaterialize!),
-          ciₙargs,
-          syms,
-          n,
-          unroll_param_tup,
-          mod
-        )
+
+    elseif _ciₙ isa Expr && _ciₙ.head === :call
+      f = first(_ciₙ.args)
+      if isglobalref(f, Base, :materialize!)
+        add_ci_call!(lb, lv(:vmaterialize!), _ciₙ.args, syms, n, unroll_param_tup, mod)
       elseif isglobalref(f, Base, :materialize)
-        add_ci_call!(
-          lb,
-          lv(:vmaterialize),
-          ciₙargs,
-          syms,
-          n,
-          unroll_param_tup,
-          mod
-        )
+        add_ci_call!(lb, lv(:vmaterialize), _ciₙ.args, syms, n, unroll_param_tup, mod)
       else
-        add_ci_call!(lb, f, ciₙargs, syms, n)
+        add_ci_call!(lb, f, _ciₙ.args, syms, n)
       end
+    else
+      rhs = _ciₙ
     end
+    push!(lb.args, Expr(:(=), syms[n], rhs))
   end
   ret::Expr = pop!(lb.args)::Expr
   if Meta.isexpr(ret, :(=), 2)
