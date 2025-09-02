@@ -16,21 +16,6 @@ function tovec(x::ForwardDiff.Dual{T,V,N}) where {T,V,N}
   return ret
 end
 
-if LoopVectorization.ifelse !== Base.ifelse
-  @inline function NNlib.leakyrelu(
-    x::LoopVectorization.AbstractSIMD,
-    a = NNlib.oftf(x, NNlib.leakyrelu_a),
-  )
-    LoopVectorization.ifelse(x > zero(x), float(x), NNlib.oftf(x, a * x))  # max(a*x, x) is 3x slower
-  end
-  @inline function NNlib.leakyrelu(
-    x::ForwardDiff.Dual{<:Any,<:LoopVectorization.AbstractSIMD},
-    a = NNlib.oftf(x, NNlib.leakyrelu_a),
-  )
-    LoopVectorization.ifelse(x > zero(x), float(x), NNlib.oftf(x, a * x))  # max(a*x, x) is 3x slower
-  end
-end
-
 vx0 = randnvec()
 vx1 = randnvec()
 vx2 = randnvec()
@@ -50,3 +35,8 @@ vud = ForwardDiff.Dual(vu0, vu1, vu2)
       reinterpret(Float64, NNlib.leakyrelu.(tovec(vd0)))
 @test reinterpret(Float64, tovec(NNlib.leakyrelu(vud))) ≈
       reinterpret(Float64, NNlib.leakyrelu.(tovec(vud)))
+
+@test reinterpret(Float64, tovec(NNlib.relu(vd0))) ≈
+      reinterpret(Float64, NNlib.relu.(tovec(vd0)))
+@test reinterpret(Float64, tovec(NNlib.relu(vud))) ≈
+      reinterpret(Float64, NNlib.relu.(tovec(vud)))

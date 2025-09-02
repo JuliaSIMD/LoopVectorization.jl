@@ -1,6 +1,7 @@
 module ForwardDiffExt
 import ForwardDiff, ChainRulesCore
-using LoopVectorization, VectorizationBase, SLEEFPirates, ForwardDiff
+using LoopVectorization, VectorizationBase, SLEEFPirates, ForwardDiff, NNlib
+using SLEEFPirates: tanh_fast, sigmoid_fast
 
 import IfElse: ifelse
 using VectorizationBase: AbstractSIMD, AbstractMask, zero_offsets
@@ -8,7 +9,6 @@ using VectorizationBase: AbstractSIMD, AbstractMask, zero_offsets
 using LoopVectorization:
   AbstractSIMD,
   AbstractStridedPointer,
-  relu,
   vmap,
   VectorizationBase,
   vmapt,
@@ -140,7 +140,8 @@ end
     )
   end
 end
-@generated function VectorizationBase.relu(
+
+@generated function NNlib.relu(
   x::ForwardDiff.Dual{T,S,N}
 ) where {T,S,N}
   quote
@@ -156,6 +157,27 @@ end
     )
   end
 end
+
+@generated function NNlib.leakyrelu(
+  x::ForwardDiff.Dual{T,S,N},
+  a = 0.01
+) where {T,S,N}
+  quote
+    $(Expr(:meta, :inline))
+    v = x.value
+    z = zero(v)
+
+    α = convert(typeof(v), a)
+    cmp = v < z
+    r = ifelse(cmp, α * v, v)
+    p = x.partials
+    ForwardDiff.Dual{T}(
+      r,
+      ForwardDiff.Partials(Base.Cartesian.@ntuple $N n -> ifelse(cmp, α * p[n], p[n]))
+    )
+  end
+end
+
 
 @generated function _ifelse(
   m::Union{AbstractMask,VecUnroll{<:Any,<:Any,Bit,<:AbstractMask}},
