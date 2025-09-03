@@ -66,15 +66,14 @@ function substitute_broadcast(
     _ciₙ = ci[n]
     syms[n] = Symbol('%', n)
 
-    local rhs
     if _ciₙ isa Core.SSAValue
-      rhs = syms[_ciₙ.id]
+      push!(lb.args, Expr(:(=), syms[n], syms[_ciₙ.id]))
 
     elseif _ciₙ isa GlobalRef
       if _ciₙ.mod === Base || _ciₙ.mod === Core
-        rhs = lv(_ciₙ.name)
+        push!(lb.args, Expr(:(=), syms[n], lv(_ciₙ.name)))
       else
-        rhs = _ciₙ.name
+        push!(lb.args, Expr(:(=), syms[n], _ciₙ.name))
       end
 
     elseif _ciₙ isa Expr && _ciₙ.head === :call
@@ -86,16 +85,17 @@ function substitute_broadcast(
       else
         add_ci_call!(lb, f, _ciₙ.args, syms, n)
       end
-      continue
+
     else
-      rhs = _ciₙ
+      push!(lb.args, Expr(:(=), syms[n], _ciₙ))
     end
-    push!(lb.args, Expr(:(=), syms[n], rhs))
   end
+
   ret::Expr = pop!(lb.args)::Expr
   if Meta.isexpr(ret, :(=), 2)
     ret = (ret.args[2])::Expr
   end
+
   esc(Expr(:let, lb, Expr(:block, ret)))
 end
 
