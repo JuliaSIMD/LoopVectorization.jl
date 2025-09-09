@@ -11,7 +11,6 @@ makedocs(;
       "examples/matrix_multiplication.md",
       "examples/array_interface.md",
       "examples/matrix_vector_ops.md",
-      "examples/dot_product.md",
       "examples/datetime_arrays.md",
       "examples/special_functions.md",
       "examples/sum_of_squared_error.md",
@@ -31,7 +30,8 @@ makedocs(;
   ],
   # repo="https://github.com/JuliaSIMD/LoopVectorization.jl/blob/{commit}{path}#L{line}",
   sitename = "LoopVectorization.jl",
-  authors = "Chris Elrod"
+  authors = "Chris Elrod",
+  checkdocs=:exports,
   # assets=[],
 )
 

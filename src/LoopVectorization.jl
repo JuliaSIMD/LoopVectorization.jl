@@ -25,7 +25,7 @@ if isdefined(Base, :Experimental) &&
   @eval Base.Experimental.@max_methods 1
 end
 export LowDimArray,
-  static, stridedpointer, *ˡ, _turbo_!, tanh_fast, sigmoid_fast
+  static, stridedpointer, *ˡ, tanh_fast, sigmoid_fast
 
 using ArrayInterface: UpTri, LoTri
 using Static: StaticInt, gt, static, Zero, One, reduce_tup
