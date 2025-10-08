@@ -1,6 +1,7 @@
 module ForwardDiffExt
 import ForwardDiff, ChainRulesCore
 using LoopVectorization, VectorizationBase, SLEEFPirates, ForwardDiff
+using SLEEFPirates: tanh_fast, sigmoid_fast
 
 import IfElse: ifelse
 using VectorizationBase: AbstractSIMD, AbstractMask, zero_offsets
@@ -8,7 +9,6 @@ using VectorizationBase: AbstractSIMD, AbstractMask, zero_offsets
 using LoopVectorization:
   AbstractSIMD,
   AbstractStridedPointer,
-  relu,
   vmap,
   VectorizationBase,
   vmapt,
@@ -140,22 +140,6 @@ end
     )
   end
 end
-@generated function VectorizationBase.relu(
-  x::ForwardDiff.Dual{T,S,N}
-) where {T,S,N}
-  quote
-    $(Expr(:meta, :inline))
-    v = x.value
-    z = zero(v)
-    cmp = v < z
-    r = ifelse(cmp, z, v)
-    p = x.partials
-    ForwardDiff.Dual{T}(
-      r,
-      ForwardDiff.Partials(Base.Cartesian.@ntuple $N n -> ifelse(cmp, z, p[n]))
-    )
-  end
-end
 
 @generated function _ifelse(
   m::Union{AbstractMask,VecUnroll{<:Any,<:Any,Bit,<:AbstractMask}},
@@ -283,15 +267,6 @@ function ChainRulesCore.rrule(::typeof(sigmoid_fast), x)
     y -> (ChainRulesZero(), mul_fast(vfnmadd_fast(s, s, s), y))
   end
   s, ∂
-end
-function ChainRulesCore.rrule(::typeof(relu), v)
-  z = zero(v)
-  cmp = v < z
-  r = ifelse(cmp, z, v)
-  ∂ = let cmp = cmp
-    y -> (ChainRulesZero(), ifelse(cmp, zero(y), y))
-  end
-  r, ∂
 end
 
 function ∂vmap_singlethread!(

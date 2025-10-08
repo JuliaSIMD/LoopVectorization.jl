@@ -61,53 +61,41 @@ function substitute_broadcast(
   configarg = (inline, u₁, u₂, v, true, threads, warncheckarg, safe)
   unroll_param_tup =
     Expr(:call, lv(:avx_config_val), :(Val{$configarg}()), staticexpr(0))
+
   for n ∈ 1:nargs
     _ciₙ = ci[n]
-    if _ciₙ isa Symbol
-      syms[n] = _ciₙ::Symbol
-    else
-      syms[n] = Symbol('%', n)
-      #ciₙ::Expr = _ciₙ::Expr
-      if _ciₙ isa Expr
-          ciₙ = _ciₙ
-      elseif _ciₙ isa GlobalRef
-          ciₙ = Expr(:globalref, _ciₙ.mod, _ciₙ.name)
+    syms[n] = Symbol('%', n)
+
+    if _ciₙ isa Core.SSAValue
+      push!(lb.args, Expr(:(=), syms[n], syms[_ciₙ.id]))
+
+    elseif _ciₙ isa GlobalRef
+      if _ciₙ.mod === Base || _ciₙ.mod === Core
+        push!(lb.args, Expr(:(=), syms[n], lv(_ciₙ.name)))
       else
-        error("Unexpected type in ci: $(typeof(_ciₙ))")
+        push!(lb.args, Expr(:(=), syms[n], _ciₙ.name))
       end
-      ciₙargs = ciₙ.args
-      f = first(ciₙargs)
-      if ciₙ.head === :(=)
-        push!(lb.args, Expr(:(=), f, syms[((ciₙargs[2])::Core.SSAValue).id]))
-      elseif isglobalref(f, Base, :materialize!)
-        add_ci_call!(
-          lb,
-          lv(:vmaterialize!),
-          ciₙargs,
-          syms,
-          n,
-          unroll_param_tup,
-          mod
-        )
+
+    elseif _ciₙ isa Expr && _ciₙ.head === :call
+      f = first(_ciₙ.args)
+      if isglobalref(f, Base, :materialize!)
+        add_ci_call!(lb, lv(:vmaterialize!), _ciₙ.args, syms, n, unroll_param_tup, mod)
       elseif isglobalref(f, Base, :materialize)
-        add_ci_call!(
-          lb,
-          lv(:vmaterialize),
-          ciₙargs,
-          syms,
-          n,
-          unroll_param_tup,
-          mod
-        )
+        add_ci_call!(lb, lv(:vmaterialize), _ciₙ.args, syms, n, unroll_param_tup, mod)
       else
-        add_ci_call!(lb, f, ciₙargs, syms, n)
+        add_ci_call!(lb, f, _ciₙ.args, syms, n)
       end
+
+    else
+      push!(lb.args, Expr(:(=), syms[n], _ciₙ))
     end
   end
+
   ret::Expr = pop!(lb.args)::Expr
   if Meta.isexpr(ret, :(=), 2)
     ret = (ret.args[2])::Expr
   end
+
   esc(Expr(:let, lb, Expr(:block, ret)))
 end
 

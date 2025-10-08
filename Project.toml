@@ -29,10 +29,12 @@ VectorizationBase = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
 [weakdeps]
 ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+NNlib = "872c559c-99b0-510c-b3b7-b6c96a88d5cd"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 
 [extensions]
 ForwardDiffExt = ["ChainRulesCore", "ForwardDiff"]
+ForwardDiffNNlibExt = ["ForwardDiff", "NNlib"]
 SpecialFunctionsExt = "SpecialFunctions"
 
 [compat]
@@ -46,6 +48,7 @@ HostCPUFeatures = "0.1.10"
 IfElse = "0.1"
 LayoutPointers = "0.1.11"
 LinearAlgebra = "1"
+NNlib = "0.9.31"
 OffsetArrays = "1.4.1"
 PolyesterWeave = "0.1.10, 0.2"
 PrecompileTools = "1"
@@ -56,5 +59,9 @@ Static = "0.8.4, 1"
 StaticArrayInterface = "1"
 ThreadingUtilities = "0.5"
 UnPack = "1"
-VectorizationBase = "0.21.67"
-julia = "1.6"
+VectorizationBase = "0.21.72"
+julia = "1.10"
+
+[extras]
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+NNlib = "872c559c-99b0-510c-b3b7-b6c96a88d5cd"

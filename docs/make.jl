@@ -31,7 +31,8 @@ makedocs(;
   ],
   # repo="https://github.com/JuliaSIMD/LoopVectorization.jl/blob/{commit}{path}#L{line}",
   sitename = "LoopVectorization.jl",
-  authors = "Chris Elrod"
+  authors = "Chris Elrod",
+  checkdocs=:exports,
   # assets=[],
 )
 

@@ -1,5 +1,9 @@
 # API reference
 
+```@docs
+LoopVectorization
+```
+
 ## Macros
 
 ```@docs
@@ -12,6 +16,8 @@
 ```@docs
 vmap
 vmap!
+vmapt
+vmapt!
 vmapnt
 vmapnt!
 vmapntt
@@ -27,7 +33,12 @@ LoopVectorization.vfilter!
 
 ## `reduce`-like constructs
 ```@docs
+vsum
 vreduce
 vmapreduce
 ```
 
+## Operators
+```@docs
+*ˡ
+```
