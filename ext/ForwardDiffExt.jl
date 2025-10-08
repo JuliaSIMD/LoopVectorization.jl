@@ -268,15 +268,6 @@ function ChainRulesCore.rrule(::typeof(sigmoid_fast), x)
   end
   s, ∂
 end
-function ChainRulesCore.rrule(::typeof(relu), v)
-  z = zero(v)
-  cmp = v < z
-  r = ifelse(cmp, z, v)
-  ∂ = let cmp = cmp
-    y -> (ChainRulesZero(), ifelse(cmp, zero(y), y))
-  end
-  r, ∂
-end
 
 function ∂vmap_singlethread!(
   f::F,
