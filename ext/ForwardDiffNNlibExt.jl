@@ -4,7 +4,7 @@ using LoopVectorization, VectorizationBase, SLEEFPirates, ForwardDiff, NNlib
 
 @generated function NNlib.relu(
   x::ForwardDiff.Dual{T,<:LoopVectorization.AbstractSIMD,N}
-) where {T,S,N}
+) where {T,N}
   quote
     $(Expr(:meta, :inline))
     v = x.value
@@ -22,7 +22,7 @@ end
 @generated function NNlib.leakyrelu(
   x::ForwardDiff.Dual{T,<:LoopVectorization.AbstractSIMD,N},
   a = 0.01
-) where {T,S,N}
+) where {T,N}
   quote
     $(Expr(:meta, :inline))
     v = x.value
