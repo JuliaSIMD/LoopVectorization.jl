@@ -19,15 +19,13 @@ If you would like to see an issue fixed, or support extended to another Julia pa
 1. Donating to the SciML Small Grants program, with a note on the purpose of your donation.
 2. Create (a) PR(s) fixing the issue yourself. Apply for the small grant program first to claim the grant. Note that the small grants program is not a mentorship program; you would be expected to complete the tasks without guidance from maintainers, past or present.
 
-Note that `LoopVectorization.jl` currently has deprecation warnings on Julia's 1.12 branch, causing test failures whenever `dep-warn=error`.
-
 ## Installation
 
 ```julia
 using Pkg
 Pkg.add("LoopVectorization")
 ```
-LoopVectorization is supported on Julia 1.1 and later. It is tested on Julia 1.5 and nightly.
+LoopVectorization is supported on Julia 1.1 and later. It is tested on Julia LTS, latest, pre-release and nightly.
 
 ## Warning
 
