@@ -25,7 +25,7 @@ If you would like to see an issue fixed, or support extended to another Julia pa
 using Pkg
 Pkg.add("LoopVectorization")
 ```
-LoopVectorization is supported on Julia 1.1 and later. It is tested on Julia 1.5 and nightly.
+LoopVectorization is supported on Julia 1.1 and later. It is tested on Julia LTS, latest, pre-release and nightly.
 
 ## Warning
 
