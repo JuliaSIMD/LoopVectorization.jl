@@ -19,8 +19,6 @@ If you would like to see an issue fixed, or support extended to another Julia pa
 1. Donating to the SciML Small Grants program, with a note on the purpose of your donation.
 2. Create (a) PR(s) fixing the issue yourself. Apply for the small grant program first to claim the grant. Note that the small grants program is not a mentorship program; you would be expected to complete the tasks without guidance from maintainers, past or present.
 
-Note that `LoopVectorization.jl` currently has deprecation warnings on Julia's 1.12 branch, causing test failures whenever `dep-warn=error`.
-
 ## Installation
 
 ```julia
