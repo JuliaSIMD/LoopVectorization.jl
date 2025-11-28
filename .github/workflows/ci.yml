@@ -30,7 +30,6 @@ jobs:
           - 'pre'
         os:
           - ubuntu-latest
-          - macOS-latest
           - windows-latest
         arch:
           - x64
@@ -41,6 +40,55 @@ jobs:
           - part4
           - part5
           - part6
+        include:
+          - version: 'lts'
+            os: macOS-latest
+            arch: aarch64
+            loopvectorization_test: part1
+          - version: 'lts'
+            os: macOS-latest
+            arch: aarch64
+            loopvectorization_test: part2
+          - version: 'lts'
+            os: macOS-latest
+            arch: aarch64
+            loopvectorization_test: part3
+          - version: 'lts'
+            os: macOS-latest
+            arch: aarch64
+            loopvectorization_test: part4
+          - version: 'lts'
+            os: macOS-latest
+            arch: aarch64
+            loopvectorization_test: part5
+          - version: 'lts'
+            os: macOS-latest
+            arch: aarch64
+            loopvectorization_test: part6
+          - version: '1'
+            os: macOS-latest
+            arch: aarch64
+            loopvectorization_test: part1
+          - version: '1'
+            os: macOS-latest
+            arch: aarch64
+            loopvectorization_test: part2
+          - version: '1'
+            os: macOS-latest
+            arch: aarch64
+            loopvectorization_test: part3
+          - version: '1'
+            os: macOS-latest
+            arch: aarch64
+            loopvectorization_test: part4
+          - version: '1'
+            os: macOS-latest
+            arch: aarch64
+            loopvectorization_test: part5
+          - version: '1'
+            os: macOS-latest
+            arch: aarch64
+            loopvectorization_test: part6
     steps:
       - uses: actions/checkout@v6
       - uses: julia-actions/setup-julia@v2
