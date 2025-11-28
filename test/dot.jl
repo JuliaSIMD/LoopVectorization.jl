@@ -2,6 +2,7 @@ using LoopVectorization, OffsetArrays
 using Test
 
 @testset "dot" begin
+  dotunroll = LoopVectorization.register_count() == 32 ? 8 : 4
   dotq = :(
     for i ∈ eachindex(a, b)
       s += a[i] * b[i]
@@ -9,7 +10,7 @@ using Test
   )
   lsdot = LoopVectorization.loopset(dotq)
   @test LoopVectorization.choose_order(lsdot) ==
-        (Symbol[:i], :i, Symbol("##undefined##"), :i, 4, -1)
+        (Symbol[:i], :i, Symbol("##undefined##"), :i, dotunroll, -1)
   function mydot(a::AbstractVector, b::AbstractVector)
     s = zero(eltype(a))
     za = OffsetArray(a, OffsetArrays.Origin(0))
