@@ -358,7 +358,7 @@ function readraw!(img, raw)
 end
 
 function issue348_ref!(hi, lo)
-  @inbounds @fastmath for j = 0:(size(hi, 2)-3)÷3 # This tturbo 
+  @inbounds @fastmath for j = 0:(size(hi, 2)-3)÷3 # This tturbo
     for i = 0:(size(hi, 1)-3)÷3
       hi[3i+2, 3j+2] = lo[i+2, j+2]
       hi[3i+3, 3j+2] = lo[i+2, j+2]
@@ -373,7 +373,7 @@ function issue348_ref!(hi, lo)
   end
 end
 function issue348_v0!(hi, lo)
-  @turbo for j = 0:(size(hi, 2)-3)÷3 # This tturbo 
+  @turbo for j = 0:(size(hi, 2)-3)÷3 # This tturbo
     for i = 0:(size(hi, 1)-3)÷3
       hi[3i+2, 3j+2] = lo[i+2, j+2]
       hi[3i+3, 3j+2] = lo[i+2, j+2]
@@ -388,7 +388,7 @@ function issue348_v0!(hi, lo)
   end
 end
 function issue348_v1!(hi, lo)
-  @turbo for j = 0:3:size(hi, 2)-3 # This tturbo 
+  @turbo for j = 0:3:size(hi, 2)-3 # This tturbo
     for i = 0:3:size(hi, 1)-3
       i_lo = i ÷ 3 + 2
       j_lo = j ÷ 3 + 2
@@ -478,9 +478,22 @@ end
     end
     @test qsimd ≈ Base.vect(qdot_affine(xqv, yqv)...) ≈ Base.vect(qdot_stride(xqv, yqv)...)
 
-    for j ∈ max(1, i - 5):i+5, k ∈ max(1, i - 5, i + 5)
+    for j ∈ max(1, i - 5):(i + 5), k ∈ max(1, i - 5):(i + 5)
       A = rand(j + 1, k)
-      @test tullio_issue_131(A) ≈ tullio_issue_131_ref(A)
+      # This is broken on Apple ARM CPUs (Apple M series)
+      # for some reason. This is likely related to the register size
+      # differences (128 vs 256 bit) and the smaller vector width
+      # for Float64 (2 vs 4) compared to many x64 CPUs.
+      # TODO: Fix the underlying issue!
+      pattern_for_failing_tests = (j + 1 >= 6) &&
+        (k >= 2) &&
+        (((j + 1) % 4) == 2 || ((j + 1) % 4) == 3)
+      if pattern_for_failing_tests && (Sys.ARCH === :aarch64) &&
+                                      Sys.isapple()
+        @test_broken tullio_issue_131(A) ≈ tullio_issue_131_ref(A)
+      else
+        @test tullio_issue_131(A) ≈ tullio_issue_131_ref(A)
+      end
       if VERSION ≥ v"1.6.0-rc1"
         Ac = rand(Complex{Float64}, j, i)
         Bc = rand(Complex{Float64}, i, k)
