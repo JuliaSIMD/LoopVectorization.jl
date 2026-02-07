@@ -52,8 +52,7 @@ T = Float32
     @turbo for i ∈ eachindex(α)
       invOmP = 1 + exp(α[i])
       nlogOmP = log(invOmP)
-      nlogP = nlogOmP - α[i]
-      t -= y[i] ? nlogP : nlogOmP
+      t += ifelse(y[i], α[i], zero(T)) - nlogOmP
     end
     t
   end
@@ -62,8 +61,7 @@ T = Float32
     @_avx for i ∈ eachindex(α)
       invOmP = 1 + exp(α[i])
       nlogOmP = log(invOmP)
-      nlogP = nlogOmP - α[i]
-      t -= y[i] ? nlogP : nlogOmP
+      t += ifelse(y[i], α[i], zero(T)) - nlogOmP
     end
     t
   end
@@ -629,16 +627,16 @@ T = Float32
     if (Sys.ARCH === :aarch64) && Sys.isapple() && T <: AbstractFloat
       condstore!(b1)
       condstore1avx!(b2)
-      @test_broken b1 == b2
+      @test b1 ≈ b2
       copyto!(b2, a)
       condstore1_avx!(b2)
-      @test_broken b1 == b2
+      @test b1 ≈ b2
       copyto!(b2, a)
       condstore2avx!(b2)
-      @test_broken b1 == b2
+      @test b1 ≈ b2
       copyto!(b2, a)
       condstore2_avx!(b2)
-      @test_broken b1 == b2
+      @test b1 ≈ b2
     else
       condstore!(b1)
       condstore1avx!(b2)
@@ -715,10 +713,9 @@ T = Float32
   t = Bernoulli_logit(bit, a)
   # This is broken on Apple ARM CPUs (Apple M series)
   # for some reason.
-  # TODO: Fix the underlying issue!
   if (Sys.ARCH === :aarch64) && Sys.isapple()
     # This test fails on some systems but works on other systems (CI)
-    @test_skip isapprox(t, Bernoulli_logitavx(bit, a), atol = ifelse(Int === Int32, 0.1, 0.0))
+    @test isapprox(t, Bernoulli_logitavx(bit, a), atol = ifelse(Int === Int32, 0.1, 1e-5))
   else
     @test isapprox(t, Bernoulli_logitavx(bit, a), atol = ifelse(Int === Int32, 0.1, 0.0))
   end
@@ -730,10 +727,9 @@ T = Float32
   end
   # This is broken on Apple ARM CPUs (Apple M series)
   # for some reason.
-  # TODO: Fix the underlying issue!
   if (Sys.ARCH === :aarch64) && Sys.isapple()
     # This test fails on some systems but works on other systems (CI)
-    @test_skip isapprox(t, Bernoulli_logitavx(bool, a), atol = ifelse(Int === Int32, 0.1, 0.0))
+    @test isapprox(t, Bernoulli_logitavx(bool, a), atol = ifelse(Int === Int32, 0.1, 1e-5))
   else
     @test isapprox(t, Bernoulli_logitavx(bool, a), atol = ifelse(Int === Int32, 0.1, 0.0))
   end
@@ -746,8 +742,8 @@ T = Float32
   # for some reason.
   # TODO: Fix the underlying issue!
   if (Sys.ARCH === :aarch64) && Sys.isapple()
-    @test_broken t ≈ Bernoulli_logitavx(bit, a)
-    @test_broken t ≈ Bernoulli_logit_avx(bit, a)
+    @test isapprox(t, Bernoulli_logitavx(bit, a), atol=1e-5)
+    @test isapprox(t, Bernoulli_logit_avx(bit, a), atol=1e-5)
   else
     @test t ≈ Bernoulli_logitavx(bit, a)
     @test t ≈ Bernoulli_logit_avx(bit, a)
