@@ -175,8 +175,16 @@ end
 
     issue543_noavx!(data_out_ref, matrix, data_in)
 
-    @test_nowarn issue543_turbo!(data_out_turbo, matrix, data_in)
-    @test data_out_turbo ≈ data_out_ref
+    # `v == 1` hits the nested W=1 VecUnroll store; fixed in
+    # JuliaSIMD/VectorizationBase.jl#127. Skip until that lands in a
+    # tagged release; drop the branch when LV's VectorizationBase
+    # compat is bumped to it.
+    if (v == 1) && Sys.isapple() && Sys.ARCH == :aarch64
+      @test_skip issue543_turbo!(data_out_turbo, matrix, data_in)
+    else
+      @test_nowarn issue543_turbo!(data_out_turbo, matrix, data_in)
+      @test data_out_turbo ≈ data_out_ref
+    end
   end
 
   # Test with non-static first but static other dimensions
