@@ -162,7 +162,7 @@ end
 
 @testset "Issue #543: W=1 Nested VecUnroll" begin
   # Test with static first dimension
-  for v in 1:4, n in 2:8
+  for v = 1:4, n = 2:8
     data_out_ref = StrideArray(undef, StaticInt(v), StaticInt(n), StaticInt(n))
     data_out_turbo = StrideArray(undef, StaticInt(v), StaticInt(n), StaticInt(n))
     matrix = StrideArray(undef, StaticInt(n), StaticInt(n))
@@ -175,18 +175,12 @@ end
 
     issue543_noavx!(data_out_ref, matrix, data_in)
 
-    # This is broken on Apple ARM CPUs (Apple M series) for some reason.
-    # TODO: Fix the underlying issue!
-    if (v == 1) && Sys.isapple() && Sys.ARCH == :aarch64
-      @test_skip issue543_turbo!(data_out_turbo, matrix, data_in)
-    else
-      @test_nowarn issue543_turbo!(data_out_turbo, matrix, data_in)
-      @test data_out_turbo ≈ data_out_ref
-    end
+    @test_nowarn issue543_turbo!(data_out_turbo, matrix, data_in)
+    @test data_out_turbo ≈ data_out_ref
   end
 
   # Test with non-static first but static other dimensions
-  for v in 1:4, n in 2:8
+  for v = 1:4, n = 2:8
     data_out_ref = StrideArray(undef, v, StaticInt(n), StaticInt(n))
     data_out_turbo = StrideArray(undef, v, StaticInt(n), StaticInt(n))
     matrix = StrideArray(undef, StaticInt(n), StaticInt(n))
