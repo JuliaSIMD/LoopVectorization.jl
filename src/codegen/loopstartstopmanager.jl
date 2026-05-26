@@ -1053,7 +1053,24 @@ function pointermax_index(
     if i === loopsym
       ind = j
       if iszero(sub)
-        push!(index.args, stophint)
+        # End-pointer offset along this loop dim: stophint * incr * stride.
+        # Previously this branch pushed `stophint` directly, omitting the
+        # stride/incr scaling that the sub > 0 branch below applies. For any
+        # strided load on the unrolled axis (e.g. `arr[2i, ...]`), that gave
+        # a bound `stride×` too small and the cleanup tail dropped the
+        # final iteration(s) when `looplen mod (UF*W) != 0`.
+        _ind = staticexpr(stophint)
+        stride = getstrides(ar)[j]
+        if isknown(incr)
+          stride *= gethint(incr)
+        else
+          _ind = mulexpr(_ind, getsym(incr))
+        end
+        if stride ≠ 1
+          @assert stride ≠ 0 "stride shouldn't be 0 if used for determining loop start/stop, but loop $n array $ar was."
+          _ind = lazymulexpr(stride, _ind)
+        end
+        push!(index.args, _ind)
       else
         _ind = if isvectorized
           if isone(sub)
@@ -1104,7 +1121,19 @@ function pointermax_index(
     if i === loopsym
       ind = j
       if iszero(sub)
-        push!(index.args, stopsym)
+        # See note on the sibling sub=0 branch above.
+        _ind = stopsym
+        stride = getstrides(ar)[j]
+        if isknown(incr)
+          stride *= gethint(incr)
+        else
+          _ind = mulexpr(_ind, getsym(incr))
+        end
+        if stride ≠ 1
+          @assert stride ≠ 0 "stride shouldn't be 0 if used for determining loop start/stop, but loop $n array $ar was."
+          _ind = lazymulexpr(stride, _ind)
+        end
+        push!(index.args, _ind)
       else
         _ind = if isvectorized
           if isone(sub)

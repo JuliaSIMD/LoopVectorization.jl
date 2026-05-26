@@ -483,20 +483,7 @@ end
     # but this leads to segfaults on some systems (e.g., x64 Linux).
     for j ∈ max(1, i - 5):(i + 5), k ∈ max(1, i - 5, i + 5)
       A = rand(j + 1, k)
-      # This is broken on Apple ARM CPUs (Apple M series)
-      # for some reason. This is likely related to the register size
-      # differences (128 vs 256 bit) and the smaller vector width
-      # for Float64 (2 vs 4) compared to many x64 CPUs.
-      # TODO: Fix the underlying issue!
-      pattern_for_failing_tests = (j + 1 >= 6) &&
-        (k >= 2) &&
-        (((j + 1) % 4) == 2 || ((j + 1) % 4) == 3)
-      if pattern_for_failing_tests && (Sys.ARCH === :aarch64) &&
-                                      Sys.isapple()
-        @test_broken tullio_issue_131(A) ≈ tullio_issue_131_ref(A)
-      else
-        @test tullio_issue_131(A) ≈ tullio_issue_131_ref(A)
-      end
+      @test tullio_issue_131(A) ≈ tullio_issue_131_ref(A)
       if VERSION ≥ v"1.6.0-rc1"
         Ac = rand(Complex{Float64}, j, i)
         Bc = rand(Complex{Float64}, i, k)
