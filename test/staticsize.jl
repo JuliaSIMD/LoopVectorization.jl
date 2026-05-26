@@ -175,11 +175,14 @@ end
 
     issue543_noavx!(data_out_ref, matrix, data_in)
 
-    # `v == 1` hits the nested W=1 VecUnroll store; fixed in
-    # JuliaSIMD/VectorizationBase.jl#127. Skip until that lands in a
-    # tagged release; drop the branch when LV's VectorizationBase
-    # compat is bumped to it.
-    if (v == 1) && Sys.isapple() && Sys.ARCH == :aarch64
+    # `v == 1` hits the nested W=1 VecUnroll store path which is fixed
+    # in JuliaSIMD/VectorizationBase.jl#127 but not in any tagged
+    # release yet. Skip on every platform until LV's VectorizationBase
+    # compat is bumped to a release containing that fix; the Julia
+    # version / arch matrix that actually picks the W=1 path varies
+    # (seen on Apple aarch64 with Julia 1.x and Julia nightly x86_64
+    # macOS at minimum).
+    if v == 1
       @test_skip issue543_turbo!(data_out_turbo, matrix, data_in)
     else
       @test_nowarn issue543_turbo!(data_out_turbo, matrix, data_in)
