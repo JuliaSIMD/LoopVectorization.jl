@@ -697,17 +697,7 @@ T = Float32
   t = Bernoulli_logit(bit, a)
   # This is broken on Apple ARM CPUs (Apple M series)
   # for some reason.
-  # TODO: Fix the underlying issue!
-  if (Sys.ARCH === :aarch64) && Sys.isapple()
-    # This test fails on some systems but works on other systems (CI)
-    @test_skip isapprox(
-      t,
-      Bernoulli_logitavx(bit, a),
-      atol = ifelse(Int === Int32, 0.1, 0.0),
-    )
-  else
-    @test isapprox(t, Bernoulli_logitavx(bit, a), atol = ifelse(Int === Int32, 0.1, 0.0))
-  end
+  @test isapprox(t, Bernoulli_logitavx(bit, a), atol = ifelse(Int === Int32, 0.1, 0.0))
   if LoopVectorization.pick_vector_width(eltype(a)) ≥ 4
     # @_avx isn't really expected to work with bits if you don't have AVX512
     # but it happens to work with AVX2 for this anyway, so may as well keep testing.
@@ -720,16 +710,8 @@ T = Float32
   bit = a .> 0.5
   bool = copyto!(Vector{Bool}(undef, length(bit)), bit)
   t = Bernoulli_logit(bit, a)
-  # BitVector indexing in the conditional branch is broken on Apple ARM
-  # (Apple M series) for some reason. Vector{Bool} works fine.
-  # TODO: Fix the underlying issue!
-  if (Sys.ARCH === :aarch64) && Sys.isapple()
-    @test_broken t ≈ Bernoulli_logitavx(bit, a)
-    @test_broken t ≈ Bernoulli_logit_avx(bit, a)
-  else
-    @test t ≈ Bernoulli_logitavx(bit, a)
-    @test t ≈ Bernoulli_logit_avx(bit, a)
-  end
+  @test t ≈ Bernoulli_logitavx(bit, a)
+  @test t ≈ Bernoulli_logit_avx(bit, a)
   @test t ≈ Bernoulli_logitavx(bool, a)
   @test t ≈ Bernoulli_logit_avx(bool, a)
 
