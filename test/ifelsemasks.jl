@@ -705,7 +705,7 @@ T = Float32
   # JuliaSIMD/VectorizationBase.jl#127. Drop the `@test_broken` branch
   # once LV's VectorizationBase compat is bumped to that release.
   if (Sys.ARCH === :aarch64) && Sys.isapple()
-    @test_broken isapprox(t, Bernoulli_logitavx(bit, a), atol = ifelse(Int === Int32, 0.1, 0.0))
+    @test_skip isapprox(t, Bernoulli_logitavx(bit, a), atol = ifelse(Int === Int32, 0.1, 0.0))
   else
     @test isapprox(t, Bernoulli_logitavx(bit, a), atol = ifelse(Int === Int32, 0.1, 0.0))
   end
@@ -714,7 +714,7 @@ T = Float32
     # but it happens to work with AVX2 for this anyway, so may as well keep testing.
     # am ruling out non-avx2 with the `VectorizationBase.pick_vector_width(eltype(a)) ≥ 4` check
     if (Sys.ARCH === :aarch64) && Sys.isapple()
-      @test_broken isapprox(t, Bernoulli_logit_avx(bit, a), atol = ifelse(Int === Int32, 0.1, 0.0))
+      @test_skip isapprox(t, Bernoulli_logit_avx(bit, a), atol = ifelse(Int === Int32, 0.1, 0.0))
     else
       @test isapprox(t, Bernoulli_logit_avx(bit, a), atol = ifelse(Int === Int32, 0.1, 0.0))
     end
@@ -735,8 +735,8 @@ T = Float32
   bool = copyto!(Vector{Bool}(undef, length(bit)), bit)
   t = Bernoulli_logit(bit, a)
   if (Sys.ARCH === :aarch64) && Sys.isapple()
-    @test_broken t ≈ Bernoulli_logitavx(bit, a)
-    @test_broken t ≈ Bernoulli_logit_avx(bit, a)
+    @test_skip t ≈ Bernoulli_logitavx(bit, a)
+    @test_skip t ≈ Bernoulli_logit_avx(bit, a)
   else
     @test t ≈ Bernoulli_logitavx(bit, a)
     @test t ≈ Bernoulli_logit_avx(bit, a)
