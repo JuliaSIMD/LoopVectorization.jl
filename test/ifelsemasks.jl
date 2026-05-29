@@ -699,48 +699,21 @@ T = Float32
   bit = a .> 0.5
   bool = copyto!(Vector{Bool}(undef, length(bit)), bit)
   t = Bernoulli_logit(bit, a)
-  # BitVector + ternary load on Apple ARM was returning the wrong bits
-  # because the dynamic-index `<W x i1>` load in VectorizationBase did
-  # not account for the bit offset within the byte. Fixed in
-  # JuliaSIMD/VectorizationBase.jl#127. Drop the `@test_broken` branch
-  # once LV's VectorizationBase compat is bumped to that release.
-  if (Sys.ARCH === :aarch64) && Sys.isapple()
-    @test_skip isapprox(t, Bernoulli_logitavx(bit, a), atol = ifelse(Int === Int32, 0.1, 0.0))
-  else
-    @test isapprox(t, Bernoulli_logitavx(bit, a), atol = ifelse(Int === Int32, 0.1, 0.0))
-  end
+  @test isapprox(t, Bernoulli_logitavx(bit, a), atol = ifelse(Int === Int32, 0.1, 0.0))
   if LoopVectorization.pick_vector_width(eltype(a)) ≥ 4
     # @_avx isn't really expected to work with bits if you don't have AVX512
     # but it happens to work with AVX2 for this anyway, so may as well keep testing.
     # am ruling out non-avx2 with the `VectorizationBase.pick_vector_width(eltype(a)) ≥ 4` check
-    if (Sys.ARCH === :aarch64) && Sys.isapple()
-      @test_skip isapprox(t, Bernoulli_logit_avx(bit, a), atol = ifelse(Int === Int32, 0.1, 0.0))
-    else
-      @test isapprox(t, Bernoulli_logit_avx(bit, a), atol = ifelse(Int === Int32, 0.1, 0.0))
-    end
+    @test isapprox(t, Bernoulli_logit_avx(bit, a), atol = ifelse(Int === Int32, 0.1, 0.0))
   end
-  # `Vector{Bool}` mask + Int α is flaky on some Apple ARM runners (see
-  # original @test_skip note "This test fails on some systems but works
-  # on other systems (CI)"). Keep gated until the underlying SIMD-tail
-  # issue is fully diagnosed.
-  if (Sys.ARCH === :aarch64) && Sys.isapple()
-    @test_skip isapprox(t, Bernoulli_logitavx(bool, a), atol = ifelse(Int === Int32, 0.1, 0.0))
-    @test_skip isapprox(t, Bernoulli_logit_avx(bool, a), atol = ifelse(Int === Int32, 0.1, 0.0))
-  else
-    @test isapprox(t, Bernoulli_logitavx(bool, a), atol = ifelse(Int === Int32, 0.1, 0.0))
-    @test isapprox(t, Bernoulli_logit_avx(bool, a), atol = ifelse(Int === Int32, 0.1, 0.0))
-  end
+  @test isapprox(t, Bernoulli_logitavx(bool, a), atol = ifelse(Int === Int32, 0.1, 0.0))
+  @test isapprox(t, Bernoulli_logit_avx(bool, a), atol = ifelse(Int === Int32, 0.1, 0.0))
   a = rand(43)
   bit = a .> 0.5
   bool = copyto!(Vector{Bool}(undef, length(bit)), bit)
   t = Bernoulli_logit(bit, a)
-  if (Sys.ARCH === :aarch64) && Sys.isapple()
-    @test_skip t ≈ Bernoulli_logitavx(bit, a)
-    @test_skip t ≈ Bernoulli_logit_avx(bit, a)
-  else
-    @test t ≈ Bernoulli_logitavx(bit, a)
-    @test t ≈ Bernoulli_logit_avx(bit, a)
-  end
+  @test t ≈ Bernoulli_logitavx(bit, a)
+  @test t ≈ Bernoulli_logit_avx(bit, a)
   @test t ≈ Bernoulli_logitavx(bool, a)
   @test t ≈ Bernoulli_logit_avx(bool, a)
 
