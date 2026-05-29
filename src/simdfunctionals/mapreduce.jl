@@ -1,5 +1,3 @@
-import VectorizationBase: vsum
-
 @inline vreduce(::typeof(+), v::VectorizationBase.AbstractSIMDVector) = vsum(v)
 @inline vreduce(::typeof(*), v::VectorizationBase.AbstractSIMDVector) = vprod(v)
 @inline vreduce(::typeof(max), v::VectorizationBase.AbstractSIMDVector) =
