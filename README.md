@@ -13,7 +13,7 @@
 [![LoopVectorization Downloads](https://shields.io/endpoint?url=https://pkgs.genieframework.com/api/v1/badge/LoopVectorization)](https://pkgs.genieframework.com?packages=LoopVectorization)
 
 
-## Maintanence
+## Maintenance
 The plan is for `LoopVectorization.jl` to be maintained through the [SciML Small Grants](https://sciml.ai/small_grants/#update_loopvectorization_to_support_changes_in_julia_v112_200) program.
 If you would like to see an issue fixed, or support extended to another Julia patch release, please consider:
 1. Donating to the SciML Small Grants program, with a note on the purpose of your donation.
@@ -58,7 +58,7 @@ For simple loops like a dot product, LoopVectorization.jl's most important optim
 <details>
  <summaryClick me! ></summary>
 <p>
- 
+
  ```julia
 julia> using LoopVectorization, BenchmarkTools
 
@@ -314,7 +314,7 @@ f = KwargCall(round, (digits = 3,));
 <p>
 
 The key to the `@turbo` macro's performance gains is leveraging knowledge of exactly how data like `Float64`s and `Int`s are handled by a CPU. As such, it is not strightforward to generalize the `@turbo` macro to work on arrays containing structs such as `Matrix{Complex{Float64}}`. Instead, it is currently recommended that users wishing to apply `@turbo` to arrays of structs use packages such as [StructArrays.jl](https://github.com/JuliaArrays/StructArrays.jl) which transform an array where each element is a struct into a struct where each element is an array. Using StructArrays.jl, we can write a matrix multiply (gemm) kernel that works on matrices of `Complex{Float64}`s and `Complex{Int}`s:
-```julia 
+```julia
 using LoopVectorization, LinearAlgebra, StructArrays, BenchmarkTools, Test
 
 BLAS.set_num_threads(1); @show BLAS.vendor()
@@ -373,7 +373,7 @@ julia> @test C1 ≈ C2
 Test Passed
 ```
 
-Similar approaches can be taken to make kernels working with a variety of numeric struct types such as [dual numbers](https://github.com/JuliaDiff/DualNumbers.jl), [DoubleFloats](https://github.com/JuliaMath/DoubleFloats.jl), etc. 
+Similar approaches can be taken to make kernels working with a variety of numeric struct types such as [dual numbers](https://github.com/JuliaDiff/DualNumbers.jl), [DoubleFloats](https://github.com/JuliaMath/DoubleFloats.jl), etc.
 
 </p>
 </details>

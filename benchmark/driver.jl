@@ -285,7 +285,7 @@ println("Benchmark results for unrolled 3x3 convolution:");
 filter2d_unrolled_bench = benchmark_filter2dunrolled(sizes);
 println(filter2d_unrolled_bench);
 
-println("Benchmark resutls of summing squared error:");
+println("Benchmark results of summing squared error:");
 sse_bench = benchmark_sse(sizes);
 println(sse_bench);
 println("Benchmark results of exponentiating a vector:");
