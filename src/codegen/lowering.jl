@@ -1065,7 +1065,16 @@ function determine_eltype(ls::LoopSet, ortypdefined::Bool)::Union{Symbol,Expr}
     push!(pt.args, Expr(:call, lv(:eltype), array))
   end
   push_outer_reduct_types!(pt, ls, ortypdefined)
-  return pt
+  # Nest calls of the two-argument `promote_type` instead of calling it once with all
+  # types: on Julia >= 1.11, `promote_type` with many (>= 36) arguments is not inferred
+  # (`Base.afoldl` has `max_args = 34`), which makes the vector width and thus the whole
+  # generated loop type-unstable. `ls.includedactualarrays` has one entry per array
+  # reference, so loops with many references to only a few arrays are affected.
+  nested = pt.args[2]
+  for i in 3:length(pt.args)
+    nested = Expr(:call, lv(:promote_type), nested, pt.args[i])
+  end
+  return nested
 end
 @inline _eltype(x) = eltype(x)
 @inline _eltype(::BitArray) = VectorizationBase.Bit
