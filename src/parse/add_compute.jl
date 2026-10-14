@@ -498,6 +498,14 @@ function add_compute!(
     end
   elseif instr.instr === :oftype && length(args) == 2
     return get_arg!(ls, args[2], elementbytes, position)
+  elseif instr.instr === :div_fast && length(args) == 2 && args[1] === 1
+    return add_compute!(
+      ls,
+      var,
+      :inv,
+      [get_arg!(ls, args[2], elementbytes, position)],
+      elementbytes
+    )
   end
   vparents = Operation[]
   deps = Symbol[]
@@ -783,7 +791,7 @@ function get_arg!(
       return xo
     end
   elseif x isa Number
-    return add_constant!(ls, x^p, elementbytes, var)::Operation
+    return add_constant!(ls, x, elementbytes)::Operation
   else
     throw("objects of type $x not supported as arg")
   end
