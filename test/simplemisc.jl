@@ -33,6 +33,13 @@ function issue480(x, y)
   end
   z
 end
+
+function issue539!(y, x)
+  @turbo for i in eachindex(x)
+    y[i] = 1 / x[i]
+  end
+  y
+end
 @testset "issue 480" begin
   using LoopVectorization
   x = zeros(33)
@@ -43,4 +50,10 @@ end
     @test issue480(x, y)
     x[i] = 0.0
   end
+end
+
+@testset "issue 539" begin
+  x = fill(Inf, 32)
+  y = similar(x)
+  @test all(iszero, issue539!(y, x))
 end
